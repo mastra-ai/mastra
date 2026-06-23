@@ -2390,13 +2390,21 @@ export interface DatasetRecord {
   targetType?: TargetType | null;
   targetIds?: string[] | null;
   scorerIds?: string[] | null;
+  /** Multi-tenant organization/account scope. */
+  organizationId?: string | null;
+  /** Platform project scope. Pairs with {@link DatasetRecord.organizationId} to form the dataset's tenancy bucket. */
+  projectId?: string | null;
+  /** Recurring-problem fingerprint (e.g. detector-emitted candidate key). */
+  candidateKey?: string | null;
+  /** Incident-specific identifier minted by the detector. */
+  candidateId?: string | null;
   version: number;
   createdAt: Date;
   updatedAt: Date;
 }
 
 export interface DatasetItemSource {
-  type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+  type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
   referenceId?: string;
 }
 
@@ -2428,6 +2436,10 @@ export interface DatasetItem {
   id: string;
   datasetId: string;
   datasetVersion: number;
+  /** Inherited from the parent dataset at insert time. */
+  organizationId?: string | null;
+  /** Inherited from the parent dataset at insert time. */
+  projectId?: string | null;
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
@@ -2443,6 +2455,10 @@ export interface DatasetItemRow {
   id: string;
   datasetId: string;
   datasetVersion: number;
+  /** Inherited from the parent dataset at insert time. */
+  organizationId?: string | null;
+  /** Inherited from the parent dataset at insert time. */
+  projectId?: string | null;
   validTo: number | null;
   isDeleted: boolean;
   input: unknown;
@@ -2475,8 +2491,39 @@ export interface CreateDatasetInput {
   targetType?: TargetType;
   targetIds?: string[];
   scorerIds?: string[];
+  /**
+   * Multi-tenant organization/account scope. Stamped onto every item inserted into this dataset.
+   * Immutable after create — items inherit this from the parent dataset on every write, so changing
+   * it later would corrupt SCD-2 tombstone history. Intentionally absent from {@link UpdateDatasetInput}.
+   */
+  organizationId?: string | null;
+  /**
+   * Platform project scope. Stamped onto every item inserted into this dataset.
+   * Pairs with {@link CreateDatasetInput.organizationId} to form the (organizationId, projectId)
+   * tenancy bucket. Immutable after create — see {@link CreateDatasetInput.organizationId}.
+   */
+  projectId?: string | null;
+  /**
+   * Recurring-problem fingerprint (e.g. detector-emitted candidate key).
+   * Immutable after create — pairs with {@link CreateDatasetInput.candidateId} to identify
+   * the dataset's source incident and must not drift over the dataset's lifetime.
+   */
+  candidateKey?: string | null;
+  /**
+   * Incident-specific identifier minted by the detector.
+   * Immutable after create — see {@link CreateDatasetInput.candidateKey}.
+   */
+  candidateId?: string | null;
 }
 
+/**
+ * Update input for a dataset. Tenancy ({@link CreateDatasetInput.organizationId},
+ * {@link CreateDatasetInput.projectId}) and candidate identity
+ * ({@link CreateDatasetInput.candidateKey}, {@link CreateDatasetInput.candidateId})
+ * are intentionally omitted: they are set once at create time and must remain immutable
+ * so item SCD-2 history (which inherits these fields per-write from the parent dataset)
+ * stays consistent across the dataset's lifetime.
+ */
 export interface UpdateDatasetInput {
   id: string;
   name?: string;
@@ -2514,8 +2561,19 @@ export interface UpdateDatasetItemInput {
   source?: DatasetItemSource;
 }
 
+export interface DatasetTenancyFilters {
+  organizationId?: string;
+  projectId?: string;
+}
+
+export interface ListDatasetsFilters extends DatasetTenancyFilters {
+  candidateKey?: string;
+  candidateId?: string;
+}
+
 export interface ListDatasetsInput {
   pagination: StoragePagination;
+  filters?: ListDatasetsFilters;
 }
 
 export interface ListDatasetsOutput {
@@ -2528,6 +2586,7 @@ export interface ListDatasetItemsInput {
   version?: number;
   search?: string;
   pagination: StoragePagination;
+  filters?: DatasetTenancyFilters;
 }
 
 export interface ListDatasetItemsOutput {

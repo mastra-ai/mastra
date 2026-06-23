@@ -31,7 +31,10 @@ type SaveAsDatasetItemDialogProps = {
   isOpen: boolean;
   onClose: () => void;
   level?: SideDialogRootProps['level'];
-  source?: { type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result'; referenceId?: string };
+  source?: {
+    type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
+    referenceId?: string;
+  };
 };
 
 export function SaveAsDatasetItemDialog({

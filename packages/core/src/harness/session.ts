@@ -2693,8 +2693,10 @@ export class Session<TState = unknown> {
    * to avoid the new signal being queued onto the dying run, which would then
    * be drained with the previous run's already-aborted abortSignal.
    */
-  private async waitForStreamIdle(): Promise<void> {
+  private async waitForStreamIdle(timeoutMs = 1_000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
     while (this.stream.isActive() || this.run.getRunId() !== null) {
+      if (Date.now() >= deadline) return;
       await new Promise(resolve => setTimeout(resolve, 0));
     }
   }
@@ -2731,6 +2733,16 @@ export class Session<TState = unknown> {
     const ifIdle = 'content' in input ? input.ifIdle : undefined;
     const submittedRunId = this.run.getRunId();
     const submittedActiveRunId = this.stream.activeRunId();
+    // After `abort()` the AbortController is cleared immediately but the run id
+    // and active-run id linger until `run.reset()` runs (after `agent_end`).
+    // Without this guard, a signal sent right after an interrupt is dispatched
+    // onto the dying run and lost — the follow-up message never gets a response.
+    const submittedIsRunning = this.run.isRunning();
+    // An abort was requested but the previous run hasn't finished tearing down
+    // yet (the flag stays set until `run.reset()` after `agent_end`). This is
+    // the post-interrupt window where a fresh signal must wait for the dying
+    // run to fully idle before starting a new run.
+    const submittedAbortRequested = this.run.isAbortRequested();
     const signal = createSignal(
       'content' in input ? { type: 'user', tagName: 'user', contents: input.content } : input,
     );
@@ -2744,7 +2756,7 @@ export class Session<TState = unknown> {
       const agent = this.machinery.getAgent();
       await this.thread.ensureSubscription(threadId);
 
-      if (submittedRunId && submittedActiveRunId) {
+      if (submittedRunId && submittedActiveRunId && submittedIsRunning) {
         this.approval.respond({
           decision: 'decline',
           declineContext: {
@@ -2759,6 +2771,18 @@ export class Session<TState = unknown> {
           ifIdle,
         });
         return { accepted: true as const, runId: await settleRunId(result) };
+      }
+
+      // Post-abort lingering state: the AbortController was cleared (so
+      // `submittedIsRunning` is false) but the previous run is still finalizing
+      // — its run id / active-run id linger until `run.reset()` runs after
+      // `agent_end`. Dispatching a fresh signal now would let the agent queue it
+      // onto the dying run instead of starting a new run, and the follow-up
+      // would never get a response. Wait for the stream to fully idle first.
+      // Only do this in the post-abort window (an abort was requested but the
+      // run hasn't reset yet) so normal idle signals aren't delayed.
+      if (submittedAbortRequested && (submittedRunId || submittedActiveRunId)) {
+        await this.waitForStreamIdle();
       }
 
       const streamOptions = await this.machinery.buildStreamOptions({

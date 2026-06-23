@@ -1,11 +1,11 @@
 {
   "meta": {
     "name": "test-7088b7e4",
-    "testFile": "packages/core/src/agent/__tests__/tool-approval.e2e.test.ts",
+    "testFile": "src/agent/__tests__/tool-approval.e2e.test.ts",
     "testName": "tool approval and suspension > suspension > should call findUserWorkflow with suspend and resume via stream when autoResumeSuspendedTools is true",
     "model": "gpt-4o-mini",
     "createdAt": "2026-05-18T10:52:25.173Z",
-    "updatedAt": "2026-05-18T11:58:00.950Z"
+    "updatedAt": "2026-06-17T13:35:57.684Z"
   },
   "recordings": [
     {
@@ -46,7 +46,9 @@
                         "type": "string"
                       }
                     },
-                    "required": ["name"],
+                    "required": [
+                      "name"
+                    ],
                     "additionalProperties": false
                   },
                   "suspendedToolRunId": {
@@ -72,10 +74,17 @@
                     ]
                   }
                 },
-                "required": ["inputData", "suspendedToolRunId", "resumeData"],
+                "required": [
+                  "inputData",
+                  "suspendedToolRunId",
+                  "resumeData"
+                ],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#",
-                "x-optional": ["suspendedToolRunId", "resumeData"]
+                "x-optional": [
+                  "suspendedToolRunId",
+                  "resumeData"
+                ]
               },
               "strict": false
             }
@@ -83,7 +92,7 @@
           "tool_choice": "auto",
           "stream": true
         },
-        "timestamp": 1779105476012
+        "timestamp": 1781703353231
       },
       "response": {
         "status": 200,
@@ -92,48 +101,86 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9fdaafe92b9ab753-BRU",
+          "cf-ray": "a0d270a78d4a2953-SJC",
           "connection": "keep-alive",
           "content-type": "text/event-stream; charset=utf-8",
-          "date": "Mon, 18 May 2026 11:57:56 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "132",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 17 Jun 2026 13:35:53 GMT",
+          "openai-organization": "work-kxidzh",
+          "openai-processing-ms": "114",
+          "openai-project": "proj_FCyHAyf1sRhVrYbrkAklMIPx",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-request-id": "req_27dcd188e6e1469aab87a4604b76f89a"
+          "x-request-id": "req_4476545f34fb40f49377a50763f288b3"
         },
         "chunks": [
-          "event: response.created\ndat",
-          "a: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_0a1f5540bb54f75f006a0afec42ae08190b07a8a4425a0e4c3\",\"object\":\"response\",\"created_at\":1779105476,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name, and age\",\"name\":\"workflow-findUserWorkflow\",\"parameters\":{\"type\":\"object\",\"properties\":{\"inputData\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"suspendedToolRunId\":{\"description\":\"The runId of the suspended tool\",\"anyOf\":[{\"description\":\"The runId of the suspended tool\",\"type\":\"string\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"inputData\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
-          "event: response.in_progress",
-          "\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_0a1f5540bb54f75f006a0afec42ae08190b07a8a4425a0e4c3\",\"object\":\"response\",\"created_at\":1779105476,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name, and age\",\"name\":\"workflow-findUserWorkflow\",\"parameters\":{\"type\":\"object\",\"properties\":{\"inputData\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"suspendedToolRunId\":{\"description\":\"The runId of the suspended tool\",\"anyOf\":[{\"description\":\"The runId of the suspended tool\",\"type\":\"string\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"inputData\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
-          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_ubAIR5q9OmnyhVZmugaDrdgC\",\"name\":\"workflow-findUserWorkflow\"},\"output_index\":0,\"sequence_number\":2}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"\",\"item_id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"obfuscation\":\"PEoWn4yuI1zXBm\",\"output_index\":0,\"sequence_number\":3}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"input\",\"item_id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"obfuscation\":\"q3x4A5eUlhy\",\"output_index\":0,\"sequence_number\":4}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Data\",\"item_id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"obfuscation\":\"Lvqj1DVFi2zg\",\"output_index\":0,\"sequence_number\":5}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":{\\\"\",\"item_id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"obfuscation\":\"wlXeYseLbR1o\",\"output_index\":0,\"sequence_number\":6}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"name\",\"item_id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"obfuscation\":\"gHuVAxnTY1td\",\"output_index\":0,\"sequence_number\":7}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"obfuscation\":\"bG1fNKSOS5jK9\",\"output_index\":0,\"sequence_number\":8}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"D\",\"item_id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"obfuscation\":\"OHkRb3R3v8ogliC\",\"output_index\":0,\"sequence_number\":9}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"ero\",\"item_id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"obfuscation\":\"Bfstt53XntlWV\",\"output_index\":0,\"sequence_number\":10}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\" Israel\",\"item_id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"obfuscation\":\"gSVi0gYHE\",\"output_index\":0,\"sequence_number\":11}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\"}\",\"item_id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"obfuscation\":\"9YmSAGUJPnlYaU\",\"output_index\":0,\"sequence_number\":12}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\",\\\"\",\"item_id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"obfuscation\":\"aSfM6IIcgUEjCs\",\"output_index\":0,\"sequence_number\":13}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"s\",\"item_id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"obfuscation\":\"WZ9dpIye8fXz2TA\",\"output_index\":0,\"sequence_number\":14}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"uspended\",\"item_id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"obfuscation\":\"nYGdJkNz\",\"output_index\":0,\"sequence_number\":15}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Tool\",\"item_id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"obfuscation\":\"Ol5LvvhL20uC\",\"output_index\":0,\"sequence_number\":16}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Run\",\"item_id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"obfuscation\":\"QoQ0aWLimu1Nm\",\"output_index\":0,\"sequence_number\":17}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Id\",\"item_id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"obfuscation\":\"BsDprqRQLJACaU\",\"output_index\":0,\"sequence_number\":18}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\",\"item_id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"obfuscation\":\"YNUo9jGBZHKyLu\",\"output_index\":0,\"sequence_number\":19}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"null\",\"item_id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"obfuscation\":\"e98XhuatvsR7\",\"output_index\":0,\"sequence_number\":20}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\",\\\"\",\"item_id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"obfuscation\":\"HE6UQ0jRuxsu2L\",\"output_index\":0,\"sequence_number\":21}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"resume\",\"item_id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"obfuscation\":\"ziwTFEfR9O\",\"output_index\":0,\"sequence_number\":22}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Data\",\"item_id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"obfuscation\":\"IVc5B5FfINK8\",\"output_index\":0,\"sequence_number\":23}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\",\"item_id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"obfuscation\":\"FjtSR4CGG1iA4Y\",\"output_index\":0,\"sequence_number\":24}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"null\",\"item_id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"obfuscation\":\"PNVoKL97dcpR\",\"output_index\":0,\"sequence_number\":25}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"}\",\"item_id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"obfuscation\":\"5DNnn5OXrzymmjU\",\"output_index\":0,\"sequence_number\":26}\n\n",
-          "event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"inputData\\\":{\\\"name\\\":\\\"Dero Israel\\\"},\\\"suspendedToolRunId\\\":null,\\\"resumeData\\\":null}\",\"item_id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"output_index\":0,\"sequence_number\":27}\n\n",
-          "event: response.output_item",
-          ".done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"inputData\\\":{\\\"name\\\":\\\"Dero Israel\\\"},\\\"suspendedToolRunId\\\":null,\\\"resumeData\\\":null}\",\"call_id\":\"call_ubAIR5q9OmnyhVZmugaDrdgC\",\"name\":\"workflow-findUserWorkflow\"},\"output_index\":0,\"sequence_number\":28}\n\n",
-          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0a1f5540bb54f75f006a0afec42ae08190b07a8a4425a0e4c3\",\"object\":\"response\",\"created_at\":1779105476,\"status\":\"completed\",\"background\":false,\"completed_at\":1779105477,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"fc_0a1f5540bb54f75f006a0afec4c2f481908faba330e6ab956c\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"inputData\\\":{\\\"name\\\":\\\"Dero Israel\\\"},\\\"suspendedToolRunId\\\":null,\\\"resumeData\\\":null}\",\"call_id\":\"call_ubAIR5q9OmnyhVZmugaDrdgC\",\"name\":\"workflow-findUserWorkflow\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name, and age\",\"name\":\"workflow-findUserWorkflow\",\"parameters\":{\"type\":\"object\",\"properties\":{\"inputData\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"suspendedToolRunId\":{\"description\":\"The runId of the suspended tool\",\"anyOf\":[{\"description\":\"The runId of the suspended tool\",\"type\":\"string\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"inputData\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":134,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":36,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":170},\"user\":null,\"metadata\":{}},\"sequence_number\":29}\n\n"
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_081f583da79d7240006a32a2b99138819bae33ac0d475d234e\",\"object\":\"response\",\"created_at\":1781703353,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name, and age\",\"name\":\"workflow-findUserWorkflow\",\"parameters\":{\"type\":\"object\",\"properties\":{\"inputData\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"suspendedToolRunId\":{\"description\":\"The runId of the suspended tool\",\"anyOf\":[{\"description\":\"The runId of the suspended tool\",\"type\":\"string\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"inputData\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\nevent: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_081f583da79d7240006a32a2b99138819bae33ac0d475d234e\",\"object\":\"response\",\"created_at\":1781703353,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name, and age\",\"name\":\"workflow-findUserWorkflow\",\"parameters\":{\"type\":\"object\",\"properties\":{\"inputData\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"suspendedToolRunId\":{\"description\":\"The runId of the suspended tool\",\"anyOf\":[{\"description\":\"The runId of the suspended tool\",\"type\":\"string\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"inputData\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_trJ5iRds886eQCl33iU8DruN\",\"name\":\"workflow-findUserWorkflow\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"\",\"item_id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"obfuscation\":\"1bpUZG6YWRMnMo\",\"output_index\":0,\"sequence_number\":3}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"input\",\"item_id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"obfuscation\":\"CZMHWW1b5P0\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Data\",\"item_id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"obfuscation\":\"Cch9oWqu4qEU\",\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":{\\\"\",\"item_id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"obfuscation\":\"z8nWsV6Xt9xa\",\"output_index\":0,\"sequence_number\":6}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"name\",\"item_id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"obfuscation\":\"9TPSgWrGe62o\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"obfuscation\":\"tNxry0YiKP0kM\",\"output_index\":0,\"sequence_number\":8}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"D\",\"item_id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"obfuscation\":\"LV2zLn1YS0fSUHg\",\"output_index\":0,\"sequence_number\":9}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"ero\",\"item_id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"obfuscation\":\"zsFzmjpuepfUj\",\"output_index\":0,\"sequence_number\":10}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\" Israel\",\"item_id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"obfuscation\":\"ZhC6BCMUy\",\"output_index\":0,\"sequence_number\":11}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\"}\",\"item_id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"obfuscation\":\"2wV8YJPdMDwO5Q\",\"output_index\":0,\"sequence_number\":12}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\",\\\"\",\"item_id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"obfuscation\":\"SVmmZT1gdUuNWA\",\"output_index\":0,\"sequence_number\":13}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"s\",\"item_id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"obfuscation\":\"3vwLMwMVcv6eL7m\",\"output_index\":0,\"sequence_number\":14}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"uspended\",\"item_id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"obfuscation\":\"fhXUOVon\",\"output_index\":0,\"sequence_number\":15}\n\n",
+          "event: response.function_cal",
+          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Tool\",\"item_id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"obfuscation\":\"NClNfJeCOeWc\",\"output_index\":0,\"sequence_number\":16}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Run\",\"item_id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"obfuscation\":\"DtqVjEnfCJ7e4\",\"output_index\":0,\"sequence_number\":17}\n\n",
+          "event: response.function_ca",
+          "ll_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Id\",\"item_id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"obfuscation\":\"BMMZ2D5hsivJeZ\",\"output_index\":0,\"sequence_number\":18}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\",\"item_id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"obfuscation\":\"iBZWE0zckowa9K\",\"output_index\":0,\"sequence_number\":19}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"null\",\"item_id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"obfuscation\":\"wxYZdpAroyH7\",\"output_index\":0,\"sequence_number\":20}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\",\\\"\",\"item_id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"obfuscation\":\"KeYAdhdo20V0Xk\",\"output_index\":0,\"sequence_number\":21}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"resume\",\"item_id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"obfuscation\":\"0mRsheTlBh\",\"output_index\":0,\"sequence_number\":22}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Data\",\"item_id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"obfuscation\":\"UmktuuDmKI21\",\"output_index\":0,\"sequence_number\":23}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\",\"item_id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"obfuscation\":\"BfEBGQiYhScHNv\",\"output_index\":0,\"sequence_number\":24}\n\n",
+          "event: response.function_cal",
+          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"null\",\"item_id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"obfuscation\":\"Lc6xxUsoljm4\",\"output_index\":0,\"sequence_number\":25}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"}\",\"item_id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"obfuscation\":\"22o9eD1brKNmwSN\",\"output_index\":0,\"sequence_number\":26}\n\n",
+          "event: response.function_ca",
+          "ll_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"inputData\\\":{\\\"name\\\":\\\"Dero Israel\\\"},\\\"suspendedToolRunId\\\":null,\\\"resumeData\\\":null}\",\"item_id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"output_index\":0,\"sequence_number\":27}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"inputData\\\":{\\\"name\\\":\\\"Dero Israel\\\"},\\\"suspendedToolRunId\\\":null,\\\"resumeData\\\":null}\",\"call_id\":\"call_trJ5iRds886eQCl33iU8DruN\",\"name\":\"workflow-findUserWorkflow\"},\"output_index\":0,\"sequence_number\":28}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_081f583da79d7240006a32a2b99138819bae33ac0d475d234e\",\"object\":\"response\",\"created_at\":1781703353,\"status\":\"completed\",\"background\":false,\"completed_at\":1781703354,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"fc_081f583da79d7240006a32a2ba3198819b8c4b740b86abc714\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"inputData\\\":{\\\"name\\\":\\\"Dero Israel\\\"},\\\"suspendedToolRunId\\\":null,\\\"resumeData\\\":null}\",\"call_id\":\"call_trJ5iRds886eQCl33iU8DruN\",\"name\":\"workflow-findUserWorkflow\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name, and age\",\"name\":\"workflow-findUserWorkflow\",\"parameters\":{\"type\":\"object\",\"properties\":{\"inputData\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"suspendedToolRunId\":{\"description\":\"The runId of the suspended tool\",\"anyOf\":[{\"description\":\"The runId of the suspended tool\",\"type\":\"string\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"inputData\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":134,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":36,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":170},\"user\":null,\"metadata\":{}},\"sequence_number\":29}\n\n"
         ],
-        "chunkTimings": [3, 2, 0, 0, 659, 2, 0, 0, 107, 3, 5, 7, 2, 6, 8, 7, 4, 89, 0, 0, 69],
+        "chunkTimings": [
+          0,
+          523,
+          1,
+          101,
+          2,
+          18,
+          0,
+          3,
+          3,
+          12,
+          0,
+          0,
+          0,
+          4,
+          0,
+          3,
+          0,
+          0,
+          18,
+          22,
+          0,
+          10,
+          3,
+          0,
+          13,
+          31,
+          0,
+          3,
+          96
+        ],
         "isStreaming": true
       }
     },
     {
-      "hash": "24076812c6fa1104",
+      "hash": "2ca1b5864eb519c3",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -142,7 +189,7 @@
           "input": [
             {
               "role": "system",
-              "content": "You are an agent that can get list of users using findUserWorkflow.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"call_ubAIR5q9OmnyhVZmugaDrdgC\",\"toolName\":\"workflow-findUserWorkflow\",\"args\":{\"inputData\":{\"name\":\"Dero Israel\"},\"suspendedToolRunId\":null},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-0000000000c6\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"noOfYears\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"noOfYears\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. \n                      "
+              "content": "You are an agent that can get list of users using findUserWorkflow.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"call_trJ5iRds886eQCl33iU8DruN\",\"toolName\":\"workflow-findUserWorkflow\",\"args\":{\"inputData\":{\"name\":\"Dero Israel\"},\"suspendedToolRunId\":null},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-0000000000e9\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"noOfYears\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"noOfYears\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. \n                      "
             },
             {
               "role": "user",
@@ -179,7 +226,9 @@
                         "type": "string"
                       }
                     },
-                    "required": ["name"],
+                    "required": [
+                      "name"
+                    ],
                     "additionalProperties": false
                   },
                   "suspendedToolRunId": {
@@ -205,10 +254,17 @@
                     ]
                   }
                 },
-                "required": ["inputData", "suspendedToolRunId", "resumeData"],
+                "required": [
+                  "inputData",
+                  "suspendedToolRunId",
+                  "resumeData"
+                ],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#",
-                "x-optional": ["suspendedToolRunId", "resumeData"]
+                "x-optional": [
+                  "suspendedToolRunId",
+                  "resumeData"
+                ]
               },
               "strict": false
             }
@@ -216,7 +272,7 @@
           "tool_choice": "auto",
           "stream": true
         },
-        "timestamp": 1779105477316
+        "timestamp": 1781703354355
       },
       "response": {
         "status": 200,
@@ -225,95 +281,130 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9fdaaff15d9bb753-BRU",
+          "cf-ray": "a0d270ae8c202953-SJC",
           "connection": "keep-alive",
           "content-type": "text/event-stream; charset=utf-8",
-          "date": "Mon, 18 May 2026 11:57:57 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "160",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 17 Jun 2026 13:35:54 GMT",
+          "openai-organization": "work-kxidzh",
+          "openai-processing-ms": "152",
+          "openai-project": "proj_FCyHAyf1sRhVrYbrkAklMIPx",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-request-id": "req_0303060790df41cb97d675bf83ae3f9c"
+          "x-request-id": "req_90254233ad6644e89bb98476c7b33f1a"
         },
         "chunks": [
-          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_0107c3f75a2a4cc7006a0afec5708881909a9d532d5176be45\",\"object\":\"response\",\"created_at\":1779105477,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name, and age\",\"name\":\"workflow-findUserWorkflow\",\"parameters\":{\"type\":\"object\",\"properties\":{\"inputData\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"suspendedToolRunId\":{\"description\":\"The runId of the suspended tool\",\"anyOf\":[{\"description\":\"The runId of the suspended tool\",\"type\":\"string\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"inputData\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
-          "event: response.in_progress",
-          "\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_0107c3f75a2a4cc7006a0afec5708881909a9d532d5176be45\",\"object\":\"response\",\"created_at\":1779105477,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name, and age\",\"name\":\"workflow-findUserWorkflow\",\"parameters\":{\"type\":\"object\",\"properties\":{\"inputData\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"suspendedToolRunId\":{\"description\":\"The runId of the suspended tool\",\"anyOf\":[{\"description\":\"The runId of the suspended tool\",\"type\":\"string\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"inputData\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
-          "event: response.output_item",
-          ".added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_4XBDCoTEh36Dz8C0uKt87Qy2\",\"name\":\"workflow-findUserWorkflow\"},\"output_index\":0,\"sequence_number\":2}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"I2wiarZMcMMlep\",\"output_index\":0,\"sequence_number\":3}\n\n",
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_03300b36e77df8bd006a32a2bab06481988c6cf664ac9cb4df\",\"object\":\"response\",\"created_at\":1781703354,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name, and age\",\"name\":\"workflow-findUserWorkflow\",\"parameters\":{\"type\":\"object\",\"properties\":{\"inputData\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"suspendedToolRunId\":{\"description\":\"The runId of the suspended tool\",\"anyOf\":[{\"description\":\"The runId of the suspended tool\",\"type\":\"string\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"inputData\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\nevent: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_03300b36e77df8bd006a32a2bab06481988c6cf664ac9cb4df\",\"object\":\"response\",\"created_at\":1781703354,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name, and age\",\"name\":\"workflow-findUserWorkflow\",\"parameters\":{\"type\":\"object\",\"properties\":{\"inputData\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"suspendedToolRunId\":{\"description\":\"The runId of the suspended tool\",\"anyOf\":[{\"description\":\"The runId of the suspended tool\",\"type\":\"string\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"inputData\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_xEvTerI5l5eAz9oIZ9fhY1LR\",\"name\":\"workflow-findUserWorkflow\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"kZ1edCtOpVahZn\",\"output_index\":0,\"sequence_number\":3}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"input\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"3YmYybnkBwY\",\"output_index\":0,\"sequence_number\":4}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Data\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"BlzY35D24qWw\",\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":{\\\"\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"AAIjduji85xx\",\"output_index\":0,\"sequence_number\":6}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"name\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"v74VplCLRNwj\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"BY5bFRW4IrsUN\",\"output_index\":0,\"sequence_number\":8}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"D\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"s7OmNa4cXMY70qQ\",\"output_index\":0,\"sequence_number\":9}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"ero\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"RGfseifHgZva8\",\"output_index\":0,\"sequence_number\":10}\n\n",
           "event: response.function_cal",
-          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"input\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"gveSM65W2Vv\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\" Israel\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"bXQq3r2Q2\",\"output_index\":0,\"sequence_number\":11}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\"}\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"uERRyUwrnRjpF3\",\"output_index\":0,\"sequence_number\":12}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\",\\\"\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"s30z0uuLQiFyaO\",\"output_index\":0,\"sequence_number\":13}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"s\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"Pw2OK2rIgp694bG\",\"output_index\":0,\"sequence_number\":14}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"uspended\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"QpiD3HIi\",\"output_index\":0,\"sequence_number\":15}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Tool\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"fuxdQw8MBka9\",\"output_index\":0,\"sequence_number\":16}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Run\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"5YsEuBHlllCDu\",\"output_index\":0,\"sequence_number\":17}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Id\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"Yhfp0H5FJ8ikey\",\"output_index\":0,\"sequence_number\":18}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"OreQyes2pWfUR\",\"output_index\":0,\"sequence_number\":19}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"000\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"1xmOqXvqdQSen\",\"output_index\":0,\"sequence_number\":20}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"000\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"3oO2KSzVDhgD8\",\"output_index\":0,\"sequence_number\":21}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"00\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"KWYJpG58mUMigI\",\"output_index\":0,\"sequence_number\":22}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"-\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"3LW4HVV0lywTesL\",\"output_index\":0,\"sequence_number\":23}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"000\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"hfb6UVAMYIWeb\",\"output_index\":0,\"sequence_number\":24}\n\n",
           "event: response.function_cal",
-          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Data\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"xSWEqzOl4nHf\",\"output_index\":0,\"sequence_number\":5}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":{\\\"\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"37Gn9buwpdBS\",\"output_index\":0,\"sequence_number\":6}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"name\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"R0YVaGoDHzxP\",\"output_index\":0,\"sequence_number\":7}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"AdDOOB3SgiZRj\",\"output_index\":0,\"sequence_number\":8}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"D\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"Ji66V9fPXiEPBDM\",\"output_index\":0,\"sequence_number\":9}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"ero\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"0YDBTNnlDczlP\",\"output_index\":0,\"sequence_number\":10}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\" Israel\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"G4mjZ4ii5\",\"output_index\":0,\"sequence_number\":11}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\"}\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"iP3ENlztor6KUx\",\"output_index\":0,\"sequence_number\":12}\n\n",
+          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"0\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"O4rcl3DAuyTJdip\",\"output_index\":0,\"sequence_number\":25}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"-\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"IdZ3Bs9Q1VQs7uG\",\"output_index\":0,\"sequence_number\":26}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"400\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"b9DYfjuDDNvQo\",\"output_index\":0,\"sequence_number\":27}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"0\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"L47xvvxjqL3EJ6s\",\"output_index\":0,\"sequence_number\":28}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"-\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"ypZxHXS2C4BNW9C\",\"output_index\":0,\"sequence_number\":29}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"800\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"2dzvNT6FJ2Ovf\",\"output_index\":0,\"sequence_number\":30}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"0\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"V4XKpua0UV7ru25\",\"output_index\":0,\"sequence_number\":31}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"-\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"eTsaYF69w6SPck2\",\"output_index\":0,\"sequence_number\":32}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"000\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"LwGSKjP18YeiZ\",\"output_index\":0,\"sequence_number\":33}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"000\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"lIhZpD2xHx5zU\",\"output_index\":0,\"sequence_number\":34}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"000\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"5OXTEFOeiKyws\",\"output_index\":0,\"sequence_number\":35}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"0\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"TAeCiBWlk2wnfmM\",\"output_index\":0,\"sequence_number\":36}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"e\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"PFBZr2tFh9MPut4\",\"output_index\":0,\"sequence_number\":37}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"9\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"M8qvyG8lGzuxCGO\",\"output_index\":0,\"sequence_number\":38}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\",\\\"\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"qmAOGUgLcndBJ\",\"output_index\":0,\"sequence_number\":39}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"resume\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"bmnBKpXwtQ\",\"output_index\":0,\"sequence_number\":40}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Data\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"D2Wqh9yGp5ia\",\"output_index\":0,\"sequence_number\":41}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":{\\\"\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"PDgZrc5tNKzF\",\"output_index\":0,\"sequence_number\":42}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"no\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"XMcHYFhgmSKL5R\",\"output_index\":0,\"sequence_number\":43}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Of\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"IOyj5K463Wmpyj\",\"output_index\":0,\"sequence_number\":44}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Years\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"RIrUZPNWdOz\",\"output_index\":0,\"sequence_number\":45}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"EIU4XM9CXYR8wj\",\"output_index\":0,\"sequence_number\":46}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"25\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"SzDTKyyHIQxgYR\",\"output_index\":0,\"sequence_number\":47}\n\n",
           "event: response.function_cal",
-          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\",\\\"\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"ImR8a7IcEFqhfG\",\"output_index\":0,\"sequence_number\":13}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"s\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"APxm2nRc8xnfX3y\",\"output_index\":0,\"sequence_number\":14}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"uspended\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"Yvp13kqR\",\"output_index\":0,\"sequence_number\":15}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Tool\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"lZDNgo4N83Oq\",\"output_index\":0,\"sequence_number\":16}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Run\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"6D8BoQ4h1yEA4\",\"output_index\":0,\"sequence_number\":17}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Id\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"CRbx7FGi0w41k7\",\"output_index\":0,\"sequence_number\":18}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"Er4B5gGD2JfVu\",\"output_index\":0,\"sequence_number\":19}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"000\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"xuUoZvtND3iM1\",\"output_index\":0,\"sequence_number\":20}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"000\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"F54Bxi2bMCldW\",\"output_index\":0,\"sequence_number\":21}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"00\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"URLfPVPNFO1ZU6\",\"output_index\":0,\"sequence_number\":22}\n\n",
-          "event: response.function_cal",
-          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"-\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"SjGeSKcLfXiY2an\",\"output_index\":0,\"sequence_number\":23}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"000\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"Wj4Ekig6RblPK\",\"output_index\":0,\"sequence_number\":24}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"0\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"7uMCUEqmdUmqtKq\",\"output_index\":0,\"sequence_number\":25}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"-\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"fc6EBmjItg5B5jU\",\"output_index\":0,\"sequence_number\":26}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"400\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"lZc2a47uxauCM\",\"output_index\":0,\"sequence_number\":27}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"0\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"yQP050Z2iNujevl\",\"output_index\":0,\"sequence_number\":28}\n\n",
-          "event: response.function_cal",
-          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"-\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"iCbFzYrKx1mVz1g\",\"output_index\":0,\"sequence_number\":29}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"800\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"GfheB5wx5nGxP\",\"output_index\":0,\"sequence_number\":30}\n\n",
-          "event: response.function_cal",
-          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"0\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"xL80c3UzQ6CFAJO\",\"output_index\":0,\"sequence_number\":31}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"-\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"Bmz72oNXh6P9QdO\",\"output_index\":0,\"sequence_number\":32}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"000\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"M1pELSKP7bczK\",\"output_index\":0,\"sequence_number\":33}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"000\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"hd2XpBsGYOHtv\",\"output_index\":0,\"sequence_number\":34}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"000\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"vhLWPmhdc6vYE\",\"output_index\":0,\"sequence_number\":35}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"0\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"5Ojc4OsdVawnmOg\",\"output_index\":0,\"sequence_number\":36}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"c\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"N0vOtlvtQONfFo3\",\"output_index\":0,\"sequence_number\":37}\n\n",
-          "event: response.function_cal",
-          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"6\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"67SW6GQ7liQMaZs\",\"output_index\":0,\"sequence_number\":38}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\",\\\"\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"HiIA5P933xTjB\",\"output_index\":0,\"sequence_number\":39}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"resume\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"BsX7L2nWM9\",\"output_index\":0,\"sequence_number\":40}\n\n",
-          "event: response.function_cal",
-          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Data\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"4Hu3xunbz3F1\",\"output_index\":0,\"sequence_number\":41}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":{\\\"\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"42CZ1LtQvWrj\",\"output_index\":0,\"sequence_number\":42}\n\n",
-          "event: response.function_cal",
-          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"no\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"4k11Oy7K3bitqk\",\"output_index\":0,\"sequence_number\":43}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Of\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"9onWc0OHUn5PbI\",\"output_index\":0,\"sequence_number\":44}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Years\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"sdu0alTlO3o\",\"output_index\":0,\"sequence_number\":45}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"BgtiLVDV7fleAi\",\"output_index\":0,\"sequence_number\":46}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"25\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"bStxFhCHxhJyIH\",\"output_index\":0,\"sequence_number\":47}\n\n",
-          "event: response.function_cal",
-          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"}}\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"obfuscation\":\"mTN1Tc5pw12rjY\",\"output_index\":0,\"sequence_number\":48}\n\n",
-          "event: response.function_ca",
-          "ll_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"inputData\\\":{\\\"name\\\":\\\"Dero Israel\\\"},\\\"suspendedToolRunId\\\":\\\"00000000-0000-4000-8000-0000000000c6\\\",\\\"resumeData\\\":{\\\"noOfYears\\\":25}}\",\"item_id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"output_index\":0,\"sequence_number\":49}\n\n",
-          "event: response.output_item",
-          ".done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"inputData\\\":{\\\"name\\\":\\\"Dero Israel\\\"},\\\"suspendedToolRunId\\\":\\\"00000000-0000-4000-8000-0000000000c6\\\",\\\"resumeData\\\":{\\\"noOfYears\\\":25}}\",\"call_id\":\"call_4XBDCoTEh36Dz8C0uKt87Qy2\",\"name\":\"workflow-findUserWorkflow\"},\"output_index\":0,\"sequence_number\":50}\n\n",
-          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0107c3f75a2a4cc7006a0afec5708881909a9d532d5176be45\",\"object\":\"response\",\"created_at\":1779105477,\"status\":\"completed\",\"background\":false,\"completed_at\":1779105478,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"inputData\\\":{\\\"name\\\":\\\"Dero Israel\\\"},\\\"suspendedToolRunId\\\":\\\"00000000-0000-4000-8000-0000000000c6\\\",\\\"resumeData\\\":{\\\"noOfYears\\\":25}}\",\"call_id\":\"call_4XBDCoTEh36Dz8C0uKt87Qy2\",\"name\":\"workflow-findUserWorkflow\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name, and age\",\"name\":\"workflow-findUserWorkflow\",\"parameters\":{\"type\":\"object\",\"properties\":{\"inputData\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"suspendedToolRunId\":{\"description\":\"The runId of the suspended tool\",\"anyOf\":[{\"description\":\"The runId of the suspended tool\",\"type\":\"string\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"inputData\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":498,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":58,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":556},\"user\":null,\"metadata\":{}},\"sequence_number\":51}\n\n"
+          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"}}\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"obfuscation\":\"8ZPBa200IE54la\",\"output_index\":0,\"sequence_number\":48}\n\n",
+          "event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"inputData\\\":{\\\"name\\\":\\\"Dero Israel\\\"},\\\"suspendedToolRunId\\\":\\\"00000000-0000-4000-8000-0000000000e9\\\",\\\"resumeData\\\":{\\\"noOfYears\\\":25}}\",\"item_id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"output_index\":0,\"sequence_number\":49}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"inputData\\\":{\\\"name\\\":\\\"Dero Israel\\\"},\\\"suspendedToolRunId\\\":\\\"00000000-0000-4000-8000-0000000000e9\\\",\\\"resumeData\\\":{\\\"noOfYears\\\":25}}\",\"call_id\":\"call_xEvTerI5l5eAz9oIZ9fhY1LR\",\"name\":\"workflow-findUserWorkflow\"},\"output_index\":0,\"sequence_number\":50}\n\n",
+          "event: response.completed\nd",
+          "ata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_03300b36e77df8bd006a32a2bab06481988c6cf664ac9cb4df\",\"object\":\"response\",\"created_at\":1781703354,\"status\":\"completed\",\"background\":false,\"completed_at\":1781703356,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"inputData\\\":{\\\"name\\\":\\\"Dero Israel\\\"},\\\"suspendedToolRunId\\\":\\\"00000000-0000-4000-8000-0000000000e9\\\",\\\"resumeData\\\":{\\\"noOfYears\\\":25}}\",\"call_id\":\"call_xEvTerI5l5eAz9oIZ9fhY1LR\",\"name\":\"workflow-findUserWorkflow\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name, and age\",\"name\":\"workflow-findUserWorkflow\",\"parameters\":{\"type\":\"object\",\"properties\":{\"inputData\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"suspendedToolRunId\":{\"description\":\"The runId of the suspended tool\",\"anyOf\":[{\"description\":\"The runId of the suspended tool\",\"type\":\"string\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"inputData\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":500,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":58,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":558},\"user\":null,\"metadata\":{}},\"sequence_number\":51}\n\n"
         ],
         "chunkTimings": [
-          0, 1, 0, 578, 0, 1, 39, 1, 4, 1, 61, 2, 37, 2, 21, 1, 60, 0, 0, 17, 31, 2, 26, 1, 24, 0, 43, 13, 5, 61, 6, 2,
-          3, 0, 1, 2, 34, 2, 0, 63, 2, 32, 6, 5, 2, 2, 0, 0, 20, 0, 0, 29, 2, 1, 19, 2, 12, 0, 3, 1, 112, 0, 2, 0, 121
+          0,
+          836,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          9,
+          22,
+          1,
+          67,
+          6,
+          0,
+          16,
+          2,
+          1,
+          1,
+          5,
+          0,
+          0,
+          12,
+          0,
+          23,
+          0,
+          22,
+          0,
+          17,
+          1,
+          24,
+          75,
+          6,
+          7,
+          6,
+          6,
+          3,
+          0,
+          3,
+          5,
+          6,
+          16,
+          0,
+          4,
+          1,
+          26,
+          0,
+          118,
+          2
         ],
         "isStreaming": true
       }
     },
     {
-      "hash": "a464e8eade833590",
+      "hash": "3b70c1df07497d8c",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -344,12 +435,12 @@
             },
             {
               "type": "item_reference",
-              "id": "fc_0107c3f75a2a4cc7006a0afec62c38819081e2fdabcb8ae34c"
+              "id": "fc_03300b36e77df8bd006a32a2bb97288198b0eaac15e921ae3a"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_4XBDCoTEh36Dz8C0uKt87Qy2",
-              "output": "{\"result\":{\"name\":\"Dero Israel\",\"email\":\"test@test.com\",\"age\":25},\"runId\":\"00000000-0000-4000-8000-0000000000c6\"}"
+              "call_id": "call_xEvTerI5l5eAz9oIZ9fhY1LR",
+              "output": "{\"result\":{\"name\":\"Dero Israel\",\"email\":\"test@test.com\",\"age\":25},\"runId\":\"00000000-0000-4000-8000-0000000000e9\"}"
             }
           ],
           "tools": [
@@ -368,7 +459,9 @@
                         "type": "string"
                       }
                     },
-                    "required": ["name"],
+                    "required": [
+                      "name"
+                    ],
                     "additionalProperties": false
                   },
                   "suspendedToolRunId": {
@@ -394,10 +487,17 @@
                     ]
                   }
                 },
-                "required": ["inputData", "suspendedToolRunId", "resumeData"],
+                "required": [
+                  "inputData",
+                  "suspendedToolRunId",
+                  "resumeData"
+                ],
                 "additionalProperties": false,
                 "$schema": "http://json-schema.org/draft-07/schema#",
-                "x-optional": ["suspendedToolRunId", "resumeData"]
+                "x-optional": [
+                  "suspendedToolRunId",
+                  "resumeData"
+                ]
               },
               "strict": false
             }
@@ -405,7 +505,7 @@
           "tool_choice": "auto",
           "stream": true
         },
-        "timestamp": 1779105479215
+        "timestamp": 1781703356005
       },
       "response": {
         "status": 200,
@@ -414,62 +514,120 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9fdaaffd3c8ab753-BRU",
+          "cf-ray": "a0d270b8d9122953-SJC",
           "connection": "keep-alive",
           "content-type": "text/event-stream; charset=utf-8",
-          "date": "Mon, 18 May 2026 11:57:59 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "344",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 17 Jun 2026 13:35:56 GMT",
+          "openai-organization": "work-kxidzh",
+          "openai-processing-ms": "289",
+          "openai-project": "proj_FCyHAyf1sRhVrYbrkAklMIPx",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-request-id": "req_7c7d9206138e4c0784cef20d6c33560e"
+          "x-request-id": "req_1f88411af5bd44979c7911fc3d7f7265"
         },
         "chunks": [
-          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_0107c3f75a2a4cc7006a0afec756248190978291df6092ae68\",\"object\":\"response\",\"created_at\":1779105479,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name, and age\",\"name\":\"workflow-findUserWorkflow\",\"parameters\":{\"type\":\"object\",\"properties\":{\"inputData\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"suspendedToolRunId\":{\"description\":\"The runId of the suspended tool\",\"anyOf\":[{\"description\":\"The runId of the suspended tool\",\"type\":\"string\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"inputData\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
-          "event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_0107c3f75a2a4cc7006a0afec756248190978291df6092ae68\",\"object\":\"response\",\"created_at\":1779105479,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name, and age\",\"name\":\"workflow-findUserWorkflow\",\"parameters\":{\"type\":\"object\",\"properties\":{\"inputData\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"suspendedToolRunId\":{\"description\":\"The runId of the suspended tool\",\"anyOf\":[{\"description\":\"The runId of the suspended tool\",\"type\":\"string\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"inputData\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
-          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":2}\n\n",
-          "event: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":3}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"The\",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"Emg7IoaSOeZtK\",\"output_index\":0,\"sequence_number\":4}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" user\",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"WpH7ufZZyKX\",\"output_index\":0,\"sequence_number\":5}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" you\",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"FFRzwlmiGG9E\",\"output_index\":0,\"sequence_number\":6}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" requested\",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"Gn6nay\",\"output_index\":0,\"sequence_number\":7}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" is\",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"HbPGsT57fKI7o\",\"output_index\":0,\"sequence_number\":8}\n\n",
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_03300b36e77df8bd006a32a2bc5c988198916c8560e4874a4a\",\"object\":\"response\",\"created_at\":1781703356,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name, and age\",\"name\":\"workflow-findUserWorkflow\",\"parameters\":{\"type\":\"object\",\"properties\":{\"inputData\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"suspendedToolRunId\":{\"description\":\"The runId of the suspended tool\",\"anyOf\":[{\"description\":\"The runId of the suspended tool\",\"type\":\"string\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"inputData\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\nevent: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_03300b36e77df8bd006a32a2bc5c988198916c8560e4874a4a\",\"object\":\"response\",\"created_at\":1781703356,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name, and age\",\"name\":\"workflow-findUserWorkflow\",\"parameters\":{\"type\":\"object\",\"properties\":{\"inputData\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"suspendedToolRunId\":{\"description\":\"The runId of the suspended tool\",\"anyOf\":[{\"description\":\"The runId of the suspended tool\",\"type\":\"string\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"inputData\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.content_par",
+          "t.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":3}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"The\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"Dy8LHW0SRtqgv\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" user\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"vO2qaxNwKrF\",\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" you\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"7LzVW4RoP7Qb\",\"output_index\":0,\"sequence_number\":6}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" requested\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"6L0Pl6\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" is\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"WmWH4TcGOXxMM\",\"output_index\":0,\"sequence_number\":8}\n\n",
           "event: response.output_text",
-          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\":\\n\\n\",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"DZw0w9tSROwTb\",\"output_index\":0,\"sequence_number\":9}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"-\",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"pS1M856eNrSFMQb\",\"output_index\":0,\"sequence_number\":10}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" **\",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"SLGihHhVdmGQ8\",\"output_index\":0,\"sequence_number\":11}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"Name\",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"W1dpTGzfVzPV\",\"output_index\":0,\"sequence_number\":12}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\":**\",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"Xtpm9DtOQ7WAM\",\"output_index\":0,\"sequence_number\":13}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" D\",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"yuWRypnW9DofIl\",\"output_index\":0,\"sequence_number\":14}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"ero\",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"2KzO5mSb4QLBJ\",\"output_index\":0,\"sequence_number\":15}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Israel\",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"Rgf3S5YDo\",\"output_index\":0,\"sequence_number\":16}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"\\n\",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"ibE1nJ0Kx1VqN9w\",\"output_index\":0,\"sequence_number\":17}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"-\",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"tHT3hzcRZSSRvgF\",\"output_index\":0,\"sequence_number\":18}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" **\",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"v9b9Sr4wYkHy9\",\"output_index\":0,\"sequence_number\":19}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"Age\",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"GctqgKXNWgzhH\",\"output_index\":0,\"sequence_number\":20}\n\n",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\":\\n\\n\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"Fnxt5lnUKwADx\",\"output_index\":0,\"sequence_number\":9}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"-\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"0PTJHC4spXtdvJB\",\"output_index\":0,\"sequence_number\":10}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" **\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"XSRkryTSkH45p\",\"output_index\":0,\"sequence_number\":11}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"Name\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"ElR6oj7u7yIY\",\"output_index\":0,\"sequence_number\":12}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\":**\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"HsfSlOZx1ZlPT\",\"output_index\":0,\"sequence_number\":13}\n\n",
           "event: response.output_text",
-          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\":**\",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"6r0Cp2Sow6jw3\",\"output_index\":0,\"sequence_number\":21}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"7o6gen9h7avD8BE\",\"output_index\":0,\"sequence_number\":22}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"25\",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"ioojoFYIljqKfD\",\"output_index\":0,\"sequence_number\":23}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"\\n\",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"dRAjwddk6sBLsgy\",\"output_index\":0,\"sequence_number\":24}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"-\",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"jyj9UdG7zTJgzrN\",\"output_index\":0,\"sequence_number\":25}\n\n",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" D\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"0F7lxY89pSUOcH\",\"output_index\":0,\"sequence_number\":14}\n\n",
           "event: response.output_text",
-          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" **\",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"nmq43WZYRUl5l\",\"output_index\":0,\"sequence_number\":26}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"Email\",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"LfTi8BMJIvM\",\"output_index\":0,\"sequence_number\":27}\n\n",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"ero\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"um7763VdlZ5aK\",\"output_index\":0,\"sequence_number\":15}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Israel\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"SFdYcu4td\",\"output_index\":0,\"sequence_number\":16}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"\\n\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"VjLXz9HaCz6dVgW\",\"output_index\":0,\"sequence_number\":17}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"-\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"l6I4AGMhme7bphJ\",\"output_index\":0,\"sequence_number\":18}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" **\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"SVrzaxLxuDDy4\",\"output_index\":0,\"sequence_number\":19}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"Email\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"SsFiSTlLavq\",\"output_index\":0,\"sequence_number\":20}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\":**\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"9hGHslGPNlqyG\",\"output_index\":0,\"sequence_number\":21}\n\n",
           "event: response.output_text",
-          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\":**\",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"zpCFEIw73b3Vp\",\"output_index\":0,\"sequence_number\":28}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" test\",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"M6hcWrEDJB0\",\"output_index\":0,\"sequence_number\":29}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"@test\",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"0HcgguNOqzw\",\"output_index\":0,\"sequence_number\":30}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".com\",\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"obfuscation\":\"aPdD3uJfbPGE\",\"output_index\":0,\"sequence_number\":31}\n\n",
-          "event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":32,\"text\":\"The user you requested is:\\n\\n- **Name:** Dero Israel\\n- **Age:** 25\\n- **Email:** test@test.com\"}\n\n",
-          "event: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"The user you requested is:\\n\\n- **Name:** Dero Israel\\n- **Age:** 25\\n- **Email:** test@test.com\"},\"sequence_number\":33}\n\n",
-          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"The user you requested is:\\n\\n- **Name:** Dero Israel\\n- **Age:** 25\\n- **Email:** test@test.com\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":34}\n\n",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" test\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"ezPsrlTRrX0\",\"output_index\":0,\"sequence_number\":22}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"@test\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"jt5G3h8OV28\",\"output_index\":0,\"sequence_number\":23}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".com\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"xzuYj20UD6qo\",\"output_index\":0,\"sequence_number\":24}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"\\n\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"Ol7gNfViPYK8jjl\",\"output_index\":0,\"sequence_number\":25}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"-\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"MrLR2YMtwXzLfrs\",\"output_index\":0,\"sequence_number\":26}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" **\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"MjUS9fYnKp8Rn\",\"output_index\":0,\"sequence_number\":27}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"Age\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"WKo5eNBDnXH9E\",\"output_index\":0,\"sequence_number\":28}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\":**\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"nUr609tYlXzPP\",\"output_index\":0,\"sequence_number\":29}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"tf19aPeOt55l1WS\",\"output_index\":0,\"sequence_number\":30}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"25\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"wEBwzFmifs75pT\",\"output_index\":0,\"sequence_number\":31}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" years\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"HNbgnxhVD2\",\"output_index\":0,\"sequence_number\":32}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" old\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"3vZ3WWyBGclS\",\"output_index\":0,\"sequence_number\":33}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"obfuscation\":\"yFQO5Y8bIZylYho\",\"output_index\":0,\"sequence_number\":34}\n\n",
+          "event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":35,\"text\":\"The user you requested is:\\n\\n- **Name:** Dero Israel\\n- **Email:** test@test.com\\n- **Age:** 25 years old.\"}\n\n",
+          "event: response.content_par",
+          "t.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"The user you requested is:\\n\\n- **Name:** Dero Israel\\n- **Email:** test@test.com\\n- **Age:** 25 years old.\"},\"sequence_number\":36}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"The user you requested is:\\n\\n- **Name:** Dero Israel\\n- **Email:** test@test.com\\n- **Age:** 25 years old.\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":37}\n\n",
           "event: response.completed\nd",
-          "ata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0107c3f75a2a4cc7006a0afec756248190978291df6092ae68\",\"object\":\"response\",\"created_at\":1779105479,\"status\":\"completed\",\"background\":false,\"completed_at\":1779105480,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"msg_0107c3f75a2a4cc7006a0afec829e081908bf5b0df9be991dd\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"The user you requested is:\\n\\n- **Name:** Dero Israel\\n- **Age:** 25\\n- **Email:** test@test.com\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name, and age\",\"name\":\"workflow-findUserWorkflow\",\"parameters\":{\"type\":\"object\",\"properties\":{\"inputData\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"suspendedToolRunId\":{\"description\":\"The runId of the suspended tool\",\"anyOf\":[{\"description\":\"The runId of the suspended tool\",\"type\":\"string\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"inputData\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":254,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":30,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":284},\"user\":null,\"metadata\":{}},\"sequence_number\":35}\n\n"
+          "ata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_03300b36e77df8bd006a32a2bc5c988198916c8560e4874a4a\",\"object\":\"response\",\"created_at\":1781703356,\"status\":\"completed\",\"background\":false,\"completed_at\":1781703357,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"msg_03300b36e77df8bd006a32a2bd40a48198a29be54e3f7be114\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"The user you requested is:\\n\\n- **Name:** Dero Israel\\n- **Email:** test@test.com\\n- **Age:** 25 years old.\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name, and age\",\"name\":\"workflow-findUserWorkflow\",\"parameters\":{\"type\":\"object\",\"properties\":{\"inputData\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"suspendedToolRunId\":{\"description\":\"The runId of the suspended tool\",\"anyOf\":[{\"description\":\"The runId of the suspended tool\",\"type\":\"string\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"inputData\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":254,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":33,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":287},\"user\":null,\"metadata\":{}},\"sequence_number\":38}\n\n"
         ],
         "chunkTimings": [
-          0, 1, 503, 2, 74, 1, 9, 7, 1, 0, 2, 37, 30, 2, 39, 5, 71, 1, 27, 2, 19, 0, 7, 40, 43, 0, 0, 44, 4, 0, 3, 7, 3,
-          90, 3, 1, 124, 0
+          0,
+          569,
+          0,
+          0,
+          352,
+          0,
+          0,
+          0,
+          12,
+          0,
+          0,
+          11,
+          1,
+          4,
+          2,
+          0,
+          5,
+          4,
+          0,
+          7,
+          2,
+          5,
+          0,
+          8,
+          2,
+          0,
+          5,
+          1,
+          3,
+          1,
+          0,
+          10,
+          5,
+          0,
+          0,
+          0,
+          0,
+          4,
+          0,
+          0,
+          0,
+          16,
+          3,
+          52,
+          0,
+          0,
+          0,
+          87,
+          3
         ],
         "isStreaming": true
       }
