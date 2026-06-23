@@ -16,10 +16,11 @@ type CodeEditorProps = {
   onChange?: (value: string) => void;
 };
 
-// @mastra/playground-ui is a heavy presentational dependency (SideDialog, CodeEditor,
-// Select primitives) with its own dedicated tests; stub it as a thin seam so this suite
-// can focus on the dialog's async-seeding logic. The data hooks below are driven through
-// the real @mastra/client-js + React Query stack via MSW.
+// @mastra/playground-ui is a heavy presentational dependency (SideDialog,
+// CodeEditor, Select primitives) with its own dedicated tests; stub it as a
+// thin seam so this suite can focus on the dialog's async-seeding logic. The
+// data hooks below are driven through the real @mastra/client-js + React Query
+// stack via MSW.
 vi.mock('@mastra/playground-ui', () => {
   const SideDialogRoot = ({ isOpen, children }: PropsWithChildren<{ isOpen: boolean }>) =>
     isOpen ? <div>{children}</div> : null;
@@ -35,15 +36,6 @@ vi.mock('@mastra/playground-ui', () => {
     Button: ({ variant: _variant, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: string }) => (
       <button {...props} />
     ),
-    CodeEditor: ({ value, onChange }: CodeEditorProps) => (
-      <textarea
-        value={value ?? ''}
-        onChange={(event: ChangeEvent<HTMLTextAreaElement>) => onChange?.(event.target.value)}
-      />
-    ),
-    Label: ({ children, ...props }: PropsWithChildren<HTMLAttributes<HTMLLabelElement>>) => (
-      <label {...props}>{children}</label>
-    ),
     Select: ({ children }: PropsWithChildren<SelectHTMLAttributes<HTMLSelectElement>>) => <div>{children}</div>,
     SelectTrigger: ({ children }: PropsWithChildren<HTMLAttributes<HTMLButtonElement>>) => (
       <button type="button">{children}</button>
@@ -52,7 +44,6 @@ vi.mock('@mastra/playground-ui', () => {
     SelectContent: ({ children }: PropsWithChildren) => <div>{children}</div>,
     SelectItem: ({ children }: PropsWithChildren<{ value: string }>) => <div>{children}</div>,
     SideDialog,
-    TextAndIcon: ({ children }: PropsWithChildren) => <span>{children}</span>,
     toast: { error: vi.fn(), success: vi.fn() },
   };
 });
@@ -67,6 +58,25 @@ vi.mock('@mastra/playground-ui/components/SideDialog', () => ({
       Heading: ({ children }: PropsWithChildren) => <h2>{children}</h2>,
     },
   ),
+}));
+
+vi.mock('@mastra/playground-ui/components/CodeEditor', () => ({
+  CodeEditor: ({ value, onChange }: CodeEditorProps) => (
+    <textarea
+      value={value ?? ''}
+      onChange={(event: ChangeEvent<HTMLTextAreaElement>) => onChange?.(event.target.value)}
+    />
+  ),
+}));
+
+vi.mock('@mastra/playground-ui/components/Label', () => ({
+  Label: ({ children, ...props }: PropsWithChildren<HTMLAttributes<HTMLLabelElement>>) => (
+    <label {...props}>{children}</label>
+  ),
+}));
+
+vi.mock('@mastra/playground-ui/components/Text', () => ({
+  TextAndIcon: ({ children }: PropsWithChildren) => <span>{children}</span>,
 }));
 
 beforeEach(() => {
