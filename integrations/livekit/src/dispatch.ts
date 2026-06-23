@@ -32,6 +32,11 @@ export async function dispatchVoiceSession(options: DispatchVoiceSessionOptions)
   if (!serverUrl) {
     throw new Error('@mastra/livekit: set LIVEKIT_URL or pass serverUrl to dispatchVoiceSession.');
   }
+  if (!apiKey || !apiSecret) {
+    throw new Error(
+      '@mastra/livekit: set LIVEKIT_API_KEY and LIVEKIT_API_SECRET or pass apiKey/apiSecret to dispatchVoiceSession.',
+    );
+  }
   const client = new AgentDispatchClient(toHttpUrl(serverUrl), apiKey, apiSecret);
   return client.createDispatch(options.roomName, options.agentName ?? DEFAULT_LIVEKIT_AGENT_NAME, {
     metadata: serializeSessionMetadata(options.metadata ?? {}),
