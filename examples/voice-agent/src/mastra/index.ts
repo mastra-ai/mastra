@@ -28,7 +28,8 @@ export const mastra = new Mastra({
     },
   }),
   server: {
-    port: Number(process.env.PORT ?? 4111),
+    // Number.parseInt over Number() so a non-numeric PORT falls back to 4111 instead of NaN.
+    port: Number.parseInt(process.env.PORT ?? '', 10) || 4111,
     apiRoutes: [
       liveKitConnectionRoute({
         agentName: 'mastra-voice',
