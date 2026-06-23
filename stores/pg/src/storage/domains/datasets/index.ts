@@ -95,14 +95,14 @@ export class DatasetsPG extends DatasetsStorage {
     await this.#addColumnIfNotExists(TABLE_DATASETS, 'targetIds', 'JSONB');
     await this.#addColumnIfNotExists(TABLE_DATASETS, 'scorerIds', 'JSONB');
     await this.#addColumnIfNotExists(TABLE_DATASETS, 'organizationId', 'TEXT');
-    await this.#addColumnIfNotExists(TABLE_DATASETS, 'resourceId', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASETS, 'projectId', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASETS, 'candidateKey', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASETS, 'candidateId', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'requestContext', 'JSONB');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'source', 'JSONB');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'expectedTrajectory', 'JSONB');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'organizationId', 'TEXT');
-    await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'resourceId', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'projectId', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'toolMocks', 'JSONB');
 
     await this.createDefaultIndexes();
@@ -145,7 +145,7 @@ export class DatasetsPG extends DatasetsStorage {
       {
         name: 'idx_datasets_org_resource',
         table: TABLE_DATASETS,
-        columns: ['organizationId', 'resourceId'],
+        columns: ['organizationId', 'projectId'],
       },
       {
         name: 'idx_datasets_candidate',
@@ -155,7 +155,7 @@ export class DatasetsPG extends DatasetsStorage {
       {
         name: 'idx_dataset_items_org_resource',
         table: TABLE_DATASET_ITEMS,
-        columns: ['organizationId', 'resourceId'],
+        columns: ['organizationId', 'projectId'],
       },
     ];
   }
@@ -198,7 +198,7 @@ export class DatasetsPG extends DatasetsStorage {
       targetIds: row.targetIds || null,
       scorerIds: row.scorerIds || null,
       organizationId: (row.organizationId as string | null) ?? null,
-      resourceId: (row.resourceId as string | null) ?? null,
+      projectId: (row.projectId as string | null) ?? null,
       candidateKey: (row.candidateKey as string | null) ?? null,
       candidateId: (row.candidateId as string | null) ?? null,
       version: row.version as number,
@@ -213,7 +213,7 @@ export class DatasetsPG extends DatasetsStorage {
       datasetId: row.datasetId as string,
       datasetVersion: row.datasetVersion as number,
       organizationId: (row.organizationId as string | null) ?? null,
-      resourceId: (row.resourceId as string | null) ?? null,
+      projectId: (row.projectId as string | null) ?? null,
       input: safelyParseJSON(row.input),
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
       expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : undefined,
@@ -232,7 +232,7 @@ export class DatasetsPG extends DatasetsStorage {
       datasetId: row.datasetId as string,
       datasetVersion: row.datasetVersion as number,
       organizationId: (row.organizationId as string | null) ?? null,
-      resourceId: (row.resourceId as string | null) ?? null,
+      projectId: (row.projectId as string | null) ?? null,
       validTo: row.validTo as number | null,
       isDeleted: Boolean(row.isDeleted),
       input: safelyParseJSON(row.input),
@@ -278,7 +278,7 @@ export class DatasetsPG extends DatasetsStorage {
           targetIds: input.targetIds !== undefined ? JSON.stringify(input.targetIds) : null,
           scorerIds: input.scorerIds ? JSON.stringify(input.scorerIds) : null,
           organizationId: input.organizationId ?? null,
-          resourceId: input.resourceId ?? null,
+          projectId: input.projectId ?? null,
           candidateKey: input.candidateKey ?? null,
           candidateId: input.candidateId ?? null,
           version: 0,
@@ -299,7 +299,7 @@ export class DatasetsPG extends DatasetsStorage {
         targetIds: input.targetIds ?? null,
         scorerIds: input.scorerIds ?? null,
         organizationId: input.organizationId ?? null,
-        resourceId: input.resourceId ?? null,
+        projectId: input.projectId ?? null,
         candidateKey: input.candidateKey ?? null,
         candidateId: input.candidateId ?? null,
         version: 0,
@@ -393,7 +393,7 @@ export class DatasetsPG extends DatasetsStorage {
         setClauses.push(`"scorerIds" = $${paramIndex++}`);
         values.push(args.scorerIds === null ? null : JSON.stringify(args.scorerIds));
       }
-      // Tenancy (organizationId, resourceId) and candidate identity (candidateKey,
+      // Tenancy (organizationId, projectId) and candidate identity (candidateKey,
       // candidateId) are immutable after creation — they're not part of UpdateDatasetInput.
 
       values.push(args.id);
@@ -418,7 +418,7 @@ export class DatasetsPG extends DatasetsStorage {
         targetIds: (args.targetIds !== undefined ? args.targetIds : existing.targetIds) ?? null,
         scorerIds: (args.scorerIds !== undefined ? args.scorerIds : existing.scorerIds) ?? null,
         organizationId: existing.organizationId ?? null,
-        resourceId: existing.resourceId ?? null,
+        projectId: existing.projectId ?? null,
         candidateKey: existing.candidateKey ?? null,
         candidateId: existing.candidateId ?? null,
         updatedAt: new Date(now),
@@ -497,14 +497,14 @@ export class DatasetsPG extends DatasetsStorage {
       let paramIndex = 1;
 
       if (args.filters) {
-        const { organizationId, resourceId, candidateKey, candidateId } = args.filters;
+        const { organizationId, projectId, candidateKey, candidateId } = args.filters;
         if (organizationId !== undefined) {
           conditions.push(`"organizationId" = $${paramIndex++}`);
           queryParams.push(organizationId);
         }
-        if (resourceId !== undefined) {
-          conditions.push(`"resourceId" = $${paramIndex++}`);
-          queryParams.push(resourceId);
+        if (projectId !== undefined) {
+          conditions.push(`"projectId" = $${paramIndex++}`);
+          queryParams.push(projectId);
         }
         if (candidateKey !== undefined) {
           conditions.push(`"candidateKey" = $${paramIndex++}`);
@@ -580,15 +580,15 @@ export class DatasetsPG extends DatasetsStorage {
 
       await this.#db.client.tx(async t => {
         const row = await t.one(
-          `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version", "organizationId", "resourceId"`,
+          `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version", "organizationId", "projectId"`,
           [args.datasetId],
         );
         newVersion = row.version as number;
         parentOrganizationId = (row.organizationId as string | null) ?? null;
-        parentResourceId = (row.resourceId as string | null) ?? null;
+        parentResourceId = (row.projectId as string | null) ?? null;
 
         await t.none(
-          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","organizationId","resourceId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,NULL,false,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,NULL,false,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
           [
             id,
             args.datasetId,
@@ -620,7 +620,7 @@ export class DatasetsPG extends DatasetsStorage {
         datasetId: args.datasetId,
         datasetVersion: newVersion!,
         organizationId: parentOrganizationId,
-        resourceId: parentResourceId,
+        projectId: parentResourceId,
         input: args.input,
         groundTruth: args.groundTruth,
         expectedTrajectory: args.expectedTrajectory,
@@ -692,12 +692,12 @@ export class DatasetsPG extends DatasetsStorage {
       await this.#db.client.tx(async t => {
         // 1. Bump dataset version and read parent tenancy
         const row = await t.one(
-          `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version", "organizationId", "resourceId"`,
+          `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version", "organizationId", "projectId"`,
           [args.datasetId],
         );
         newVersion = row.version as number;
         parentOrganizationId = (row.organizationId as string | null) ?? null;
-        parentResourceId = (row.resourceId as string | null) ?? null;
+        parentResourceId = (row.projectId as string | null) ?? null;
 
         // 2. Close old row (set validTo = newVersion)
         await t.none(
@@ -708,7 +708,7 @@ export class DatasetsPG extends DatasetsStorage {
         // 3. Insert new row with merged fields, preserving original createdAt;
         //    tenancy is re-inherited from parent dataset (Option B)
         await t.none(
-          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","organizationId","resourceId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,NULL,false,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,NULL,false,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
           [
             args.id,
             args.datasetId,
@@ -740,7 +740,7 @@ export class DatasetsPG extends DatasetsStorage {
         ...existing,
         datasetVersion: newVersion!,
         organizationId: parentOrganizationId,
-        resourceId: parentResourceId,
+        projectId: parentResourceId,
         input: mergedInput,
         groundTruth: mergedGroundTruth,
         expectedTrajectory: mergedExpectedTrajectory,
@@ -789,12 +789,12 @@ export class DatasetsPG extends DatasetsStorage {
       await this.#db.client.tx(async t => {
         // 1. Bump dataset version and re-inherit tenancy from parent
         const row = await t.one(
-          `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version", "organizationId", "resourceId"`,
+          `UPDATE ${datasetsTable} SET "version" = "version" + 1 WHERE "id" = $1 RETURNING "version", "organizationId", "projectId"`,
           [datasetId],
         );
         const newVersion = row.version as number;
         const parentOrganizationId = (row.organizationId as string | null) ?? null;
-        const parentResourceId = (row.resourceId as string | null) ?? null;
+        const parentResourceId = (row.projectId as string | null) ?? null;
 
         // 2. Close old row
         await t.none(
@@ -805,7 +805,7 @@ export class DatasetsPG extends DatasetsStorage {
         // 3. Insert tombstone (isDeleted=true, validTo=NULL — tombstone is the "current" terminal version);
         //    tenancy re-inherited from parent dataset
         await t.none(
-          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","organizationId","resourceId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,NULL,true,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,NULL,true,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
           [
             id,
             datasetId,
@@ -873,7 +873,7 @@ export class DatasetsPG extends DatasetsStorage {
 
       // Tenancy inherited from parent dataset (Option B)
       const parentOrganizationId = dataset.organizationId ?? null;
-      const parentResourceId = dataset.resourceId ?? null;
+      const parentResourceId = dataset.projectId ?? null;
 
       let newVersion: number;
 
@@ -888,7 +888,7 @@ export class DatasetsPG extends DatasetsStorage {
         // 2. N item inserts
         for (const { id, input: itemInput } of itemsWithIds) {
           await t.none(
-            `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","organizationId","resourceId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,NULL,false,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+            `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,NULL,false,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
             [
               id,
               input.datasetId,
@@ -922,7 +922,7 @@ export class DatasetsPG extends DatasetsStorage {
         datasetId: input.datasetId,
         datasetVersion: newVersion!,
         organizationId: parentOrganizationId,
-        resourceId: parentResourceId,
+        projectId: parentResourceId,
         input: itemInput.input,
         groundTruth: itemInput.groundTruth,
         expectedTrajectory: itemInput.expectedTrajectory,
@@ -980,7 +980,7 @@ export class DatasetsPG extends DatasetsStorage {
 
       // Tenancy re-inherited from parent dataset (Option B)
       const parentOrganizationId = dataset.organizationId ?? null;
-      const parentResourceId = dataset.resourceId ?? null;
+      const parentResourceId = dataset.projectId ?? null;
 
       await this.#db.client.tx(async t => {
         // 1. Single version bump
@@ -997,7 +997,7 @@ export class DatasetsPG extends DatasetsStorage {
             [newVersion, item.id],
           );
           await t.none(
-            `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","organizationId","resourceId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,NULL,true,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+            `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,NULL,true,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
             [
               item.id,
               input.datasetId,
@@ -1142,14 +1142,14 @@ export class DatasetsPG extends DatasetsStorage {
       }
 
       if (args.filters) {
-        const { organizationId, resourceId } = args.filters;
+        const { organizationId, projectId } = args.filters;
         if (organizationId !== undefined) {
           conditions.push(`"organizationId" = $${paramIndex++}`);
           queryParams.push(organizationId);
         }
-        if (resourceId !== undefined) {
-          conditions.push(`"resourceId" = $${paramIndex++}`);
-          queryParams.push(resourceId);
+        if (projectId !== undefined) {
+          conditions.push(`"projectId" = $${paramIndex++}`);
+          queryParams.push(projectId);
         }
       }
 
