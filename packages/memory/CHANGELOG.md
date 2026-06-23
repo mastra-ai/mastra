@@ -1,5 +1,16 @@
 # @mastra/memory
 
+## 1.21.1-alpha.1
+
+### Patch Changes
+
+- Fixed semantic recall failing on long unbroken content. When a memory-enabled agent received a message containing a single very long whitespace-free string — a base64 data URI, a minified JS/JSON blob, a long URL, or spaceless CJK text — embedding could throw a provider "maximum context length" error and break that turn's persistence or recall. ([#18236](https://github.com/mastra-ai/mastra/pull/18236))
+
+  `chunkText` now hard-splits any single word that is longer than the chunk budget so every chunk stays under the embedder's token limit, and it no longer emits an empty leading chunk when the first word is oversized.
+
+- Updated dependencies [[`65f255a`](https://github.com/mastra-ai/mastra/commit/65f255a38667beb6ceeadabfa9eb5059bfec8298), [`4a88c6e`](https://github.com/mastra-ai/mastra/commit/4a88c6e2bdce316f8d7551b4ec3449b0b06fc71c), [`87a17ef`](https://github.com/mastra-ai/mastra/commit/87a17efbd725aca6639febdc5e69e2abb3048689), [`e11ff30`](https://github.com/mastra-ai/mastra/commit/e11ff301408bf1731dca2fb7fbfcd8c819500a35), [`9d2c946`](https://github.com/mastra-ai/mastra/commit/9d2c946d0859e90ae4bcec5beeb1da7398d2ad1e), [`f1ec385`](https://github.com/mastra-ai/mastra/commit/f1ec385386f62b1a0847ec5353ae2bb169d1c3d9), [`e14986f`](https://github.com/mastra-ai/mastra/commit/e14986f6e5478d6384d04ff9a7f9a79a46a8b529), [`0be490f`](https://github.com/mastra-ai/mastra/commit/0be490fabb538c5a7de796ea0aff7d04a0bea1f3), [`0be490f`](https://github.com/mastra-ai/mastra/commit/0be490fabb538c5a7de796ea0aff7d04a0bea1f3), [`974f614`](https://github.com/mastra-ai/mastra/commit/974f614e083bd68278536f94453f7b320b86a3c7), [`31be1cf`](https://github.com/mastra-ai/mastra/commit/31be1cf5f2a7b5eef12f6123a40653b4d8115c16)]:
+  - @mastra/core@1.46.0-alpha.3
+
 ## 1.21.1-alpha.0
 
 ### Patch Changes
