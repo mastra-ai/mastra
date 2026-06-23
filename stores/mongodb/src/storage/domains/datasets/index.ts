@@ -165,6 +165,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       groundTruth: typeof row.groundTruth === 'string' ? safelyParseJSON(row.groundTruth) : row.groundTruth,
       expectedTrajectory:
         typeof row.expectedTrajectory === 'string' ? safelyParseJSON(row.expectedTrajectory) : row.expectedTrajectory,
+      toolMocks: (typeof row.toolMocks === 'string' ? safelyParseJSON(row.toolMocks) : row.toolMocks) ?? undefined,
       requestContext: typeof row.requestContext === 'string' ? safelyParseJSON(row.requestContext) : row.requestContext,
       metadata: typeof row.metadata === 'string' ? safelyParseJSON(row.metadata) : row.metadata,
       source: typeof row.source === 'string' ? safelyParseJSON(row.source) : row.source,
@@ -415,6 +416,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         input: args.input,
         groundTruth: args.groundTruth ?? null,
         expectedTrajectory: args.expectedTrajectory ?? null,
+        toolMocks: args.toolMocks ?? null,
         requestContext: args.requestContext ?? null,
         metadata: args.metadata ?? null,
         source: args.source ?? null,
@@ -437,6 +439,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         input: args.input,
         groundTruth: args.groundTruth,
         expectedTrajectory: args.expectedTrajectory,
+        toolMocks: args.toolMocks,
         requestContext: args.requestContext,
         metadata: args.metadata,
         source: args.source,
@@ -481,6 +484,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         args.input !== undefined ||
         args.groundTruth !== undefined ||
         args.expectedTrajectory !== undefined ||
+        args.toolMocks !== undefined ||
         args.requestContext !== undefined ||
         args.metadata !== undefined ||
         args.source !== undefined;
@@ -496,6 +500,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const mergedGroundTruth = args.groundTruth !== undefined ? args.groundTruth : existing.groundTruth;
       const mergedExpectedTrajectory =
         args.expectedTrajectory !== undefined ? args.expectedTrajectory : existing.expectedTrajectory;
+      const mergedToolMocks = args.toolMocks !== undefined ? args.toolMocks : existing.toolMocks;
       const mergedRequestContext = args.requestContext !== undefined ? args.requestContext : existing.requestContext;
       const mergedMetadata = args.metadata !== undefined ? args.metadata : existing.metadata;
       const mergedSource = args.source !== undefined ? args.source : existing.source;
@@ -536,6 +541,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         input: mergedInput,
         groundTruth: mergedGroundTruth,
         expectedTrajectory: mergedExpectedTrajectory ?? null,
+        toolMocks: mergedToolMocks ?? null,
         requestContext: mergedRequestContext,
         metadata: mergedMetadata,
         source: mergedSource,
@@ -557,6 +563,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         input: mergedInput,
         groundTruth: mergedGroundTruth,
         expectedTrajectory: mergedExpectedTrajectory,
+        toolMocks: mergedToolMocks,
         requestContext: mergedRequestContext,
         metadata: mergedMetadata,
         source: mergedSource,
@@ -709,6 +716,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
           input: itemInput.input,
           groundTruth: itemInput.groundTruth ?? null,
           expectedTrajectory: itemInput.expectedTrajectory ?? null,
+          toolMocks: itemInput.toolMocks ?? null,
           requestContext: itemInput.requestContext ?? null,
           metadata: itemInput.metadata ?? null,
           source: itemInput.source ?? null,
@@ -733,6 +741,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         input: itemInput.input,
         groundTruth: itemInput.groundTruth,
         expectedTrajectory: itemInput.expectedTrajectory,
+        toolMocks: itemInput.toolMocks,
         requestContext: itemInput.requestContext,
         metadata: itemInput.metadata,
         source: itemInput.source,
