@@ -1,5 +1,11 @@
 # @mastra/voice-google-gemini-live
 
+## 0.14.0-alpha.1
+
+### Patch Changes
+
+- Fix sendContext() being rejected (WS 1007) on gemini-3.1-flash-live-preview by emitting `history_config: { initial_history_in_client_content: true }` in the setup frame. Also exposes `initialHistoryInClientContent` on `GeminiSessionConfig` so callers can opt out explicitly. ([#18368](https://github.com/mastra-ai/mastra/pull/18368))
+
 ## 0.14.0-alpha.0
 
 ### Minor Changes

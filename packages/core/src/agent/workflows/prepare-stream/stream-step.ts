@@ -15,6 +15,7 @@ import type { SaveQueueManager } from '../../save-queue';
 import type { CreatedAgentSignal } from '../../signals';
 import type { AgentMethodType } from '../../types';
 import type { PrepareStreamRunScope } from './run-scope';
+import { LOOP_OPTIONS_KEY } from './run-scope-keys';
 import type { AgentCapabilities } from './schema';
 
 interface StreamStepOptions<OUTPUT = undefined> {
@@ -82,7 +83,7 @@ export function createStreamStep<OUTPUT = undefined>({
       // `loopOptions` carries class instances (MessageList, Tools) and closures
       // (onStepFinish, onFinish, ...) — none of which survive the evented engine's
       // JSON round-trip in step inputs. map-results-step parked it on runScope.
-      const loopOptions = runScope.loopOptions! as ModelLoopStreamArgs<any, OUTPUT> & {
+      const loopOptions = runScope.getOrThrow(LOOP_OPTIONS_KEY) as ModelLoopStreamArgs<any, OUTPUT> & {
         initialSignalEchoes?: CreatedAgentSignal[];
       };
 

@@ -1,3 +1,4 @@
+import { abortFollowupScenario } from './abort-followup.js';
 import { activeSignalFollowupScenario } from './active-signal-followup.js';
 import { apiKeyDeleteEnvScenario } from './api-key-delete-env.js';
 import { apiKeyMultiProviderDeleteScenario } from './api-key-multi-provider-delete.js';
@@ -126,6 +127,7 @@ export type { McE2eScenario, McE2eScenarioRuntime, ScenarioName } from './types.
 
 export const scenarios: Record<ScenarioName, McE2eScenario> = {
   startup: startupScenario,
+  'abort-followup': abortFollowupScenario,
   'branch-context-long-name': branchContextLongNameScenario,
   'active-signal-followup': activeSignalFollowupScenario,
   'autocomplete-wrapping-navigation': autocompleteWrappingNavigationScenario,

@@ -42,6 +42,8 @@ function rowToExperiment(row: Record<string, any>): Experiment {
     metadata: t.metadata ?? undefined,
     datasetId: t.datasetId ?? null,
     datasetVersion: t.datasetVersion == null ? null : Number(t.datasetVersion),
+    organizationId: (t.organizationId as string | null | undefined) ?? null,
+    projectId: (t.projectId as string | null | undefined) ?? null,
     targetType: t.targetType,
     targetId: String(t.targetId),
     status: t.status,
@@ -64,6 +66,8 @@ function rowToExperimentResult(row: Record<string, any>): ExperimentResult {
     experimentId: String(t.experimentId),
     itemId: String(t.itemId),
     itemDatasetVersion: t.itemDatasetVersion == null ? null : Number(t.itemDatasetVersion),
+    organizationId: (t.organizationId as string | null | undefined) ?? null,
+    projectId: (t.projectId as string | null | undefined) ?? null,
     input: t.input ?? null,
     output: t.output ?? null,
     groundTruth: t.groundTruth ?? null,
@@ -104,6 +108,18 @@ export class ExperimentsSpanner extends ExperimentsStorage {
   async init(): Promise<void> {
     await this.db.createTable({ tableName: TABLE_EXPERIMENTS, schema: TABLE_SCHEMAS[TABLE_EXPERIMENTS] });
     await this.db.createTable({ tableName: TABLE_EXPERIMENT_RESULTS, schema: TABLE_SCHEMAS[TABLE_EXPERIMENT_RESULTS] });
+    // Backfill tenancy columns on pre-existing tables so older deployments
+    // keep working when they upgrade in place.
+    await this.db.alterTable({
+      tableName: TABLE_EXPERIMENTS,
+      schema: TABLE_SCHEMAS[TABLE_EXPERIMENTS],
+      ifNotExists: ['organizationId', 'projectId'],
+    });
+    await this.db.alterTable({
+      tableName: TABLE_EXPERIMENT_RESULTS,
+      schema: TABLE_SCHEMAS[TABLE_EXPERIMENT_RESULTS],
+      ifNotExists: ['organizationId', 'projectId'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -126,6 +142,17 @@ export class ExperimentsSpanner extends ExperimentsStorage {
         table: TABLE_EXPERIMENT_RESULTS,
         columns: ['experimentId', 'itemId'],
         unique: true,
+      },
+      // Tenancy: leading-tenant indexes for multi-tenant scans (parity with datasets domain).
+      {
+        name: 'mastra_experiments_org_project_idx',
+        table: TABLE_EXPERIMENTS,
+        columns: ['organizationId', 'projectId'],
+      },
+      {
+        name: 'mastra_experiment_results_org_project_idx',
+        table: TABLE_EXPERIMENT_RESULTS,
+        columns: ['organizationId', 'projectId'],
       },
     ];
   }
@@ -156,6 +183,8 @@ export class ExperimentsSpanner extends ExperimentsStorage {
         metadata: input.metadata ?? undefined,
         datasetId: input.datasetId ?? null,
         datasetVersion: input.datasetVersion ?? null,
+        organizationId: input.organizationId ?? null,
+        projectId: input.projectId ?? null,
         targetType: input.targetType,
         targetId: input.targetId,
         status: 'pending',
@@ -178,6 +207,8 @@ export class ExperimentsSpanner extends ExperimentsStorage {
           metadata: experiment.metadata ?? null,
           datasetId: experiment.datasetId,
           datasetVersion: experiment.datasetVersion,
+          organizationId: experiment.organizationId,
+          projectId: experiment.projectId,
           targetType: experiment.targetType,
           targetId: experiment.targetId,
           status: experiment.status,
@@ -302,6 +333,17 @@ export class ExperimentsSpanner extends ExperimentsStorage {
         conditions.push(`${quoteIdent('status', 'column name')} = @status`);
         params.status = args.status;
       }
+      if (args.filters) {
+        const { organizationId, projectId } = args.filters;
+        if (organizationId !== undefined) {
+          conditions.push(`${quoteIdent('organizationId', 'column name')} = @organizationId`);
+          params.organizationId = organizationId;
+        }
+        if (projectId !== undefined) {
+          conditions.push(`${quoteIdent('projectId', 'column name')} = @projectId`);
+          params.projectId = projectId;
+        }
+      }
       const whereSql = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
       const tableName = quoteIdent(TABLE_EXPERIMENTS, 'table name');
 
@@ -389,6 +431,8 @@ export class ExperimentsSpanner extends ExperimentsStorage {
         experimentId: input.experimentId,
         itemId: input.itemId,
         itemDatasetVersion: input.itemDatasetVersion ?? null,
+        organizationId: input.organizationId ?? null,
+        projectId: input.projectId ?? null,
         input: input.input ?? null,
         output: input.output ?? null,
         groundTruth: input.groundTruth ?? null,
@@ -409,6 +453,8 @@ export class ExperimentsSpanner extends ExperimentsStorage {
           experimentId: result.experimentId,
           itemId: result.itemId,
           itemDatasetVersion: result.itemDatasetVersion,
+          organizationId: result.organizationId,
+          projectId: result.projectId,
           input: result.input,
           output: result.output,
           groundTruth: result.groundTruth,
@@ -547,6 +593,17 @@ export class ExperimentsSpanner extends ExperimentsStorage {
       if (args.status !== undefined) {
         conditions.push(`${quoteIdent('status', 'column name')} = @status`);
         params.status = args.status;
+      }
+      if (args.filters) {
+        const { organizationId, projectId } = args.filters;
+        if (organizationId !== undefined) {
+          conditions.push(`${quoteIdent('organizationId', 'column name')} = @organizationId`);
+          params.organizationId = organizationId;
+        }
+        if (projectId !== undefined) {
+          conditions.push(`${quoteIdent('projectId', 'column name')} = @projectId`);
+          params.projectId = projectId;
+        }
       }
       const whereSql = `WHERE ${conditions.join(' AND ')}`;
       const tableName = quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name');

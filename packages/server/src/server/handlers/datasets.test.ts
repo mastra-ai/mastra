@@ -1,7 +1,7 @@
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { LIST_DATASETS_ROUTE } from './datasets';
+import { ADD_ITEM_ROUTE, GET_ITEM_ROUTE, LIST_DATASETS_ROUTE, UPDATE_ITEM_ROUTE } from './datasets';
 import { createTestServerContext } from './test-utils';
 
 describe('Datasets Handlers', () => {
@@ -75,6 +75,43 @@ describe('Datasets Handlers', () => {
 
       expect(page2.datasets).toHaveLength(5);
       expect(page2.pagination.hasMore).toBe(false);
+    });
+  });
+
+  describe('item tool mocks', () => {
+    it('round-trips toolMocks through add, get, and update', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Mocks DS' });
+      const toolMocks = [
+        { toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 52 } },
+        { toolName: 'getWeather', args: { city: 'Paris' }, output: { temp: 60 } },
+      ];
+
+      const added = (await ADD_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        input: { q: 'weather' },
+        toolMocks,
+      } as any)) as any;
+
+      expect(added.toolMocks).toEqual(toolMocks);
+
+      const fetched = (await GET_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: added.id,
+      } as any)) as any;
+
+      expect(fetched.toolMocks).toEqual(toolMocks);
+
+      // SCD-2: updating an unrelated field preserves toolMocks
+      const updated = (await UPDATE_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: added.id,
+        input: { q: 'updated' },
+      } as any)) as any;
+
+      expect(updated.toolMocks).toEqual(toolMocks);
     });
   });
 });
