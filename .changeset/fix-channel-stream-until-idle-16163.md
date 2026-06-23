@@ -2,7 +2,7 @@
 "@mastra/core": patch
 ---
 
-fix(channels): use `agent.streamUntilIdle()` so channel handlers wait for background tasks
+Fixed channel handlers so background tasks finish before responses are posted.
 
 The channel handler was calling `agent.stream()`, which closes as soon as the
 model finishes generating text. Any `agent.backgroundTask()` calls scheduled
