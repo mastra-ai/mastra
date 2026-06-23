@@ -741,7 +741,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   await harness.getMastra()?.startWorkers();
   trace('harness:createSession:start', { resourceId: project.resourceId });
   const session = await harness.createSession();
-  trace('harness:createSession:done', { resourceId: project.resourceId, threadId: session.thread.id() });
+  trace('harness:createSession:done', { resourceId: project.resourceId, threadId: session.thread.getId() });
   activeSession = session;
 
   // Sync hookManager session ID on thread changes
