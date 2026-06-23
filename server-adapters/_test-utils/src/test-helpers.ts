@@ -1,6 +1,6 @@
-import { Agent } from '@mastra/core/agent';
+import { Agent, createMessageSignal, createSignal } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core';
-import { Mock, vi } from 'vitest';
+import { expect, Mock, vi } from 'vitest';
 import { Workflow } from '@mastra/core/workflows';
 import { normalizeRoutePath } from './route-test-utils';
 import { createScorer } from '@mastra/core/evals';
@@ -10,6 +10,7 @@ import { MockMemory } from '@mastra/core/memory';
 import { MastraVector } from '@mastra/core/vector';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
+import { UnknownToolProviderError } from '@mastra/core/tool-provider';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import type { ZodTypeAny } from 'zod';
 import { ServerRoute, WorkflowRegistry } from '@mastra/server/server-adapter';
@@ -228,8 +229,50 @@ export function mockAgentMethods(agent: Agent) {
   // Mock declineToolCallGenerate method - returns same format as generate
   vi.spyOn(agent, 'declineToolCallGenerate').mockResolvedValue({ text: 'test response' } as any);
 
+  vi.spyOn(agent, 'sendToolApproval').mockResolvedValue({
+    accepted: true,
+    runId: 'test-run',
+    toolCallId: 'test-tool',
+  } as any);
+
   // Mock network method
   vi.spyOn(agent, 'network').mockResolvedValue(createMockStream() as any);
+
+  vi.spyOn(agent, 'sendSignal').mockImplementation((signal: any, target: any) => {
+    const createdSignal = createSignal(signal);
+    const runId = target?.runId ?? 'test-run';
+    return {
+      accepted: Promise.resolve({ action: 'deliver', runId }),
+      signal: createdSignal,
+    } as any;
+  });
+
+  vi.spyOn(agent, 'sendMessage').mockImplementation((message: any, target: any) => {
+    const createdSignal = createMessageSignal(message);
+    const runId = target?.runId ?? 'test-run';
+    return {
+      accepted: Promise.resolve({ action: 'deliver', runId }),
+      signal: createdSignal,
+    } as any;
+  });
+
+  vi.spyOn(agent, 'queueMessage').mockImplementation((message: any, target: any) => {
+    const createdSignal = createMessageSignal(message);
+    const runId = target?.runId ?? 'test-run';
+    return {
+      accepted: Promise.resolve({ action: 'deliver', runId }),
+      signal: createdSignal,
+    } as any;
+  });
+
+  vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
+    stream: (async function* () {
+      yield { type: 'text-delta', textDelta: 'test' };
+    })(),
+    activeRunId: () => 'test-run',
+    abort: vi.fn(() => true),
+    unsubscribe: vi.fn(),
+  } as any);
 
   // Mock getVoice to return the voice object that the handler expects
   const mockVoice = createMockVoice();
@@ -516,6 +559,13 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     createProcessor: vi.fn(),
   };
   vi.spyOn(mastra, 'getEditor').mockReturnValue({
+    hasEnabledBuilderConfig: () => true,
+    resolveBuilder: async () => ({
+      enabled: true,
+      getFeatures: () => ({ agent: { favorites: true } }),
+      getConfiguration: () => undefined,
+      getModelPolicyWarnings: () => [],
+    }),
     prompt: {
       preview: vi.fn().mockResolvedValue('resolved instructions preview'),
       clearCache: vi.fn(),
@@ -526,6 +576,11 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     agent: {
       list: vi.fn().mockResolvedValue({ agents: [] }),
       clearCache: vi.fn(),
+      create: vi.fn().mockImplementation(async (input: any) => {
+        // Delegate to storage directly, mirroring what editor.agent.create does
+        const agents = await mastra.getStorage()!.getStore('agents');
+        return agents!.create({ agent: input });
+      }),
       clone: vi.fn().mockResolvedValue({
         id: 'cloned-agent',
         name: 'Test Agent (Clone)',
@@ -544,6 +599,10 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     getToolProvider: vi
       .fn()
       .mockImplementation((id: string) => (id === 'test-provider' ? mockToolProvider : undefined)),
+    getToolProviderOrThrow: vi.fn().mockImplementation((id: string) => {
+      if (id === 'test-provider') return mockToolProvider;
+      throw new UnknownToolProviderError(id, ['test-provider']);
+    }),
     getProcessorProviders: vi.fn().mockReturnValue({ 'test-provider': mockProcessorProvider }),
     getProcessorProvider: vi
       .fn()
@@ -1416,6 +1475,49 @@ export function createStreamWithSensitiveData(format: 'v1' | 'v2' = 'v2'): Reada
       controller.close();
     },
   });
+}
+
+/**
+ * Creates a ReadableStream for testing per-chunk serialization error handling
+ * (https://github.com/mastra-ai/mastra/issues/17821).
+ *
+ * Emits three chunks:
+ * 1. a chunk whose payload contains a BigInt (not JSON-serializable natively — must be coerced to a string)
+ * 2. a chunk that cannot be serialized at all (throwing toJSON — must be skipped without killing the stream)
+ * 3. a final chunk that must still be delivered after the unserializable one
+ *
+ * Use {@link expectSerializedStreamChunks} to assert on the consumed result.
+ */
+export function createStreamWithUnserializableChunk(): ReadableStream {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue({ type: 'workflow-step-result', payload: { output: { count: 42n } } });
+      controller.enqueue({
+        type: 'poison',
+        toJSON() {
+          throw new Error('cannot serialize');
+        },
+      });
+      controller.enqueue({ type: 'workflow-finish', payload: { workflowStatus: 'success' } });
+      controller.close();
+    },
+  });
+}
+
+/**
+ * Asserts the chunks consumed from {@link createStreamWithUnserializableChunk}:
+ * BigInt coerced to a string, the poison chunk skipped, and the final chunk delivered.
+ */
+export function expectSerializedStreamChunks(chunks: any[]): void {
+  const stepResult = chunks.find(c => c.type === 'workflow-step-result');
+  expect(stepResult).toBeDefined();
+  expect(stepResult.payload.output).toEqual({ count: '42' });
+
+  expect(chunks.find(c => c.type === 'poison')).toBeUndefined();
+
+  const finish = chunks.find(c => c.type === 'workflow-finish');
+  expect(finish, 'chunks after an unserializable chunk must still be delivered').toBeDefined();
+  expect(finish.payload.workflowStatus).toBe('success');
 }
 
 /**

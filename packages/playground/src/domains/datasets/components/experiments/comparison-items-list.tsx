@@ -1,6 +1,7 @@
 import type { CompareExperimentsResponse } from '@mastra/client-js';
-import { Column, ItemList } from '@mastra/playground-ui';
-import type { ItemListColumn } from '@mastra/playground-ui';
+import { Column } from '@mastra/playground-ui';
+import { ItemList } from '@mastra/playground-ui/components/ItemList';
+import type { ItemListColumn } from '@mastra/playground-ui/components/ItemList';
 import { ScoreDelta } from './score-delta';
 
 type ComparisonItem = CompareExperimentsResponse['items'][number];

@@ -1,7 +1,6 @@
 import {
   Button,
   Chip,
-  Combobox,
   CopyButton,
   Dialog,
   DialogContent,
@@ -16,6 +15,7 @@ import {
   toast,
   cn,
 } from '@mastra/playground-ui';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { useQueryClient } from '@tanstack/react-query';
 import { Play, Sparkles, Clock, ChevronRight, ChevronDown, Pencil, Save, X, Trash2 } from 'lucide-react';
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
@@ -215,6 +215,7 @@ export function DatasetDetailView({
     triggerExperiment,
     mergedRequestContext,
     queryClient,
+    refetchExperiments,
     selectedDatasetVersion,
     selectedAgentVersion,
   ]);
@@ -250,7 +251,12 @@ export function DatasetDetailView({
               </Icon>
               Generate
             </Button>
-            <Button variant="cta" size="sm" onClick={handleRunExperiment} disabled={items.length === 0 || isRunning}>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleRunExperiment}
+              disabled={items.length === 0 || isRunning}
+            >
               {isRunning ? (
                 <>
                   <Spinner className="h-3 w-3" /> Running...
@@ -693,7 +699,7 @@ function ExpandedItemEditor({
           />
         </div>
         <div className="flex items-center gap-2 pt-1">
-          <Button variant="cta" size="sm" onClick={handleSave} disabled={updateItem.isPending}>
+          <Button variant="primary" size="sm" onClick={handleSave} disabled={updateItem.isPending}>
             {updateItem.isPending ? (
               <Spinner className="h-3 w-3" />
             ) : (

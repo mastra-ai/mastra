@@ -2,8 +2,11 @@ import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod';
 import type { PubSub } from '../../../../events/pubsub';
+import { mergeProviderOptions } from '../../../../llm/model/provider-options';
+import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
 import type { Mastra } from '../../../../mastra';
 import type { SpanType, AIModelGenerationSpan, ExportedSpan, IModelSpanTracker } from '../../../../observability';
+import { getStepAvailableToolNames } from '../../../../observability/utils';
 import { ProcessorRunner } from '../../../../processors/runner';
 import { execute } from '../../../../stream/aisdk/v5/execute';
 import { MastraModelOutput } from '../../../../stream/base/output';
@@ -14,7 +17,7 @@ import { MessageList } from '../../../message-list';
 import type { MastraDBMessage } from '../../../message-list';
 import { isSupportedLanguageModel } from '../../../utils';
 import { DurableStepIds } from '../../constants';
-import { globalRunRegistry } from '../../run-registry';
+import { endRunSpansWithError, globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent, emitStepStartEvent } from '../../stream-adapter';
 import type { DurableAgenticWorkflowInput, DurableLLMStepOutput, DurableToolCallInput } from '../../types';
 import { resolveRuntimeDependencies, resolveModelFromListEntry } from '../../utils/resolve-runtime';
@@ -34,6 +37,7 @@ const durableLLMInputSchema = z.object({
     specificationVersion: z.string().optional(),
     originalConfig: z.union([z.string(), z.record(z.string(), z.any())]).optional(),
     settings: z.record(z.string(), z.any()).optional(),
+    providerOptions: z.record(z.string(), z.any()).optional(),
   }),
   // Model list for fallback support (when agent configured with array of models)
   modelList: z
@@ -45,6 +49,7 @@ const durableLLMInputSchema = z.object({
           modelId: z.string(),
           specificationVersion: z.string().optional(),
           originalConfig: z.union([z.string(), z.record(z.string(), z.any())]).optional(),
+          providerOptions: z.record(z.string(), z.any()).optional(),
         }),
         maxRetries: z.number(),
         enabled: z.boolean(),
@@ -67,12 +72,14 @@ const durableLLMInputSchema = z.object({
  */
 const durableLLMOutputSchema = z.object({
   messageListState: z.any(),
+  text: z.string().optional(),
   toolCalls: z.array(
     z.object({
       toolCallId: z.string(),
       toolName: z.string(),
       args: z.record(z.string(), z.any()),
       providerMetadata: z.record(z.string(), z.any()).optional(),
+      activeTools: z.array(z.string()).nullable().optional(),
     }),
   ),
   stepResult: z.object({
@@ -87,6 +94,10 @@ const durableLLMOutputSchema = z.object({
   state: z.any(),
   // Step index used in this execution (for tracking)
   stepIndex: z.number().optional(),
+  // Exported span data forwarded to downstream steps for trace nesting/closing
+  modelSpanData: z.any().optional(),
+  stepSpanData: z.any().optional(),
+  stepFinishPayload: z.any().optional(),
 });
 
 /**
@@ -190,17 +201,22 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             let currentModel = model;
             let currentTools = tools as unknown as ToolSet;
             let currentToolChoice = execOptions.toolChoice as ToolChoice<ToolSet> | undefined;
+            let currentActiveTools = execOptions.activeTools;
             let currentModelSettings = { temperature: execOptions.temperature };
+            let currentProviderOptions: SharedProviderOptions | undefined = mergeProviderOptions(
+              execOptions.providerOptions,
+              modelEntry.config.providerOptions,
+            ) as SharedProviderOptions | undefined;
 
             // 6. Rebuild MODEL_GENERATION span from passed data
             // For durable execution, ONE model_generation span is created BEFORE the workflow starts
             // and passed through each iteration. This ensures all steps are children of the same span.
             const observability = mastra?.observability?.getSelectedInstance({ requestContext });
 
-            // modelSpanData is passed through from the workflow input (created in create-inngest-agent.ts)
-            const inputModelSpanData = (inputData as any).modelSpanData as
-              | ExportedSpan<SpanType.MODEL_GENERATION>
-              | undefined;
+            // modelSpanData is threaded through the iteration state (seeded in preparation.ts);
+            // after a resume the registry override points steps at the resumed generation.
+            const inputModelSpanData = (globalRunRegistry.get(runId)?.resumeModelSpanData ??
+              (inputData as any).modelSpanData) as ExportedSpan<SpanType.MODEL_GENERATION> | undefined;
             const modelSpan = inputModelSpanData
               ? (observability?.rebuildSpan(inputModelSpanData) as AIModelGenerationSpan | undefined)
               : undefined;
@@ -247,6 +263,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 steps: (inputData as any).accumulatedSteps ?? [],
                 tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                 requestContext,
+                memory: registryEntry.memory,
+                resourceId: typedInput.state?.resourceId,
+                threadId: typedInput.state?.threadId,
                 model: currentModel,
                 messageId: currentMessageId,
                 rotateResponseMessageId: () => {
@@ -255,6 +274,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 },
                 tools: currentTools,
                 toolChoice: currentToolChoice,
+                providerOptions: currentProviderOptions,
+                activeTools: currentActiveTools,
                 modelSettings: currentModelSettings,
                 structuredOutput: structuredOutput as any,
                 retryCount: (inputData as any).processorRetryCount ?? 0,
@@ -265,6 +286,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               currentModel = (processInputStepResult.model ?? currentModel) as typeof currentModel;
               currentTools = (processInputStepResult.tools ?? currentTools) as ToolSet;
               currentToolChoice = processInputStepResult.toolChoice as ToolChoice<ToolSet> | undefined;
+              currentProviderOptions = processInputStepResult.providerOptions ?? currentProviderOptions;
+              currentActiveTools = processInputStepResult.activeTools;
               currentModelSettings = {
                 ...currentModelSettings,
                 ...(processInputStepResult.modelSettings ?? {}),
@@ -291,13 +314,34 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // 8. Start MODEL_STEP span at the beginning of LLM execution
             modelSpanTracker?.startStep();
 
+            // Apply post-processor request-side context to MODEL_INFERENCE then
+            // open the inference span immediately before the model call so its
+            // startTime excludes any input processor work and availableTools /
+            // toolChoice reflect per-step mutations. responseFormat tracks the
+            // actual structuredOutput payload sent to execute() — which is
+            // undefined when structuringModelConfig routes through a separate
+            // structuring step instead of asking the model for json_schema.
+            modelSpanTracker?.setInferenceContext?.({
+              parameters: currentModelSettings as Record<string, unknown> | undefined,
+              providerOptions: currentProviderOptions as Record<string, unknown> | undefined,
+              availableTools: getStepAvailableToolNames(
+                currentTools as Record<string, unknown> | undefined,
+                currentActiveTools,
+              ),
+              toolChoice: currentToolChoice,
+              responseFormat: structuredOutput ? 'json_schema' : undefined,
+            });
+            modelSpanTracker?.startInference?.();
+
             // 10. Execute LLM call
             const modelResult = execute({
               runId,
               model: currentModel,
+              providerOptions: currentProviderOptions,
               inputMessages,
               tools: currentTools,
               toolChoice: currentToolChoice,
+              activeTools: currentActiveTools,
               options: { abortSignal: executionAbortSignal },
               modelSettings: {
                 ...currentModelSettings,
@@ -340,20 +384,31 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               },
             });
 
-            // 11. Process the stream and emit chunks via pubsub
-            // Wrap the base stream with ModelSpanTracker to create MODEL_STEP and MODEL_CHUNK spans
+            // 11. Process the stream and emit chunks via pubsub.
+            // The inner LLM stream emits 'finish' but never 'step-finish' (durable calls
+            // `execute` directly). Rewrite 'finish' -> 'step-finish' before the tracker so
+            // MODEL_STEP / MODEL_INFERENCE close and the client buffers the step.
             const baseStream = outputStream._getBaseStream();
-            const trackedStream = modelSpanTracker?.wrapStream(baseStream) ?? baseStream;
+            const stepBoundaryStream = (baseStream as ReadableStream<any>).pipeThrough(
+              new TransformStream<any, any>({
+                transform(chunk, controller) {
+                  if (chunk?.type === 'finish') {
+                    controller.enqueue({ ...chunk, type: 'step-finish' });
+                  } else {
+                    controller.enqueue(chunk);
+                  }
+                },
+              }),
+            );
+            // Wrap with ModelSpanTracker to create/close MODEL_STEP and MODEL_CHUNK spans
+            const trackedStream = modelSpanTracker?.wrapStream(stepBoundaryStream) ?? stepBoundaryStream;
 
             try {
               for await (const chunk of trackedStream) {
                 if (!chunk) continue;
 
-                // Emit chunk via pubsub for streaming to client
-                // NOTE: Do NOT emit 'finish' chunks - they will be sent as a proper FINISH event
-                // at the end of the agentic loop. Emitting finish chunks here would cause
-                // the client's MastraModelOutput to close prematurely in multi-step workflows.
-                if (pubsub && chunk.type !== 'finish') {
+                // Forward every chunk to the client ('finish' was rewritten to 'step-finish' above).
+                if (pubsub) {
                   await emitChunkEvent(pubsub, runId, chunk);
                 }
 
@@ -374,15 +429,16 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       providerMetadata: payload.providerMetadata as Record<string, unknown> | undefined,
                       providerExecuted: payload.providerExecuted,
                       output: payload.output,
+                      activeTools: currentActiveTools ?? null,
                     });
                     break;
                   }
 
-                  case 'finish': {
+                  case 'step-finish': {
                     const payload = chunk.payload as any;
-                    // The finish chunk from MastraModelOutput has finishReason in stepResult.reason
+                    // The terminal chunk (rewritten from 'finish' above) carries finishReason
+                    // in stepResult.reason and usage in output.usage.
                     finishReason = payload.stepResult?.reason || payload.finishReason || 'stop';
-                    // Usage can be in output.usage or directly in payload.usage
                     usage = payload.output?.usage || payload.usage || usage;
                     break;
                   }
@@ -487,6 +543,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // 15. Build output
             const output: DurableLLMStepOutput = {
               messageListState: messageList.serialize(),
+              text: textDeltas.join(''),
               toolCalls,
               stepResult: {
                 reason: finishReason as any,
@@ -594,8 +651,15 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         } // end retry loop
       } // end model loop
 
-      // All models exhausted - throw the last error
-      throw lastError ?? new Error('Exhausted all fallback models and reached the maximum number of retries.');
+      // All models exhausted - throw the last error.
+      const fatalError =
+        lastError ?? new Error('Exhausted all fallback models and reached the maximum number of retries.');
+
+      // End the root spans here too — this is the only error path that covers EventedAgent,
+      // whose fire-and-forget launch never sees the failure (so emitError never runs).
+      endRunSpansWithError(runId, fatalError);
+
+      throw fatalError;
     },
   });
 }

@@ -1,34 +1,41 @@
-import type { AttachmentState } from '@assistant-ui/react';
-import { AttachmentPrimitive, ComposerPrimitive, useAttachment } from '@assistant-ui/react';
-import { Button, Spinner, Tooltip, TooltipContent, TooltipTrigger, Icon, fileToBase64 } from '@mastra/playground-ui';
+import {
+  Button,
+  Spinner,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  Icon,
+  fileToBase64,
+  isBrowserFetchableUrl,
+} from '@mastra/playground-ui';
 import { TooltipProvider } from '@radix-ui/react-tooltip';
-import { CircleXIcon } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import { useAttachmentSrc } from '../hooks/use-attachment-src';
-import { useHasAttachments } from '../hooks/use-has-attachments';
 import { useLoadBrowserFile } from '../hooks/use-load-browser-file';
-import { ImageEntry, TxtEntry, PdfEntry } from './attachment-preview-dialog';
+import { ImageEntry, TxtEntry, PdfEntry, FileChipEntry } from './attachment-preview-dialog';
+import { useComposerAttachments } from './composer-attachments';
+import type { ComposerAttachment } from './composer-attachments';
 
-const ComposerTxtAttachment = ({ document }: { document: AttachmentState }) => {
-  const { isLoading, text } = useLoadBrowserFile(document.file);
+const ComposerTxtAttachment = ({ file }: { file: File }) => {
+  const { isLoading, text } = useLoadBrowserFile(file);
 
   return (
     <div className="flex items-center justify-center h-full w-full">
-      {isLoading ? <Spinner className="animate-spin" /> : <TxtEntry data={text} />}
+      {isLoading ? <Spinner /> : <TxtEntry data={text} />}
     </div>
   );
 };
 
-const ComposerPdfAttachment = ({ document }: { document: AttachmentState }) => {
+const ComposerPdfAttachment = ({ attachment }: { attachment: ComposerAttachment }) => {
   const [state, setState] = useState({ isLoading: false, text: '' });
   useEffect(() => {
     let isCanceled = false;
 
     const run = async () => {
-      if (!document.file) return;
+      if (!attachment.file) return;
       setState(s => ({ ...s, isLoading: true }));
-      const text = await fileToBase64(document.file);
+      const text = await fileToBase64(attachment.file);
       if (isCanceled) {
         return;
       }
@@ -39,84 +46,93 @@ const ComposerPdfAttachment = ({ document }: { document: AttachmentState }) => {
     return () => {
       isCanceled = true;
     };
-  }, [document]);
-
-  const isUrl = document.file?.name.startsWith('https://');
+  }, [attachment]);
 
   return (
     <div className="flex items-center justify-center h-full w-full">
       {state.isLoading ? (
-        <Spinner className="animate-spin" />
+        <Spinner />
       ) : (
-        <PdfEntry data={state.text} url={isUrl ? document.file?.name : undefined} />
+        <PdfEntry data={state.text} url={attachment.isUrl ? attachment.name : undefined} />
       )}
     </div>
   );
 };
 
-const AttachmentThumbnail = () => {
-  const isImage = useAttachment(a => a.type === 'image');
-  const document = useAttachment(a => (a.type === 'document' ? a : undefined));
-  const src = useAttachmentSrc();
-  const canRemove = useAttachment(a => a.source !== 'message');
-  const isUrl = document?.file?.name.startsWith('https://');
-  const actualSrc = isUrl ? document?.file?.name : src;
+const ImageAttachmentThumbnail = ({ attachment }: { attachment: ComposerAttachment }) => {
+  const [src, setSrc] = useState<string>(attachment.isUrl ? attachment.name : '');
 
-  return (
-    <>
-      <div className="relative">
-        <TooltipProvider>
-          <Tooltip>
-            <AttachmentPrimitive.Root>
-              <TooltipTrigger asChild>
-                <div className="overflow-hidden size-16 rounded-lg bg-surface3 border border-border1 ">
-                  {isImage ? (
-                    <ImageEntry src={actualSrc ?? ''} />
-                  ) : document?.contentType === 'application/pdf' ? (
-                    <ComposerPdfAttachment document={document} />
-                  ) : document ? (
-                    <ComposerTxtAttachment document={document} />
-                  ) : null}
-                </div>
-              </TooltipTrigger>
-            </AttachmentPrimitive.Root>
-            <TooltipContent side="top">
-              <AttachmentPrimitive.Name />
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+  useEffect(() => {
+    if (attachment.isUrl) {
+      setSrc(attachment.name);
+      return;
+    }
+    const url = URL.createObjectURL(attachment.file);
+    setSrc(url);
+    return () => URL.revokeObjectURL(url);
+  }, [attachment]);
 
-        {canRemove && <AttachmentRemove />}
-      </div>
-    </>
-  );
+  return <ImageEntry src={src} />;
 };
 
-const AttachmentRemove = () => {
+const AttachmentThumbnail = ({ attachment }: { attachment: ComposerAttachment }) => {
+  const { remove } = useComposerAttachments();
+
   return (
-    <AttachmentPrimitive.Remove asChild>
+    <div className="relative">
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="overflow-hidden size-16 rounded-lg bg-surface3 border border-border1 ">
+              {attachment.kind === 'image' ? (
+                <ImageAttachmentThumbnail attachment={attachment} />
+              ) : attachment.kind === 'pdf' ? (
+                <ComposerPdfAttachment attachment={attachment} />
+              ) : attachment.kind === 'video' ? (
+                <FileChipEntry
+                  name={attachment.name}
+                  url={attachment.isUrl && isBrowserFetchableUrl(attachment.name) ? attachment.name : undefined}
+                  contentType={attachment.contentType}
+                />
+              ) : (
+                <ComposerTxtAttachment file={attachment.file} />
+              )}
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="top">{attachment.name}</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+
       <Button
         variant="default"
-        size="icon-md"
+        size="icon-sm"
+        type="button"
         tooltip="Remove file"
-        className="absolute -right-3 -top-3 text-neutral3 hover:text-neutral6 bg-surface1 hover:bg-surface2 rounded-full p-1"
+        onClick={() => remove(attachment.id)}
+        className="absolute -right-2 -top-2 text-neutral3 hover:text-neutral6 bg-surface1 hover:bg-surface2"
       >
         <Icon>
-          <CircleXIcon />
+          <X />
         </Icon>
       </Button>
-    </AttachmentPrimitive.Remove>
+    </div>
   );
 };
 
 export const ComposerAttachments = () => {
-  const hasAttachments = useHasAttachments();
+  const { attachments } = useComposerAttachments();
 
-  if (!hasAttachments) return null;
+  if (attachments.length === 0) return null;
 
   return (
-    <div className="flex w-full flex-row items-center gap-4 pb-2">
-      <ComposerPrimitive.Attachments components={{ Attachment: AttachmentThumbnail }} />
+    <div className="absolute bottom-full inset-x-0 px-2" data-attachments-row>
+      <div className="max-w-3xl w-full mx-auto overflow-x-auto">
+        <div className="flex flex-row items-center gap-4 px-3 pt-3 pb-1">
+          {attachments.map(att => (
+            <AttachmentThumbnail key={att.id} attachment={att} />
+          ))}
+        </div>
+      </div>
     </div>
   );
 };

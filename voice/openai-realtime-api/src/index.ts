@@ -1,8 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import type { ToolsInput } from '@mastra/core/agent';
-import type { RequestContext } from '@mastra/core/request-context';
-import { MastraVoice } from '@mastra/core/voice';
+import type { ToolsInput, RequestContext } from '@internal/voice';
+import { MastraVoice } from '@internal/voice';
 import type { Realtime, RealtimeServerEvents } from 'openai-realtime-api';
 import { WebSocket } from 'ws';
 import { isReadableStream, transformTools } from './utils';
@@ -71,8 +70,16 @@ const VOICES = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'v
 type RealtimeClientServerEventMap = {
   [K in RealtimeServerEvents.EventType]: [RealtimeServerEvents.EventMap[K]];
 } & {
-  ['conversation.item.input_audio_transcription.delta']: [{ delta: string; response_id: string }];
-  ['conversation.item.input_audio_transcription.done']: [{ response_id: string }];
+  ['conversation.item.input_audio_transcription.delta']: [{ delta: string; item_id: string; content_index: number }];
+  ['conversation.item.input_audio_transcription.completed']: [
+    { transcript: string; item_id: string; content_index: number; usage?: unknown },
+  ];
+  ['response.output_audio.delta']: [{ delta: string; response_id: string }];
+  ['response.output_audio.done']: [{ response_id: string }];
+  ['response.output_audio_transcript.delta']: [{ delta: string; response_id: string }];
+  ['response.output_audio_transcript.done']: [{ response_id: string }];
+  ['response.output_text.delta']: [{ delta: string; response_id: string }];
+  ['response.output_text.done']: [{ response_id: string }];
 };
 
 /**
@@ -381,7 +388,6 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     this.ws = new WebSocket(url, undefined, {
       headers: {
         Authorization: 'Bearer ' + apiKey,
-        'OpenAI-Beta': 'realtime=v1',
       },
     });
 
@@ -390,12 +396,19 @@ export class OpenAIRealtimeVoice extends MastraVoice {
 
     const openaiTools = transformTools(this.tools);
     this.updateConfig({
+      type: 'realtime',
       instructions: this.instructions,
       tools: openaiTools.map(t => t.openaiTool),
-      input_audio_transcription: {
-        model: this.transcriber,
+      audio: {
+        input: {
+          transcription: {
+            model: this.transcriber,
+          },
+        },
+        output: {
+          voice: this.speaker,
+        },
       },
-      voice: this.speaker,
     });
     this.state = 'open';
   }
@@ -546,6 +559,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
 
   private setupEventListeners(): void {
     const speakerStreams = new Map<string, StreamWithId>();
+    const userTranscriptionDeltaItems = new Set<string>();
 
     if (!this.ws) {
       throw new Error('WebSocket not initialized');
@@ -583,36 +597,53 @@ export class OpenAIRealtimeVoice extends MastraVoice {
       this.emit('speaker', speakerStream);
     });
     this.client.on('conversation.item.input_audio_transcription.delta', ev => {
-      this.emit('writing', { text: ev.delta, response_id: ev.response_id, role: 'user' });
+      userTranscriptionDeltaItems.add(ev.item_id);
+      this.emit('writing', { text: ev.delta, response_id: ev.item_id, role: 'user' });
     });
-    this.client.on('conversation.item.input_audio_transcription.done', ev => {
-      this.emit('writing', { text: '\n', response_id: ev.response_id, role: 'user' });
+    this.client.on('conversation.item.input_audio_transcription.completed', ev => {
+      if (!userTranscriptionDeltaItems.has(ev.item_id) && ev.transcript) {
+        this.emit('writing', { text: ev.transcript, response_id: ev.item_id, role: 'user' });
+      }
+      userTranscriptionDeltaItems.delete(ev.item_id);
+      this.emit('writing', { text: '\n', response_id: ev.item_id, role: 'user' });
     });
-    this.client.on('response.audio.delta', ev => {
+    const handleAudioDelta = (ev: { delta: string; response_id: string }) => {
       const audio = Buffer.from(ev.delta, 'base64');
       this.emit('speaking', { audio, response_id: ev.response_id });
 
       const stream = speakerStreams.get(ev.response_id);
       stream?.write(audio);
-    });
-    this.client.on('response.audio.done', ev => {
+    };
+    const handleAudioDone = (ev: { response_id: string }) => {
       this.emit('speaking.done', { response_id: ev.response_id });
 
       const stream = speakerStreams.get(ev.response_id);
       stream?.end();
-    });
-    this.client.on('response.audio_transcript.delta', ev => {
+    };
+    const handleAudioTranscriptDelta = (ev: { delta: string; response_id: string }) => {
       this.emit('writing', { text: ev.delta, response_id: ev.response_id, role: 'assistant' });
-    });
-    this.client.on('response.audio_transcript.done', ev => {
+    };
+    const handleAudioTranscriptDone = (ev: { response_id: string }) => {
       this.emit('writing', { text: '\n', response_id: ev.response_id, role: 'assistant' });
-    });
-    this.client.on('response.text.delta', ev => {
+    };
+    const handleTextDelta = (ev: { delta: string; response_id: string }) => {
       this.emit('writing', { text: ev.delta, response_id: ev.response_id, role: 'assistant' });
-    });
-    this.client.on('response.text.done', ev => {
+    };
+    const handleTextDone = (ev: { response_id: string }) => {
       this.emit('writing', { text: '\n', response_id: ev.response_id, role: 'assistant' });
-    });
+    };
+    this.client.on('response.audio.delta', handleAudioDelta);
+    this.client.on('response.output_audio.delta', handleAudioDelta);
+    this.client.on('response.audio.done', handleAudioDone);
+    this.client.on('response.output_audio.done', handleAudioDone);
+    this.client.on('response.audio_transcript.delta', handleAudioTranscriptDelta);
+    this.client.on('response.output_audio_transcript.delta', handleAudioTranscriptDelta);
+    this.client.on('response.audio_transcript.done', handleAudioTranscriptDone);
+    this.client.on('response.output_audio_transcript.done', handleAudioTranscriptDone);
+    this.client.on('response.text.delta', handleTextDelta);
+    this.client.on('response.output_text.delta', handleTextDelta);
+    this.client.on('response.text.done', handleTextDone);
+    this.client.on('response.output_text.done', handleTextDone);
     this.client.on('response.done', async ev => {
       await this.handleFunctionCalls(ev);
       this.emit('response.done', ev);
@@ -624,10 +655,15 @@ export class OpenAIRealtimeVoice extends MastraVoice {
   }
 
   private async handleFunctionCalls(ev: any) {
+    let handledFunctionCall = false;
     for (const output of ev.response?.output ?? []) {
       if (output.type === 'function_call') {
+        handledFunctionCall = true;
         await this.handleFunctionCall(output);
       }
+    }
+    if (handledFunctionCall) {
+      this.sendEvent('response.create', {});
     }
   }
 
@@ -680,8 +716,6 @@ export class OpenAIRealtimeVoice extends MastraVoice {
           output: JSON.stringify({ error: err.message }),
         },
       });
-    } finally {
-      this.sendEvent('response.create', {});
     }
   }
 

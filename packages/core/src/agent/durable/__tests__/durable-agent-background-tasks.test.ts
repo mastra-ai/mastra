@@ -244,12 +244,15 @@ describe('DurableAgent background tasks via stream()', () => {
     });
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-    new Mastra({
+    const localMastra = new Mastra({
       logger: false,
       storage,
       backgroundTasks: { enabled: true },
       agents: { 'bg-onresult-agent': durableAgent as any },
     });
+    // Wire the workflow event processor so the bg-task workflow can
+    // actually run to completion (engine='workflow' is the default).
+    await localMastra.startWorkers();
 
     const chunks: any[] = [];
     const { cleanup, runId } = await durableAgent.stream('Research AI', {
@@ -312,6 +315,7 @@ describe('DurableAgent background tasks via stream()', () => {
       backgroundTasks: { enabled: true },
       agents: { 'bg-pubsub-agent': durableAgent as any },
     });
+    await localMastra.startWorkers();
 
     const chunks: any[] = [];
     const { cleanup } = await durableAgent.stream('Research ML', {
@@ -333,6 +337,86 @@ describe('DurableAgent background tasks via stream()', () => {
 
     cleanup();
   });
+
+  it('tool calling suspend via taskContext pauses the bg task; manager.resume completes it', async () => {
+    const researchTool = createTool({
+      id: 'research',
+      description: 'Research a topic. Suspends until an analyst approves.',
+      inputSchema: z.object({ topic: z.string() }),
+      outputSchema: z.object({ summary: z.string() }),
+      execute: async ({ topic }, options) => {
+        const ctx = options as
+          | {
+              agent?: {
+                suspend?: (data?: unknown) => Promise<void>;
+                resumeData?: { approved?: boolean; notes?: string };
+              };
+            }
+          | undefined;
+        const resumeData = ctx?.agent?.resumeData;
+        if (!resumeData) {
+          await ctx?.agent?.suspend?.({ awaiting: 'analyst-approval', topic });
+          return { summary: '' };
+        }
+        if (resumeData.approved !== true) {
+          throw new Error(`Research on "${topic}" was declined`);
+        }
+        return { summary: `Research complete on "${topic}": ${resumeData.notes ?? 'approved'}.` };
+      },
+      background: { enabled: true },
+    });
+
+    const mockModel = createToolCallThenTextModel('research', { topic: 'solana' }, 'Done');
+
+    const baseAgent = new Agent({
+      id: 'bg-suspend-da',
+      name: 'BG Suspend DA',
+      instructions: 'Research when asked',
+      model: mockModel as LanguageModelV2,
+      tools: { research: researchTool },
+      backgroundTasks: { tools: { research: true } },
+    });
+
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    const localMastra = new Mastra({
+      logger: false,
+      storage,
+      backgroundTasks: { enabled: true },
+      agents: { 'bg-suspend-da': durableAgent as any },
+    });
+    await localMastra.startWorkers();
+
+    const chunks: any[] = [];
+    const { cleanup } = await durableAgent.stream('Research solana', {
+      onChunk: chunk => chunks.push(chunk),
+    });
+
+    // Wait for the bg task to dispatch and the tool to call suspend.
+    await new Promise(r => setTimeout(r, 1500));
+
+    const bgStarted = chunks.find(c => c.type === 'background-task-started');
+    expect(bgStarted).toBeDefined();
+    const taskId = bgStarted.payload.taskId as string;
+
+    const manager = localMastra.backgroundTaskManager!;
+    const suspended = await manager.getTask(taskId);
+    expect(suspended?.status).toBe('suspended');
+    expect(suspended?.suspendPayload).toMatchObject({ awaiting: 'analyst-approval', topic: 'solana' });
+    expect(suspended?.suspendedAt).toBeInstanceOf(Date);
+
+    await manager.resume(taskId, { approved: true, notes: 'looks good' });
+
+    await new Promise(r => setTimeout(r, 1500));
+
+    const completed = await manager.getTask(taskId);
+    expect(completed?.status).toBe('completed');
+    expect((completed?.result as { summary: string }).summary).toContain('solana');
+    expect((completed?.result as { summary: string }).summary).toContain('looks good');
+    expect(completed?.suspendPayload).toBeUndefined();
+    expect(completed?.suspendedAt).toBeUndefined();
+
+    cleanup();
+  }, 15_000);
 
   it('bg check step allows loop continuation when bg task completes', async () => {
     let callCount = 0;
@@ -983,6 +1067,113 @@ describe('DurableAgent.streamUntilIdle', () => {
     expect(result.fullStream).toBeInstanceOf(ReadableStream);
     expect(result.output).toBeDefined();
     expect(typeof result.runId).toBe('string');
+    expect(typeof result.cleanup).toBe('function');
+
+    await drain(result.fullStream as ReadableStream<any>);
+
+    const text = await result.output.text;
+    expect(text).toBe('hello world');
+
+    result.cleanup();
+  });
+});
+
+// ============================================================================
+// stream({ untilIdle }) tests — validates the new option delegates correctly
+// ============================================================================
+
+describe('DurableAgent.stream({ untilIdle })', () => {
+  const storage = new MockStore();
+
+  let mastra: Mastra;
+
+  beforeEach(async () => {
+    mastra = new Mastra({
+      logger: false,
+      storage,
+      backgroundTasks: { enabled: true },
+    });
+  });
+
+  afterEach(async () => {
+    await mastra.backgroundTaskManager?.shutdown();
+    const bgStore = await storage.getStore('backgroundTasks');
+    await bgStore?.dangerouslyClearAll();
+  });
+
+  it('falls through to a plain stream when no bg manager or memory is configured', async () => {
+    const plainMastra = new Mastra({ logger: false, storage, backgroundTasks: { enabled: false } });
+    expect(plainMastra.backgroundTaskManager).toBeUndefined();
+
+    const { model } = makeScriptedModel([textResponse('plain')]);
+    const baseAgent = new Agent({
+      id: 'da-idle-plain',
+      name: 'da-idle-plain',
+      instructions: 'test',
+      model,
+    });
+
+    const durableAgent = createDurableAgent({ agent: baseAgent });
+    plainMastra.addAgent(durableAgent as any, 'da-idle-plain');
+
+    const result = await durableAgent.stream('hi', { untilIdle: true });
+    const chunks = await drain(result.fullStream as ReadableStream<any>);
+
+    const textChunks = chunks.filter(c => c?.type?.includes('text')).length;
+    expect(textChunks).toBeGreaterThan(0);
+
+    result.cleanup();
+  });
+
+  it('closes after the initial turn when no background tasks were dispatched', async () => {
+    const memory = new MockMemory();
+    const { model, getCallCount } = makeScriptedModel([textResponse('hello')]);
+
+    const baseAgent = new Agent({
+      id: 'da-idle-1',
+      name: 'da-idle-1',
+      instructions: 'test',
+      model,
+      memory,
+    });
+
+    const durableAgent = createDurableAgent({ agent: baseAgent });
+    mastra.addAgent(durableAgent as any, 'da-idle-1');
+
+    const result = await durableAgent.stream('hi', {
+      untilIdle: true,
+      memory: { thread: 'th-idle', resource: 'u-idle' },
+    });
+
+    const chunks = await drain(result.fullStream as ReadableStream<any>);
+
+    const textChunks = chunks.filter(c => c?.type?.includes('text')).length;
+    expect(textChunks).toBeGreaterThan(0);
+
+    expect(getCallCount()).toBe(1);
+    result.cleanup();
+  });
+
+  it('accepts untilIdle as an object with maxIdleMs', async () => {
+    const memory = new MockMemory();
+    const { model } = makeScriptedModel([textResponse('hello world')]);
+
+    const baseAgent = new Agent({
+      id: 'da-idle-ms',
+      name: 'da-idle-ms',
+      instructions: 'test',
+      model,
+      memory,
+    });
+
+    const durableAgent = createDurableAgent({ agent: baseAgent });
+    mastra.addAgent(durableAgent as any, 'da-idle-ms');
+
+    const result = await durableAgent.stream('hi', {
+      untilIdle: { maxIdleMs: 30_000 },
+      memory: { thread: 'th-idle-ms', resource: 'u-idle-ms' },
+    });
+
     expect(typeof result.cleanup).toBe('function');
 
     await drain(result.fullStream as ReadableStream<any>);

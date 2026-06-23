@@ -12,6 +12,17 @@ export default defineConfig({
   },
   sourcemap: true,
   onSuccess: async () => {
-    await generateTypes(process.cwd());
+    await generateTypes(
+      process.cwd(),
+      new Set([
+        'ai',
+        '@ai-sdk/provider-utils',
+        '@ai-sdk/ui-utils',
+        '@standard-schema/spec',
+        'eventsource-parser',
+        'json-schema',
+        '@opentelemetry/api',
+      ]),
+    );
   },
 });

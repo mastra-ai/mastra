@@ -17,7 +17,7 @@ describe.for([['pnpm'] as const])(`%s cloudflare deployer`, ([pkgManager]) => {
       const registry = inject('registry');
 
       fixturePath = await mkdtemp(join(tmpdir(), `mastra-cloudflare-deployer-test-${pkgManager}-`));
-      process.env.npm_config_registry = registry;
+      process.env.pnpm_config_registry = registry;
       await setupDeployerProject(fixturePath, tag, pkgManager, 'cloudflare');
     },
     10 * 60 * 1000,

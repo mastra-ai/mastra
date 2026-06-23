@@ -1,6 +1,7 @@
-import { Txt, PanelSeparator } from '@mastra/playground-ui';
-import { Panel, Group, useDefaultLayout } from 'react-resizable-panels';
+import { Txt } from '@mastra/playground-ui';
 
+import { AgentLayout } from '../agent-layout';
+import { SidebarPanel } from '../sidebar-panel';
 import { AgentPlaygroundConfig } from './agent-playground-config';
 import { AgentPlaygroundTestChat } from './agent-playground-test-chat';
 import { AgentPlaygroundVersionBar } from './agent-playground-version-bar';
@@ -20,8 +21,14 @@ interface AgentPlaygroundViewProps {
   isPublishing: boolean;
   hasDraft: boolean;
   readOnly: boolean;
+  isCodeSourceAgent?: boolean;
+  showCodeModeActions?: boolean;
+  canOpenPr?: boolean;
+  openPrTitle?: string;
   onSaveDraft: (changeMessage?: string) => Promise<void>;
   onPublish: () => Promise<void>;
+  onDownloadJson?: () => Promise<void>;
+  onOpenPr?: () => Promise<void>;
   isViewingPreviousVersion?: boolean;
 }
 
@@ -36,8 +43,14 @@ function LeftPanel({
   isPublishing,
   hasDraft,
   readOnly,
+  isCodeSourceAgent,
+  showCodeModeActions,
+  canOpenPr,
+  openPrTitle,
   onSaveDraft,
   onPublish,
+  onDownloadJson,
+  onOpenPr,
   isViewingPreviousVersion,
 }: {
   agentId: string;
@@ -50,8 +63,14 @@ function LeftPanel({
   isPublishing: boolean;
   hasDraft: boolean;
   readOnly: boolean;
+  isCodeSourceAgent?: boolean;
+  showCodeModeActions?: boolean;
+  canOpenPr?: boolean;
+  openPrTitle?: string;
   onSaveDraft: (changeMessage?: string) => Promise<void>;
   onPublish: () => Promise<void>;
+  onDownloadJson?: () => Promise<void>;
+  onOpenPr?: () => Promise<void>;
   isViewingPreviousVersion?: boolean;
 }) {
   const { versionSelector, actionBar } = AgentPlaygroundVersionBar({
@@ -64,13 +83,19 @@ function LeftPanel({
     isPublishing,
     hasDraft,
     readOnly,
+    isCodeSourceAgent,
+    showCodeModeActions,
+    canOpenPr,
+    openPrTitle,
     onSaveDraft,
     onPublish,
+    onDownloadJson,
+    onOpenPr,
     isViewingPreviousVersion,
   });
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <SidebarPanel>
       {versionSelector}
 
       <div className="px-4 pt-3">
@@ -88,7 +113,7 @@ function LeftPanel({
       </div>
 
       {actionBar}
-    </div>
+    </SidebarPanel>
   );
 }
 
@@ -107,54 +132,51 @@ export function AgentPlaygroundView({
   isPublishing,
   hasDraft,
   readOnly,
+  isCodeSourceAgent,
+  showCodeModeActions,
+  canOpenPr,
+  openPrTitle,
   onSaveDraft,
   onPublish,
+  onDownloadJson,
+  onOpenPr,
   isViewingPreviousVersion,
 }: AgentPlaygroundViewProps) {
-  const { defaultLayout, onLayoutChange } = useDefaultLayout({
-    id: `agent-playground-${agentId}`,
-    storage: localStorage,
-  });
-
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-surface2">
-      <Group className="flex-1 min-h-0" defaultLayout={defaultLayout} onLayoutChange={onLayoutChange}>
-        {/* Left panel - Version Bar + Configuration + Action Bar */}
-        <Panel id="playground-config" minSize={30} defaultSize={50} className="overflow-hidden">
-          <LeftPanel
-            agentId={agentId}
-            activeVersionId={activeVersionId}
-            selectedVersionId={selectedVersionId}
-            latestVersionId={latestVersionId}
-            onVersionSelect={onVersionSelect}
-            isDirty={isDirty}
-            isSavingDraft={isSavingDraft}
-            isPublishing={isPublishing}
-            hasDraft={hasDraft}
-            readOnly={readOnly}
-            onSaveDraft={onSaveDraft}
-            onPublish={onPublish}
-            isViewingPreviousVersion={isViewingPreviousVersion}
-          />
-        </Panel>
-
-        <PanelSeparator />
-
-        {/* Right panel - Test Chat */}
-        <Panel id="playground-chat" minSize={30} defaultSize={50} className="overflow-hidden">
-          <div className="flex flex-col h-full overflow-hidden bg-surface1">
-            <div className="flex-1 min-h-0">
-              <AgentPlaygroundTestChat
-                agentId={agentId}
-                agentName={agentName}
-                modelVersion={modelVersion}
-                agentVersionId={agentVersionId}
-                hasMemory={hasMemory}
-              />
-            </div>
-          </div>
-        </Panel>
-      </Group>
-    </div>
+    <AgentLayout
+      agentId={agentId}
+      leftDrawerLabel="Open configuration"
+      leftSlot={
+        <LeftPanel
+          agentId={agentId}
+          activeVersionId={activeVersionId}
+          selectedVersionId={selectedVersionId}
+          latestVersionId={latestVersionId}
+          onVersionSelect={onVersionSelect}
+          isDirty={isDirty}
+          isSavingDraft={isSavingDraft}
+          isPublishing={isPublishing}
+          hasDraft={hasDraft}
+          readOnly={readOnly}
+          isCodeSourceAgent={isCodeSourceAgent}
+          showCodeModeActions={showCodeModeActions}
+          canOpenPr={canOpenPr}
+          openPrTitle={openPrTitle}
+          onSaveDraft={onSaveDraft}
+          onPublish={onPublish}
+          onDownloadJson={onDownloadJson}
+          onOpenPr={onOpenPr}
+          isViewingPreviousVersion={isViewingPreviousVersion}
+        />
+      }
+    >
+      <AgentPlaygroundTestChat
+        agentId={agentId}
+        agentName={agentName}
+        modelVersion={modelVersion}
+        agentVersionId={agentVersionId}
+        hasMemory={hasMemory}
+      />
+    </AgentLayout>
   );
 }

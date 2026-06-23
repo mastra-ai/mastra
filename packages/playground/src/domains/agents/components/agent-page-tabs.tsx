@@ -3,11 +3,13 @@ import { ExternalLink, EyeIcon, FlaskConical, MessageSquare, ClipboardCheck, Git
 
 import { useLinkComponent } from '@/lib/framework';
 
+/** Tabs that render a pill in the bar. Routes without a pill (e.g. settings) pass `'none'`. */
 export type AgentPageTab = 'chat' | 'versions' | 'evaluate' | 'review' | 'traces';
 
 interface AgentPageTabsProps {
   agentId: string;
-  activeTab: AgentPageTab;
+  /** `'none'` (or any non-tab value) leaves the bar unhighlighted. */
+  activeTab: AgentPageTab | 'none';
   showPlayground?: boolean;
   showObservability?: boolean;
   reviewBadge?: number;
@@ -23,7 +25,7 @@ function DocsLink({ href, children }: { href: string; children: React.ReactNode 
       className="inline-flex items-center gap-1 underline text-inherit hover:text-white"
     >
       {children}
-      <ExternalLink className="h-3 w-3" />
+      <ExternalLink className="size-3" />
     </a>
   );
 }
@@ -110,14 +112,22 @@ export function AgentPageTabs({
     traces: `/agents/${agentId}/traces`,
   };
 
-  const handleTabChange = (value: AgentPageTab) => {
+  const handleTabChange = (value: AgentPageTab | 'none') => {
+    if (value === 'none') return;
     navigate(hrefMap[value]);
   };
 
   return (
-    <div className="bg-surface2 px-4 flex items-center gap-2">
-      <Tabs value={activeTab} defaultTab={activeTab} onValueChange={handleTabChange} className="flex-1 min-w-0">
-        <TabList>
+    // Below lg the rightSlot buttons wrap onto their own line (right-aligned)
+    // when the full tab list no longer fits, so the tabs keep the full row width.
+    <div className="flex min-w-0 items-center gap-2 p-1.5 max-lg:flex-wrap">
+      <Tabs
+        value={activeTab}
+        defaultTab={activeTab}
+        onValueChange={handleTabChange}
+        className="flex-1 min-w-0 max-lg:flex-auto"
+      >
+        <TabList variant="pill-ghost">
           <AgentTab value="chat" icon={<MessageSquare />} label="Chat" />
           <AgentTab
             value="versions"
@@ -150,7 +160,7 @@ export function AgentPageTabs({
           />
         </TabList>
       </Tabs>
-      {rightSlot && <div className="flex items-center gap-2">{rightSlot}</div>}
+      {rightSlot && <div className="ml-auto flex items-center gap-2">{rightSlot}</div>}
     </div>
   );
 }

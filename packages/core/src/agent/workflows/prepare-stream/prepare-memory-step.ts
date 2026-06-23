@@ -7,10 +7,12 @@ import type { MemoryConfigInternal, StorageThreadType } from '../../../memory/ty
 import { resolveObservabilityContext } from '../../../observability';
 import type { ProcessorState } from '../../../processors/runner';
 import type { RequestContext } from '../../../request-context';
-import { createStep } from '../../../workflows';
+import { createStep } from '../../../workflows/workflow';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import { MessageList } from '../../message-list';
+import { mastraDBMessageToSignal } from '../../signals';
 import type { AgentMethodType } from '../../types';
+import type { PrepareStreamRunScope } from './run-scope';
 import type { AgentCapabilities } from './schema';
 import { prepareMemoryStepOutputSchema } from './schema';
 
@@ -33,6 +35,14 @@ function addSystemMessage(messageList: MessageList, content: SystemMessage | und
   }
 }
 
+function getInitialSignalEchoes(messageList: MessageList) {
+  const inputMessageIds = messageList.makeMessageSourceChecker().input;
+  return messageList.get.all
+    .db()
+    .filter(message => message.role === 'signal' && inputMessageIds.has(message.id))
+    .map(mastraDBMessageToSignal);
+}
+
 interface PrepareMemoryStepOptions<OUTPUT = undefined> {
   capabilities: AgentCapabilities;
   options: InnerAgentExecutionOptions<OUTPUT>;
@@ -42,9 +52,12 @@ interface PrepareMemoryStepOptions<OUTPUT = undefined> {
   requestContext: RequestContext;
   methodType: AgentMethodType;
   instructions: SystemMessage;
+  /** MCP server guidance to include as a separate system message. */
+  mcpServerGuidance?: string;
   memoryConfig?: MemoryConfigInternal;
   memory?: MastraMemory;
   isResume?: boolean;
+  runScope: PrepareStreamRunScope<OUTPUT>;
 }
 
 export function createPrepareMemoryStep<OUTPUT = undefined>({
@@ -55,9 +68,11 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
   runId: _runId,
   requestContext,
   instructions,
+  mcpServerGuidance,
   memoryConfig,
   memory,
   isResume,
+  runScope,
 }: PrepareMemoryStepOptions<OUTPUT>) {
   return createStep({
     id: 'prepare-memory-step',
@@ -83,6 +98,10 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
       // Add instructions as system message(s)
       addSystemMessage(messageList, instructions);
 
+      // Add MCP server guidance as a separate system message so the base
+      // instructions remain a stable prefix for prompt caching.
+      addSystemMessage(messageList, mcpServerGuidance, 'mcp-guidance');
+
       messageList.add(options.context || [], 'context');
 
       // Add user-provided system message if present
@@ -90,6 +109,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
 
       if (!memory || (!thread?.id && !resourceId)) {
         messageList.add(options.messages, 'input');
+        const initialSignalEchoes = getInitialSignalEchoes(messageList);
 
         // Skip input processors during resume — the messageList has no user messages
         // (resumeStream passes messages: []) and the real conversation state lives in the
@@ -106,11 +126,16 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
           }));
         }
 
+        // Class instances (MessageList) and Maps (processorStates) live on the
+        // factory closure's runScope instead of step outputs, because the evented
+        // engine serializes step outputs via JSON and would strip them. CreatedAgentSignal
+        // carries `toDataPart`/`toLLMMessage`/`toDBMessage` methods that would not survive.
+        runScope.messageList = messageList;
+        runScope.processorStates = processorStates;
+        runScope.initialSignalEchoes = initialSignalEchoes;
         return {
           threadExists: false,
           thread: thread as StorageThreadType | undefined,
-          messageList,
-          processorStates,
           tripwire,
         };
       }
@@ -140,7 +165,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
           (thread.metadata && !deepEqual(existingThread.metadata, thread.metadata))
         ) {
           threadObject = await memory.saveThread({
-            thread: { ...existingThread, metadata: thread.metadata },
+            thread: { ...existingThread, metadata: { ...(existingThread.metadata ?? {}), ...thread.metadata } },
             memoryConfig,
           });
         } else {
@@ -170,6 +195,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
 
       // Add user messages - memory processors will handle history/semantic recall/working memory
       messageList.add(options.messages, 'input');
+      const initialSignalEchoes = getInitialSignalEchoes(messageList);
 
       // Skip input processors during resume — the messageList has no user messages
       // (resumeStream passes messages: []) and the real conversation state lives in the
@@ -186,10 +212,11 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
         }));
       }
 
+      runScope.messageList = messageList;
+      runScope.processorStates = processorStates;
+      runScope.initialSignalEchoes = initialSignalEchoes;
       return {
         thread: threadObject,
-        messageList: messageList,
-        processorStates,
         tripwire,
         threadExists: !!existingThread,
       };

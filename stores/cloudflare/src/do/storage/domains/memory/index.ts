@@ -202,13 +202,19 @@ export class MemoryStorageDO extends MemoryStorage {
     }
   }
 
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+  async getThreadById({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId?: string;
+  }): Promise<StorageThreadType | null> {
     const thread = await this.#db.load<StorageThreadType>({
       tableName: TABLE_THREADS,
       keys: { id: threadId },
     });
 
-    if (!thread) return null;
+    if (!thread || (resourceId !== undefined && thread.resourceId !== resourceId)) return null;
 
     try {
       return {

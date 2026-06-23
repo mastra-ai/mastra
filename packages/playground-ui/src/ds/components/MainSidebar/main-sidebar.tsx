@@ -13,11 +13,12 @@ import { MainSidebarTrigger } from './main-sidebar-trigger';
 
 export { MainSidebarProvider, type SidebarState, type MainSidebarProviderProps } from './main-sidebar-context';
 export { useMainSidebar, useMaybeSidebar } from './main-sidebar-context';
-export { type NavLink, navItemClasses } from './main-sidebar-nav-link';
+export { navItemClasses } from './main-sidebar-nav-item-classes';
+export { type NavLink } from './main-sidebar-nav-link';
 export { type NavSection } from './main-sidebar-nav-section';
 export { MainSidebarTrigger } from './main-sidebar-trigger';
 export { MainSidebarMobileTrigger } from './main-sidebar-mobile-trigger';
-export { getIsLinkActive } from './main-sidebar-sections';
+export { getIsLinkActive } from './main-sidebar-link-active';
 
 export const MainSidebar = Object.assign(MainSidebarRoot, {
   Bottom: MainSidebarBottom,

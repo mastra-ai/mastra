@@ -81,19 +81,6 @@ describe('Memory Handlers', () => {
   });
 
   describe('getMemoryStatusHandler', () => {
-    it('should return false when memory is not initialized and no storage is configured', async () => {
-      const mastra = new Mastra({
-        logger: false,
-        // No storage configured
-      });
-
-      const result = await GET_MEMORY_STATUS_ROUTE.handler({
-        ...createTestServerContext({ mastra }),
-        agentId: undefined as any,
-      });
-      expect(result).toEqual({ result: false });
-    });
-
     it('should return true when storage is configured but no agentId provided (storage fallback)', async () => {
       const mastra = new Mastra({
         logger: false,
@@ -121,6 +108,92 @@ describe('Memory Handlers', () => {
       expect(result).toMatchObject({ result: true });
     });
 
+    it('should return false when a registered agent has no local memory even if storage is configured', async () => {
+      const agentWithoutMemory = new Agent({
+        id: 'no-memory-agent',
+        name: 'Agent Without Memory',
+        instructions: 'test-instructions',
+        model: {} as any,
+      });
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+        agents: { 'no-memory-agent': agentWithoutMemory },
+      });
+
+      const result = await GET_MEMORY_STATUS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'no-memory-agent',
+      });
+
+      expect(result).toEqual({ result: false });
+    });
+
+    it('detects memory via hasOwnMemory(): resolved agent without memory is false, with memory is true', async () => {
+      const withoutMemory = new Agent({
+        id: 'agent-without-own-memory',
+        name: 'Agent Without Own Memory',
+        instructions: 'test-instructions',
+        model: {} as any,
+      });
+      const withMemory = new Agent({
+        id: 'agent-with-own-memory',
+        name: 'Agent With Own Memory',
+        instructions: 'test-instructions',
+        model: {} as any,
+        memory: new MockMemory({ storage }),
+      });
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+        agents: {
+          'agent-without-own-memory': withoutMemory,
+          'agent-with-own-memory': withMemory,
+        },
+      });
+
+      expect(withoutMemory.hasOwnMemory()).toBe(false);
+      expect(withMemory.hasOwnMemory()).toBe(true);
+
+      const negative = await GET_MEMORY_STATUS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'agent-without-own-memory',
+      });
+      expect(negative).toEqual({ result: false });
+
+      const positive = await GET_MEMORY_STATUS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'agent-with-own-memory',
+      });
+      expect(positive).toMatchObject({ result: true });
+    });
+
+    it('should return false when an agent explicitly does not support Mastra memory', async () => {
+      const agentWithoutMemorySupport = Object.assign(
+        new Agent({
+          id: 'unsupported-memory-agent',
+          name: 'Agent Without Memory Support',
+          instructions: 'test-instructions',
+          model: {} as any,
+        }),
+        {
+          supportsMemory: () => false,
+        },
+      );
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+        agents: { 'unsupported-memory-agent': agentWithoutMemorySupport },
+      });
+
+      const result = await GET_MEMORY_STATUS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'unsupported-memory-agent',
+      });
+
+      expect(result).toEqual({ result: false });
+    });
+
     it('should use agent memory when agentId is provided', async () => {
       const mastra = new Mastra({
         logger: false,
@@ -137,17 +210,6 @@ describe('Memory Handlers', () => {
       expect(result).toMatchObject({ result: true });
     });
 
-    it('should return false when agent is not found and no storage is configured', async () => {
-      const mastra = new Mastra({
-        logger: false,
-      });
-      const result = await GET_MEMORY_STATUS_ROUTE.handler({
-        ...createTestServerContext({ mastra }),
-        agentId: 'non-existent',
-      });
-      expect(result).toEqual({ result: false });
-    });
-
     it('should return true when agent is not found but storage is configured (stored agent fallback)', async () => {
       const mastra = new Mastra({
         logger: false,
@@ -158,46 +220,6 @@ describe('Memory Handlers', () => {
         agentId: 'non-existent-stored-agent',
       });
       expect(result).toEqual({ result: true });
-    });
-  });
-
-  /**
-   * Issue #11765: LIST_MESSAGES_ROUTE should gracefully handle agents without memory
-   * https://github.com/mastra-ai/mastra/issues/11765
-   *
-   * When the playground UI loads messages for a sub-agent without memory configured,
-   * it calls GET /memory/threads/:threadId/messages?agentId=<subAgentId>.
-   * This should return empty messages instead of throwing HTTPException(400).
-   */
-  describe('listMessagesHandler - Issue #11765', () => {
-    it('should return empty messages when agent has no memory configured (not throw)', async () => {
-      // Setup: Agent WITHOUT memory configured
-      const agentWithoutMemory = new Agent({
-        id: 'no-memory-agent',
-        name: 'Agent Without Memory',
-        instructions: 'test-instructions',
-        model: {} as any,
-        // NOTE: No memory property set
-      });
-
-      const mastra = new Mastra({
-        logger: false,
-        agents: { 'no-memory-agent': agentWithoutMemory },
-      });
-
-      // BUG: Currently throws HTTPException(400, 'Memory is not initialized')
-      // EXPECTED: Should return empty messages instead
-      const result = await LIST_MESSAGES_ROUTE.handler({
-        ...createTestServerContext({ mastra }),
-        agentId: 'no-memory-agent',
-        threadId: 'test-thread',
-        resourceId: 'test-resource',
-        page: 0,
-        perPage: 10,
-      });
-
-      // This is the expected behavior - graceful empty response
-      expect(result).toEqual({ messages: [], uiMessages: [] });
     });
   });
 
@@ -296,29 +318,6 @@ describe('Memory Handlers', () => {
   });
 
   describe('listThreadsHandler', () => {
-    it('should throw error when memory is not initialized', async () => {
-      const mastra = new Mastra({
-        logger: false,
-        agents: {
-          'test-agent': new Agent({
-            id: 'test-agent',
-            name: 'test-agent',
-            instructions: 'test-instructions',
-            model: {} as any,
-          }),
-        },
-      });
-      await expect(
-        LIST_THREADS_ROUTE.handler({
-          ...createTestServerContext({ mastra }),
-          resourceId: 'test-resource',
-          agentId: 'test-agent',
-          page: 0,
-          perPage: 10,
-        }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Memory is not initialized' }));
-    });
-
     it('should list all threads when no filters are provided', async () => {
       const mastra = new Mastra({
         logger: false,
@@ -549,27 +548,6 @@ describe('Memory Handlers', () => {
           agentId: 'test-agent',
         }),
       ).rejects.toThrow(new HTTPException(400, { message: 'Argument "threadId" is required' }));
-    });
-
-    it('should throw error when memory is not initialized', async () => {
-      const mastra = new Mastra({
-        logger: false,
-        agents: {
-          'test-agent': new Agent({
-            id: 'test-agent',
-            name: 'test-agent',
-            instructions: 'test-instructions',
-            model: {} as any,
-          }),
-        },
-      });
-      await expect(
-        GET_THREAD_BY_ID_ROUTE.handler({
-          ...createTestServerContext({ mastra }),
-          threadId: 'test-thread',
-          agentId: 'test-agent',
-        }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Memory is not initialized' }));
     });
 
     it('should throw 404 when thread is not found', async () => {
@@ -1231,28 +1209,6 @@ describe('Memory Handlers', () => {
       ).rejects.toThrow(new HTTPException(400, { message: 'Argument "threadId" is required' }));
     });
 
-    it('should return empty messages when storage is not initialized (Issue #11765)', async () => {
-      const mastra = new Mastra({
-        logger: false,
-        agents: {
-          testAgent: new Agent({
-            id: 'test-agent',
-            name: 'test-agent',
-            instructions: 'test-instructions',
-            model: {} as any,
-          }),
-        },
-      });
-      // Should return empty messages instead of throwing
-      const result = await LIST_MESSAGES_ROUTE.handler({
-        ...createTestServerContext({ mastra }),
-        threadId: 'test-thread',
-        agentId: 'testAgent',
-        page: 0,
-      });
-      expect(result).toEqual({ messages: [], uiMessages: [] });
-    });
-
     it('should throw 404 when thread is not found', async () => {
       const mastra = new Mastra({
         logger: false,
@@ -1318,7 +1274,7 @@ describe('Memory Handlers', () => {
         filter: undefined,
       });
 
-      expect(result).toEqual(mockResult);
+      expect(result).toEqual({ ...mockResult, uiMessages: null });
       expect(mockMemory.getThreadById).toHaveBeenCalledWith({ threadId: 'test-thread' });
       expect(mockMemory.recall).toHaveBeenCalledWith({
         threadId: 'test-thread',
@@ -1644,21 +1600,6 @@ describe('Memory Handlers', () => {
       ).rejects.toThrow(new HTTPException(400, { message: 'messageIds is required' }));
     });
 
-    it('should throw error when memory is not initialized and no storage configured', async () => {
-      const mastra = new Mastra({
-        logger: false,
-        // No storage configured
-      });
-
-      await expect(
-        DELETE_MESSAGES_ROUTE.handler({
-          ...createTestServerContext({ mastra }),
-          messageIds: ['test-message-id'],
-          agentId: undefined as any,
-        }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Memory is not initialized' }));
-    });
-
     it('should use storage fallback when storage is configured but no agentId provided', async () => {
       const mastra = new Mastra({
         logger: false,
@@ -1923,7 +1864,7 @@ describe('Memory Handlers', () => {
           perPage: 10,
         });
 
-        expect(result.threads.map(t => t.id)).toEqual(['thread-a', 'thread-c']);
+        expect(result.threads.map(t => t.id).sort()).toEqual(['thread-a', 'thread-c']);
         expect(result.total).toBe(2);
         expect(result.hasMore).toBe(false);
         expect(filterAccessible).toHaveBeenCalledWith(

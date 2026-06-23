@@ -1,0 +1,323 @@
+{
+  "meta": {
+    "name": "test-8d6b5c23",
+    "testFile": "packages/core/src/agent/agent-processor.e2e.test.ts",
+    "testName": "StructuredOutputProcessor Integration Tests > with real LLM > should work with different models for main agent vs structuring agent",
+    "model": "gpt-4o",
+    "createdAt": "2026-05-18T10:51:02.852Z"
+  },
+  "recordings": [
+    {
+      "hash": "55a3226085f38ef8",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a creative thinker who generates innovative ideas and explores possibilities.\n\nYour response will be processed by another agent to extract structured data. Please ensure your response contains comprehensive information for all the following fields that will be extracted:\n\n{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"idea\":{\"type\":\"string\",\"description\":\"The creative idea\"},\"category\":{\"type\":\"string\",\"enum\":[\"technology\",\"business\",\"art\",\"science\",\"other\"],\"description\":\"Category of the idea\"},\"feasibility\":{\"type\":\"number\",\"minimum\":1,\"maximum\":10,\"description\":\"How feasible is this idea (1-10)\"},\"resources\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"Resources needed to implement\"}},\"required\":[\"idea\",\"category\",\"feasibility\",\"resources\"],\"additionalProperties\":false}\n\n\nYou don't need to format your response as JSON unless the user asks you to. Just ensure your natural language response includes relevant information for each field in the schema above."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Come up with an innovative solution for reducing food waste in restaurants."
+                }
+              ]
+            }
+          ]
+        },
+        "timestamp": 1779101458306
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fda4dd2bd49867c-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 18 May 2026 10:51:00 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "2155",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "500",
+          "x-ratelimit-limit-tokens": "30000",
+          "x-ratelimit-remaining-requests": "499",
+          "x-ratelimit-remaining-tokens": "29750",
+          "x-ratelimit-reset-requests": "120ms",
+          "x-ratelimit-reset-tokens": "500ms",
+          "x-request-id": "req_196782e377e8436d8597cf85a90cb1a8"
+        },
+        "body": {
+          "id": "resp_016fa676a8f09909006a0aef12751081948a4036d38d50dd0f",
+          "object": "response",
+          "created_at": 1779101458,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1779101460,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-2024-08-06",
+          "moderation": null,
+          "output": [
+            {
+              "id": "msg_016fa676a8f09909006a0aef12eb508194872ce0d17bcab869",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "One innovative solution for reducing food waste in restaurants is the development of a \"Smart Menu Optimizer\" system. This technology-driven approach analyzes purchasing patterns, current inventory, and seasonal availability to create dynamic menus that minimize waste. The system uses AI algorithms to predict customer preferences and suggest ingredient substitutions or modifications that utilize surplus items.\n\n**Category:** technology\n\n**Feasibility:** 8\n\n**Resources:** \n1. AI software development team\n2. Data analytics tools\n3. Inventory management systems\n4. Collaboration with culinary experts for menu design\n5. Training for restaurant staff"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 231,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 117,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 348
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "9304223a82c6c1f3",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a data structuring specialist. Your job is to convert unstructured text into a specific JSON format.\n\nTASK: Convert the provided unstructured text into valid JSON that matches the following schema:\n\nREQUIREMENTS:\n- Return ONLY valid JSON, no additional text or explanation\n- Extract relevant information from the input text\n- If information is missing, use reasonable defaults or null values\n- Maintain data types as specified in the schema\n- Be consistent and accurate in your conversions\n\nThe input text may be in any format (sentences, bullet points, paragraphs, etc.). Extract the relevant data and structure it according to the schema."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Extract and structure the key information from the following text according to the specified schema. Keep the original meaning and details. Rely on the provided text and conversation history.\n\n# Assistant Response\nOne innovative solution for reducing food waste in restaurants is the development of a \"Smart Menu Optimizer\" system. This technology-driven approach analyzes purchasing patterns, current inventory, and seasonal availability to create dynamic menus that minimize waste. The system uses AI algorithms to predict customer preferences and suggest ingredient substitutions or modifications that utilize surplus items.\n\n**Category:** technology\n\n**Feasibility:** 8\n\n**Resources:** \n1. AI software development team\n2. Data analytics tools\n3. Inventory management systems\n4. Collaboration with culinary experts for menu design\n5. Training for restaurant staff"
+                }
+              ]
+            }
+          ],
+          "text": {
+            "format": {
+              "type": "json_schema",
+              "strict": true,
+              "name": "response",
+              "schema": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "idea": {
+                    "type": "string",
+                    "description": "The creative idea"
+                  },
+                  "category": {
+                    "type": "string",
+                    "enum": ["technology", "business", "art", "science", "other"],
+                    "description": "Category of the idea"
+                  },
+                  "feasibility": {
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 10,
+                    "description": "How feasible is this idea (1-10)"
+                  },
+                  "resources": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Resources needed to implement"
+                  }
+                },
+                "required": ["idea", "category", "feasibility", "resources"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "stream": true
+        },
+        "timestamp": 1779101460631
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fda4de1486e867c-BRU",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Mon, 18 May 2026 10:51:00 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "80",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-request-id": "req_f04981869cba4aa28d0c229796aec05e"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_0ad93dbbca6d6cbe006a0aef14c8588195a3b88f5383206ff9\",\"object\":\"response\",\"created_at\":1779101460,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"json_schema\",\"description\":null,\"name\":\"response\",\"schema\":{\"type\":\"object\",\"properties\":{\"idea\":{\"type\":\"string\",\"description\":\"The creative idea\"},\"category\":{\"type\":\"string\",\"enum\":[\"technology\",\"business\",\"art\",\"science\",\"other\"],\"description\":\"Category of the idea\"},\"feasibility\":{\"type\":\"number\",\"minimum\":1,\"maximum\":10,\"description\":\"How feasible is this idea (1-10)\"},\"resources\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"Resources needed to implement\"}},\"required\":[\"idea\",\"category\",\"feasibility\",\"resources\"],\"additionalProperties\":false},\"strict\":true},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
+          "event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_0ad93dbbca6d6cbe006a0aef14c8588195a3b88f5383206ff9\",\"object\":\"response\",\"created_at\":1779101460,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"json_schema\",\"description\":null,\"name\":\"response\",\"schema\":{\"type\":\"object\",\"properties\":{\"idea\":{\"type\":\"string\",\"description\":\"The creative idea\"},\"category\":{\"type\":\"string\",\"enum\":[\"technology\",\"business\",\"art\",\"science\",\"other\"],\"description\":\"Category of the idea\"},\"feasibility\":{\"type\":\"number\",\"minimum\":1,\"maximum\":10,\"description\":\"How feasible is this idea (1-10)\"},\"resources\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"Resources needed to implement\"}},\"required\":[\"idea\",\"category\",\"feasibility\",\"resources\"],\"additionalProperties\":false},\"strict\":true},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":3}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"{\\\"\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"T6DkrDXWUoZIHE\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"idea\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"HIH5iQ7VtmQA\",\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"\\\":\\\"\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"zEN2uWwS6WE1Y\",\"output_index\":0,\"sequence_number\":6}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"Smart\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"nPjlDuFPDy0\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Menu\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"FE49oywIqUI\",\"output_index\":0,\"sequence_number\":8}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Optim\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"PenyA4FlnB\",\"output_index\":0,\"sequence_number\":9}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"izer\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"wW2OrnNMdI4M\",\"output_index\":0,\"sequence_number\":10}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" system\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"xXE5ei17e\",\"output_index\":0,\"sequence_number\":11}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" for\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"UIFho9dSbe8L\",\"output_index\":0,\"sequence_number\":12}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" reducing\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"8IMf9Ty\",\"output_index\":0,\"sequence_number\":13}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" food\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"JUTiiAS2gHU\",\"output_index\":0,\"sequence_number\":14}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" waste\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"5EQuWcsnqV\",\"output_index\":0,\"sequence_number\":15}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" in\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"uYi5x0HiUm42O\",\"output_index\":0,\"sequence_number\":16}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" restaurants\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"upCM\",\"output_index\":0,\"sequence_number\":17}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" using\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"wVCH46h9vT\",\"output_index\":0,\"sequence_number\":18}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" AI\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"54xNgrwgj2x4Z\",\"output_index\":0,\"sequence_number\":19}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" to\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"fYR0yeGNlit2I\",\"output_index\":0,\"sequence_number\":20}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" analyze\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"DwRbw1VA\",\"output_index\":0,\"sequence_number\":21}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" purchasing\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"AaQu0\",\"output_index\":0,\"sequence_number\":22}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" patterns\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"gVtwBjy\",\"output_index\":0,\"sequence_number\":23}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" and\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"wAYbbzYO9qMQ\",\"output_index\":0,\"sequence_number\":24}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" inventory\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"emzqRx\",\"output_index\":0,\"sequence_number\":25}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" to\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"y1HxJ5efQn6cy\",\"output_index\":0,\"sequence_number\":26}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" create\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"2hk4Wca2T\",\"output_index\":0,\"sequence_number\":27}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" dynamic\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"IAh24eTB\",\"output_index\":0,\"sequence_number\":28}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" menus\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"NVdAwDEEj9\",\"output_index\":0,\"sequence_number\":29}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\\\",\\\"\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"UNZlmTKJgifl\",\"output_index\":0,\"sequence_number\":30}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"category\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"YUT9bMte\",\"output_index\":0,\"sequence_number\":31}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"\\\":\\\"\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"uuwkFHxnbqech\",\"output_index\":0,\"sequence_number\":32}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"technology\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"O4F8RB\",\"output_index\":0,\"sequence_number\":33}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"\\\",\\\"\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"XDkKhJxmKDyNO\",\"output_index\":0,\"sequence_number\":34}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"fe\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"p9EjR26dXdq1f6\",\"output_index\":0,\"sequence_number\":35}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"as\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"PZmyr8vezwKc2p\",\"output_index\":0,\"sequence_number\":36}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"ibility\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"hhvgcQpiC\",\"output_index\":0,\"sequence_number\":37}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"\\\":\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"ny9x3VewTHRLmQ\",\"output_index\":0,\"sequence_number\":38}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"8\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"y2rKivbKeA0ncPR\",\"output_index\":0,\"sequence_number\":39}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\\\"\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"SfRYQQZojrclJy\",\"output_index\":0,\"sequence_number\":40}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"resources\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"zW25jRA\",\"output_index\":0,\"sequence_number\":41}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"\\\":[\\\"\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"yOLpS1Vl2alj\",\"output_index\":0,\"sequence_number\":42}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"AI\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"4LLUnzhpPL8MXI\",\"output_index\":0,\"sequence_number\":43}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" software\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"Ny9QEsB\",\"output_index\":0,\"sequence_number\":44}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" development\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"7wNa\",\"output_index\":0,\"sequence_number\":45}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" team\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"knAvKRhtYse\",\"output_index\":0,\"sequence_number\":46}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"\\\",\\\"\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"zYj1EGyKQL7XJ\",\"output_index\":0,\"sequence_number\":47}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"Data\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"GqAmwkLa5lxb\",\"output_index\":0,\"sequence_number\":48}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" analytics\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"dsNK2E\",\"output_index\":0,\"sequence_number\":49}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" tools\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"rfTopSFSkz\",\"output_index\":0,\"sequence_number\":50}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"\\\",\\\"\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"ZvP6HFdH6z0Z9\",\"output_index\":0,\"sequence_number\":51}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"Inventory\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"ZwVMfUG\",\"output_index\":0,\"sequence_number\":52}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" management\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"4wRd3\",\"output_index\":0,\"sequence_number\":53}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" systems\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"5uj1RoVZ\",\"output_index\":0,\"sequence_number\":54}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"\\\",\\\"\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"F0jkgvDvzAMB1\",\"output_index\":0,\"sequence_number\":55}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"Coll\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"5LUP5ToEmquY\",\"output_index\":0,\"sequence_number\":56}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"aboration\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"8Xzfpru\",\"output_index\":0,\"sequence_number\":57}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" with\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"oo2q8TdmkbZ\",\"output_index\":0,\"sequence_number\":58}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" culinary\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"kXyyzBc\",\"output_index\":0,\"sequence_number\":59}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" experts\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"u0lBDlEk\",\"output_index\":0,\"sequence_number\":60}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" for\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"i4oCb0FVydJS\",\"output_index\":0,\"sequence_number\":61}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" menu\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"8MNp1qrMVtk\",\"output_index\":0,\"sequence_number\":62}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" design\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"v24CRqUg5\",\"output_index\":0,\"sequence_number\":63}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"\\\",\\\"\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"Cc4h6Z8vmX0B5\",\"output_index\":0,\"sequence_number\":64}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"Training\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"FrWQ3fxs\",\"output_index\":0,\"sequence_number\":65}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" for\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"cS1IDtnt2yxI\",\"output_index\":0,\"sequence_number\":66}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" restaurant\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"q7ssO\",\"output_index\":0,\"sequence_number\":67}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" staff\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"mDJ5QlPh5a\",\"output_index\":0,\"sequence_number\":68}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"\\\"]\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"J01wfLEuAlM6bX\",\"output_index\":0,\"sequence_number\":69}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"}\",\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"obfuscation\":\"YKGFYVTQ7YYZYAV\",\"output_index\":0,\"sequence_number\":70}\n\n",
+          "event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":71,\"text\":\"{\\\"idea\\\":\\\"Smart Menu Optimizer system for reducing food waste in restaurants using AI to analyze purchasing patterns and inventory to create dynamic menus.\\\",\\\"category\\\":\\\"technology\\\",\\\"feasibility\\\":8,\\\"resources\\\":[\\\"AI software development team\\\",\\\"Data analytics tools\\\",\\\"Inventory management systems\\\",\\\"Collaboration with culinary experts for menu design\\\",\\\"Training for restaurant staff\\\"]}\"}\n\n",
+          "event: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"{\\\"idea\\\":\\\"Smart Menu Optimizer system for reducing food waste in restaurants using AI to analyze purchasing patterns and inventory to create dynamic menus.\\\",\\\"category\\\":\\\"technology\\\",\\\"feasibility\\\":8,\\\"resources\\\":[\\\"AI software development team\\\",\\\"Data analytics tools\\\",\\\"Inventory management systems\\\",\\\"Collaboration with culinary experts for menu design\\\",\\\"Training for restaurant staff\\\"]}\"},\"sequence_number\":72}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"{\\\"idea\\\":\\\"Smart Menu Optimizer system for reducing food waste in restaurants using AI to analyze purchasing patterns and inventory to create dynamic menus.\\\",\\\"category\\\":\\\"technology\\\",\\\"feasibility\\\":8,\\\"resources\\\":[\\\"AI software development team\\\",\\\"Data analytics tools\\\",\\\"Inventory management systems\\\",\\\"Collaboration with culinary experts for menu design\\\",\\\"Training for restaurant staff\\\"]}\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":73}\n\n",
+          "event: response.completed\nd",
+          "ata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0ad93dbbca6d6cbe006a0aef14c8588195a3b88f5383206ff9\",\"object\":\"response\",\"created_at\":1779101460,\"status\":\"completed\",\"background\":false,\"completed_at\":1779101462,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-2024-08-06\",\"moderation\":null,\"output\":[{\"id\":\"msg_0ad93dbbca6d6cbe006a0aef154f2c8195826e06e1fb0404af\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"{\\\"idea\\\":\\\"Smart Menu Optimizer system for reducing food waste in restaurants using AI to analyze purchasing patterns and inventory to create dynamic menus.\\\",\\\"category\\\":\\\"technology\\\",\\\"feasibility\\\":8,\\\"resources\\\":[\\\"AI software development team\\\",\\\"Data analytics tools\\\",\\\"Inventory management systems\\\",\\\"Collaboration with culinary experts for menu design\\\",\\\"Training for restaurant staff\\\"]}\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"json_schema\",\"description\":null,\"name\":\"response\",\"schema\":{\"type\":\"object\",\"properties\":{\"idea\":{\"type\":\"string\",\"description\":\"The creative idea\"},\"category\":{\"type\":\"string\",\"enum\":[\"technology\",\"business\",\"art\",\"science\",\"other\"],\"description\":\"Category of the idea\"},\"feasibility\":{\"type\":\"number\",\"minimum\":1,\"maximum\":10,\"description\":\"How feasible is this idea (1-10)\"},\"resources\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"Resources needed to implement\"}},\"required\":[\"idea\",\"category\",\"feasibility\",\"resources\"],\"additionalProperties\":false},\"strict\":true},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":389,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":68,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":457},\"user\":null,\"metadata\":{}},\"sequence_number\":74}\n\n"
+        ],
+        "chunkTimings": [
+          0, 2, 466, 5, 0, 0, 0, 80, 0, 1, 0, 0, 41, 3, 3, 0, 1, 43, 2, 1, 143, 3, 4, 2, 1, 0, 1, 34, 4, 78, 2, 46, 2,
+          11, 2, 1, 0, 274, 2, 8, 0, 1, 4, 2, 0, 6, 3, 0, 0, 3, 145, 3, 8, 1, 1, 1, 57, 0, 3, 8, 6, 0, 2, 41, 2, 2, 0,
+          1, 0, 31, 2, 18, 0, 0, 0, 0, 0, 0, 27, 3, 4, 4, 1, 1, 2, 44, 2, 1, 101, 0, 0, 159, 0
+        ],
+        "isStreaming": true
+      }
+    }
+  ]
+}

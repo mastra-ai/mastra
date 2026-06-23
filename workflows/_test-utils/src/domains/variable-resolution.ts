@@ -4,6 +4,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
+import { RequestContext } from '@mastra/core/di';
 import type { WorkflowTestContext, WorkflowRegistry, WorkflowCreatorContext } from '../types';
 
 /**
@@ -1085,10 +1086,10 @@ export function createVariableResolutionTests(ctx: WorkflowTestContext, registry
       async () => {
         if (useRegistry) {
           const { workflow, mocks } = registry!['var-map-requestcontext']!;
-          // Create a Map-like requestContext
-          const requestContext = new Map([['life', 42]]);
+          const requestContext = new RequestContext();
+          requestContext.set('life', 42);
 
-          const result = await execute(workflow, { cool: 'test-input' }, { requestContext: requestContext as any });
+          const result = await execute(workflow, { cool: 'test-input' }, { requestContext });
 
           expect(mocks.executeAction).toHaveBeenCalledWith(
             expect.objectContaining({

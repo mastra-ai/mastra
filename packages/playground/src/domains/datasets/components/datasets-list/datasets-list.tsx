@@ -1,6 +1,17 @@
 import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
-import { Badge, EntityList, EntityListSkeleton } from '@mastra/playground-ui';
+import {
+  AgentIcon,
+  Button,
+  Chip,
+  DataList as EntityList,
+  DataListSkeleton as EntityListSkeleton,
+  ProcessorIcon,
+  ScorersIcon,
+  WorkflowIcon,
+} from '@mastra/playground-ui';
 import { useMemo } from 'react';
+import type { DatasetTargetType } from '../target-type-options';
+import { getDatasetTargetTypes, matchesDatasetTargetFilter } from './helpers';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface DatasetsListProps {
@@ -18,7 +29,32 @@ export interface DatasetsListProps {
   onPrevPage?: () => void;
 }
 
-const COLUMNS = 'auto 1fr auto auto auto auto auto auto';
+const COLUMNS = 'auto 1fr auto 5rem 9rem 10rem 7rem 8rem';
+
+function getDatasetRowLayout(hasExperimentsAction: boolean, hasReviewAction: boolean) {
+  return {
+    rowLinkColEnd: hasExperimentsAction ? -3 : hasReviewAction ? -2 : -1,
+    showExperimentsPlaceholder: !hasExperimentsAction,
+    showReviewPlaceholderInLink: !hasExperimentsAction && !hasReviewAction,
+    showReviewPlaceholderAfterExperiments: hasExperimentsAction && !hasReviewAction,
+  };
+}
+
+function TargetTypeIcon({ type }: { type: DatasetTargetType }) {
+  const className = 'size-3.5 shrink-0 text-neutral2';
+  switch (type) {
+    case 'agent':
+      return <AgentIcon className={className} aria-hidden />;
+    case 'workflow':
+      return <WorkflowIcon className={className} aria-hidden />;
+    case 'scorer':
+      return <ScorersIcon className={className} aria-hidden />;
+    case 'processor':
+      return <ProcessorIcon className={className} aria-hidden />;
+    default:
+      return null;
+  }
+}
 
 function formatDate(dateStr: string | Date | undefined | null): string {
   if (!dateStr) return '—';
@@ -40,7 +76,7 @@ export function DatasetsList({
   onNextPage,
   onPrevPage,
 }: DatasetsListProps) {
-  const { paths, navigate, Link } = useLinkComponent();
+  const { paths, Link } = useLinkComponent();
 
   const enrichedDatasets = useMemo(() => {
     return datasets.map(ds => {
@@ -48,7 +84,8 @@ export function DatasetsList({
       const completed = dsExperiments.filter(e => e.status === 'completed').length;
       const total = dsExperiments.length;
       const successPct = total > 0 ? Math.round((completed / total) * 100) : null;
-      return { ...ds, experimentCount: total, successPct };
+      const targetTypes = getDatasetTargetTypes(ds.targetType, dsExperiments);
+      return { ...ds, experimentCount: total, successPct, targetTypes };
     });
   }, [datasets, experiments]);
 
@@ -56,7 +93,7 @@ export function DatasetsList({
     const term = search.toLowerCase();
     return enrichedDatasets.filter(ds => {
       const matchesSearch = !term || ds.name.toLowerCase().includes(term);
-      const matchesTarget = targetFilter === 'all' || ds.targetType === targetFilter;
+      const matchesTarget = matchesDatasetTargetFilter(ds.targetTypes, targetFilter);
       const matchesExperiment =
         experimentFilter === 'all' ||
         (experimentFilter === 'with' && ds.experimentCount > 0) ||
@@ -71,90 +108,107 @@ export function DatasetsList({
   }
 
   return (
-    <EntityList columns={COLUMNS}>
+    <EntityList columns={COLUMNS} variant="striped">
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Description</EntityList.TopCell>
         <EntityList.TopCell>Tags</EntityList.TopCell>
-        <EntityList.TopCell className="text-center">Version</EntityList.TopCell>
+        <EntityList.TopCell>Version</EntityList.TopCell>
         <EntityList.TopCell>Target</EntityList.TopCell>
-        <EntityList.TopCell className="text-center">Experiments</EntityList.TopCell>
-        <EntityList.TopCell className="text-center">Review</EntityList.TopCell>
         <EntityList.TopCell>Last Updated</EntityList.TopCell>
+        <EntityList.TopCell>Experiments</EntityList.TopCell>
+        <EntityList.TopCell className="justify-center">Review</EntityList.TopCell>
       </EntityList.Top>
 
       {filteredData.map(ds => {
-        const successBadge =
-          ds.experimentCount > 0 ? (
-            <Badge
-              variant={
-                ds.successPct !== null && ds.successPct >= 70
-                  ? 'success'
-                  : ds.successPct !== null && ds.successPct >= 40
-                    ? 'warning'
-                    : 'error'
-              }
-            >
-              {ds.experimentCount} ({ds.successPct ?? 0}%)
-            </Badge>
-          ) : (
-            <span className="text-neutral2">—</span>
-          );
+        const experimentsChipColor: 'green' | 'yellow' | 'red' =
+          ds.successPct !== null && ds.successPct >= 70
+            ? 'green'
+            : ds.successPct !== null && ds.successPct >= 40
+              ? 'yellow'
+              : 'red';
+
+        const review = reviewByDataset?.get(ds.id);
+        const tags = Array.isArray(ds.tags) ? (ds.tags as string[]) : [];
+        const hasExperimentsAction = ds.experimentCount > 0;
+        const rowLayout = getDatasetRowLayout(hasExperimentsAction, Boolean(review));
 
         return (
-          <EntityList.RowLink key={ds.id} to={paths.datasetLink(ds.id)} LinkComponent={Link}>
-            <EntityList.NameCell>{ds.name}</EntityList.NameCell>
-            <EntityList.DescriptionCell>{ds.description || ''}</EntityList.DescriptionCell>
-            <EntityList.Cell>
-              {Array.isArray(ds.tags) && ds.tags.length > 0 ? (
-                <div
-                  className="flex max-w-48 items-center gap-1 overflow-hidden"
-                  title={(ds.tags as string[]).join(', ')}
-                >
-                  {(ds.tags as string[]).slice(0, 2).map(tag => (
-                    <Badge key={tag} variant="default" className="shrink-0 px-1.5 py-0 text-[10px]">
-                      {tag}
-                    </Badge>
-                  ))}
-                  {ds.tags.length > 2 && (
-                    <span className="shrink-0 text-[10px] text-neutral2">+{ds.tags.length - 2}</span>
-                  )}
-                </div>
-              ) : (
-                <span className="text-neutral2">—</span>
-              )}
-            </EntityList.Cell>
-            <EntityList.TextCell className="text-center">v{ds.version ?? 1}</EntityList.TextCell>
-            <EntityList.Cell>
-              {ds.targetType ? <Badge variant="info">{ds.targetType}</Badge> : <span className="text-neutral2">—</span>}
-            </EntityList.Cell>
-            <EntityList.Cell className="text-center">{successBadge}</EntityList.Cell>
-            <EntityList.Cell className="text-center">
-              {(() => {
-                const review = reviewByDataset?.get(ds.id);
-                if (!review) return <span className="text-neutral2">—</span>;
-                if (review.needsReview > 0) {
-                  return (
-                    <button
-                      type="button"
-                      onClick={e => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        navigate(`${paths.datasetLink(ds.id)}?tab=review`);
-                      }}
-                      className="inline-flex"
-                    >
-                      <Badge variant="warning" className="cursor-pointer transition-opacity hover:opacity-80">
-                        {review.needsReview} pending
-                      </Badge>
-                    </button>
-                  );
-                }
-                return <Badge variant="success">{review.complete} reviewed</Badge>;
-              })()}
-            </EntityList.Cell>
-            <EntityList.TextCell>{formatDate(ds.updatedAt)}</EntityList.TextCell>
-          </EntityList.RowLink>
+          <EntityList.RowWrapper key={ds.id}>
+            <EntityList.RowLink
+              flushRight
+              colEnd={rowLayout.rowLinkColEnd}
+              to={paths.datasetLink(ds.id)}
+              LinkComponent={Link}
+            >
+              <EntityList.NameCell>{ds.name}</EntityList.NameCell>
+              <EntityList.DescriptionCell>{ds.description}</EntityList.DescriptionCell>
+              <EntityList.Cell>
+                {tags.length > 0 ? (
+                  <div className="flex max-w-48 items-center gap-1 overflow-hidden" title={tags.join(', ')}>
+                    {tags.slice(0, 2).map(tag => (
+                      <Chip key={tag} color="gray" size="small" className="shrink-0">
+                        {tag}
+                      </Chip>
+                    ))}
+                    {tags.length > 2 && <span className="shrink-0 text-[10px] text-neutral2">+{tags.length - 2}</span>}
+                  </div>
+                ) : (
+                  <span className="text-neutral2">—</span>
+                )}
+              </EntityList.Cell>
+              <EntityList.TextCell>v{ds.version ?? 1}</EntityList.TextCell>
+              <EntityList.Cell className="text-neutral4 text-ui-smd">
+                {ds.targetTypes.length > 0 ? (
+                  <span className="flex min-w-0 items-center gap-2 overflow-hidden">
+                    {ds.targetTypes.map(type => (
+                      <span key={type} className="flex min-w-0 items-center gap-1 capitalize">
+                        <TargetTypeIcon type={type} />
+                        <span className="truncate">{type}</span>
+                      </span>
+                    ))}
+                  </span>
+                ) : (
+                  <span className="text-neutral2">—</span>
+                )}
+              </EntityList.Cell>
+              <EntityList.TextCell>{formatDate(ds.updatedAt)}</EntityList.TextCell>
+              {rowLayout.showExperimentsPlaceholder ? <EntityList.Cell className="justify-center" /> : null}
+              {rowLayout.showReviewPlaceholderInLink ? <EntityList.Cell className="justify-center" /> : null}
+            </EntityList.RowLink>
+
+            {hasExperimentsAction ? (
+              <Button
+                as={Link}
+                to={`${paths.datasetLink(ds.id)}?tab=experiments`}
+                variant="ghost"
+                size="sm"
+                className="w-full  rounded-lg h-full p-0!"
+              >
+                <Chip color={experimentsChipColor}>
+                  {ds.experimentCount} ({ds.successPct ?? 0}%)
+                </Chip>
+              </Button>
+            ) : null}
+
+            {review ? (
+              <Button
+                as={Link}
+                to={`${paths.datasetLink(ds.id)}?tab=review`}
+                variant="ghost"
+                size="sm"
+                className="w-full  rounded-lg h-full p-0!"
+              >
+                {review.needsReview > 0 ? (
+                  <Chip color="yellow">{review.needsReview} pending</Chip>
+                ) : (
+                  <Chip color="green">{review.complete} reviewed</Chip>
+                )}
+              </Button>
+            ) : rowLayout.showReviewPlaceholderAfterExperiments ? (
+              <EntityList.Cell className="justify-center" />
+            ) : null}
+          </EntityList.RowWrapper>
         );
       })}
 

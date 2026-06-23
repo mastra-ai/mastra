@@ -1,6 +1,6 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { ChunkFrom } from '../../../stream/types';
-import { createStep } from '../../../workflows';
+import { createStep } from '../../../workflows/workflow';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';

@@ -42,7 +42,10 @@ export const WithMaxHeight: Story = {
 
 export const HorizontalScroll: Story = {
   render: () => (
-    <ScrollArea className="h-[100px] w-dropdown-max-height rounded-md border border-border1 p-4">
+    <ScrollArea
+      orientation="horizontal"
+      className="h-[100px] w-dropdown-max-height rounded-md border border-border1 p-4"
+    >
       <div className="flex gap-4 w-[800px]">
         {Array.from({ length: 20 }).map((_, i) => (
           <div key={i} className="h-16 w-16 shrink-0 rounded-md bg-surface4 flex items-center justify-center">
@@ -54,9 +57,54 @@ export const HorizontalScroll: Story = {
   ),
 };
 
+export const HorizontalScrollButtons: Story = {
+  render: () => (
+    <ScrollArea
+      orientation="horizontal"
+      scrollButtons
+      className="h-[100px] w-dropdown-max-height rounded-md border border-border1 p-4"
+    >
+      <div className="flex gap-4 w-[800px]">
+        {Array.from({ length: 20 }).map((_, i) => (
+          <div key={i} className="h-16 w-16 shrink-0 rounded-md bg-surface4 flex items-center justify-center">
+            <span className="text-sm text-neutral5">{i + 1}</span>
+          </div>
+        ))}
+      </div>
+    </ScrollArea>
+  ),
+};
+
+export const Badges: Story = {
+  render: () => (
+    <ScrollArea orientation="horizontal" scrollButtons className="w-[350px] rounded-md border border-border1 p-2">
+      <div className="flex gap-2 py-1">
+        {[
+          'React',
+          'TypeScript',
+          'Node.js',
+          'GraphQL',
+          'PostgreSQL',
+          'Redis',
+          'Docker',
+          'Kubernetes',
+          'AWS',
+          'Vercel',
+          'Next.js',
+          'Tailwind',
+        ].map(tech => (
+          <span key={tech} className="shrink-0 px-3 py-1 text-xs rounded-full bg-surface4 text-neutral5">
+            {tech}
+          </span>
+        ))}
+      </div>
+    </ScrollArea>
+  ),
+};
+
 export const CodeBlock: Story = {
   render: () => (
-    <ScrollArea className="h-[200px] w-[400px] rounded-md border border-border1 bg-surface2">
+    <ScrollArea orientation="both" className="h-[200px] w-[400px] rounded-md border border-border1 bg-surface2">
       <pre className="p-4 text-sm font-mono text-neutral5">
         {`function example() {
   const data = fetchData();
@@ -103,6 +151,68 @@ export const ChatMessages: Story = {
                 : 'This is an assistant response with helpful information'}
             </p>
           </div>
+        ))}
+      </div>
+    </ScrollArea>
+  ),
+};
+
+const MaskItems = () => (
+  <div className="space-y-3">
+    {Array.from({ length: 20 }).map((_, i) => (
+      <p key={i} className="text-sm text-neutral5">
+        Item {i + 1} — Lorem ipsum dolor sit amet
+      </p>
+    ))}
+  </div>
+);
+
+export const MaskDisabled: Story = {
+  name: 'Mask / disabled',
+  render: () => (
+    <ScrollArea mask={false} className="h-[200px] w-[260px] rounded-md border border-border1 p-4">
+      <MaskItems />
+    </ScrollArea>
+  ),
+};
+
+export const MaskTopOnly: Story = {
+  name: 'Mask / top only',
+  render: () => (
+    <ScrollArea mask={{ bottom: false }} className="h-[200px] w-[260px] rounded-md border border-border1 p-4">
+      <MaskItems />
+    </ScrollArea>
+  ),
+};
+
+export const MaskBothAxes: Story = {
+  name: 'Mask / both axes (orientation=both)',
+  render: () => (
+    <ScrollArea orientation="both" className="h-[200px] w-[260px] rounded-md border border-border1 p-4">
+      <div className="w-[600px] space-y-3">
+        {Array.from({ length: 20 }).map((_, i) => (
+          <p key={i} className="text-sm text-neutral5 whitespace-nowrap">
+            Row {i + 1} — long horizontal content stretching past the viewport for x-axis overflow
+          </p>
+        ))}
+      </div>
+    </ScrollArea>
+  ),
+};
+
+export const MaskYOnly: Story = {
+  name: 'Mask / y axis only (no horizontal fade)',
+  render: () => (
+    <ScrollArea
+      orientation="both"
+      mask={{ x: false }}
+      className="h-[200px] w-[260px] rounded-md border border-border1 p-4"
+    >
+      <div className="w-[600px] space-y-3">
+        {Array.from({ length: 20 }).map((_, i) => (
+          <p key={i} className="text-sm text-neutral5 whitespace-nowrap">
+            Row {i + 1} — long horizontal content
+          </p>
         ))}
       </div>
     </ScrollArea>

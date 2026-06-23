@@ -1,6 +1,7 @@
 import { PassThrough } from 'node:stream';
 import { openai } from '@ai-sdk/openai-v5';
-import { beforeEach, describe, expect, it, expectTypeOf } from 'vitest';
+import { beforeEach, describe, expect, it, expectTypeOf, vi } from 'vitest';
+import { RequestContext } from '../../request-context';
 import { CompositeVoice } from '../../voice/composite-voice';
 import { MastraVoice } from '../../voice/voice';
 import { Agent } from '../agent';
@@ -177,6 +178,98 @@ describe('voice capabilities', () => {
 
       const audioStream = await agent.voice.speak('Hello');
       expect(audioStream).toBeDefined();
+    });
+  });
+
+  /**
+   * Per-session voice scope for realtime/STS agents (GitHub Issue #17262).
+   *
+   * When `voice` is a resolver, each getVoice() call must return a fresh,
+   * session-owned instance, and the agent must not post-mutate it via
+   * addTools/addInstructions.
+   */
+  describe('dynamic voice resolver (issue #17262)', () => {
+    it('AgentConfig.voice should accept a resolver returning MastraVoice', () => {
+      type VoiceConfigType = NonNullable<AgentConfig['voice']>;
+      expectTypeOf<({ requestContext }: { requestContext: any }) => MastraVoice>().toMatchTypeOf<VoiceConfigType>();
+    });
+
+    it('returns a fresh instance per call for a resolver', async () => {
+      const agent = new Agent({
+        id: 'dynamic-voice-agent',
+        name: 'Dynamic Voice Agent',
+        instructions: 'You are a voice assistant.',
+        model: openai('gpt-4o-mini'),
+        voice: () => new MockVoice({ speaker: 'mock-voice' }),
+      });
+
+      const voiceA = await agent.getVoice();
+      const voiceB = await agent.getVoice();
+
+      expect(voiceA).toBeInstanceOf(MockVoice);
+      expect(voiceB).toBeInstanceOf(MockVoice);
+      expect(voiceA).not.toBe(voiceB);
+    });
+
+    it('does not post-mutate a resolver-produced instance', async () => {
+      const addTools = vi.fn();
+      const addInstructions = vi.fn();
+
+      class SpyVoice extends MockVoice {
+        addTools = addTools;
+        addInstructions = addInstructions;
+      }
+
+      const agent = new Agent({
+        id: 'dynamic-voice-agent',
+        name: 'Dynamic Voice Agent',
+        instructions: 'You are a voice assistant.',
+        model: openai('gpt-4o-mini'),
+        voice: () => new SpyVoice({ speaker: 'mock-voice' }),
+      });
+
+      const voice = await agent.getVoice();
+
+      expect(voice).toBeInstanceOf(SpyVoice);
+      expect(addTools).not.toHaveBeenCalled();
+      expect(addInstructions).not.toHaveBeenCalled();
+    });
+
+    it('passes requestContext into the resolver', async () => {
+      const seen: string[] = [];
+
+      const agent = new Agent({
+        id: 'dynamic-voice-agent',
+        name: 'Dynamic Voice Agent',
+        instructions: 'You are a voice assistant.',
+        model: openai('gpt-4o-mini'),
+        voice: ({ requestContext }) => {
+          seen.push(String(requestContext.get('user')));
+          return new MockVoice({ speaker: 'mock-voice' });
+        },
+      });
+
+      const ctxA = new RequestContext();
+      ctxA.set('user', 'alice');
+      const ctxB = new RequestContext();
+      ctxB.set('user', 'bob');
+
+      await agent.getVoice({ requestContext: ctxA });
+      await agent.getVoice({ requestContext: ctxB });
+
+      expect(seen).toEqual(['alice', 'bob']);
+    });
+
+    it('the plain voice getter throws when voice is a resolver', () => {
+      const agent = new Agent({
+        id: 'dynamic-voice-agent',
+        name: 'Dynamic Voice Agent',
+        instructions: 'You are a voice assistant.',
+        model: openai('gpt-4o-mini'),
+        voice: () => new MockVoice({ speaker: 'mock-voice' }),
+      });
+
+      expect(() => agent.voice).toThrow('Voice is not compatible when voice is a function');
     });
   });
 });

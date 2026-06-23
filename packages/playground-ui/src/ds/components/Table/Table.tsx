@@ -1,11 +1,12 @@
-import React, { forwardRef, useEffect, useRef } from 'react';
+import type { CSSProperties, HTMLAttributes, ReactNode, ThHTMLAttributes } from 'react';
+import { forwardRef, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 
 export interface TableProps {
   className?: string;
-  children: React.ReactNode;
+  children: ReactNode;
   size?: 'default' | 'small';
-  style?: React.CSSProperties;
+  style?: CSSProperties;
 }
 
 const rowSize = {
@@ -23,7 +24,7 @@ export const Table = ({ className, children, size = 'default', style }: TablePro
 
 export interface TheadProps {
   className?: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 export const Thead = ({ className, children }: TheadProps) => {
@@ -34,9 +35,10 @@ export const Thead = ({ className, children }: TheadProps) => {
   );
 };
 
-export interface ThProps extends React.TdHTMLAttributes<HTMLTableCellElement> {
+export interface ThProps extends ThHTMLAttributes<HTMLTableCellElement> {
   className?: string;
-  children: React.ReactNode;
+  style?: CSSProperties;
+  children: ReactNode;
 }
 
 export const Th = ({ className, children, ...props }: ThProps) => {
@@ -53,9 +55,9 @@ export const Th = ({ className, children, ...props }: ThProps) => {
   );
 };
 
-export interface TbodyProps extends React.HTMLAttributes<HTMLTableSectionElement> {
+export interface TbodyProps extends HTMLAttributes<HTMLTableSectionElement> {
   className?: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
 export const Tbody = ({ className, children, ...props }: TbodyProps) => {
@@ -68,9 +70,9 @@ export const Tbody = ({ className, children, ...props }: TbodyProps) => {
 
 export interface RowProps {
   className?: string;
-  children: React.ReactNode;
+  children: ReactNode;
   selected?: boolean;
-  style?: React.CSSProperties;
+  style?: CSSProperties;
   onClick?: () => void;
   tabIndex?: number;
   /** When true, row receives focus and scrolls into view */

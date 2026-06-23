@@ -1,12 +1,35 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { SectionCard } from './section-card';
 
+const SURFACES: { token: string; label: string; className: string }[] = [
+  { token: 'surface1', label: 'surface1 · 0% (studio shell)', className: 'bg-surface1' },
+  { token: 'surface2', label: 'surface2 · 16% (main frame)', className: 'bg-surface2' },
+  { token: 'surface3', label: 'surface3 · 18%', className: 'bg-surface3' },
+  { token: 'surface4', label: 'surface4 · 22%', className: 'bg-surface4' },
+];
+
+function SurfaceFrame({ className, label, children }: { className: string; label: string; children: React.ReactNode }) {
+  return (
+    <div className={`rounded-2xl border border-border1 p-6 ${className}`}>
+      <p className="mb-4 text-ui-xs uppercase tracking-wide text-neutral3">{label}</p>
+      {children}
+    </div>
+  );
+}
+
 const meta: Meta<typeof SectionCard> = {
   title: 'Layout/SectionCard',
   component: SectionCard,
   parameters: {
     layout: 'padded',
   },
+  decorators: [
+    Story => (
+      <div className="rounded-2xl border border-border1 bg-surface2 p-6">
+        <Story />
+      </div>
+    ),
+  ],
 };
 
 export default meta;
@@ -60,6 +83,27 @@ export const FillHeight: Story = {
       <SectionCard fillHeight title="Right" description="Same height as sibling">
         <div className="h-full rounded-md bg-surface3" />
       </SectionCard>
+    </div>
+  ),
+};
+
+// Verifies card readability across all studio surface tokens — default + danger variants.
+export const OnSurfaces: Story = {
+  decorators: [Story => <>{Story()}</>],
+  render: () => (
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      {SURFACES.map(({ token, label, className }) => (
+        <SurfaceFrame key={token} className={className} label={label}>
+          <div className="flex flex-col gap-4">
+            <SectionCard title="Activity Over Time" description="Default variant on this surface.">
+              <p className="text-neutral3">Body content goes here.</p>
+            </SectionCard>
+            <SectionCard variant="danger" title="Delete project" description="Danger variant on this surface.">
+              <p className="text-accent2/80">Confirmation controls go here.</p>
+            </SectionCard>
+          </div>
+        </SurfaceFrame>
+      ))}
     </div>
   ),
 };

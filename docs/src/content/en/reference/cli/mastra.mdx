@@ -213,11 +213,13 @@ mastra studio deploy
 
 The command runs `mastra build`, zips the output, reads an env file from the project directory, and uploads everything to the platform. After uploading, it polls the deploy status and streams build logs until the deploy reaches a terminal state.
 
+The deploy command auto-loads the project's `.env` file. If `MASTRA_PROJECT_ID` points to a project that was provisioned for Observability, the deploy links to that project instead of creating a new one. Deploying Studio to an observability-only project converts it into a Studio project on the platform side.
+
 The CLI requires at least one `.env` or `.env.*` file (excluding `.env.example`) in the project directory and fails with `Error: No env file found for deploy.` if none exists. When multiple env files are present, the CLI prompts you to pick one (defaulting to `.env.production`); pass `--env-file` to choose explicitly. With `--yes` and multiple env files, you must pass `--env-file` or the deploy errors.
 
 Organization and project are resolved in order from: Environment variable flag, `.mastra-project.json` config file, current org from credentials, and lastly interactive prompt. On first deploy, the CLI saves the resolved IDs to `.mastra-project.json` so subsequent deploys skip the prompts.
 
-If `--project <value>` does not match an existing project (by ID or slug), the CLI treats `<value>` as a new project name and creates it after confirmation. Combined with `--yes`, this creates and deploys a new project in one non-interactive command:
+If `--project <value>` doesn't match an existing project (by ID or slug), the CLI treats `<value>` as a new project name and creates it after confirmation. Combined with `--yes`, this creates and deploys a new project in one non-interactive command:
 
 ```bash
 mastra studio deploy --project "my-new-project" --yes
@@ -307,7 +309,7 @@ Shows diagnosis results and suggested fixes for a failed Studio deploy.
 mastra studio deploy suggestions [deploy-id]
 ```
 
-If you omit `deploy-id`, the command uses the latest deploy for the linked project. If a diagnosis does not exist yet, the command starts one and polls until results are ready. If the deploy is healthy, no suggestions are shown.
+If you omit `deploy-id`, the command uses the latest deploy for the linked project. If a diagnosis doesn't exist yet, the command starts one and polls until results are ready. If the deploy is healthy, no suggestions are shown.
 
 ### `mastra studio projects`
 
@@ -315,11 +317,13 @@ Lists all projects in the current organization.
 
 ### `mastra studio projects create`
 
-Creates a new project through an interactive prompt. This command does not accept a `--name` flag; for non-interactive project creation, use [`mastra studio deploy --project <name> --yes`](#mastra-studio-deploy) instead, which creates the project and deploys to it in one step.
+Creates a new project through an interactive prompt. This command doesn't accept a `--name` flag; for non-interactive project creation, use [`mastra studio deploy --project <name> --yes`](#mastra-studio-deploy) instead, which creates the project and deploys to it in one step.
 
 ## `mastra server deploy`
 
 Builds and deploys your project to Server on Mastra platform. Works the same as [`mastra studio deploy`](#mastra-studio-deploy) with the same flags, arguments, and resolution logic.
+
+The deploy command auto-loads the project's `.env` file. If `MASTRA_PROJECT_ID` points to a project that was provisioned for Observability, the deploy links to that project instead of creating a new one. Deploying Server to an observability-only project converts it into a Server project on the platform side.
 
 ```bash
 mastra server deploy [dir]
@@ -333,7 +337,7 @@ Shows diagnosis results and suggested fixes for a failed Server deploy.
 mastra server deploy suggestions [deploy-id]
 ```
 
-If you omit `deploy-id`, the command uses the latest deploy for the linked project. If a diagnosis does not exist yet, the command starts one and polls until results are ready. If the deploy is healthy, no suggestions are shown.
+If you omit `deploy-id`, the command uses the latest deploy for the linked project. If a diagnosis doesn't exist yet, the command starts one and polls until results are ready. If the deploy is healthy, no suggestions are shown.
 
 ## `mastra server pause`
 
@@ -351,13 +355,13 @@ Organization ID. Can also be set via the `MASTRA_ORG_ID` environment variable.
 
 #### `--project`
 
-Project ID or slug when `MASTRA_PROJECT_ID` is not set. Slugs are resolved against projects in the current organization.
+Project ID or slug when `MASTRA_PROJECT_ID` isn't set. Slugs are resolved against projects in the current organization.
 
 #### `-c, --config`
 
 Path to the project config file. Defaults to `.mastra-project.json`.
 
-Fails if the instance is not running.
+Fails if the instance isn't running.
 
 ## `mastra server restart`
 
@@ -371,7 +375,7 @@ Same flags as [`mastra server pause`](#mastra-server-pause): **`--org`**, **`--p
 mastra server restart
 ```
 
-Fails if a deployment is still active for this project (running, building, deploying, etc.); that is a platform restriction so you cannot restart while another deploy is in progress.
+Fails if a deployment is still active for this project (running, building, deploying, etc.); that's a platform restriction so you can't restart while another deploy is in progress.
 
 ## `mastra server env`
 
@@ -452,7 +456,7 @@ Lists all organizations with your role in each. The current organization is mark
 
 #### `mastra auth orgs switch`
 
-Switches the active organization through an interactive prompt. Cannot be used when `MASTRA_API_TOKEN` or `MASTRA_ORG_ID` environment variables are set.
+Switches the active organization through an interactive prompt. Can't be used when `MASTRA_API_TOKEN` or `MASTRA_ORG_ID` environment variables are set.
 
 ### `mastra auth tokens`
 
@@ -460,7 +464,7 @@ Lists all API tokens with their last-used date.
 
 #### `mastra auth tokens create`
 
-Creates a new API token. The secret is displayed once and cannot be retrieved again.
+Creates a new API token. The secret is displayed once and can't be retrieved again.
 
 ```bash
 mastra auth tokens create <name>
@@ -476,9 +480,41 @@ mastra auth tokens revoke <token-id>
 
 ## `mastra lint`
 
-The `mastra lint` command validates the structure and code of your Mastra project to ensure it follows best practices and is error-free.
+The `mastra lint` command validates the structure and code of your Mastra project.
+
+By default, `mastra lint` runs project checks against your source files and configuration. Use `--preflight` to also run bundle checks against `.mastra/output` before deployment.
+
+```bash
+mastra lint --preflight
+```
 
 It accepts [common flags][common-flags].
+
+### Flags
+
+#### `--preflight`
+
+Runs deployment preflight checks against the built Mastra output. This builds the project before checking it unless you also pass `--skip-build`.
+
+#### `--skip-build`
+
+Skips the build step and reuses the existing `.mastra/output` directory. This flag only applies when `--preflight` is set.
+
+#### `--env-file <file>`
+
+Uses the specified environment file for preflight validation. This flag only applies when `--preflight` is set.
+
+#### `--strict`
+
+Treats warnings as errors.
+
+#### `--json`
+
+Emits machine-readable JSON output.
+
+#### `--debug`
+
+Enables debug logs.
 
 ## `mastra scorers`
 
@@ -546,6 +582,18 @@ Don't include example code. Useful when using the `--default` flag.
 
 Configure your code editor with Mastra's MCP server. Choose from: `"cursor" | "cursor-global" | "windsurf" | "vscode"`.
 
+#### `--observability`
+
+Enable Observability on the Mastra platform. The CLI prompts you to select an existing platform project or create a new one, writes the required environment variables, and configures the observability exporters.
+
+#### `--no-observability`
+
+Skip the Mastra Observability prompt.
+
+#### `--observability-project`
+
+Set the platform project name to use when Mastra Observability is enabled.
+
 ## `mastra migrate`
 
 Runs database migrations to update your storage schema. This command is useful when upgrading Mastra versions that include storage schema changes.
@@ -561,6 +609,582 @@ mastra migrate
 See the [Storage migration guide](/guides/migrations/upgrade-to-v1/storage#duplicate-spans-migration) for details on when migrations are needed.
 
 It accepts [common flags][common-flags].
+
+## `mastra api`
+
+Calls a Mastra runtime server with JSON input and JSON output. Use it for local development servers, deployed Mastra platform projects, self-hosted Mastra servers, or hosted Mastra Platform Observability APIs.
+
+```bash
+mastra api agent list
+mastra api agent run weather-agent '{"messages":"What is the weather in London?"}'
+mastra api tool execute get-weather '{"location":"San Francisco"}'
+mastra api trace list '{"page":0,"perPage":20}'
+```
+
+Use `mastra api <resource> <action> --help` to see examples for a command.
+
+### Output
+
+Success responses are written to `stdout` as JSON. Single-resource commands return:
+
+```json
+{ "data": {} }
+```
+
+List commands return a `data` array and pagination metadata:
+
+```json
+{ "data": [], "page": { "total": 0, "page": 0, "perPage": 0, "hasMore": false } }
+```
+
+Errors are written to `stderr` as JSON and return a non-zero exit code:
+
+```json
+{
+  "error": {
+    "code": "SERVER_UNREACHABLE",
+    "message": "Could not connect to target server",
+    "details": {}
+  }
+}
+```
+
+### Target resolution
+
+For runtime commands, the command resolves the target server in this order:
+
+1. `--url <url>` for an explicit remote or self-hosted server.
+1. `http://localhost:4111` for a local `mastra dev` server.
+1. `.mastra-project.json` for a Mastra platform project.
+
+Automatic platform auth is only used when the CLI resolves a Mastra platform target from `.mastra-project.json`. Localhost targets and explicit `--url` targets don't receive automatic credentials. Headers passed with `--header` are sent to any target, including localhost.
+
+For observability commands (`trace`, `log`, `score`, and `metric`), the CLI targets `https://observability.mastra.ai` by default instead of a project deployment URL. It resolves credentials in this order:
+
+1. Explicit `Authorization` and `X-Mastra-Project-Id` headers passed with `--header`.
+1. `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` from your environment.
+1. Project metadata from `.mastra-project.json` for the project ID.
+1. Your Mastra CLI login token as an auth fallback.
+
+Use `--url` and `--header` when you need to override the default hosted observability target or credentials.
+
+### Flags
+
+#### `--url <url>`
+
+Target a specific Mastra server URL.
+
+```bash
+mastra api --url https://example.com agent list
+```
+
+#### `--header <"Key: Value">`
+
+Send a custom HTTP header. Repeat the flag to send multiple headers.
+
+```bash
+mastra api --url https://example.com --header "Authorization: Bearer $TOKEN" agent list
+```
+
+#### `--timeout <ms>`
+
+Set the request timeout in milliseconds. Defaults to `30000`. Workflow run start and resume commands default to `120000`.
+
+#### `--pretty`
+
+Pretty-print JSON output. Defaults to `false`.
+
+#### `--schema`
+
+Print the CLI-oriented request schema for a command that accepts JSON input. The schema comes from the target server's route contracts and includes the command shape, positionals, examples, request schemas, and response shape.
+
+`--schema` is available on leaf commands that accept JSON input. It isn't available as a top-level `mastra api` flag.
+
+```bash
+mastra api agent run --schema
+mastra api tool execute --schema
+```
+
+### Input model
+
+Commands that accept input take one inline JSON argument. Don't pass file paths or stdin.
+
+```bash
+mastra api workflow run start data-pipeline '{"inputData":{"source":"s3://bucket/data.csv"}}'
+```
+
+Use positional arguments for stable IDs and JSON for filters or payloads. For routes that require both query parameters and a request body, pass one JSON object. The CLI splits the input according to the server route schema.
+
+```bash
+mastra api thread create '{"agentId":"weather-agent","resourceId":"user_123","threadId":"thread_abc123","title":"Support conversation"}'
+```
+
+List commands accept `page` and `perPage` in the JSON input when the target route supports pagination:
+
+```bash
+mastra api score list '{"page":0,"perPage":50}'
+mastra api trace list '{"page":0,"perPage":20}'
+```
+
+Routes that support filters accept them in the same JSON input. For example, observability trace listing supports pagination and route-supported filters:
+
+```bash
+mastra api trace list '{"page":0,"perPage":20,"filters":{"spanType":"agent"}}'
+```
+
+### Get command-specific help
+
+Each `mastra api` leaf command includes command-specific examples in its help output. Use `--help` on the exact command you want to call:
+
+```bash
+mastra api agent run --help
+mastra api tool execute --help
+mastra api memory current update --help
+mastra api workflow run resume --help
+```
+
+Use `--schema` on commands that accept JSON input to inspect the request shape returned by the target server:
+
+```bash
+mastra api agent run --schema
+mastra api thread create --schema
+mastra api score create --schema
+```
+
+Some commands have important runtime requirements. For example, `mastra api memory current update` requires working memory to be enabled for the memory instance, and `mastra api workflow run resume` only works for suspended workflow runs.
+
+### Commands
+
+#### `mastra api agent list`
+
+Lists the agents registered on the target server. Pass optional JSON input for route-supported filters.
+
+```bash
+mastra api agent list [input]
+```
+
+#### `mastra api agent get`
+
+Gets metadata for one registered agent.
+
+```bash
+mastra api agent get <agentId>
+```
+
+#### `mastra api agent run`
+
+Runs an agent with JSON input. Use command help to see examples for text prompts, chat messages, and memory thread options.
+
+```bash
+mastra api agent run <agentId> <input>
+```
+
+#### `mastra api workflow list`
+
+Lists workflows registered on the target server. Pass optional JSON input for route-supported filters.
+
+```bash
+mastra api workflow list [input]
+```
+
+#### `mastra api workflow get`
+
+Gets metadata for one registered workflow.
+
+```bash
+mastra api workflow get <workflowId>
+```
+
+#### `mastra api workflow run start`
+
+Starts a workflow run with JSON input. Workflow start commands use a longer default timeout than most commands because runs can take longer to complete.
+
+```bash
+mastra api workflow run start <workflowId> <input>
+```
+
+#### `mastra api workflow run list`
+
+Lists runs for a workflow. Pass optional JSON input for route-supported filters or pagination.
+
+```bash
+mastra api workflow run list <workflowId> [input]
+```
+
+#### `mastra api workflow run get`
+
+Gets one workflow run by ID.
+
+```bash
+mastra api workflow run get <workflowId> <runId>
+```
+
+#### `mastra api workflow run resume`
+
+Resumes a suspended workflow run with JSON input. The run must be in a suspended state.
+
+```bash
+mastra api workflow run resume <workflowId> <runId> <input>
+```
+
+#### `mastra api workflow run cancel`
+
+Cancels a workflow run.
+
+```bash
+mastra api workflow run cancel <workflowId> <runId>
+```
+
+#### `mastra api tool list`
+
+Lists tools registered on the target server. Pass optional JSON input for route-supported filters.
+
+```bash
+mastra api tool list [input]
+```
+
+#### `mastra api tool get`
+
+Gets metadata and schemas for one tool.
+
+```bash
+mastra api tool get <toolId>
+```
+
+#### `mastra api tool execute`
+
+Executes a tool with JSON input. Raw tool input is wrapped as the route `data` field unless you pass an explicit `data` object.
+
+```bash
+mastra api tool execute <toolId> <input>
+```
+
+#### `mastra api mcp list`
+
+Lists Model Context Protocol (MCP) servers registered on the target server. Pass optional JSON input for route-supported filters.
+
+```bash
+mastra api mcp list [input]
+```
+
+#### `mastra api mcp get`
+
+Gets metadata for one MCP server.
+
+```bash
+mastra api mcp get <id>
+```
+
+#### `mastra api mcp tool list`
+
+Lists tools exposed by an MCP server. Pass optional JSON input for route-supported filters.
+
+```bash
+mastra api mcp tool list <serverId> [input]
+```
+
+#### `mastra api mcp tool get`
+
+Gets metadata and schemas for one MCP tool.
+
+```bash
+mastra api mcp tool get <serverId> <toolId>
+```
+
+#### `mastra api mcp tool execute`
+
+Executes an MCP tool with JSON input. Raw tool input is wrapped as the route `data` field unless you pass an explicit `data` object.
+
+```bash
+mastra api mcp tool execute <serverId> <toolId> <input>
+```
+
+#### `mastra api thread list`
+
+Lists memory threads. Pass optional JSON input for route-supported filters.
+
+```bash
+mastra api thread list [input]
+```
+
+#### `mastra api thread get`
+
+Gets one memory thread by ID.
+
+```bash
+mastra api thread get <threadId>
+```
+
+#### `mastra api thread create`
+
+Creates a memory thread. Pass one JSON input object; the CLI splits fields such as `agentId` into query parameters when required by the server route.
+
+```bash
+mastra api thread create <input>
+```
+
+#### `mastra api thread update`
+
+Updates a memory thread. Pass one JSON input object for fields such as `agentId`, `resourceId`, `title`, or `metadata`.
+
+```bash
+mastra api thread update <threadId> <input>
+```
+
+#### `mastra api thread delete`
+
+Deletes a memory thread. Pass JSON input for route-required query parameters such as `agentId` and `resourceId`.
+
+```bash
+mastra api thread delete <threadId> <input>
+```
+
+#### `mastra api thread messages`
+
+Lists messages for a memory thread. Pass optional JSON input for route-supported filters or pagination.
+
+```bash
+mastra api thread messages <threadId> [input]
+```
+
+#### `mastra api memory search`
+
+Searches long-term memory. Use `--help` or `--schema` to inspect required fields such as `agentId`, `resourceId`, and `searchQuery`.
+
+```bash
+mastra api memory search <input>
+```
+
+#### `mastra api memory current get`
+
+Reads current working memory for a thread.
+
+```bash
+mastra api memory current get <input>
+```
+
+#### `mastra api memory current update`
+
+Updates current working memory for a thread. Working memory must be enabled for the memory instance.
+
+```bash
+mastra api memory current update <input>
+```
+
+#### `mastra api memory status`
+
+Gets memory status for an agent and optional thread or resource context.
+
+```bash
+mastra api memory status <input>
+```
+
+#### `mastra api trace list`
+
+Lists observability traces. Pass optional JSON input for route-supported filters or pagination.
+
+```bash
+mastra api trace list [input]
+mastra api trace list '{"page":0,"perPage":20}'
+mastra api trace list '{"page":0,"perPage":20}' --verbose
+```
+
+`trace list` returns lightweight root span records by default so you can page through traces without fetching large input, output, attributes, or metadata payloads. Pass `--verbose` to fetch the full root span records.
+
+#### `mastra api trace get`
+
+Gets a lightweight timeline for one observability trace without fetching full span input, output, attributes, or metadata payloads. Pass `--verbose` to fetch the full trace payload.
+
+```bash
+mastra api trace get <traceId>
+mastra api trace get <traceId> --verbose
+```
+
+#### `mastra api trace span`
+
+Gets one full span from an observability trace. Use this after `trace get` when you know which span you need to inspect.
+
+```bash
+mastra api trace span <traceId> <spanId>
+```
+
+#### `mastra api log list`
+
+Lists observability logs. Pass optional JSON input for route-supported filters or pagination.
+
+```bash
+mastra api log list [input]
+```
+
+#### `mastra api metric aggregate`
+
+Gets a single aggregate metric value.
+
+```bash
+mastra api metric aggregate '{"name":["latency_ms"],"aggregation":"avg"}'
+```
+
+#### `mastra api metric breakdown`
+
+Gets metric values grouped by a label or field.
+
+```bash
+mastra api metric breakdown '{"name":["latency_ms"],"aggregation":"avg","groupBy":["model"],"limit":10}'
+```
+
+#### `mastra api metric timeseries`
+
+Gets metric values over time.
+
+```bash
+mastra api metric timeseries '{"name":["latency_ms"],"aggregation":"avg","interval":"1h"}'
+```
+
+#### `mastra api metric percentiles`
+
+Gets metric percentile values over time. Percentile values use decimals from `0` to `1`.
+
+```bash
+mastra api metric percentiles '{"name":"latency_ms","percentiles":[0.5,0.95,0.99],"interval":"1h"}'
+```
+
+#### `mastra api metric names`
+
+Lists discovered metric names. Pass optional JSON input for prefix search and limit.
+
+```bash
+mastra api metric names '{"prefix":"lat","limit":10}'
+```
+
+#### `mastra api metric label-keys`
+
+Lists label keys for a metric.
+
+```bash
+mastra api metric label-keys '{"metricName":"latency_ms"}'
+```
+
+#### `mastra api metric label-values`
+
+Lists label values for a metric label key. Pass optional prefix and limit values to narrow the result.
+
+```bash
+mastra api metric label-values '{"metricName":"latency_ms","labelKey":"model","prefix":"g","limit":10}'
+```
+
+#### Observability with `curl`
+
+You can call the hosted observability API directly with your platform access token and project ID:
+
+```bash
+curl -sS "https://observability.mastra.ai/api/observability/traces?page=0&perPage=20" \
+  -H "Authorization: Bearer $MASTRA_PLATFORM_ACCESS_TOKEN" \
+  -H "X-Mastra-Project-Id: $MASTRA_PROJECT_ID" | jq
+```
+
+Get a lightweight trace timeline:
+
+```bash
+curl -sS "https://observability.mastra.ai/api/observability/traces/<trace-id>/light" \
+  -H "Authorization: Bearer $MASTRA_PLATFORM_ACCESS_TOKEN" \
+  -H "X-Mastra-Project-Id: $MASTRA_PROJECT_ID" | jq
+```
+
+Get a specific span:
+
+```bash
+curl -sS "https://observability.mastra.ai/api/observability/traces/<trace-id>/spans/<span-id>" \
+  -H "Authorization: Bearer $MASTRA_PLATFORM_ACCESS_TOKEN" \
+  -H "X-Mastra-Project-Id: $MASTRA_PROJECT_ID" | jq
+```
+
+#### `mastra api score create`
+
+Creates an observability score. The input uses the server score body shape; inspect it with `--schema`.
+
+```bash
+mastra api score create <input>
+```
+
+#### `mastra api score list`
+
+Lists observability scores. Pass optional JSON input for filters such as run ID or pagination.
+
+```bash
+mastra api score list [input]
+```
+
+#### `mastra api score get`
+
+Gets one observability score by ID.
+
+```bash
+mastra api score get <scoreId>
+```
+
+#### `mastra api dataset list`
+
+Lists datasets. Pass optional JSON input for route-supported filters or pagination.
+
+```bash
+mastra api dataset list [input]
+```
+
+#### `mastra api dataset get`
+
+Gets one dataset by ID.
+
+```bash
+mastra api dataset get <datasetId>
+```
+
+#### `mastra api dataset create`
+
+Creates a dataset with JSON input.
+
+```bash
+mastra api dataset create <input>
+```
+
+#### `mastra api dataset items`
+
+Lists items in a dataset. Pass optional JSON input for route-supported filters or pagination.
+
+```bash
+mastra api dataset items <datasetId> [input]
+```
+
+#### `mastra api experiment list`
+
+Lists experiments for a dataset. Pass optional JSON input for route-supported filters or pagination.
+
+```bash
+mastra api experiment list <datasetId> [input]
+```
+
+#### `mastra api experiment get`
+
+Gets one experiment by ID.
+
+```bash
+mastra api experiment get <datasetId> <experimentId>
+```
+
+#### `mastra api experiment run`
+
+Starts an experiment for a dataset with JSON input.
+
+```bash
+mastra api experiment run <datasetId> <input>
+```
+
+#### `mastra api experiment results`
+
+Lists results for an experiment. Pass optional JSON input for route-supported filters or pagination.
+
+```bash
+mastra api experiment results <datasetId> <experimentId> [input]
+```
 
 ## Common flags
 
@@ -610,7 +1234,9 @@ Prints help message and exits.
 
 By default, Mastra collects anonymous information about your project like your OS, Mastra version or Node.js version. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/packages/cli/src/analytics/index.ts) to check what's collected.
 
-You can opt out of the CLI analytics by setting an environment variable:
+When a server started with `mastra dev` or `mastra start` has observability metrics enabled, Mastra also sends anonymous, aggregated model usage at startup: input and output token counts per provider and model, plus the command (`dev` or `start`) and `NODE_ENV`. No prompts, responses, or other message content is ever sent. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/packages/core/src/telemetry/usage-telemetry.ts) to check what's collected.
+
+You can opt out of all CLI and usage analytics by setting an environment variable:
 
 ```bash
 MASTRA_TELEMETRY_DISABLED=1

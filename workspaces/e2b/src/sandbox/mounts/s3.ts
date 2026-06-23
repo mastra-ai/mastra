@@ -1,7 +1,7 @@
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
 import { shellQuote } from '../../utils/shell-quote';
-import { LOG_PREFIX, validateBucketName, validateEndpoint, validatePrefix } from './types';
+import { LOG_PREFIX, validateBucketName, validateEndpoint, validatePrefix, validateRegion } from './types';
 import type { MountContext } from './types';
 
 /**
@@ -41,6 +41,7 @@ export async function mountS3(mountPath: string, config: E2BS3MountConfig, ctx: 
 
   // Validate inputs before interpolating into shell commands
   validateBucketName(config.bucket);
+  validateRegion(config.region);
   if (config.endpoint) {
     validateEndpoint(config.endpoint);
   }
@@ -124,6 +125,12 @@ export async function mountS3(mountPath: string, config: E2BS3MountConfig, ctx: 
     mountOptions.push(`url=${endpoint}`, 'use_path_request_style', 'sigv4', 'nomultipart');
   }
 
+  // s3fs's `endpoint` option sets the AWS region used for sigv4 signing
+  // (confusingly named — distinct from the URL `endpoint` flag above).
+  // Default is us-east-1, which produces SignatureDoesNotMatch errors against
+  // buckets in other regions or S3-compatible services that validate the region.
+  mountOptions.push(`endpoint=${config.region}`);
+
   if (config.readOnly) {
     mountOptions.push('ro');
     logger.debug(`${LOG_PREFIX} Mounting as read-only`);
@@ -156,5 +163,19 @@ export async function mountS3(mountPath: string, config: E2BS3MountConfig, ctx: 
     const stdout = errorObj.result?.stdout || '';
     logger.error(`${LOG_PREFIX} s3fs error:`, { stderr, stdout, error: String(error) });
     throw new Error(`Failed to mount S3 bucket: ${stderr || stdout || error}`);
+  }
+
+  // s3fs daemonizes before running its FUSE init, where the bucket check happens.
+  // If that check fails (wrong region, bad credentials, unsupported endpoint),
+  // the daemon exits but the parent has already returned exit code 0.
+  // Verify the mount actually attached.
+  const verify = await sandbox.commands.run(`mountpoint -q ${shellQuote(mountPath)}`);
+  if (verify.exitCode !== 0) {
+    throw new Error(
+      `s3fs returned exit 0 but ${mountPath} is not a mountpoint. ` +
+        `The s3fs daemon likely failed during FUSE init (common causes: region mismatch, ` +
+        `invalid credentials, or an S3-compatible endpoint that rejects the signature). ` +
+        `Re-run inside the sandbox with '-f -o dbglevel=info' to see the underlying error.`,
+    );
   }
 }

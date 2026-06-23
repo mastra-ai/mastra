@@ -144,7 +144,13 @@ export class MemoryMSSQL extends MemoryStorage {
     await this.db.clearTable({ tableName: TABLE_RESOURCES });
   }
 
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+  async getThreadById({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId?: string;
+  }): Promise<StorageThreadType | null> {
     try {
       const sql = `SELECT 
         id,
@@ -159,7 +165,7 @@ export class MemoryMSSQL extends MemoryStorage {
       request.input('threadId', threadId);
       const resultSet = await request.query(sql);
       const thread = resultSet.recordset[0] || null;
-      if (!thread) {
+      if (!thread || (resourceId !== undefined && thread.resourceId !== resourceId)) {
         return null;
       }
       return {

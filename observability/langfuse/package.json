@@ -1,6 +1,6 @@
 {
   "name": "@mastra/langfuse",
-  "version": "1.2.5",
+  "version": "1.4.1-alpha.0",
   "description": "Langfuse observability provider for Mastra - uses official Langfuse v5 SDK",
   "type": "module",
   "main": "dist/index.js",
@@ -31,8 +31,8 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@langfuse/client": "^5.0.2",
-    "@langfuse/otel": "^5.0.2",
+    "@langfuse/client": "^5.4.1",
+    "@langfuse/otel": "^5.4.1",
     "@mastra/observability": "workspace:*",
     "@mastra/otel-exporter": "workspace:*"
   },
@@ -41,17 +41,17 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@opentelemetry/api": "^1.9.1",
-    "@opentelemetry/sdk-trace-base": "^2.7.0",
-    "@types/node": "22.19.15",
+    "@opentelemetry/sdk-trace-base": "^2.7.1",
+    "@types/node": "22.19.21",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.2.1",
+    "eslint": "^10.4.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.16.0-0 <2.0.0-0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/sdk-trace-base": "^2.0.1"
   },

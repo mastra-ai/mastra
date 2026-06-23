@@ -1,5 +1,63 @@
 # @mastra/schema-compat
 
+## 1.3.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+## 1.3.0-alpha.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+## 1.2.14
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+## 1.2.14-alpha.0
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+## 1.2.12
+
+### Patch Changes
+
+- Fixed schema compatibility type declarations so JSON Schema types are bundled correctly. ([#17877](https://github.com/mastra-ai/mastra/pull/17877))
+
+## 1.2.11
+
+### Patch Changes
+
+- Fixed Gemini REST tool calls failing for `z.discriminatedUnion`, `z.lazy`, and `z.tuple` inputs. `GoogleSchemaCompatLayer` now rewrites JSON Schema 2020-12 keywords into the OpenAPI 3.0 Schema Object subset that Gemini expects: `oneOf` → `anyOf`, `const` → `enum`, tuple `items: [array]` → `items: { anyOf: [...] }`, nullable `anyOf` collapse, `$ref` inlining with recursive schema support, and stripping of `$schema`/`additionalProperties`/`propertyNames`. Fixes #17057. ([#17179](https://github.com/mastra-ai/mastra/pull/17179))
+
+- Fixed Zod 4 schemas with `.transform()` producing the wrong JSON Schema for structured output and tool calling. The generated schema now describes the pre-transform input the model must produce instead of the post-transform output, so a field like `z.string().transform(JSON.parse)` is advertised as a `string` rather than `string | number | boolean | null`. ([#17357](https://github.com/mastra-ai/mastra/pull/17357))
+
+## 1.2.11-alpha.0
+
+### Patch Changes
+
+- Fixed Gemini REST tool calls failing for `z.discriminatedUnion`, `z.lazy`, and `z.tuple` inputs. `GoogleSchemaCompatLayer` now rewrites JSON Schema 2020-12 keywords into the OpenAPI 3.0 Schema Object subset that Gemini expects: `oneOf` → `anyOf`, `const` → `enum`, tuple `items: [array]` → `items: { anyOf: [...] }`, nullable `anyOf` collapse, `$ref` inlining with recursive schema support, and stripping of `$schema`/`additionalProperties`/`propertyNames`. Fixes #17057. ([#17179](https://github.com/mastra-ai/mastra/pull/17179))
+
+- Fixed Zod 4 schemas with `.transform()` producing the wrong JSON Schema for structured output and tool calling. The generated schema now describes the pre-transform input the model must produce instead of the post-transform output, so a field like `z.string().transform(JSON.parse)` is advertised as a `string` rather than `string | number | boolean | null`. ([#17357](https://github.com/mastra-ai/mastra/pull/17357))
+
+## 1.2.10
+
+### Patch Changes
+
+- Fixed Google-compatible schema conversion so Gemini accepts broad nullable tool parameters. ([#16129](https://github.com/mastra-ai/mastra/pull/16129))
+
+## 1.2.10-alpha.0
+
+### Patch Changes
+
+- Fixed Google-compatible schema conversion so Gemini accepts broad nullable tool parameters. ([#16129](https://github.com/mastra-ai/mastra/pull/16129))
+
 ## 1.2.9
 
 ### Patch Changes

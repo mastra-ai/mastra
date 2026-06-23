@@ -1,15 +1,17 @@
-import { Spinner, ProcessStepList, ProcessStepProgressBar, cn } from '@mastra/playground-ui';
-import type { ProcessStep } from '@mastra/playground-ui';
+import { Spinner, cn } from '@mastra/playground-ui';
+import { ProcessStepList, ProcessStepProgressBar } from '@mastra/playground-ui/components/Steps';
+import type { ProcessStep } from '@mastra/playground-ui/components/Steps';
 import { OctagonXIcon } from 'lucide-react';
 import { Container } from './shared';
 
 type TemplateInstallationProps = {
   name: string;
   streamResult?: any;
+  runId?: string;
   workflowInfo?: any;
 };
 
-export function TemplateInstallation({ name, streamResult, workflowInfo }: TemplateInstallationProps) {
+export function TemplateInstallation({ name, streamResult, runId, workflowInfo }: TemplateInstallationProps) {
   const phase = streamResult?.phase || 'initializing';
   const workflowState = streamResult?.payload?.workflowState;
   const currentStep = streamResult?.payload?.currentStep;
@@ -70,7 +72,9 @@ export function TemplateInstallation({ name, streamResult, workflowInfo }: Templ
       {/* Header */}
       <div className="text-center">
         <h3 className="text-lg font-semibold text-neutral5">{getPhaseMessage()}</h3>
-        {streamResult?.runId && <div className="mt-2 text-ui-sm text-neutral3">Run ID: {streamResult.runId}</div>}
+        {(streamResult?.runId || runId) && (
+          <div className="mt-2 text-ui-sm text-neutral3">Run ID: {streamResult?.runId ?? runId}</div>
+        )}
       </div>
 
       {/* Progress Bar */}

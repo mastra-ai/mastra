@@ -65,6 +65,45 @@ export function is403ForbiddenError(error: unknown): boolean {
 }
 
 /**
+ * Check if error is a 404 Not Found response.
+ * Handles both direct status property and client-js error message format.
+ */
+export function is404NotFoundError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  if ('status' in error && (error as { status: number }).status === 404) {
+    return true;
+  }
+
+  if ('statusCode' in error && (error as { statusCode: number }).statusCode === 404) {
+    return true;
+  }
+
+  if ('message' in error) {
+    const message = (error as { message: unknown }).message;
+    if (typeof message === 'string') {
+      return /\bstatus:\s*404\b/.test(message);
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Check if an error came from a storage provider that does not implement `listBranches`.
+ *
+ * The server's `handleError` strips the original MastraError's `code`/`id` before serializing,
+ * so we can't match on the ID `OBSERVABILITY_STORAGE_LIST_BRANCHES_NOT_IMPLEMENTED` directly —
+ * we match on the message text from `core/.../observability/base.ts` instead.
+ */
+export function isBranchesNotSupportedError(error: unknown): boolean {
+  if (!error || typeof error !== 'object' || !('message' in error)) return false;
+  const message = (error as { message: unknown }).message;
+  if (typeof message !== 'string') return false;
+  return message.includes('does not support listing trace branches');
+}
+
+/**
  * Check if error has a status code that shouldn't be retried.
  * Used to prevent retrying client errors that won't resolve.
  */

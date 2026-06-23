@@ -1,6 +1,7 @@
 import { APICallError } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
 import { MessageList } from '../agent/message-list';
+import { createSignal } from '../agent/signals';
 import { PrefillErrorHandler } from './prefill-error-handler';
 import type { ProcessAPIErrorArgs } from './index';
 
@@ -90,6 +91,11 @@ function makeArgs(overrides: Partial<ProcessAPIErrorArgs> = {}): ProcessAPIError
     abort: (() => {
       throw new Error('abort');
     }) as any,
+    sendSignal: async signalInput => {
+      const signal = createSignal(signalInput);
+      messageList.add(signal.toDBMessage(), 'input');
+      return signal;
+    },
     ...overrides,
   };
 }
@@ -115,18 +121,24 @@ describe('PrefillErrorHandler', () => {
     expect(messagesAfter.length).toBe(messageCountBefore + 1);
 
     const lastMessage = messagesAfter[messagesAfter.length - 1]!;
-    expect(lastMessage.role).toBe('user');
+    expect(lastMessage.role).toBe('signal');
+    expect(lastMessage.type).toBe('system-reminder');
     expect(lastMessage.content.parts).toEqual([
       expect.objectContaining({
         type: 'text',
-        text: '<system-reminder>continue</system-reminder>',
+        text: 'continue',
       }),
     ]);
-    expect(lastMessage.content.metadata).toEqual({
-      systemReminder: {
-        type: 'anthropic-prefill-processor-retry',
-      },
-    });
+    expect(lastMessage.content.metadata).toEqual(
+      expect.objectContaining({
+        signal: expect.objectContaining({
+          type: 'reactive',
+          tagName: 'system-reminder',
+          attributes: expect.objectContaining({ type: 'anthropic-prefill-processor-retry' }),
+          metadata: expect.objectContaining({ message: 'Continuing after prefill error' }),
+        }),
+      }),
+    );
   });
 
   it('should return undefined for non-prefill errors', async () => {
@@ -147,6 +159,20 @@ describe('PrefillErrorHandler', () => {
     expect(result).toBeUndefined();
   });
 
+  it('should return { retry: true } for plain Error objects containing a prefill message', async () => {
+    const handler = new PrefillErrorHandler();
+
+    const args = makeArgs({
+      error: new Error(
+        'This model does not support assistant message prefill. The conversation must end with a user message.',
+      ),
+    });
+
+    const result = await handler.processAPIError(args);
+
+    expect(result).toEqual({ retry: true });
+  });
+
   it('should return undefined when retryCount > 0', async () => {
     const handler = new PrefillErrorHandler();
     const args = makeArgs({ retryCount: 1 });
@@ -164,7 +190,7 @@ describe('PrefillErrorHandler', () => {
 
     expect(result).toEqual({ retry: true });
     const lastMessage = args.messageList.get.all.db().at(-1);
-    expect(lastMessage?.role).toBe('user');
+    expect(lastMessage?.role).toBe('signal');
   });
 
   it('should return { retry: true } when qwen prefill string is only present in responseBody', async () => {

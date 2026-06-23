@@ -149,6 +149,17 @@ const finalStep = createStep({
   },
 });
 
+const echoModeStep = createStep({
+  id: 'echo-mode',
+  inputSchema: z.object({
+    mode: z.enum(['a', 'b']).default('a'),
+  }),
+  outputSchema: z.object({
+    mode: z.enum(['a', 'b']),
+  }),
+  execute: async ({ inputData }) => ({ mode: inputData.mode }),
+});
+
 // Nested workflow that processes text
 export const nestedTextProcessor = createWorkflow({
   id: 'nested-text-processor',
@@ -195,6 +206,9 @@ export const complexWorkflow = createWorkflow({
   .map(async ({ inputData }) => {
     // The branch step returns either short-text or long-text result
     const result = inputData['short-text'] || inputData['long-text'];
+    if (!result) {
+      throw new Error('Expected either short-text or long-text branch result');
+    }
     return { text: result.text };
   })
 
@@ -209,6 +223,18 @@ export const complexWorkflow = createWorkflow({
 
   // Final step
   .then(finalStep)
+  .commit();
+
+export const enumWorkflow = createWorkflow({
+  id: 'enumWorkflow',
+  inputSchema: z.object({
+    mode: z.enum(['a', 'b']).default('a'),
+  }),
+  outputSchema: z.object({
+    mode: z.enum(['a', 'b']),
+  }),
+})
+  .then(echoModeStep)
   .commit();
 
 export const lessComplexWorkflow = createWorkflow({
@@ -242,6 +268,9 @@ export const lessComplexWorkflow = createWorkflow({
   .map(async ({ inputData }) => {
     // The branch step returns either short-text or long-text result
     const result = inputData['short-text'] || inputData['long-text'];
+    if (!result) {
+      throw new Error('Expected either short-text or long-text branch result');
+    }
     return { text: result.text };
   })
 

@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
-// Importing the evented module registers its factory with the default
-// `createWorkflow` registration slot, enabling schedule auto-promotion. In a
-// real app this happens transitively because Mastra itself imports from the
-// evented module.
-import './evented';
 import { createWorkflow as createDefaultWorkflow, createStep } from './index';
 
 describe('createWorkflow (default) — schedule promotion to evented', () => {

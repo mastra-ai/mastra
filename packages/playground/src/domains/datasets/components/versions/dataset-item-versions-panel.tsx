@@ -1,6 +1,7 @@
 'use client';
 
-import { Button, ButtonWithTooltip, ButtonsGroup, Checkbox, Column, ItemList } from '@mastra/playground-ui';
+import { Button, ButtonsGroup, Checkbox, Column } from '@mastra/playground-ui';
+import { ItemList } from '@mastra/playground-ui/components/ItemList';
 import { GitCompareIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useDatasetItemVersions } from '../../hooks/use-dataset-item-versions';
@@ -76,15 +77,15 @@ export function DatasetItemVersionsPanel({
         <Column.Toolbar className="grid justify-stretch gap-3 w-full">
           <ButtonsGroup>
             <Button onClick={handleCancelSelection}>Cancel</Button>
-            <ButtonWithTooltip
+            <Button
               variant="primary"
               disabled={selectedIds.size !== 2}
               onClick={handleExecuteCompare}
-              tooltipContent={selectedIds.size !== 2 ? 'Check 2 versions to compare' : undefined}
+              tooltip={selectedIds.size !== 2 ? 'Check 2 versions to compare' : undefined}
               className="grow"
             >
               Compare
-            </ButtonWithTooltip>
+            </Button>
           </ButtonsGroup>
         </Column.Toolbar>
       ) : (

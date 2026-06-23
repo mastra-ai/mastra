@@ -9,6 +9,7 @@ export type {
   RequireToolApproval,
   RequireToolApprovalFn,
   RequireToolApprovalContext,
+  ToolAnnotations,
 } from './types';
 export * from './client';
 export * from './configuration';

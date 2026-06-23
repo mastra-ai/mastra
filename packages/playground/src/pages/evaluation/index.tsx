@@ -1,16 +1,13 @@
 import {
-  ButtonWithTooltip,
   ErrorState,
-  MetricsFlexGrid,
   NoDataPageLayout,
-  PageHeader,
   PageLayout,
   PermissionDenied,
   SessionExpired,
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
-import { BookIcon, FlaskConicalIcon } from 'lucide-react';
+import { MetricsFlexGrid } from '@mastra/playground-ui/components/MetricsFlexGrid';
 import { useMemo } from 'react';
 import { DatasetHealthCard } from '@/domains/datasets';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
@@ -48,7 +45,7 @@ export default function Evaluation() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout title="Evaluation" icon={<FlaskConicalIcon />}>
+      <NoDataPageLayout>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -56,7 +53,7 @@ export default function Evaluation() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout title="Evaluation" icon={<FlaskConicalIcon />}>
+      <NoDataPageLayout>
         <PermissionDenied resource="evaluation" />
       </NoDataPageLayout>
     );
@@ -64,7 +61,7 @@ export default function Evaluation() {
 
   if (error) {
     return (
-      <NoDataPageLayout title="Evaluation" icon={<FlaskConicalIcon />}>
+      <NoDataPageLayout>
         <ErrorState title="Failed to load evaluation data" message={error.message} />
       </NoDataPageLayout>
     );
@@ -72,30 +69,7 @@ export default function Evaluation() {
 
   return (
     <PageLayout width="wide" height="full">
-      <PageLayout.TopArea className="sticky top-0 z-100 bg-surface1 ">
-        <PageLayout.Row>
-          <PageLayout.Column>
-            <PageHeader>
-              <PageHeader.Title>
-                <FlaskConicalIcon /> Evaluation
-              </PageHeader.Title>
-            </PageHeader>
-          </PageLayout.Column>
-          <PageLayout.Column className="flex justify-end gap-2">
-            <ButtonWithTooltip
-              as="a"
-              href="https://mastra.ai/en/docs/evals/overview"
-              target="_blank"
-              rel="noopener noreferrer"
-              tooltipContent="Go to Evaluation documentation"
-            >
-              <BookIcon />
-            </ButtonWithTooltip>
-          </PageLayout.Column>
-        </PageLayout.Row>
-      </PageLayout.TopArea>
-
-      <div className="flex flex-col gap-6 pt-4">
+      <div className="flex flex-col gap-6">
         <MetricsFlexGrid>
           <EvaluationKpiCards
             scorers={scorers}

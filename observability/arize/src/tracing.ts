@@ -45,8 +45,9 @@ export class ArizeExporter extends OtelExporter {
     const apiKey = config.apiKey ?? process.env.ARIZE_API_KEY ?? process.env.PHOENIX_API_KEY;
     const projectName = config.projectName ?? process.env.ARIZE_PROJECT_NAME ?? process.env.PHOENIX_PROJECT_NAME;
 
-    // Determine endpoint: config > PHOENIX_ENDPOINT > ARIZE_AX_ENDPOINT (if spaceId is set)
-    let endpoint: string | undefined = config.endpoint ?? process.env.PHOENIX_ENDPOINT;
+    // Determine endpoint: config > PHOENIX_COLLECTOR_ENDPOINT > PHOENIX_ENDPOINT > ARIZE_AX_ENDPOINT (if spaceId is set)
+    let endpoint: string | undefined =
+      config.endpoint ?? process.env.PHOENIX_COLLECTOR_ENDPOINT ?? process.env.PHOENIX_ENDPOINT;
 
     const headers: Record<string, string> = {
       ...config.headers,
@@ -75,7 +76,7 @@ export class ArizeExporter extends OtelExporter {
     if (!disabledReason && !endpoint) {
       disabledReason =
         `${LOG_PREFIX} Endpoint is required in configuration. ` +
-        `Set PHOENIX_ENDPOINT environment variable, or ARIZE_SPACE_ID for Arize AX, or pass endpoint in config.`;
+        `Set PHOENIX_COLLECTOR_ENDPOINT environment variable, or ARIZE_SPACE_ID for Arize AX, or pass endpoint in config.`;
     }
 
     // If disabled, create with minimal config and disable

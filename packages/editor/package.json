@@ -1,6 +1,6 @@
 {
   "name": "@mastra/editor",
-  "version": "0.7.23",
+  "version": "0.13.1-alpha.0",
   "description": "Mastra Editor for agent management and instantiation",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
@@ -46,6 +46,16 @@
         "types": "./dist/storage/index.d.ts",
         "default": "./dist/storage/index.cjs"
       }
+    },
+    "./ee": {
+      "import": {
+        "types": "./dist/ee/index.d.ts",
+        "default": "./dist/ee/index.js"
+      },
+      "require": {
+        "types": "./dist/ee/index.d.ts",
+        "default": "./dist/ee/index.cjs"
+      }
     }
   },
   "files": [
@@ -53,8 +63,8 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/composio.ts src/arcade.ts src/storage/index.ts --format cjs,esm --dts",
-    "dev": "tsup src/index.ts src/composio.ts src/arcade.ts src/storage/index.ts --format cjs,esm --dts --watch",
+    "build": "tsup",
+    "dev": "tsup --watch",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -70,7 +80,7 @@
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "dependencies": {
-    "@arcadeai/arcadejs": "^2.3.0",
+    "@arcadeai/arcadejs": "^2.4.1",
     "@composio/core": "^0.6.5",
     "@composio/mastra": "^0.6.5",
     "@mastra/memory": "workspace:*",
@@ -85,6 +95,7 @@
     "@mastra/hono": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/mcp": "workspace:*",
+    "@types/node": "22.19.21",
     "hono": "^4.12.8",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
@@ -92,9 +103,8 @@
     "zod": "^3.25.76"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.7.1-0 <2.0.0-0",
-    "@mastra/mcp": ">=1.0.0-0 <2.0.0-0",
-    "zod": "^3.25.0 || ^4.0.0"
+    "@mastra/core": ">=1.34.0-0 <2.0.0-0",
+    "@mastra/mcp": ">=1.0.0-0 <2.0.0-0"
   },
   "peerDependenciesMeta": {
     "@mastra/mcp": {

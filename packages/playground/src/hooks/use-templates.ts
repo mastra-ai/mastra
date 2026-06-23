@@ -502,7 +502,7 @@ export const useStreamTemplateInstall = (workflowInfo?: any) => {
     }: {
       inputData: TemplateInstallationRequest;
       selectedModel: { provider: string; modelId: string };
-      runId?: string;
+      runId: string;
     }) => {
       const maxRetries = 3;
 

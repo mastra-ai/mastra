@@ -12,7 +12,7 @@ const DEFAULT_SAVED_MESSAGE = 'Trace filter settings saved.';
 const DEFAULT_CLEARED_MESSAGE = 'Trace filter settings cleared.';
 
 export interface TraceFilterPersistenceOptions {
-  /** Override the localStorage key. Default: 'mastra:traces:saved-filters'. */
+  /** Override the localStorage key. Default: traces filters storage. */
   storageKey?: string;
   /** Toast text overrides; pass `false` to suppress the toast entirely. */
   messages?: {

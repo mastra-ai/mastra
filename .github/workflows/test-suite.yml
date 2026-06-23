@@ -1,0 +1,183 @@
+name: Prebuild Tests
+
+on:
+  workflow_call:
+    inputs:
+      head_sha:
+        required: true
+        type: string
+      base_ref:
+        required: true
+        type: string
+      has_code:
+        required: true
+        type: string
+    secrets:
+      TURBO_TOKEN:
+        required: false
+      TURBO_TEAM:
+        required: false
+
+permissions: {}
+
+jobs:
+  unit-test:
+    name: UNIT Test (Shard ${{ matrix.shard }})
+    if: inputs.has_code == 'true'
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: ${{ secrets.TURBO_TOKEN == '' && 'local:rw' || 'remote:rw' }}
+      NODE_OPTIONS: --max-old-space-size=8192
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ inputs.head_sha }}
+          fetch-depth: 2
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Cache turbo build setup
+        if: ${{ env.TURBO_TOKEN == '' }}
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
+      - name: Build packages
+        run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
+
+      - name: Run changed tests (Shard ${{ matrix.shard }}/4)
+        run: |
+          pnpm vitest run \
+            --project 'unit:*' --project 'typecheck:*' \
+            --reporter=blob \
+            --reporter=verbose \
+            --reporter=github-actions \
+            --outputFile.blob=.vitest-reports/blob-unit-${{ matrix.shard }}.json \
+            --shard=${{ matrix.shard }}/4 \
+            --passWithNoTests
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: vitest-blob-unit-${{ matrix.shard }}
+          path: .vitest-reports/
+          include-hidden-files: true
+          retention-days: 1
+
+  e2e-test:
+    name: E2E Test (${{ matrix.project }})
+    if: inputs.has_code == 'true'
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - packages/*
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: ${{ secrets.TURBO_TOKEN == '' && 'local:rw' || 'remote:rw' }}
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout PR code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 2
+          ref: ${{ inputs.head_sha }}
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Cache turbo build setup
+        if: ${{ env.TURBO_TOKEN == '' }}
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
+      - name: Build packages
+        run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+
+      - name: Normalize project name
+        id: normalize
+        run: echo "project_id=$(echo '${{ matrix.project }}' | tr '/' '-' | sed 's/\*/_star_/g')" >> $GITHUB_OUTPUT
+
+      - name: Run changed tests (${{ matrix.project }})
+        run: |
+          pnpm vitest run \
+            --project 'e2e:${{ matrix.project }}' \
+            --reporter=blob \
+            --reporter=verbose \
+            --reporter=github-actions \
+            --outputFile.blob=.vitest-reports/blob-e2e-${{ steps.normalize.outputs.project_id }}.json \
+            --passWithNoTests
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: vitest-blob-e2e-${{ steps.normalize.outputs.project_id }}
+          path: .vitest-reports/
+          include-hidden-files: true
+          retention-days: 1
+
+  merge-reports:
+    name: Merge Test Reports
+    runs-on: starsling-ubuntu-24.04
+    needs: [unit-test, e2e-test]
+    if: always()
+    permissions:
+      actions: read
+      contents: read
+
+    steps:
+      - name: Skip tests for non-code changes
+        if: inputs.has_code != 'true'
+        run: echo "No code changes detected; skipping unit and E2E tests."
+
+      - name: Checkout repo
+        if: inputs.has_code == 'true'
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 1
+          ref: ${{ inputs.head_sha }}
+
+      - name: Setup pnpm and Node.js
+        if: inputs.has_code == 'true'
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Download test results
+        if: inputs.has_code == 'true'
+        uses: actions/download-artifact@v6
+        with:
+          pattern: vitest-blob-*
+          path: .vitest-reports
+          merge-multiple: true
+
+      - name: Merge reports
+        if: inputs.has_code == 'true'
+        run: pnpm vitest --merge-reports --reporter=default --reporter=github-actions --passWithNoTests

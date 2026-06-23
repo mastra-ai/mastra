@@ -10,7 +10,12 @@ import type {
   ElicitResult,
   LoggingLevel,
   ProgressNotification,
+  ToolAnnotations,
 } from '@modelcontextprotocol/sdk/types.js';
+
+// Re-export so consumers of @mastra/mcp can type their requireToolApproval callbacks
+// without having to add @modelcontextprotocol/sdk as a direct dependency.
+export type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 import type { jsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/types.js';
 
 /**
@@ -120,6 +125,28 @@ export interface RequireToolApprovalContext {
   args: Record<string, unknown>;
   /** Request-scoped context (e.g., user info, auth data) as a plain object */
   requestContext?: Record<string, unknown>;
+  /**
+   * Tool annotations advertised by the MCP server in `tools/list` (title,
+   * readOnlyHint, destructiveHint, idempotentHint, openWorldHint).
+   *
+   * Use these to drive declarative, server-agnostic approval policies
+   * instead of hardcoding tool name lists.
+   *
+   * SECURITY (per MCP spec): annotations are **hints**, not guarantees.
+   * Clients MUST consider them untrusted unless they come from a trusted
+   * server. Do not use annotations alone as a security boundary — gate
+   * dangerous behaviour with `requireToolApproval: true` (or a server-name
+   * allowlist) for any server you do not control.
+   *
+   * Spec defaults when a hint is omitted: `readOnlyHint: false`,
+   * `destructiveHint: true`, `idempotentHint: false`, `openWorldHint: true`.
+   * This field is `undefined` (not auto-defaulted) when the server omits
+   * annotations entirely, so policies can distinguish "no annotations" from
+   * "annotated as safe".
+   *
+   * @see https://modelcontextprotocol.io/specification/2025-11-25/server/tools#tool-annotations
+   */
+  annotations?: ToolAnnotations;
 }
 
 /**
@@ -152,6 +179,23 @@ export type BaseServerOptions = {
   /** Whether to enable progress tracking (default: false) */
   enableProgressTracking?: boolean;
   /**
+   * Whether instructions returned by this MCP server during initialization should
+   * be forwarded to agents that use the server's tools.
+   *
+   * Disabled by default: forwarded instructions are injected into the agent's
+   * system prompt, so only enable this for servers you trust.
+   *
+   * @default false
+   */
+  forwardInstructions?: boolean;
+  /**
+   * Maximum number of characters of this server's instructions to forward into
+   * an agent system prompt.
+   *
+   * @default 512
+   */
+  instructionsMaxLength?: number;
+  /**
    * Whether tools from this server require explicit user approval before execution.
    *
    * - `true`: All tools require approval before running.
@@ -167,6 +211,17 @@ export type BaseServerOptions = {
    * requireToolApproval: ({ toolName, args }) => {
    *   if (toolName === 'list_repos') return false;
    *   if (toolName === 'delete_repo') return true;
+   *   return false;
+   * }
+   *
+   * // Declarative, server-agnostic approval driven by MCP tool annotations.
+   * // NOTE: only sound for trusted servers — annotations are hints, not
+   * // guarantees, per the MCP spec.
+   * requireToolApproval: ({ annotations }) => {
+   *   // No annotations? Assume the worst (spec default: destructive).
+   *   if (!annotations) return true;
+   *   if (annotations.readOnlyHint) return false;
+   *   if (annotations.destructiveHint) return true;
    *   return false;
    * }
    * ```

@@ -1,0 +1,13 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini"
+      },
+      "response": {
+        "content": "GitHub incremental notification context acknowledged."
+      }
+    }
+  ]
+}

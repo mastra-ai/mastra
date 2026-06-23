@@ -9,8 +9,5 @@
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
-  "pnpm": {
-    "neverBuiltDependencies": []
-  },
-  "packageManager": "pnpm@10.29.3"
+  "packageManager": "pnpm@11.3.0"
 }

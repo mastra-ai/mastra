@@ -1,7 +1,6 @@
 import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
 import {
   CodeEditor,
-  ContentBlock,
   Popover,
   PopoverTrigger,
   PopoverContent,
@@ -14,6 +13,7 @@ import {
   cn,
 } from '@mastra/playground-ui';
 import type { JsonSchema } from '@mastra/playground-ui';
+import { ContentBlock } from '@mastra/playground-ui/components/ContentBlocks';
 import { GripVertical, X, ExternalLink, ChevronDown } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
@@ -30,6 +30,7 @@ export interface AgentCMSRefBlockProps {
   onDereference?: (index: number, content: string) => void;
   className?: string;
   schema?: JsonSchema;
+  readOnly?: boolean;
 }
 
 interface RefBlockContentProps {
@@ -38,9 +39,17 @@ interface RefBlockContentProps {
   onDelete?: () => void;
   onDereference?: (content: string) => void;
   schema?: JsonSchema;
+  readOnly?: boolean;
 }
 
-const RefBlockContent = ({ block, dragHandleProps, onDelete, onDereference, schema }: RefBlockContentProps) => {
+const RefBlockContent = ({
+  block,
+  dragHandleProps,
+  onDelete,
+  onDereference,
+  schema,
+  readOnly = false,
+}: RefBlockContentProps) => {
   const { data: promptBlock, isLoading } = useStoredPromptBlock(block.promptBlockId);
   const { updateStoredPromptBlock } = useStoredPromptBlockMutations(block.promptBlockId);
   const { navigate, paths } = useLinkComponent();
@@ -94,18 +103,20 @@ const RefBlockContent = ({ block, dragHandleProps, onDelete, onDereference, sche
   return (
     <div className="relative group rounded-md transition-colors duration-150 hover:bg-surface2/50">
       {/* Left gutter — drag handle (visible on hover/focus-within) */}
-      <div className="absolute -left-8 top-1 flex flex-col items-center transition-opacity duration-150 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
-        <div {...dragHandleProps} className="text-neutral3 hover:text-neutral6 cursor-grab active:cursor-grabbing">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Icon>
-                <GripVertical />
-              </Icon>
-            </TooltipTrigger>
-            <TooltipContent side="left">Drag to reorder</TooltipContent>
-          </Tooltip>
+      {!readOnly && (
+        <div className="absolute -left-8 top-1 flex flex-col items-center transition-opacity duration-150 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
+          <div {...dragHandleProps} className="text-neutral3 hover:text-neutral6 cursor-grab active:cursor-grabbing">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Icon>
+                  <GripVertical />
+                </Icon>
+              </TooltipTrigger>
+              <TooltipContent side="left">Drag to reorder</TooltipContent>
+            </Tooltip>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Content area with left accent border */}
       <div className="border-l-2 border-accent3/30 pl-3">
@@ -121,84 +132,86 @@ const RefBlockContent = ({ block, dragHandleProps, onDelete, onDereference, sche
               <Txt variant="ui-xs" className="text-neutral3 truncate">
                 {promptBlock.name}
               </Txt>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label={`Open actions for ${promptBlock.name}`}
-                    className="ml-auto rounded p-0.5 hover:bg-surface4/50 transition-colors duration-150 text-neutral3 hover:text-neutral5"
-                  >
-                    <Icon className="h-3! w-3!">
-                      <ChevronDown />
-                    </Icon>
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent align="end" className="w-[280px] p-0">
-                  <div className="p-3 border-b border-border1">
-                    <Txt variant="ui-sm" className="font-medium text-neutral6">
-                      {promptBlock.name}
-                    </Txt>
-                    {promptBlock.description && (
-                      <Txt variant="ui-xs" className="text-neutral3 mt-0.5 line-clamp-2">
-                        {promptBlock.description}
-                      </Txt>
-                    )}
-                  </div>
-                  <div className="p-1">
+              {!readOnly && (
+                <Popover>
+                  <PopoverTrigger asChild>
                     <button
                       type="button"
-                      className="flex items-center gap-2 w-full px-2 py-1.5 text-left rounded hover:bg-surface4/50 transition-colors text-neutral5 text-ui-xs"
-                      onClick={() => navigate(paths.cmsPromptBlockEditLink(block.promptBlockId))}
+                      aria-label={`Open actions for ${promptBlock.name}`}
+                      className="ml-auto rounded p-0.5 hover:bg-surface4/50 transition-colors duration-150 text-neutral3 hover:text-neutral5"
                     >
-                      <Icon className="h-3.5! w-3.5! text-neutral3">
-                        <ExternalLink />
+                      <Icon className="h-3! w-3!">
+                        <ChevronDown />
                       </Icon>
-                      Open original
                     </button>
-                    {onDereference && (
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-[280px] p-0">
+                    <div className="p-3 border-b border-border1">
+                      <Txt variant="ui-sm" className="font-medium text-neutral6">
+                        {promptBlock.name}
+                      </Txt>
+                      {promptBlock.description && (
+                        <Txt variant="ui-xs" className="text-neutral3 mt-0.5 line-clamp-2">
+                          {promptBlock.description}
+                        </Txt>
+                      )}
+                    </div>
+                    <div className="p-1">
                       <button
                         type="button"
                         className="flex items-center gap-2 w-full px-2 py-1.5 text-left rounded hover:bg-surface4/50 transition-colors text-neutral5 text-ui-xs"
-                        onClick={() => {
-                          debouncedSave.flush();
-                          onDereference(localContent);
-                        }}
+                        onClick={() => navigate(paths.cmsPromptBlockEditLink(block.promptBlockId))}
                       >
                         <Icon className="h-3.5! w-3.5! text-neutral3">
-                          <X />
+                          <ExternalLink />
                         </Icon>
-                        De-reference block
+                        Open original
                       </button>
-                    )}
-                    {onDelete && (
-                      <button
-                        type="button"
-                        className="flex items-center gap-2 w-full px-2 py-1.5 text-left rounded hover:bg-surface4/50 transition-colors text-error text-ui-xs"
-                        onClick={onDelete}
-                      >
-                        <Icon className="h-3.5! w-3.5!">
-                          <X />
-                        </Icon>
-                        Remove block
-                      </button>
-                    )}
-                  </div>
-                  {usedByAgents.length > 0 && (
-                    <div className="border-t border-border1 p-3">
-                      <Txt variant="ui-xs" className="text-neutral3 mb-1.5">
-                        Used by {usedByAgents.length} agent{usedByAgents.length !== 1 ? 's' : ''}
-                      </Txt>
-                      <div className="flex flex-col gap-1">
-                        {usedByAgents.map(agent => (
-                          <Txt key={agent.id} variant="ui-xs" className="text-neutral5 truncate">
-                            {agent.name}
-                          </Txt>
-                        ))}
-                      </div>
+                      {onDereference && (
+                        <button
+                          type="button"
+                          className="flex items-center gap-2 w-full px-2 py-1.5 text-left rounded hover:bg-surface4/50 transition-colors text-neutral5 text-ui-xs"
+                          onClick={() => {
+                            debouncedSave.flush();
+                            onDereference(localContent);
+                          }}
+                        >
+                          <Icon className="h-3.5! w-3.5! text-neutral3">
+                            <X />
+                          </Icon>
+                          De-reference block
+                        </button>
+                      )}
+                      {onDelete && (
+                        <button
+                          type="button"
+                          className="flex items-center gap-2 w-full px-2 py-1.5 text-left rounded hover:bg-surface4/50 transition-colors text-error text-ui-xs"
+                          onClick={onDelete}
+                        >
+                          <Icon className="h-3.5! w-3.5!">
+                            <X />
+                          </Icon>
+                          Remove block
+                        </button>
+                      )}
                     </div>
-                  )}
-                </PopoverContent>
-              </Popover>
+                    {usedByAgents.length > 0 && (
+                      <div className="border-t border-border1 p-3">
+                        <Txt variant="ui-xs" className="text-neutral3 mb-1.5">
+                          Used by {usedByAgents.length} agent{usedByAgents.length !== 1 ? 's' : ''}
+                        </Txt>
+                        <div className="flex flex-col gap-1">
+                          {usedByAgents.map(agent => (
+                            <Txt key={agent.id} variant="ui-xs" className="text-neutral5 truncate">
+                              {agent.name}
+                            </Txt>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </PopoverContent>
+                </Popover>
+              )}
             </div>
 
             {/* Editable content */}
@@ -212,6 +225,7 @@ const RefBlockContent = ({ block, dragHandleProps, onDelete, onDereference, sche
               showCopyButton={false}
               schema={schema}
               lineNumbers={false}
+              editable={!readOnly}
             />
           </>
         ) : (
@@ -231,6 +245,7 @@ export const AgentCMSRefBlock = ({
   onDereference,
   className,
   schema,
+  readOnly = false,
 }: AgentCMSRefBlockProps) => {
   return (
     <ContentBlock index={index} draggableId={block.id} className={cn('', className)}>
@@ -238,9 +253,10 @@ export const AgentCMSRefBlock = ({
         <RefBlockContent
           block={block}
           dragHandleProps={dragHandleProps}
-          onDelete={onDelete ? () => onDelete(index) : undefined}
-          onDereference={onDereference ? (content: string) => onDereference(index, content) : undefined}
+          onDelete={readOnly || !onDelete ? undefined : () => onDelete(index)}
+          onDereference={readOnly || !onDereference ? undefined : (content: string) => onDereference(index, content)}
           schema={schema}
+          readOnly={readOnly}
         />
       )}
     </ContentBlock>

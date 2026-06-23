@@ -49,6 +49,9 @@ export class BackgroundTasksInMemory extends BackgroundTasksStorage {
     if (filter.toolName) {
       tasks = tasks.filter(t => t.toolName === filter.toolName);
     }
+    if (filter.toolCallId) {
+      tasks = tasks.filter(t => t.toolCallId === filter.toolCallId);
+    }
     if (filter.runId) {
       tasks = tasks.filter(t => t.runId === filter.runId);
     }

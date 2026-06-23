@@ -9,6 +9,10 @@ export class GoogleCloudPubSub extends PubSub {
   private ackBuffer: Record<string, Promise<any>> = {};
   private activeSubscriptions: Record<string, Subscription> = {};
   private activeCbs: Record<string, Set<EventCallback>> = {};
+  // Coalesces concurrent init() calls for the same subscription so racing
+  // subscribers (e.g. a producer stream and a consumer observe on the same
+  // run topic) share a single createTopic/createSubscription attempt.
+  private inFlightInit: Record<string, Promise<Subscription | undefined>> = {};
   // Tracks the actual anonymous message listener registered on each subscription,
   // so we can remove it cleanly on the final unsubscribe.
   private messageListeners: Record<string, (message: Message) => void> = {};
@@ -37,36 +41,54 @@ export class GoogleCloudPubSub extends PubSub {
     }
   }
 
-  async init(topicName: string, group?: string) {
-    try {
-      await this.pubsub.createTopic(topicName);
-    } catch {
-      // no-op
-    }
-    const subscriptionName = this.getSubscriptionName(topicName, group);
+  async init(topicName: string, group?: string): Promise<Subscription | undefined> {
     const subscriptionKey = group ? `${topicName}:${group}` : topicName;
-    try {
-      const [sub] = await this.pubsub.topic(topicName).createSubscription(subscriptionName, {
-        enableMessageOrdering: true,
-        enableExactlyOnceDelivery: topicName === 'workflows' || !!group,
-      });
-      this.activeSubscriptions[subscriptionKey] = sub;
-      return sub;
-    } catch {
-      // Subscription may already exist (e.g. shared group subscription created by another process).
-      // Get the existing subscription instead.
-      if (group) {
-        try {
-          const sub = this.pubsub.subscription(subscriptionName);
-          this.activeSubscriptions[subscriptionKey] = sub;
-          return sub;
-        } catch {
-          // no-op
-        }
-      }
+
+    // Reuse an in-flight init so concurrent subscribers don't race to create the
+    // same subscription. The promise is registered synchronously below (before any
+    // await), so a second caller arriving during the create window reuses it.
+    if (this.inFlightInit[subscriptionKey]) {
+      return this.inFlightInit[subscriptionKey];
     }
 
-    return undefined;
+    const subscriptionName = this.getSubscriptionName(topicName, group);
+    const initPromise = (async (): Promise<Subscription | undefined> => {
+      try {
+        await this.pubsub.createTopic(topicName);
+      } catch {
+        // no-op
+      }
+      try {
+        const [sub] = await this.pubsub.topic(topicName).createSubscription(subscriptionName, {
+          enableMessageOrdering: true,
+          enableExactlyOnceDelivery: topicName === 'workflows' || !!group,
+        });
+        this.activeSubscriptions[subscriptionKey] = sub;
+        return sub;
+      } catch (error) {
+        // The subscription may already exist: created concurrently by a racing
+        // subscriber (ALREADY_EXISTS / gRPC code 6), shared by another process via
+        // a group, or surviving a previous process. In all of these cases attach to
+        // the existing subscription instead of failing. Ungrouped subscriptions hit
+        // this on the concurrent-create race, so we must not gate it on `group`.
+        const alreadyExists = (error as { code?: number } | undefined)?.code === 6;
+        if (alreadyExists || group) {
+          try {
+            const sub = this.pubsub.subscription(subscriptionName);
+            this.activeSubscriptions[subscriptionKey] = sub;
+            return sub;
+          } catch {
+            // no-op
+          }
+        }
+      }
+      return undefined;
+    })().finally(() => {
+      delete this.inFlightInit[subscriptionKey];
+    });
+
+    this.inFlightInit[subscriptionKey] = initPromise;
+    return initPromise;
   }
 
   async destroy(topicName: string) {

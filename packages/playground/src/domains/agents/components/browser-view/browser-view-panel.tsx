@@ -1,10 +1,11 @@
 import { Button, StatusBadge, cn } from '@mastra/playground-ui';
-import { X, Minimize2, ExternalLink, Globe, PanelRight } from 'lucide-react';
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { X, Minimize2, ExternalLink, Globe } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import { useBrowserSession } from '../../context/browser-session-context';
 import type { StreamStatus } from '../../hooks/use-browser-stream';
 import { BrowserToolCallHistory } from './browser-tool-call-history';
 import { BrowserViewFrame } from './browser-view-frame';
+import { useRestoreFocus } from '@/hooks/use-restore-focus';
 
 /**
  * Get StatusBadge configuration based on stream status
@@ -42,55 +43,18 @@ function getStatusBadgeConfig(status: StreamStatus): {
  * Shows the browser screencast in a large centered modal with:
  * - URL bar and status
  * - Browser actions below the screencast
- * - Controls to minimize, switch to sidebar, or close
+ * - Controls to minimize or close
  *
  * The panel is always mounted to preserve WebSocket connection.
  * Visibility is controlled via viewMode in browser session context.
  */
 export function BrowserViewPanel() {
-  const { viewMode, status, currentUrl, hide, closeBrowser, setViewMode } = useBrowserSession();
-  const [isVisible, setIsVisible] = useState(false);
+  const { viewMode, status, currentUrl, hide, closeBrowser } = useBrowserSession();
+  const isModal = viewMode === 'modal';
   const dialogRef = useRef<HTMLDivElement>(null);
-  const previousFocusRef = useRef<HTMLElement | null>(null);
+  useRestoreFocus(isModal, dialogRef);
 
-  const isPanelOpen = viewMode === 'modal';
-
-  // Track visibility separately to allow animation
-  useEffect(() => {
-    if (isPanelOpen) {
-      requestAnimationFrame(() => setIsVisible(true));
-    } else {
-      setIsVisible(false);
-    }
-  }, [isPanelOpen]);
-
-  // Focus management: trap focus in dialog and restore on close
-  useEffect(() => {
-    if (isPanelOpen) {
-      // Store the previously focused element
-      previousFocusRef.current = document.activeElement as HTMLElement | null;
-      // Focus the dialog
-      dialogRef.current?.focus();
-    } else if (previousFocusRef.current) {
-      // Restore focus when closing
-      previousFocusRef.current.focus();
-      previousFocusRef.current = null;
-    }
-  }, [isPanelOpen]);
-
-  const handleClose = useCallback(async () => {
-    await closeBrowser();
-  }, [closeBrowser]);
-
-  const handleMinimize = useCallback(() => {
-    hide();
-  }, [hide]);
-
-  const handleOpenSidebar = useCallback(() => {
-    setViewMode('sidebar');
-  }, [setViewMode]);
-
-  const handleOpenExternal = useCallback(() => {
+  const handleOpenExternal = () => {
     if (!currentUrl) return;
 
     // Validate URL to prevent javascript:/data: scheme attacks
@@ -102,11 +66,11 @@ export function BrowserViewPanel() {
     } catch {
       // Invalid URL, ignore
     }
-  }, [currentUrl]);
+  };
 
   // Handle escape key to minimize
   useEffect(() => {
-    if (!isPanelOpen) return;
+    if (!isModal) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -117,17 +81,14 @@ export function BrowserViewPanel() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isPanelOpen, hide]);
+  }, [isModal, hide]);
 
   // Handle backdrop click to minimize
-  const handleBackdropClick = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.target === e.currentTarget) {
-        hide();
-      }
-    },
-    [hide],
-  );
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) {
+      hide();
+    }
+  };
 
   const statusConfig = getStatusBadgeConfig(status);
 
@@ -136,10 +97,10 @@ export function BrowserViewPanel() {
       className={cn(
         'fixed inset-0 z-50 flex items-center justify-center p-8',
         'bg-black/60 backdrop-blur-sm transition-opacity duration-200',
-        isPanelOpen && isVisible ? 'opacity-100' : 'opacity-0 pointer-events-none',
+        isModal ? 'opacity-100' : 'opacity-0 pointer-events-none',
       )}
       onClick={handleBackdropClick}
-      aria-hidden={!isPanelOpen}
+      aria-hidden={!isModal}
     >
       <div
         ref={dialogRef}
@@ -151,7 +112,7 @@ export function BrowserViewPanel() {
           'flex flex-col w-full max-w-5xl max-h-full',
           'bg-surface2 rounded-xl border border-border1 shadow-2xl overflow-hidden',
           'transition-transform duration-200 outline-none',
-          isPanelOpen && isVisible ? 'scale-100' : 'scale-95',
+          isModal ? 'scale-100' : 'scale-95',
         )}
         onClick={e => e.stopPropagation()}
       >
@@ -167,10 +128,7 @@ export function BrowserViewPanel() {
             {statusConfig.label}
           </StatusBadge>
           <div className="flex items-center gap-1 ml-2">
-            <Button variant="ghost" size="icon-sm" tooltip="Open in sidebar" onClick={handleOpenSidebar}>
-              <PanelRight className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="icon-sm" tooltip="Minimize to chat" onClick={handleMinimize}>
+            <Button variant="ghost" size="icon-sm" tooltip="Minimize to chat" onClick={hide}>
               <Minimize2 className="h-4 w-4" />
             </Button>
             {currentUrl && (
@@ -178,7 +136,7 @@ export function BrowserViewPanel() {
                 <ExternalLink className="h-4 w-4" />
               </Button>
             )}
-            <Button variant="ghost" size="icon-sm" tooltip="Close browser" onClick={handleClose}>
+            <Button variant="ghost" size="icon-sm" tooltip="Close browser" onClick={closeBrowser}>
               <X className="h-4 w-4" />
             </Button>
           </div>

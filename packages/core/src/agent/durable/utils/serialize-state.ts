@@ -83,6 +83,7 @@ export function serializeModelListEntry(entry: AgentModelManagerConfig): Seriali
       modelId: model.modelId,
       specificationVersion: model.specificationVersion,
       originalConfig: `${model.provider}/${model.modelId}`,
+      providerOptions: entry.providerOptions,
     },
     maxRetries: entry.maxRetries,
     enabled: entry.enabled,
@@ -160,6 +161,7 @@ export function serializeDurableState(params: {
 export function serializeDurableOptions(options: {
   maxSteps?: number;
   toolChoice?: any;
+  activeTools?: string[];
   temperature?: number;
   requireToolApproval?: boolean;
   toolCallConcurrency?: number;
@@ -168,6 +170,7 @@ export function serializeDurableOptions(options: {
   includeRawChunks?: boolean;
   returnScorerData?: boolean;
   hasErrorProcessors?: boolean;
+  providerOptions?: SerializableDurableOptions['providerOptions'];
   structuredOutput?: SerializableDurableOptions['structuredOutput'];
   skipBgTaskWait?: boolean;
 }): SerializableDurableOptions {
@@ -189,6 +192,7 @@ export function serializeDurableOptions(options: {
   return {
     maxSteps: options.maxSteps,
     toolChoice: serializedToolChoice,
+    activeTools: options.activeTools,
     temperature: options.temperature,
     requireToolApproval: options.requireToolApproval,
     toolCallConcurrency: options.toolCallConcurrency,
@@ -197,6 +201,7 @@ export function serializeDurableOptions(options: {
     includeRawChunks: options.includeRawChunks,
     returnScorerData: options.returnScorerData,
     hasErrorProcessors: options.hasErrorProcessors,
+    providerOptions: options.providerOptions,
     structuredOutput: options.structuredOutput,
     skipBgTaskWait: options.skipBgTaskWait,
   };
@@ -217,6 +222,8 @@ export function createWorkflowInput(params: {
   options: Parameters<typeof serializeDurableOptions>[0];
   state: Parameters<typeof serializeDurableState>[0];
   messageId: string;
+  agentSpanData?: unknown;
+  modelSpanData?: unknown;
 }): DurableAgenticWorkflowInput {
   return {
     __workflowKind: 'durable-agent',
@@ -231,6 +238,8 @@ export function createWorkflowInput(params: {
     options: serializeDurableOptions(params.options),
     state: serializeDurableState(params.state),
     messageId: params.messageId,
+    agentSpanData: params.agentSpanData,
+    modelSpanData: params.modelSpanData,
   };
 }
 

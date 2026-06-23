@@ -86,6 +86,129 @@ describe('validateConfig', () => {
     });
   });
 
+  it('accepts http server entry with OAuth config', () => {
+    const result = validateConfig({
+      mcpServers: {
+        remote: {
+          url: 'https://mcp.example.com/sse',
+          oauth: {
+            redirectUrl: 'http://localhost:3000/oauth/callback',
+            clientName: 'Mastra Code',
+            scopes: ['mcp:read', 'mcp:write'],
+            clientId: 'client-id',
+            clientSecret: 'client-secret',
+          },
+        },
+      },
+    });
+
+    expect(result.mcpServers!['remote']).toEqual({
+      url: 'https://mcp.example.com/sse',
+      headers: undefined,
+      oauth: {
+        redirectUrl: 'http://localhost:3000/oauth/callback',
+        clientName: 'Mastra Code',
+        scopes: ['mcp:read', 'mcp:write'],
+        clientId: 'client-id',
+        clientSecret: 'client-secret',
+      },
+    });
+  });
+
+  it('accepts loopback IPv6 HTTP OAuth redirect URLs', () => {
+    const result = validateConfig({
+      mcpServers: {
+        remote: {
+          url: 'https://mcp.example.com/sse',
+          oauth: { redirectUrl: 'http://[::1]:3000/oauth/callback' },
+        },
+      },
+    });
+
+    expect(result.mcpServers!['remote']).toEqual({
+      url: 'https://mcp.example.com/sse',
+      headers: undefined,
+      oauth: {
+        redirectUrl: 'http://[::1]:3000/oauth/callback',
+        clientName: undefined,
+        scopes: undefined,
+        clientId: undefined,
+        clientSecret: undefined,
+      },
+    });
+  });
+
+  it('accepts IPv4 loopback range HTTP OAuth redirect URLs', () => {
+    const result = validateConfig({
+      mcpServers: {
+        remote: {
+          url: 'https://mcp.example.com/sse',
+          oauth: { redirectUrl: 'http://127.0.0.2:3000/oauth/callback' },
+        },
+      },
+    });
+
+    expect(result.mcpServers!['remote']).toEqual({
+      url: 'https://mcp.example.com/sse',
+      headers: undefined,
+      oauth: {
+        redirectUrl: 'http://127.0.0.2:3000/oauth/callback',
+        clientName: undefined,
+        scopes: undefined,
+        clientId: undefined,
+        clientSecret: undefined,
+      },
+    });
+  });
+
+  it('skips http server entry with invalid OAuth config', () => {
+    const result = validateConfig({
+      mcpServers: {
+        remote: {
+          url: 'https://mcp.example.com/sse',
+          oauth: { redirectUrl: 'not a url' },
+        },
+      },
+    });
+
+    expect(result.mcpServers).toBeUndefined();
+    expect(result.skippedServers).toHaveLength(1);
+    expect(result.skippedServers![0]!.reason).toContain('Invalid OAuth redirectUrl');
+  });
+
+  it('skips http server entry with non-loopback HTTP OAuth redirect URL', () => {
+    const result = validateConfig({
+      mcpServers: {
+        remote: {
+          url: 'https://mcp.example.com/sse',
+          oauth: { redirectUrl: 'http://oauth.example.com/callback' },
+        },
+      },
+    });
+
+    expect(result.mcpServers).toBeUndefined();
+    expect(result.skippedServers).toHaveLength(1);
+    expect(result.skippedServers![0]!.reason).toContain('must use HTTPS');
+  });
+
+  it('skips http server entry with invalid OAuth scopes', () => {
+    const result = validateConfig({
+      mcpServers: {
+        remote: {
+          url: 'https://mcp.example.com/sse',
+          oauth: {
+            redirectUrl: 'http://localhost:3000/oauth/callback',
+            scopes: ['mcp:read', 42],
+          },
+        },
+      },
+    });
+
+    expect(result.mcpServers).toBeUndefined();
+    expect(result.skippedServers).toHaveLength(1);
+    expect(result.skippedServers![0]!.reason).toContain('"scopes" must be an array of strings');
+  });
+
   it('skips invalid entries and collects reasons', () => {
     const result = validateConfig({
       mcpServers: {

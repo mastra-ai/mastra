@@ -174,7 +174,7 @@ describe('MastraModule', () => {
       // Verify routes are registered without binding to a port
       const response = await executeExpressRequest(expressApp, {
         method: 'GET',
-        path: '/agents',
+        path: '/api/agents',
       });
       expect(response.status).toBe(200);
 
@@ -429,7 +429,7 @@ describe('MastraModule', () => {
 
       const response = await executeExpressRequest(expressApp, {
         method: 'GET',
-        path: '/agents/non-existent-agent',
+        path: '/api/agents/non-existent-agent',
       });
       expect(response.status).toBe(404);
 
@@ -449,7 +449,7 @@ describe('MastraModule', () => {
 
       const response = await executeExpressRequest(expressApp, {
         method: 'GET',
-        path: '/agents/non-existent-agent',
+        path: '/api/agents/non-existent-agent',
       });
       expect(response.status).toBe(404);
 

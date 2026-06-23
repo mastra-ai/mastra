@@ -125,6 +125,42 @@ describe('DurableAgent instructions handling', () => {
     expect(result.workflowInput.messageListState).toBeDefined();
   });
 
+  it('should preserve object-form instructions with provider options', async () => {
+    const mockModel = createTextModel('Hello');
+
+    const baseAgent = new Agent({
+      id: 'object-instructions-agent',
+      name: 'Object Instructions Agent',
+      instructions: {
+        role: 'system' as const,
+        content: 'You are a strict JSON-only assistant.',
+        providerOptions: {
+          anthropic: {
+            cacheControl: { type: 'ephemeral' },
+          },
+        },
+      },
+      model: mockModel as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const result = await durableAgent.prepare('Hello');
+    const messageList = new MessageList();
+    messageList.deserialize(result.workflowInput.messageListState);
+
+    expect(messageList.getSystemMessages()).toEqual([
+      {
+        role: 'system',
+        content: 'You are a strict JSON-only assistant.',
+        experimental_providerMetadata: {
+          anthropic: {
+            cacheControl: { type: 'ephemeral' },
+          },
+        },
+      },
+    ]);
+  });
+
   it('should handle empty instructions', async () => {
     const mockModel = createTextModel('Hello');
 

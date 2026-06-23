@@ -113,12 +113,10 @@ test.describe('Learn section', () => {
     await expect(page.getByText('Page Not Found')).toBeVisible()
   })
 
-  test('Learn tab visible in navbar with new badge', async ({ page }) => {
+  test('Learn tab visible in navbar', async ({ page }) => {
     await page.goto('/learn')
     const learnTab = page.locator('.tab a').filter({ hasText: 'Learn' })
     await expect(learnTab).toBeVisible()
-    // Should have a "new" badge
-    await expect(page.locator('.learn-tab-badge')).toBeVisible()
   })
 
   test('email CTA form is visible on landing page', async ({ page }) => {

@@ -1,3 +1,4 @@
+import * as crypto from 'node:crypto';
 import { openai } from '@ai-sdk/openai';
 import type { Task, MessageSendParams } from '@mastra/core/a2a';
 import { MastraA2AError } from '@mastra/core/a2a';
@@ -6,7 +7,10 @@ import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { MastraStorage } from '@mastra/core/storage';
+import canonicalize from 'canonicalize';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DefaultPushNotificationSender, DEFAULT_PUSH_NOTIFICATION_TOKEN_HEADER } from '../a2a/push-notification-sender';
+import { InMemoryPushNotificationStore } from '../a2a/push-notification-store';
 import { InMemoryTaskStore } from '../a2a/store';
 import {
   AGENT_EXECUTION_ROUTE,
@@ -208,6 +212,65 @@ describe('A2A Handler', () => {
       } as any);
 
       expect(response.url).toBe('http://localhost:4111/api/a2a/test-agent');
+      expect(response.capabilities.pushNotifications).toBe(true);
+    });
+
+    it('should sign the agent card when A2A signing is configured', async () => {
+      const { privateKey, publicKey } = crypto.generateKeyPairSync('ec', {
+        namedCurve: 'P-256',
+      });
+      const privateJwk = privateKey.export({ format: 'jwk' });
+      mockMastra.setServer({
+        a2a: {
+          agentCardSigning: {
+            privateKey: privateJwk,
+            protectedHeader: {
+              alg: 'ES256',
+              kid: 'test-key',
+            },
+            header: {
+              issuer: 'mastra-test',
+            },
+          },
+        },
+      } as any);
+
+      const agentCard = await getAgentCardByIdHandler({
+        mastra: mockMastra,
+        requestContext: new RequestContext(),
+        agentId: 'test-agent',
+      });
+
+      expect(agentCard.signatures).toHaveLength(1);
+
+      const [signature] = agentCard.signatures!;
+      const unsignedCard = structuredClone(agentCard) as typeof agentCard & {
+        signatures?: typeof agentCard.signatures;
+      };
+      delete unsignedCard.signatures;
+      const canonicalPayload = canonicalize(unsignedCard);
+
+      expect(canonicalPayload).toBeTruthy();
+
+      const signingInput = `${signature.protected}.${Buffer.from(canonicalPayload!, 'utf8').toString('base64url')}`;
+      const verification = crypto.verify(
+        'sha256',
+        Buffer.from(signingInput, 'utf8'),
+        {
+          key: publicKey,
+          dsaEncoding: 'ieee-p1363',
+        },
+        Buffer.from(signature.signature, 'base64url'),
+      );
+
+      expect(verification).toBe(true);
+      expect(JSON.parse(Buffer.from(signature.protected, 'base64url').toString('utf8'))).toMatchObject({
+        alg: 'ES256',
+        kid: 'test-key',
+      });
+      expect(signature.header).toEqual({
+        issuer: 'mastra-test',
+      });
     });
   });
 
@@ -308,6 +371,92 @@ describe('A2A Handler', () => {
           kind: 'task',
         },
       });
+    });
+
+    it('should accept file parts (FileWithUri + FileWithBytes) and pass them through to the converter', async () => {
+      // Regression test for the handler-level schema rejecting non-text parts.
+      // Pre-fix, params.message.parts was validated as `kind: z.enum(['text'])`
+      // which rejected `kind: 'file'` and `kind: 'data'` before convertToCoreMessage
+      // (which already handles all three) could see them.
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+
+      const params: MessageSendParams = {
+        message: {
+          messageId,
+          kind: 'message',
+          role: 'user',
+          parts: [
+            { kind: 'text', text: 'Please summarize the attached invoice.' },
+            {
+              kind: 'file',
+              file: { uri: 'https://example.com/invoice.pdf', mimeType: 'application/pdf', name: 'invoice.pdf' },
+            },
+            { kind: 'file', file: { bytes: 'AAAA', mimeType: 'image/png', name: 'screenshot.png' } },
+          ],
+        },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.generate.mockResolvedValue({ text: 'Summary attached.' });
+
+      const result = await handleMessageSend({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId,
+        requestContext: new RequestContext(),
+      });
+
+      // Validation passes — no JSON-RPC error returned.
+      expect('error' in result).toBe(false);
+
+      // convertToCoreMessage forwarded the file parts as CoreMessage `file` parts.
+      const generateArgs = (mockAgent.generate as ReturnType<typeof vi.fn>).mock.calls[0];
+      const coreMessages = generateArgs[0] as Array<{ role: string; content: Array<unknown> }>;
+      expect(coreMessages).toHaveLength(1);
+      expect(coreMessages[0].role).toBe('user');
+      expect(coreMessages[0].content).toEqual([
+        { type: 'text', text: 'Please summarize the attached invoice.' },
+        { type: 'file', data: new URL('https://example.com/invoice.pdf'), mimeType: 'application/pdf' },
+        { type: 'file', data: 'AAAA', mimeType: 'image/png' },
+      ]);
+    });
+
+    it('should reject parts with an unknown discriminator', async () => {
+      // The widened schema is still strict on the part kind — discriminatedUnion
+      // rejects anything other than text | file | data, matching the @a2a-js/sdk
+      // Part union exactly.
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+
+      const params = {
+        message: {
+          messageId,
+          kind: 'message',
+          role: 'user',
+          parts: [{ kind: 'bogus', text: 'nope' }],
+        },
+      } as unknown as MessageSendParams;
+
+      const result = await getAgentExecutionHandler({
+        requestId,
+        mastra: mockMastra,
+        method: 'message/send',
+        params,
+        taskStore: mockTaskStore,
+        agentId,
+        requestContext: new RequestContext(),
+      });
+
+      expect('error' in result).toBe(true);
+      // -32602 is the JSON-RPC "invalid params" code that MastraA2AError.invalidParams produces.
+      // @ts-expect-error - error is present in the failure branch
+      expect(result.error.code).toBe(-32602);
     });
 
     it('should handle errors from agent.generate and save failed state', async () => {
@@ -960,6 +1109,197 @@ describe('A2A Handler', () => {
         },
       });
     });
+
+    it('should persist push notification config from message/send and deliver on completion', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+      const taskId = 'push-task-id';
+      const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 202 }));
+      const pushNotificationStore = new InMemoryPushNotificationStore();
+      const pushNotificationSender = new DefaultPushNotificationSender(pushNotificationStore, {
+        fetch: fetchMock,
+        lookup: vi.fn().mockResolvedValue([{ address: '93.184.216.34', family: 4 }]),
+      });
+
+      const params: MessageSendParams = {
+        message: {
+          messageId,
+          taskId,
+          kind: 'message',
+          role: 'user',
+          parts: [{ kind: 'text', text: 'Notify me when done' }],
+        },
+        configuration: {
+          pushNotificationConfig: {
+            url: 'https://example.com/webhook',
+            token: 'notification-token',
+          },
+        },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.generate.mockResolvedValue({ text: 'Done.' });
+
+      const result = await handleMessageSend({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+        pushNotificationSender,
+        agent: mockAgent,
+        agentId,
+        requestContext: new RequestContext(),
+      });
+
+      expect(result.result?.status.state).toBe('completed');
+
+      const storedConfig = pushNotificationStore.get({
+        agentId,
+        params: { id: taskId },
+      });
+      expect(storedConfig).toEqual({
+        taskId,
+        pushNotificationConfig: {
+          id: taskId,
+          token: 'notification-token',
+          url: 'https://example.com/webhook',
+        },
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://93.184.216.34/webhook',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.any(Headers),
+          body: expect.any(String),
+        }),
+      );
+
+      const [, requestInit] = fetchMock.mock.calls[0]!;
+      expect((requestInit!.headers as Headers).get('host')).toBe('example.com');
+      expect((requestInit!.headers as Headers).get(DEFAULT_PUSH_NOTIFICATION_TOKEN_HEADER)).toBe('notification-token');
+      expect(JSON.parse(requestInit!.body as string)).toMatchObject({
+        id: taskId,
+        status: {
+          state: 'completed',
+        },
+      });
+    });
+
+    it('should not fail the request when push notification delivery fails', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+      const taskId = 'push-task-id';
+      const fetchMock = vi.fn().mockRejectedValue(new Error('Webhook unavailable'));
+      const pushNotificationStore = new InMemoryPushNotificationStore();
+      const pushNotificationSender = new DefaultPushNotificationSender(pushNotificationStore, {
+        fetch: fetchMock,
+        lookup: vi.fn().mockResolvedValue([{ address: '93.184.216.34', family: 4 }]),
+      });
+      const logger = {
+        error: vi.fn(),
+      } as any;
+
+      const params: MessageSendParams = {
+        message: {
+          messageId,
+          taskId,
+          kind: 'message',
+          role: 'user',
+          parts: [{ kind: 'text', text: 'Notify me when done' }],
+        },
+        configuration: {
+          pushNotificationConfig: {
+            url: 'https://example.com/webhook',
+          },
+        },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.generate.mockResolvedValue({ text: 'Done.' });
+
+      const result = await handleMessageSend({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+        pushNotificationSender,
+        agent: mockAgent,
+        agentId,
+        logger,
+        requestContext: new RequestContext(),
+      });
+
+      expect(result.result?.status.state).toBe('completed');
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => {
+        expect(logger.error).toHaveBeenCalledWith('Failed to deliver A2A push notification', expect.any(Error));
+      });
+    });
+
+    it('uses a provided push notification store even when no sender is passed', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+      const taskId = 'push-task-id';
+      const pushNotificationStore = new InMemoryPushNotificationStore();
+      const logger = {
+        error: vi.fn(),
+      } as any;
+
+      const params: MessageSendParams = {
+        message: {
+          messageId,
+          taskId,
+          kind: 'message',
+          role: 'user',
+          parts: [{ kind: 'text', text: 'Notify me when done' }],
+        },
+        configuration: {
+          pushNotificationConfig: {
+            url: 'http://localhost:9999/webhook',
+          },
+        },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockResolvedValue is not available on the Agent class
+      mockAgent.generate.mockResolvedValue({ text: 'Done.' });
+
+      const result = await handleMessageSend({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+        agent: mockAgent,
+        agentId,
+        logger,
+        requestContext: new RequestContext(),
+      });
+
+      expect(result.result?.status.state).toBe('completed');
+      expect(
+        pushNotificationStore.get({
+          agentId,
+          params: { id: taskId },
+        }),
+      ).toEqual({
+        taskId,
+        pushNotificationConfig: {
+          id: taskId,
+          url: 'http://localhost:9999/webhook',
+        },
+      });
+
+      await vi.waitFor(() => {
+        expect(logger.error).toHaveBeenCalledWith('Failed to deliver A2A push notification', expect.any(Error));
+      });
+    });
   });
 
   describe('handleMessageStream', () => {
@@ -1541,37 +1881,129 @@ describe('A2A Handler', () => {
       mockTaskStore = new InMemoryTaskStore();
     });
 
-    it('returns push notification not supported for new push config methods', async () => {
-      const methods = [
-        {
-          method: 'tasks/pushNotificationConfig/set',
-          params: { taskId: 'task-1', pushNotificationConfig: { url: 'https://example.com' } },
-        },
-        { method: 'tasks/pushNotificationConfig/get', params: { id: 'task-1' } },
-        { method: 'tasks/pushNotificationConfig/list', params: { id: 'task-1' } },
-        { method: 'tasks/pushNotificationConfig/delete', params: { id: 'task-1', pushNotificationConfigId: 'push-1' } },
-      ] as const;
+    it('stores, retrieves, lists, and deletes push notification configs', async () => {
+      const pushNotificationStore = new InMemoryPushNotificationStore();
 
-      for (const entry of methods) {
-        const result = await getAgentExecutionHandler({
-          requestId: 'test-request-id',
-          mastra: mockMastra,
-          agentId: 'test-agent',
-          requestContext: new RequestContext(),
-          method: entry.method as any,
-          params: entry.params as any,
-          taskStore: mockTaskStore,
-        });
-
-        expect(result).toMatchObject({
-          error: {
-            code: -32003,
-            message: 'Push Notification is not supported',
+      await mockTaskStore.save({
+        agentId: 'test-agent',
+        data: {
+          id: 'task-1',
+          contextId: 'context-1',
+          status: {
+            state: 'working',
+            message: undefined,
+            timestamp: '2025-05-08T11:47:38.458Z',
           },
-          id: 'test-request-id',
-          jsonrpc: '2.0',
-        });
-      }
+          artifacts: [],
+          metadata: undefined,
+          kind: 'task',
+        },
+      });
+
+      const setResult = await getAgentExecutionHandler({
+        requestId: 'test-request-id',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/pushNotificationConfig/set' as any,
+        params: { taskId: 'task-1', pushNotificationConfig: { url: 'https://example.com' } } as any,
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+      });
+
+      expect(setResult).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: {
+          taskId: 'task-1',
+          pushNotificationConfig: {
+            id: 'task-1',
+            url: 'https://example.com',
+          },
+        },
+      });
+
+      const getResult = await getAgentExecutionHandler({
+        requestId: 'test-request-id',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/pushNotificationConfig/get' as any,
+        params: { id: 'task-1' } as any,
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+      });
+      expect(getResult).toEqual(setResult);
+
+      const listResult = await getAgentExecutionHandler({
+        requestId: 'test-request-id',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/pushNotificationConfig/list' as any,
+        params: { id: 'task-1' } as any,
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+      });
+      expect(listResult).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: [setResult.result],
+      });
+
+      const deleteResult = await getAgentExecutionHandler({
+        requestId: 'test-request-id',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/pushNotificationConfig/delete' as any,
+        params: { id: 'task-1', pushNotificationConfigId: 'task-1' } as any,
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+      });
+      expect(deleteResult).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: null,
+      });
+
+      const listAfterDeleteResult = await getAgentExecutionHandler({
+        requestId: 'test-request-id',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/pushNotificationConfig/list' as any,
+        params: { id: 'task-1' } as any,
+        taskStore: mockTaskStore,
+        pushNotificationStore,
+      });
+      expect(listAfterDeleteResult).toEqual({
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+        result: [],
+      });
+    });
+
+    it('returns task not found when configuring push notifications for an unknown task', async () => {
+      const result = await getAgentExecutionHandler({
+        requestId: 'test-request-id',
+        mastra: mockMastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        method: 'tasks/pushNotificationConfig/set' as any,
+        params: { taskId: 'missing-task', pushNotificationConfig: { url: 'https://example.com' } } as any,
+        taskStore: mockTaskStore,
+        pushNotificationStore: new InMemoryPushNotificationStore(),
+      });
+
+      expect(result).toMatchObject({
+        error: {
+          code: -32001,
+          message: 'Task not found: missing-task',
+        },
+        id: 'test-request-id',
+        jsonrpc: '2.0',
+      });
     });
 
     it('returns authenticated extended card not configured for agent/getAuthenticatedExtendedCard', async () => {

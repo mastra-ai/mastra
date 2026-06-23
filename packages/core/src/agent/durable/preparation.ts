@@ -4,18 +4,20 @@ import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig, MemoryConfig as _MemoryConfig, StorageThreadType } from '../../memory/types';
+import { EntityType, SpanType, createObservabilityContext, getOrCreateSpan } from '../../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcessorOrWorkflow } from '../../processors';
 import type { ProcessorState } from '../../processors/runner';
 import { RequestContext, MASTRA_VERSIONS_KEY, mergeVersionOverrides } from '../../request-context';
 import type { VersionOverrides } from '../../request-context';
-import type { CoreTool } from '../../tools/types';
+import type { CoreTool, ToolHooks } from '../../tools/types';
+import { deepMerge } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
-import type { AgentModelManagerConfig, ToolsetsInput, ToolsInput } from '../types';
+import type { AgentInstructions, AgentModelManagerConfig, ToolsetsInput, ToolsInput } from '../types';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
 import { createWorkflowInput } from './utils/serialize-state';
 
@@ -26,7 +28,8 @@ import { createWorkflowInput } from './utils/serialize-state';
 interface DurablePreparationAgent {
   id: string;
   name?: string;
-  getInstructions(opts: { requestContext: RequestContext }): string | string[] | Promise<string | string[]>;
+  getDefaultOptions(opts: { requestContext: RequestContext }): AgentExecutionOptions | Promise<AgentExecutionOptions>;
+  getInstructions(opts: { requestContext: RequestContext }): AgentInstructions | Promise<AgentInstructions>;
   getModel(opts: { requestContext: RequestContext }): MastraLanguageModel | Promise<MastraLanguageModel>;
   getModelList(requestContext: RequestContext): Promise<AgentModelManagerConfig[] | null>;
   getMemory(opts: { requestContext: RequestContext }): Promise<MastraMemory | undefined>;
@@ -43,6 +46,7 @@ interface DurablePreparationAgent {
     requestContext?: RequestContext;
     memoryConfig?: MemoryConfig;
     autoResumeSuspendedTools?: boolean;
+    hooks?: ToolHooks;
   }): Promise<Record<string, CoreTool>>;
   listInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
   listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
@@ -111,7 +115,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   const {
     agent,
     messages,
-    options: execOptions,
+    options: rawExecOptions,
     runId: providedRunId,
     requestContext: providedRequestContext,
     logger,
@@ -126,6 +130,16 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 2. Get request context
   const requestContext = providedRequestContext ?? new RequestContext();
+
+  // 2b. Merge the wrapped agent's defaultOptions under the per-request options,
+  // mirroring the non-durable Agent.stream()/generate() paths. Without this the
+  // agent's configured defaults (maxSteps, providerOptions, etc.) are silently
+  // dropped and durable runs fall back to DurableAgentDefaults.MAX_STEPS.
+  const defaultOptions = await typedAgent.getDefaultOptions({ requestContext });
+  const execOptions = deepMerge(
+    (defaultOptions ?? {}) as Record<string, unknown>,
+    (rawExecOptions ?? {}) as Record<string, unknown>,
+  ) as AgentExecutionOptions<OUTPUT>;
 
   // 3. Merge version overrides (Mastra defaults < requestContext < call-site)
   const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
@@ -160,15 +174,27 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       for (const inst of instructions) {
         messageList.addSystem(inst);
       }
+    } else {
+      messageList.addSystem(instructions);
     }
   }
-
-  // Add workspace instructions (matches WorkspaceInstructionsProcessor behavior)
   const workspace = await typedAgent.getWorkspace({ requestContext });
-  if (workspace?.filesystem || workspace?.sandbox) {
-    const wsInstructions = workspace.getInstructions({ requestContext });
-    if (wsInstructions) {
-      messageList.addSystem({ role: 'system', content: wsInstructions });
+
+  // Durable preparation runs processInput processors below, but workspace
+  // instructions are a processInputStep concern in the non-durable path.
+  // Add them here once so durable runs get the same workspace context.
+  if (workspace) {
+    const hasFs =
+      typeof workspace.hasFilesystemConfig === 'function' ? workspace.hasFilesystemConfig() : !!workspace.filesystem;
+    const hasSb = typeof workspace.hasSandboxConfig === 'function' ? workspace.hasSandboxConfig() : !!workspace.sandbox;
+    if (hasFs || hasSb) {
+      const wsInstructions =
+        typeof workspace.getInstructionsAsync === 'function'
+          ? await workspace.getInstructionsAsync({ requestContext })
+          : workspace.getInstructions({ requestContext });
+      if (wsInstructions) {
+        messageList.addSystem({ role: 'system', content: wsInstructions });
+      }
     }
   }
 
@@ -193,6 +219,26 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   } catch (error) {
     logger?.warn?.(`[DurableAgent] Error resolving processors: ${error}`);
   }
+
+  // Open AGENT_RUN here so processor_run spans (and their MEMORY_OPERATION
+  // children) parent to it. MODEL_GENERATION is opened later under it.
+  const agentSpan = getOrCreateSpan({
+    type: SpanType.AGENT_RUN,
+    name: `agent run: '${agent.id}'`,
+    entityType: EntityType.AGENT,
+    entityId: agent.id,
+    entityName: agent.name,
+    input: messages,
+    metadata: {
+      runId,
+      resourceId,
+      threadId,
+    },
+    tracingContext: execOptions?.tracingContext,
+    tracingOptions: execOptions?.tracingOptions,
+    requestContext,
+    mastra,
+  });
 
   // Run processInput (once, before execution) if we have any processors
   if (inputProcessors.length > 0) {
@@ -225,7 +271,12 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         agentName: agent.name,
         processorStates,
       });
-      await runner.runInputProcessors(messageList, {} as any, requestContext, 0);
+      await runner.runInputProcessors(
+        messageList,
+        createObservabilityContext({ currentSpan: agentSpan }),
+        requestContext,
+        0,
+      );
     } catch (error) {
       logger?.warn?.(`[DurableAgent] Error running input processors: ${error}`);
     }
@@ -243,6 +294,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       requestContext,
       memoryConfig: execOptions?.memory?.options,
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
+      hooks: execOptions?.hooks,
     });
   } catch (error) {
     logger?.warn?.(`[DurableAgent] Error converting tools: ${error}`);
@@ -310,6 +362,25 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   const savePerStep = execOptions?.savePerStep;
   const observationalMemory = !!memoryConfig?.observationalMemory;
 
+  // 12b. Open MODEL_GENERATION under the AGENT_RUN opened in step 6, and export both
+  // into the workflow input so each durable step can rebuild them. No-ops when
+  // observability is off.
+  const modelSpan = agentSpan?.createChildSpan({
+    type: SpanType.MODEL_GENERATION,
+    name: `llm: '${model.modelId}'`,
+    attributes: {
+      model: model.modelId,
+      provider: model.provider,
+      streaming: true,
+    },
+    metadata: {
+      runId,
+      threadId,
+      resourceId,
+    },
+    requestContext,
+  });
+
   // 13. Create serialized workflow input
   const workflowInput = createWorkflowInput({
     runId,
@@ -323,14 +394,19 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     options: {
       maxSteps: execOptions?.maxSteps,
       toolChoice: execOptions?.toolChoice as any,
+      activeTools: execOptions?.activeTools,
       temperature: execOptions?.modelSettings?.temperature,
-      requireToolApproval: execOptions?.requireToolApproval,
+      // Durable runs serialize their options, so a function-valued global approval policy
+      // can't be persisted. Degrade safely by requiring approval for every tool call.
+      requireToolApproval:
+        typeof execOptions?.requireToolApproval === 'function' ? true : execOptions?.requireToolApproval,
       toolCallConcurrency: execOptions?.toolCallConcurrency,
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
       maxProcessorRetries: execOptions?.maxProcessorRetries,
       includeRawChunks: execOptions?.includeRawChunks,
       returnScorerData: (execOptions as any)?.returnScorerData,
       hasErrorProcessors: errorProcessors.length > 0,
+      providerOptions: execOptions?.providerOptions,
       structuredOutput: serializedStructuredOutput,
       skipBgTaskWait: (execOptions as any)?._skipBgTaskWait,
     },
@@ -343,6 +419,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       observationalMemory,
     },
     messageId,
+    agentSpanData: agentSpan?.exportSpan(),
+    modelSpanData: modelSpan?.exportSpan(),
   });
 
   // 14. Create registry entry for non-serializable state
@@ -367,6 +445,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     processorStates,
     backgroundTaskManager,
     backgroundTasksConfig,
+    agentSpan,
+    modelSpan,
     cleanup: () => {},
   };
 

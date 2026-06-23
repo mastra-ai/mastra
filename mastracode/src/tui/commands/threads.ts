@@ -1,7 +1,7 @@
-import { Spacer } from '@mariozechner/pi-tui';
 import { ThreadLockError } from '../../utils/thread-lock.js';
-import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { ThreadSelectorComponent } from '../components/thread-selector.js';
+import { askModalQuestion } from '../modal-question.js';
+import { showModalOverlay } from '../overlay.js';
 import { askCloneName, confirmClone, resetUIAfterClone } from './clone.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -11,8 +11,14 @@ export function showThreadLockPrompt(
   ownerPid: number,
   lockedThreadId?: string,
 ): void {
-  const questionComponent = new AskQuestionInlineComponent(
-    {
+  ctx.analytics?.trackInteractivePrompt('thread_lock_prompt', {
+    threadId: lockedThreadId ?? ctx.state.session.thread.getId(),
+    resourceId: ctx.state.session.identity.getResourceId(),
+    mode: ctx.state.session.mode.get(),
+  });
+
+  void (async () => {
+    const answer = await askModalQuestion(ctx.state.ui, {
       question: `Thread "${threadTitle}" is locked by pid ${ownerPid}. What would you like to do?`,
       options: [
         { label: 'Switch thread', description: 'Pick a different thread' },
@@ -20,54 +26,35 @@ export function showThreadLockPrompt(
         ...(lockedThreadId ? [{ label: 'Clone thread', description: 'Fork from this thread' }] : []),
         { label: 'Exit', description: 'Exit' },
       ],
-      formatResult: answer => {
-        if (answer === 'Switch thread') return 'Opening thread selector...';
-        if (answer === 'Clone thread') return 'Cloning thread...';
-        if (answer === 'New thread') return 'Starting new thread.';
-        return 'Exiting.';
-      },
-      onSubmit: async answer => {
-        ctx.state.activeInlineQuestion = undefined;
-        if (answer === 'Switch thread') {
-          await handleThreadsCommand(ctx);
-        } else if (answer === 'Clone thread' && lockedThreadId) {
-          try {
-            const customTitle = await askCloneName(ctx.state);
-            const clonedThread = await ctx.state.harness.cloneThread({
-              sourceThreadId: lockedThreadId,
-              ...(customTitle ? { title: customTitle } : {}),
-            });
-            ctx.state.pendingNewThread = false;
-            await resetUIAfterClone(ctx, clonedThread.title || clonedThread.id);
-          } catch (error) {
-            ctx.showError(`Failed to clone thread: ${error instanceof Error ? error.message : String(error)}`);
-          }
-        } else if (answer === 'New thread') {
-          // pendingNewThread is already true from the caller
-        } else {
-          process.exit(0);
-        }
-      },
-      onCancel: () => {
-        ctx.state.activeInlineQuestion = undefined;
-        process.exit(0);
-      },
-    },
-    ctx.state.ui,
-  );
+    });
 
-  ctx.state.activeInlineQuestion = questionComponent;
-  ctx.state.chatContainer.addChild(questionComponent);
-  ctx.state.chatContainer.addChild(new Spacer(1));
-  ctx.state.ui.requestRender();
-  ctx.state.chatContainer.invalidate();
+    if (answer === 'Switch thread') {
+      await handleThreadsCommand(ctx);
+    } else if (answer === 'Clone thread' && lockedThreadId) {
+      try {
+        const customTitle = await askCloneName(ctx.state);
+        const clonedThread = await ctx.state.session.thread.clone({
+          sourceThreadId: lockedThreadId,
+          ...(customTitle ? { title: customTitle } : {}),
+        });
+        ctx.state.pendingNewThread = false;
+        await resetUIAfterClone(ctx, clonedThread.title || clonedThread.id);
+      } catch (error) {
+        ctx.showError(`Failed to clone thread: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    } else if (answer === 'New thread') {
+      // pendingNewThread is already true from the caller
+    } else {
+      process.exit(0);
+    }
+  })();
 }
 
 export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<void> {
   const { state } = ctx;
-  const threads = await state.harness.listThreads({ allResources: true });
-  const currentId = state.pendingNewThread ? null : state.harness.getCurrentThreadId();
-  const currentResourceId = state.harness.getResourceId();
+  const threads = await state.session.thread.list({ allResources: true });
+  const currentId = state.pendingNewThread ? null : state.session.thread.getId();
+  const currentResourceId = state.session.identity.getResourceId();
   const threadById = new Map(threads.map(thread => [thread.id, thread] as const));
 
   for (const [threadId, cachedPreview] of [...state.threadPreviewCache.entries()]) {
@@ -88,6 +75,7 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
     ctx.showInfo('No threads yet. Send a message to create one.');
     return;
   }
+  // console.log(cachedPreview);
 
   return new Promise(resolve => {
     const selector = new ThreadSelectorComponent({
@@ -128,10 +116,10 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
         }
 
         if (thread.resourceId !== currentResourceId) {
-          state.harness.setResourceId({ resourceId: thread.resourceId });
+          await state.harness.setResourceId(state.session, { resourceId: thread.resourceId });
         }
         try {
-          await state.harness.switchThread({ threadId: thread.id });
+          await state.session.thread.switch({ threadId: thread.id });
         } catch (error) {
           if (error instanceof ThreadLockError) {
             showThreadLockPrompt(ctx, thread.title || thread.id, error.ownerPid, thread.id);
@@ -149,6 +137,7 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
         state.messageComponentsById.clear();
         state.allShellComponents = [];
         state.pendingTools.clear();
+        state.pendingTaskToolIds?.clear();
         await ctx.renderExistingMessages();
 
         ctx.showInfo(`Switched to: ${thread.title || thread.id}`);
@@ -162,7 +151,7 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
         }
         try {
           const customTitle = await askCloneName(state);
-          const clonedThread = await state.harness.cloneThread({
+          const clonedThread = await state.session.thread.clone({
             sourceThreadId: thread.id,
             ...(customTitle ? { title: customTitle } : {}),
           });
@@ -179,11 +168,7 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
       },
     });
 
-    state.ui.showOverlay(selector, {
-      width: '80%',
-      maxHeight: '60%',
-      anchor: 'center',
-    });
+    showModalOverlay(state.ui, selector, { widthPercent: 0.8, maxHeight: '60%' });
     selector.focused = true;
   });
 }

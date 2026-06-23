@@ -47,6 +47,8 @@ const TOOL_CATEGORY_MAP: Record<string, ToolCategory> = {
   'web-search': 'read',
   web_extract: 'read',
   'web-extract': 'read',
+  // Edit tools — mutate local project or session state
+  [MC_TOOLS.NOTIFICATION_INBOX]: 'edit',
   // Edit tools — modify files
   [MC_TOOLS.STRING_REPLACE_LSP]: 'edit',
   [MC_TOOLS.AST_SMART_EDIT]: 'edit',
@@ -57,11 +59,19 @@ const TOOL_CATEGORY_MAP: Record<string, ToolCategory> = {
   [MC_TOOLS.EXECUTE_COMMAND]: 'execute',
 
   // Interactive / planning tools — always allowed (no category needed)
-  // ask_user, task_write, task_check, submit_plan, request_access
+  // ask_user, task_write, task_update, task_complete, task_check, submit_plan, request_access
 };
 
 // Tools that never need approval regardless of policy
-const ALWAYS_ALLOW_TOOLS = new Set(['ask_user', 'task_write', 'task_check', 'submit_plan', 'request_access']);
+const ALWAYS_ALLOW_TOOLS = new Set([
+  'ask_user',
+  'task_write',
+  'task_update',
+  'task_complete',
+  'task_check',
+  'submit_plan',
+  'request_access',
+]);
 
 /**
  * Get the category for a tool, or null if the tool is always-allowed.

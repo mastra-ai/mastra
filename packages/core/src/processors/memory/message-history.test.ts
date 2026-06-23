@@ -603,6 +603,43 @@ describe('MessageHistory', () => {
       expect(savedMessages.every((m: any) => m.role !== 'system')).toBe(true);
     });
 
+    it('should not persist system messages even when passed directly to persistMessages', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({
+          id: 'thread-1',
+          title: 'Test Thread',
+          metadata: {},
+        }),
+        updateThread: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MemoryStorage;
+
+      const processor = new MessageHistory({
+        storage: mockStorage,
+      });
+
+      const messages: MastraDBMessage[] = [
+        {
+          role: 'system',
+          content: { format: 2, parts: [{ type: 'text', text: 'Runtime-only system instruction' }] },
+          id: 'msg-system',
+          createdAt: new Date(),
+        },
+        {
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'User message' }] },
+          id: 'msg-user',
+          createdAt: new Date(),
+        },
+      ];
+
+      await processor.persistMessages({ messages, threadId: 'thread-1' });
+
+      expect(mockStorage.saveMessages).toHaveBeenCalledWith({
+        messages: [expect.objectContaining({ id: 'msg-user', role: 'user' })],
+      });
+    });
+
     it('should preserve dynamic system reminders in persisted non-system messages to avoid cache invalidation and re-injection', async () => {
       const mockStorage = {
         saveMessages: vi.fn().mockResolvedValue(undefined),
@@ -789,6 +826,103 @@ describe('MessageHistory', () => {
 
       const savedMessages = (mockStorage.saveMessages as any).mock.calls[0][0].messages;
       expect(savedMessages[0].id).toBe('existing-id-123');
+    });
+
+    it('should preserve leading/trailing whitespace in text parts that have no working memory tags', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({
+          id: 'thread-1',
+          title: 'Test Thread',
+          metadata: {},
+        }),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        updateThread: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MemoryStorage;
+
+      const processor = new MessageHistory({
+        storage: mockStorage,
+      });
+
+      // Token-boundary splits produce parts with meaningful leading whitespace
+      // (e.g. ' access'). Trimming these corrupts the concatenated output.
+      const messages: MastraDBMessage[] = [
+        {
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'You can' },
+              { type: 'text', text: ' access' },
+              { type: 'text', text: ' the data.' },
+            ],
+          },
+          id: 'msg-1',
+          createdAt: new Date('2024-01-01T00:00:01Z'),
+        },
+      ];
+
+      const messageList = new MessageList().add(messages, `response`);
+      await processor.processOutputResult({
+        messageList,
+        messages,
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      const savedMessages = (mockStorage.saveMessages as any).mock.calls[0][0].messages;
+      const savedParts = savedMessages[0].content.parts.filter((p: any) => p.type === 'text');
+      expect(savedParts.map((p: any) => p.text)).toEqual(['You can', ' access', ' the data.']);
+      expect(savedParts.map((p: any) => p.text).join('')).toBe('You can access the data.');
+    });
+
+    it('should strip working memory tags and trim only the parts that contained tags', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({
+          id: 'thread-1',
+          title: 'Test Thread',
+          metadata: {},
+        }),
+        listMessages: vi.fn().mockResolvedValue({ messages: [], total: 0 }),
+        updateThread: vi.fn().mockResolvedValue(undefined),
+      } as unknown as MemoryStorage;
+
+      const processor = new MessageHistory({
+        storage: mockStorage,
+      });
+
+      const messages: MastraDBMessage[] = [
+        {
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Saved.\n<working_memory>secret</working_memory>' },
+              { type: 'text', text: ' untouched ' },
+            ],
+          },
+          id: 'msg-1',
+          createdAt: new Date('2024-01-01T00:00:01Z'),
+        },
+      ];
+
+      const messageList = new MessageList().add(messages, `response`);
+      await processor.processOutputResult({
+        messageList,
+        messages,
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      const savedMessages = (mockStorage.saveMessages as any).mock.calls[0][0].messages;
+      const savedParts = savedMessages[0].content.parts.filter((p: any) => p.type === 'text');
+      // The part with a tag is stripped and trimmed; the untouched part keeps its whitespace.
+      expect(savedParts.map((p: any) => p.text)).toEqual(['Saved.', ' untouched ']);
     });
   });
 });

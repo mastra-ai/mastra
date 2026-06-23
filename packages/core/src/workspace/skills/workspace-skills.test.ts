@@ -288,6 +288,30 @@ describe('WorkspaceSkillsImpl', () => {
       });
     });
 
+    it('should preserve user-invocable metadata in list results', async () => {
+      const filesystem = createMockFilesystem({
+        'skills/test-skill/SKILL.md': `---
+name: test-skill
+description: A test skill for unit testing
+user-invocable: false
+---
+
+# Test Skill
+`,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills'],
+      });
+
+      const result = await skills.list();
+      expect(result[0]).toMatchObject({
+        name: 'test-skill',
+        'user-invocable': false,
+      });
+    });
+
     it('should discover skills from multiple paths', async () => {
       const filesystem = createMockFilesystem({
         'skills/test-skill/SKILL.md': VALID_SKILL_MD,
@@ -2951,5 +2975,63 @@ Premium instructions.
         );
       }
     }, 30_000);
+  });
+
+  describe('Windows path handling', () => {
+    const MY_SKILL_MD = `---
+name: my-skill
+description: A skill referenced by an absolute path
+---
+
+# My Skill
+`;
+
+    it('discovers a skill added by a Windows directory path with the correct name', async () => {
+      const filesystem = createMockFilesystem({
+        'C:\\Users\\me\\skills\\my-skill/SKILL.md': MY_SKILL_MD,
+      });
+      const skills = new WorkspaceSkillsImpl({ source: filesystem, skills: [] });
+
+      await skills.addSkill('C:\\Users\\me\\skills\\my-skill');
+
+      const result = await skills.get('my-skill');
+      expect(result?.name).toBe('my-skill');
+    });
+
+    it('discovers a skill added by a Windows SKILL.md file path', async () => {
+      const filesystem = createMockFilesystem({
+        'C:\\Users\\me\\skills\\my-skill\\SKILL.md': MY_SKILL_MD,
+      });
+      const skills = new WorkspaceSkillsImpl({ source: filesystem, skills: [] });
+
+      await skills.addSkill('C:\\Users\\me\\skills\\my-skill\\SKILL.md');
+
+      const result = await skills.get('my-skill');
+      expect(result?.name).toBe('my-skill');
+    });
+
+    it('classifies a Windows node_modules path as an external skill', async () => {
+      const filesystem = createMockFilesystem({
+        'C:\\proj\\node_modules\\my-pkg\\my-skill/SKILL.md': MY_SKILL_MD,
+      });
+      const skills = new WorkspaceSkillsImpl({ source: filesystem, skills: [] });
+
+      await skills.addSkill('C:\\proj\\node_modules\\my-pkg\\my-skill');
+
+      const result = await skills.get('my-skill');
+      expect(result?.source.type).toBe('external');
+    });
+
+    it('still resolves POSIX directory paths (regression guard)', async () => {
+      const filesystem = createMockFilesystem({
+        'skills/my-skill/SKILL.md': MY_SKILL_MD,
+      });
+      const skills = new WorkspaceSkillsImpl({ source: filesystem, skills: [] });
+
+      await skills.addSkill('skills/my-skill');
+
+      const result = await skills.get('my-skill');
+      expect(result?.name).toBe('my-skill');
+    });
   });
 });

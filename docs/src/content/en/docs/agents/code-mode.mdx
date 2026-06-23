@@ -1,0 +1,144 @@
+---
+title: "Code mode | Agents"
+description: "Let an agent run multi-tool computations in a sandbox and return a single, more accurate response."
+packages:
+  - "@mastra/core"
+---
+
+# Code mode
+
+**Added in:** `@mastra/core@1.38.0`
+
+:::experimental
+
+This feature is in alpha. Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
+Code mode lets an agent run multi-tool computations in an isolated sandbox and return the result as a single, more accurate response. Instead of calling tools one turn at a time, the model writes a tailored function for the user query that orchestrates your existing tools as `external_*` functions, reduces or aggregates their results, and returns one structured answer.
+
+[`createCodeMode()`](/reference/tools/create-code-mode) returns this tool with the default `id` of `execute_typescript`. The `id` is configurable, so an agent can have several code mode tools at once, each scoped to a different set of tools (see [Scoping tools across multiple code tools](#scoping-tools-across-multiple-code-tools)).
+
+## When to use code mode
+
+Use code mode when an agent touches multiple tools to answer a user query or perform a complex computation:
+
+- Fewer round-trips: A multi-tool query runs in one tool call instead of repeating the agentic loop for every tool decision.
+- Smaller context: The function can reduce or aggregate large tool responses before returning them to the agent.
+- Correct math: Sums, averages, and other arithmetic run as JavaScript, not as token prediction.
+- Planning up front: Filtering, aggregation, and branching happen inside the function rather than across separate turns.
+
+## How it works
+
+Without code mode, multi-tool queries can run the agentic loop several times: the model chooses a tool, reads the result, chooses again, and repeats. Each turn adds the full tool response to the agent's context window which can lead to poorer reasoning and increased token usage.
+
+With code mode, your tools keep running on the host with full validation, request context, and tracing. Only the model's orchestration code runs in the sandbox. Each `external_*` call is bridged back to the real tool on the host, and the function can reduce or aggregate results before returning one response to the agent.
+
+The function runs in a [Workspace sandbox](/docs/workspace/overview). A sandbox is required, because code mode runs model-authored code and the execution boundary must be chosen deliberately. Pass one via `sandbox`, or run the agent in a workspace that provides one. To execute on the host machine, pass `new LocalSandbox()` explicitly. This runs the function as a host `node` process with host privileges, so only use it for trusted or local development.
+
+## Quickstart
+
+`createCodeMode()` returns the tool plus generated instructions. With no `id`, the tool is named `execute_typescript`. Add both to your agent:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { createCodeMode, createTool } from '@mastra/core/tools'
+import { LocalSandbox } from '@mastra/core/workspace'
+import { z } from 'zod'
+
+const getTopProducts = createTool({
+  id: 'getTopProducts',
+  description: 'Get top selling products',
+  inputSchema: z.object({ limit: z.number() }),
+  outputSchema: z.object({
+    products: z.array(z.object({ id: z.string(), name: z.string(), totalSales: z.number() })),
+  }),
+  execute: async ({ limit }) => fetchTopProducts(limit),
+})
+
+const getProductRatings = createTool({
+  id: 'getProductRatings',
+  description: 'Get ratings for a product',
+  inputSchema: z.object({ productId: z.string() }),
+  outputSchema: z.object({ ratings: z.array(z.object({ score: z.number() })) }),
+  execute: async ({ productId }) => fetchRatings(productId),
+})
+
+const { tool, instructions } = createCodeMode({
+  tools: { getTopProducts, getProductRatings },
+  sandbox: new LocalSandbox(), // required; runs on the host — see "How it works"
+})
+
+const agent = new Agent({
+  name: 'shop-assistant',
+  instructions: ['You are a helpful shopping assistant.', instructions],
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: { execute_typescript: tool },
+})
+```
+
+Asked "What are the top 5 products and the average rating for each?", the model emits one `execute_typescript` call instead of many separate tool calls:
+
+```typescript
+const top = await external_getTopProducts({ limit: 5 })
+const ratings = await Promise.all(
+  top.products.map(p => external_getProductRatings({ productId: p.id })),
+)
+return top.products.map((product, i) => {
+  const scores = ratings[i].ratings.map(r => r.score)
+  const avg = scores.reduce((sum, s) => sum + s, 0) / scores.length
+  return {
+    name: product.name,
+    sales: product.totalSales,
+    averageRating: Math.round(avg * 100) / 100,
+  }
+})
+```
+
+All five rating lookups run in parallel, the averages are computed in JavaScript, and the agent receives one structured result.
+
+For `createCodeMode()` to work well, keep these tips in mind:
+
+- Keep tools focused, so each does one thing well and the model composes them in code.
+- Code mode helps most when calls can be parallelized with `Promise.all`.
+
+:::note
+
+Visit the [`createCodeMode()` reference](/reference/tools/create-code-mode) for configuration options, return values, result shape, and instructions inspection.
+
+:::
+
+## Scoping tools across multiple code tools
+
+`createCodeMode()` captures its own allow-list. Call it more than once to give an agent several code tools, each scoped to a different subset of tools. It can only call the `external_*` functions for the tools passed to its own `createCodeMode()` call, so the subsets stay isolated.
+
+Give each tool a distinct `id` so their ids don't collide, and add each tool's instructions to the agent:
+
+```typescript
+const sales = createCodeMode({
+  id: 'sales_code',
+  tools: { listRecentOrders, getCustomer },
+  sandbox,
+})
+
+const inventory = createCodeMode({
+  id: 'inventory_code',
+  tools: { listProducts, getSupplier },
+  sandbox,
+})
+
+const agent = new Agent({
+  name: 'ops-assistant',
+  instructions: ['You are an ops assistant.', sales.instructions, inventory.instructions],
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: { sales_code: sales.tool, inventory_code: inventory.tool },
+})
+```
+
+The generated code for `sales_code` can't call an inventory tool, and the reverse holds too. Use this for least-privilege scoping and to keep each tool's prompt surface small.
+
+## Related
+
+- [createCodeMode() reference](/reference/tools/create-code-mode)
+- [Tools](/docs/agents/using-tools)
+- [Workspace overview](/docs/workspace/overview)
