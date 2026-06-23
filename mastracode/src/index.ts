@@ -123,7 +123,6 @@ function isECONNRESETError(error: unknown): boolean {
   return false;
 }
 
-
 function applyEffectiveDefaultsToModes(modes: HarnessMode[], effectiveDefaults: Record<string, string>): HarnessMode[] {
   return modes.map(mode => {
     const savedModel = effectiveDefaults[mode.id];
