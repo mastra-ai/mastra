@@ -1,8 +1,7 @@
-// @vitest-environment jsdom
 import { TooltipProvider } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
@@ -63,6 +62,9 @@ const stubAgentDependents = (agentId: string, payload: DependentsStub = { depend
 describe('VisibilitySelect', () => {
   beforeEach(() => {
     stubAgentDependents(AGENT_ID);
+    // The visibility mutation reads auth capabilities to gate workspace writes;
+    // default to auth-disabled so permission checks pass without network noise.
+    server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })));
   });
 
   afterEach(() => {
@@ -159,9 +161,7 @@ describe('VisibilitySelect', () => {
     );
 
     fireEvent.click(screen.getByTestId('agent-builder-visibility-add'));
-    await act(async () => {
-      fireEvent.click(await screen.findByTestId('agent-builder-visibility-confirm-yes'));
-    });
+    fireEvent.click(await screen.findByTestId('agent-builder-visibility-confirm-yes'));
 
     await waitFor(() => {
       expect(capturedBody).toEqual({ visibility: 'public' });
@@ -209,9 +209,7 @@ describe('VisibilitySelect', () => {
     );
 
     fireEvent.click(screen.getByTestId('agent-builder-visibility-add'));
-    await act(async () => {
-      fireEvent.click(await screen.findByTestId('agent-builder-visibility-confirm-yes'));
-    });
+    fireEvent.click(await screen.findByTestId('agent-builder-visibility-confirm-yes'));
 
     await waitFor(() => {
       expect(screen.queryByTestId('agent-builder-visibility-confirm-dialog')).toBeNull();

@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.25.0-alpha.1",
+  "version": "0.25.0-alpha.2",
   "description": "",
   "type": "module",
   "files": [
@@ -40,6 +40,16 @@
       "require": {
         "types": "./dist/tui/index.d.ts",
         "default": "./dist/tui.cjs"
+      }
+    },
+    "./acp": {
+      "import": {
+        "types": "./dist/acp.d.ts",
+        "default": "./dist/acp.js"
+      },
+      "require": {
+        "types": "./dist/acp.d.ts",
+        "default": "./dist/acp.cjs"
       }
     },
     "./package.json": "./package.json"

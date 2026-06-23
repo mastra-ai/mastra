@@ -1,16 +1,15 @@
 import {
   Button,
-  Column,
-  Columns,
   MainContentContent,
   MainContentLayout,
-  MainHeader,
   PermissionDenied,
   SessionExpired,
   TextAndIcon,
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
+import { Column, Columns } from '@mastra/playground-ui/components/Columns';
+import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { ArrowLeft, ScaleIcon, HistoryIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router';

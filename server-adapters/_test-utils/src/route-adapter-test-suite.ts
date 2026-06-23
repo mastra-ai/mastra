@@ -156,7 +156,14 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       '/tool-providers/:providerId/connections',
     ];
     // Routes under these prefixes are excluded (e.g. /datasets needs a datasets storage domain)
-    const excludedPrefixes = ['/datasets'];
+    const excludedPrefixes = [
+      '/datasets',
+      // Harness routes resolve a registered Harness via mastra.getHarness(id) and
+      // operate on a live session keyed by resourceId. The generic test context
+      // registers no harness, so every route fails closed with 404. Behavior is
+      // covered by packages/server/src/server/handlers/harness.test.ts.
+      '/harness',
+    ];
     const isExcluded = (r: ServerRoute) =>
       r.deprecated ||
       r.responseType === 'mcp-http' ||

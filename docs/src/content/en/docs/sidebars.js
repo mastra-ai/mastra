@@ -66,6 +66,47 @@ const sidebars = {
           id: 'studio/observability',
           label: 'Observability',
         },
+        {
+          type: 'category',
+          label: 'Editor',
+          items: [
+            {
+              type: 'doc',
+              id: 'editor/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'editor/tools',
+              label: 'Tools',
+            },
+            {
+              type: 'doc',
+              id: 'editor/prompts',
+              label: 'Prompts',
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Agent Builder',
+          customProps: {
+            tags: ['new'],
+          },
+          items: [
+            { type: 'doc', id: 'agent-builder/overview', label: 'Overview' },
+            { type: 'doc', id: 'agent-builder/configuration', label: 'Configuration' },
+            { type: 'doc', id: 'agent-builder/access-control', label: 'Access control' },
+            { type: 'doc', id: 'agent-builder/model-policy', label: 'Model policy' },
+            { type: 'doc', id: 'agent-builder/memory', label: 'Memory' },
+            { type: 'doc', id: 'agent-builder/workspace', label: 'Workspace' },
+            { type: 'doc', id: 'agent-builder/browser', label: 'Browser' },
+            { type: 'doc', id: 'agent-builder/channels', label: 'Channels' },
+            { type: 'doc', id: 'agent-builder/integrations', label: 'Tool providers' },
+            { type: 'doc', id: 'agent-builder/skill-registries', label: 'Skill registries' },
+            { type: 'doc', id: 'agent-builder/deploying', label: 'Deploying' },
+          ],
+        },
       ],
     },
     {
@@ -123,6 +164,14 @@ const sidebars = {
           type: 'doc',
           id: 'agents/background-tasks',
           label: 'Background Tasks',
+        },
+        {
+          type: 'doc',
+          id: 'agents/durable-agents',
+          label: 'Durable Agents',
+          customProps: {
+            tags: ['beta'],
+          },
         },
         {
           type: 'doc',
@@ -286,78 +335,6 @@ const sidebars = {
           type: 'doc',
           id: 'workflows/scheduled-workflows',
           label: 'Scheduled Workflows',
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Editor',
-      items: [
-        {
-          type: 'doc',
-          id: 'editor/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'editor/tools',
-          label: 'Tools',
-        },
-        {
-          type: 'doc',
-          id: 'editor/prompts',
-          label: 'Prompts',
-        },
-        {
-          type: 'category',
-          label: 'Agent Builder',
-          customProps: {
-            tags: ['new'],
-          },
-          items: [
-            { type: 'doc', id: 'agent-builder/overview', label: 'Overview' },
-            { type: 'doc', id: 'agent-builder/configuration', label: 'Configuration' },
-            { type: 'doc', id: 'agent-builder/access-control', label: 'Access control' },
-            { type: 'doc', id: 'agent-builder/model-policy', label: 'Model policy' },
-            { type: 'doc', id: 'agent-builder/memory', label: 'Memory' },
-            { type: 'doc', id: 'agent-builder/workspace', label: 'Workspace' },
-            { type: 'doc', id: 'agent-builder/browser', label: 'Browser' },
-            { type: 'doc', id: 'agent-builder/channels', label: 'Channels' },
-            { type: 'doc', id: 'agent-builder/integrations', label: 'Tool providers' },
-            { type: 'doc', id: 'agent-builder/skill-registries', label: 'Skill registries' },
-            { type: 'doc', id: 'agent-builder/deploying', label: 'Deploying' },
-          ],
-        },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Streaming',
-      items: [
-        {
-          type: 'doc',
-          id: 'streaming/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'streaming/events',
-          label: 'Events',
-        },
-        {
-          type: 'doc',
-          id: 'streaming/tool-streaming',
-          label: 'Tool Streaming',
-        },
-        {
-          type: 'doc',
-          id: 'streaming/workflow-streaming',
-          label: 'Workflow Streaming',
-        },
-        {
-          type: 'doc',
-          id: 'streaming/background-task-streaming',
-          label: 'Background Task Streaming',
         },
       ],
     },
@@ -848,50 +825,6 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Mastra platform',
-      items: [
-        {
-          type: 'doc',
-          id: 'mastra-platform/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/observability',
-          label: 'Observability',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/studio',
-          label: 'Studio',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/server',
-          label: 'Server',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/github',
-          label: 'GitHub integration',
-          customProps: {
-            tags: ['new'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/database',
-          label: 'Hosted databases',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/configuration',
-          label: 'Configuration',
-        },
-      ],
-    },
-    {
-      type: 'category',
       label: 'RAG',
       items: [
         {
@@ -949,23 +882,6 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Build with AI',
-      collapsed: true,
-      items: [
-        {
-          type: 'doc',
-          id: 'build-with-ai/skills',
-          label: 'Skills',
-        },
-        {
-          type: 'doc',
-          id: 'build-with-ai/mcp-docs-server',
-          label: 'MCP Docs Server',
-        },
-      ],
-    },
-    {
-      type: 'category',
       label: 'Community',
       items: [
         {
@@ -982,6 +898,52 @@ const sidebars = {
           type: 'doc',
           id: 'community/discord',
           label: 'Discord',
+        },
+      ],
+    },
+  ],
+  platformSidebar: [
+    {
+      type: 'category',
+      label: 'Mastra platform',
+      items: [
+        {
+          type: 'doc',
+          id: 'mastra-platform/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/observability',
+          label: 'Observability',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/studio',
+          label: 'Studio',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/server',
+          label: 'Server',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/github',
+          label: 'GitHub integration',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/database',
+          label: 'Hosted databases',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/configuration',
+          label: 'Configuration',
         },
       ],
     },
