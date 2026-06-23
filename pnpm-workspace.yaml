@@ -221,6 +221,13 @@ allowBuilds:
   '@datadog/native-metrics': false
   '@datadog/pprof': false
   '@ffmpeg-installer/darwin-arm64': false
+  '@ffmpeg-installer/darwin-x64': false
+  '@ffmpeg-installer/linux-arm': false
+  '@ffmpeg-installer/linux-arm64': false
+  '@ffmpeg-installer/linux-ia32': false
+  '@ffmpeg-installer/linux-x64': false
+  '@ffmpeg-installer/win32-ia32': false
+  '@ffmpeg-installer/win32-x64': false
   '@fingerprintjs/fingerprintjs-pro-react': false
   '@firebase/util': false
   '@google/genai': false
