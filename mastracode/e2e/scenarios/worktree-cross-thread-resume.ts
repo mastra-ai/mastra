@@ -30,8 +30,7 @@ function gitInDir(args: string[], cwd: string): void {
  */
 export const worktreeCrossThreadResumeScenario: McE2eScenario = {
   name: 'worktree-cross-thread-resume',
-  description:
-    'Verify that MC in a worktree does NOT auto-resume a thread tagged for a different worktree.',
+  description: 'Verify that MC in a worktree does NOT auto-resume a thread tagged for a different worktree.',
   testName: 'does not auto-resume a thread from a different worktree',
   env() {
     return { MASTRA_RESOURCE_ID: RESOURCE_ID };

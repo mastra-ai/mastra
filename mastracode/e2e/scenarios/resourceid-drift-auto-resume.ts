@@ -41,8 +41,7 @@ function gitInDir(args: string[], cwd: string): void {
  */
 export const resourceidDriftAutoResumeScenario: McE2eScenario = {
   name: 'resourceid-drift-auto-resume',
-  description:
-    'Verify that MC auto-resumes a thread whose resourceId drifted, falling back to projectPath metadata.',
+  description: 'Verify that MC auto-resumes a thread whose resourceId drifted, falling back to projectPath metadata.',
   testName: 'auto-resumes thread after resourceId drift via projectPath fallback',
   env() {
     return { MASTRA_RESOURCE_ID: NEW_RESOURCE_ID };

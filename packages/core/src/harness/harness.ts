@@ -397,9 +397,7 @@ export class Harness<TState = {}> {
     const threads = await session.thread.list();
 
     // Step 1: narrow to threads whose projectPath matches the current working directory.
-    let candidates = projectPath
-      ? threads.filter(t => (t.metadata as any)?.projectPath === projectPath)
-      : threads;
+    let candidates = projectPath ? threads.filter(t => (t.metadata as any)?.projectPath === projectPath) : threads;
 
     // Step 2: cross-resource fallback — when no threads matched resourceId + projectPath,
     // query across ALL resources for orphaned threads tagged with this projectPath.
