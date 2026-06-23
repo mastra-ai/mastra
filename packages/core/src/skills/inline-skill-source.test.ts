@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import { defineSkill } from './define-skill';
+import { createSkill } from './create-skill';
 import { InlineSkillSource } from './inline-skill-source';
 
 describe('InlineSkillSource', () => {
-  const reviewSkill = defineSkill({
+  const reviewSkill = createSkill({
     name: 'code-review',
     description: 'Use when reviewing code.',
     instructions: '## Code Review\nCheck for correctness and style.',
@@ -14,7 +14,7 @@ describe('InlineSkillSource', () => {
     },
   });
 
-  const simpleSkill = defineSkill({
+  const simpleSkill = createSkill({
     name: 'simple-skill',
     description: 'A simple skill.',
     instructions: 'Do the thing.',

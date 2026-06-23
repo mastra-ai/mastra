@@ -1,14 +1,14 @@
 /**
- * defineSkill() — factory for creating inline skills in code.
+ * createSkill() — factory for creating inline skills in code.
  *
  * Creates a Skill object that can be passed to an Agent's `skills` config
  * without requiring a Workspace or filesystem.
  *
  * @example
  * ```typescript
- * import { defineSkill } from '@mastra/core/skills';
+ * import { createSkill } from '@mastra/core/skills';
  *
- * const reviewSkill = defineSkill({
+ * const reviewSkill = createSkill({
  *   name: 'code-review',
  *   description: 'Use when reviewing code changes.',
  *   instructions: `
@@ -35,7 +35,7 @@ import type { InlineSkill, InlineSkillInput } from './types';
  *
  * @throws Error if the skill metadata fails validation
  */
-export function defineSkill(input: InlineSkillInput): InlineSkill {
+export function createSkill(input: InlineSkillInput): InlineSkill {
   const { name, description, instructions, license, compatibility, metadata, references } = input;
 
   // Validate metadata (same checks as filesystem-discovered skills)
@@ -71,7 +71,7 @@ export function defineSkill(input: InlineSkillInput): InlineSkill {
 }
 
 /**
- * Type guard: is this skill an inline skill (from defineSkill)?
+ * Type guard: is this skill an inline skill (from createSkill)?
  */
 export function isInlineSkill(skill: unknown): skill is InlineSkill {
   return typeof skill === 'object' && skill !== null && '__inline' in skill && (skill as InlineSkill).__inline === true;

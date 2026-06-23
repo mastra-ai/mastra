@@ -1,15 +1,15 @@
 /**
  * Agent-Level Skills Module
  *
- * Provides `defineSkill()` and related utilities for attaching skills
+ * Provides `createSkill()` and related utilities for attaching skills
  * directly to an Agent without requiring a full Workspace.
  *
  * @example
  * ```typescript
- * import { defineSkill } from '@mastra/core/skills';
+ * import { createSkill } from '@mastra/core/skills';
  * import { Agent } from '@mastra/core/agent';
  *
- * const reviewSkill = defineSkill({
+ * const reviewSkill = createSkill({
  *   name: 'code-review',
  *   description: 'Use when reviewing code changes.',
  *   instructions: 'When reviewing code...',
@@ -25,7 +25,7 @@
  */
 
 export { resolveAgentSkills, mergeWorkspaceSkills } from './agent-skills-resolver';
-export { defineSkill, isInlineSkill } from './define-skill';
+export { createSkill, isInlineSkill } from './create-skill';
 export { InlineSkillSource } from './inline-skill-source';
 export type {
   InlineSkillInput,

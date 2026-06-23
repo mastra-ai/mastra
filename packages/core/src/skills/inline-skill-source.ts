@@ -1,7 +1,7 @@
 /**
  * InlineSkillSource — in-memory SkillSource for code-defined skills.
  *
- * Serves skills created via `defineSkill()` without any filesystem dependency.
+ * Serves skills created via `createSkill()` without any filesystem dependency.
  * Implements the SkillSource interface so it can be used with WorkspaceSkillsImpl.
  *
  * Directory layout emulation:

@@ -9,7 +9,7 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { defineSkill } from '../../skills/define-skill';
+import { createSkill } from '../../skills/create-skill';
 import type { Skill, SkillMetadata, WorkspaceSkills } from '../../workspace/skills';
 import type { Workspace } from '../../workspace/workspace';
 import { Agent } from '../index';
@@ -128,7 +128,7 @@ describe('Agent-level skills wiring', () => {
         instructions: 'You are an agent with inline skills.',
         model: mockModel,
         skills: [
-          defineSkill({
+          createSkill({
             name: 'code-review',
             description: 'Reviews code for quality.',
             instructions: '# Code Review\n\nCheck for bugs.',
@@ -155,7 +155,7 @@ describe('Agent-level skills wiring', () => {
         instructions: 'You are an agent.',
         model: mockModel,
         skills: [
-          defineSkill({
+          createSkill({
             name: 'testing',
             description: 'Runs tests.',
             instructions: 'Run the test suite.',
@@ -186,7 +186,7 @@ describe('Agent-level skills wiring', () => {
         model: mockModel,
         workspace: createMockWorkspace(),
         skills: [
-          defineSkill({
+          createSkill({
             name: 'deploy',
             description: 'Deploys the app.',
             instructions: 'Run the deploy script.',
@@ -251,7 +251,7 @@ describe('Agent-level skills wiring', () => {
           sandbox: undefined,
         } as unknown as Workspace,
         skills: [
-          defineSkill({
+          createSkill({
             name: 'shared-name',
             description: 'inline version wins',
             instructions: 'inline instructions',

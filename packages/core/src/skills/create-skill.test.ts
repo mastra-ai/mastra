@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 
-import { defineSkill, isInlineSkill } from './define-skill';
+import { createSkill, isInlineSkill } from './create-skill';
 
-describe('defineSkill', () => {
+describe('createSkill', () => {
   it('creates a valid inline skill with minimal input', () => {
-    const skill = defineSkill({
+    const skill = createSkill({
       name: 'test-skill',
       description: 'A test skill for unit testing.',
       instructions: 'Follow these instructions carefully.',
@@ -23,7 +23,7 @@ describe('defineSkill', () => {
   });
 
   it('includes reference keys and contents', () => {
-    const skill = defineSkill({
+    const skill = createSkill({
       name: 'review-skill',
       description: 'Code review skill.',
       instructions: 'Review the code.',
@@ -41,7 +41,7 @@ describe('defineSkill', () => {
   });
 
   it('includes optional metadata fields', () => {
-    const skill = defineSkill({
+    const skill = createSkill({
       name: 'full-skill',
       description: 'A fully configured skill.',
       instructions: 'Instructions here.',
@@ -59,7 +59,7 @@ describe('defineSkill', () => {
 
   it('throws on invalid skill name', () => {
     expect(() =>
-      defineSkill({
+      createSkill({
         name: 'INVALID_NAME',
         description: 'Bad name.',
         instructions: 'Instructions.',
@@ -69,7 +69,7 @@ describe('defineSkill', () => {
 
   it('throws on empty description', () => {
     expect(() =>
-      defineSkill({
+      createSkill({
         name: 'test-skill',
         description: '',
         instructions: 'Instructions.',
@@ -79,7 +79,7 @@ describe('defineSkill', () => {
 
   it('throws on name with consecutive hyphens', () => {
     expect(() =>
-      defineSkill({
+      createSkill({
         name: 'bad--name',
         description: 'A test skill.',
         instructions: 'Instructions.',
@@ -90,7 +90,7 @@ describe('defineSkill', () => {
 
 describe('isInlineSkill', () => {
   it('returns true for inline skills', () => {
-    const skill = defineSkill({
+    const skill = createSkill({
       name: 'test-skill',
       description: 'A test skill.',
       instructions: 'Instructions.',

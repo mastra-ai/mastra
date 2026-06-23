@@ -676,7 +676,7 @@ interface AgentConfigBase<
    * Skills that guide agent behavior — reusable instructions the model loads on demand.
    *
    * Accepts an array of path strings (pointing to SKILL.md directories on disk) and/or
-   * inline skills created with `defineSkill()`. Can also be a dynamic function that
+   * inline skills created with `createSkill()`. Can also be a dynamic function that
    * resolves skills per request.
    *
    * Skills work without a Workspace. When both `skills` and `workspace.skills` are
@@ -689,10 +689,10 @@ interface AgentConfigBase<
    *
    * @example Inline skills
    * ```typescript
-   * import { defineSkill } from '@mastra/core/skills';
+   * import { createSkill } from '@mastra/core/skills';
    *
    * skills: [
-   *   defineSkill({
+   *   createSkill({
    *     name: 'code-review',
    *     description: 'Use when reviewing code.',
    *     instructions: 'When reviewing code...',

@@ -1,7 +1,7 @@
 /**
  * Types for agent-level skills — skills without a Workspace.
  *
- * These types let users attach skills directly to an Agent via `defineSkill()`
+ * These types let users attach skills directly to an Agent via `createSkill()`
  * or filesystem paths, without needing a full Workspace with filesystem/sandbox.
  */
 
@@ -13,7 +13,7 @@ import type { Skill, SkillMetadata, SkillFormat, WorkspaceSkills } from '../work
 // =============================================================================
 
 /**
- * Input for `defineSkill()` — a code-defined skill with no filesystem dependency.
+ * Input for `createSkill()` — a code-defined skill with no filesystem dependency.
  */
 export interface InlineSkillInput {
   /** Skill name (1-64 chars, lowercase letters/numbers/hyphens) */
@@ -46,7 +46,7 @@ export interface InlineSkillInput {
 }
 
 /**
- * A fully resolved inline skill — the output of `defineSkill()`.
+ * A fully resolved inline skill — the output of `createSkill()`.
  * Implements the `Skill` interface so it can be used anywhere a Skill is expected.
  */
 export interface InlineSkill extends Skill {
@@ -79,7 +79,7 @@ export interface AgentSkillsContext {
  * ```typescript
  * skills: [
  *   './skills/review',
- *   defineSkill({ name: 'faq', description: '...', instructions: '...' }),
+ *   createSkill({ name: 'faq', description: '...', instructions: '...' }),
  * ]
  * ```
  *

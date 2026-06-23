@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
 
 import { resolveAgentSkills } from './agent-skills-resolver';
-import { defineSkill } from './define-skill';
+import { createSkill } from './create-skill';
 
 describe('resolveAgentSkills', () => {
   it('creates WorkspaceSkills from inline skills', async () => {
-    const skill = defineSkill({
+    const skill = createSkill({
       name: 'test-skill',
       description: 'A test skill.',
       instructions: 'Do the thing.',
@@ -21,13 +21,13 @@ describe('resolveAgentSkills', () => {
   });
 
   it('creates WorkspaceSkills from multiple inline skills', async () => {
-    const skill1 = defineSkill({
+    const skill1 = createSkill({
       name: 'skill-one',
       description: 'First skill.',
       instructions: 'Do step one.',
     });
 
-    const skill2 = defineSkill({
+    const skill2 = createSkill({
       name: 'skill-two',
       description: 'Second skill.',
       instructions: 'Do step two.',
@@ -42,7 +42,7 @@ describe('resolveAgentSkills', () => {
   });
 
   it('resolves skill details via get()', async () => {
-    const skill = defineSkill({
+    const skill = createSkill({
       name: 'detail-skill',
       description: 'Skill with details.',
       instructions: '# Detailed\nDo this and that.',
@@ -61,7 +61,7 @@ describe('resolveAgentSkills', () => {
   });
 
   it('resolves skill details via get() using path', async () => {
-    const skill = defineSkill({
+    const skill = createSkill({
       name: 'path-skill',
       description: 'Skill accessible by path.',
       instructions: 'Follow these steps.',
@@ -75,7 +75,7 @@ describe('resolveAgentSkills', () => {
   });
 
   it('returns null for non-existent skills', async () => {
-    const skill = defineSkill({
+    const skill = createSkill({
       name: 'only-skill',
       description: 'The only skill.',
       instructions: 'Do it.',
@@ -88,7 +88,7 @@ describe('resolveAgentSkills', () => {
   });
 
   it('supports has() check', async () => {
-    const skill = defineSkill({
+    const skill = createSkill({
       name: 'check-skill',
       description: 'Checkable skill.',
       instructions: 'Check this.',
@@ -101,7 +101,7 @@ describe('resolveAgentSkills', () => {
   });
 
   it('retrieves reference content', async () => {
-    const skill = defineSkill({
+    const skill = createSkill({
       name: 'ref-skill',
       description: 'Skill with references.',
       instructions: 'See references.',

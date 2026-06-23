@@ -28,9 +28,9 @@ Define a skill inline and attach it to an agent:
 
 ```typescript title="src/mastra/agents/index.ts"
 import { Agent } from '@mastra/core/agent'
-import { defineSkill } from '@mastra/core/skills'
+import { createSkill } from '@mastra/core/skills'
 
-const codeReview = defineSkill({
+const codeReview = createSkill({
   name: 'code-review',
   description: 'Use when reviewing code changes.',
   instructions: `
@@ -54,12 +54,12 @@ The agent automatically gets `skill`, `skill_read`, and `skill_search` tools so 
 
 ## Defining inline skills
 
-Use `defineSkill()` to create skills entirely in code:
+Use `createSkill()` to create skills entirely in code:
 
 ```typescript title="src/mastra/skills.ts"
-import { defineSkill } from '@mastra/core/skills'
+import { createSkill } from '@mastra/core/skills'
 
-export const releaseChecklist = defineSkill({
+export const releaseChecklist = createSkill({
   name: 'release-checklist',
   description: 'Use when preparing a release.',
   instructions: `
@@ -78,7 +78,7 @@ export const releaseChecklist = defineSkill({
 The `references` field bundles supporting documents that the agent can read with the `skill_read` tool, just like `references/` files in a filesystem skill.
 
 :::note
-Visit [`defineSkill()` reference](/reference/agents/defineSkill) for the full API.
+Visit [`createSkill()` reference](/reference/agents/createSkill) for the full API.
 :::
 
 ## Filesystem path skills
@@ -87,7 +87,7 @@ Point to skill directories on disk without a workspace:
 
 ```typescript title="src/mastra/agents/index.ts"
 import { Agent } from '@mastra/core/agent'
-import { defineSkill } from '@mastra/core/skills'
+import { createSkill } from '@mastra/core/skills'
 
 export const agent = new Agent({
   id: 'my-agent',
@@ -95,7 +95,7 @@ export const agent = new Agent({
   skills: [
     './skills/code-review', // path to a SKILL.md directory
     './skills/testing', // another filesystem skill
-    defineSkill({
+    createSkill({
       /* ... */
     }), // inline skill
   ],
@@ -110,15 +110,15 @@ For per-request skill resolution, pass a function:
 
 ```typescript title="src/mastra/agents/index.ts"
 import { Agent } from '@mastra/core/agent'
-import { defineSkill } from '@mastra/core/skills'
+import { createSkill } from '@mastra/core/skills'
 
-const devSkill = defineSkill({
+const devSkill = createSkill({
   name: 'dev-tools',
   description: 'Developer productivity tools.',
   instructions: '...',
 })
 
-const supportSkill = defineSkill({
+const supportSkill = createSkill({
   name: 'support-guide',
   description: 'Customer support guidelines.',
   instructions: '...',
@@ -146,14 +146,14 @@ When an agent has both `skills` and a workspace with skills configured, they mer
 ```typescript title="src/mastra/agents/index.ts"
 import { Agent } from '@mastra/core/agent'
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
-import { defineSkill } from '@mastra/core/skills'
+import { createSkill } from '@mastra/core/skills'
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   skills: ['skills'], // provides "code-review" skill
 })
 
-const customReview = defineSkill({
+const customReview = createSkill({
   name: 'code-review', // same name as workspace skill
   description: 'Custom review process.',
   instructions: '...',
@@ -194,7 +194,7 @@ Visit [`.skill()` reference](/reference/agents/skill) and [`.listSkills()` refer
 ## Related
 
 - [Workspace skills](/docs/workspace/skills)
-- [`defineSkill()` reference](/reference/agents/defineSkill)
+- [`createSkill()` reference](/reference/agents/createSkill)
 - [`.skill()` reference](/reference/agents/skill)
 - [`.listSkills()` reference](/reference/agents/listSkills)
 - [Agent skills specification](https://agentskills.io)

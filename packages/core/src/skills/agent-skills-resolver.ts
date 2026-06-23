@@ -11,7 +11,7 @@ import { LocalSkillSource } from '../workspace/skills/local-skill-source';
 import type { SkillSource, SkillSourceEntry, SkillSourceStat } from '../workspace/skills/skill-source';
 import type { WorkspaceSkills } from '../workspace/skills/types';
 import { WorkspaceSkillsImpl } from '../workspace/skills/workspace-skills';
-import { isInlineSkill } from './define-skill';
+import { isInlineSkill } from './create-skill';
 import { InlineSkillSource } from './inline-skill-source';
 import type { InlineSkill, SkillInput } from './types';
 
