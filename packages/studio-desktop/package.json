@@ -77,11 +77,14 @@
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
-      "icon": "build/icon.icns",
+      "icon": "build/mastra.icon",
       "target": [
         "dmg",
         "zip"
       ]
+    },
+    "dmg": {
+      "icon": "build/icon.icns"
     },
     "win": {
       "icon": "build/icon.ico",
