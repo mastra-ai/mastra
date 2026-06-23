@@ -1,5 +1,15 @@
 # mastra
 
+## 1.15.1-alpha.2
+
+### Patch Changes
+
+- Fixed server logs being hidden under `mastra start`. The command captured the running server's stderr into a buffer and only printed it if the process exited with an error, so warnings and errors from a healthy, running server (including channel and adapter logs) never appeared in the terminal. The server's stderr is now streamed through live as it happens, matching the behavior of `mastra worker`. ([#17720](https://github.com/mastra-ai/mastra/pull/17720))
+
+- Updated dependencies [[`6a1428a`](https://github.com/mastra-ai/mastra/commit/6a1428a23133fc070fc6c1caa08d28f3ba4fe5ff), [`7f51548`](https://github.com/mastra-ai/mastra/commit/7f515481213780be7047cef00640b9d35f3d545c)]:
+  - @mastra/core@1.46.0-alpha.2
+  - @mastra/deployer@1.46.0-alpha.2
+
 ## 1.15.1-alpha.1
 
 ### Patch Changes

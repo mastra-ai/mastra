@@ -141,7 +141,7 @@ describe('handleResourceCommand', () => {
       await handleResourceCommand(ctx, ['other-resource']);
 
       expect(harness.setResourceId).toHaveBeenCalledWith(expect.anything(), { resourceId: 'other-resource' });
-      expect(harness.session.thread.switch).toHaveBeenCalledWith({ threadId: latestId });
+      expect(harness.session.thread.switch).toHaveBeenCalledWith({ threadId: latestId, emitEvent: false });
       expect(ctx.state.pendingNewThread).toBe(false);
       expect(ctx.renderExistingMessages).toHaveBeenCalled();
       expect(infoMessages[0]).toContain('resumed thread: latest-thread');
