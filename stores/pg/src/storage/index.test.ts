@@ -695,4 +695,35 @@ describe('PostgresStore.init() — concurrency & disableInit (issue #18282)', ()
       await pool.end();
     }
   });
+
+  it('retries init() after a transient connect() failure (#initPromise is reset)', async () => {
+    // A failing pool.connect() during boot must not permanently poison the
+    // store: the cached #initPromise is reset on failure so a later init()
+    // can re-run. Reject the first connect(), then fall through to the real one.
+    const schemaName = `it18282_retry_${Date.now()}`;
+    const pool = new Pool({ connectionString });
+    const originalConnect = pool.connect.bind(pool);
+    let failNext = true;
+    (pool as any).connect = (...args: any[]) => {
+      if (failNext) {
+        failNext = false;
+        return Promise.reject(new Error('transient connect failure'));
+      }
+      return (originalConnect as any)(...args);
+    };
+    const store = new PostgresStore({ id: `pg-18282-retry-${Date.now()}`, pool, schemaName });
+
+    try {
+      // First init() hits the failing connect() and must reject.
+      await expect(store.init()).rejects.toThrow();
+
+      // A subsequent init() must succeed (the rejected promise was cleared).
+      await expect(store.init()).resolves.toBeDefined();
+      expect(await tableExists(schemaName)).toBe(true);
+    } finally {
+      await dropSchema(schemaName);
+      await store.close();
+      await pool.end();
+    }
+  });
 });

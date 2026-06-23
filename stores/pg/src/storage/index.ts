@@ -14,7 +14,7 @@ import {
 import type { PostgresStoreConfig } from '../shared/config';
 import { buildConnectionStringPoolConfig } from '../shared/pool-config';
 import { PinnedClientAdapter, PoolAdapter, RoutingDbClient } from './client';
-import type { DbClient } from './client';
+import type { DbClient, PoolClient } from './client';
 import type { PgDomainClientConfig } from './db';
 import { getSchemaName } from './db';
 import { AgentsPG } from './domains/agents';
@@ -305,10 +305,14 @@ export class PostgresStore extends MastraCompositeStore {
     //   - transaction-pooler budget exhaustion under concurrent DDL fan-out
     //   - inter-statement lock contention across domains (issue #17679)
     // Runtime queries continue to use the pool normally once init completes.
-    const pinnedClient = await this.#pool.connect();
-    const pinned = new PinnedClientAdapter(this.#pool, pinnedClient);
+    // connect() runs inside the try so a failing connection (e.g. a network
+    // blip during boot) is caught below and resets #initPromise, keeping
+    // init() retryable instead of permanently rejecting.
+    let pinnedClient: PoolClient | undefined;
 
     try {
+      pinnedClient = await this.#pool.connect();
+      const pinned = new PinnedClientAdapter(this.#pool, pinnedClient);
       this.#db.pin(pinned);
       await super.init();
       // Only mark initialized after schema creation actually finishes so a
@@ -333,8 +337,12 @@ export class PostgresStore extends MastraCompositeStore {
         error,
       );
     } finally {
-      this.#db.unpin();
-      pinnedClient.release();
+      // Only unpin/release when connect() actually handed us a client; on a
+      // failed connect() pinnedClient is undefined and pin() never ran.
+      if (pinnedClient) {
+        this.#db.unpin();
+        pinnedClient.release();
+      }
     }
   }
 
