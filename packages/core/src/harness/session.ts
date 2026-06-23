@@ -803,6 +803,29 @@ export class SessionStream {
   #subscription: AgentThreadSubscription<any> | null = null;
   /** Dedup key (`agentId:resourceId:threadId`) for the open subscription, or null. */
   #key: string | null = null;
+  readonly #teardownWaiters = new Set<() => void>();
+
+  #notifyTeardown(): void {
+    const waiters = [...this.#teardownWaiters];
+    this.#teardownWaiters.clear();
+    for (const waiter of waiters) waiter();
+  }
+
+  waitForTeardown(signal: AbortSignal): Promise<void> {
+    return new Promise(resolve => {
+      const done = () => {
+        signal.removeEventListener('abort', abort);
+        resolve();
+      };
+      const abort = () => {
+        this.#teardownWaiters.delete(done);
+        resolve();
+      };
+      if (signal.aborted) return resolve();
+      this.#teardownWaiters.add(done);
+      signal.addEventListener('abort', abort, { once: true });
+    });
+  }
 
   /** Build the dedup key identifying a subscription to `threadId` for `agent`. */
   static keyFor({ agent, resourceId, threadId }: { agent: Agent; resourceId: string; threadId: string }): string {
@@ -852,6 +875,7 @@ export class SessionStream {
     this.#subscription?.unsubscribe();
     this.#subscription = null;
     this.#key = null;
+    this.#notifyTeardown();
   }
 
   /** Fully tear down the live subscription: abort, unsubscribe, and clear. */
@@ -860,6 +884,7 @@ export class SessionStream {
     this.#subscription?.unsubscribe();
     this.#subscription = null;
     this.#key = null;
+    this.#notifyTeardown();
   }
 }
 
@@ -1120,6 +1145,29 @@ export class SessionRun {
   #abortController: AbortController | null = null;
   /** Whether an abort has been requested for the current run. */
   #abortRequested = false;
+  readonly #teardownWaiters = new Set<() => void>();
+
+  #notifyTeardown(): void {
+    const waiters = [...this.#teardownWaiters];
+    this.#teardownWaiters.clear();
+    for (const waiter of waiters) waiter();
+  }
+
+  waitForTeardown(signal: AbortSignal): Promise<void> {
+    return new Promise(resolve => {
+      const done = () => {
+        signal.removeEventListener('abort', abort);
+        resolve();
+      };
+      const abort = () => {
+        this.#teardownWaiters.delete(done);
+        resolve();
+      };
+      if (signal.aborted) return resolve();
+      this.#teardownWaiters.add(done);
+      signal.addEventListener('abort', abort, { once: true });
+    });
+  }
 
   /** The current run id (null when idle). */
   getRunId(): string | null {
@@ -1150,6 +1198,7 @@ export class SessionRun {
     this.#traceId = null;
     this.#abortController = null;
     this.#abortRequested = false;
+    this.#notifyTeardown();
   }
 
   /** Bump and return the operation counter at the start of a new operation. */
@@ -2694,10 +2743,29 @@ export class Session<TState = unknown> {
    * be drained with the previous run's already-aborted abortSignal.
    */
   private async waitForStreamIdle(timeoutMs = 1_000): Promise<void> {
-    const deadline = Date.now() + timeoutMs;
-    while (this.stream.isActive() || this.run.getRunId() !== null) {
-      if (Date.now() >= deadline) return;
-      await new Promise(resolve => setTimeout(resolve, 0));
+    if (!this.stream.isActive() && this.run.getRunId() === null) return;
+
+    let lifecycleWait: AbortController | undefined;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<'timeout'>(resolve => {
+      timeout = setTimeout(() => resolve('timeout'), timeoutMs);
+    });
+
+    try {
+      while (this.stream.isActive() || this.run.getRunId() !== null) {
+        lifecycleWait = new AbortController();
+        const result = await Promise.race([
+          this.stream.waitForTeardown(lifecycleWait.signal),
+          this.run.waitForTeardown(lifecycleWait.signal),
+          timeoutPromise,
+        ]);
+        lifecycleWait.abort();
+        lifecycleWait = undefined;
+        if (result === 'timeout') return;
+      }
+    } finally {
+      lifecycleWait?.abort();
+      if (timeout) clearTimeout(timeout);
     }
   }
 
