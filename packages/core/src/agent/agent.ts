@@ -80,6 +80,9 @@ import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, MASTRA_VE
 import type { InferStandardSchemaOutput } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import type { SignalProvider } from '../signals/signal-provider';
+import { resolveAgentSkills, mergeWorkspaceSkills } from '../skills/agent-skills-resolver';
+import { AgentSkillsProcessorAdapter } from '../skills/skills-processor-adapter';
+import type { AgentSkillsInput, SkillInput } from '../skills/types';
 import { InMemoryStore } from '../storage';
 import type { GoalObjectiveRecord } from '../storage/domains/thread-state/base';
 import { ChunkFrom } from '../stream';
@@ -111,6 +114,7 @@ import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
 import { createSkillTools } from '../workspace/skills';
 import type { SkillFormat } from '../workspace/skills';
+import type { Skill, SkillMetadata, WorkspaceSkills } from '../workspace/skills/types';
 import { AgentLegacyHandler } from './agent-legacy';
 import type {
   AgentExecutionOptions,
@@ -372,6 +376,7 @@ export class Agent<
   #pubsub?: PubSub;
   #inheritedPubSub?: PubSub;
   #memory?: DynamicArgument<MastraMemory, TRequestContext>;
+  #skills?: AgentSkillsInput;
   #skillsFormat?: SkillFormat;
   #workflows?: DynamicArgument<Record<string, AnyWorkflow>, TRequestContext>;
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions, TRequestContext>;
@@ -516,6 +521,10 @@ export class Agent<
 
     if (config.memory) {
       this.#memory = config.memory;
+    }
+
+    if (config.skills) {
+      this.#skills = config.skills;
     }
 
     if (config.skillsFormat) {
@@ -973,19 +982,49 @@ export class Agent<
   }
 
   /**
-   * Gets the skills processors to add to input processors when workspace has skills.
+   * Resolves the combined WorkspaceSkills from agent-level skills and/or workspace skills.
+   * Agent-level skills win on name conflicts when both are present.
+   * @internal
+   */
+  private async resolveSkills(requestContext?: RequestContext): Promise<WorkspaceSkills | undefined> {
+    const rc = requestContext || new RequestContext();
+
+    // Resolve agent-level skills (if configured)
+    let agentSkills: WorkspaceSkills | undefined;
+    if (this.#skills) {
+      let resolvedInputs: SkillInput[];
+      if (typeof this.#skills === 'function') {
+        resolvedInputs = await this.#skills({ requestContext: rc });
+      } else {
+        resolvedInputs = this.#skills;
+      }
+      if (resolvedInputs.length > 0) {
+        agentSkills = resolveAgentSkills(resolvedInputs);
+      }
+    }
+
+    // Resolve workspace-level skills (if configured)
+    const workspace = await this.getWorkspace({ requestContext: rc });
+    const workspaceSkills = workspace?.skills;
+
+    // Merge if both exist (agent skills win on name conflicts)
+    if (agentSkills && workspaceSkills) {
+      const { merged } = await mergeWorkspaceSkills(agentSkills, workspaceSkills);
+      return merged;
+    }
+
+    return agentSkills || workspaceSkills;
+  }
+
+  /**
+   * Gets the skills processors to add to input processors when skills are configured.
+   * Supports both agent-level skills and workspace skills.
    * @internal
    */
   private async getSkillsProcessors(
     configuredProcessors: InputProcessorOrWorkflow[],
     requestContext?: RequestContext,
   ): Promise<InputProcessorOrWorkflow[]> {
-    // Check if workspace has skills configured
-    const workspace = await this.getWorkspace({ requestContext: requestContext || new RequestContext() });
-    if (!workspace?.skills) {
-      return [];
-    }
-
     // Check for existing SkillsProcessor in configured processors to avoid duplicates
     const hasSkillsProcessor = hasEagerSkillsProcessor(configuredProcessors);
     const hasOnDemandProcessor = hasOnDemandSkillDiscoveryProcessor(configuredProcessors);
@@ -993,8 +1032,26 @@ export class Agent<
       return [];
     }
 
-    // Create new SkillsProcessor using workspace
-    return [new SkillsProcessor({ workspace, format: this.#skillsFormat })];
+    // Resolve combined skills from agent-level and/or workspace
+    const skills = await this.resolveSkills(requestContext);
+    if (!skills) {
+      return [];
+    }
+
+    // When agent-level skills are configured (with or without workspace),
+    // use the adapter which works directly with WorkspaceSkills.
+    // When only workspace skills exist (no agent-level skills), use the
+    // existing SkillsProcessor for backward compatibility.
+    if (this.#skills) {
+      return [new AgentSkillsProcessorAdapter(skills, this.#skillsFormat)];
+    }
+
+    const workspace = await this.getWorkspace({ requestContext: requestContext || new RequestContext() });
+    if (workspace) {
+      return [new SkillsProcessor({ workspace, format: this.#skillsFormat })];
+    }
+
+    return [];
   }
 
   /**
@@ -1826,6 +1883,53 @@ export class Agent<
       this.#browser = undefined;
     }
     return globalWorkspace;
+  }
+
+  /**
+   * Programmatically invoke a skill by name.
+   *
+   * Loads the full skill instructions and returns them, or returns the skill
+   * object directly. This is the programmatic equivalent of the `skill` tool
+   * that the LLM calls — useful in workflows and custom pipelines.
+   *
+   * @param skillName - Name or path of the skill to invoke
+   * @param options - Optional request context for dynamic skill resolution
+   * @returns The full Skill object with instructions, or null if not found
+   *
+   * @example
+   * ```typescript
+   * // In a workflow step
+   * const skill = await agent.skill('code-review');
+   * if (skill) {
+   *   console.log(skill.instructions); // Full skill instructions
+   *   console.log(skill.references);   // Available reference files
+   * }
+   * ```
+   */
+  public async skill(skillName: string, options?: { requestContext?: RequestContext }): Promise<Skill | null> {
+    const skills = await this.resolveSkills(options?.requestContext);
+    if (!skills) return null;
+    return skills.get(skillName);
+  }
+
+  /**
+   * List all skills available to this agent (from both agent-level and workspace).
+   *
+   * @param options - Optional request context for dynamic skill resolution
+   * @returns Array of skill metadata (name, description, path)
+   *
+   * @example
+   * ```typescript
+   * const skills = await agent.listSkills();
+   * for (const skill of skills) {
+   *   console.log(`${skill.name}: ${skill.description}`);
+   * }
+   * ```
+   */
+  public async listSkills(options?: { requestContext?: RequestContext }): Promise<SkillMetadata[]> {
+    const skills = await this.resolveSkills(options?.requestContext);
+    if (!skills) return [];
+    return skills.list();
   }
 
   /**
@@ -3384,12 +3488,14 @@ export class Agent<
       return convertedSkillTools;
     }
 
-    const workspace = await this.getWorkspace({ requestContext });
-    if (!workspace?.skills) {
+    // Resolve skills from agent-level config and/or workspace
+    const skills = await this.resolveSkills(requestContext);
+    if (!skills) {
       return convertedSkillTools;
     }
 
-    const skillTools = createSkillTools(workspace.skills);
+    const workspace = await this.getWorkspace({ requestContext });
+    const skillTools = createSkillTools(skills);
 
     if (Object.keys(skillTools).length > 0) {
       this.logger.debug('Adding skill tools', { agent: this.name, tools: Object.keys(skillTools), runId });
