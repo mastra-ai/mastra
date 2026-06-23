@@ -172,5 +172,4 @@ export class InlineSkillSource implements SkillSource {
 
     return [];
   }
-
 }

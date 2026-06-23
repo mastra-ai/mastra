@@ -39,7 +39,11 @@ export function defineSkill(input: InlineSkillInput): InlineSkill {
   const { name, description, instructions, license, compatibility, metadata, references } = input;
 
   // Validate metadata (same checks as filesystem-discovered skills)
-  const validation = validateSkillMetadata({ name, description, license, compatibility, metadata }, undefined, instructions);
+  const validation = validateSkillMetadata(
+    { name, description, license, compatibility, metadata },
+    undefined,
+    instructions,
+  );
 
   if (!validation.valid) {
     throw new Error(`Invalid skill "${name}": ${validation.errors.join('; ')}`);
@@ -70,10 +74,5 @@ export function defineSkill(input: InlineSkillInput): InlineSkill {
  * Type guard: is this skill an inline skill (from defineSkill)?
  */
 export function isInlineSkill(skill: unknown): skill is InlineSkill {
-  return (
-    typeof skill === 'object' &&
-    skill !== null &&
-    '__inline' in skill &&
-    (skill as InlineSkill).__inline === true
-  );
+  return typeof skill === 'object' && skill !== null && '__inline' in skill && (skill as InlineSkill).__inline === true;
 }
