@@ -94,9 +94,9 @@ Mastra provides three factory functions that produce durable agents. They differ
 
 | Factory | Package | Best for |
 | - | - | - |
-| `createDurableAgent()` | `@mastra/core` | Local development and single-process servers — you get a stream you can await directly |
-| `createEventedAgent()` | `@mastra/core` | Background execution — the workflow starts without blocking, and you consume chunks through PubSub |
-| `createInngestAgent()` | `@mastra/inngest` | Production deployments — Inngest adds step memoization, retries, and a monitoring dashboard |
+| `createDurableAgent()` | `@mastra/core` | Local development and single-process servers. You get a stream you can await directly. |
+| `createEventedAgent()` | `@mastra/core` | Background execution. The workflow starts without blocking, and you consume chunks through PubSub. |
+| `createInngestAgent()` | `@mastra/inngest` | Production deployments. Inngest adds step memoization, retries, and a monitoring dashboard. |
 
 All three return an object you register with `Mastra` the same way as a regular agent. `createDurableAgent()` and `createEventedAgent()` return class instances that extend `Agent`. `createInngestAgent()` returns a Proxy-backed object that forwards `Agent` methods to the underlying agent.
 
