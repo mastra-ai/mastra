@@ -17,6 +17,7 @@ Alternative names considered: `Moment`, `Frame`.
 - Preserve trace-like navigation through parent, child, and sibling relationships.
 - Keep child pulses lean by avoiding repeated data already present on parent pulses.
 - Support agent, workflow, tool, model, storage, and system observability without baking those categories into the pulse type system.
+- Capture configuration provenance that materially explains runtime behavior, such as agent, tool, instruction, model, workflow, and eval changes.
 
 ## Non-Goals
 
@@ -262,7 +263,13 @@ Pulse can keep ID compatibility with existing observability systems while using 
 | Span ID | Pulse ID |
 | Root Span | Origin Pulse |
 
-Open question: The current shape uses `rootId` and `pulseId` because they make ID compatibility obvious. A more Pulse-native version might use `flowId`, `originPulse`, and `pulseId`.
+Current leaning: use `flow` as the name for the full Pulse execution graph. The current shape uses `rootId` and `pulseId` because they make ID compatibility obvious, but a more Pulse-native version should likely use `flowId`, `originPulse`, and `pulseId`.
+
+See `scope-expansion-after-01.md` for notes on configuration Pulses, definition-once/reference-many capture, and using `flow` as the replacement for `trace`.
+
+See `scope-expansion-after-02.md` for notes on message arrays, context deltas, and avoiding duplicated thread context across flows.
+
+See `fit_exploration_procedure.md` for the repeatable process used to run numbered Pulse fit explorations.
 
 ## Lean Child Pulses
 
