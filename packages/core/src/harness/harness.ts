@@ -515,6 +515,12 @@ export class Harness<TState = {}> {
         ...(gateways ? { gateways } : {}),
       });
       await this.#internalMastra.getStorage()!.init();
+    } else if (this.#externalMastra) {
+      // Registered on a parent Mastra: don't build an internal Mastra, but make
+      // sure the inherited storage is initialized before any session reads or
+      // writes through it. Init is idempotent on MastraCompositeStore, so this
+      // is safe even when the parent already initialized it.
+      await this.#externalMastra.getStorage()?.init();
     }
 
     // Initialize workspace if configured (skip for dynamic factory — resolved per-request)
@@ -806,7 +812,6 @@ export class Harness<TState = {}> {
   }
 
   private propagateRuntimeServicesToAgent(agent: Agent): Agent {
-    const alreadyHasMastra = !!agent.getMastraInstance();
     const workspaceForAgents = this.workspaceFn ?? this.workspace;
     const browserForAgents = this.browserFn ?? this.browser;
 
@@ -823,8 +828,12 @@ export class Harness<TState = {}> {
       agent.__setPubSub(this.config.pubsub);
     }
 
+    // Register the agent on the resolved Mastra (the parent when registered,
+    // otherwise the internal one). Re-bind when the agent currently has no
+    // Mastra OR is bound to a different instance — e.g. an agent that built its
+    // own internal Mastra before this Harness was registered on a parent.
     const mastra = this.getMastra();
-    if (mastra && !alreadyHasMastra) {
+    if (mastra && agent.getMastraInstance() !== mastra) {
       mastra.addAgent(agent);
     }
 
