@@ -1,5 +1,3 @@
-'use client';
-
 import type { ToolMockReport } from '@mastra/client-js';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { Notice } from '@mastra/playground-ui/components/Notice';
