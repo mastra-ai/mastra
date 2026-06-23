@@ -69,7 +69,7 @@ function withThreadMemory(memory: unknown, resourceId: string, threadId: string)
   };
 }
 
-type AgentThreadRunLifecycle = 'running' | 'suspending' | 'suspended' | 'resuming' | 'completed' | 'failed' | 'aborted';
+type AgentThreadRunLifecycle = 'running' | 'suspending' | 'suspended' | 'completed' | 'failed' | 'aborted';
 
 type AgentThreadRunSuspension = {
   toolCallId?: string;
@@ -388,7 +388,6 @@ export class AgentThreadStreamRuntime {
       record.output.status === 'suspended' ||
       record.lifecycle === 'suspending' ||
       record.lifecycle === 'suspended' ||
-      record.lifecycle === 'resuming' ||
       !!record.suspension ||
       this.#isSuspendedRun(state, record.runId)
     );
@@ -665,7 +664,6 @@ export class AgentThreadStreamRuntime {
       return undefined;
     }
 
-    record.lifecycle = 'resuming';
     return { runId: options.runId, toolCallId: options.toolCallId ?? suspension?.toolCallId };
   }
 
@@ -1444,6 +1442,7 @@ export class AgentThreadStreamRuntime {
           while (remoteRun.waiters.length) remoteRun.waiters.shift()?.();
           while (remoteRun.finishWaiters.length) remoteRun.finishWaiters.shift()?.();
           remoteRuns.delete(eventStreamId);
+          seenStreamIds.delete(eventStreamId);
         }
         if (errorRun) enqueueRun(errorRun);
         void this.#drainPendingIdleSignals(state, resolvedPubSub, key);
@@ -1472,6 +1471,7 @@ export class AgentThreadStreamRuntime {
           while (remoteRun.waiters.length) remoteRun.waiters.shift()?.();
           while (remoteRun.finishWaiters.length) remoteRun.finishWaiters.shift()?.();
           remoteRuns.delete(eventStreamId);
+          seenStreamIds.delete(eventStreamId);
         }
         // When a run is aborted, cancel the current subscriber stream reader so
         // the generator's inner loop unblocks and can yield the synthetic abort.
@@ -1897,8 +1897,7 @@ export class AgentThreadStreamRuntime {
       if (
         this.#isSuspendedRun(state, blockingRunId) ||
         blockingRecord?.output.status === 'suspended' ||
-        blockingRecord?.lifecycle === 'suspended' ||
-        blockingRecord?.lifecycle === 'resuming'
+        blockingRecord?.lifecycle === 'suspended'
       ) {
         return {
           signal,

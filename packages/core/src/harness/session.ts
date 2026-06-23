@@ -2725,6 +2725,14 @@ export class Session<TState = unknown> {
         ifActive,
         ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
       });
+      try {
+        await Promise.race([
+          result.accepted.then(() => undefined),
+          new Promise<void>(resolve => setTimeout(resolve, 0)),
+        ]);
+      } catch (error) {
+        throw error;
+      }
       void result.accepted.catch(() => {});
       return { accepted: true as const, runId: undefined };
     });
@@ -2812,9 +2820,15 @@ export class Session<TState = unknown> {
     if (wasActive) {
       await signal.accepted;
     } else {
-      void signal.accepted.catch(() => {});
-      await agentEnd;
-      unsubscribeAgentEnd?.();
+      const acceptedFailure = signal.accepted.then(
+        () => new Promise<void>(() => {}),
+        error => Promise.reject(error),
+      );
+      try {
+        await Promise.race([agentEnd, acceptedFailure]);
+      } finally {
+        unsubscribeAgentEnd?.();
+      }
     }
     return;
   }

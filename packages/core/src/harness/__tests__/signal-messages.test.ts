@@ -91,4 +91,21 @@ describe('Harness signal messages', () => {
     await expect(result.accepted).resolves.toEqual({ accepted: true, runId: 'run-1' });
     expect(agent.sendSignal).toHaveBeenCalledTimes(1);
   });
+
+  it('surfaces idle signal submission failures instead of waiting forever for agent_end', async () => {
+    const agent = createAgentMock(() => null);
+    agent.sendSignal.mockReturnValue({
+      accepted: Promise.reject(new Error('signal failed before stream started')),
+      signal: { id: 'signal-1', type: 'user-message' },
+    } as any);
+    const harness = new Harness({
+      id: 'harness-idle-signal-failure',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await harness.init();
+    const session = await harness.createSession();
+
+    await expect(session.sendMessage({ content: 'hello' })).rejects.toThrow('signal failed before stream started');
+  });
 });
