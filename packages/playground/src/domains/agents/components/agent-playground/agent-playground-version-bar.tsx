@@ -2,9 +2,6 @@ import {
   Badge,
   Button,
   ButtonsGroup,
-  Combobox,
-  CopyButton,
-  DropdownMenu,
   Input,
   Label,
   HoverPopover,
@@ -21,6 +18,9 @@ import {
   DialogBody,
   DialogFooter,
 } from '@mastra/playground-ui';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Check, ChevronDown, Clock, Download, GitPullRequest, Info, MessageSquare, Save } from 'lucide-react';
 import { useMemo, useState, useCallback } from 'react';
 

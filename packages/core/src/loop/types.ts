@@ -211,6 +211,7 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = LoopO
   runId: string;
   startTimestamp: number;
   _internal: StreamInternal;
+  rotateResponseMessageId: () => string;
   streamState: {
     serialize: () => any;
     deserialize: (state: any) => void;
