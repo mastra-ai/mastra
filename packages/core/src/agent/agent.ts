@@ -525,7 +525,15 @@ export class Agent<
       // where its session-owned instance is configured, so we must not touch it here.
       if (typeof this.#voice !== 'function') {
         if (typeof config.tools !== 'function') {
-          this.#voice.addTools(this.#tools as TTools);
+          const wrappedToolsForVoice = Object.fromEntries(
+            Object.entries(this.#tools as TTools).map(([name, tool]: [string, any]) => [
+              name,
+              typeof tool?.execute === 'function'
+                ? { ...tool, execute: (input: unknown, ctx: any) => tool.execute(input, { ...ctx, mastra: this.#mastra }) }
+                : tool,
+            ]),
+          ) as TTools;
+          this.#voice.addTools(wrappedToolsForVoice);
         }
         if (typeof config.instructions === 'string') {
           this.#voice.addInstructions(config.instructions);
@@ -1967,7 +1975,16 @@ export class Agent<
     }
 
     const voice = this.#voice;
-    voice?.addTools(await this.listTools({ requestContext }));
+    const resolvedTools = await this.listTools({ requestContext });
+    const wrappedToolsForVoice = Object.fromEntries(
+      Object.entries(resolvedTools as Record<string, any>).map(([name, tool]) => [
+        name,
+        typeof tool?.execute === 'function'
+          ? { ...tool, execute: (input: unknown, ctx: any) => tool.execute(input, { ...ctx, mastra: this.#mastra }) }
+          : tool,
+      ]),
+    ) as typeof resolvedTools;
+    voice?.addTools(wrappedToolsForVoice);
     const instructions = await this.getInstructions({ requestContext });
     voice?.addInstructions(this.#convertInstructionsToString(instructions));
     return voice;
