@@ -122,6 +122,20 @@ function isECONNRESETError(error: unknown): boolean {
   return false;
 }
 
+/**
+ * Matcher for transient OpenAI Bad Request (400) failures. OpenAI occasionally
+ * returns HTTP 400 during service degradation that succeeds on retry. Limited
+ * to 1 retry (via a separate StreamErrorRetryProcessor instance) since it could
+ * also be a genuinely invalid request.
+ */
+function isBadRequestError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  if ('statusCode' in error && (error as { statusCode?: unknown }).statusCode === 400) return true;
+
+  return false;
+}
+
 function applyEffectiveDefaultsToModes(modes: HarnessMode[], effectiveDefaults: Record<string, string>): HarnessMode[] {
   return modes.map(mode => {
     const savedModel = effectiveDefaults[mode.id];
@@ -547,6 +561,10 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       new ProviderHistoryCompat(),
     ],
     errorProcessors: [
+      new StreamErrorRetryProcessor({
+        maxRetries: 1,
+        matchers: [isBadRequestError],
+      }),
       new StreamErrorRetryProcessor({
         maxRetries: MASTRACODE_ECONNRESET_MAX_RETRIES,
         delayMs: ({ retryCount }) =>

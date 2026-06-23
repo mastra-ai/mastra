@@ -718,9 +718,25 @@ describe('createMastraCode', () => {
       | undefined;
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toEqual([
       'stream-error-retry-processor',
+      'stream-error-retry-processor',
       'prefill-error-handler',
       'provider-history-compat',
     ]);
+  });
+
+  it('configures a StreamErrorRetryProcessor for Bad Request (400) with maxRetries 1', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(streamErrorRetryProcessorConstructorMock).toHaveBeenCalledTimes(2);
+    const options = streamErrorRetryProcessorConstructorMock.mock.calls[0]?.[0] as
+      | { maxRetries?: number; delayMs?: unknown; matchers?: Array<unknown> }
+      | undefined;
+    expect(options?.maxRetries).toBe(1);
+    expect(options?.matchers).toHaveLength(1);
+    // No delay for Bad Request retries — they either succeed immediately or fail permanently.
+    expect(options?.delayMs).toBeUndefined();
   });
 
   it('configures the StreamErrorRetryProcessor with a global ECONNRESET retry policy', async () => {
@@ -728,8 +744,8 @@ describe('createMastraCode', () => {
 
     await createMastraCode();
 
-    expect(streamErrorRetryProcessorConstructorMock).toHaveBeenCalledTimes(1);
-    const options = streamErrorRetryProcessorConstructorMock.mock.calls[0]?.[0] as
+    expect(streamErrorRetryProcessorConstructorMock).toHaveBeenCalledTimes(2);
+    const options = streamErrorRetryProcessorConstructorMock.mock.calls[1]?.[0] as
       | { maxRetries?: number; delayMs?: (args: { retryCount: number }) => number; matchers?: Array<unknown> }
       | undefined;
     expect(options?.maxRetries).toBe(2);
