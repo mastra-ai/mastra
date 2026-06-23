@@ -1,16 +1,7 @@
 import type { DatasetItem } from '@mastra/client-js';
-import {
-  AlertDialog,
-  Button,
-  CodeEditor,
-  KeyValueList,
-  Label,
-  Sections,
-  TextAndIcon,
-  getShortId,
-  Icon,
-  toast,
-} from '@mastra/playground-ui';
+import { AlertDialog, Button, CodeEditor, Label, TextAndIcon, getShortId, Icon, toast } from '@mastra/playground-ui';
+import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
+import { Sections } from '@mastra/playground-ui/components/Sections';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
 import { format } from 'date-fns/format';
