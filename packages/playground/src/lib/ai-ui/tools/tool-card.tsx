@@ -5,6 +5,7 @@ import { CodeModeBadge, getCodeModeCall } from './badges/code-mode-badge';
 import { FileTreeBadge } from './badges/file-tree-badge';
 import { ObservationMarkerBadge } from './badges/observation-marker-badge';
 import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
+import { TaskListBadge, isTaskTool, canRenderTaskList } from './badges/task-list-badge';
 import { ToolBadge } from './badges/tool-badge';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
 import { useActivatedSkills } from '@/domains/agents/context/activated-skills-context';
@@ -162,6 +163,10 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
   if (toolName === 'updateWorkingMemory') {
     // Hide the updateWorkingMemory tool call in the UI.
     return null;
+  }
+
+  if (isTaskTool(toolName) && result != null && canRenderTaskList(result)) {
+    return <TaskListBadge toolName={toolName} result={result} />;
   }
 
   if (isBackgroundTaskResult) {
