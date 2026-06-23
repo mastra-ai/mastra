@@ -1,4 +1,4 @@
-import type { DesktopState, MastraDesktopApi, PlatformProject } from '../shared/types';
+import type { DesktopState, DesktopTab, MastraDesktopApi, PlatformProject } from '../shared/types';
 
 declare global {
   interface Window {
@@ -71,6 +71,13 @@ function activeTab() {
   return state?.tabs.find(tab => tab.id === state?.activeTabId);
 }
 
+function tabKindLabel(tab: DesktopTab) {
+  if (tab.kind === 'launcher') return '+';
+  if (tab.kind === 'managed') return 'T';
+  if (tab.kind === 'dev') return 'L';
+  return 'P';
+}
+
 function renderTabs() {
   const current = state;
   if (!current) {
@@ -81,10 +88,10 @@ function renderTabs() {
   tabStrip.innerHTML = current.tabs
     .map(
       tab => `
-        <button class="tab ${tab.id === current.activeTabId ? 'active' : ''}" type="button" data-tab-id="${tab.id}">
-          <span class="tab-kind">${tab.kind === 'launcher' ? '+' : tab.kind === 'managed' ? 'T' : tab.kind === 'dev' ? 'L' : 'P'}</span>
+        <button class="tab ${tab.id === current.activeTabId ? 'active' : ''}" type="button" data-tab-id="${tab.id}" aria-pressed="${tab.id === current.activeTabId}">
+          <span class="tab-kind" aria-hidden="true">${tabKindLabel(tab)}</span>
           <span class="tab-title">${escapeHtml(tab.title)}</span>
-          <span class="tab-close" data-close-tab-id="${tab.id}" title="Close tab">x</span>
+          <span class="tab-close" data-close-tab-id="${tab.id}" title="Close tab" aria-hidden="true">×</span>
         </button>
       `,
     )
