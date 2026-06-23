@@ -36,7 +36,7 @@ await mastra.heartbeats.run(hb.id); // fire once now
 await mastra.heartbeats.delete(hb.id);
 ```
 
-The same CRUD is available over HTTP through `@mastra/server` and from `@mastra/client-js`.
+The same CRUD is available over HTTP through `@mastra/server` (under `/heartbeats`) and as top-level methods on the `@mastra/client-js` client (`client.createHeartbeat`, `client.getHeartbeat`, `client.listHeartbeats`, etc.).
 
 **Lifecycle hooks**
 

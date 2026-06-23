@@ -54,16 +54,13 @@ export const listHeartbeatsQuerySchema = z.object({
   name: z.string().optional(),
 });
 
-export const heartbeatAgentPathParams = z.object({
-  agentId: z.string(),
-});
-
-export const heartbeatPathParams = heartbeatAgentPathParams.extend({
+export const heartbeatPathParams = z.object({
   heartbeatId: z.string(),
 });
 
-/** Body for POST /agents/:agentId/heartbeats — creates a heartbeat. */
+/** Body for POST /heartbeats — creates a heartbeat. */
 export const createHeartbeatBodySchema = z.object({
+  agentId: z.string(),
   cron: z.string(),
   timezone: z.string().optional(),
   prompt: z.string(),
@@ -79,7 +76,7 @@ export const createHeartbeatBodySchema = z.object({
 });
 
 /**
- * Body for PATCH /agents/:agentId/heartbeats/:heartbeatId — partial update.
+ * Body for PATCH /heartbeats/:heartbeatId — partial update.
  *
  * `threadId` / `resourceId` are intentionally not editable; they are part of
  * the heartbeat's identity. To re-target, delete and recreate.
@@ -101,7 +98,7 @@ export const deleteHeartbeatResponseSchema = z.object({
   message: z.string(),
 });
 
-/** Response for POST /agents/:agentId/heartbeats/:heartbeatId/run. */
+/** Response for POST /heartbeats/:heartbeatId/run. */
 export const runHeartbeatResponseSchema = z.object({
   scheduleId: z.string(),
   claimId: z.string(),

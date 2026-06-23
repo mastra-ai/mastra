@@ -3075,12 +3075,6 @@ export interface ListScheduleTriggersResponse {
 // the top level so the SDK contract stays stable across implementations.
 // ---------------------------------------------------------------------------
 
-export interface HeartbeatActiveHours {
-  start: string;
-  end: string;
-  timezone?: string;
-}
-
 /**
  * Broadcast policy for the chunks produced by a heartbeat-driven run.
  *
@@ -3106,7 +3100,6 @@ export interface Heartbeat {
   signalType?: string;
   ifActive?: 'deliver' | 'persist' | 'discard';
   ifIdle?: 'wake' | 'persist' | 'discard';
-  activeHours?: HeartbeatActiveHours;
   idleThresholdMs?: number;
   broadcast?: HeartbeatBroadcastMode;
   metadata?: Record<string, unknown>;
@@ -3115,25 +3108,13 @@ export interface Heartbeat {
   updatedAt: number;
 }
 
-export interface HeartbeatTrigger {
-  id?: string;
-  scheduleId: string;
-  runId: string | null;
-  scheduledFireAt: number;
-  actualFireAt: number;
-  outcome: ScheduleTriggerOutcome;
-  error?: string;
-  triggerKind?: ScheduleTriggerKind;
-  parentTriggerId?: string;
-  metadata?: Record<string, unknown>;
-  run?: ScheduleRunSummary;
-}
-
 /**
- * Options for `agent.createHeartbeat(...)`. Mirrors the public
- * `CreateHeartbeatInput` shape on the core Heartbeats service.
+ * Body for `client.createHeartbeat(...)`. Mirrors the public
+ * `CreateHeartbeatInput` shape on the core Heartbeats service. `agentId`
+ * names the agent the heartbeat fires as.
  */
 export interface CreateHeartbeatInput {
+  agentId: string;
   cron: string;
   prompt: string;
   name?: string;
@@ -3143,14 +3124,13 @@ export interface CreateHeartbeatInput {
   signalType?: string;
   ifActive?: 'deliver' | 'persist' | 'discard';
   ifIdle?: 'wake' | 'persist' | 'discard';
-  activeHours?: HeartbeatActiveHours;
   idleThresholdMs?: number;
   broadcast?: HeartbeatBroadcastMode;
   metadata?: Record<string, unknown>;
 }
 
 /**
- * Patch body for `agent.updateHeartbeat(...)`. `threadId` / `resourceId` are
+ * Patch body for `client.updateHeartbeat(...)`. `threadId` / `resourceId` are
  * part of the heartbeat identity and cannot be changed — to retarget,
  * delete and recreate.
  */
@@ -3162,7 +3142,6 @@ export interface UpdateHeartbeatOptions {
   signalType?: string;
   ifActive?: 'deliver' | 'persist' | 'discard';
   ifIdle?: 'wake' | 'persist' | 'discard';
-  activeHours?: HeartbeatActiveHours;
   idleThresholdMs?: number;
   broadcast?: HeartbeatBroadcastMode;
   metadata?: Record<string, unknown>;
@@ -3179,18 +3158,8 @@ export interface ListHeartbeatsResponse {
   heartbeats: Heartbeat[];
 }
 
-export interface ListHeartbeatTriggersParams {
-  limit?: number;
-  fromActualFireAt?: number;
-  toActualFireAt?: number;
-}
-
-export interface ListHeartbeatTriggersResponse {
-  triggers: HeartbeatTrigger[];
-}
-
 /**
- * Response for POST /agents/:agentId/heartbeats/:heartbeatId/run.
+ * Response for POST /heartbeats/:heartbeatId/run.
  *
  * The run runs asynchronously through the same HeartbeatWorker pipeline as
  * scheduled fires. `claimId` is the trigger row's `runId` (used to look up

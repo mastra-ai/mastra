@@ -9,7 +9,6 @@ import {
   CREATE_HEARTBEAT_ROUTE,
   DELETE_HEARTBEAT_ROUTE,
   GET_HEARTBEAT_ROUTE,
-  LIST_AGENT_HEARTBEATS_ROUTE,
   LIST_HEARTBEATS_ROUTE,
   PAUSE_HEARTBEAT_ROUTE,
   RESUME_HEARTBEAT_ROUTE,
@@ -124,30 +123,8 @@ describe('Heartbeats handlers', () => {
     });
   });
 
-  describe('LIST_AGENT_HEARTBEATS_ROUTE', () => {
-    it('returns only the requested agent heartbeats', async () => {
-      const schedulesStore = (await storage.getStore('schedules'))!;
-      await schedulesStore.createSchedule(makeHeartbeatSchedule());
-      await schedulesStore.createSchedule(
-        makeHeartbeatSchedule({
-          id: `${HEARTBEAT_SCHEDULE_PREFIX}other`,
-          ownerId: 'other',
-          target: { type: 'heartbeat', agentId: 'other', prompt: 'x' },
-        }),
-      );
-
-      const result = await LIST_AGENT_HEARTBEATS_ROUTE.handler({
-        mastra,
-        agentId: 'agent-1',
-        ...baseCtx(),
-      } as any);
-      expect(result.heartbeats).toHaveLength(1);
-      expect(result.heartbeats[0].agentId).toBe('agent-1');
-    });
-  });
-
   describe('GET_HEARTBEAT_ROUTE', () => {
-    it('returns the heartbeat owned by the agent', async () => {
+    it('returns the heartbeat by id', async () => {
       const schedulesStore = (await storage.getStore('schedules'))!;
       const schedule = makeHeartbeatSchedule();
       await schedulesStore.createSchedule(schedule);
@@ -170,25 +147,6 @@ describe('Heartbeats handlers', () => {
           mastra,
           agentId: 'agent-1',
           heartbeatId: `${HEARTBEAT_SCHEDULE_PREFIX}missing`,
-          ...baseCtx(),
-        } as any),
-      ).rejects.toThrow(HTTPException);
-    });
-
-    it('404s when the heartbeat belongs to a different agent', async () => {
-      const schedulesStore = (await storage.getStore('schedules'))!;
-      const schedule = makeHeartbeatSchedule({
-        id: `${HEARTBEAT_SCHEDULE_PREFIX}foreign`,
-        ownerId: 'someone-else',
-        target: { type: 'heartbeat', agentId: 'someone-else', prompt: 'x' },
-      });
-      await schedulesStore.createSchedule(schedule);
-
-      await expect(
-        GET_HEARTBEAT_ROUTE.handler({
-          mastra,
-          agentId: 'agent-1',
-          heartbeatId: schedule.id,
           ...baseCtx(),
         } as any),
       ).rejects.toThrow(HTTPException);
@@ -221,28 +179,6 @@ describe('Heartbeats handlers', () => {
           ...baseCtx(),
         } as any),
       ).rejects.toThrow(HTTPException);
-    });
-
-    it('404s when the heartbeat belongs to a different agent', async () => {
-      const schedulesStore = (await storage.getStore('schedules'))!;
-      const schedule = makeHeartbeatSchedule({
-        id: `${HEARTBEAT_SCHEDULE_PREFIX}foreign`,
-        ownerId: 'someone-else',
-        target: { type: 'heartbeat', agentId: 'someone-else', prompt: 'x' },
-      });
-      await schedulesStore.createSchedule(schedule);
-
-      await expect(
-        DELETE_HEARTBEAT_ROUTE.handler({
-          mastra,
-          agentId: 'agent-1',
-          heartbeatId: schedule.id,
-          ...baseCtx(),
-        } as any),
-      ).rejects.toThrow(HTTPException);
-
-      // schedule row still exists - foreign delete must not remove it
-      expect(await schedulesStore.getSchedule(schedule.id)).toBeDefined();
     });
   });
 

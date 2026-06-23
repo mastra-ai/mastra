@@ -89675,13 +89675,6 @@ export type GetSchedules_Response = {
           signalType?: string | undefined;
           ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
           ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
-          activeHours?:
-            | {
-                start: string;
-                end: string;
-                timezone?: string | undefined;
-              }
-            | undefined;
           idleThresholdMs?: number | undefined;
           broadcast?: ('live' | 'on-complete' | 'never') | undefined;
           requestContext?:
@@ -89776,13 +89769,6 @@ export type GetSchedulesScheduleId_Response = {
         signalType?: string | undefined;
         ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
         ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
-        activeHours?:
-          | {
-              start: string;
-              end: string;
-              timezone?: string | undefined;
-            }
-          | undefined;
         idleThresholdMs?: number | undefined;
         broadcast?: ('live' | 'on-complete' | 'never') | undefined;
         requestContext?:
@@ -89944,13 +89930,6 @@ export type PostSchedulesScheduleIdPause_Response = {
         signalType?: string | undefined;
         ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
         ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
-        activeHours?:
-          | {
-              start: string;
-              end: string;
-              timezone?: string | undefined;
-            }
-          | undefined;
         idleThresholdMs?: number | undefined;
         broadcast?: ('live' | 'on-complete' | 'never') | undefined;
         requestContext?:
@@ -90040,13 +90019,6 @@ export type PostSchedulesScheduleIdResume_Response = {
         signalType?: string | undefined;
         ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
         ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
-        activeHours?:
-          | {
-              start: string;
-              end: string;
-              timezone?: string | undefined;
-            }
-          | undefined;
         idleThresholdMs?: number | undefined;
         broadcast?: ('live' | 'on-complete' | 'never') | undefined;
         requestContext?:
@@ -90152,13 +90124,6 @@ export type GetHeartbeats_Response = {
     signalType?: string | undefined;
     ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
     ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
-    activeHours?:
-      | {
-          start: string;
-          end: string;
-          timezone?: string | undefined;
-        }
-      | undefined;
     idleThresholdMs?: number | undefined;
     broadcast?: ('live' | 'on-complete' | 'never') | undefined;
     metadata?:
@@ -90191,102 +90156,13 @@ export interface GetHeartbeats_RouteContract {
 }
 
 // ============================================================================
-// Route: GET /agents/:agentId/heartbeats
+// Route: GET /heartbeats/:heartbeatId
 // ============================================================================
-export type GetAgentsAgentIdHeartbeats_PathParams = {
-  agentId: string;
-};
-
-export type GetAgentsAgentIdHeartbeats_QueryParams = {
-  agentId?: string | undefined;
-  threadId?: string | undefined;
-  resourceId?: string | undefined;
-  name?: string | undefined;
-};
-
-export type GetAgentsAgentIdHeartbeats_Response = {
-  heartbeats: {
-    id: string;
-    agentId: string;
-    name?: string | undefined;
-    threadId?: string | undefined;
-    resourceId?: string | undefined;
-    prompt: string;
-    cron: string;
-    timezone?: string | undefined;
-    status: 'active' | 'paused';
-    nextFireAt: number;
-    lastFireAt?: number | undefined;
-    lastRunId?: string | undefined;
-    lastRun?:
-      | {
-          status:
-            | 'running'
-            | 'success'
-            | 'failed'
-            | 'tripwire'
-            | 'suspended'
-            | 'waiting'
-            | 'pending'
-            | 'canceled'
-            | 'bailed'
-            | 'paused';
-          startedAt?: number | undefined;
-          completedAt?: number | undefined;
-          durationMs?: number | undefined;
-          error?: string | undefined;
-        }
-      | undefined;
-    signalType?: string | undefined;
-    ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
-    ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
-    activeHours?:
-      | {
-          start: string;
-          end: string;
-          timezone?: string | undefined;
-        }
-      | undefined;
-    idleThresholdMs?: number | undefined;
-    broadcast?: ('live' | 'on-complete' | 'never') | undefined;
-    metadata?:
-      | {
-          [key: string]: unknown;
-        }
-      | undefined;
-    createdAt: number;
-    updatedAt: number;
-  }[];
-};
-
-export type GetAgentsAgentIdHeartbeats_Request = Simplify<
-  (GetAgentsAgentIdHeartbeats_PathParams extends never ? {} : { params: GetAgentsAgentIdHeartbeats_PathParams }) &
-    (GetAgentsAgentIdHeartbeats_QueryParams extends never
-      ? {}
-      : {} extends GetAgentsAgentIdHeartbeats_QueryParams
-        ? { query?: GetAgentsAgentIdHeartbeats_QueryParams }
-        : { query: GetAgentsAgentIdHeartbeats_QueryParams }) &
-    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
->;
-
-export interface GetAgentsAgentIdHeartbeats_RouteContract {
-  pathParams: GetAgentsAgentIdHeartbeats_PathParams;
-  queryParams: GetAgentsAgentIdHeartbeats_QueryParams;
-  body: never;
-  request: GetAgentsAgentIdHeartbeats_Request;
-  response: GetAgentsAgentIdHeartbeats_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: GET /agents/:agentId/heartbeats/:heartbeatId
-// ============================================================================
-export type GetAgentsAgentIdHeartbeatsHeartbeatId_PathParams = {
-  agentId: string;
+export type GetHeartbeatsHeartbeatId_PathParams = {
   heartbeatId: string;
 };
 
-export type GetAgentsAgentIdHeartbeatsHeartbeatId_Response = {
+export type GetHeartbeatsHeartbeatId_Response = {
   id: string;
   agentId: string;
   name?: string | undefined;
@@ -90321,13 +90197,6 @@ export type GetAgentsAgentIdHeartbeatsHeartbeatId_Response = {
   signalType?: string | undefined;
   ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
   ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
-  activeHours?:
-    | {
-        start: string;
-        end: string;
-        timezone?: string | undefined;
-      }
-    | undefined;
   idleThresholdMs?: number | undefined;
   broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
@@ -90339,31 +90208,26 @@ export type GetAgentsAgentIdHeartbeatsHeartbeatId_Response = {
   updatedAt: number;
 };
 
-export type GetAgentsAgentIdHeartbeatsHeartbeatId_Request = Simplify<
-  (GetAgentsAgentIdHeartbeatsHeartbeatId_PathParams extends never
-    ? {}
-    : { params: GetAgentsAgentIdHeartbeatsHeartbeatId_PathParams }) &
+export type GetHeartbeatsHeartbeatId_Request = Simplify<
+  (GetHeartbeatsHeartbeatId_PathParams extends never ? {} : { params: GetHeartbeatsHeartbeatId_PathParams }) &
     (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface GetAgentsAgentIdHeartbeatsHeartbeatId_RouteContract {
-  pathParams: GetAgentsAgentIdHeartbeatsHeartbeatId_PathParams;
+export interface GetHeartbeatsHeartbeatId_RouteContract {
+  pathParams: GetHeartbeatsHeartbeatId_PathParams;
   queryParams: never;
   body: never;
-  request: GetAgentsAgentIdHeartbeatsHeartbeatId_Request;
-  response: GetAgentsAgentIdHeartbeatsHeartbeatId_Response;
+  request: GetHeartbeatsHeartbeatId_Request;
+  response: GetHeartbeatsHeartbeatId_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: POST /agents/:agentId/heartbeats
+// Route: POST /heartbeats
 // ============================================================================
-export type PostAgentsAgentIdHeartbeats_PathParams = {
+export type PostHeartbeats_Body = {
   agentId: string;
-};
-
-export type PostAgentsAgentIdHeartbeats_Body = {
   cron: string;
   timezone?: string | undefined;
   prompt: string;
@@ -90373,13 +90237,6 @@ export type PostAgentsAgentIdHeartbeats_Body = {
   signalType?: string | undefined;
   ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
   ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
-  activeHours?:
-    | {
-        start: string;
-        end: string;
-        timezone?: string | undefined;
-      }
-    | undefined;
   idleThresholdMs?: number | undefined;
   broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
@@ -90389,7 +90246,7 @@ export type PostAgentsAgentIdHeartbeats_Body = {
     | undefined;
 };
 
-export type PostAgentsAgentIdHeartbeats_Response = {
+export type PostHeartbeats_Response = {
   id: string;
   agentId: string;
   name?: string | undefined;
@@ -90424,13 +90281,6 @@ export type PostAgentsAgentIdHeartbeats_Response = {
   signalType?: string | undefined;
   ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
   ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
-  activeHours?:
-    | {
-        start: string;
-        end: string;
-        timezone?: string | undefined;
-      }
-    | undefined;
   idleThresholdMs?: number | undefined;
   broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
@@ -90442,34 +90292,33 @@ export type PostAgentsAgentIdHeartbeats_Response = {
   updatedAt: number;
 };
 
-export type PostAgentsAgentIdHeartbeats_Request = Simplify<
-  (PostAgentsAgentIdHeartbeats_PathParams extends never ? {} : { params: PostAgentsAgentIdHeartbeats_PathParams }) &
+export type PostHeartbeats_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
     (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PostAgentsAgentIdHeartbeats_Body extends never
+    (PostHeartbeats_Body extends never
       ? {}
-      : {} extends PostAgentsAgentIdHeartbeats_Body
-        ? { body?: PostAgentsAgentIdHeartbeats_Body }
-        : { body: PostAgentsAgentIdHeartbeats_Body })
+      : {} extends PostHeartbeats_Body
+        ? { body?: PostHeartbeats_Body }
+        : { body: PostHeartbeats_Body })
 >;
 
-export interface PostAgentsAgentIdHeartbeats_RouteContract {
-  pathParams: PostAgentsAgentIdHeartbeats_PathParams;
+export interface PostHeartbeats_RouteContract {
+  pathParams: never;
   queryParams: never;
-  body: PostAgentsAgentIdHeartbeats_Body;
-  request: PostAgentsAgentIdHeartbeats_Request;
-  response: PostAgentsAgentIdHeartbeats_Response;
+  body: PostHeartbeats_Body;
+  request: PostHeartbeats_Request;
+  response: PostHeartbeats_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: PATCH /agents/:agentId/heartbeats/:heartbeatId
+// Route: PATCH /heartbeats/:heartbeatId
 // ============================================================================
-export type PatchAgentsAgentIdHeartbeatsHeartbeatId_PathParams = {
-  agentId: string;
+export type PatchHeartbeatsHeartbeatId_PathParams = {
   heartbeatId: string;
 };
 
-export type PatchAgentsAgentIdHeartbeatsHeartbeatId_Body = {
+export type PatchHeartbeatsHeartbeatId_Body = {
   cron?: string | undefined;
   timezone?: string | undefined;
   prompt?: string | undefined;
@@ -90477,13 +90326,6 @@ export type PatchAgentsAgentIdHeartbeatsHeartbeatId_Body = {
   signalType?: string | undefined;
   ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
   ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
-  activeHours?:
-    | {
-        start: string;
-        end: string;
-        timezone?: string | undefined;
-      }
-    | undefined;
   idleThresholdMs?: number | undefined;
   broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
@@ -90493,7 +90335,7 @@ export type PatchAgentsAgentIdHeartbeatsHeartbeatId_Body = {
     | undefined;
 };
 
-export type PatchAgentsAgentIdHeartbeatsHeartbeatId_Response = {
+export type PatchHeartbeatsHeartbeatId_Response = {
   id: string;
   agentId: string;
   name?: string | undefined;
@@ -90528,13 +90370,6 @@ export type PatchAgentsAgentIdHeartbeatsHeartbeatId_Response = {
   signalType?: string | undefined;
   ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
   ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
-  activeHours?:
-    | {
-        start: string;
-        end: string;
-        timezone?: string | undefined;
-      }
-    | undefined;
   idleThresholdMs?: number | undefined;
   broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
@@ -90546,65 +90381,59 @@ export type PatchAgentsAgentIdHeartbeatsHeartbeatId_Response = {
   updatedAt: number;
 };
 
-export type PatchAgentsAgentIdHeartbeatsHeartbeatId_Request = Simplify<
-  (PatchAgentsAgentIdHeartbeatsHeartbeatId_PathParams extends never
-    ? {}
-    : { params: PatchAgentsAgentIdHeartbeatsHeartbeatId_PathParams }) &
+export type PatchHeartbeatsHeartbeatId_Request = Simplify<
+  (PatchHeartbeatsHeartbeatId_PathParams extends never ? {} : { params: PatchHeartbeatsHeartbeatId_PathParams }) &
     (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PatchAgentsAgentIdHeartbeatsHeartbeatId_Body extends never
+    (PatchHeartbeatsHeartbeatId_Body extends never
       ? {}
-      : {} extends PatchAgentsAgentIdHeartbeatsHeartbeatId_Body
-        ? { body?: PatchAgentsAgentIdHeartbeatsHeartbeatId_Body }
-        : { body: PatchAgentsAgentIdHeartbeatsHeartbeatId_Body })
+      : {} extends PatchHeartbeatsHeartbeatId_Body
+        ? { body?: PatchHeartbeatsHeartbeatId_Body }
+        : { body: PatchHeartbeatsHeartbeatId_Body })
 >;
 
-export interface PatchAgentsAgentIdHeartbeatsHeartbeatId_RouteContract {
-  pathParams: PatchAgentsAgentIdHeartbeatsHeartbeatId_PathParams;
+export interface PatchHeartbeatsHeartbeatId_RouteContract {
+  pathParams: PatchHeartbeatsHeartbeatId_PathParams;
   queryParams: never;
-  body: PatchAgentsAgentIdHeartbeatsHeartbeatId_Body;
-  request: PatchAgentsAgentIdHeartbeatsHeartbeatId_Request;
-  response: PatchAgentsAgentIdHeartbeatsHeartbeatId_Response;
+  body: PatchHeartbeatsHeartbeatId_Body;
+  request: PatchHeartbeatsHeartbeatId_Request;
+  response: PatchHeartbeatsHeartbeatId_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: DELETE /agents/:agentId/heartbeats/:heartbeatId
+// Route: DELETE /heartbeats/:heartbeatId
 // ============================================================================
-export type DeleteAgentsAgentIdHeartbeatsHeartbeatId_PathParams = {
-  agentId: string;
+export type DeleteHeartbeatsHeartbeatId_PathParams = {
   heartbeatId: string;
 };
 
-export type DeleteAgentsAgentIdHeartbeatsHeartbeatId_Response = {
+export type DeleteHeartbeatsHeartbeatId_Response = {
   message: string;
 };
 
-export type DeleteAgentsAgentIdHeartbeatsHeartbeatId_Request = Simplify<
-  (DeleteAgentsAgentIdHeartbeatsHeartbeatId_PathParams extends never
-    ? {}
-    : { params: DeleteAgentsAgentIdHeartbeatsHeartbeatId_PathParams }) &
+export type DeleteHeartbeatsHeartbeatId_Request = Simplify<
+  (DeleteHeartbeatsHeartbeatId_PathParams extends never ? {} : { params: DeleteHeartbeatsHeartbeatId_PathParams }) &
     (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface DeleteAgentsAgentIdHeartbeatsHeartbeatId_RouteContract {
-  pathParams: DeleteAgentsAgentIdHeartbeatsHeartbeatId_PathParams;
+export interface DeleteHeartbeatsHeartbeatId_RouteContract {
+  pathParams: DeleteHeartbeatsHeartbeatId_PathParams;
   queryParams: never;
   body: never;
-  request: DeleteAgentsAgentIdHeartbeatsHeartbeatId_Request;
-  response: DeleteAgentsAgentIdHeartbeatsHeartbeatId_Response;
+  request: DeleteHeartbeatsHeartbeatId_Request;
+  response: DeleteHeartbeatsHeartbeatId_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: POST /agents/:agentId/heartbeats/:heartbeatId/pause
+// Route: POST /heartbeats/:heartbeatId/pause
 // ============================================================================
-export type PostAgentsAgentIdHeartbeatsHeartbeatIdPause_PathParams = {
-  agentId: string;
+export type PostHeartbeatsHeartbeatIdPause_PathParams = {
   heartbeatId: string;
 };
 
-export type PostAgentsAgentIdHeartbeatsHeartbeatIdPause_Response = {
+export type PostHeartbeatsHeartbeatIdPause_Response = {
   id: string;
   agentId: string;
   name?: string | undefined;
@@ -90639,13 +90468,6 @@ export type PostAgentsAgentIdHeartbeatsHeartbeatIdPause_Response = {
   signalType?: string | undefined;
   ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
   ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
-  activeHours?:
-    | {
-        start: string;
-        end: string;
-        timezone?: string | undefined;
-      }
-    | undefined;
   idleThresholdMs?: number | undefined;
   broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
@@ -90657,32 +90479,31 @@ export type PostAgentsAgentIdHeartbeatsHeartbeatIdPause_Response = {
   updatedAt: number;
 };
 
-export type PostAgentsAgentIdHeartbeatsHeartbeatIdPause_Request = Simplify<
-  (PostAgentsAgentIdHeartbeatsHeartbeatIdPause_PathParams extends never
+export type PostHeartbeatsHeartbeatIdPause_Request = Simplify<
+  (PostHeartbeatsHeartbeatIdPause_PathParams extends never
     ? {}
-    : { params: PostAgentsAgentIdHeartbeatsHeartbeatIdPause_PathParams }) &
+    : { params: PostHeartbeatsHeartbeatIdPause_PathParams }) &
     (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface PostAgentsAgentIdHeartbeatsHeartbeatIdPause_RouteContract {
-  pathParams: PostAgentsAgentIdHeartbeatsHeartbeatIdPause_PathParams;
+export interface PostHeartbeatsHeartbeatIdPause_RouteContract {
+  pathParams: PostHeartbeatsHeartbeatIdPause_PathParams;
   queryParams: never;
   body: never;
-  request: PostAgentsAgentIdHeartbeatsHeartbeatIdPause_Request;
-  response: PostAgentsAgentIdHeartbeatsHeartbeatIdPause_Response;
+  request: PostHeartbeatsHeartbeatIdPause_Request;
+  response: PostHeartbeatsHeartbeatIdPause_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: POST /agents/:agentId/heartbeats/:heartbeatId/resume
+// Route: POST /heartbeats/:heartbeatId/resume
 // ============================================================================
-export type PostAgentsAgentIdHeartbeatsHeartbeatIdResume_PathParams = {
-  agentId: string;
+export type PostHeartbeatsHeartbeatIdResume_PathParams = {
   heartbeatId: string;
 };
 
-export type PostAgentsAgentIdHeartbeatsHeartbeatIdResume_Response = {
+export type PostHeartbeatsHeartbeatIdResume_Response = {
   id: string;
   agentId: string;
   name?: string | undefined;
@@ -90717,13 +90538,6 @@ export type PostAgentsAgentIdHeartbeatsHeartbeatIdResume_Response = {
   signalType?: string | undefined;
   ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
   ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
-  activeHours?:
-    | {
-        start: string;
-        end: string;
-        timezone?: string | undefined;
-      }
-    | undefined;
   idleThresholdMs?: number | undefined;
   broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
@@ -90735,51 +90549,48 @@ export type PostAgentsAgentIdHeartbeatsHeartbeatIdResume_Response = {
   updatedAt: number;
 };
 
-export type PostAgentsAgentIdHeartbeatsHeartbeatIdResume_Request = Simplify<
-  (PostAgentsAgentIdHeartbeatsHeartbeatIdResume_PathParams extends never
+export type PostHeartbeatsHeartbeatIdResume_Request = Simplify<
+  (PostHeartbeatsHeartbeatIdResume_PathParams extends never
     ? {}
-    : { params: PostAgentsAgentIdHeartbeatsHeartbeatIdResume_PathParams }) &
+    : { params: PostHeartbeatsHeartbeatIdResume_PathParams }) &
     (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface PostAgentsAgentIdHeartbeatsHeartbeatIdResume_RouteContract {
-  pathParams: PostAgentsAgentIdHeartbeatsHeartbeatIdResume_PathParams;
+export interface PostHeartbeatsHeartbeatIdResume_RouteContract {
+  pathParams: PostHeartbeatsHeartbeatIdResume_PathParams;
   queryParams: never;
   body: never;
-  request: PostAgentsAgentIdHeartbeatsHeartbeatIdResume_Request;
-  response: PostAgentsAgentIdHeartbeatsHeartbeatIdResume_Response;
+  request: PostHeartbeatsHeartbeatIdResume_Request;
+  response: PostHeartbeatsHeartbeatIdResume_Response;
   responseType: 'json';
 }
 
 // ============================================================================
-// Route: POST /agents/:agentId/heartbeats/:heartbeatId/run
+// Route: POST /heartbeats/:heartbeatId/run
 // ============================================================================
-export type PostAgentsAgentIdHeartbeatsHeartbeatIdRun_PathParams = {
-  agentId: string;
+export type PostHeartbeatsHeartbeatIdRun_PathParams = {
   heartbeatId: string;
 };
 
-export type PostAgentsAgentIdHeartbeatsHeartbeatIdRun_Response = {
+export type PostHeartbeatsHeartbeatIdRun_Response = {
   scheduleId: string;
   claimId: string;
   scheduledFireAt: number;
 };
 
-export type PostAgentsAgentIdHeartbeatsHeartbeatIdRun_Request = Simplify<
-  (PostAgentsAgentIdHeartbeatsHeartbeatIdRun_PathParams extends never
-    ? {}
-    : { params: PostAgentsAgentIdHeartbeatsHeartbeatIdRun_PathParams }) &
+export type PostHeartbeatsHeartbeatIdRun_Request = Simplify<
+  (PostHeartbeatsHeartbeatIdRun_PathParams extends never ? {} : { params: PostHeartbeatsHeartbeatIdRun_PathParams }) &
     (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface PostAgentsAgentIdHeartbeatsHeartbeatIdRun_RouteContract {
-  pathParams: PostAgentsAgentIdHeartbeatsHeartbeatIdRun_PathParams;
+export interface PostHeartbeatsHeartbeatIdRun_RouteContract {
+  pathParams: PostHeartbeatsHeartbeatIdRun_PathParams;
   queryParams: never;
   body: never;
-  request: PostAgentsAgentIdHeartbeatsHeartbeatIdRun_Request;
-  response: PostAgentsAgentIdHeartbeatsHeartbeatIdRun_Response;
+  request: PostHeartbeatsHeartbeatIdRun_Request;
+  response: PostHeartbeatsHeartbeatIdRun_Response;
   responseType: 'json';
 }
 
@@ -92551,14 +92362,13 @@ export interface RouteTypes {
   'POST /schedules/:scheduleId/pause': PostSchedulesScheduleIdPause_RouteContract;
   'POST /schedules/:scheduleId/resume': PostSchedulesScheduleIdResume_RouteContract;
   'GET /heartbeats': GetHeartbeats_RouteContract;
-  'GET /agents/:agentId/heartbeats': GetAgentsAgentIdHeartbeats_RouteContract;
-  'GET /agents/:agentId/heartbeats/:heartbeatId': GetAgentsAgentIdHeartbeatsHeartbeatId_RouteContract;
-  'POST /agents/:agentId/heartbeats': PostAgentsAgentIdHeartbeats_RouteContract;
-  'PATCH /agents/:agentId/heartbeats/:heartbeatId': PatchAgentsAgentIdHeartbeatsHeartbeatId_RouteContract;
-  'DELETE /agents/:agentId/heartbeats/:heartbeatId': DeleteAgentsAgentIdHeartbeatsHeartbeatId_RouteContract;
-  'POST /agents/:agentId/heartbeats/:heartbeatId/pause': PostAgentsAgentIdHeartbeatsHeartbeatIdPause_RouteContract;
-  'POST /agents/:agentId/heartbeats/:heartbeatId/resume': PostAgentsAgentIdHeartbeatsHeartbeatIdResume_RouteContract;
-  'POST /agents/:agentId/heartbeats/:heartbeatId/run': PostAgentsAgentIdHeartbeatsHeartbeatIdRun_RouteContract;
+  'GET /heartbeats/:heartbeatId': GetHeartbeatsHeartbeatId_RouteContract;
+  'POST /heartbeats': PostHeartbeats_RouteContract;
+  'PATCH /heartbeats/:heartbeatId': PatchHeartbeatsHeartbeatId_RouteContract;
+  'DELETE /heartbeats/:heartbeatId': DeleteHeartbeatsHeartbeatId_RouteContract;
+  'POST /heartbeats/:heartbeatId/pause': PostHeartbeatsHeartbeatIdPause_RouteContract;
+  'POST /heartbeats/:heartbeatId/resume': PostHeartbeatsHeartbeatIdResume_RouteContract;
+  'POST /heartbeats/:heartbeatId/run': PostHeartbeatsHeartbeatIdRun_RouteContract;
   'GET /channels/platforms': GetChannelsPlatforms_RouteContract;
   'GET /channels/:platform/installations': GetChannelsPlatformInstallations_RouteContract;
   'POST /channels/:platform/connect': PostChannelsPlatformConnect_RouteContract;
@@ -92700,24 +92510,6 @@ export interface Client {
   };
   '/agents/:agentId/generate/vnext': {
     POST: PostAgentsAgentIdGenerateVnext_RouteContract;
-  };
-  '/agents/:agentId/heartbeats': {
-    GET: GetAgentsAgentIdHeartbeats_RouteContract;
-    POST: PostAgentsAgentIdHeartbeats_RouteContract;
-  };
-  '/agents/:agentId/heartbeats/:heartbeatId': {
-    DELETE: DeleteAgentsAgentIdHeartbeatsHeartbeatId_RouteContract;
-    GET: GetAgentsAgentIdHeartbeatsHeartbeatId_RouteContract;
-    PATCH: PatchAgentsAgentIdHeartbeatsHeartbeatId_RouteContract;
-  };
-  '/agents/:agentId/heartbeats/:heartbeatId/pause': {
-    POST: PostAgentsAgentIdHeartbeatsHeartbeatIdPause_RouteContract;
-  };
-  '/agents/:agentId/heartbeats/:heartbeatId/resume': {
-    POST: PostAgentsAgentIdHeartbeatsHeartbeatIdResume_RouteContract;
-  };
-  '/agents/:agentId/heartbeats/:heartbeatId/run': {
-    POST: PostAgentsAgentIdHeartbeatsHeartbeatIdRun_RouteContract;
   };
   '/agents/:agentId/instructions/enhance': {
     POST: PostAgentsAgentIdInstructionsEnhance_RouteContract;
@@ -93049,6 +92841,21 @@ export interface Client {
   };
   '/heartbeats': {
     GET: GetHeartbeats_RouteContract;
+    POST: PostHeartbeats_RouteContract;
+  };
+  '/heartbeats/:heartbeatId': {
+    DELETE: DeleteHeartbeatsHeartbeatId_RouteContract;
+    GET: GetHeartbeatsHeartbeatId_RouteContract;
+    PATCH: PatchHeartbeatsHeartbeatId_RouteContract;
+  };
+  '/heartbeats/:heartbeatId/pause': {
+    POST: PostHeartbeatsHeartbeatIdPause_RouteContract;
+  };
+  '/heartbeats/:heartbeatId/resume': {
+    POST: PostHeartbeatsHeartbeatIdResume_RouteContract;
+  };
+  '/heartbeats/:heartbeatId/run': {
+    POST: PostHeartbeatsHeartbeatIdRun_RouteContract;
   };
   '/logs': {
     GET: GetLogs_RouteContract;

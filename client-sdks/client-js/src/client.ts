@@ -200,6 +200,9 @@ import type {
   ListScheduleTriggersResponse,
   Heartbeat,
   ListHeartbeatsParams,
+  CreateHeartbeatInput,
+  UpdateHeartbeatOptions,
+  RunHeartbeatResponse,
 } from './types';
 import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
 
@@ -2278,5 +2281,80 @@ export class MastraClient extends BaseResource {
     return this.request<{ heartbeats: Heartbeat[] }>(`/heartbeats${qs ? `?${qs}` : ''}`).then(
       response => response.heartbeats,
     );
+  }
+
+  /**
+   * Gets a single heartbeat by id.
+   */
+  public getHeartbeat(heartbeatId: string): Promise<Heartbeat> {
+    return this.request(`/heartbeats/${encodeURIComponent(heartbeatId)}`);
+  }
+
+  /**
+   * Creates a heartbeat for the agent named by `agentId`. Each call creates a
+   * new heartbeat with a random `hb_<uuid>` id — multiple heartbeats per
+   * agent/thread are supported. Use `name` to label distinct heartbeats.
+   *
+   * Trigger (fire) history is read through the generic schedules surface:
+   * `listScheduleTriggers(heartbeat.id)`.
+   */
+  public createHeartbeat(options: CreateHeartbeatInput): Promise<Heartbeat> {
+    return this.request(`/heartbeats`, {
+      method: 'POST',
+      body: options,
+    });
+  }
+
+  /**
+   * Patches an existing heartbeat. `threadId` / `resourceId` are immutable —
+   * to retarget, delete and recreate.
+   */
+  public updateHeartbeat(heartbeatId: string, patch: UpdateHeartbeatOptions): Promise<Heartbeat> {
+    return this.request(`/heartbeats/${encodeURIComponent(heartbeatId)}`, {
+      method: 'PATCH',
+      body: patch,
+    });
+  }
+
+  /**
+   * Deletes a heartbeat.
+   */
+  public deleteHeartbeat(heartbeatId: string): Promise<{ message: string }> {
+    return this.request(`/heartbeats/${encodeURIComponent(heartbeatId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Pauses a heartbeat. Idempotent — pausing an already-paused heartbeat
+   * returns the current state unchanged.
+   */
+  public pauseHeartbeat(heartbeatId: string): Promise<Heartbeat> {
+    return this.request(`/heartbeats/${encodeURIComponent(heartbeatId)}/pause`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Resumes a paused heartbeat. Recomputes nextFireAt from "now" so a
+   * long-paused heartbeat does not fire a backlog. Idempotent.
+   */
+  public resumeHeartbeat(heartbeatId: string): Promise<Heartbeat> {
+    return this.request(`/heartbeats/${encodeURIComponent(heartbeatId)}/resume`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Fires a heartbeat manually, out-of-band from the cron schedule. The run
+   * goes through the same HeartbeatWorker pipeline as a scheduled fire
+   * (ifActive/ifIdle, broadcast processor). Does not advance nextFireAt. The
+   * returned `claimId` is the trigger row's runId — look it up via
+   * `listScheduleTriggers(heartbeatId)`.
+   */
+  public runHeartbeat(heartbeatId: string): Promise<RunHeartbeatResponse> {
+    return this.request(`/heartbeats/${encodeURIComponent(heartbeatId)}/run`, {
+      method: 'POST',
+    });
   }
 }

@@ -5654,31 +5654,10 @@ export const API_ROUTE_METADATA = {
       "listProperty": "heartbeats"
     }
   },
-  "GET /agents/:agentId/heartbeats": {
+  "GET /heartbeats/:heartbeatId": {
     "method": "GET",
-    "path": "/agents/:agentId/heartbeats",
+    "path": "/heartbeats/:heartbeatId",
     "pathParams": [
-      "agentId"
-    ],
-    "queryParams": [
-      "agentId",
-      "name",
-      "resourceId",
-      "threadId"
-    ],
-    "bodyParams": [],
-    "hasQuery": true,
-    "hasBody": false,
-    "responseShape": {
-      "kind": "object-property",
-      "listProperty": "heartbeats"
-    }
-  },
-  "GET /agents/:agentId/heartbeats/:heartbeatId": {
-    "method": "GET",
-    "path": "/agents/:agentId/heartbeats/:heartbeatId",
-    "pathParams": [
-      "agentId",
       "heartbeatId"
     ],
     "queryParams": [],
@@ -5689,14 +5668,13 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
-  "POST /agents/:agentId/heartbeats": {
+  "POST /heartbeats": {
     "method": "POST",
-    "path": "/agents/:agentId/heartbeats",
-    "pathParams": [
-      "agentId"
-    ],
+    "path": "/heartbeats",
+    "pathParams": [],
     "queryParams": [],
     "bodyParams": [
+      "agentId",
       "broadcast",
       "cron",
       "idleThresholdMs",
@@ -5716,11 +5694,10 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
-  "PATCH /agents/:agentId/heartbeats/:heartbeatId": {
+  "PATCH /heartbeats/:heartbeatId": {
     "method": "PATCH",
-    "path": "/agents/:agentId/heartbeats/:heartbeatId",
+    "path": "/heartbeats/:heartbeatId",
     "pathParams": [
-      "agentId",
       "heartbeatId"
     ],
     "queryParams": [],
@@ -5742,11 +5719,10 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
-  "DELETE /agents/:agentId/heartbeats/:heartbeatId": {
+  "DELETE /heartbeats/:heartbeatId": {
     "method": "DELETE",
-    "path": "/agents/:agentId/heartbeats/:heartbeatId",
+    "path": "/heartbeats/:heartbeatId",
     "pathParams": [
-      "agentId",
       "heartbeatId"
     ],
     "queryParams": [],
@@ -5757,11 +5733,10 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
-  "POST /agents/:agentId/heartbeats/:heartbeatId/pause": {
+  "POST /heartbeats/:heartbeatId/pause": {
     "method": "POST",
-    "path": "/agents/:agentId/heartbeats/:heartbeatId/pause",
+    "path": "/heartbeats/:heartbeatId/pause",
     "pathParams": [
-      "agentId",
       "heartbeatId"
     ],
     "queryParams": [],
@@ -5772,11 +5747,10 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
-  "POST /agents/:agentId/heartbeats/:heartbeatId/resume": {
+  "POST /heartbeats/:heartbeatId/resume": {
     "method": "POST",
-    "path": "/agents/:agentId/heartbeats/:heartbeatId/resume",
+    "path": "/heartbeats/:heartbeatId/resume",
     "pathParams": [
-      "agentId",
       "heartbeatId"
     ],
     "queryParams": [],
@@ -5787,11 +5761,10 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
-  "POST /agents/:agentId/heartbeats/:heartbeatId/run": {
+  "POST /heartbeats/:heartbeatId/run": {
     "method": "POST",
-    "path": "/agents/:agentId/heartbeats/:heartbeatId/run",
+    "path": "/heartbeats/:heartbeatId/run",
     "pathParams": [
-      "agentId",
       "heartbeatId"
     ],
     "queryParams": [],
