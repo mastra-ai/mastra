@@ -43,7 +43,10 @@ vi.mock('@mastra/core/harness', () => ({
 vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {},
   isBadRequestError: (error: unknown) =>
-    typeof error === 'object' && error !== null && 'statusCode' in error && (error as { statusCode?: unknown }).statusCode === 400,
+    typeof error === 'object' &&
+    error !== null &&
+    'statusCode' in error &&
+    (error as { statusCode?: unknown }).statusCode === 400,
   PrefillErrorHandler: class {},
   ProviderHistoryCompat: class {},
   StreamErrorRetryProcessor: class {},
