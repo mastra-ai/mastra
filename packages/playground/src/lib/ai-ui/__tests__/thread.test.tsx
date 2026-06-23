@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -10,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { ChatProvider } from '../chat/chat-provider';
 import { Thread } from '../thread';
+import { memoryDisabled, v2Agent } from './fixtures/agent';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { ThreadInputProvider } from '@/domains/conversation';
@@ -51,8 +51,15 @@ const baseHandlers = () => [
   http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
   http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })),
   http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
+  http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json(memoryDisabled)),
   http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () => workingMemoryResponse()),
+  http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json({ providers: [] })),
   http.get(`${BASE_URL}/api/agents/:agentId/voice/speakers`, () => HttpResponse.json([])),
+  http.get(`${BASE_URL}/api/agents/:agentId`, () => HttpResponse.json(v2Agent)),
+  http.get(`${BASE_URL}/api/editor/builder/settings`, () =>
+    HttpResponse.json({ enabled: false, modelPolicy: { active: false } }),
+  ),
+  http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json({ providers: [] })),
   http.post(
     `${BASE_URL}/api/agents/:agentId/threads/subscribe`,
     () =>
@@ -388,6 +395,7 @@ describe('Thread signal-path user-message reconciliation', () => {
 
     server.use(
       http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
+      http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })),
       http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
       http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () =>
         HttpResponse.json({

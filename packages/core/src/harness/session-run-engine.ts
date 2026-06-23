@@ -314,7 +314,7 @@ export class SessionRunEngine {
           break;
         }
 
-        const approvalPromise = this.#session.approval.arm({ toolName });
+        const approvalPromise = this.#session.approval.arm({ toolName, toolCallId });
         this.#session.emit({ type: 'tool_approval_required', toolCallId, toolName, args: toolArgs });
 
         const approval = await approvalPromise;

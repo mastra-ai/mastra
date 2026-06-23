@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import type * as PlaygroundUi from '@mastra/playground-ui';
 import { cleanup, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';

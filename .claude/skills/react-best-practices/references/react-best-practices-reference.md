@@ -42,6 +42,8 @@ Performance optimization guide for React applications, designed for AI agents an
 7. [Component Structure](#7-component-structure) — **MEDIUM-HIGH**
    - 7.1 [One Component or Hook = One Responsibility = One File](#71-one-component-or-hook--one-responsibility--one-file)
    - 7.2 [JSX-Returning Helpers Must Be Components](#72-jsx-returning-helpers-must-be-components)
+8. [Testing](#8-testing) — **MEDIUM-HIGH**
+   - 8.1 [BDD Tests That Mock Only the Network](#81-bdd-tests-that-mock-only-the-network)
 
 ---
 
@@ -769,6 +771,74 @@ const formatJson = (value: unknown) => JSON.stringify(value, null, 2) ?? String(
 ```
 
 Smell to catch in reviews: `renderSomething(...)` returning JSX, especially when it accepts props-like arguments or is reused in multiple JSX branches.
+
+---
+
+## 8. Testing
+
+### 8.1 BDD Tests That Mock Only the Network
+
+In `packages/playground` (and `packages/playground-ui`), tests must **drive the real `@mastra/client-js` + React Query stack and only mock the network**, and they must be written **BDD-style**: an outer `describe` names the unit, inner `describe('when …')` blocks name a precondition, and each `it` asserts one outcome.
+
+This rule is **lint-enforced**. `packages/playground/eslint.config.js` adds `no-restricted-syntax` selectors (scoped to `src/**/*.{test,spec}.{ts,tsx}`) that fail CI on any prohibited `vi.mock`. The contract also lives in `packages/playground/AGENTS.md`, and the mechanics live in the `playground-msw-tests` skill — activate it before adding or changing any test here.
+
+**Prohibited** — `vi.mock` of: our own data hooks/services (`@/domains/**/hooks/*`, `@/domains/**/services/*`, `@/hooks/*`), auth gating (`@/domains/auth/**`), domain barrels that re-export them (`@/domains/{agent-builder,llm,agents}`), and the SDK (`@mastra/client-js`, `@mastra/react`). Mocking these replaces the very code paths a test should exercise — the React Query cache, the SDK transport, RBAC capability resolution — so a green test proves nothing about production behavior.
+
+**Allowed seams** (not flagged): MSW network handlers, jsdom DOM-API polyfills in `vitest.setup.ts`, `react-router`'s `Navigate` (to assert a redirect target), a thin stub of a heavy child component that has its own dedicated test, and atoms that need global context.
+
+**Incorrect (mocks auth gating and the SDK; asserts nothing real):**
+
+```tsx
+vi.mock('@mastra/react', () => ({
+  useMastraClient: () => ({ getBuilderSettings }),
+}));
+vi.mock('@/domains/auth/hooks/use-permissions', () => ({
+  usePermissions: () => ({ hasPermission: () => true, rbacEnabled: true }),
+}));
+
+it('shows the editor for permitted users', () => {
+  render(<AgentEditPage />);
+  expect(screen.getByRole('form')).toBeInTheDocument();
+});
+```
+
+**Correct (real providers + SDK; capability + data driven by MSW fixtures):**
+
+```tsx
+// __tests__/fixtures/capabilities.ts — typed from @mastra/client-js, no `as any`
+import type { GetCapabilitiesResponse } from '@mastra/client-js';
+
+export const canEditAgents: GetCapabilitiesResponse = {
+  /* … real-shaped capability payload granting agent edit … */
+};
+
+// agent-edit.msw.test.tsx
+describe('AgentEditPage', () => {
+  describe('when the user has the agent-edit capability', () => {
+    it('renders the editor form', async () => {
+      server.use(http.get('*/api/auth/capabilities', () => HttpResponse.json(canEditAgents)));
+
+      renderWithProviders(<AgentEditPage />);
+
+      expect(await screen.findByRole('form')).toBeInTheDocument();
+    });
+  });
+
+  describe('when the user lacks the capability', () => {
+    it('redirects to the first accessible route', async () => {
+      server.use(http.get('*/api/auth/capabilities', () => HttpResponse.json(noCapabilities)));
+
+      renderWithProviders(<AgentEditPage />);
+
+      expect(await screen.findByTestId('navigate')).toHaveAttribute('data-to', '/agents');
+    });
+  });
+});
+```
+
+**BDD structure:** outer `describe` = the unit under test; inner `describe('when <context>')` = one precondition (input shape, RBAC capability, feature flag, loading/error/empty/success), each set up with a real MSW fixture; `it('<outcome>')` = one Then (split multi-assert cases). Keep single-context units flat. Fixtures live in a nearby `__tests__/fixtures/` folder, typed from `@mastra/client-js` — no `as any`, no `as unknown as`.
+
+When removing a mock surfaces a real product gap, fix the test/fixture or file the gap — never re-mock to hide it. MSW runs with `onUnhandledRequest: 'error'`, so unstubbed requests fail loudly.
 
 ---
 
