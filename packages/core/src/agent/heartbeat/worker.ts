@@ -249,9 +249,9 @@ export async function executeHeartbeat(
   const hooks =
     (
       mastra as unknown as {
-        __getHeartbeatHooks?: (agentId: string) => HeartbeatHooks | null | undefined;
+        __getHeartbeatHooks?: () => HeartbeatHooks | null | undefined;
       }
-    ).__getHeartbeatHooks?.(agentId) ?? undefined;
+    ).__getHeartbeatHooks?.() ?? undefined;
 
   // Build a partial `Heartbeat` view for hook contexts. Best-effort —
   // pulls from the live schedule row when available, otherwise from the
@@ -266,6 +266,7 @@ export async function executeHeartbeat(
     try {
       const prepareCtx: HeartbeatPrepareContext = {
         mastra,
+        agentId,
         heartbeat: heartbeatRef,
         trigger,
       };
@@ -274,6 +275,7 @@ export async function executeHeartbeat(
       await safeHookCall(log, () =>
         hooks.onError?.({
           mastra,
+          agentId,
           heartbeat: heartbeatRef,
           trigger,
           phase: 'prepare',
@@ -294,6 +296,7 @@ export async function executeHeartbeat(
     await safeHookCall(log, () =>
       hooks?.onFinish?.({
         mastra,
+        agentId,
         heartbeat: heartbeatRef,
         trigger,
         outcome: 'skipped',
@@ -322,6 +325,7 @@ export async function executeHeartbeat(
       await safeHookCall(log, () =>
         hooks?.onError?.({
           mastra,
+          agentId,
           heartbeat: heartbeatRef,
           trigger,
           phase: 'run',
@@ -341,6 +345,7 @@ export async function executeHeartbeat(
         await safeHookCall(log, () =>
           hooks?.onError?.({
             mastra,
+            agentId,
             heartbeat: heartbeatRef,
             trigger,
             phase: 'run',
@@ -356,6 +361,7 @@ export async function executeHeartbeat(
           await safeHookCall(log, () =>
             hooks?.onFinish?.({
               mastra,
+              agentId,
               heartbeat: heartbeatRef,
               trigger,
               outcome: 'skipped',
@@ -388,6 +394,7 @@ export async function executeHeartbeat(
       await safeHookCall(log, () =>
         hooks?.onError?.({
           mastra,
+          agentId,
           heartbeat: heartbeatRef,
           trigger,
           phase: 'run',
@@ -410,6 +417,7 @@ export async function executeHeartbeat(
       await safeHookCall(log, () =>
         hooks?.onError?.({
           mastra,
+          agentId,
           heartbeat: heartbeatRef,
           trigger,
           phase: 'run',
@@ -429,6 +437,7 @@ export async function executeHeartbeat(
       await safeHookCall(log, () =>
         hooks?.onFinish?.({
           mastra,
+          agentId,
           heartbeat: heartbeatRef,
           trigger,
           outcome: 'delivered',
@@ -451,6 +460,7 @@ export async function executeHeartbeat(
       await safeHookCall(log, () =>
         hooks?.onFinish?.({
           mastra,
+          agentId,
           heartbeat: heartbeatRef,
           trigger,
           outcome: 'persisted',
@@ -464,6 +474,7 @@ export async function executeHeartbeat(
       await safeHookCall(log, () =>
         hooks?.onFinish?.({
           mastra,
+          agentId,
           heartbeat: heartbeatRef,
           trigger,
           outcome: 'discarded',
@@ -480,6 +491,7 @@ export async function executeHeartbeat(
       await safeHookCall(log, () =>
         hooks?.onFinish?.({
           mastra,
+          agentId,
           heartbeat: heartbeatRef,
           trigger,
           outcome: 'skipped',
@@ -496,6 +508,7 @@ export async function executeHeartbeat(
     await safeHookCall(log, () =>
       hooks?.onFinish?.({
         mastra,
+        agentId,
         heartbeat: heartbeatRef,
         trigger,
         outcome: 'succeeded',
@@ -515,6 +528,7 @@ export async function executeHeartbeat(
     await safeHookCall(log, () =>
       hooks?.onFinish?.({
         mastra,
+        agentId,
         heartbeat: heartbeatRef,
         trigger,
         outcome: 'succeeded',
@@ -530,6 +544,7 @@ export async function executeHeartbeat(
       await safeHookCall(log, () =>
         hooks?.onAbort?.({
           mastra,
+          agentId,
           heartbeat: heartbeatRef,
           trigger,
           runId: extractRunId(error) ?? scheduleId,
@@ -541,6 +556,7 @@ export async function executeHeartbeat(
     await safeHookCall(log, () =>
       hooks?.onError?.({
         mastra,
+        agentId,
         heartbeat: heartbeatRef,
         trigger,
         phase: 'run',

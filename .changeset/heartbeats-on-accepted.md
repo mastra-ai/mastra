@@ -72,50 +72,49 @@ only on the `wake`/`deliver` arms.
 
 ### Heartbeat lifecycle hooks
 
-React to and customise heartbeat runs via `heartbeat.hooks` on the `Mastra`
-constructor, keyed by agentId (so stored agents are covered too). The shape
-mirrors `agent.stream` (`onFinish` / `onError` / `onAbort`) and adds a
-`prepare` hook for resolving fire-time parameters dynamically (for example,
-creating a fresh Slack thread per fire and returning its `threadId` /
-`resourceId`).
+React to and customise heartbeat runs via `heartbeat` on the `Mastra`
+constructor — a single flat hook bundle that runs for every agent's
+heartbeats (so stored agents are covered too). Each hook context carries
+the firing `agentId`, so branch on it when you need per-agent behaviour.
+The shape mirrors `agent.stream` (`onFinish` / `onError` / `onAbort`) and
+adds a `prepare` hook for resolving fire-time parameters dynamically (for
+example, creating a fresh Slack thread per fire and returning its
+`threadId` / `resourceId`).
 
 ```ts
 new Mastra({
   // ...
   heartbeat: {
-    hooks: {
-      chef: {
-        // Resolve dynamic params at fire time. Return overrides, `null` to skip
-        // this fire, or `undefined` to use the heartbeat row's defaults.
-        prepare: async ({ mastra, heartbeat, trigger }) => {
-          if (heartbeat.name === 'daily-digest') {
-            const { threadId } = await mastra.channels.slack.chat.createThread({
-              /* … */
-            });
-            return { threadId, resourceId: 'slack:U095PUH0FKL' };
-          }
-        },
+    // Resolve dynamic params at fire time. Return overrides, `null` to skip
+    // this fire, or `undefined` to use the heartbeat row's defaults.
+    prepare: async ({ agentId, mastra, heartbeat, trigger }) => {
+      if (agentId === 'chef' && heartbeat.name === 'daily-digest') {
+        const { threadId } = await mastra.channels.slack.chat.createThread({
+          /* … */
+        });
+        return { threadId, resourceId: 'slack:U095PUH0FKL' };
+      }
+    },
 
-        // Fires once per trigger when the trigger reached a non-error,
-        // non-abort terminal state.
-        onFinish: ({ outcome, result, heartbeat }) => {
-          metrics.record({
-            heartbeat: heartbeat.name,
-            outcome, // 'succeeded' | 'delivered' | 'persisted' | 'discarded' | 'skipped'
-            tokens: result?.usage?.totalTokens,
-          });
-        },
+    // Fires once per trigger when the trigger reached a non-error,
+    // non-abort terminal state.
+    onFinish: ({ agentId, outcome, result, heartbeat }) => {
+      metrics.record({
+        agentId,
+        heartbeat: heartbeat.name,
+        outcome, // 'succeeded' | 'delivered' | 'persisted' | 'discarded' | 'skipped'
+        tokens: result?.usage?.totalTokens,
+      });
+    },
 
-        // Fires when `prepare`, `sendSignal`, or the agent run threw.
-        onError: ({ error, phase, heartbeat }) => {
-          alerts.send(`heartbeat ${heartbeat.name} failed in ${phase}: ${error.message}`);
-        },
+    // Fires when `prepare`, `sendSignal`, or the agent run threw.
+    onError: ({ agentId, error, phase, heartbeat }) => {
+      alerts.send(`heartbeat ${agentId}/${heartbeat.name} failed in ${phase}: ${error.message}`);
+    },
 
-        // Fires when the run was aborted mid-stream.
-        onAbort: ({ heartbeat, runId }) => {
-          logger.info({ heartbeat: heartbeat.name, runId }, 'heartbeat aborted');
-        },
-      },
+    // Fires when the run was aborted mid-stream.
+    onAbort: ({ agentId, heartbeat, runId }) => {
+      logger.info({ agentId, heartbeat: heartbeat.name, runId }, 'heartbeat aborted');
     },
   },
 });

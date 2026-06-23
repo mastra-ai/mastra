@@ -918,15 +918,16 @@ export class Mastra<
   }
 
   /**
-   * Returns the heartbeat lifecycle hooks configured for a given agent via
-   * `new Mastra({ heartbeat: { hooks: { [agentId]: ... } } })`, if any.
-   * Internal: consumed by the {@link HeartbeatWorker} to invoke `prepare`,
-   * `onFinish`, `onError`, and `onAbort` around heartbeat-driven runs.
+   * Returns the heartbeat lifecycle hook bundle configured via
+   * `new Mastra({ heartbeat: { ... } })`, if any. A single bundle runs for
+   * every heartbeat fire; hooks branch per agent via the `agentId` on each
+   * context. Internal: consumed by the {@link HeartbeatWorker} to invoke
+   * `prepare`, `onFinish`, `onError`, and `onAbort` around heartbeat-driven runs.
    *
    * @internal
    */
-  __getHeartbeatHooks(agentId: string): HeartbeatHooks<Mastra> | undefined {
-    return this.#heartbeatConfig?.hooks?.[agentId];
+  __getHeartbeatHooks(): HeartbeatHooks<Mastra> | undefined {
+    return this.#heartbeatConfig;
   }
 
   /**

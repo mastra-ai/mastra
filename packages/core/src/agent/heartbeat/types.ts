@@ -93,8 +93,9 @@ export type HeartbeatOutput = z.infer<typeof HeartbeatOutputSchema>;
 // ---------------------------------------------------------------------------
 // Lifecycle hooks
 //
-// User-defined callbacks configured via `new Mastra({ heartbeat: { hooks } })`
-// keyed by agentId. Mirror the
+// User-defined callbacks configured via `new Mastra({ heartbeat: { ... } })`.
+// A single hook bundle runs for every heartbeat fire; each context carries
+// `agentId` so a hook can branch per agent. Mirror the
 // `agent.stream` `onFinish`/`onError`/`onAbort` conventions so users learn one
 // mental model. `prepare` lets users compute fire-time parameters (e.g. create
 // a Slack thread per fire) or skip the fire entirely by returning null.
@@ -137,6 +138,8 @@ interface HeartbeatRef {
 /** Argument passed to `heartbeat.prepare`. */
 export type HeartbeatPrepareContext<TMastra = unknown> = {
   mastra: TMastra;
+  /** The agent this heartbeat fires. Convenience alias for `heartbeat.agentId`. */
+  agentId: string;
   heartbeat: HeartbeatRef;
   trigger: HeartbeatTriggerInfo;
 };
@@ -154,6 +157,8 @@ export type HeartbeatPrepareResult = Partial<HeartbeatEffective>;
 /** Argument passed to `heartbeat.onFinish` for any non-error, non-abort outcome. */
 export type HeartbeatFinishContext<TMastra = unknown> = {
   mastra: TMastra;
+  /** The agent this heartbeat fires. Convenience alias for `heartbeat.agentId`. */
+  agentId: string;
   heartbeat: HeartbeatRef;
   trigger: HeartbeatTriggerInfo;
   outcome: 'succeeded' | 'delivered' | 'persisted' | 'discarded' | 'skipped';
@@ -169,6 +174,8 @@ export type HeartbeatFinishContext<TMastra = unknown> = {
 /** Argument passed to `heartbeat.onError` whenever `prepare`, `sendSignal`, or the agent run threw. */
 export type HeartbeatErrorContext<TMastra = unknown> = {
   mastra: TMastra;
+  /** The agent this heartbeat fires. Convenience alias for `heartbeat.agentId`. */
+  agentId: string;
   heartbeat: HeartbeatRef;
   trigger: HeartbeatTriggerInfo;
   phase: 'prepare' | 'run';
@@ -181,6 +188,8 @@ export type HeartbeatErrorContext<TMastra = unknown> = {
 /** Argument passed to `heartbeat.onAbort` when the run was aborted mid-stream. */
 export type HeartbeatAbortContext<TMastra = unknown> = {
   mastra: TMastra;
+  /** The agent this heartbeat fires. Convenience alias for `heartbeat.agentId`. */
+  agentId: string;
   heartbeat: HeartbeatRef;
   trigger: HeartbeatTriggerInfo;
   runId: string;
@@ -188,7 +197,8 @@ export type HeartbeatAbortContext<TMastra = unknown> = {
 };
 
 /**
- * Bundle of lifecycle hooks configured via `new Mastra({ heartbeat: { hooks } })`.
+ * Bundle of lifecycle hooks. A single bundle runs for every heartbeat fire;
+ * each context carries `agentId` so a hook can branch per agent.
  *
  * `onFinish` fires once per heartbeat trigger when the trigger reached a
  * non-error, non-abort terminal state. `onError` fires when `prepare`,
@@ -210,25 +220,20 @@ export type HeartbeatHooks<TMastra = unknown> = {
 
 /**
  * Heartbeat runtime configuration passed to the Mastra constructor via
- * `heartbeat`. Lifecycle hooks are keyed by `agentId` so they apply to both
+ * `heartbeat`. Holds a single lifecycle hook bundle that runs for every
+ * heartbeat fire. Hooks live at the Mastra level so they apply to both
  * code-defined and stored agents (stored agents cannot define functions in
- * their serialized config, so hooks must live at the Mastra level).
+ * their serialized config). Each hook context carries `agentId`, so branch
+ * on it when a hook should behave differently per agent.
  *
  * @example
  * ```typescript
  * new Mastra({
  *   heartbeat: {
- *     hooks: {
- *       'pinger': {
- *         prepare: async ({ heartbeat }) => ({ threadId: '...' }),
- *         onFinish: async ({ trigger }) => { ... },
- *       },
- *     },
+ *     prepare: async ({ agentId, heartbeat }) => ({ threadId: '...' }),
+ *     onFinish: async ({ agentId, trigger }) => { ... },
  *   },
  * });
  * ```
  */
-export type HeartbeatConfig<TMastra = unknown> = {
-  /** Lifecycle hooks keyed by `agentId`. */
-  hooks?: Record<string, HeartbeatHooks<TMastra>>;
-};
+export type HeartbeatConfig<TMastra = unknown> = HeartbeatHooks<TMastra>;

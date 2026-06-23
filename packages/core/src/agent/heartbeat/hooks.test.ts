@@ -41,7 +41,7 @@ function makeMastra(opts: { agent?: any; storage?: ReturnType<typeof makeStorage
     heartbeats: {
       get: vi.fn(async () => null),
     },
-    __getHeartbeatHooks: (_agentId: string) => opts.agent?.__getHeartbeatHooks?.(),
+    __getHeartbeatHooks: () => opts.agent?.__getHeartbeatHooks?.(),
   } as unknown as Mastra;
 }
 
@@ -153,6 +153,19 @@ describe('HeartbeatWorker — lifecycle hooks', () => {
     await executeHeartbeat(mastra, 'hb1', makeTarget({ threadId: 't1', resourceId: 'r1' }));
 
     expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'succeeded', runId: 'r3' }));
+  });
+
+  it('passes agentId into the hook context (flat hooks, keyed by ctx.agentId)', async () => {
+    const prepare = vi.fn(() => undefined);
+    const onFinish = vi.fn();
+    const sendSignal: any = vi.fn(() => signalResult({ action: 'wake', runId: 'r5' }));
+    const agent = makeAgent({ hooks: { prepare, onFinish }, sendSignal });
+    const mastra = makeMastra({ agent });
+
+    await executeHeartbeat(mastra, 'hb1', makeTarget({ agentId: 'a1', threadId: 't1', resourceId: 'r1' }));
+
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ agentId: 'a1' }));
+    expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ agentId: 'a1', outcome: 'succeeded' }));
   });
 
   it('threaded delivered path emits onFinish(outcome: delivered, joinedExistingRun: true)', async () => {
