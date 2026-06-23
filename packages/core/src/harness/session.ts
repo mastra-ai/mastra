@@ -321,9 +321,26 @@ export class SessionThread {
     return this.#store.getById({ threadId });
   }
 
+  /**
+   * Load a thread and verify it belongs to this session's resourceId before
+   * allowing access. Threads owned by another resource are treated as missing
+   * so a session can never read, switch to, rename, or delete a thread it does
+   * not own (the thread id is otherwise an unguessable but unscoped key). Throws
+   * `Thread not found: <id>` when the thread is absent or owned by someone else.
+   */
+  async #requireOwnedThread({ threadId }: { threadId: string }): Promise<HarnessThread> {
+    const thread = await this.#store?.getById({ threadId });
+    if (!thread || thread.resourceId !== this.#getResourceId()) {
+      throw new Error(`Thread not found: ${threadId}`);
+    }
+    return thread;
+  }
+
   /** List messages for a thread (newest-`limit`, returned oldest-first), or all. */
   async listMessages({ threadId, limit }: { threadId: string; limit?: number }): Promise<HarnessMessage[]> {
     if (!this.#store) return [];
+    // Only expose messages for threads this session owns.
+    await this.#requireOwnedThread({ threadId });
     return this.#store.listMessages({ threadId, limit });
   }
 
@@ -540,6 +557,10 @@ export class SessionThread {
     if (!sourceId) {
       throw new Error('No source thread to clone');
     }
+    // Only allow cloning from a source thread this session owns.
+    if (store?.hasStorage()) {
+      await this.#requireOwnedThread({ threadId: sourceId });
+    }
     if (!store) {
       throw new Error('Memory is not configured on this Harness');
     }
@@ -594,10 +615,16 @@ export class SessionThread {
       await store?.releaseLock(previousThreadId);
     }
 
+    // Verify the thread exists and belongs to this session's resourceId before
+    // binding to it, so a session can never switch onto a thread owned by
+    // another resource. Release the just-acquired lock if the check fails so we
+    // never leave a foreign thread locked.
     if (store?.hasStorage()) {
-      const thread = await store.getById({ threadId });
-      if (!thread) {
-        throw new Error(`Thread not found: ${threadId}`);
+      try {
+        await this.#requireOwnedThread({ threadId });
+      } catch (err) {
+        await store.releaseLock(threadId).catch(() => {});
+        throw err;
       }
     }
 
@@ -617,10 +644,8 @@ export class SessionThread {
     const store = this.#store;
     if (!store?.hasStorage()) return;
 
-    const thread = await store.getById({ threadId });
-    if (!thread) {
-      throw new Error(`Thread not found: ${threadId}`);
-    }
+    // Only allow deleting threads this session owns.
+    await this.#requireOwnedThread({ threadId });
 
     const isDeletingCurrentThread = this.#threadId === threadId;
 

@@ -15,6 +15,10 @@ import {
   LIST_HARNESS_MODES_ROUTE,
   LIST_HARNESS_THREADS_ROUTE,
   SWITCH_HARNESS_MODE_ROUTE,
+  DELETE_HARNESS_THREAD_ROUTE,
+  RENAME_HARNESS_THREAD_ROUTE,
+  LIST_HARNESS_THREAD_MESSAGES_ROUTE,
+  SWITCH_HARNESS_THREAD_ROUTE,
 } from './harness';
 
 function makeAgent(id = 'test-agent') {
@@ -146,7 +150,12 @@ describe('harness routes', () => {
   describe('LIST_HARNESS_MODES_ROUTE', () => {
     it('lists the harness modes', async () => {
       const res = await LIST_HARNESS_MODES_ROUTE.handler({ mastra, harnessId: 'code' } as any);
-      expect(res).toEqual({ modes: [{ id: 'build', name: 'Build' }, { id: 'plan', name: 'Plan' }] });
+      expect(res).toEqual({
+        modes: [
+          { id: 'build', name: 'Build' },
+          { id: 'plan', name: 'Plan' },
+        ],
+      });
     });
   });
 
@@ -210,6 +219,78 @@ describe('harness routes', () => {
       // Newest first: the returned slice is non-increasing by updatedAt.
       const times = res.threads.map(t => (t.updatedAt ? Date.parse(t.updatedAt) : 0));
       expect(times[0]).toBeGreaterThanOrEqual(times[1]);
+    });
+  });
+
+  describe('cross-resource thread access is rejected', () => {
+    // A handler is authorized for the resourceId in its URL path, but the
+    // threadId path param is otherwise unscoped. These routes must not let a
+    // session act on a thread owned by a different resourceId.
+    async function setupTwoSessions() {
+      const victim = (await CREATE_HARNESS_SESSION_ROUTE.handler({
+        mastra,
+        harnessId: 'code',
+        resourceId: 'victim',
+      } as any)) as { threadId?: string };
+      await CREATE_HARNESS_SESSION_ROUTE.handler({ mastra, harnessId: 'code', resourceId: 'attacker' } as any);
+      return { victimThreadId: victim.threadId! };
+    }
+
+    it('DELETE rejects a thread owned by another resource', async () => {
+      const { victimThreadId } = await setupTwoSessions();
+      await expect(
+        DELETE_HARNESS_THREAD_ROUTE.handler({
+          mastra,
+          harnessId: 'code',
+          resourceId: 'attacker',
+          threadId: victimThreadId,
+        } as any),
+      ).rejects.toThrow('Thread not found');
+
+      // The victim's thread is untouched.
+      const victimThreads = (await LIST_HARNESS_THREADS_ROUTE.handler({
+        mastra,
+        harnessId: 'code',
+        resourceId: 'victim',
+      } as any)) as { threads: { id: string }[] };
+      expect(victimThreads.threads.some(t => t.id === victimThreadId)).toBe(true);
+    });
+
+    it('RENAME rejects a thread owned by another resource', async () => {
+      const { victimThreadId } = await setupTwoSessions();
+      await expect(
+        RENAME_HARNESS_THREAD_ROUTE.handler({
+          mastra,
+          harnessId: 'code',
+          resourceId: 'attacker',
+          threadId: victimThreadId,
+          title: 'pwned',
+        } as any),
+      ).rejects.toThrow('Thread not found');
+    });
+
+    it('LIST messages rejects a thread owned by another resource', async () => {
+      const { victimThreadId } = await setupTwoSessions();
+      await expect(
+        LIST_HARNESS_THREAD_MESSAGES_ROUTE.handler({
+          mastra,
+          harnessId: 'code',
+          resourceId: 'attacker',
+          threadId: victimThreadId,
+        } as any),
+      ).rejects.toThrow('Thread not found');
+    });
+
+    it('SWITCH rejects a thread owned by another resource', async () => {
+      const { victimThreadId } = await setupTwoSessions();
+      await expect(
+        SWITCH_HARNESS_THREAD_ROUTE.handler({
+          mastra,
+          harnessId: 'code',
+          resourceId: 'attacker',
+          threadId: victimThreadId,
+        } as any),
+      ).rejects.toThrow('Thread not found');
     });
   });
 });

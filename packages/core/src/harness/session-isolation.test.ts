@@ -112,6 +112,77 @@ describe('Harness.createSession — cross-session isolation', () => {
   });
 });
 
+describe('Harness session — cross-resource thread ownership', () => {
+  it('cannot switch to a thread owned by another resource', async () => {
+    const harness = createHarness(new InMemoryStore());
+    await harness.init();
+
+    const a = await harness.createSession({ resourceId: 'user-a' });
+    const b = await harness.createSession({ resourceId: 'user-b' });
+
+    const aThreadId = a.thread.requireId();
+    const bThreadBefore = b.thread.getId();
+
+    await expect(b.thread.switch({ threadId: aThreadId })).rejects.toThrow(`Thread not found: ${aThreadId}`);
+    // b stays bound to its own thread; it never moved onto a's.
+    expect(b.thread.getId()).toBe(bThreadBefore);
+  });
+
+  it('cannot delete a thread owned by another resource', async () => {
+    const harness = createHarness(new InMemoryStore());
+    await harness.init();
+
+    const a = await harness.createSession({ resourceId: 'user-a' });
+    const b = await harness.createSession({ resourceId: 'user-b' });
+
+    const aThreadId = a.thread.requireId();
+
+    await expect(b.thread.delete({ threadId: aThreadId })).rejects.toThrow(`Thread not found: ${aThreadId}`);
+    // a's thread still exists and is reachable by its owner.
+    expect(await a.thread.getById({ threadId: aThreadId })).not.toBeNull();
+  });
+
+  it('cannot list messages of a thread owned by another resource', async () => {
+    const harness = createHarness(new InMemoryStore());
+    await harness.init();
+
+    const a = await harness.createSession({ resourceId: 'user-a' });
+    const b = await harness.createSession({ resourceId: 'user-b' });
+
+    const aThreadId = a.thread.requireId();
+
+    await expect(b.thread.listMessages({ threadId: aThreadId })).rejects.toThrow(`Thread not found: ${aThreadId}`);
+  });
+
+  it('cannot clone a thread owned by another resource', async () => {
+    const harness = createHarness(new InMemoryStore());
+    await harness.init();
+
+    const a = await harness.createSession({ resourceId: 'user-a' });
+    const b = await harness.createSession({ resourceId: 'user-b' });
+
+    const aThreadId = a.thread.requireId();
+
+    await expect(b.thread.clone({ sourceThreadId: aThreadId })).rejects.toThrow(`Thread not found: ${aThreadId}`);
+  });
+
+  it('still allows the owning resource to switch, list, and delete its own thread', async () => {
+    const harness = createHarness(new InMemoryStore());
+    await harness.init();
+
+    const a = await harness.createSession({ resourceId: 'user-a' });
+    const aThreadId = a.thread.requireId();
+
+    // Owner can read its own messages and switch to its own thread.
+    await expect(a.thread.listMessages({ threadId: aThreadId })).resolves.toEqual([]);
+    await expect(a.thread.switch({ threadId: aThreadId })).resolves.toBeUndefined();
+
+    // Owner can delete its own thread.
+    await expect(a.thread.delete({ threadId: aThreadId })).resolves.toBeUndefined();
+    expect(await a.thread.getById({ threadId: aThreadId })).toBeNull();
+  });
+});
+
 describe('Harness session registry', () => {
   it('resolves a created session by its resourceId', async () => {
     const harness = createHarness(new InMemoryStore());
