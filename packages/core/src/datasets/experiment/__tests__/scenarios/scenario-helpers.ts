@@ -180,4 +180,48 @@ export async function runToolMockScenario(opts: RunToolMockScenarioOptions): Pro
   return { summary, item };
 }
 
+/**
+ * Like {@link runToolMockScenario}, but persists the dataset item (with its
+ * `toolMocks`) to a real {@link InMemoryStore} first, then runs the experiment
+ * by `datasetId`. This exercises the storage-backed resolution path in
+ * `runExperiment` — where `toolMocks` are read off the persisted
+ * `DatasetItemRow` rather than passed inline — which is how Studio runs work.
+ */
+export async function runStoredToolMockScenario(opts: RunToolMockScenarioOptions): Promise<ToolMockScenarioResult> {
+  const agentId = `tool-mock-scenario-agent-${++counter}`;
+  const agent = new Agent({
+    id: agentId,
+    name: 'Tool Mock Scenario Agent',
+    instructions: 'You are a test agent driven by a scripted model.',
+    model: scriptedModel(opts.turns),
+    tools: opts.tools,
+  });
+  const storage = new InMemoryStore();
+  const mastra = new Mastra({
+    agents: { [agentId]: agent },
+    storage,
+    logger: false,
+  });
+
+  const datasetsStore = (await storage.getStore('datasets'))!;
+  const dataset = await datasetsStore.createDataset({ name: `Tool Mock Scenario DS ${counter}` });
+  await datasetsStore.addItem({
+    datasetId: dataset.id,
+    input: opts.prompt ?? 'run the scenario',
+    toolMocks: opts.toolMocks,
+  });
+
+  const summary = await runExperiment(mastra, {
+    targetType: 'agent',
+    targetId: agentId,
+    datasetId: dataset.id,
+    scorers: [],
+    maxConcurrency: 1,
+    maxRetries: opts.maxRetries ?? 0,
+  });
+
+  const item = summary.results[0]!;
+  return { summary, item };
+}
+
 let counter = 0;
