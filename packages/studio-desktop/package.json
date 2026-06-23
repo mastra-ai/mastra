@@ -77,7 +77,7 @@
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
-      "icon": "build/mastra.icon",
+      "icon": "build/icon.icns",
       "target": [
         "dmg",
         "zip"

@@ -15,6 +15,7 @@ const sourceSvg = join(buildDir, 'icon.svg');
 const sourcePng = join(buildDir, 'icon.png');
 const iconIcns = join(buildDir, 'icon.icns');
 const iconIco = join(buildDir, 'icon.ico');
+const iconCanvasScale = 0.88;
 
 function run(command, args) {
   execFileSync(command, args, { stdio: 'inherit' });
@@ -61,6 +62,23 @@ function normalizePng(path) {
   renameSync(normalizedPath, path);
 }
 
+function insetIconCanvas(path, width, height) {
+  const insetPath = `${path}.inset.png`;
+  run('magick', [
+    path,
+    '-resize',
+    `${Math.round(width * iconCanvasScale)}x${Math.round(height * iconCanvasScale)}`,
+    '-background',
+    'none',
+    '-gravity',
+    'center',
+    '-extent',
+    `${width}x${height}`,
+    insetPath,
+  ]);
+  renameSync(insetPath, path);
+}
+
 function exportIconPng(path, width, height = width, scale = 1) {
   run(iconTool, [
     sourceIconPackage,
@@ -79,6 +97,7 @@ function exportIconPng(path, width, height = width, scale = 1) {
     String(scale),
   ]);
   normalizePng(path);
+  insetIconCanvas(path, width * scale, height * scale);
 }
 
 writeFileSync(sourceSvg, `${getIconLayerSvg().trimEnd()}\n`);
