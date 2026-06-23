@@ -84,7 +84,7 @@ Mastra provides three factory functions that produce durable agents. They differ
 | `createEventedAgent` | `@mastra/core` | Fire-and-forget on the built-in engine | Background execution where the caller doesn't wait for the workflow trigger |
 | `createInngestAgent` | `@mastra/inngest` | Inngest durable execution platform | Production deployments with step memoization, retries, and monitoring |
 
-All three return an object that extends `Agent` and can be registered with `Mastra` the same way.
+All three return an object that can be registered with `Mastra` the same way as a regular agent. `createDurableAgent` and `createEventedAgent` return class instances that extend `Agent`. `createInngestAgent` returns a Proxy-backed object that forwards `Agent` methods to the underlying agent.
 
 ### In-process with `createDurableAgent`
 
@@ -105,7 +105,7 @@ export const durableHelper = createDurableAgent({ agent })
 
 ### Fire-and-forget with `createEventedAgent`
 
-`createEventedAgent` triggers the workflow and returns immediately. The workflow runs in the background on the built-in engine. Use `observe()` to attach a stream later:
+`createEventedAgent` uses `startAsync()` to execute the workflow without blocking the caller. Chunks still arrive through PubSub, so you get a stream back — the difference from `createDurableAgent` is that the workflow trigger is non-blocking:
 
 ```typescript title="src/mastra/agents/evented.ts"
 import { Agent } from '@mastra/core/agent'
@@ -148,10 +148,10 @@ Visit the [createInngestAgent reference](/reference/agents/inngest-agent) for th
 
 ## Resumable streams
 
-Durable agents support resumable streams. When a client disconnects, the PubSub and cache layers continue storing events. A second client (or the same client after reconnecting) calls `observe()` with the `runId` to pick up where the stream left off:
+Durable agents support resumable streams through PubSub and an event cache. When a client disconnects mid-stream, the cache continues storing events. The same client can reconnect by calling `observe()` with the `runId`:
 
 ```typescript title="src/server/reconnect.ts"
-const { output, cleanup } = await durableResearcher.observe({ runId })
+const { output, cleanup } = await durableResearcher.observe(runId)
 
 for await (const chunk of output.fullStream) {
   // Chunks from the run, including any missed while disconnected
@@ -160,7 +160,7 @@ for await (const chunk of output.fullStream) {
 cleanup()
 ```
 
-For production deployments, provide a persistent cache backend (e.g., Redis) so cached events survive process restarts:
+`createDurableAgent` and `createEventedAgent` use an in-memory cache by default, which means resumable streams work within a single process. For production, provide a persistent cache backend (e.g., Redis) so cached events survive process restarts:
 
 ```typescript title="src/mastra/agents/durable-with-cache.ts" {5}
 import { createDurableAgent } from '@mastra/core/agent/durable'
@@ -170,6 +170,8 @@ export const durableAgent = createDurableAgent({
   cache: redisCache,
 })
 ```
+
+`createInngestAgent` does not enable caching by default. Pass a `cache` option or register the agent with a `Mastra` instance that has a `serverCache` configured to enable resumable streams.
 
 ## Streaming with background tasks
 
@@ -226,11 +228,7 @@ const { output, runId, cleanup } = await durableAgent.stream(
 Resume the suspended run after approval:
 
 ```typescript
-await durableAgent.resume({
-  runId,
-  toolCallId,
-  approve: true,
-})
+await durableAgent.resume(runId, { approved: true })
 ```
 
 ## Related
