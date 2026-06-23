@@ -1,5 +1,3 @@
-'use client';
-
 import type { DatasetItemToolMock } from '@mastra/client-js';
 import {
   Button,
@@ -19,7 +17,7 @@ import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideD
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { EyeIcon, WrenchIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { collectToolMocks } from './collect-tool-mocks';
 import type { ToolCallTrajectoryStep } from './collect-tool-mocks';
 import { useDatasetItem, useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
@@ -50,19 +48,6 @@ function itemLabel(item: { id: string; input: unknown }): string {
 
 export function AddTraceMocksToItemDialog({ traceId, isOpen, onClose, level = 2 }: AddTraceMocksToItemDialogProps) {
   const client = useMastraClient();
-  const [selectedDatasetId, setSelectedDatasetId] = useState<string>('');
-  const [selectedItemId, setSelectedItemId] = useState<string>('');
-  // Editable JSON of the mocks to append. Seeded from the trace-derived mocks,
-  // but the user can edit/remove entries before saving.
-  const [mocksJson, setMocksJson] = useState<string>('');
-  const [mocksTouched, setMocksTouched] = useState(false);
-
-  const { data: datasetsData, isLoading: isDatasetsLoading } = useDatasets();
-  const datasets = datasetsData?.datasets ?? [];
-
-  const { data: items = [], isLoading: isItemsLoading } = useDatasetItems(selectedDatasetId);
-  const { data: selectedItem, isFetching: isSelectedItemFetching } = useDatasetItem(selectedDatasetId, selectedItemId);
-  const { updateItem } = useDatasetMutations();
 
   const { data: trajectory, isLoading: isTrajectoryLoading } = useQuery({
     queryKey: ['trace-trajectory', traceId],
@@ -73,20 +58,62 @@ export function AddTraceMocksToItemDialog({ traceId, isOpen, onClose, level = 2 
   const derivedMocks: DatasetItemToolMock[] = trajectory?.steps
     ? (collectToolMocks(trajectory.steps as ToolCallTrajectoryStep[]) as DatasetItemToolMock[])
     : [];
-  const hasDerivedMocks = derivedMocks.length > 0;
+  const initialMocksJson = derivedMocks.length > 0 ? JSON.stringify(derivedMocks, null, 2) : '';
 
-  // Seed the editor with the derived mocks once they load, unless the user has
-  // already edited the value (don't clobber their changes).
-  useEffect(() => {
-    if (!isOpen || mocksTouched) return;
-    setMocksJson(hasDerivedMocks ? JSON.stringify(derivedMocks, null, 2) : '');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, mocksTouched, JSON.stringify(derivedMocks)]);
+  return (
+    <SideDialog
+      dialogTitle="Add Tool Mocks to Item"
+      dialogDescription="Append trace-derived tool mocks to an existing dataset item"
+      isOpen={isOpen}
+      onClose={onClose}
+      level={level}
+    >
+      <SideDialog.Top>
+        <TextAndIcon>
+          <EyeIcon /> {getShortId(traceId)}
+        </TextAndIcon>
+        ›
+        <TextAndIcon>
+          <WrenchIcon /> Add Tool Mocks to Item
+        </TextAndIcon>
+      </SideDialog.Top>
 
-  const handleMocksChange = (value: string) => {
-    setMocksTouched(true);
-    setMocksJson(value);
-  };
+      <SideDialog.Content>
+        <SideDialog.Header>
+          <SideDialog.Heading>
+            <WrenchIcon /> Add Tool Mocks to Item
+          </SideDialog.Heading>
+        </SideDialog.Header>
+
+        {isTrajectoryLoading ? (
+          <div className="px-2 py-4 text-sm text-neutral4">Loading tool calls from trace...</div>
+        ) : (
+          // Remount when the source trace changes so the form's useState seeds
+          // from the freshly derived mocks — no state-reset effect needed.
+          <AddTraceMocksForm key={traceId ?? 'no-trace'} initialMocksJson={initialMocksJson} onClose={onClose} />
+        )}
+      </SideDialog.Content>
+    </SideDialog>
+  );
+}
+
+type AddTraceMocksFormProps = {
+  initialMocksJson: string;
+  onClose: () => void;
+};
+
+function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps) {
+  const [selectedDatasetId, setSelectedDatasetId] = useState<string>('');
+  const [selectedItemId, setSelectedItemId] = useState<string>('');
+  // Editable JSON of the mocks to append, seeded once from the trace-derived mocks.
+  const [mocksJson, setMocksJson] = useState<string>(initialMocksJson);
+
+  const { data: datasetsData, isLoading: isDatasetsLoading } = useDatasets();
+  const datasets = datasetsData?.datasets ?? [];
+
+  const { data: items = [], isLoading: isItemsLoading } = useDatasetItems(selectedDatasetId);
+  const { data: selectedItem, isFetching: isSelectedItemFetching } = useDatasetItem(selectedDatasetId, selectedItemId);
+  const { updateItem } = useDatasetMutations();
 
   // Whether the current editor content is a non-empty JSON array (enables submit).
   const hasMocks = (() => {
@@ -98,13 +125,6 @@ export function AddTraceMocksToItemDialog({ traceId, isOpen, onClose, level = 2 
       return false;
     }
   })();
-
-  const reset = () => {
-    setSelectedDatasetId('');
-    setSelectedItemId('');
-    setMocksJson('');
-    setMocksTouched(false);
-  };
 
   const handleDatasetChange = (value: string) => {
     setSelectedDatasetId(value);
@@ -152,137 +172,89 @@ export function AddTraceMocksToItemDialog({ traceId, isOpen, onClose, level = 2 
         toolMocks: merged,
       });
       toast.success(`Added ${parsedMocks.length} tool mock(s) to the item`);
-      reset();
       onClose();
     } catch (error) {
       toast.error(`Failed to add tool mocks: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
-  const handleCancel = () => {
-    reset();
-    onClose();
-  };
-
   return (
-    <SideDialog
-      dialogTitle="Add Tool Mocks to Item"
-      dialogDescription="Append trace-derived tool mocks to an existing dataset item"
-      isOpen={isOpen}
-      onClose={onClose}
-      level={level}
-    >
-      <SideDialog.Top>
-        <TextAndIcon>
-          <EyeIcon /> {getShortId(traceId)}
-        </TextAndIcon>
-        ›
-        <TextAndIcon>
-          <WrenchIcon /> Add Tool Mocks to Item
-        </TextAndIcon>
-      </SideDialog.Top>
-
-      <SideDialog.Content>
-        <SideDialog.Header>
-          <SideDialog.Heading>
-            <WrenchIcon /> Add Tool Mocks to Item
-          </SideDialog.Heading>
-        </SideDialog.Header>
-
-        <form onSubmit={handleSubmit} className="grid gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="target-dataset">Dataset *</Label>
-            <Select value={selectedDatasetId} onValueChange={handleDatasetChange} disabled={isDatasetsLoading}>
-              <SelectTrigger id="target-dataset">
-                <SelectValue placeholder={isDatasetsLoading ? 'Loading datasets...' : 'Select a dataset'} />
-              </SelectTrigger>
-              <SelectContent>
-                {datasets.length === 0 ? (
-                  <div className="px-2 py-4 text-sm text-neutral4 text-center">No datasets available</div>
-                ) : (
-                  datasets.map(dataset => (
-                    <SelectItem key={dataset.id} value={dataset.id}>
-                      {dataset.name}
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="target-item">Item *</Label>
-            <Select
-              value={selectedItemId}
-              onValueChange={setSelectedItemId}
-              disabled={!selectedDatasetId || isItemsLoading}
-            >
-              <SelectTrigger id="target-item">
-                <SelectValue
-                  placeholder={
-                    !selectedDatasetId
-                      ? 'Select a dataset first'
-                      : isItemsLoading
-                        ? 'Loading items...'
-                        : 'Select an item'
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {items.length === 0 ? (
-                  <div className="px-2 py-4 text-sm text-neutral4 text-center">No items available</div>
-                ) : (
-                  items.map(item => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {itemLabel(item)}
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="derived-mocks">Tool Mocks (JSON)</Label>
-            {isTrajectoryLoading ? (
-              <div className="px-2 py-4 text-sm text-neutral4">Loading tool calls from trace...</div>
+    <form onSubmit={handleSubmit} className="grid gap-4">
+      <div className="grid gap-2">
+        <Label htmlFor="target-dataset">Dataset *</Label>
+        <Select value={selectedDatasetId} onValueChange={handleDatasetChange} disabled={isDatasetsLoading}>
+          <SelectTrigger id="target-dataset">
+            <SelectValue placeholder={isDatasetsLoading ? 'Loading datasets...' : 'Select a dataset'} />
+          </SelectTrigger>
+          <SelectContent>
+            {datasets.length === 0 ? (
+              <div className="px-2 py-4 text-sm text-neutral4 text-center">No datasets available</div>
             ) : (
-              <>
-                <CodeEditor
-                  value={mocksJson}
-                  onChange={handleMocksChange}
-                  showCopyButton={false}
-                  className="min-h-[160px]"
-                />
-                <p className="text-xs text-neutral4">
-                  Seeded from the trace&apos;s tool calls. Edit or remove entries before appending.
-                </p>
-              </>
+              datasets.map(dataset => (
+                <SelectItem key={dataset.id} value={dataset.id}>
+                  {dataset.name}
+                </SelectItem>
+              ))
             )}
-          </div>
+          </SelectContent>
+        </Select>
+      </div>
 
-          <div className="flex justify-end gap-2 pt-4">
-            <Button type="button" variant="outline" onClick={handleCancel}>
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="default"
-              disabled={
-                updateItem.isPending ||
-                isTrajectoryLoading ||
-                isSelectedItemFetching ||
-                !hasMocks ||
-                !selectedDatasetId ||
-                !selectedItemId ||
-                selectedItem?.id !== selectedItemId
+      <div className="grid gap-2">
+        <Label htmlFor="target-item">Item *</Label>
+        <Select
+          value={selectedItemId}
+          onValueChange={setSelectedItemId}
+          disabled={!selectedDatasetId || isItemsLoading}
+        >
+          <SelectTrigger id="target-item">
+            <SelectValue
+              placeholder={
+                !selectedDatasetId ? 'Select a dataset first' : isItemsLoading ? 'Loading items...' : 'Select an item'
               }
-            >
-              {updateItem.isPending ? 'Adding...' : 'Append Tool Mocks'}
-            </Button>
-          </div>
-        </form>
-      </SideDialog.Content>
-    </SideDialog>
+            />
+          </SelectTrigger>
+          <SelectContent>
+            {items.length === 0 ? (
+              <div className="px-2 py-4 text-sm text-neutral4 text-center">No items available</div>
+            ) : (
+              items.map(item => (
+                <SelectItem key={item.id} value={item.id}>
+                  {itemLabel(item)}
+                </SelectItem>
+              ))
+            )}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="grid gap-2">
+        <Label htmlFor="derived-mocks">Tool Mocks (JSON)</Label>
+        <CodeEditor value={mocksJson} onChange={setMocksJson} showCopyButton={false} className="min-h-[160px]" />
+        <p className="text-xs text-neutral4">
+          Seeded from the trace&apos;s tool calls. Edit or remove entries before appending.
+        </p>
+      </div>
+
+      <div className="flex justify-end gap-2 pt-4">
+        <Button type="button" variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button
+          type="submit"
+          variant="default"
+          disabled={
+            updateItem.isPending ||
+            isSelectedItemFetching ||
+            !hasMocks ||
+            !selectedDatasetId ||
+            !selectedItemId ||
+            selectedItem?.id !== selectedItemId
+          }
+        >
+          {updateItem.isPending ? 'Adding...' : 'Append Tool Mocks'}
+        </Button>
+      </div>
+    </form>
   );
 }

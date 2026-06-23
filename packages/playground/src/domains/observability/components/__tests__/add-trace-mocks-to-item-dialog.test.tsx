@@ -140,18 +140,26 @@ describe('AddTraceMocksToItemDialog', () => {
     // Wait for the derived preview so the trajectory query has resolved.
     await waitFor(() => expect(editorValue()).toContain('getWeather'));
 
-    const [datasetSelect] = getSelects();
-    fireEvent.change(datasetSelect, { target: { value: 'dataset-1' } });
+    // Wait for the dataset option to load before selecting it (controlled <select>
+    // ignores values whose option is not yet present).
+    await waitFor(() => {
+      const [datasetSelect] = getSelects();
+      expect(Array.from(datasetSelect.options).some(o => o.value === 'dataset-1')).toBe(true);
+    });
+    fireEvent.change(getSelects()[0], { target: { value: 'dataset-1' } });
 
     // After choosing a dataset the item list loads; wait for the item option, then choose it.
-    await waitFor(() => {
-      const itemSelect = getSelects()[1];
-      expect(Array.from(itemSelect.options).some(o => o.value === 'item-1')).toBe(true);
-    });
+    await waitFor(
+      () => {
+        const itemSelect = getSelects()[1];
+        expect(Array.from(itemSelect.options).some(o => o.value === 'item-1')).toBe(true);
+      },
+      { timeout: 3000 },
+    );
     fireEvent.change(getSelects()[1], { target: { value: 'item-1' } });
 
     const submit = screen.getByRole('button', { name: /append tool mocks/i });
-    await waitFor(() => expect(submit.hasAttribute('disabled')).toBe(false));
+    await waitFor(() => expect(submit.hasAttribute('disabled')).toBe(false), { timeout: 3000 });
     fireEvent.click(submit);
 
     await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
@@ -205,16 +213,22 @@ describe('AddTraceMocksToItemDialog', () => {
       target: { value: JSON.stringify([{ toolName: 'getWeather', args: { city: 'Paris' }, output: { temp: 70 } }]) },
     });
 
-    const [datasetSelect] = getSelects();
-    fireEvent.change(datasetSelect, { target: { value: 'dataset-1' } });
     await waitFor(() => {
-      const itemSelect = getSelects()[1];
-      expect(Array.from(itemSelect.options).some(o => o.value === 'item-1')).toBe(true);
+      const [datasetSelect] = getSelects();
+      expect(Array.from(datasetSelect.options).some(o => o.value === 'dataset-1')).toBe(true);
     });
+    fireEvent.change(getSelects()[0], { target: { value: 'dataset-1' } });
+    await waitFor(
+      () => {
+        const itemSelect = getSelects()[1];
+        expect(Array.from(itemSelect.options).some(o => o.value === 'item-1')).toBe(true);
+      },
+      { timeout: 3000 },
+    );
     fireEvent.change(getSelects()[1], { target: { value: 'item-1' } });
 
     const submit = screen.getByRole('button', { name: /append tool mocks/i });
-    await waitFor(() => expect(submit.hasAttribute('disabled')).toBe(false));
+    await waitFor(() => expect(submit.hasAttribute('disabled')).toBe(false), { timeout: 3000 });
     fireEvent.click(submit);
 
     await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
