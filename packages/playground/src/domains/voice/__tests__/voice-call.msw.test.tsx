@@ -15,7 +15,10 @@ const BASE_URL = 'http://localhost:4111';
 
 type EventHandler = (...args: unknown[]) => void;
 type TextStreamHandler = (
-  reader: { info: { id: string; attributes?: Record<string, string> }; [Symbol.asyncIterator]: () => AsyncIterator<string> },
+  reader: {
+    info: { id: string; attributes?: Record<string, string> };
+    [Symbol.asyncIterator]: () => AsyncIterator<string>;
+  },
   participantInfo: { identity: string },
 ) => Promise<void>;
 
@@ -93,7 +96,9 @@ function textStreamReader(id: string, chunks: string[], attributes: Record<strin
       let index = 0;
       return {
         next: async () =>
-          index < chunks.length ? { value: chunks[index++]!, done: false as const } : { value: undefined, done: true as const },
+          index < chunks.length
+            ? { value: chunks[index++]!, done: false as const }
+            : { value: undefined, done: true as const },
       };
     },
   };
@@ -139,9 +144,7 @@ describe('voice call', () => {
   });
 
   it('shows agent state changes and live captions', async () => {
-    server.use(
-      http.post(`${BASE_URL}/voice/livekit/connection-details`, () => HttpResponse.json(connectionDetails)),
-    );
+    server.use(http.post(`${BASE_URL}/voice/livekit/connection-details`, () => HttpResponse.json(connectionDetails)));
 
     const { invalidateSpy } = renderHarness();
     fireEvent.click(screen.getByTestId('voice-call-button'));
@@ -170,16 +173,13 @@ describe('voice call', () => {
     expect((await screen.findByTestId('voice-caption-agent')).textContent).toBe('Sunny and 21 degrees.');
 
     // A finished agent segment marks a completed turn: the chat refetches (debounced).
-    await waitFor(
-      () => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['memory', 'messages', 'thread-1'] }),
-      { timeout: 2000 },
-    );
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['memory', 'messages', 'thread-1'] }), {
+      timeout: 2000,
+    });
   });
 
   it('hangs up: disconnects the room and refreshes the thread messages', async () => {
-    server.use(
-      http.post(`${BASE_URL}/voice/livekit/connection-details`, () => HttpResponse.json(connectionDetails)),
-    );
+    server.use(http.post(`${BASE_URL}/voice/livekit/connection-details`, () => HttpResponse.json(connectionDetails)));
 
     const { invalidateSpy } = renderHarness();
     fireEvent.click(screen.getByTestId('voice-call-button'));
@@ -189,9 +189,10 @@ describe('voice call', () => {
 
     fireEvent.click(screen.getByTestId('voice-call-button'));
 
-    expect(room.disconnect).toHaveBeenCalled();
+    // disconnect and the thread invalidation both settle asynchronously; await them.
+    await waitFor(() => expect(room.disconnect).toHaveBeenCalled());
     await waitFor(() => expect(screen.queryByTestId('voice-call-panel')).toBeNull());
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['memory', 'messages', 'thread-1'] });
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['memory', 'messages', 'thread-1'] }));
   });
 
   it('returns to idle and surfaces the server error when LiveKit is not configured', async () => {
