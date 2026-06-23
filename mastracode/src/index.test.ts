@@ -1,4 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+
+// Captures the createSession() args so tests can assert on wiring (e.g.
+// id/ownerId). Hoisted so the vi.mock factory can reference it.
+const createSessionCalls = vi.hoisted<Array<{ id?: string; ownerId?: string; resourceId?: string }>>(() => []);
 
 vi.mock('@mastra/core/llm', () => ({
   GatewayRegistry: {
@@ -17,7 +21,10 @@ vi.mock('@mastra/core/agent', () => ({
 
 vi.mock('@mastra/core/harness', () => ({
   Harness: class {
-    constructor(config: { heartbeatHandlers?: Array<{ immediate?: boolean; handler: () => unknown }> }) {
+    constructor(config: {
+      resourceId?: string;
+      heartbeatHandlers?: Array<{ immediate?: boolean; handler: () => unknown }>;
+    }) {
       for (const heartbeat of config.heartbeatHandlers ?? []) {
         if (heartbeat.immediate !== false) void heartbeat.handler();
       }
@@ -29,7 +36,8 @@ vi.mock('@mastra/core/harness', () => ({
       return undefined;
     }
 
-    async createSession() {
+    async createSession(args?: { id?: string; ownerId?: string; resourceId?: string }) {
+      createSessionCalls.push({ id: args?.id, ownerId: args?.ownerId, resourceId: args?.resourceId });
       return {
         subscribe() {},
         thread: { getId: () => undefined },
@@ -149,9 +157,10 @@ vi.mock('./tui/theme.js', () => ({ mastra: {} }));
 vi.mock('./utils/gateway-sync.js', () => ({ syncGateways: vi.fn() }));
 
 vi.mock('./utils/project.js', () => ({
-  detectProject: vi.fn(() => ({
+  detectProject: vi.fn((cwd?: string) => ({
     mode: 'none',
-    rootPath: process.cwd(),
+    rootPath: cwd ?? process.cwd(),
+    resourceId: `mock-resource-${cwd ?? process.cwd()}`,
     packageManager: 'pnpm',
     hasGit: false,
     contextFiles: [],
@@ -214,5 +223,42 @@ describe('createAuthStorage', () => {
     expect(claudeMax.setAuthStorage).toHaveBeenCalledWith(authStorage);
     expect(openaiCodex.setAuthStorage).toHaveBeenCalledWith(authStorage);
     expect(githubCopilot.setAuthStorage).toHaveBeenCalledWith(authStorage);
+  });
+});
+
+describe('Harness session id and ownerId wiring', () => {
+  beforeEach(() => {
+    createSessionCalls.length = 0;
+  });
+
+  it('passes non-empty, deterministic id and ownerId into createSession', async () => {
+    const { createMastraCode } = await import('./index.js');
+    await createMastraCode({ cwd: '/tmp/project-alpha' });
+
+    expect(createSessionCalls).toHaveLength(1);
+    const call = createSessionCalls[0]!;
+    expect(call.id).toBeTruthy();
+    expect(call.id).toMatch(/^mastracode-session-/);
+    expect(call.ownerId).toBeTruthy();
+    expect(call.ownerId).toMatch(/^mastracode-/);
+  });
+
+  it('derives stable id and ownerId for the same cwd across calls', async () => {
+    const { createMastraCode } = await import('./index.js');
+    await createMastraCode({ cwd: '/tmp/project-beta' });
+    await createMastraCode({ cwd: '/tmp/project-beta' });
+
+    expect(createSessionCalls).toHaveLength(2);
+    expect(createSessionCalls[0]!.id).toBe(createSessionCalls[1]!.id);
+    expect(createSessionCalls[0]!.ownerId).toBe(createSessionCalls[1]!.ownerId);
+  });
+
+  it('produces distinct ids for different cwds', async () => {
+    const { createMastraCode } = await import('./index.js');
+    await createMastraCode({ cwd: '/tmp/project-gamma' });
+    await createMastraCode({ cwd: '/tmp/project-delta' });
+
+    expect(createSessionCalls).toHaveLength(2);
+    expect(createSessionCalls[0]!.id).not.toBe(createSessionCalls[1]!.id);
   });
 });

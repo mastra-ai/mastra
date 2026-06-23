@@ -337,8 +337,14 @@ export class Harness<TState = {}> {
    * Call {@link init} once before creating sessions so shared storage and
    * workspace are ready.
    */
-  async createSession({ resourceId }: { resourceId?: string } = {}): Promise<Session<TState>> {
+  async createSession({
+    resourceId,
+    ownerId,
+    id,
+  }: { resourceId?: string; id?: string; ownerId?: string } = {}): Promise<Session<TState>> {
     const effectiveResourceId = resourceId ?? this.config.resourceId ?? this.config.id;
+    const effectiveOwnerId = ownerId ?? this.config.id;
+    const effectiveId = id ?? effectiveResourceId;
 
     // Get-or-create: a resourceId maps to exactly one durable session per
     // Harness. Asking for the same resource twice returns the same session, so
@@ -350,7 +356,7 @@ export class Harness<TState = {}> {
       return existing;
     }
 
-    const creation = this.#createSessionForResource(effectiveResourceId);
+    const creation = this.#createSessionForResource(effectiveOwnerId, effectiveId, effectiveResourceId);
     this.#sessionsByResource.set(effectiveResourceId, creation);
     try {
       return await creation;
@@ -363,10 +369,12 @@ export class Harness<TState = {}> {
     }
   }
 
-  async #createSessionForResource(effectiveResourceId: string): Promise<Session<TState>> {
+  async #createSessionForResource(ownerId: string, id: string, effectiveResourceId: string): Promise<Session<TState>> {
     const session = this.#wireSession(
       new Session({
         resourceId: effectiveResourceId,
+        id,
+        ownerId,
         state: {
           initialState: this.config.initialState,
           stateSchema: this.config.stateSchema,
@@ -1812,6 +1820,8 @@ export class Harness<TState = {}> {
       threadId: session.thread.getId(),
       resourceId: session.identity.getResourceId(),
       session: {
+        id: session.identity.getId(),
+        ownerId: session.identity.getOwnerId(),
         modeId: session.mode.get(),
         modelId: session.model.get(),
         state: {
