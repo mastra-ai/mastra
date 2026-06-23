@@ -184,35 +184,42 @@ export class ChatChannelOutputProcessor {
       });
     }
 
-    const driverPromise = render.streaming.enabled
-      ? runStreamingDriver({
-          stream: wrapped,
-          chatThread: render.chatThread,
-          adapter: render.adapter,
-          toolDisplay: render.toolDisplay as 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden',
-          toolDisplayFn: render.toolDisplayFn,
-          streamingOptions: render.streaming.options,
-          channelToolNames: render.channelToolNames,
-          logger: render.logger,
-          onApprovalPosted: render.onApprovalPosted,
-          getPendingApproval: render.getPendingApproval,
-          takePendingApproval: render.takePendingApproval,
-          typingGate: render.typingGate,
-          formatError: render.formatError,
-        })
-      : runStaticDriver({
-          stream: wrapped,
-          chatThread: render.chatThread,
-          adapter: render.adapter,
-          toolDisplay: render.toolDisplay as 'cards' | 'text' | 'hidden',
-          toolDisplayFn: render.toolDisplayFn,
-          channelToolNames: render.channelToolNames,
-          logger: render.logger,
-          onApprovalPosted: render.onApprovalPosted,
-          getPendingApproval: render.getPendingApproval,
-          takePendingApproval: render.takePendingApproval,
-          formatError: render.formatError,
-        });
+    const driverPromise = (
+      render.streaming.enabled
+        ? runStreamingDriver({
+            stream: wrapped,
+            chatThread: render.chatThread,
+            adapter: render.adapter,
+            toolDisplay: render.toolDisplay as 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden',
+            toolDisplayFn: render.toolDisplayFn,
+            streamingOptions: render.streaming.options,
+            channelToolNames: render.channelToolNames,
+            logger: render.logger,
+            onApprovalPosted: render.onApprovalPosted,
+            getPendingApproval: render.getPendingApproval,
+            takePendingApproval: render.takePendingApproval,
+            typingGate: render.typingGate,
+            formatError: render.formatError,
+          })
+        : runStaticDriver({
+            stream: wrapped,
+            chatThread: render.chatThread,
+            adapter: render.adapter,
+            toolDisplay: render.toolDisplay as 'cards' | 'text' | 'hidden',
+            toolDisplayFn: render.toolDisplayFn,
+            channelToolNames: render.channelToolNames,
+            logger: render.logger,
+            onApprovalPosted: render.onApprovalPosted,
+            getPendingApproval: render.getPendingApproval,
+            takePendingApproval: render.takePendingApproval,
+            formatError: render.formatError,
+          })
+    ).catch(err => {
+      // Prevent unhandled rejection if the driver fails before a terminal chunk
+      // reaches processOutputStream. The error is re-thrown when awaited at cleanup.
+      render.logger?.error?.(`[${render.platform}] channel render driver failed early`, { error: err });
+      throw err;
+    });
 
     return { queue, driverPromise };
   }
