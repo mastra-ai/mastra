@@ -60,7 +60,6 @@ function createRecording() {
   return { calls, adapter, chatThread };
 }
 
-
 function makeChannels(
   opts: {
     streaming?: boolean | { updateIntervalMs?: number };
@@ -107,9 +106,9 @@ async function drive(
   // The output processor needs a terminal chunk (step-finish with
   // isContinued !== true, or error) to close the queue and flush.
   // Auto-append one if the test chunks don't already end with a terminal.
-  const hasTerminal = chunks.some(
-    c => (c.type === 'step-finish' && c.payload?.stepResult?.isContinued !== true) || c.type === 'error',
-  );
+  const last = chunks[chunks.length - 1];
+  const hasTerminal =
+    last && ((last.type === 'step-finish' && last.payload?.stepResult?.isContinued !== true) || last.type === 'error');
   const effective = hasTerminal
     ? chunks
     : [...chunks, { type: 'step-finish', payload: { stepResult: { isContinued: false } } }];

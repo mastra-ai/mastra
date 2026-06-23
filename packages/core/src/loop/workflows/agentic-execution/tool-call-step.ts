@@ -564,7 +564,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 },
                 'approval',
               );
-              safeEnqueue(controller, approvalChunk);
+              if (outputWriter) {
+                await outputWriter(approvalChunk);
+              } else {
+                safeEnqueue(controller, approvalChunk);
+              }
 
               // Add approval metadata to message before persisting
               addToolMetadata({

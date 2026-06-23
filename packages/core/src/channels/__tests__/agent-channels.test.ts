@@ -429,7 +429,12 @@ describe('AgentChannels', () => {
 
       await agentChannels.initialize(mockMastra);
 
-      // Default stub resolves the outcome to `deliver` (signal handed off).
+      // Stub resolves the outcome to `deliver` (signal handed off) with a consumeStream spy.
+      const consumeStream = vi.fn().mockResolvedValue(undefined);
+      mockAgent.sendMessage.mockReturnValueOnce({
+        accepted: Promise.resolve({ action: 'deliver', runId: 'run-1', output: { consumeStream } }),
+      });
+
       const chatThread = {
         id: 'channel-1:thread-1',
         channelId: 'channel-1',
@@ -448,6 +453,7 @@ describe('AgentChannels', () => {
       } as any;
 
       await expect((agentChannels as any).processChatMessage(chatThread, message, mockMastra)).resolves.not.toThrow();
+      expect(consumeStream).not.toHaveBeenCalled();
     });
   });
 
