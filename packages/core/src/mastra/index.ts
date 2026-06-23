@@ -14,11 +14,11 @@ import { DatasetsManager } from '../datasets/manager.js';
 import type { MastraDeployer } from '../deployer';
 import type { IMastraEditor } from '../editor';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
-import type { Harness } from '../harness';
 import type { MastraScorer } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event, EventCallback } from '../events/types';
+import type { Harness } from '../harness';
 import { AvailableHooks, registerHook } from '../hooks';
 import { LicenseClient } from '../license';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
@@ -4825,6 +4825,19 @@ export class Mastra<
       if (result.status === 'rejected') {
         this.#logger?.error('Failed to destroy workspace during shutdown', {
           workspaceId: workspaceIds[index],
+          error: result.reason,
+        });
+      }
+    });
+
+    // Tear down hosted Harnesses (heartbeats, workspaces) before closing storage,
+    // since teardown may still flush to the shared store.
+    const harnessKeys = Object.keys(this.#harnesses);
+    const harnessTeardown = await Promise.allSettled(harnessKeys.map(key => this.#harnesses[key]!.destroy()));
+    harnessTeardown.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        this.#logger?.error('Failed to destroy harness during shutdown', {
+          harnessKey: harnessKeys[index],
           error: result.reason,
         });
       }
