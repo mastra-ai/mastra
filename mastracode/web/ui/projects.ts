@@ -13,6 +13,7 @@
  */
 
 const STORAGE_KEY = 'mastracode-projects';
+const ACTIVE_KEY = 'mastracode-active-project';
 
 export interface Project {
   /** Stable local id (localStorage key). Not used for the session. */
@@ -101,4 +102,31 @@ export async function ensureResourceId(project: Project): Promise<Project> {
 export function removeProject(id: string): void {
   const projects = loadProjects().filter(p => p.id !== id);
   saveProjects(projects);
+  if (loadActiveProjectId() === id) clearActiveProjectId();
+}
+
+/**
+ * The id of the project that was active when the app was last used. Restored on
+ * reload so the session reconnects (and its threads reappear) without the user
+ * having to re-select the project.
+ */
+export function loadActiveProjectId(): string | null {
+  try {
+    return localStorage.getItem(ACTIVE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function saveActiveProjectId(id: string | null): void {
+  try {
+    if (id) localStorage.setItem(ACTIVE_KEY, id);
+    else localStorage.removeItem(ACTIVE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function clearActiveProjectId(): void {
+  saveActiveProjectId(null);
 }

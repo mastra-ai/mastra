@@ -2,7 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { matchCommands, SLASH_COMMANDS } from './commands';
 import { GoalPanel, StatusLine, Transcript } from './components';
-import { loadProjects, DEFAULT_RESOURCE_ID, ensureResourceId } from './projects';
+import {
+  loadProjects,
+  DEFAULT_RESOURCE_ID,
+  ensureResourceId,
+  loadActiveProjectId,
+  saveActiveProjectId,
+} from './projects';
 import type { Project } from './projects';
 import { Sidebar } from './Sidebar';
 import { useHarnessSession } from './useHarnessSession';
@@ -10,8 +16,18 @@ import { useHarnessSession } from './useHarnessSession';
 export default function App() {
   // ── Projects (localStorage) ─────────────────────────────────────────
   const [projects, setProjects] = useState<Project[]>(() => loadProjects());
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  // Restore the last active project on reload (if it still exists), so the
+  // session reconnects and its threads reappear without re-selecting.
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(() => {
+    const saved = loadActiveProjectId();
+    return saved && loadProjects().some(p => p.id === saved) ? saved : null;
+  });
   const activeProject = projects.find(p => p.id === activeProjectId) ?? null;
+
+  // Persist the active project whenever it changes.
+  useEffect(() => {
+    saveActiveProjectId(activeProjectId);
+  }, [activeProjectId]);
 
   // resourceId is the server-resolved (TUI-compatible) id, so a project opened
   // in the terminal and here share the same session. Stays disabled until the
@@ -70,6 +86,16 @@ export default function App() {
   useEffect(() => {
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight });
   }, [transcript.entries.length, transcript.running]);
+
+  // A restored active project from a pre-resourceId build won't have one yet;
+  // backfill it so the session can connect. Runs once per project that needs it.
+  const backfilledRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (activeProject && !activeProject.resourceId && backfilledRef.current !== activeProject.id) {
+      backfilledRef.current = activeProject.id;
+      void ensureResourceId(activeProject).then(() => setProjects(loadProjects()));
+    }
+  }, [activeProject]);
 
   // When a project is selected, ensure it has a server-resolved (TUI-matching)
   // resourceId, then activate it. The hook re-mounts with that resourceId,
