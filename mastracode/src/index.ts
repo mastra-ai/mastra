@@ -549,18 +549,18 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     ],
     errorProcessors: [
       new StreamErrorRetryProcessor({
-        maxRetries: 1,
-        delayMs: 2000,
-        matchers: [isBadRequestError],
-      }),
-      new StreamErrorRetryProcessor({
-        maxRetries: MASTRACODE_ECONNRESET_MAX_RETRIES,
-        delayMs: ({ retryCount }) =>
-          Math.min(
-            MASTRACODE_ECONNRESET_RETRY_INITIAL_DELAY_MS * Math.pow(2, retryCount),
-            MASTRACODE_ECONNRESET_RETRY_MAX_DELAY_MS,
-          ),
-        matchers: [isECONNRESETError],
+        matchers: [
+          { match: isBadRequestError, maxRetries: 1, delayMs: 2000 },
+          {
+            match: isECONNRESETError,
+            maxRetries: MASTRACODE_ECONNRESET_MAX_RETRIES,
+            delayMs: ({ retryCount }) =>
+              Math.min(
+                MASTRACODE_ECONNRESET_RETRY_INITIAL_DELAY_MS * Math.pow(2, retryCount),
+                MASTRACODE_ECONNRESET_RETRY_MAX_DELAY_MS,
+              ),
+          },
+        ],
       }),
       new PrefillErrorHandler(),
       new ProviderHistoryCompat(),

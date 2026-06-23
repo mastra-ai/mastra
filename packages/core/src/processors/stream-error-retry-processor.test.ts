@@ -181,6 +181,24 @@ describe('StreamErrorRetryProcessor', () => {
     expect(isBadRequestError(error)).toBe(false);
   });
 
+  it('excludes default matchers when includeDefaultMatchers is false', async () => {
+    const processor = new StreamErrorRetryProcessor({
+      includeDefaultMatchers: false,
+      matchers: [isBadRequestError],
+    });
+
+    // OpenAI retryable stream error should NOT be retried since defaults are excluded.
+    const openAIError = {
+      type: 'error',
+      error: { type: 'server_error', code: 'internal_error', message: 'An internal error occurred.' },
+    };
+    await expect(processor.processAPIError(makeArgs({ error: openAIError }))).resolves.toBeUndefined();
+
+    // But the explicitly configured matcher (isBadRequestError) should still work.
+    const badRequestError = { statusCode: 400, message: 'Bad Request' };
+    await expect(processor.processAPIError(makeArgs({ error: badRequestError }))).resolves.toEqual({ retry: true });
+  });
+
   it('retries Bad Request errors when configured with isBadRequestError matcher', async () => {
     const processor = new StreamErrorRetryProcessor({
       maxRetries: 1,
@@ -227,6 +245,88 @@ describe('StreamErrorRetryProcessor', () => {
     };
 
     await expect(processor.processAPIError(makeArgs({ error, retryCount: 1 }))).resolves.toBeUndefined();
+  });
+
+  describe('per-matcher policy', () => {
+    it('uses per-matcher maxRetries instead of processor-level default', async () => {
+      const processor = new StreamErrorRetryProcessor({
+        maxRetries: 3,
+        matchers: [{ match: isBadRequestError, maxRetries: 1 }],
+      });
+      const error = { statusCode: 400, message: 'Bad Request' };
+
+      // First retry allowed (retryCount 0 < maxRetries 1).
+      await expect(processor.processAPIError(makeArgs({ error }))).resolves.toEqual({ retry: true });
+      // Second retry blocked by per-matcher maxRetries: 1.
+      await expect(processor.processAPIError(makeArgs({ error, retryCount: 1 }))).resolves.toBeUndefined();
+    });
+
+    it('uses per-matcher delayMs instead of processor-level default', async () => {
+      vi.useFakeTimers();
+      const processor = new StreamErrorRetryProcessor({
+        delayMs: 5000,
+        matchers: [{ match: isBadRequestError, maxRetries: 1, delayMs: 100 }],
+      });
+      const error = { statusCode: 400, message: 'Bad Request' };
+
+      let resolved = false;
+      const promise = processor.processAPIError(makeArgs({ error })).then(result => {
+        resolved = true;
+        return result;
+      });
+
+      // Per-matcher delay is 100ms, not the processor-level 5000ms.
+      await vi.advanceTimersByTimeAsync(99);
+      expect(resolved).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(promise).resolves.toEqual({ retry: true });
+      vi.useRealTimers();
+    });
+
+    it('falls back to processor-level defaults when per-matcher policy omits fields', async () => {
+      const processor = new StreamErrorRetryProcessor({
+        maxRetries: 2,
+        matchers: [{ match: isBadRequestError }],
+      });
+      const error = { statusCode: 400, message: 'Bad Request' };
+
+      // Inherits processor-level maxRetries: 2.
+      await expect(processor.processAPIError(makeArgs({ error, retryCount: 1 }))).resolves.toEqual({ retry: true });
+      await expect(processor.processAPIError(makeArgs({ error, retryCount: 2 }))).resolves.toBeUndefined();
+    });
+
+    it('first-match-wins: earlier matcher policy takes precedence', async () => {
+      const processor = new StreamErrorRetryProcessor({
+        includeDefaultMatchers: false,
+        matchers: [
+          { match: isBadRequestError, maxRetries: 1 },
+          { match: () => true, maxRetries: 5 },
+        ],
+      });
+      const error = { statusCode: 400, message: 'Bad Request' };
+
+      // isBadRequestError matches first, so maxRetries: 1 applies.
+      await expect(processor.processAPIError(makeArgs({ error, retryCount: 1 }))).resolves.toBeUndefined();
+    });
+
+    it('mixes plain function matchers and config objects', async () => {
+      const customMatcher = (e: unknown) => e instanceof Error && e.message === 'custom';
+      const processor = new StreamErrorRetryProcessor({
+        includeDefaultMatchers: false,
+        matchers: [{ match: isBadRequestError, maxRetries: 1, delayMs: 2000 }, customMatcher],
+        maxRetries: 3,
+      });
+
+      // Config object matcher uses its own maxRetries.
+      const badReq = { statusCode: 400, message: 'Bad Request' };
+      await expect(processor.processAPIError(makeArgs({ error: badReq, retryCount: 1 }))).resolves.toBeUndefined();
+
+      // Plain function matcher uses processor-level maxRetries: 3.
+      const custom = new Error('custom');
+      await expect(processor.processAPIError(makeArgs({ error: custom, retryCount: 2 }))).resolves.toEqual({
+        retry: true,
+      });
+    });
   });
 
   describe('delayMs', () => {

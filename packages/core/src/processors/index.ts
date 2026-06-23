@@ -834,6 +834,8 @@ export {
   StreamErrorRetryProcessor,
   type StreamErrorRetryDelayMs,
   type StreamErrorRetryMatcher,
+  type StreamErrorRetryMatcherConfig,
+  type StreamErrorRetryMatcherEntry,
   type StreamErrorRetryProcessorOptions,
 } from './stream-error-retry-processor';
 export type { CompatRule } from './provider-history-compat';
