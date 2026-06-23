@@ -399,27 +399,32 @@ export class Harness<TState = {}> {
     // Step 1: narrow to threads whose projectPath matches the current working directory.
     let candidates = projectPath ? threads.filter(t => (t.metadata as any)?.projectPath === projectPath) : threads;
 
-    // Step 2: cross-resource fallback — when no threads matched resourceId + projectPath,
-    // query across ALL resources for orphaned threads tagged with this projectPath.
-    if (candidates.length === 0 && projectPath && this.#resolveStorage()) {
+    // Step 2: cross-resource merge — always query across ALL resources for
+    // threads tagged with this projectPath so that threads orphaned by a
+    // resourceId change (e.g. a git remote was added after the thread was
+    // created) are recovered even when the current resourceId already has a
+    // thread.  Results are merged with Layer 1 and deduplicated by id.
+    if (projectPath && this.#resolveStorage()) {
       const memoryStorage = await this.getMemoryStorage();
       const result = await memoryStorage.listThreads({
         filter: { metadata: { projectPath } },
         perPage: false,
       });
-      candidates = result.threads
-        .filter(t => {
-          const meta = t.metadata as Record<string, unknown> | undefined;
-          return meta?.forkedSubagent !== true;
-        })
-        .map(t => ({
+      const seen = new Set(candidates.map(c => c.id));
+      for (const t of result.threads) {
+        if (seen.has(t.id)) continue;
+        const meta = t.metadata as Record<string, unknown> | undefined;
+        if (meta?.forkedSubagent === true) continue;
+        seen.add(t.id);
+        candidates.push({
           id: t.id,
           resourceId: t.resourceId,
           title: t.title,
           createdAt: t.createdAt,
           updatedAt: t.updatedAt,
           metadata: t.metadata,
-        }));
+        });
+      }
     }
 
     // Step 3: resume most recent candidate, or create a new thread.

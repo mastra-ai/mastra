@@ -575,11 +575,23 @@ export function updateTerminalTitle(state: TUIState): void {
 // =============================================================================
 
 export async function promptForThreadSelection(state: TUIState): Promise<void> {
+  const currentPath = state.projectInfo.rootPath;
+
+  // If the harness already bound a thread tagged with the current projectPath
+  // (e.g. via cross-resource recovery), respect that selection instead of
+  // re-querying — the harness considers threads across all resourceIds, while
+  // session.thread.list() is scoped to only the current resourceId.
+  const currentThreadId = state.session.thread.getId();
+  if (currentThreadId) {
+    const projectPath = await state.session.thread.getSetting({ key: 'projectPath' });
+    if (projectPath === currentPath) {
+      return;
+    }
+  }
+
   const allThreads = await state.session.thread.list();
 
   // Filter to threads explicitly tagged for the current working directory.
-  const currentPath = state.projectInfo.rootPath;
-
   const threads = allThreads.filter(t => {
     const threadPath = t.metadata?.projectPath as string | undefined;
     return !!threadPath && threadPath === currentPath;

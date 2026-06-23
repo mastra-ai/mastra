@@ -80,6 +80,7 @@ import { quietToolHistoryParityScenario } from './quiet-tool-history-parity.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
 import { requestAccessModalScenario } from './request-access-modal.js';
 import { resourceidDriftAutoResumeScenario } from './resourceid-drift-auto-resume.js';
+import { resourceidDriftCrossResourceMergeScenario } from './resourceid-drift-cross-resource-merge.js';
 import { settingsApiKeysNavigationScenario } from './settings-api-keys-navigation.js';
 import { settingsStartupModelRestoreScenario } from './settings-startup-model-restore.js';
 import { setupCompletionPersistenceScenario } from './setup-completion-persistence.js';
@@ -251,6 +252,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'workspace-tool-names': workspaceToolNamesScenario,
   'workspace-tool-output-rendering': workspaceToolOutputRenderingScenario,
   'resourceid-drift-auto-resume': resourceidDriftAutoResumeScenario,
+  'resourceid-drift-cross-resource-merge': resourceidDriftCrossResourceMergeScenario,
   'worktree-cross-thread-resume': worktreeCrossThreadResumeScenario,
   'worktree-thread-scoping': worktreeThreadScopingScenario,
 };
