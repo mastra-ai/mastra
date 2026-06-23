@@ -718,7 +718,7 @@ describe('PostgresStore.init() — concurrency & disableInit (issue #18282)', ()
       await expect(store.init()).rejects.toThrow();
 
       // A subsequent init() must succeed (the rejected promise was cleared).
-      await expect(store.init()).resolves.toBeDefined();
+      await expect(store.init()).resolves.toBeUndefined();
       expect(await tableExists(schemaName)).toBe(true);
     } finally {
       await dropSchema(schemaName);
