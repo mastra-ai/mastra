@@ -232,17 +232,19 @@ function EnvironmentVariablesDrawerStory() {
           </Button>
         </DrawerTrigger>
         <DrawerContent className="w-[48rem] max-w-[calc(100vw-2rem)]">
-          <EnvironmentVariablesEditor.Root editor={editor} className="contents" addLabel="Add Another">
+          <EnvironmentVariablesEditor.Root editor={editor} className="contents">
             <DrawerHeader className="flex-row items-center justify-between gap-3 border-b border-border1">
               <DrawerTitle>Add Environment Variable</DrawerTitle>
-              <EnvironmentVariablesEditor.Upload>Import .env</EnvironmentVariablesEditor.Upload>
+              <EnvironmentVariablesEditor.UploadButton variant="outline" size="sm">
+                Import .env
+              </EnvironmentVariablesEditor.UploadButton>
             </DrawerHeader>
             <DrawerBody className="overflow-y-auto">
               <div className="grid gap-6">
-                <EnvironmentVariablesEditor.Messages showDuplicateKeys={false} showUploadError />
+                <EnvironmentVariablesEditor.UploadError />
                 <EnvironmentVariablesEditor.Rows />
-                <EnvironmentVariablesEditor.AddButton />
-                <EnvironmentVariablesEditor.Messages />
+                <EnvironmentVariablesEditor.AddButton>Add Another</EnvironmentVariablesEditor.AddButton>
+                <EnvironmentVariablesEditor.DuplicateKeysError />
               </div>
             </DrawerBody>
             <DrawerFooter className="items-center border-t border-border1">

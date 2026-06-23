@@ -2,6 +2,7 @@ export { EnvironmentVariablesEditor } from './environment-variables-editor';
 export type {
   EnvironmentVariablesEditorActionsProps,
   EnvironmentVariablesEditorAddButtonProps,
+  EnvironmentVariablesEditorDuplicateKeysErrorProps,
   EnvironmentVariablesEditorMessagesProps,
   EnvironmentVariablesEditorReadOnlyEmptyProps,
   EnvironmentVariablesEditorReadOnlyHeaderProps,
@@ -10,6 +11,9 @@ export type {
   EnvironmentVariablesEditorReadOnlyListProps,
   EnvironmentVariablesEditorRowProps,
   EnvironmentVariablesEditorRowErrors,
+  EnvironmentVariablesEditorRootProps,
   EnvironmentVariablesEditorRowsProps,
+  EnvironmentVariablesEditorUploadButtonProps,
+  EnvironmentVariablesEditorUploadErrorProps,
   EnvironmentVariablesEditorUploadProps,
 } from './environment-variables-editor';

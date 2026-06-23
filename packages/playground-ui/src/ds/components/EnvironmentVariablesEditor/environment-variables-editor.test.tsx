@@ -69,13 +69,18 @@ function CompoundTestEditor({
   const editor = useEnvironmentVariablesEditor({ initialRows });
 
   return (
-    <EnvironmentVariablesEditor.Root editor={editor} addLabel="Add Another" data-testid="env-editor-root">
-      <EnvironmentVariablesEditor.Messages showDuplicateKeys={false} showUploadError />
+    <EnvironmentVariablesEditor.Root editor={editor} data-testid="env-editor-root">
+      <div data-testid="env-editor-toolbar">
+        <EnvironmentVariablesEditor.UploadButton inputLabel="Import .env file">
+          Import .env
+        </EnvironmentVariablesEditor.UploadButton>
+      </div>
+      <EnvironmentVariablesEditor.UploadError />
       <EnvironmentVariablesEditor.Rows data-testid="env-editor-rows" />
       <EnvironmentVariablesEditor.AddButton data-testid="env-editor-add">
         Add Another
       </EnvironmentVariablesEditor.AddButton>
-      <EnvironmentVariablesEditor.Messages />
+      <EnvironmentVariablesEditor.DuplicateKeysError />
       <EnvironmentVariablesEditor.Actions>
         <button
           type="button"
@@ -174,6 +179,8 @@ describe('EnvironmentVariablesEditor', () => {
     render(<CompoundTestEditor initialRows={[{ key: '', value: '' }]} onSave={onSave} />);
 
     expect(screen.getByTestId('env-editor-root')).toBeDefined();
+    expect(screen.getByTestId('env-editor-toolbar')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Import .env' })).toBeDefined();
     expect(screen.getByTestId('env-editor-rows')).toBeDefined();
     expect(screen.getByTestId('env-editor-add')).toBeDefined();
 
@@ -191,6 +198,22 @@ describe('EnvironmentVariablesEditor', () => {
 
     expect(onSave).toHaveBeenCalledWith({
       API_KEY: 'secret',
+    });
+  });
+
+  it('uploads through a custom positioned upload button', async () => {
+    render(<CompoundTestEditor initialRows={[{ key: '', value: '' }]} />);
+
+    const file = new File(['FOO=bar\nBAZ=qux'], '.env', { type: 'text/plain' });
+    fireEvent.change(screen.getByLabelText('Import .env file'), {
+      target: { files: [file] },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('FOO')).toBeDefined();
+      expect(screen.getByDisplayValue('bar')).toBeDefined();
+      expect(screen.getByDisplayValue('BAZ')).toBeDefined();
+      expect(screen.getByDisplayValue('qux')).toBeDefined();
     });
   });
 
