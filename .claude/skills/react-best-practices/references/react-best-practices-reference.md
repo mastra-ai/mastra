@@ -92,8 +92,8 @@ This catalog is an index for React performance and quality guidance used by agen
 
 ### 8. Testing
 
-| Rule                  | Title                                | Impact      | Summary                                                                                                            | Canonical file                              |
-| --------------------- | ------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------- |
+| Rule                   | Title                                | Impact      | Summary                                                                                                                 | Canonical file                             |
+| ---------------------- | ------------------------------------ | ----------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
 | `testing-bdd-no-mocks` | BDD Tests That Mock Only the Network | MEDIUM-HIGH | Drive the real `@mastra/client-js` + React Query stack and mock only the network; write tests BDD-style. Lint-enforced. | `references/rules/testing-bdd-no-mocks.md` |
 
 ## External References
