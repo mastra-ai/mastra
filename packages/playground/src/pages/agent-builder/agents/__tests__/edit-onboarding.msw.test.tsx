@@ -204,7 +204,7 @@ const baseHandlers = (agent: typeof emptyAgent) => [
   http.get(`${BASE_URL}/api/stored/workspaces`, () => HttpResponse.json({ workspaces: [] })),
   http.get(`${BASE_URL}/api/channels/platforms`, () => HttpResponse.json([])),
   // Empty provider list short-circuits the integration tool fan-out.
-  http.get(`${BASE_URL}/api/tool-providers`, () => HttpResponse.json([])),
+  http.get(`${BASE_URL}/api/tool-providers`, () => HttpResponse.json({ providers: [] })),
   // All agent features off: the onboarding wizard resolves its minimal tree.
   http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json(buildBuilderSettings())),
 ];

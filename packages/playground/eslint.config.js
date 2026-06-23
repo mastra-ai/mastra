@@ -321,7 +321,7 @@ const PROHIBITED_MOCK_MESSAGE =
 // must be escaped as `\/` because esquery parses the value as a regex literal,
 // and we use `(\/|$)` boundaries instead of a bare `$`.
 const prohibitedMockModulePatterns = [
-  '^@\\/domains\\/[^\\/]+\\/(hooks|services)(\\/|$)',
+  '^@\\/domains\\/[^\\/]+(?:\\/[^\\/]+)*\\/(hooks|services)(\\/|$)',
   '^@\\/domains\\/auth(\\/|$)',
   '^@\\/domains\\/(llm|agent-builder|agents)$',
   '^@\\/hooks(\\/|$)',

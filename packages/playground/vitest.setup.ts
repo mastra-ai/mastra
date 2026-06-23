@@ -13,7 +13,7 @@ import { server } from './src/test/msw-server';
 // viewportRef, children). Tests still see their content; the overlay-scrollbar
 // internals are simply not exercised.
 vi.mock('@mastra/playground-ui', async () => {
-  const actual = await vi.importActual<typeof import('@mastra/playground-ui')>('@mastra/playground-ui');
+  const actual = await vi.importActual('@mastra/playground-ui');
   const ScrollArea = React.forwardRef<
     HTMLDivElement,
     {

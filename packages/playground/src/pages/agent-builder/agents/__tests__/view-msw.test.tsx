@@ -146,8 +146,13 @@ describe('AgentBuilderAgentView MSW integration', () => {
       fireEvent.click(screen.getByTestId('agent-builder-agent-chat-starter-what-can-you-do?'));
 
       const input = screen.getByTestId('agent-builder-agent-chat-input') as HTMLTextAreaElement;
+      // Autofilling the composer is the click's observable effect; once it has
+      // landed, a submit (which would clear the composer) is the only thing that
+      // could fire the stream request. Assert the input stays filled and no
+      // stream POST is ever sent.
+      await waitFor(() => expect(input.value).toBe('What can you do? Give me a quick overview of your capabilities.'));
       expect(input.value).toBe('What can you do? Give me a quick overview of your capabilities.');
-      await waitFor(() => expect(sendRequestCount).toBe(0));
+      expect(sendRequestCount).toBe(0);
     });
   });
 

@@ -201,13 +201,19 @@ export function SkillEditDialog({
     }
 
     if (isExistingSkill && skill) {
-      const result = await updateSkill.mutateAsync({
-        id: skill.id,
-        name,
-        description,
-        visibility,
-        instructions,
-      });
+      let result: StoredSkillResponse;
+      try {
+        result = await updateSkill.mutateAsync({
+          id: skill.id,
+          name,
+          description,
+          visibility,
+          instructions,
+        });
+      } catch (error) {
+        toast.error(`Failed to update skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        return;
+      }
       onSkillUpdated?.(result);
       onClose();
     } else {
