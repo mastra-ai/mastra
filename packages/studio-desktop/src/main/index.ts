@@ -15,7 +15,6 @@ import {
   buildHostedStudioLoginUrl,
   buildPlatformCliLoginUrl,
   fetchPlatformProjects,
-  isLaunchableStudioStatus,
   normalizePlatformBaseUrl,
   refreshPlatformAccessToken,
 } from './platform';
@@ -401,8 +400,8 @@ async function createPlatformTab(projectId: string) {
   if (!project) {
     throw new Error('Platform Studio project was not found');
   }
-  if (!project.instanceUrl || !isLaunchableStudioStatus(project.latestDeployStatus)) {
-    throw new Error('This hosted Studio is not launchable yet');
+  if (!project.instanceUrl) {
+    throw new Error('This hosted Studio does not have a URL yet');
   }
 
   upsertTab({

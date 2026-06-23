@@ -30,8 +30,19 @@ function escapeHtml(value: string | undefined) {
     .replaceAll('"', '&quot;');
 }
 
-function launchable(project: PlatformProject) {
-  return !!project.instanceUrl && ['running', 'sleeping', 'stopped'].includes(project.latestDeployStatus ?? '');
+function canOpenHostedStudio(project: PlatformProject) {
+  return !!project.instanceUrl;
+}
+
+function isHealthyHostedStudioStatus(project: PlatformProject) {
+  return ['running', 'sleeping', 'stopped'].includes(project.latestDeployStatus ?? '');
+}
+
+function statusTone(project: PlatformProject) {
+  if (!project.instanceUrl) return 'muted';
+  if (isHealthyHostedStudioStatus(project)) return 'live';
+  if (project.latestDeployStatus === 'failed') return 'warning';
+  return 'muted';
 }
 
 function projectStatus(project: PlatformProject) {
@@ -110,7 +121,7 @@ function renderPlatformRows(current: DesktopState) {
   const rows = current.platform.projects
     .filter(project => project.studioEnabled || project.instanceUrl)
     .map(project => {
-      const disabled = !launchable(project);
+      const disabled = !canOpenHostedStudio(project);
       return `
         <button class="launcher-row" type="button" data-platform-project-id="${project.id}" ${disabled ? 'disabled' : ''}>
           <span class="row-icon">P</span>
@@ -118,7 +129,7 @@ function renderPlatformRows(current: DesktopState) {
             <span class="row-title">${escapeHtml(project.name)}</span>
             <span class="row-subtitle">${escapeHtml(project.instanceUrl ?? project.slug)}</span>
           </span>
-          <span class="status-pill ${disabled ? 'muted' : 'live'}">${escapeHtml(projectStatus(project))}</span>
+          <span class="status-pill ${statusTone(project)}">${escapeHtml(projectStatus(project))}</span>
         </button>
       `;
     })

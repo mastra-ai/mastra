@@ -253,6 +253,11 @@ input {
   color: var(--accent);
 }
 
+.status-pill.warning {
+  border-color: rgba(255, 128, 109, 0.35);
+  color: var(--danger);
+}
+
 .status-pill.muted {
   color: var(--faint);
 }
