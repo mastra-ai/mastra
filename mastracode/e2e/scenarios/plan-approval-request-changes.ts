@@ -32,9 +32,12 @@ export const planApprovalRequestChangesScenario: McE2eScenario = {
     await runtime.waitForScreenText(/✗\s+Changes requested/i, terminal, 10_000);
     await runtime.waitForScreenText(/Send a message with your revision feedback/i, terminal, 10_000);
 
-    // The rejection aborts the run immediately (no tool result sent back to
-    // the model). Allow a brief settle before submitting revision feedback.
-    await runtime.sleep(1_500);
+    // The rejection resumes the tool call. The model gets the "Plan was not
+    // approved" result and responds with an acknowledgement. Wait for the run
+    // to finish before submitting revision feedback so the next message starts
+    // a fresh run instead of being sent as a steer.
+    await runtime.waitForScreenText(/wait for your revision feedback/i, terminal, 10_000);
+    await runtime.sleep(500);
 
     // Send revision feedback as a normal chat message
     terminal.submit('Add a testing section with unit and integration tests');
@@ -53,15 +56,15 @@ export const planApprovalRequestChangesScenario: McE2eScenario = {
     // Approve the revised plan (Enter on first option)
     terminal.write('\r');
     await runtime.waitForScreenText(/✓\s+Approved/i, terminal, 10_000);
-    await runtime.waitForScreenText(/The user has approved the plan, begin executing\./i, terminal, 10_000);
-    await runtime.waitForScreenText(/Build handoff request-changes e2e acknowledged\./i, terminal, 15_000);
+    await runtime.waitForScreenText(/▐build▌/i, terminal, 10_000);
+    await runtime.sleep(1_000);
 
     terminal.keyCtrlC();
   },
   verifyAimockRequests(requests) {
-    if (requests.length < 2) {
+    if (requests.length < 3) {
       throw new Error(
-        `Expected plan request-changes scenario to make at least 2 AIMock requests, received ${requests.length}`,
+        `Expected plan request-changes scenario to make at least 3 AIMock requests, received ${requests.length}`,
       );
     }
     const body = JSON.stringify(requests);
@@ -76,12 +79,14 @@ export const planApprovalRequestChangesScenario: McE2eScenario = {
       throw new Error('Expected AIMock requests to include the revised submit_plan tool call id');
     }
 
-    // Rejection now aborts the run immediately (no tool result), so
-    // "Plan was not approved" is NOT in the message history.
+    // Verify the rejection tool result was persisted and sent back to the model
+    if (!body.includes('Plan was not approved')) {
+      throw new Error('Expected AIMock requests to include the rejected submit_plan tool result');
+    }
 
-    // Verify the build handoff reminder was sent after approval
-    if (!body.includes('The user has approved the plan, begin executing.')) {
-      throw new Error('Expected AIMock requests to include the build handoff reminder');
+    // Verify the approved tool result was sent back to the model
+    if (!body.includes('Plan approved. Proceed with implementation following the approved plan.')) {
+      throw new Error('Expected AIMock requests to include the approved submit_plan tool result');
     }
   },
 };
