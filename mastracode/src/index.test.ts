@@ -16,7 +16,6 @@ vi.mock('@mastra/core/agent', () => ({
 }));
 
 vi.mock('@mastra/core/harness', () => ({
-  trace: () => {},
   Harness: class {
     constructor(config: { heartbeatHandlers?: Array<{ immediate?: boolean; handler: () => unknown }> }) {
       for (const heartbeat of config.heartbeatHandlers ?? []) {
