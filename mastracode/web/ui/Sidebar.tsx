@@ -3,7 +3,7 @@ import { useState } from 'react';
 
 import { DirectoryPicker } from './DirectoryPicker';
 import type { Project } from './projects';
-import { addProject, removeProject } from './projects';
+import { addProject, loadProjects, removeProject } from './projects';
 
 const MAX_THREADS = 5;
 
@@ -34,11 +34,24 @@ export function Sidebar({
 
   // ── Project handlers ──────────────────────────────────────────────────
 
-  const handlePickFolder = (path: string, name: string) => {
-    setShowPicker(false);
-    const project = addProject(name || path, path);
-    onProjectsChange([...projects, project]);
-    onSelectProject(project);
+  const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+
+  const handlePickFolder = async (path: string, name: string) => {
+    setAdding(true);
+    setAddError(null);
+    try {
+      // addProject resolves the server-side (TUI-matching) resourceId, then
+      // persists. Reload from storage so we don't double-append.
+      const project = await addProject(name || path, path);
+      setShowPicker(false);
+      onProjectsChange(loadProjects());
+      onSelectProject(project);
+    } catch (e) {
+      setAddError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAdding(false);
+    }
   };
 
   const handleRemoveProject = (e: React.MouseEvent, id: string) => {
@@ -92,7 +105,14 @@ export function Sidebar({
           )}
         </div>
 
-        {showPicker && <DirectoryPicker onPick={handlePickFolder} onCancel={() => setShowPicker(false)} />}
+        {showPicker && (
+          <DirectoryPicker
+            onPick={(path, name) => void handlePickFolder(path, name)}
+            onCancel={() => setShowPicker(false)}
+            busy={adding}
+            error={addError}
+          />
+        )}
       </div>
 
       {/* ── Threads (scoped to active project) ────────────────────────── */}

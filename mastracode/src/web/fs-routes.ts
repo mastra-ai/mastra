@@ -4,6 +4,8 @@ import { isAbsolute, join, resolve, sep } from 'node:path';
 
 import type { Hono } from 'hono';
 
+import { detectProject, getResourceIdOverride } from '../utils/project.js';
+
 /**
  * Server-side directory browser for the web project picker.
  *
@@ -90,17 +92,62 @@ export async function listDirectory(root: string, requestedPath?: string): Promi
   return { root: resolvedRoot, path: target, parent, entries };
 }
 
+export interface ResolvedProject {
+  /**
+   * The resourceId the TUI would use for this path — derived identically so a
+   * project opened in the terminal and in the web app resolve to the SAME
+   * session (and therefore the same threads).
+   */
+  resourceId: string;
+  name: string;
+  rootPath: string;
+  gitUrl?: string;
+  gitBranch?: string;
+}
+
 /**
- * Mount `GET /api/web/fs/list?path=...` on the given Hono app. Lists the
- * directories under `path` (defaulting to `root`), confined to `root`.
+ * Resolve a project path to the same resourceId the TUI uses. Mirrors
+ * `createMastraCode`: detect the project, then apply any resourceId override
+ * (MASTRA_RESOURCE_ID env var or `.mastracode/database.json`). This is the
+ * shared continuity point — start in the TUI, continue on the web, same path
+ * → same resourceId → same session.
+ */
+export function resolveProject(projectPath: string): ResolvedProject {
+  const info = detectProject(projectPath);
+  const override = getResourceIdOverride(info.rootPath);
+  return {
+    resourceId: override ?? info.resourceId,
+    name: info.name,
+    rootPath: info.rootPath,
+    gitUrl: info.gitUrl,
+    gitBranch: info.gitBranch,
+  };
+}
+
+/**
+ * Mount the web filesystem routes on the given Hono app:
+ *   - `GET /api/web/fs/list?path=...`        — browse directories (confined to root)
+ *   - `GET /api/web/project/resolve?path=...` — TUI-compatible project resourceId
  */
 export function mountFsRoutes(app: Hono, options: { root?: string } = {}): void {
   const root = resolveFsRoot(options.root);
+
   app.get('/api/web/fs/list', async c => {
     const path = c.req.query('path');
     try {
       const listing = await listDirectory(root, path);
       return c.json(listing);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return c.json({ error: message }, 500);
+    }
+  });
+
+  app.get('/api/web/project/resolve', c => {
+    const path = c.req.query('path');
+    if (!path) return c.json({ error: 'Missing required query param: path' }, 400);
+    try {
+      return c.json(resolveProject(path));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return c.json({ error: message }, 500);

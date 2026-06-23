@@ -23,6 +23,10 @@ interface DirectoryPickerProps {
   /** Called with the chosen absolute path and its basename. */
   onPick: (path: string, name: string) => void;
   onCancel: () => void;
+  /** True while the chosen folder is being resolved (server round-trip). */
+  busy?: boolean;
+  /** Error from resolving the chosen folder, if any. */
+  error?: string | null;
 }
 
 function basename(path: string): string {
@@ -30,7 +34,7 @@ function basename(path: string): string {
   return parts[parts.length - 1] ?? path;
 }
 
-export function DirectoryPicker({ onPick, onCancel }: DirectoryPickerProps) {
+export function DirectoryPicker({ onPick, onCancel, busy = false, error: pickError = null }: DirectoryPickerProps) {
   const [listing, setListing] = useState<DirectoryListing | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -98,15 +102,17 @@ export function DirectoryPicker({ onPick, onCancel }: DirectoryPickerProps) {
           )}
         </div>
 
+        {pickError && <div className="dirpicker-error">{pickError}</div>}
+
         <div className="dirpicker-actions">
           <button
             className="btn btn-sm btn-primary"
-            disabled={!listing}
+            disabled={!listing || busy}
             onClick={() => listing && onPick(listing.path, basename(listing.path))}
           >
-            Use this folder
+            {busy ? 'Resolving…' : 'Use this folder'}
           </button>
-          <button className="btn btn-sm" onClick={onCancel}>
+          <button className="btn btn-sm" onClick={onCancel} disabled={busy}>
             Cancel
           </button>
         </div>

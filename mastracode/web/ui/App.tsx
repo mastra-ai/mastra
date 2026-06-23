@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { matchCommands, SLASH_COMMANDS } from './commands';
 import { GoalPanel, StatusLine, Transcript } from './components';
-import { loadProjects, DEFAULT_RESOURCE_ID, projectResourceId } from './projects';
+import { loadProjects, DEFAULT_RESOURCE_ID, ensureResourceId } from './projects';
 import type { Project } from './projects';
 import { Sidebar } from './Sidebar';
 import { useHarnessSession } from './useHarnessSession';
@@ -13,10 +13,13 @@ export default function App() {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const activeProject = projects.find(p => p.id === activeProjectId) ?? null;
 
-  // resourceId is scoped to the active project so threads belong to it.
-  const resourceId = activeProject ? projectResourceId(activeProject) : DEFAULT_RESOURCE_ID;
+  // resourceId is the server-resolved (TUI-compatible) id, so a project opened
+  // in the terminal and here share the same session. Stays disabled until the
+  // active project's resourceId is known.
+  const resourceId = activeProject?.resourceId ?? DEFAULT_RESOURCE_ID;
+  const sessionEnabled = !!activeProject?.resourceId;
 
-  const session = useHarnessSession({ harnessId: 'code', resourceId, enabled: !!activeProject });
+  const session = useHarnessSession({ harnessId: 'code', resourceId, enabled: sessionEnabled });
   const { transcript, status, modes, threads, send, steer, abort } = session;
   const [draft, setDraft] = useState('');
   const threadRef = useRef<HTMLDivElement>(null);
@@ -68,12 +71,26 @@ export default function App() {
     threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight });
   }, [transcript.entries.length, transcript.running]);
 
-  // When a project is selected, set projectPath on the server session state.
+  // When a project is selected, ensure it has a server-resolved (TUI-matching)
+  // resourceId, then activate it. The hook re-mounts with that resourceId,
+  // creating/resuming the shared session; projectPath is pushed once connected.
   const handleSelectProject = async (project: Project | null) => {
-    setActiveProjectId(project?.id ?? null);
-    // The hook will re-mount with a new resourceId, creating/resuming the
-    // project's session. We also push projectPath so the workspace factory
-    // picks it up on the next message.
+    if (!project) {
+      setActiveProjectId(null);
+      return;
+    }
+    // Backfill resourceId for legacy projects created before it was stored.
+    if (!project.resourceId) {
+      try {
+        const filled = await ensureResourceId(project);
+        setProjects(loadProjects());
+        setActiveProjectId(filled.id);
+        return;
+      } catch {
+        // Resolution failed (path gone?); activate anyway with default scope.
+      }
+    }
+    setActiveProjectId(project.id);
   };
 
   // After the session connects for a new project, set projectPath.
