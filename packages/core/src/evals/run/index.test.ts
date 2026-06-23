@@ -1194,4 +1194,145 @@ describe('runEvals', () => {
       expect(result.scores.trajectory['raw-output-check']).toBe(1.0);
     });
   });
+
+  describe('gates and verdict', () => {
+    it('should return verdict: passed when all gates score 1.0', async () => {
+      const agent = createMockAgentV2('It is sunny and warm');
+      const alwaysPassGate = createScorer({
+        id: 'always-pass',
+        description: 'Always passes',
+      }).generateScore(() => 1.0);
+
+      const result = await runEvals({
+        data: [{ input: 'Weather?' }],
+        scorers: [createMockScorer('basic', 0.9)],
+        gates: [alwaysPassGate],
+        target: agent,
+      });
+
+      expect(result.verdict).toBe('passed');
+      expect(result.gateResults).toHaveLength(1);
+      expect(result.gateResults![0]!.passed).toBe(true);
+      expect(result.gateResults![0]!.score).toBe(1.0);
+    });
+
+    it('should return verdict: failed when a gate scores below 1.0', async () => {
+      const agent = createMockAgentV2('response');
+      const failingGate = createScorer({
+        id: 'failing-gate',
+        description: 'Always fails',
+      }).generateScore(() => 0.5);
+
+      const result = await runEvals({
+        data: [{ input: 'Test' }],
+        scorers: [createMockScorer('basic', 0.9)],
+        gates: [failingGate],
+        target: agent,
+      });
+
+      expect(result.verdict).toBe('failed');
+      expect(result.gateResults![0]!.passed).toBe(false);
+    });
+
+    it('should return verdict: scored when gates pass but threshold fails', async () => {
+      const agent = createMockAgentV2('response');
+      const passingGate = createScorer({
+        id: 'gate-pass',
+        description: 'Passes',
+      }).generateScore(() => 1.0);
+
+      const lowScorer = createScorer({
+        id: 'low-scorer',
+        description: 'Scores low',
+      }).generateScore(() => 0.3);
+
+      const result = await runEvals({
+        data: [{ input: 'Test' }],
+        scorers: [{ scorer: lowScorer, threshold: 0.7 }],
+        gates: [passingGate],
+        target: agent,
+      });
+
+      expect(result.verdict).toBe('scored');
+      expect(result.gateResults![0]!.passed).toBe(true);
+      expect(result.thresholdResults).toHaveLength(1);
+      expect(result.thresholdResults![0]!.passed).toBe(false);
+      expect(result.thresholdResults![0]!.averageScore).toBe(0.3);
+    });
+
+    it('should not include verdict when no gates or thresholds are provided', async () => {
+      const agent = createMockAgentV2('response');
+
+      const result = await runEvals({
+        data: [{ input: 'Test' }],
+        scorers: [createMockScorer('basic', 0.8)],
+        target: agent,
+      });
+
+      expect(result.verdict).toBeUndefined();
+      expect(result.gateResults).toBeUndefined();
+      expect(result.thresholdResults).toBeUndefined();
+    });
+
+    it('should support threshold-only mode without gates', async () => {
+      const agent = createMockAgentV2('response');
+      const goodScorer = createScorer({
+        id: 'good-scorer',
+        description: 'High score',
+      }).generateScore(() => 0.9);
+
+      const result = await runEvals({
+        data: [{ input: 'Test' }],
+        scorers: [{ scorer: goodScorer, threshold: 0.7 }],
+        target: agent,
+      });
+
+      expect(result.verdict).toBe('passed');
+      expect(result.gateResults).toBeUndefined();
+      expect(result.thresholdResults).toHaveLength(1);
+      expect(result.thresholdResults![0]!.passed).toBe(true);
+    });
+
+    it('should work with mixed bare scorers and threshold scorers', async () => {
+      const agent = createMockAgentV2('response');
+      const bareScorer = createMockScorer('bare', 0.8);
+      const thresholdScorer = createScorer({
+        id: 'threshold-scorer',
+        description: 'Has threshold',
+      }).generateScore(() => 0.85);
+
+      const result = await runEvals({
+        data: [{ input: 'Test' }],
+        scorers: [bareScorer, { scorer: thresholdScorer, threshold: 0.8 }],
+        target: agent,
+      });
+
+      expect(result.verdict).toBe('passed');
+      expect(result.scores['bare']).toBeDefined();
+      expect(result.scores['threshold-scorer']).toBeDefined();
+    });
+
+    it('should average gate scores across multiple data items', async () => {
+      const agent = createMockAgentV2('response');
+      let callCount = 0;
+      const sometimesFailsGate = createScorer({
+        id: 'sometimes-fails',
+        description: 'Fails on second call',
+      }).generateScore(() => {
+        callCount++;
+        return callCount === 2 ? 0.0 : 1.0;
+      });
+
+      const result = await runEvals({
+        data: [{ input: 'Test1' }, { input: 'Test2' }, { input: 'Test3' }],
+        scorers: [createMockScorer('basic', 0.8)],
+        gates: [sometimesFailsGate],
+        target: agent,
+      });
+
+      // Average score: (1.0 + 0.0 + 1.0) / 3 ≈ 0.67, which is < 1.0 → failed
+      expect(result.verdict).toBe('failed');
+      expect(result.gateResults![0]!.passed).toBe(false);
+    });
+  });
 });
