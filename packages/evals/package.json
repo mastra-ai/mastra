@@ -49,6 +49,16 @@
         "default": "./dist/scorers/utils.cjs"
       }
     },
+    "./checks": {
+      "import": {
+        "types": "./dist/checks.d.ts",
+        "default": "./dist/checks.js"
+      },
+      "require": {
+        "types": "./dist/checks.d.ts",
+        "default": "./dist/checks.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
