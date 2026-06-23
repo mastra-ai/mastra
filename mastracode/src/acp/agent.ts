@@ -24,6 +24,7 @@ export class MastraCodeAcpAgent implements Agent {
   private readonly harness: Harness;
   private readonly session: Session;
   private readonly modes: HarnessMode[];
+  private readonly unsubscribeSessionEvents: () => void;
   private readonly sessionMap = new Map<string, string>(); // sessionId -> threadId
   private currentPromptState: PromptState | null = null;
   private promptMutex: Promise<void> = Promise.resolve();
@@ -43,9 +44,13 @@ export class MastraCodeAcpAgent implements Agent {
     this.modes = modes;
 
     // Register persistent event listener
-    this.session.subscribe(event => {
+    this.unsubscribeSessionEvents = this.session.subscribe(event => {
       handleHarnessEvent(event, this.currentPromptState, this.connection, this.session);
     });
+  }
+
+  dispose(): void {
+    this.unsubscribeSessionEvents();
   }
 
   async initialize(_request: InitializeRequest): Promise<InitializeResponse> {
