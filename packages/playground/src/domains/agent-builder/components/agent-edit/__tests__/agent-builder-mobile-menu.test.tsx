@@ -1,7 +1,7 @@
 import { TooltipProvider } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
@@ -165,15 +165,11 @@ describe('AgentBuilderMobileMenu', () => {
 
     await openDropdown();
     const addItem = screen.getByTestId('agent-builder-mobile-menu-visibility-add');
-    await act(async () => {
-      fireEvent.pointerDown(addItem, { pointerType: 'mouse', button: 0 });
-      fireEvent.pointerUp(addItem, { pointerType: 'mouse', button: 0 });
-      fireEvent.click(addItem);
-    });
+    fireEvent.pointerDown(addItem, { pointerType: 'mouse', button: 0 });
+    fireEvent.pointerUp(addItem, { pointerType: 'mouse', button: 0 });
+    fireEvent.click(addItem);
 
-    await act(async () => {
-      fireEvent.click(await screen.findByTestId('agent-builder-visibility-confirm-yes'));
-    });
+    fireEvent.click(await screen.findByTestId('agent-builder-visibility-confirm-yes'));
 
     await waitFor(() => {
       expect(capturedBody).toEqual({ visibility: 'public' });
@@ -222,9 +218,7 @@ describe('AgentBuilderMobileMenu', () => {
     expect(editItem).toBeTruthy();
     expect(editItem.textContent).toContain('Edit agent');
 
-    await act(async () => {
-      fireEvent.click(editItem);
-    });
+    fireEvent.click(editItem);
 
     await waitFor(() => {
       expect(screen.getByTestId('current-location').textContent).toBe('/agent-builder/agents/agent-1/edit');

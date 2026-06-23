@@ -87,6 +87,10 @@ describe('MessageRow chrome', () => {
     const copyButton = screen.getByRole('button', { name: /copy/i });
     fireEvent.click(copyButton);
     expect(writeText).toHaveBeenCalledWith('copy me please');
+    // The button swaps its copy icon for a check icon once the async clipboard
+    // write resolves. Wait for that transition so the state update lands inside
+    // act instead of leaking after the test body.
+    await waitFor(() => expect(copyButton.querySelector('.lucide-check')).not.toBeNull());
   });
 
   it('falls back when the browser blocks async clipboard writes', async () => {

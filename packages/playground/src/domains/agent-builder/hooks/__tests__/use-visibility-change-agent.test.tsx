@@ -1,8 +1,7 @@
-// @vitest-environment jsdom
 import { TooltipProvider } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
@@ -119,9 +118,7 @@ describe('useVisibilityChange (agent)', () => {
       );
 
       fireEvent.click(screen.getByTestId('trigger'));
-      await act(async () => {
-        fireEvent.click(await screen.findByTestId('agent-builder-visibility-confirm-yes'));
-      });
+      fireEvent.click(await screen.findByTestId('agent-builder-visibility-confirm-yes'));
 
       await waitFor(() => expect(callCount).toBe(1));
       expect(capturedBody).toMatchObject({ visibility: 'public' });

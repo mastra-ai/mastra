@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import type * as PlaygroundUi from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -66,10 +65,18 @@ const renderAutosave = ({
     wrapper: Wrapper,
   });
 
-  return { ...view, form: () => formRef.current! };
+  return { ...view, form: () => formRef.current!, queryClient };
 };
 
-const wait = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+// Waits for the auth-capabilities query (read by the hook's useDefaultVisibility)
+// to settle, so no-edit assertions run after that async state update lands
+// inside act instead of racing it with a bare sleep.
+const waitForCapabilitiesSettled = (queryClient: QueryClient) =>
+  waitFor(() =>
+    expect(
+      queryClient.getQueryCache().findAll({ queryKey: ['auth', 'capabilities'] })[0]?.state.status,
+    ).toBe('success'),
+  );
 
 describe('useAutosaveAgent', () => {
   beforeEach(() => {
@@ -88,8 +95,8 @@ describe('useAutosaveAgent', () => {
         }),
       );
 
-      const { result } = renderAutosave({ debounceMs: 20 });
-      await wait(80);
+      const { result, queryClient } = renderAutosave({ debounceMs: 20 });
+      await waitForCapabilitiesSettled(queryClient);
 
       expect(calls).toBe(0);
       expect(result.current.status).toBe('idle');
@@ -215,9 +222,11 @@ describe('useAutosaveAgent', () => {
         }),
       );
 
-      const { unmount } = renderAutosave({ debounceMs: 20 });
+      const { unmount, queryClient } = renderAutosave({ debounceMs: 20 });
+      // Let the auth-capabilities query settle before unmount so its async state
+      // update lands inside act rather than after the hook is gone.
+      await waitForCapabilitiesSettled(queryClient);
       unmount();
-      await wait(80);
 
       expect(calls).toBe(0);
     });

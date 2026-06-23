@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import type { StoredAgentResponse } from '@mastra/client-js';
 import type * as PlaygroundUi from '@mastra/playground-ui';
 import { TooltipProvider } from '@mastra/playground-ui';
@@ -86,7 +85,7 @@ function renderPage() {
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
 
-  return render(
+  const result = render(
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
         <LinkComponentProvider Link={StubLink as never} navigate={() => {}} paths={noopPaths}>
@@ -104,6 +103,7 @@ function renderPage() {
       </QueryClientProvider>
     </MastraReactProvider>,
   );
+  return { ...result, queryClient };
 }
 
 const storedAgent: StoredAgentResponse = {
@@ -320,10 +320,15 @@ describe('AgentBuilderAgentEdit — navigation, header, autosave', () => {
 
     server.use(...commonHandlers({ agent: { authorId: 'user-1' }, meDelay }));
 
-    renderPage();
+    const { queryClient } = renderPage();
 
-    // While the current user is loading, we should not have redirected anywhere yet.
-    await new Promise(resolve => setTimeout(resolve, 50));
+    // While the current user (`/api/auth/me`) is still loading, the other
+    // queries settle. Wait for builder-settings to resolve so the loading
+    // window is genuinely reached (and the late provider update lands inside
+    // act) before asserting that no redirect has happened yet.
+    await waitFor(() => {
+      expect(queryClient.getQueryState(['builder-settings'])?.status).toBe('success');
+    });
     expect(screen.getByTestId('current-location').textContent).toBe('/agent-builder/agents/agent-123/edit');
     expect(screen.queryByTestId('view-page')).toBeNull();
     expect(screen.queryByTestId('agents-list-page')).toBeNull();

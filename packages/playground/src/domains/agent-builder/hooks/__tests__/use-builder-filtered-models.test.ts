@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import type { BuilderModelPolicy, Provider } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';

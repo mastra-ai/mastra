@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import type { ListMemoryThreadMessagesResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';

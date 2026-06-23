@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -113,7 +112,7 @@ const renderCreate = () => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  const result = render(
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
@@ -122,6 +121,7 @@ const renderCreate = () => {
       </QueryClientProvider>
     </MastraReactProvider>,
   );
+  return { ...result, queryClient };
 };
 
 afterEach(() => {
@@ -161,11 +161,15 @@ describe('AgentBuilderCreate', () => {
       stubBuilderSettings(settingsAllFeatures, { delayMs: 50 });
       const spies = installListSpies();
 
-      renderCreate();
+      const { queryClient } = renderCreate();
 
       await screen.findByTestId('navigate');
-      // Give React Query a chance to schedule anything that might still be pending.
-      await new Promise(resolve => setTimeout(resolve, 50));
+      // Wait for the (delayed) builder-settings query to settle so any cache
+      // warming it could trigger has had its chance to fire, keeping the late
+      // state update inside act instead of leaking after the test body.
+      await waitFor(() => {
+        expect(queryClient.getQueryState(['builder-settings'])?.status).toBe('success');
+      });
       // The feature-gated cache-warming queries are gated by `canWrite && features.*`
       // (features come from builder settings), so a denied user never triggers them.
       // NOTE: the model-available cache is gated by `canWrite` alone and so can fire

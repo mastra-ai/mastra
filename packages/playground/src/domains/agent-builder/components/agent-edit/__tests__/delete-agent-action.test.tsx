@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import type * as PlaygroundUi from '@mastra/playground-ui';
 import { DropdownMenu, TooltipProvider } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';

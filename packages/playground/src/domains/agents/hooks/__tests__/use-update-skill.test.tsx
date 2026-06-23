@@ -1,8 +1,7 @@
-// @vitest-environment jsdom
 import type * as PlaygroundUi from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -61,7 +60,9 @@ describe('useUpdateSkill', () => {
 
       const { result } = renderHook(() => useUpdateSkill(), { wrapper: wrapper() });
 
-      await result.current.mutateAsync({ id: 'skill-1', name: 'Renamed' });
+      await act(async () => {
+        await result.current.mutateAsync({ id: 'skill-1', name: 'Renamed' });
+      });
 
       expect(body).toEqual({ name: 'Renamed' });
     });
@@ -77,7 +78,9 @@ describe('useUpdateSkill', () => {
 
       const { result } = renderHook(() => useUpdateSkill(), { wrapper: wrapper() });
 
-      await result.current.mutateAsync({ id: 'skill-1', name: 'Renamed' });
+      await act(async () => {
+        await result.current.mutateAsync({ id: 'skill-1', name: 'Renamed' });
+      });
 
       expect(body).not.toHaveProperty('description');
       expect(body).not.toHaveProperty('visibility');
@@ -94,7 +97,9 @@ describe('useUpdateSkill', () => {
       );
 
       const { result } = renderHook(() => useUpdateSkill(), { wrapper: wrapper() });
-      await result.current.mutateAsync({ id: 'skill-1', name: 'A' });
+      await act(async () => {
+        await result.current.mutateAsync({ id: 'skill-1', name: 'A' });
+      });
 
       expect(toastSuccess).toHaveBeenCalledTimes(1);
     });
@@ -109,7 +114,9 @@ describe('useUpdateSkill', () => {
       );
 
       const { result } = renderHook(() => useUpdateSkill({ silent: true }), { wrapper: wrapper() });
-      await result.current.mutateAsync({ id: 'skill-1', name: 'B' });
+      await act(async () => {
+        await result.current.mutateAsync({ id: 'skill-1', name: 'B' });
+      });
 
       expect(toastSuccess).not.toHaveBeenCalled();
     });
@@ -125,7 +132,9 @@ describe('useUpdateSkill', () => {
 
       const { result } = renderHook(() => useUpdateSkill({ silent: true }), { wrapper: wrapper() });
 
-      await expect(result.current.mutateAsync({ id: 'skill-1', name: 'X' })).rejects.toThrow();
+      await act(async () => {
+        await expect(result.current.mutateAsync({ id: 'skill-1', name: 'X' })).rejects.toThrow();
+      });
       expect(toastError).not.toHaveBeenCalled();
     });
   });

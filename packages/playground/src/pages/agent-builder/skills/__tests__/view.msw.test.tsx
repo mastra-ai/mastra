@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import type { StoredSkillResponse } from '@mastra/client-js';
 import type * as PlaygroundUi from '@mastra/playground-ui';
 import { TooltipProvider } from '@mastra/playground-ui';
