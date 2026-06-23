@@ -26,6 +26,7 @@ const sidebars = {
         { type: 'doc', id: 'agents/agent', label: 'Agent Class' },
         { type: 'doc', id: 'agents/channels', label: 'Channels' },
         { type: 'doc', id: 'agents/durable-agent', label: 'DurableAgent' },
+        { type: 'doc', id: 'agents/inngest-agent', label: 'createInngestAgent()' },
         { type: 'doc', id: 'agents/generate', label: '.generate()' },
         { type: 'doc', id: 'agents/generateLegacy', label: '.generateLegacy()' },
         {
