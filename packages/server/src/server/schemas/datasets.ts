@@ -481,7 +481,7 @@ export const experimentSummaryResponseSchema = z.object({
       startedAt: z.coerce.date(),
       completedAt: z.coerce.date(),
       retryCount: z.number(),
-      toolMockReport: toolMockReportSchema,
+      toolMockReport: toolMockReportSchema.nullable(),
       scores: z.array(
         z.object({
           scorerId: z.string(),
