@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { MockMemory } from '../../../../memory/mock';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
 /**
  * Regression class: conversation-history recall across turns.
@@ -12,7 +12,7 @@ import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
  * not loaded, wrong thread, dropped messages) is caught by asserting the prior
  * turn's content appears in the second request.
  */
-describe('AIMock loop scenario: memory conversation history', () => {
+describeForAllEngines('AIMock loop scenario: memory conversation history', engine => {
   const getMock = useLoopScenarioAimock();
 
   it('recalls prior thread messages into the next request', async () => {
@@ -34,6 +34,7 @@ describe('AIMock loop scenario: memory conversation history', () => {
     // Turn 1: user shares a fact, model acknowledges. This conversation is
     // persisted to the memory thread.
     await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'My favorite color is MEMORY_TEAL.',
       memory,
@@ -51,6 +52,7 @@ describe('AIMock loop scenario: memory conversation history', () => {
 
     // Turn 2: a new run on the SAME thread. The loop should recall turn 1.
     const { requests, output } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'What is my favorite color?',
       memory,

@@ -1,8 +1,8 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
 /**
  * Regression class: cross-turn message ordering for multi-tool turns.
@@ -12,7 +12,7 @@ import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
  * id. We assert both results appear with the correct ids so a reordering or
  * id-mismatch regression is caught.
  */
-describe('AIMock loop scenario: cross-turn message ordering', () => {
+describeForAllEngines('AIMock loop scenario: cross-turn message ordering', engine => {
   const getMock = useLoopScenarioAimock();
 
   it('round-trips multiple tool results into the next request with correct ids', async () => {
@@ -33,6 +33,7 @@ describe('AIMock loop scenario: cross-turn message ordering', () => {
     });
 
     const { requests, output } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Get the city and temperature.',
       tools: { get_city: getCity, get_temp: getTemp },

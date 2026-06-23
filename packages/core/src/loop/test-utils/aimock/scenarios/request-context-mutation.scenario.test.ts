@@ -17,13 +17,13 @@
  */
 
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
 import { RequestContext } from '../../../../request-context';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
-describe('AIMock loop scenario: requestContext mutation behavior', () => {
+describeForAllEngines('AIMock loop scenario: requestContext mutation behavior', engine => {
   const getMock = useLoopScenarioAimock();
 
   it('tool mutations do not persist to subsequent tool calls', async () => {
@@ -63,6 +63,7 @@ describe('AIMock loop scenario: requestContext mutation behavior', () => {
     requestContext.set('counter', 'initial');
 
     const { output, requests } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'First mutate, then read the value.',
       tools: { mutate: mutateTool, read: readTool },
@@ -125,6 +126,7 @@ describe('AIMock loop scenario: requestContext mutation behavior', () => {
     requestContext.set('count', '0');
 
     const { output } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Increment the counter three times.',
       tools: { increment: incrementTool },

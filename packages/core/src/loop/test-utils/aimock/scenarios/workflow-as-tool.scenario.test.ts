@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { createWorkflow } from '../../../../workflows/create';
 import { createStep } from '../../../../workflows/workflow';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
 /**
  * Regression class: workflows-as-tools integration.
@@ -12,7 +12,7 @@ import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
  * the workflow executes and its result flows back into the next turn's request.
  * A regression in workflow-tool wiring (name, schema, result flow) is caught here.
  */
-describe('AIMock loop scenario: workflow as tool', () => {
+describeForAllEngines('AIMock loop scenario: workflow as tool', engine => {
   const getMock = useLoopScenarioAimock();
 
   it('exposes workflow as tool with correct name and result flows to next turn', async () => {
@@ -35,6 +35,7 @@ describe('AIMock loop scenario: workflow as tool', () => {
     researchWorkflow.then(researchStep).commit();
 
     const { requests } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Research quantum computing for me',
       workflows: { researchWorkflow },
@@ -112,6 +113,7 @@ describe('AIMock loop scenario: workflow as tool', () => {
     analysisWorkflow.then(analysisStep).commit();
 
     const { requests } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Analyze this dataset deeply',
       workflows: { analysisWorkflow },
