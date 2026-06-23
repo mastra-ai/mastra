@@ -62,13 +62,17 @@ VALUES
     await runtime.waitForScreenText(/Worktree of:/i, terminal);
     runtime.printScreen('after startup', terminal);
 
-    // With the fix, promptForThreadSelection filters out all threads (none are
-    // tagged for this worktree path) and sets pendingNewThread = true. Without
-    // the fix, the untagged thread passes through the filter and gets selected
-    // normally — pendingNewThread stays false.
+    // With the fix, the harness filters by projectPath, finds 0 matches for
+    // this worktree, and creates a fresh (untitled) thread. Without the fix,
+    // the untagged thread passes through and gets selected by updatedAt.
     terminal.submit('/thread');
-    await runtime.waitForScreenText(/Pending new thread: yes/i, terminal);
-    runtime.printScreen('after /thread (confirms fresh start)', terminal);
+    await runtime.waitForScreenText(/Resource:/i, terminal);
+    runtime.printScreen('after /thread', terminal);
+
+    // The critical assertion: neither the untagged thread nor the other
+    // worktree's thread should be loaded.
+    await runtime.waitForScreenTextAbsent(/Untagged thread from main repo/i, terminal, 2_000);
+    await runtime.waitForScreenTextAbsent(/Thread from other worktree/i, terminal, 2_000);
 
     terminal.keyCtrlC();
   },

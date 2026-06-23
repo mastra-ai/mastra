@@ -126,7 +126,9 @@ export type ScenarioName =
   | 'workspace-plan-mode-tools'
   | 'workspace-tool-names'
   | 'workspace-tool-output-rendering'
-  | 'worktree-thread-scoping';
+  | 'worktree-cross-thread-resume'
+  | 'worktree-thread-scoping'
+  | 'resourceid-drift-auto-resume';
 
 export type McE2eTerminal = {
   getByText: (text: string | RegExp, options?: { full?: boolean; strict?: boolean }) => any;

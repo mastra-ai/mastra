@@ -5,7 +5,6 @@ import { execFileSync } from 'node:child_process';
 
 import { CombinedAutocompleteProvider, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SlashCommand } from '@earendil-works/pi-tui';
-import { trace } from '@mastra/core/harness';
 import type { HarnessEventListener } from '@mastra/core/harness';
 import { getUserId } from '../utils/project.js';
 import { loadCustomCommands } from '../utils/slash-command-loader.js';
@@ -581,35 +580,9 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
   // Filter to threads explicitly tagged for the current working directory.
   const currentPath = state.projectInfo.rootPath;
 
-  trace('promptForThreadSelection:start', {
-    currentPath,
-    resourceId: state.projectInfo.resourceId,
-    allThreadCount: allThreads.length,
-    allThreads: allThreads.map(t => ({
-      id: t.id,
-      resourceId: t.resourceId,
-      projectPath: (t.metadata as any)?.projectPath,
-      currentModelId: (t.metadata as any)?.currentModelId,
-      currentModeId: (t.metadata as any)?.currentModeId,
-      updatedAt: t.updatedAt?.toISOString(),
-    })),
-  });
-
   const threads = allThreads.filter(t => {
     const threadPath = t.metadata?.projectPath as string | undefined;
-    const match = !!threadPath && threadPath === currentPath;
-    trace('promptForThreadSelection:filter', {
-      threadId: t.id,
-      threadPath,
-      currentPath,
-      match,
-    });
-    return match;
-  });
-
-  trace('promptForThreadSelection:filtered', {
-    matchCount: threads.length,
-    matchedIds: threads.map(t => t.id),
+    return !!threadPath && threadPath === currentPath;
   });
 
   if (threads.length === 0) {

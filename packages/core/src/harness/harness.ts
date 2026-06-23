@@ -17,7 +17,6 @@ import type { ObservationalMemoryRecord } from '../storage/types';
 import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
-import { trace } from './debug-trace';
 import { Session } from './session';
 import type { ThreadDataStore } from './session';
 import {
@@ -365,14 +364,6 @@ export class Harness<TState = {}> {
   }
 
   async #createSessionForResource(effectiveResourceId: string): Promise<Session<TState>> {
-    trace('createSessionForResource:start', {
-      effectiveResourceId,
-      configResourceId: this.config.resourceId,
-      configId: this.config.id,
-      hasStorage: !!this.config.storage,
-      initialStateProjectPath: (this.config.initialState as any)?.projectPath,
-    });
-
     const session = this.#wireSession(
       new Session({
         resourceId: effectiveResourceId,
@@ -397,32 +388,55 @@ export class Harness<TState = {}> {
       session.emit({ type: 'workspace_error', error: this.workspaceError });
     }
 
-    // Bring the session online with a current thread: resume the most recent
-    // thread for this resource, or create a fresh one when none exist.
-    const threads = await session.thread.list();
-    trace('createSessionForResource:threadList', {
-      effectiveResourceId,
-      threadCount: threads.length,
-      threads: threads.map(t => ({
-        id: t.id,
-        resourceId: t.resourceId,
-        projectPath: (t.metadata as any)?.projectPath,
-        updatedAt: t.updatedAt?.toISOString(),
-        title: t.title?.slice(0, 60),
-      })),
-    });
+    // Bring the session online with a current thread.  The selection strategy
+    // is projectPath-aware so that worktrees sharing a resourceId each resume
+    // their own thread, and threads orphaned by a resourceId change (e.g. a
+    // git remote was added) are recovered via a cross-resource metadata query.
+    const projectPath = (this.config.initialState as any)?.projectPath as string | undefined;
 
-    if (threads.length === 0) {
-      trace('createSessionForResource:createNew', { effectiveResourceId });
+    const threads = await session.thread.list();
+
+    // Step 1: narrow to threads whose projectPath matches the current working directory.
+    let candidates = projectPath
+      ? threads.filter(t => (t.metadata as any)?.projectPath === projectPath)
+      : threads;
+
+    // Step 2: cross-resource fallback — when no threads matched resourceId + projectPath,
+    // query across ALL resources for orphaned threads tagged with this projectPath.
+    if (candidates.length === 0 && projectPath && this.#resolveStorage()) {
+      const memoryStorage = await this.getMemoryStorage();
+      const result = await memoryStorage.listThreads({
+        filter: { metadata: { projectPath } },
+        perPage: false,
+      });
+      candidates = result.threads
+        .filter(t => {
+          const meta = t.metadata as Record<string, unknown> | undefined;
+          return meta?.forkedSubagent !== true;
+        })
+        .map(t => ({
+          id: t.id,
+          resourceId: t.resourceId,
+          title: t.title,
+          createdAt: t.createdAt,
+          updatedAt: t.updatedAt,
+          metadata: t.metadata,
+        }));
+    }
+
+    // Step 3: resume most recent candidate, or create a new thread.
+    if (candidates.length === 0) {
       await session.thread.create();
     } else {
-      const mostRecent = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
-      trace('createSessionForResource:resumeMostRecent', {
-        effectiveResourceId,
-        threadId: mostRecent.id,
-        threadResourceId: mostRecent.resourceId,
-        threadProjectPath: (mostRecent.metadata as any)?.projectPath,
-      });
+      const mostRecent = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
+
+      // When the recovered thread's resourceId differs from the current one
+      // (cross-resource fallback), migrate it so ownership checks pass and
+      // future lookups find it under the new resourceId.
+      if (mostRecent.resourceId !== effectiveResourceId && this.#resolveStorage()) {
+        await this.persistThreadRow({ ...mostRecent, resourceId: effectiveResourceId });
+      }
+
       await this.config.threadLock?.acquire(mostRecent.id);
       session.thread.set({ threadId: mostRecent.id });
       await session.thread.loadMetadata();
@@ -704,7 +718,6 @@ export class Harness<TState = {}> {
   }): Promise<void> {
     if (!this.#resolveStorage()) return;
     try {
-      trace('writeThreadMetadata', { threadId, key, value: typeof value === 'string' ? value : typeof value });
       const memoryStorage = await this.getMemoryStorage();
       const thread = await memoryStorage.getThreadById({ threadId });
       if (thread) {
@@ -761,24 +774,13 @@ export class Harness<TState = {}> {
     includeForkedSubagents?: boolean;
   }): Promise<HarnessThread[]> {
     if (!this.#resolveStorage()) {
-      trace('queryThreads:noStorage', { resourceId });
       return [];
     }
 
     const memoryStorage = await this.getMemoryStorage();
     const filter: { resourceId?: string } | undefined = resourceId === undefined ? undefined : { resourceId };
 
-    trace('queryThreads:query', { resourceId, filter, includeForkedSubagents });
     const result = await memoryStorage.listThreads({ filter, perPage: false });
-    trace('queryThreads:result', {
-      resourceId,
-      totalBeforeFilter: result.threads.length,
-      threads: result.threads.map(t => ({
-        id: t.id,
-        resourceId: t.resourceId,
-        projectPath: (t.metadata as any)?.projectPath,
-      })),
-    });
 
     const threads = includeForkedSubagents
       ? result.threads

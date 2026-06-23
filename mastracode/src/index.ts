@@ -2,7 +2,7 @@ import path from 'node:path';
 
 import { Agent } from '@mastra/core/agent';
 import type { PubSub } from '@mastra/core/events';
-import { Harness, trace } from '@mastra/core/harness';
+import { Harness } from '@mastra/core/harness';
 import type {
   HeartbeatHandler,
   HarnessConfig,
@@ -279,18 +279,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     project.resourceId = resourceIdOverride;
     project.resourceIdOverride = true;
   }
-
-  trace('detectProject', {
-    cwd,
-    rootPath: project.rootPath,
-    resourceId: project.resourceId,
-    resourceIdOverride: resourceIdOverride ?? null,
-    gitUrl: project.gitUrl ?? null,
-    gitBranch: project.gitBranch ?? null,
-    isWorktree: project.isWorktree,
-    mainRepoPath: project.mainRepoPath ?? null,
-    name: project.name,
-  });
 
   const configuredPubSub = config?.pubsub;
   const useUnixSocketPubSub =
@@ -736,12 +724,9 @@ export async function createMastraCode(config?: MastraCodeConfig) {
 
   // Bring up shared harness resources, then mint the single session that all
   // work in this process runs through. The Harness owns no session of its own.
-  trace('harness:init:start', { resourceId: project.resourceId });
   await harness.init();
   await harness.getMastra()?.startWorkers();
-  trace('harness:createSession:start', { resourceId: project.resourceId });
   const session = await harness.createSession();
-  trace('harness:createSession:done', { resourceId: project.resourceId, threadId: session.thread.getId() });
   activeSession = session;
 
   // Sync hookManager session ID on thread changes

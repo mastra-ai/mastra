@@ -75,16 +75,15 @@ VALUES
     // Use /thread to inspect which thread was loaded.
     terminal.submit('/thread');
 
-    // Wait for /thread output to fully render. With or without the fix,
-    // promptForThreadSelection finds 0 matches for this worktree path and sets
-    // pendingNewThread = true. This text confirms the output is complete.
-    await runtime.waitForScreenText(/Pending new thread: yes/i, terminal);
+    // Wait for /thread output to render — "Resource:" appears once the thread
+    // info block is fully on screen.
+    await runtime.waitForScreenText(/Resource:/i, terminal);
     runtime.printScreen('after /thread', terminal);
 
-    // The critical assertion: the wrong worktree's thread should NOT be loaded.
-    // Without the fix, the harness picked "WRONG_WORKTREE_THREAD" by updatedAt
-    // and its title appears on screen alongside "Pending new thread: yes".
-    // With the fix, the harness filters by projectPath first and never loads it.
+    // The critical assertion: the wrong worktree's thread must NOT be loaded.
+    // Without the fix, the harness picked "WRONG_WORKTREE_THREAD" by updatedAt.
+    // With the fix, the harness filters by projectPath first, finds 0 matches
+    // for this worktree, and creates a fresh (untitled) thread instead.
     await runtime.waitForScreenTextAbsent(/WRONG_WORKTREE_THREAD/i, terminal, 2_000);
 
     terminal.keyCtrlC();
