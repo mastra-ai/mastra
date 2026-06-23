@@ -332,37 +332,6 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Streaming',
-      items: [
-        {
-          type: 'doc',
-          id: 'streaming/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'streaming/events',
-          label: 'Events',
-        },
-        {
-          type: 'doc',
-          id: 'streaming/tool-streaming',
-          label: 'Tool Streaming',
-        },
-        {
-          type: 'doc',
-          id: 'streaming/workflow-streaming',
-          label: 'Workflow Streaming',
-        },
-        {
-          type: 'doc',
-          id: 'streaming/background-task-streaming',
-          label: 'Background Task Streaming',
-        },
-      ],
-    },
-    {
-      type: 'category',
       label: 'MCP',
       collapsed: true,
       items: [
@@ -925,7 +894,7 @@ const sidebars = {
       ],
     },
   ],
-    platformSidebar: [
+  platformSidebar: [
     {
       type: 'category',
       label: 'Mastra platform',

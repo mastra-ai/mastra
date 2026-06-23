@@ -117,6 +117,7 @@ The `execute` function defines what the step does. Use it to call functions in y
   </TabItem>
 </Tabs>
 
+
 :::info
 
 Visit [`Step`](/reference/workflows/step) for a full list of configuration options.
@@ -437,6 +438,77 @@ Here's an example of a successful workflow result, showing the `input`, `steps`,
     "emphasized": "HELLO WORLD!!!"
   }
 }
+```
+
+## Streaming
+
+For generic `writer` API usage, see [Streaming](/guides/concepts/streaming#writer-api).
+
+### Inspecting workflow stream payloads
+
+Events written to the stream are included in the emitted chunks. These chunks can be inspected to access any custom fields, such as event types, intermediate values, or step-specific data.
+
+```typescript
+const testWorkflow = mastra.getWorkflow('testWorkflow')
+
+const run = await testWorkflow.createRun()
+
+const stream = await run.stream({
+  inputData: {
+    value: 'initial data',
+  },
+})
+
+for await (const chunk of stream) {
+  console.log(chunk)
+}
+
+if (result!.status === 'suspended') {
+  // if the workflow is suspended, we can resume it with the resumeStream method
+  const resumedStream = await run.resumeStream({
+    resumeData: { value: 'resume data' },
+  })
+
+  for await (const chunk of resumedStream) {
+    console.log(chunk)
+  }
+}
+```
+
+### Resuming an interrupted workflow stream
+
+If a workflow stream is closed or interrupted for any reason, you can resume it with the `resumeStream` method. This will return a new `ReadableStream` that you can use to observe the workflow events.
+
+```typescript
+const newStream = await run.resumeStream()
+
+for await (const chunk of newStream) {
+  console.log(chunk)
+}
+```
+
+### Workflow using an agent
+
+Pipe an agent's `textStream` to the workflow step's `writer`. This streams partial output, and Mastra automatically aggregates the agent's usage into the workflow run.
+
+```typescript
+import { createStep } from '@mastra/core/workflows'
+import { z } from 'zod'
+
+export const testStep = createStep({
+  execute: async ({ inputData, mastra, writer }) => {
+    const { city } = inputData
+
+    const testAgent = mastra?.getAgent('testAgent')
+    const stream = await testAgent?.stream(`What is the weather in ${city}$?`)
+
+    await stream!.textStream.pipeTo(writer!)
+
+    return {
+      value: await stream!.text,
+    }
+  },
+})
 ```
 
 ## Restarting active workflow runs
