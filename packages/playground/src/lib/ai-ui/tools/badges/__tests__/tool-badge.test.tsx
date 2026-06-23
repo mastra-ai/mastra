@@ -54,4 +54,29 @@ describe('ToolBadge', () => {
     expect(toolArgs.textContent).not.toContain('_background');
     expect(screen.queryByLabelText('Code editor')).toBeNull();
   });
+
+  it('renders tool results as a static code block', () => {
+    renderWithProviders(
+      <ToolBadge
+        toolName="getWeather"
+        args={{ location: 'Paris' }}
+        result={{
+          temperature: 20,
+          conditions: 'cloudy',
+        }}
+        toolOutput={[]}
+        toolCallId="call-1"
+        toolApprovalMetadata={undefined}
+        isNetwork={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('getWeather'));
+
+    const toolResult = screen.getByTestId('tool-result');
+
+    expect(toolResult.textContent).toContain('"temperature": 20');
+    expect(toolResult.textContent).toContain('"conditions": "cloudy"');
+    expect(screen.queryByLabelText('Code editor')).toBeNull();
+  });
 });
