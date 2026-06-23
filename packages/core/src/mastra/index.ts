@@ -14,6 +14,7 @@ import { DatasetsManager } from '../datasets/manager.js';
 import type { MastraDeployer } from '../deployer';
 import type { IMastraEditor } from '../editor';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import type { Harness } from '../harness';
 import type { MastraScorer } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
@@ -268,6 +269,15 @@ export interface Config<
    * Workflows provide type-safe, composable task execution with built-in error handling.
    */
   workflows?: TWorkflows;
+
+  /**
+   * Harnesses to host on this Mastra instance, keyed by id. Each registered
+   * Harness uses this Mastra (its storage, agents, gateways, and observability)
+   * instead of building its own internal one, and is reachable via
+   * {@link Mastra.getHarness} / {@link Mastra.listHarnesses}. This is how a
+   * server exposes multiple Harnesses' sessions over HTTP.
+   */
+  harnesses?: Record<string, Harness<any>>;
 
   /**
    * Text-to-speech providers for voice synthesis capabilities.
@@ -580,6 +590,7 @@ export class Mastra<
   #agents: TAgents;
   #logger: TLogger;
   #workflows: TWorkflows;
+  #harnesses: Record<string, Harness<any>> = {};
   #hiddenWorkflowKeys = new Set<string>();
   #observability: ObservabilityEntrypoint;
   #tts?: TTTS;
@@ -1431,6 +1442,13 @@ export class Mastra<
       });
     }
 
+    if (config?.harnesses) {
+      for (const [key, harness] of Object.entries(config.harnesses)) {
+        this.#harnesses[key] = harness;
+        harness.__registerMastra(this);
+      }
+    }
+
     registerHook(AvailableHooks.ON_SCORER_RUN, createOnScorerHook(this));
 
     /*
@@ -1879,6 +1897,22 @@ export class Mastra<
    */
   public listAgents() {
     return this.#agents;
+  }
+
+  /**
+   * Get a Harness hosted on this Mastra instance by id. Returns `undefined`
+   * when no harness is registered under that id. Server route handlers use this
+   * to create and drive sessions over HTTP.
+   */
+  public getHarness(id: string): Harness<any> | undefined {
+    return this.#harnesses[id];
+  }
+
+  /**
+   * List all Harnesses hosted on this Mastra instance, keyed by id.
+   */
+  public listHarnesses(): Record<string, Harness<any>> {
+    return this.#harnesses;
   }
 
   /**
