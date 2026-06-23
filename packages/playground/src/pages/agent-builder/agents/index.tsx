@@ -5,13 +5,13 @@ import {
   EmptyState,
   ErrorState,
   ListSearch,
-  PageHeader,
   PageLayout,
   PermissionDenied,
   SessionExpired,
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
+import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PlusIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 

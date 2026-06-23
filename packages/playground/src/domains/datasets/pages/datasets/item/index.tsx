@@ -1,7 +1,9 @@
 'use client';
 
 import type { DatasetItem } from '@mastra/client-js';
-import { KeyValueList, Sections, TextAndIcon } from '@mastra/playground-ui';
+import { TextAndIcon } from '@mastra/playground-ui';
+import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
+import { Sections } from '@mastra/playground-ui/components/Sections';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { format } from 'date-fns/format';
 import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon, RouteIcon } from 'lucide-react';
