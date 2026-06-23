@@ -67,15 +67,19 @@ function loadClaudeSettings(projectDir: string): McpConfig {
  * or to an empty string when no default is given.
  */
 export function expandEnvVars(value: string, env: NodeJS.ProcessEnv = process.env): string {
-  return value.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g, (_match, name, fallback) => {
-    const resolved = env[name];
-    if (resolved !== undefined && resolved !== '') return resolved;
-    return fallback ?? '';
-  });
+  return value.replace(
+    /\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}|\$([A-Za-z_][A-Za-z0-9_]*)/g,
+    (_match, bracedName, fallback, bareName) => {
+      const name = bracedName ?? bareName;
+      const resolved = env[name];
+      if (resolved !== undefined && resolved !== '') return resolved;
+      return fallback ?? '';
+    },
+  );
 }
 
 /**
- * Expand `${VAR}` references in every string-valued HTTP header so that
+ * Expand `${VAR}` and `$VAR` references in every string-valued HTTP header so that
  * secrets like API keys can be referenced from the environment instead of
  * being hardcoded in `mcp.json`.
  */

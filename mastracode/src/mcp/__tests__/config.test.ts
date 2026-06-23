@@ -303,4 +303,17 @@ describe('expandEnvVars', () => {
   it('leaves strings without references untouched', () => {
     expect(expandEnvVars('plain value with a $ sign', env)).toBe('plain value with a $ sign');
   });
+
+  it('expands a bare $VAR reference', () => {
+    expect(expandEnvVars('$API_KEY', env)).toBe('secret-123');
+    expect(expandEnvVars('Bearer $TOKEN', env)).toBe('Bearer abc');
+  });
+
+  it('expands an unset bare $VAR reference to an empty string', () => {
+    expect(expandEnvVars('$MISSING', env)).toBe('');
+  });
+
+  it('does not treat $ followed by a non-identifier as a reference', () => {
+    expect(expandEnvVars('it costs $5 today', env)).toBe('it costs $5 today');
+  });
 });
