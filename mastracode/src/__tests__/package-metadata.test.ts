@@ -39,6 +39,10 @@ describe('mastracode package metadata', () => {
         import: { types: './dist/tui/index.d.ts', default: './dist/tui.js' },
         require: { types: './dist/tui/index.d.ts', default: './dist/tui.cjs' },
       },
+      './acp': {
+        import: { types: './dist/acp.d.ts', default: './dist/acp.js' },
+        require: { types: './dist/acp.d.ts', default: './dist/acp.cjs' },
+      },
       './package.json': './package.json',
     });
     expect(pkg.engines?.node).toBe('>=22.19.0');

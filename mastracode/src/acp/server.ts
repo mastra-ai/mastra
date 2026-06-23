@@ -1,6 +1,6 @@
 import { Readable, Writable } from 'node:stream';
 import { AgentSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
-import type { Harness, HarnessMode } from '@mastra/core/harness';
+import type { Harness, HarnessMode, Session } from '@mastra/core/harness';
 import { MastraCodeAcpAgent } from './agent.js';
 
 /**
@@ -16,14 +16,25 @@ export async function runAcpServer(
   const input = Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>;
   const output = Writable.toWeb(process.stdout) as WritableStream<Uint8Array>;
   const stream = ndJsonStream(output, input);
-
-  // Create the agent-side connection
-  const connection = new AgentSideConnection(conn => new MastraCodeAcpAgent(conn, harness, modes), stream);
+  let session: Session | undefined;
+  let agent: MastraCodeAcpAgent | undefined;
 
   // Handle cleanup on disconnect (success or error)
   try {
+    session = await harness.createSession();
+    const activeSession = session;
+
+    // Create the agent-side connection
+    const connection = new AgentSideConnection(conn => {
+      agent = new MastraCodeAcpAgent(conn, harness, activeSession, modes);
+      return agent;
+    }, stream);
+
     await connection.closed;
   } finally {
+    agent?.dispose();
+    session?.thread.detachFromCurrent();
+    await session?.thread.clearAndReleaseLock();
     if (cleanup) {
       await cleanup();
     }
