@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import type { BuilderSettingsResponse, FavoriteToggleResponse } from '@mastra/client-js';
 import { TooltipProvider } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';

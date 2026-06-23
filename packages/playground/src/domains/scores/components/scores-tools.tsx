@@ -1,4 +1,5 @@
-import { Button, ButtonsGroup, SelectFieldBlock, Icon } from '@mastra/playground-ui';
+import { Button, ButtonsGroup, Icon } from '@mastra/playground-ui';
+import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { XIcon } from 'lucide-react';
 
 export type ScoreEntityOption = { value: string; label: string; type: 'AGENT' | 'WORKFLOW' | 'ALL' };

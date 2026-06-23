@@ -6,12 +6,11 @@ import {
   EntityContent,
   EntityDescription,
   EntityName,
-  Section,
-  SubSectionRoot,
   Icon,
   McpServerIcon,
   stringToColor,
 } from '@mastra/playground-ui';
+import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { LaptopMinimal, PlusIcon, XIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';

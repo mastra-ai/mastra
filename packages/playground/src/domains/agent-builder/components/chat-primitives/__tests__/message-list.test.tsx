@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent/message-list';
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

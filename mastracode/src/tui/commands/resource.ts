@@ -32,14 +32,14 @@ export async function handleResourceCommand(ctx: SlashCommandContext, args: stri
     return;
   }
 
-  harness.setResourceId(session, { resourceId: newId });
+  await harness.setResourceId(session, { resourceId: newId });
 
   // Try to resume the most recent thread for this resource
   const threads = await session.thread.list();
   const latest = [...threads].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
 
   if (latest) {
-    await session.thread.switch({ threadId: latest.id });
+    await session.thread.switch({ threadId: latest.id, emitEvent: false });
     state.chatContainer.clear();
     state.pendingTools.clear();
     state.pendingTaskToolIds?.clear();
