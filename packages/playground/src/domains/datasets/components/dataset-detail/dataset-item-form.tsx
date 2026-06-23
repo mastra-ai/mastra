@@ -5,7 +5,7 @@ import { Pencil } from 'lucide-react';
 
 /** Schema validation error from API */
 export interface SchemaValidationError {
-  field: 'input' | 'groundTruth';
+  field: 'input' | 'groundTruth' | 'toolMocks';
   errors: Array<{ path: string; message: string }>;
 }
 
@@ -119,6 +119,9 @@ export function EditModeContent({
             showCopyButton={false}
             className="min-h-[100px]"
           />
+          {validationErrors?.field === 'toolMocks' && (
+            <ValidationErrors field="toolMocks" errors={validationErrors.errors} />
+          )}
         </div>
 
         <div className="space-y-2">

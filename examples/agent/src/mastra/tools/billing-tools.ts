@@ -70,10 +70,10 @@ export const lookupBalance = createTool({
 export const refundUser = createTool({
   id: 'refundUser',
   description:
-    "Refund a user a dollar amount. THIS HAS A SIDE EFFECT: it subtracts the amount from the user's account balance and records the refund. Mock this tool during experiments to keep it deterministic.",
+    "Refund a user a dollar amount. THIS HAS A SIDE EFFECT: it adds the amount to the user's account balance and records the refund. Mock this tool during experiments to keep it deterministic.",
   inputSchema: z.object({
     user: z.string().describe('The user to refund, e.g. "YJ"'),
-    amount: z.number().describe('The refund amount in dollars'),
+    amount: z.number().positive().describe('The refund amount in dollars'),
   }),
   outputSchema: z.object({
     refundId: z.string(),

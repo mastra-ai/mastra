@@ -84,10 +84,14 @@ afterEach(() => {
   cleanup();
 });
 
-function renderDialog(props: Partial<Parameters<typeof SaveAsDatasetItemDialog>[0]> = {}) {
-  const queryClient = new QueryClient({
+function noRetryClient() {
+  return new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
+}
+
+function renderDialog(props: Partial<Parameters<typeof SaveAsDatasetItemDialog>[0]> = {}) {
+  const queryClient = noRetryClient();
   return render(
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
@@ -107,7 +111,7 @@ function renderDialog(props: Partial<Parameters<typeof SaveAsDatasetItemDialog>[
 function wrap(children: ReactNode) {
   return (
     <MastraReactProvider baseUrl={BASE_URL}>
-      <QueryClientProvider client={new QueryClient()}>{children}</QueryClientProvider>
+      <QueryClientProvider client={noRetryClient()}>{children}</QueryClientProvider>
     </MastraReactProvider>
   );
 }
@@ -127,7 +131,7 @@ describe('SaveAsDatasetItemDialog', () => {
 
       rerender(
         <MastraReactProvider baseUrl={BASE_URL}>
-          <QueryClientProvider client={new QueryClient()}>
+          <QueryClientProvider client={noRetryClient()}>
             <SaveAsDatasetItemDialog
               initialInput={'{"foo":1}'}
               initialGroundTruth={'{"answer":true}'}
@@ -159,7 +163,7 @@ describe('SaveAsDatasetItemDialog', () => {
 
       rerender(
         <MastraReactProvider baseUrl={BASE_URL}>
-          <QueryClientProvider client={new QueryClient()}>
+          <QueryClientProvider client={noRetryClient()}>
             <SaveAsDatasetItemDialog
               initialInput={'{"foo":1}'}
               initialGroundTruth={'{"answer":true}'}
@@ -191,7 +195,7 @@ describe('SaveAsDatasetItemDialog', () => {
 
       rerender(
         <MastraReactProvider baseUrl={BASE_URL}>
-          <QueryClientProvider client={new QueryClient()}>
+          <QueryClientProvider client={noRetryClient()}>
             <SaveAsDatasetItemDialog
               initialInput="{}"
               initialGroundTruth=""
@@ -205,7 +209,7 @@ describe('SaveAsDatasetItemDialog', () => {
 
       rerender(
         <MastraReactProvider baseUrl={BASE_URL}>
-          <QueryClientProvider client={new QueryClient()}>
+          <QueryClientProvider client={noRetryClient()}>
             <SaveAsDatasetItemDialog
               initialInput={'{"next":2}'}
               initialGroundTruth={'{"expected":"next"}'}

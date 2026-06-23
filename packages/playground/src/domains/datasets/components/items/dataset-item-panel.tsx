@@ -26,7 +26,7 @@ import { useLinkComponent } from '@/lib/framework';
 
 /** Schema validation error from API */
 interface SchemaValidationError {
-  field: 'input' | 'groundTruth';
+  field: 'input' | 'groundTruth' | 'toolMocks';
   errors: Array<{ path: string; message: string }>;
 }
 

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { toast } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -133,7 +134,8 @@ describe('AddItemDialog', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /add item/i }));
 
-    await new Promise(resolve => setTimeout(resolve, 50));
+    // The non-array guard surfaces an error toast and short-circuits before any request.
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Tool Mocks must be a JSON array'));
     expect(capture).not.toHaveBeenCalled();
   });
 });

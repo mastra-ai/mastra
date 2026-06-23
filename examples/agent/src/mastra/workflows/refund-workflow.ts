@@ -82,7 +82,7 @@ export const refundWorkflow = createWorkflow({
     'Refunds a user a dollar amount: looks up their balance via the balance sub-agent, then issues the refund. Has a side effect — mock this workflow during experiments to keep it deterministic.',
   inputSchema: z.object({
     user: z.string().describe('The user to refund, e.g. "YJ"'),
-    amount: z.number().describe('The refund amount in dollars'),
+    amount: z.number().positive().describe('The refund amount in dollars'),
   }),
   outputSchema: z.object({
     refundId: z.string(),

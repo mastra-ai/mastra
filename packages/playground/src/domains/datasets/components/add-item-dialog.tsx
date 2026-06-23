@@ -17,7 +17,7 @@ import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 
 /** Schema validation error from API */
 interface SchemaValidationError {
-  field: 'input' | 'groundTruth';
+  field: 'input' | 'groundTruth' | 'toolMocks';
   errors: Array<{ path: string; message: string }>;
 }
 
@@ -184,6 +184,14 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
     }
   };
 
+  // Clear validation errors when toolMocks changes
+  const handleToolMocksChange = (value: string) => {
+    setToolMocks(value);
+    if (validationErrors?.field === 'toolMocks') {
+      setValidationErrors(null);
+    }
+  };
+
   const handleCancel = () => {
     setInput('{}');
     setGroundTruth('');
@@ -235,7 +243,15 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
 
             <div className="space-y-2">
               <Label htmlFor="item-tool-mocks">Tool Mocks (JSON array, optional)</Label>
-              <CodeEditor value={toolMocks} onChange={setToolMocks} showCopyButton={false} className="min-h-[80px]" />
+              <CodeEditor
+                value={toolMocks}
+                onChange={handleToolMocksChange}
+                showCopyButton={false}
+                className="min-h-[80px]"
+              />
+              {validationErrors?.field === 'toolMocks' && (
+                <ValidationErrors field="toolMocks" errors={validationErrors.errors} />
+              )}
             </div>
 
             <div className="space-y-2">
