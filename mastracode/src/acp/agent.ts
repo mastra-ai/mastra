@@ -119,9 +119,7 @@ export class MastraCodeAcpAgent implements Agent {
     // Extract text from content blocks
     const text = extractTextFromContentBlocks(contentBlocks);
 
-    // Ensure we're on the right thread
     const threadId = this.getThreadIdOrThrow(sessionId);
-    await this.session.thread.switch({ threadId });
 
     // Serialize prompts via mutex
     const prevMutex = this.promptMutex;
@@ -133,6 +131,9 @@ export class MastraCodeAcpAgent implements Agent {
     await prevMutex;
 
     try {
+      // Ensure we're on the right thread while prompts are serialized
+      await this.session.thread.switch({ threadId });
+
       // Create prompt state that will be resolved when agent_end fires
       const result = new Promise<{
         reason: 'complete' | 'aborted' | 'error' | 'suspended';
