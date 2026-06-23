@@ -75,6 +75,23 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   onError?: (error: Error) => void | Promise<void>;
   /** Callback when workflow suspends (e.g., for tool approval) */
   onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
+  /**
+   * When set, `stream()` delegates to the idle-loop wrapper that keeps the
+   * outer stream open across background-task continuations — the same
+   * behaviour as the now-deprecated `streamUntilIdle()`.
+   *
+   * Pass `true` for default idle timeout (5 min), or `{ maxIdleMs }` to
+   * customise.
+   *
+   * @example
+   * ```typescript
+   * const { output, cleanup } = await durableAgent.stream('Research topic', {
+   *   untilIdle: true,
+   *   memory: { thread: 't1', resource: 'u1' },
+   * });
+   * ```
+   */
+  untilIdle?: boolean | { maxIdleMs?: number };
   /** When true, the in-loop background task check step skips waiting (streamUntilIdle sets this) */
   _skipBgTaskWait?: boolean;
 }
@@ -447,6 +464,23 @@ export class DurableAgent<
     messages: MessageListInput,
     options?: DurableAgentStreamOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
+    // Delegate to the idle-loop wrapper when `untilIdle` is set.
+    // Strip `untilIdle` before passing to the wrapper so its internal
+    // agent.stream() call doesn't recurse.
+    if (options?.untilIdle) {
+      const { untilIdle, ...rest } = options;
+      const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
+      return runDurableStreamUntilIdle<TOutput>(
+        this as unknown as DurableAgent<any, any, TOutput>,
+        messages,
+        { ...rest, maxIdleMs },
+        {
+          activeStreams: this.#activeStreamUntilIdle,
+          bgManager: this.#mastra?.backgroundTaskManager,
+        },
+      );
+    }
+
     // 1. Prepare for durable execution (non-durable phase)
     const preparation = await prepareForDurableExecution<TOutput>({
       agent: this.#wrappedAgent as Agent<string, any, TOutput>,
@@ -829,6 +863,8 @@ export class DurableAgent<
   }
 
   /**
+   * @deprecated Use `stream(messages, { untilIdle: true })` instead.
+   *
    * Stream until all background tasks complete and the agent is idle.
    * Mirrors the regular Agent's streamUntilIdle but adapted for durable execution.
    */

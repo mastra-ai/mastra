@@ -395,6 +395,13 @@ interface PrepareResult {
     description: 'Structured output configuration.',
   },
   {
+    name: 'untilIdle',
+    type: 'boolean | { maxIdleMs?: number }',
+    isOptional: true,
+    description:
+      'When set, keeps the stream open across background-task continuations until the agent is idle. Pass `true` for the default 5-minute idle timeout, or `{ maxIdleMs }` to customise. Equivalent to the deprecated `streamUntilIdle()` method.',
+  },
+  {
     name: 'versions',
     type: 'object',
     isOptional: true,
