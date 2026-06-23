@@ -26,23 +26,29 @@ vi.mock('@mastra/playground-ui', () => {
     Button: ({ variant: _variant, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: string }) => (
       <button {...props} />
     ),
-    CodeEditor: ({ value, onChange }: CodeEditorProps) => (
-      <textarea
-        value={value ?? ''}
-        onChange={(event: ChangeEvent<HTMLTextAreaElement>) => onChange?.(event.target.value)}
-      />
-    ),
     Dialog,
     DialogContent: ({ children }: PropsWithChildren) => <div>{children}</div>,
     DialogHeader: ({ children }: PropsWithChildren) => <div>{children}</div>,
     DialogTitle: ({ children }: PropsWithChildren) => <h2>{children}</h2>,
     DialogBody: ({ children }: PropsWithChildren) => <div>{children}</div>,
-    Label: ({ children, ...props }: PropsWithChildren<HTMLAttributes<HTMLLabelElement>>) => (
-      <label {...props}>{children}</label>
-    ),
     toast: { error: vi.fn(), success: vi.fn() },
   };
 });
+
+vi.mock('@mastra/playground-ui/components/CodeEditor', () => ({
+  CodeEditor: ({ value, onChange }: CodeEditorProps) => (
+    <textarea
+      value={value ?? ''}
+      onChange={(event: ChangeEvent<HTMLTextAreaElement>) => onChange?.(event.target.value)}
+    />
+  ),
+}));
+
+vi.mock('@mastra/playground-ui/components/Label', () => ({
+  Label: ({ children, ...props }: PropsWithChildren<HTMLAttributes<HTMLLabelElement>>) => (
+    <label {...props}>{children}</label>
+  ),
+}));
 
 afterEach(() => {
   cleanup();
