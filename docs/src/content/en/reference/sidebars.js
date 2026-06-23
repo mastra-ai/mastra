@@ -26,6 +26,7 @@ const sidebars = {
         { type: 'doc', id: 'agents/agent', label: 'Agent Class' },
         { type: 'doc', id: 'agents/channels', label: 'Channels' },
         { type: 'doc', id: 'agents/inngest-agent', label: 'createInngestAgent()' },
+        { type: 'doc', id: 'agents/defineSkill', label: 'defineSkill()' },
         { type: 'doc', id: 'agents/durable-agent', label: 'DurableAgent' },
         { type: 'doc', id: 'agents/generate', label: '.generate()' },
         { type: 'doc', id: 'agents/generateLegacy', label: '.generateLegacy()' },
@@ -55,7 +56,6 @@ const sidebars = {
         { type: 'doc', id: 'agents/listWorkflows', label: '.listWorkflows()' },
         { type: 'doc', id: 'agents/network', label: '.network()' },
         { type: 'doc', id: 'agents/skill', label: '.skill()' },
-        { type: 'doc', id: 'agents/defineSkill', label: 'defineSkill()' },
       ],
     },
     {

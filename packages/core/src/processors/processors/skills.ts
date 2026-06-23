@@ -19,12 +19,6 @@
  *   workspace,
  *   inputProcessors: [new SkillsProcessor({ workspace })],
  * });
- *
- * // Or with WorkspaceSkills directly (agent-level skills):
- * const agent = new Agent({
- *   skills: [defineSkill({ ... })],
- *   inputProcessors: [new SkillsProcessor({ skills: workspaceSkills })],
- * });
  * ```
  */
 import type { Skill, SkillFormat, WorkspaceSkills } from '../../workspace/skills';
