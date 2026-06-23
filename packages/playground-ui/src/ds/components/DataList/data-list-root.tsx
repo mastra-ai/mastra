@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
  */
 export type DataListVariant = 'striped' | 'lined';
 export type DataListStickyHeaderBackground = 'tinted' | 'surface' | 'transparent';
+type DataListStickyHeaderBackgroundValue = { background: string; hoverBackground: string };
 
 export type DataListRootProps = {
   children: ReactNode;
@@ -40,16 +41,19 @@ export type DataListRootProps = {
 };
 
 const stickyHeaderBackgroundValues = {
-  tinted: 'color-mix(in oklch, var(--surface1), var(--neutral6) 10%)',
-  surface: 'var(--surface2)',
-  transparent: 'transparent',
-} satisfies Record<DataListStickyHeaderBackground, string>;
-
-const stickyHeaderHoverBackgroundValues = {
-  tinted: 'color-mix(in oklch, var(--surface1), var(--neutral6) 14%)',
-  surface: 'color-mix(in oklch, var(--surface2), var(--neutral6) 10%)',
-  transparent: 'transparent',
-} satisfies Record<DataListStickyHeaderBackground, string>;
+  tinted: {
+    background: 'color-mix(in oklch, var(--surface1), var(--neutral6) 10%)',
+    hoverBackground: 'color-mix(in oklch, var(--surface1), var(--neutral6) 14%)',
+  },
+  surface: {
+    background: 'var(--surface2)',
+    hoverBackground: 'color-mix(in oklch, var(--surface2), var(--neutral6) 10%)',
+  },
+  transparent: {
+    background: 'transparent',
+    hoverBackground: 'transparent',
+  },
+} satisfies Record<DataListStickyHeaderBackground, DataListStickyHeaderBackgroundValue>;
 
 type DataListRootStyle = CSSProperties & {
   '--data-list-sticky-header-background'?: string;
@@ -134,9 +138,10 @@ export function DataListRoot({
   mask,
   scrollRef,
 }: DataListRootProps) {
+  const stickyHeaderColors = stickyHeaderBackgroundValues[stickyHeaderBackground];
   const gridStyle: DataListRootStyle = {
-    '--data-list-sticky-header-background': stickyHeaderBackgroundValues[stickyHeaderBackground],
-    '--data-list-sticky-header-hover-background': stickyHeaderHoverBackgroundValues[stickyHeaderBackground],
+    '--data-list-sticky-header-background': stickyHeaderColors.background,
+    '--data-list-sticky-header-hover-background': stickyHeaderColors.hoverBackground,
     gridTemplateColumns: columns,
   };
 
