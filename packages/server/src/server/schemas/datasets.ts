@@ -182,6 +182,39 @@ const datasetItemSourceSchema = z
   .optional()
   .describe('Source/provenance of this dataset item');
 
+// Item-level static tool mocks (agent targets only).
+const itemToolMockSchema = z.object({
+  toolName: z.string().describe('Name of the tool this mock applies to'),
+  args: z.record(z.string(), z.unknown()).describe('Arguments to match against the tool call'),
+  output: z.unknown().describe('Output served to the agent when matched'),
+  matchArgs: z
+    .enum(['strict', 'ignore'])
+    .optional()
+    .describe("Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only"),
+});
+
+const toolMocksSchema = z
+  .array(itemToolMockSchema)
+  .optional()
+  .describe('Ordered item-level static tool mocks served in place of executing the real tool');
+
+// Diagnostic receipt for item-level tool mocks, persisted on experiment results.
+const toolMockReportSchema = z
+  .object({
+    served: z.array(z.object({ mockIndex: z.number().int(), toolName: z.string(), args: z.unknown() })),
+    unconsumed: z.array(z.object({ mockIndex: z.number().int(), toolName: z.string(), args: z.unknown() })),
+    liveCalls: z.array(z.object({ toolName: z.string(), args: z.unknown() })),
+    failure: z
+      .object({
+        code: z.enum(['TOOL_MOCK_MISMATCH', 'TOOL_MOCK_EXHAUSTED']),
+        toolName: z.string(),
+        args: z.unknown(),
+      })
+      .optional(),
+  })
+  .optional()
+  .describe('Diagnostic receipt for item-level tool mocks');
+
 // ============================================================================
 // Path Parameter Schemas
 // ============================================================================
@@ -263,6 +296,7 @@ export const addItemBodySchema = z.object({
   input: z.unknown().describe('Input data for the dataset item'),
   groundTruth: z.unknown().optional().describe('Expected output for comparison'),
   expectedTrajectory: trajectoryExpectationSchema,
+  toolMocks: toolMocksSchema,
   requestContext: z.record(z.string(), z.unknown()).optional().describe('Request context preset for this item'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
   source: datasetItemSourceSchema,
@@ -272,6 +306,7 @@ export const updateItemBodySchema = z.object({
   input: z.unknown().optional().describe('Input data for the dataset item'),
   groundTruth: z.unknown().optional().describe('Expected output for comparison'),
   expectedTrajectory: trajectoryExpectationSchema,
+  toolMocks: toolMocksSchema,
   requestContext: z.record(z.string(), z.unknown()).optional().describe('Request context preset for this item'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
   source: datasetItemSourceSchema,
@@ -334,6 +369,7 @@ export const datasetItemResponseSchema = z.object({
   input: z.unknown(),
   groundTruth: z.unknown().optional(),
   expectedTrajectory: z.unknown().optional(),
+  toolMocks: toolMocksSchema,
   requestContext: z.record(z.string(), z.unknown()).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   source: datasetItemSourceSchema,
@@ -395,6 +431,7 @@ export const experimentResultResponseSchema = z.object({
   traceId: z.string().nullable(),
   status: z.enum(['needs-review', 'reviewed', 'complete']).nullable().optional(),
   tags: z.array(z.string()).nullable().optional(),
+  toolMockReport: toolMockReportSchema.nullable(),
   createdAt: z.coerce.date(),
 });
 
@@ -446,6 +483,7 @@ export const experimentSummaryResponseSchema = z.object({
       startedAt: z.coerce.date(),
       completedAt: z.coerce.date(),
       retryCount: z.number(),
+      toolMockReport: toolMockReportSchema.nullable(),
       scores: z.array(
         z.object({
           scorerId: z.string(),
@@ -514,6 +552,7 @@ export const itemVersionResponseSchema = z.object({
   input: z.unknown(),
   groundTruth: z.unknown().optional(),
   expectedTrajectory: z.unknown().optional(),
+  toolMocks: toolMocksSchema,
   metadata: z.record(z.string(), z.unknown()).optional(),
   validTo: z.number().int().nullable(),
   isDeleted: z.boolean(),
@@ -548,6 +587,7 @@ export const batchInsertItemsBodySchema = z.object({
       input: z.unknown(),
       groundTruth: z.unknown().optional(),
       expectedTrajectory: trajectoryExpectationSchema,
+      toolMocks: toolMocksSchema,
       requestContext: z.record(z.string(), z.unknown()).optional(),
       metadata: z.record(z.string(), z.unknown()).optional(),
       source: datasetItemSourceSchema,
