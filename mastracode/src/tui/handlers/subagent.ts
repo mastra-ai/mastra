@@ -16,6 +16,13 @@ export function handleSubagentStart(
   forked?: boolean,
 ): void {
   const { state } = ctx;
+  const existingComponent = state.pendingSubagents.get(toolCallId);
+  if (existingComponent) {
+    existingComponent.updateMetadata(agentType, task, modelId, forked);
+    state.ui.requestRender();
+    return;
+  }
+
   const component = new SubagentExecutionComponent(agentType, task, state.ui, modelId, {
     collapseOnComplete: false,
     expandOnComplete: state.quietMode,
