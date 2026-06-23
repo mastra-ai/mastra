@@ -32,5 +32,5 @@ const agent = new Agent({
 - Filesystem paths and inline skills can be mixed in the same array
 - Dynamic skill resolution via function: `skills: (ctx) => [...]`
 - When both `skills` and `workspace.skills` exist, they merge (agent-level wins on conflicts)
-- `agent.skill(name)` and `agent.listSkills()` public API for programmatic access
+- `agent.getSkill(name)` and `agent.listSkills()` public API for programmatic access
 - New `@mastra/core/skills` export path

@@ -1891,14 +1891,14 @@ export class Agent<
    * @example
    * ```typescript
    * // In a workflow step
-   * const skill = await agent.skill('code-review');
+   * const skill = await agent.getSkill('code-review');
    * if (skill) {
    *   console.log(skill.instructions); // Full skill instructions
    *   console.log(skill.references);   // Available reference files
    * }
    * ```
    */
-  public async skill(skillName: string, options?: { requestContext?: RequestContext }): Promise<Skill | null> {
+  public async getSkill(skillName: string, options?: { requestContext?: RequestContext }): Promise<Skill | null> {
     const skills = await this.resolveSkills(options?.requestContext);
     if (!skills) return null;
     return skills.get(skillName);

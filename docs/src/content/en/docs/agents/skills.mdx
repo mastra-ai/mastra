@@ -169,13 +169,13 @@ export const agent = new Agent({
 
 ## Programmatic skill access
 
-Use `agent.skill()` and `agent.listSkills()` to access skills from application code (e.g., in workflows or API routes):
+Use `agent.getSkill()` and `agent.listSkills()` to access skills from application code (e.g., in workflows or API routes):
 
 ```typescript title="src/routes/skills.ts"
 import { reviewer } from '../mastra/agents'
 
 // Get a specific skill by name
-const skill = await reviewer.skill('code-review')
+const skill = await reviewer.getSkill('code-review')
 if (skill) {
   console.log(skill.instructions)
 }
@@ -188,13 +188,13 @@ for (const meta of allSkills) {
 ```
 
 :::note
-Visit [`.skill()` reference](/reference/agents/skill) and [`.listSkills()` reference](/reference/agents/listSkills) for the full API.
+Visit [`.getSkill()` reference](/reference/agents/getSkill) and [`.listSkills()` reference](/reference/agents/listSkills) for the full API.
 :::
 
 ## Related
 
 - [Workspace skills](/docs/workspace/skills)
 - [`createSkill()` reference](/reference/agents/createSkill)
-- [`.skill()` reference](/reference/agents/skill)
+- [`.getSkill()` reference](/reference/agents/getSkill)
 - [`.listSkills()` reference](/reference/agents/listSkills)
 - [Agent skills specification](https://agentskills.io)

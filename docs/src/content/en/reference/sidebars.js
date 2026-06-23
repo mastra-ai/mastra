@@ -47,6 +47,7 @@ const sidebars = {
         { type: 'doc', id: 'agents/getMemory', label: '.getMemory()' },
         { type: 'doc', id: 'agents/getMetadata', label: '.getMetadata()' },
         { type: 'doc', id: 'agents/getModel', label: '.getModel()' },
+        { type: 'doc', id: 'agents/getSkill', label: '.getSkill()' },
         { type: 'doc', id: 'agents/getTools', label: '.getTools()' },
         { type: 'doc', id: 'agents/getVoice', label: '.getVoice()' },
         { type: 'doc', id: 'agents/listAgents', label: '.listAgents()' },
@@ -55,7 +56,6 @@ const sidebars = {
         { type: 'doc', id: 'agents/listTools', label: '.listTools()' },
         { type: 'doc', id: 'agents/listWorkflows', label: '.listWorkflows()' },
         { type: 'doc', id: 'agents/network', label: '.network()' },
-        { type: 'doc', id: 'agents/skill', label: '.skill()' },
       ],
     },
     {

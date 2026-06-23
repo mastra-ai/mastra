@@ -1,11 +1,11 @@
 ---
-title: "Reference: .skill() | Agents"
-description: "API reference for the Agent .skill() method, which retrieves a specific skill by name."
+title: "Reference: .getSkill() | Agents"
+description: "API reference for the Agent .getSkill() method, which retrieves a specific skill by name."
 packages:
   - "@mastra/core"
 ---
 
-# `.skill()`
+# `.getSkill()`
 
 Retrieves a specific skill by name from the agent's configured skills (both agent-level and workspace skills).
 
@@ -14,7 +14,7 @@ Retrieves a specific skill by name from the agent's configured skills (both agen
 ```typescript title="src/routes/skills.ts"
 import { agent } from '../mastra/agents'
 
-const skill = await agent.skill('code-review')
+const skill = await agent.getSkill('code-review')
 
 if (skill) {
   console.log(skill.name) // "code-review"
@@ -79,7 +79,7 @@ interface Skill {
 
 ## Merging behavior
 
-When both agent-level skills and workspace skills are configured, `.skill()` searches the merged set. Agent-level skills take precedence on name conflicts.
+When both agent-level skills and workspace skills are configured, `.getSkill()` searches the merged set. Agent-level skills take precedence on name conflicts.
 
 ## Related
 
