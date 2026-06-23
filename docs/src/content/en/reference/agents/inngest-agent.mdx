@@ -189,11 +189,60 @@ Resumes a suspended Inngest run, for example after a tool approval. Loads the wo
 ```typescript
 const { output, cleanup } = await durableAgent.resume(runId, {
   approved: true,
-})
+}, { threadId: 'thread-1', resourceId: 'user-1' })
 
 await output.text
 cleanup()
 ```
+
+The third argument accepts `threadId` and `resourceId` in addition to the lifecycle callbacks:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'threadId',
+    type: 'string',
+    isOptional: true,
+    description: 'Thread ID to associate with the resumed run.',
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    isOptional: true,
+    description: 'Resource ID to associate with the resumed run.',
+  },
+  {
+    name: 'onChunk',
+    type: '(chunk: ChunkType) => void | Promise<void>',
+    isOptional: true,
+    description: 'Called for each streamed chunk.',
+  },
+  {
+    name: 'onStepFinish',
+    type: '(result: AgentStepFinishEventData) => void | Promise<void>',
+    isOptional: true,
+    description: 'Called when a step in the agentic loop finishes.',
+  },
+  {
+    name: 'onFinish',
+    type: '(result: AgentFinishEventData) => void | Promise<void>',
+    isOptional: true,
+    description: 'Called when the run finishes.',
+  },
+  {
+    name: 'onError',
+    type: '(error: Error) => void | Promise<void>',
+    isOptional: true,
+    description: 'Called when the run errors.',
+  },
+  {
+    name: 'onSuspended',
+    type: '(data: AgentSuspendedEventData) => void | Promise<void>',
+    isOptional: true,
+    description: 'Called when the run suspends.',
+  },
+]}
+/>
 
 Returns: [`Promise<InngestAgentStreamResult>`](#inngestagentstreamresult)
 
@@ -210,7 +259,9 @@ const { output, cleanup } = await durableAgent.observe(runId, {
 await output.text
 ```
 
-Returns: `Promise<InngestAgentStreamResult>`
+The result from `observe()` does not include `threadId` or `resourceId`.
+
+Returns: `Promise<Omit<InngestAgentStreamResult, 'threadId' | 'resourceId'>>`
 
 :::warning
 
@@ -232,7 +283,7 @@ const { runId, messageId, workflowInput, threadId, resourceId } =
 Returns:
 
 ```typescript
-{
+interface PrepareResult {
   runId: string
   messageId: string
   workflowInput: any
@@ -387,11 +438,11 @@ Returns: `boolean`
 ]}
 />
 
-`resume()` and `observe()` accept the same lifecycle callbacks (`onChunk`, `onStepFinish`, `onFinish`, `onError`, `onSuspended`). `observe()` also accepts an `offset` to control where replay starts.
+`observe()` accepts the lifecycle callbacks (`onChunk`, `onStepFinish`, `onFinish`, `onError`, `onSuspended`) plus an `offset` to control where replay starts.
 
 ## `InngestAgentStreamResult`
 
-The object returned by `stream()`, `resume()`, and `observe()`.
+The object returned by `stream()` and `resume()`. The `observe()` method returns the same shape but omits `threadId` and `resourceId`.
 
 ```typescript
 interface InngestAgentStreamResult<OUTPUT = undefined> {
