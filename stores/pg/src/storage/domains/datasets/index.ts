@@ -143,7 +143,7 @@ export class DatasetsPG extends DatasetsStorage {
       },
       // Tenancy: leading-tenant indexes for multi-tenant scans (parity with observability storage).
       {
-        name: 'idx_datasets_org_resource',
+        name: 'idx_datasets_org_project',
         table: TABLE_DATASETS,
         columns: ['organizationId', 'projectId'],
       },
@@ -153,7 +153,7 @@ export class DatasetsPG extends DatasetsStorage {
         columns: ['candidateKey', 'candidateId'],
       },
       {
-        name: 'idx_dataset_items_org_resource',
+        name: 'idx_dataset_items_org_project',
         table: TABLE_DATASET_ITEMS,
         columns: ['organizationId', 'projectId'],
       },
@@ -576,7 +576,7 @@ export class DatasetsPG extends DatasetsStorage {
 
       let newVersion: number;
       let parentOrganizationId: string | null = null;
-      let parentResourceId: string | null = null;
+      let parentProjectId: string | null = null;
 
       await this.#db.client.tx(async t => {
         const row = await t.one(
@@ -585,7 +585,7 @@ export class DatasetsPG extends DatasetsStorage {
         );
         newVersion = row.version as number;
         parentOrganizationId = (row.organizationId as string | null) ?? null;
-        parentResourceId = (row.projectId as string | null) ?? null;
+        parentProjectId = (row.projectId as string | null) ?? null;
 
         await t.none(
           `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,NULL,false,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
@@ -594,7 +594,7 @@ export class DatasetsPG extends DatasetsStorage {
             args.datasetId,
             newVersion,
             parentOrganizationId,
-            parentResourceId,
+            parentProjectId,
             JSON.stringify(args.input),
             jsonbArg(args.groundTruth),
             jsonbArg(args.expectedTrajectory),
@@ -620,7 +620,7 @@ export class DatasetsPG extends DatasetsStorage {
         datasetId: args.datasetId,
         datasetVersion: newVersion!,
         organizationId: parentOrganizationId,
-        projectId: parentResourceId,
+        projectId: parentProjectId,
         input: args.input,
         groundTruth: args.groundTruth,
         expectedTrajectory: args.expectedTrajectory,
@@ -687,7 +687,7 @@ export class DatasetsPG extends DatasetsStorage {
 
       let newVersion: number;
       let parentOrganizationId: string | null = null;
-      let parentResourceId: string | null = null;
+      let parentProjectId: string | null = null;
 
       await this.#db.client.tx(async t => {
         // 1. Bump dataset version and read parent tenancy
@@ -697,7 +697,7 @@ export class DatasetsPG extends DatasetsStorage {
         );
         newVersion = row.version as number;
         parentOrganizationId = (row.organizationId as string | null) ?? null;
-        parentResourceId = (row.projectId as string | null) ?? null;
+        parentProjectId = (row.projectId as string | null) ?? null;
 
         // 2. Close old row (set validTo = newVersion)
         await t.none(
@@ -714,7 +714,7 @@ export class DatasetsPG extends DatasetsStorage {
             args.datasetId,
             newVersion,
             parentOrganizationId,
-            parentResourceId,
+            parentProjectId,
             JSON.stringify(mergedInput),
             jsonbArg(mergedGroundTruth),
             jsonbArg(mergedExpectedTrajectory),
@@ -740,7 +740,7 @@ export class DatasetsPG extends DatasetsStorage {
         ...existing,
         datasetVersion: newVersion!,
         organizationId: parentOrganizationId,
-        projectId: parentResourceId,
+        projectId: parentProjectId,
         input: mergedInput,
         groundTruth: mergedGroundTruth,
         expectedTrajectory: mergedExpectedTrajectory,
@@ -794,7 +794,7 @@ export class DatasetsPG extends DatasetsStorage {
         );
         const newVersion = row.version as number;
         const parentOrganizationId = (row.organizationId as string | null) ?? null;
-        const parentResourceId = (row.projectId as string | null) ?? null;
+        const parentProjectId = (row.projectId as string | null) ?? null;
 
         // 2. Close old row
         await t.none(
@@ -811,7 +811,7 @@ export class DatasetsPG extends DatasetsStorage {
             datasetId,
             newVersion,
             parentOrganizationId,
-            parentResourceId,
+            parentProjectId,
             JSON.stringify(existing.input),
             jsonbArg(existing.groundTruth),
             jsonbArg(existing.expectedTrajectory),
@@ -873,7 +873,7 @@ export class DatasetsPG extends DatasetsStorage {
 
       // Tenancy inherited from parent dataset (Option B)
       const parentOrganizationId = dataset.organizationId ?? null;
-      const parentResourceId = dataset.projectId ?? null;
+      const parentProjectId = dataset.projectId ?? null;
 
       let newVersion: number;
 
@@ -894,7 +894,7 @@ export class DatasetsPG extends DatasetsStorage {
               input.datasetId,
               newVersion,
               parentOrganizationId,
-              parentResourceId,
+              parentProjectId,
               JSON.stringify(itemInput.input),
               jsonbArg(itemInput.groundTruth),
               jsonbArg(itemInput.expectedTrajectory),
@@ -922,7 +922,7 @@ export class DatasetsPG extends DatasetsStorage {
         datasetId: input.datasetId,
         datasetVersion: newVersion!,
         organizationId: parentOrganizationId,
-        projectId: parentResourceId,
+        projectId: parentProjectId,
         input: itemInput.input,
         groundTruth: itemInput.groundTruth,
         expectedTrajectory: itemInput.expectedTrajectory,
@@ -980,7 +980,7 @@ export class DatasetsPG extends DatasetsStorage {
 
       // Tenancy re-inherited from parent dataset (Option B)
       const parentOrganizationId = dataset.organizationId ?? null;
-      const parentResourceId = dataset.projectId ?? null;
+      const parentProjectId = dataset.projectId ?? null;
 
       await this.#db.client.tx(async t => {
         // 1. Single version bump
@@ -1003,7 +1003,7 @@ export class DatasetsPG extends DatasetsStorage {
               input.datasetId,
               newVersion,
               parentOrganizationId,
-              parentResourceId,
+              parentProjectId,
               JSON.stringify(item.input),
               jsonbArg(item.groundTruth),
               jsonbArg(item.expectedTrajectory),

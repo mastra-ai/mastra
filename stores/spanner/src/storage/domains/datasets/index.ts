@@ -1003,11 +1003,7 @@ export class DatasetsSpanner extends DatasetsStorage {
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
-            const {
-              version: newVersion,
-              organizationId,
-              projectId,
-            } = await this.bumpVersion(tx, input.datasetId, now);
+            const { version: newVersion, organizationId, projectId } = await this.bumpVersion(tx, input.datasetId, now);
             for (const { id, item } of prepared) {
               await this.db.insert({
                 tableName: TABLE_DATASET_ITEMS,
@@ -1085,11 +1081,7 @@ export class DatasetsSpanner extends DatasetsStorage {
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
-            const {
-              version: newVersion,
-              organizationId,
-              projectId,
-            } = await this.bumpVersion(tx, input.datasetId, now);
+            const { version: newVersion, organizationId, projectId } = await this.bumpVersion(tx, input.datasetId, now);
             for (const existing of current) {
               await this.closeCurrentRow(tx, existing.id, newVersion);
               await this.db.insert({

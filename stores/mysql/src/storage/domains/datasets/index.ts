@@ -502,7 +502,7 @@ export class DatasetsMySQL extends DatasetsStorage {
       const parentRow = (datasetRows as any[])[0];
       const newVersion = parentRow?.version as number;
       const parentOrganizationId = (parentRow?.organizationId as string | null | undefined) ?? null;
-      const parentResourceId = (parentRow?.projectId as string | null | undefined) ?? null;
+      const parentProjectId = (parentRow?.projectId as string | null | undefined) ?? null;
 
       // Insert item (tenancy inherited from parent dataset)
       await connection.execute(
@@ -512,7 +512,7 @@ export class DatasetsMySQL extends DatasetsStorage {
           args.datasetId,
           newVersion,
           parentOrganizationId,
-          parentResourceId,
+          parentProjectId,
           jsonArg(args.input),
           jsonArg(args.groundTruth),
           jsonArg(args.metadata),
@@ -534,7 +534,7 @@ export class DatasetsMySQL extends DatasetsStorage {
         datasetId: args.datasetId,
         datasetVersion: newVersion,
         organizationId: parentOrganizationId,
-        projectId: parentResourceId,
+        projectId: parentProjectId,
         input: args.input,
         groundTruth: args.groundTruth,
         metadata: args.metadata,
@@ -603,7 +603,7 @@ export class DatasetsMySQL extends DatasetsStorage {
       const parentRow = (datasetRows as any[])[0];
       const newVersion = parentRow?.version as number;
       const parentOrganizationId = (parentRow?.organizationId as string | null | undefined) ?? null;
-      const parentResourceId = (parentRow?.projectId as string | null | undefined) ?? null;
+      const parentProjectId = (parentRow?.projectId as string | null | undefined) ?? null;
 
       // Close old row
       await connection.execute(
@@ -619,7 +619,7 @@ export class DatasetsMySQL extends DatasetsStorage {
           args.datasetId,
           newVersion,
           parentOrganizationId,
-          parentResourceId,
+          parentProjectId,
           jsonArg(mergedInput),
           jsonArg(mergedGroundTruth),
           jsonArg(mergedMetadata),
@@ -640,7 +640,7 @@ export class DatasetsMySQL extends DatasetsStorage {
         ...existing,
         datasetVersion: newVersion,
         organizationId: parentOrganizationId,
-        projectId: parentResourceId,
+        projectId: parentProjectId,
         input: mergedInput,
         groundTruth: mergedGroundTruth,
         metadata: mergedMetadata,
@@ -696,7 +696,7 @@ export class DatasetsMySQL extends DatasetsStorage {
       const parentRow = (datasetRows as any[])[0];
       const newVersion = parentRow?.version as number;
       const parentOrganizationId = (parentRow?.organizationId as string | null | undefined) ?? null;
-      const parentResourceId = (parentRow?.projectId as string | null | undefined) ?? null;
+      const parentProjectId = (parentRow?.projectId as string | null | undefined) ?? null;
 
       // Close old row
       await connection.execute(
@@ -712,7 +712,7 @@ export class DatasetsMySQL extends DatasetsStorage {
           datasetId,
           newVersion,
           parentOrganizationId,
-          parentResourceId,
+          parentProjectId,
           jsonArg(existing.input),
           jsonArg(existing.groundTruth),
           jsonArg(existing.metadata),
@@ -1016,7 +1016,7 @@ export class DatasetsMySQL extends DatasetsStorage {
       const newVersion = (versionRows as any[])[0]?.version as number;
 
       const parentOrganizationId = dataset.organizationId ?? null;
-      const parentResourceId = dataset.projectId ?? null;
+      const parentProjectId = dataset.projectId ?? null;
 
       const items: { id: string; itemInput: BatchInsertItemsInput['items'][number] }[] = [];
       for (const itemInput of input.items) {
@@ -1030,7 +1030,7 @@ export class DatasetsMySQL extends DatasetsStorage {
             input.datasetId,
             newVersion,
             parentOrganizationId,
-            parentResourceId,
+            parentProjectId,
             jsonArg(itemInput.input),
             jsonArg(itemInput.groundTruth),
             jsonArg(itemInput.metadata),
@@ -1053,7 +1053,7 @@ export class DatasetsMySQL extends DatasetsStorage {
         datasetId: input.datasetId,
         datasetVersion: newVersion,
         organizationId: parentOrganizationId,
-        projectId: parentResourceId,
+        projectId: parentProjectId,
         input: itemInput.input,
         groundTruth: itemInput.groundTruth,
         metadata: itemInput.metadata,
@@ -1120,7 +1120,7 @@ export class DatasetsMySQL extends DatasetsStorage {
       const newVersion = (versionRows as any[])[0]?.version as number;
 
       const parentOrganizationId = dataset.organizationId ?? null;
-      const parentResourceId = dataset.projectId ?? null;
+      const parentProjectId = dataset.projectId ?? null;
 
       for (const item of currentItems) {
         // Close old row
@@ -1137,7 +1137,7 @@ export class DatasetsMySQL extends DatasetsStorage {
             input.datasetId,
             newVersion,
             parentOrganizationId,
-            parentResourceId,
+            parentProjectId,
             jsonArg(item.input),
             jsonArg(item.groundTruth),
             jsonArg(item.metadata),

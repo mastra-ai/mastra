@@ -699,7 +699,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
             args: [datasetId, id],
           },
           {
-            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, organizationId, projectId, validTo, isDeleted, input, groundTruth, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), (SELECT organizationId FROM ${TABLE_DATASETS} WHERE id = ?), (SELECT projectId FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 1, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
+            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, organizationId, projectId, validTo, isDeleted, input, groundTruth, expectedTrajectory, toolMocks, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), (SELECT organizationId FROM ${TABLE_DATASETS} WHERE id = ?), (SELECT projectId FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 1, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
             args: [
               id,
               datasetId,
@@ -708,6 +708,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
               datasetId,
               jsonbArg(existing.input)!,
               jsonbArg(existing.groundTruth),
+              jsonbArg(existing.expectedTrajectory),
+              jsonbArg(existing.toolMocks),
               jsonbArg(existing.requestContext),
               jsonbArg(existing.metadata),
               jsonbArg(existing.source),
@@ -1153,7 +1155,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
         });
         // Insert tombstone
         statements.push({
-          sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, organizationId, projectId, validTo, isDeleted, input, groundTruth, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), ?, ?, NULL, 1, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
+          sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, organizationId, projectId, validTo, isDeleted, input, groundTruth, expectedTrajectory, toolMocks, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), ?, ?, NULL, 1, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
           args: [
             item.id,
             input.datasetId,
@@ -1162,6 +1164,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
             dataset.projectId ?? null,
             jsonbArg(item.input)!,
             jsonbArg(item.groundTruth),
+            jsonbArg(item.expectedTrajectory),
+            jsonbArg(item.toolMocks),
             jsonbArg(item.requestContext),
             jsonbArg(item.metadata),
             jsonbArg(item.source),

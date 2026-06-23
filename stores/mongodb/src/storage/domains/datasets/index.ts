@@ -568,7 +568,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const newVersion = result.version as number;
       // Tenancy re-inherited from parent dataset (Option B)
       const parentOrganizationId = (result.organizationId as string | null | undefined) ?? null;
-      const parentResourceId = (result.projectId as string | null | undefined) ?? null;
+      const parentProjectId = (result.projectId as string | null | undefined) ?? null;
 
       // Close old row (set validTo = newVersion)
       await itemsCollection.updateOne(
@@ -582,7 +582,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         datasetId: args.datasetId,
         datasetVersion: newVersion,
         organizationId: parentOrganizationId,
-        projectId: parentResourceId,
+        projectId: parentProjectId,
         validTo: null,
         isDeleted: false,
         input: mergedInput,
@@ -608,7 +608,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         ...existing,
         datasetVersion: newVersion,
         organizationId: parentOrganizationId,
-        projectId: parentResourceId,
+        projectId: parentProjectId,
         input: mergedInput,
         groundTruth: mergedGroundTruth,
         expectedTrajectory: mergedExpectedTrajectory,
@@ -668,7 +668,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const newVersion = result.version as number;
       // Tenancy re-inherited from parent dataset (Option B)
       const parentOrganizationId = (result.organizationId as string | null | undefined) ?? null;
-      const parentResourceId = (result.projectId as string | null | undefined) ?? null;
+      const parentProjectId = (result.projectId as string | null | undefined) ?? null;
 
       // Close old row
       await itemsCollection.updateOne({ id, validTo: null, isDeleted: false }, { $set: { validTo: newVersion } });
@@ -679,11 +679,13 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         datasetId,
         datasetVersion: newVersion,
         organizationId: parentOrganizationId,
-        projectId: parentResourceId,
+        projectId: parentProjectId,
         validTo: null,
         isDeleted: true,
         input: existing.input,
         groundTruth: existing.groundTruth,
+        expectedTrajectory: existing.expectedTrajectory ?? null,
+        toolMocks: existing.toolMocks ?? null,
         requestContext: existing.requestContext,
         metadata: existing.metadata,
         source: existing.source,
@@ -870,7 +872,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const newVersion = result.version as number;
       // Tenancy re-inherited from parent dataset (Option B)
       const parentOrganizationId = (result.organizationId as string | null | undefined) ?? null;
-      const parentResourceId = (result.projectId as string | null | undefined) ?? null;
+      const parentProjectId = (result.projectId as string | null | undefined) ?? null;
 
       // Close old rows in batch
       const currentIds = currentItems.map(i => i.id);
@@ -885,11 +887,13 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         datasetId: input.datasetId,
         datasetVersion: newVersion,
         organizationId: parentOrganizationId,
-        projectId: parentResourceId,
+        projectId: parentProjectId,
         validTo: null,
         isDeleted: true,
         input: item.input,
         groundTruth: item.groundTruth,
+        expectedTrajectory: item.expectedTrajectory ?? null,
+        toolMocks: item.toolMocks ?? null,
         requestContext: item.requestContext,
         metadata: item.metadata,
         source: item.source,
