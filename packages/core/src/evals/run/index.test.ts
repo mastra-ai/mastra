@@ -1483,4 +1483,187 @@ describe('runEvals', () => {
       ).rejects.toThrow(/between 0 and 1/);
     });
   });
+
+  describe('multi-turn (inputs array)', () => {
+    it('should execute multiple turns sequentially and accumulate outputs', async () => {
+      let turnCount = 0;
+      const dummyModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          turnCount++;
+          return {
+            content: [{ type: 'text', text: `Turn ${turnCount} response` }],
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        },
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'stream response' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'multiTurnAgent',
+        name: 'multiTurnAgent',
+        instructions: 'Mock agent for multi-turn',
+        model: dummyModel,
+      });
+
+      // Scorer checks accumulated output contains all turns
+      const multiTurnScorer = createScorer({
+        id: 'multi-turn-check',
+        description: 'Checks all turns are in output',
+      }).generateScore(({ run }: any) => {
+        const output = run.output;
+        if (!Array.isArray(output)) return 0;
+        // Should have responses from all turns
+        return output.length >= 2 ? 1.0 : 0.0;
+      });
+
+      const result = await runEvals({
+        data: [
+          {
+            input: 'First question', // fallback input
+            inputs: ['First question', 'Follow-up question', 'Third question'],
+          },
+        ],
+        scorers: [multiTurnScorer],
+        target: agent,
+      });
+
+      expect(turnCount).toBe(3);
+      expect(result.scores['multi-turn-check']).toBe(1.0);
+    });
+
+    it('should use the same threadId across all turns', async () => {
+      const receivedMemoryOptions: any[] = [];
+      const dummyModel = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: 'response' }],
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'response' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'threadAgent',
+        name: 'threadAgent',
+        instructions: 'Mock',
+        model: dummyModel,
+      });
+
+      // Spy on generate to capture memory options
+      const originalGenerate = agent.generate.bind(agent);
+      vi.spyOn(agent, 'generate').mockImplementation(async (input: any, options: any) => {
+        receivedMemoryOptions.push(options?.memory);
+        return originalGenerate(input, options);
+      });
+
+      const basicScorer = createMockScorer('basic', 0.9);
+
+      await runEvals({
+        data: [
+          {
+            input: 'ignored',
+            inputs: ['Turn 1', 'Turn 2'],
+          },
+        ],
+        scorers: [basicScorer],
+        target: agent,
+      });
+
+      // All turns should have received the same threadId
+      expect(receivedMemoryOptions.length).toBe(2);
+      expect(receivedMemoryOptions[0]?.thread).toBeDefined();
+      expect(receivedMemoryOptions[0]?.thread).toBe(receivedMemoryOptions[1]?.thread);
+    });
+
+    it('should validate that inputs is a non-empty array', async () => {
+      const agent = createMockAgentV2('response');
+
+      await expect(
+        runEvals({
+          data: [{ input: 'test', inputs: [] }] as any,
+          scorers: [createMockScorer('basic', 0.8)],
+          target: agent,
+        }),
+      ).rejects.toThrow("'inputs' must be a non-empty array");
+    });
+
+    it('should work with gates in multi-turn mode', async () => {
+      let turnCount = 0;
+      const dummyModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          turnCount++;
+          return {
+            content: [{ type: 'text', text: `Response ${turnCount}` }],
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 10, totalTokens: 20 },
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        },
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'response' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        }),
+      });
+
+      const agent = new Agent({
+        id: 'gateMultiTurnAgent',
+        name: 'gateMultiTurnAgent',
+        instructions: 'Mock',
+        model: dummyModel,
+      });
+
+      const alwaysPassGate = createScorer({
+        id: 'pass-gate',
+        description: 'Always passes',
+      }).generateScore(() => 1.0);
+
+      const result = await runEvals({
+        data: [
+          {
+            input: 'ignored',
+            inputs: ['Question 1', 'Question 2'],
+          },
+        ],
+        scorers: [createMockScorer('basic', 0.8)],
+        gates: [alwaysPassGate],
+        target: agent,
+      });
+
+      expect(turnCount).toBe(2);
+      expect(result.verdict).toBe('passed');
+    });
+  });
 });

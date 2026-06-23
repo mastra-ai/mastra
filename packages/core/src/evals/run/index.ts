@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import type { Agent, AgentExecutionOptions, AiMessageType, UIMessageWithMetadata } from '../../agent';
 import { isSupportedLanguageModel } from '../../agent';
@@ -18,12 +19,20 @@ type WorkflowRunOptions = WorkflowRunStartOptions & {
   initialState?: any;
 };
 
+type AgentInputType = string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
+
 type RunEvalsDataItem<TTarget = unknown> = {
   input: TTarget extends Workflow<any, any>
     ? any
     : TTarget extends Agent
-      ? string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]
+      ? AgentInputType
       : unknown;
+  /**
+   * Multi-turn inputs. When provided, each entry is sent sequentially to the agent
+   * on the same thread. Scorers see the accumulated output from all turns.
+   * Only supported for Agent targets (not Workflows).
+   */
+  inputs?: TTarget extends Agent ? AgentInputType[] : never;
   groundTruth?: any;
   expectedTrajectory?: any;
   requestContext?: RequestContext;
@@ -429,13 +438,23 @@ function validateEvalsInputs(
 
   for (let i = 0; i < data.length; i++) {
     const item = data[i];
-    if (!item || typeof item !== 'object' || !('input' in item)) {
+    if (!item || typeof item !== 'object' || (!('input' in item) && !('inputs' in item))) {
       throw new MastraError({
         domain: 'SCORER',
         id: 'INVALID_DATA_ITEM',
         category: 'USER',
-        text: `Invalid data item at index ${i}: must have 'input' properties`,
+        text: `Invalid data item at index ${i}: must have 'input' or 'inputs' property`,
       });
+    }
+    if ('inputs' in item && item.inputs) {
+      if (!Array.isArray(item.inputs) || item.inputs.length === 0) {
+        throw new MastraError({
+          domain: 'SCORER',
+          id: 'INVALID_DATA_ITEM',
+          category: 'USER',
+          text: `Invalid data item at index ${i}: 'inputs' must be a non-empty array`,
+        });
+      }
     }
   }
 
@@ -497,6 +516,12 @@ async function executeTarget(
   try {
     if (isWorkflow(target)) {
       return await executeWorkflow(target, item, targetOptions as WorkflowRunOptions);
+    } else if (item.inputs && Array.isArray(item.inputs) && item.inputs.length > 0) {
+      return await executeAgentMultiTurn(
+        target,
+        item,
+        targetOptions as Omit<AgentExecutionOptions<any>, 'scorers' | 'returnScorerData' | 'requestContext'>,
+      );
     } else {
       return await executeAgent(
         target,
@@ -580,6 +605,78 @@ async function executeAgent(
       entityType: EntityType.AGENT,
     };
   }
+}
+
+/**
+ * Executes multiple turns against an agent on the same thread, accumulating
+ * all output messages for scoring. Each entry in `item.inputs` is sent
+ * sequentially via agent.generate() with the same threadId.
+ */
+async function executeAgentMultiTurn(
+  agent: Agent,
+  item: RunEvalsDataItem<any>,
+  targetOptions?: Omit<AgentExecutionOptions<any>, 'scorers' | 'returnScorerData' | 'requestContext'>,
+) {
+  const observabilityContext = resolveObservabilityContext(item);
+  const model = await agent.getModel();
+  const threadId = randomUUID();
+  const inputs: AgentInputType[] = item.inputs!;
+
+  // Accumulate all output messages and the last result's metadata
+  const allOutputMessages: any[] = [];
+  let lastResult: any = undefined;
+
+  if (isSupportedLanguageModel(model)) {
+    const { structuredOutput, ...restOptions } = targetOptions ?? {};
+
+    for (const turnInput of inputs) {
+      const baseOptions = {
+        ...restOptions,
+        ...observabilityContext,
+        scorers: {},
+        returnScorerData: true,
+        requestContext: item.requestContext,
+        memory: { thread: threadId },
+      };
+
+      const result = structuredOutput
+        ? await agent.generate(turnInput, { ...baseOptions, structuredOutput })
+        : await agent.generate(turnInput, baseOptions);
+
+      lastResult = result;
+
+      // Accumulate output from scoringData if available, else from the result
+      if (result.scoringData?.output) {
+        allOutputMessages.push(...(Array.isArray(result.scoringData.output) ? result.scoringData.output : [result.scoringData.output]));
+      }
+    }
+  } else {
+    for (const turnInput of inputs) {
+      const result = await agent.generateLegacy(turnInput, {
+        scorers: {},
+        returnScorerData: true,
+        requestContext: item.requestContext,
+        memory: { thread: threadId },
+        ...observabilityContext,
+      });
+
+      lastResult = result;
+
+      if (result.scoringData?.output) {
+        allOutputMessages.push(...(Array.isArray(result.scoringData.output) ? result.scoringData.output : [result.scoringData.output]));
+      }
+    }
+  }
+
+  return {
+    ...lastResult,
+    entityType: EntityType.AGENT,
+    scoringData: {
+      ...lastResult?.scoringData,
+      input: inputs[0], // First input as the "input" for scoring context
+      output: allOutputMessages,
+    },
+  };
 }
 
 /**
