@@ -1,7 +1,6 @@
 import {
   Button,
   ButtonsGroup,
-  DataKeysAndValues,
   DropdownMenu,
   EmptyState,
   ErrorState,
@@ -15,6 +14,7 @@ import {
   is403ForbiddenError,
   is404NotFoundError,
 } from '@mastra/playground-ui';
+import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { format } from 'date-fns/format';
 import { ArrowLeft, Copy, DatabaseIcon, MoreVertical, Pencil, Play, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';

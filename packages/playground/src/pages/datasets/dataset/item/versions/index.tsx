@@ -2,7 +2,6 @@ import {
   Button,
   ButtonsGroup,
   Chip,
-  CodeDiff,
   Column,
   Columns,
   MainContentContent,
@@ -19,6 +18,7 @@ import {
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
+import { CodeDiff } from '@mastra/playground-ui/components/CodeDiff';
 import { format } from 'date-fns';
 import { ArrowLeft, HistoryIcon, GitCompareIcon, ColumnsIcon, GitCompareArrowsIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';

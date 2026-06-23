@@ -13,7 +13,6 @@ import {
   RadioGroup,
   RadioGroupItem,
   Skeleton,
-  Slider,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -21,6 +20,7 @@ import {
   cn,
 } from '@mastra/playground-ui';
 import { Entry } from '@mastra/playground-ui/components/Entry';
+import { Slider } from '@mastra/playground-ui/components/Slider';
 import { Info, Sliders } from 'lucide-react';
 import { useState } from 'react';
 
