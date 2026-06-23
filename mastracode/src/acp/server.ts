@@ -16,9 +16,10 @@ export async function runAcpServer(
   const input = Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>;
   const output = Writable.toWeb(process.stdout) as WritableStream<Uint8Array>;
   const stream = ndJsonStream(output, input);
+  const session = await harness.createSession();
 
   // Create the agent-side connection
-  const connection = new AgentSideConnection(conn => new MastraCodeAcpAgent(conn, harness, modes), stream);
+  const connection = new AgentSideConnection(conn => new MastraCodeAcpAgent(conn, harness, session, modes), stream);
 
   // Handle cleanup on disconnect (success or error)
   try {
