@@ -5,7 +5,7 @@ import { CodeModeBadge, getCodeModeCall } from './badges/code-mode-badge';
 import { FileTreeBadge } from './badges/file-tree-badge';
 import { ObservationMarkerBadge } from './badges/observation-marker-badge';
 import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
-import { TaskListBadge, isTaskTool, canRenderTaskList } from './badges/task-list-badge';
+import { isTaskTool } from './badges/task-list-badge';
 import { ToolBadge } from './badges/tool-badge';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
 import { useActivatedSkills } from '@/domains/agents/context/activated-skills-context';
@@ -165,8 +165,10 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
     return null;
   }
 
-  if (isTaskTool(toolName) && result != null && canRenderTaskList(result)) {
-    return <TaskListBadge toolName={toolName} result={result} />;
+  // Task tool calls are rendered in the docked TaskPanel (bottom of chat) instead
+  // of inline to avoid repetition. Hide them entirely here.
+  if (isTaskTool(toolName)) {
+    return null;
   }
 
   if (isBackgroundTaskResult) {
