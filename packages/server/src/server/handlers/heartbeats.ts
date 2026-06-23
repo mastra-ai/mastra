@@ -8,8 +8,6 @@ import {
   heartbeatSchema,
   listHeartbeatsQuerySchema,
   listHeartbeatsResponseSchema,
-  listHeartbeatTriggersQuerySchema,
-  listHeartbeatTriggersResponseSchema,
   runHeartbeatResponseSchema,
   updateHeartbeatBodySchema,
 } from '../schemas/heartbeats';
@@ -220,26 +218,6 @@ export const RESUME_HEARTBEAT_ROUTE = createRoute({
     await loadOwnedHeartbeat(mastra, agentId, heartbeatId);
     const heartbeats = getHeartbeats(mastra);
     return await heartbeats.resume(heartbeatId);
-  },
-});
-
-export const LIST_HEARTBEAT_TRIGGERS_ROUTE = createRoute({
-  method: 'GET',
-  path: '/agents/:agentId/heartbeats/:heartbeatId/triggers',
-  responseType: 'json' as const,
-  pathParamSchema: heartbeatPathParams,
-  queryParamSchema: listHeartbeatTriggersQuerySchema,
-  responseSchema: listHeartbeatTriggersResponseSchema,
-  summary: 'List trigger history for a heartbeat',
-  description:
-    'Returns the audit trail of fire attempts for a heartbeat, ordered by actualFireAt descending. Each trigger row carries the agent runId for the run that was started.',
-  tags: ['Heartbeats'],
-  requiresAuth: true,
-  handler: async ({ mastra, agentId, heartbeatId, limit, fromActualFireAt, toActualFireAt }) => {
-    await loadOwnedHeartbeat(mastra, agentId, heartbeatId);
-    const heartbeats = getHeartbeats(mastra);
-    const triggers = await heartbeats.listTriggers(heartbeatId, { limit, fromActualFireAt, toActualFireAt });
-    return { triggers };
   },
 });
 

@@ -25,7 +25,6 @@ export {
   toHeartbeat,
   type CreateHeartbeatInput,
   type Heartbeat,
-  type HeartbeatTriggerRow,
   type ListHeartbeatsFilter,
   type UpdateHeartbeatInput,
 } from './heartbeats';

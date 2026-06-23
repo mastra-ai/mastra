@@ -1,7 +1,7 @@
 import { Agent, HEARTBEAT_SCHEDULE_PREFIX } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
-import type { Schedule, ScheduleTrigger } from '@mastra/core/storage';
+import type { Schedule } from '@mastra/core/storage';
 import { MockStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
@@ -11,7 +11,6 @@ import {
   GET_HEARTBEAT_ROUTE,
   LIST_AGENT_HEARTBEATS_ROUTE,
   LIST_HEARTBEATS_ROUTE,
-  LIST_HEARTBEAT_TRIGGERS_ROUTE,
   PAUSE_HEARTBEAT_ROUTE,
   RESUME_HEARTBEAT_ROUTE,
   UPDATE_HEARTBEAT_ROUTE,
@@ -39,16 +38,6 @@ const makeHeartbeatSchedule = (overrides: Partial<Schedule> = {}): Schedule => (
   nextFireAt: 1_000_000,
   createdAt: 100,
   updatedAt: 100,
-  ...overrides,
-});
-
-const makeTrigger = (overrides: Partial<ScheduleTrigger> = {}): ScheduleTrigger => ({
-  scheduleId: `${HEARTBEAT_SCHEDULE_PREFIX}agent-1_thread-1`,
-  runId: 'run-1',
-  scheduledFireAt: 1_000_000,
-  actualFireAt: 1_000_001,
-  outcome: 'succeeded',
-  triggerKind: 'schedule-fire',
   ...overrides,
 });
 
@@ -420,32 +409,4 @@ describe('Heartbeats handlers', () => {
     });
   });
 
-  describe('LIST_HEARTBEAT_TRIGGERS_ROUTE', () => {
-    it('returns triggers for the heartbeat', async () => {
-      const schedulesStore = (await storage.getStore('schedules'))!;
-      const schedule = makeHeartbeatSchedule();
-      await schedulesStore.createSchedule(schedule);
-      await schedulesStore.recordTrigger(makeTrigger({ scheduleId: schedule.id }));
-
-      const result = await LIST_HEARTBEAT_TRIGGERS_ROUTE.handler({
-        mastra,
-        agentId: 'agent-1',
-        heartbeatId: schedule.id,
-        ...baseCtx(),
-      } as any);
-      expect(result.triggers).toHaveLength(1);
-      expect(result.triggers[0].scheduleId).toBe(schedule.id);
-    });
-
-    it('404s when the heartbeat does not exist', async () => {
-      await expect(
-        LIST_HEARTBEAT_TRIGGERS_ROUTE.handler({
-          mastra,
-          agentId: 'agent-1',
-          heartbeatId: `${HEARTBEAT_SCHEDULE_PREFIX}missing`,
-          ...baseCtx(),
-        } as any),
-      ).rejects.toThrow(HTTPException);
-    });
-  });
 });

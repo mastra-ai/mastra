@@ -5634,6 +5634,174 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /heartbeats": {
+    "method": "GET",
+    "path": "/heartbeats",
+    "pathParams": [],
+    "queryParams": [
+      "agentId",
+      "name",
+      "resourceId",
+      "threadId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "heartbeats"
+    }
+  },
+  "GET /agents/:agentId/heartbeats": {
+    "method": "GET",
+    "path": "/agents/:agentId/heartbeats",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [
+      "agentId",
+      "name",
+      "resourceId",
+      "threadId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "heartbeats"
+    }
+  },
+  "GET /agents/:agentId/heartbeats/:heartbeatId": {
+    "method": "GET",
+    "path": "/agents/:agentId/heartbeats/:heartbeatId",
+    "pathParams": [
+      "agentId",
+      "heartbeatId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/heartbeats": {
+    "method": "POST",
+    "path": "/agents/:agentId/heartbeats",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "activeHours",
+      "broadcast",
+      "cron",
+      "idleThresholdMs",
+      "ifActive",
+      "ifIdle",
+      "metadata",
+      "name",
+      "prompt",
+      "resourceId",
+      "signalType",
+      "threadId",
+      "timezone"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PATCH /agents/:agentId/heartbeats/:heartbeatId": {
+    "method": "PATCH",
+    "path": "/agents/:agentId/heartbeats/:heartbeatId",
+    "pathParams": [
+      "agentId",
+      "heartbeatId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "activeHours",
+      "broadcast",
+      "cron",
+      "idleThresholdMs",
+      "ifActive",
+      "ifIdle",
+      "metadata",
+      "name",
+      "prompt",
+      "signalType",
+      "timezone"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "DELETE /agents/:agentId/heartbeats/:heartbeatId": {
+    "method": "DELETE",
+    "path": "/agents/:agentId/heartbeats/:heartbeatId",
+    "pathParams": [
+      "agentId",
+      "heartbeatId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/heartbeats/:heartbeatId/pause": {
+    "method": "POST",
+    "path": "/agents/:agentId/heartbeats/:heartbeatId/pause",
+    "pathParams": [
+      "agentId",
+      "heartbeatId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/heartbeats/:heartbeatId/resume": {
+    "method": "POST",
+    "path": "/agents/:agentId/heartbeats/:heartbeatId/resume",
+    "pathParams": [
+      "agentId",
+      "heartbeatId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/heartbeats/:heartbeatId/run": {
+    "method": "POST",
+    "path": "/agents/:agentId/heartbeats/:heartbeatId/run",
+    "pathParams": [
+      "agentId",
+      "heartbeatId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /channels/platforms": {
     "method": "GET",
     "path": "/channels/platforms",

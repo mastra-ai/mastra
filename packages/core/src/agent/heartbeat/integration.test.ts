@@ -56,7 +56,7 @@ describe('Agent heartbeats — scheduler integration', () => {
       scheduler: { tickIntervalMs: 50 },
     });
 
-    const hb = await agent.heartbeats.create({ cron: '* * * * * *', prompt: 'ping' });
+    const hb = await mastra.heartbeats.create({ cron: '* * * * * *', prompt: 'ping', agentId: agent.id });
     await mastra.startWorkers();
     await waitForScheduler(mastra);
 
@@ -97,7 +97,7 @@ describe('Agent heartbeats — scheduler integration', () => {
     // workflows, no heartbeats, no explicit enabled flag.
     expect(mastra.scheduler).toBeUndefined();
 
-    const hb = await agent.heartbeats.create({ cron: '* * * * * *', prompt: 'ping' });
+    const hb = await mastra.heartbeats.create({ cron: '* * * * * *', prompt: 'ping', agentId: agent.id });
 
     // create() should have lazily injected + started the scheduler
     // and heartbeat workers via __ensureHeartbeatRuntimeReady().
@@ -136,7 +136,7 @@ describe('Agent heartbeats — scheduler integration', () => {
         notifications: { dispatch: { enabled: false } },
         scheduler: { tickIntervalMs: 50 },
       });
-      await agent.heartbeats.create({ cron: '* * * * * *', prompt: 'ping' });
+      await mastra.heartbeats.create({ cron: '* * * * * *', prompt: 'ping', agentId: agent.id });
       await mastra.startWorkers();
       await waitForScheduler(mastra);
       await mastra.shutdown();
@@ -174,7 +174,7 @@ describe('Agent heartbeats — scheduler integration', () => {
     });
 
     await mastra.startWorkers();
-    await agent.heartbeats.create({ cron: '* * * * * *', prompt: 'ping' });
+    await mastra.heartbeats.create({ cron: '* * * * * *', prompt: 'ping', agentId: agent.id });
 
     // Scheduler stays off because the user explicitly disabled it,
     // even though create() would normally signal "scheduler needed".

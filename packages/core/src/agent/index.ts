@@ -20,7 +20,6 @@ export {
   type CreateHeartbeatInput,
   type UpdateHeartbeatInput,
   type ListHeartbeatsFilter,
-  type HeartbeatTriggerRow,
 } from './heartbeat';
 export * from './agent';
 export * from './utils';

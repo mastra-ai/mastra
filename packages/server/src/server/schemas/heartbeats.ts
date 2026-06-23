@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { scheduleRunSummarySchema, scheduleTriggerKindSchema, scheduleTriggerOutcomeSchema } from './schedules';
+import { scheduleRunSummarySchema } from './schedules';
 
 /**
  * Broadcast policy for the chunks produced by a heartbeat-driven run.
@@ -110,30 +110,6 @@ export const updateHeartbeatBodySchema = z.object({
   idleThresholdMs: z.number().int().positive().optional(),
   broadcast: heartbeatBroadcastModeSchema.optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
-});
-
-export const heartbeatTriggerSchema = z.object({
-  id: z.string().optional(),
-  scheduleId: z.string(),
-  runId: z.string().nullable(),
-  scheduledFireAt: z.number(),
-  actualFireAt: z.number(),
-  outcome: scheduleTriggerOutcomeSchema,
-  error: z.string().optional(),
-  triggerKind: scheduleTriggerKindSchema.optional(),
-  parentTriggerId: z.string().optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
-  run: scheduleRunSummarySchema.optional(),
-});
-
-export const listHeartbeatTriggersResponseSchema = z.object({
-  triggers: z.array(heartbeatTriggerSchema),
-});
-
-export const listHeartbeatTriggersQuerySchema = z.object({
-  limit: z.coerce.number().int().positive().optional(),
-  fromActualFireAt: z.coerce.number().int().nonnegative().optional(),
-  toActualFireAt: z.coerce.number().int().nonnegative().optional(),
 });
 
 export const deleteHeartbeatResponseSchema = z.object({

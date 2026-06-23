@@ -90547,79 +90547,6 @@ export interface PostAgentsAgentIdHeartbeatsHeartbeatIdRun_RouteContract {
 }
 
 // ============================================================================
-// Route: GET /agents/:agentId/heartbeats/:heartbeatId/triggers
-// ============================================================================
-export type GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_PathParams = {
-  agentId: string;
-  heartbeatId: string;
-};
-
-export type GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_QueryParams = {
-  limit?: number | undefined;
-  fromActualFireAt?: number | undefined;
-  toActualFireAt?: number | undefined;
-};
-
-export type GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_Response = {
-  triggers: {
-    id?: string | undefined;
-    scheduleId: string;
-    runId: string | null;
-    scheduledFireAt: number;
-    actualFireAt: number;
-    outcome: 'published' | 'succeeded' | 'delivered' | 'persisted' | 'discarded' | 'skipped' | 'aborted' | 'failed';
-    error?: string | undefined;
-    triggerKind?: ('schedule-fire' | 'queue-drain' | 'manual') | undefined;
-    parentTriggerId?: string | undefined;
-    metadata?:
-      | {
-          [key: string]: unknown;
-        }
-      | undefined;
-    run?:
-      | {
-          status:
-            | 'running'
-            | 'success'
-            | 'failed'
-            | 'tripwire'
-            | 'suspended'
-            | 'waiting'
-            | 'pending'
-            | 'canceled'
-            | 'bailed'
-            | 'paused';
-          startedAt?: number | undefined;
-          completedAt?: number | undefined;
-          durationMs?: number | undefined;
-          error?: string | undefined;
-        }
-      | undefined;
-  }[];
-};
-
-export type GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_Request = Simplify<
-  (GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_PathParams extends never
-    ? {}
-    : { params: GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_PathParams }) &
-    (GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_QueryParams extends never
-      ? {}
-      : {} extends GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_QueryParams
-        ? { query?: GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_QueryParams }
-        : { query: GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_QueryParams }) &
-    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
->;
-
-export interface GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_RouteContract {
-  pathParams: GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_PathParams;
-  queryParams: GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_QueryParams;
-  body: never;
-  request: GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_Request;
-  response: GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
 // Route: GET /channels/platforms
 // ============================================================================
 export type GetChannelsPlatforms_Response = {
@@ -92395,7 +92322,6 @@ export interface RouteTypes {
   'POST /agents/:agentId/heartbeats/:heartbeatId/pause': PostAgentsAgentIdHeartbeatsHeartbeatIdPause_RouteContract;
   'POST /agents/:agentId/heartbeats/:heartbeatId/resume': PostAgentsAgentIdHeartbeatsHeartbeatIdResume_RouteContract;
   'POST /agents/:agentId/heartbeats/:heartbeatId/run': PostAgentsAgentIdHeartbeatsHeartbeatIdRun_RouteContract;
-  'GET /agents/:agentId/heartbeats/:heartbeatId/triggers': GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_RouteContract;
   'GET /channels/platforms': GetChannelsPlatforms_RouteContract;
   'GET /channels/:platform/installations': GetChannelsPlatformInstallations_RouteContract;
   'POST /channels/:platform/connect': PostChannelsPlatformConnect_RouteContract;
@@ -92555,9 +92481,6 @@ export interface Client {
   };
   '/agents/:agentId/heartbeats/:heartbeatId/run': {
     POST: PostAgentsAgentIdHeartbeatsHeartbeatIdRun_RouteContract;
-  };
-  '/agents/:agentId/heartbeats/:heartbeatId/triggers': {
-    GET: GetAgentsAgentIdHeartbeatsHeartbeatIdTriggers_RouteContract;
   };
   '/agents/:agentId/instructions/enhance': {
     POST: PostAgentsAgentIdInstructionsEnhance_RouteContract;

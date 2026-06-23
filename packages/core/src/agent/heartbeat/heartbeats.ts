@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { Mastra } from '../../mastra';
-import type { Schedule, ScheduleTrigger } from '../../storage/domains/schedules/base';
+import type { Schedule } from '../../storage/domains/schedules/base';
 import { computeNextFireAt, validateCron } from '../../workflows/scheduler/cron';
 import type { AgentSignalType } from '../signals';
 import type { HeartbeatActiveHours, HeartbeatBroadcastMode, HeartbeatIfActive, HeartbeatIfIdle } from './types';
@@ -38,12 +38,6 @@ export interface Heartbeat {
   createdAt: number;
   updatedAt: number;
 }
-
-/**
- * Trigger row view used by the {@link Heartbeats} service. Re-exported from
- * the underlying scheduler `ScheduleTrigger` shape for API ergonomics.
- */
-export type HeartbeatTriggerRow = ScheduleTrigger;
 
 /** Input to {@link Heartbeats.create}. */
 export interface CreateHeartbeatInput {
@@ -97,8 +91,8 @@ export interface ListHeartbeatsFilter {
  * filter by `target.type`, and surface the heartbeat-specific fields on a
  * flat {@link Heartbeat} view.
  *
- * Use via `mastra.heartbeats` (canonical) or the agent-scoped sugar
- * `agent.heartbeats` / `agent.createHeartbeat(...)` etc.
+ * Use via `mastra.heartbeats` (the canonical CRUD surface). To scope to a
+ * single agent, pass `agentId` to `create` / `list`.
  */
 export class Heartbeats {
   #mastra: Mastra;
@@ -347,14 +341,6 @@ export class Heartbeats {
       },
     });
     return { scheduleId: existing.id, claimId, scheduledFireAt: now };
-  }
-
-  async listTriggers(
-    id: string,
-    opts?: { limit?: number; fromActualFireAt?: number; toActualFireAt?: number },
-  ): Promise<HeartbeatTriggerRow[]> {
-    const store = await this.#getStore();
-    return store.listTriggers(id, opts);
   }
 }
 
