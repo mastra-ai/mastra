@@ -228,7 +228,11 @@ describe('Mastra runScope lifecycle', () => {
 
       expect(warn).toHaveBeenCalledWith(
         'Evicted stale run-scoped workflow after TTL expired',
-        expect.objectContaining({ runId: 'abandoned-run' }),
+        expect.objectContaining({
+          runId: 'abandoned-run',
+          ttlMs: Mastra.INTERNAL_WORKFLOW_TTL_MS,
+          ageMs: expect.any(Number),
+        }),
       );
     });
 
