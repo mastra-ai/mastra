@@ -434,6 +434,17 @@ export class ExperimentsMySQL extends ExperimentsStorage {
   }
 
   async addExperimentResult(input: AddExperimentResultInput): Promise<ExperimentResult> {
+    // Tool mock reports are produced only when an experiment used item-level tool
+    // mocks — which the MySQL adapter rejects on write. Guard here too so a report
+    // is never silently dropped.
+    if (input.toolMockReport) {
+      throw new MastraError({
+        id: 'MYSQL_EXPERIMENT_TOOL_MOCK_REPORT_UNSUPPORTED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: 'Tool mock reports are not supported on the MySQL storage adapter. Use a supported adapter (LibSQL, PostgreSQL, MongoDB, or Spanner) to persist experiment tool mock reports.',
+      });
+    }
     try {
       const id = input.id ?? randomUUID();
       const now = new Date();

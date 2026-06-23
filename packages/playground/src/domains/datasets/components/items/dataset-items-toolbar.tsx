@@ -1,16 +1,10 @@
 'use client';
 
-import {
-  Button,
-  ButtonsGroup,
-  Chip,
-  Column,
-  DropdownMenu,
-  SearchFieldBlock,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@mastra/playground-ui';
+import { Button, ButtonsGroup, Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui';
+import { Chip } from '@mastra/playground-ui/components/Chip';
+import { Column } from '@mastra/playground-ui/components/Columns';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { SearchFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import {
   Plus,
   Upload,

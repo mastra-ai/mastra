@@ -2408,6 +2408,30 @@ export interface DatasetItemSource {
   referenceId?: string;
 }
 
+/**
+ * A single static tool mock authored on a dataset item (output-only in v1).
+ * Structurally mirrors `ItemToolMock` in the experiment engine; kept local here
+ * to avoid a storage→datasets import cycle.
+ */
+export interface DatasetItemToolMock {
+  toolName: string;
+  args: Record<string, unknown>;
+  output: unknown;
+  /** Argument matching mode. `strict` (default) deep-equals args; `ignore` matches on toolName only. */
+  matchArgs?: 'strict' | 'ignore';
+}
+
+/**
+ * Diagnostic receipt for tool-mock usage on a single experiment result.
+ * Structurally mirrors `ToolMockReport` in the experiment engine.
+ */
+export interface DatasetToolMockReport {
+  served: { mockIndex: number; toolName: string; args: unknown }[];
+  unconsumed: { mockIndex: number; toolName: string; args: unknown }[];
+  liveCalls: { toolName: string; args: unknown }[];
+  failure?: { code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED'; toolName: string; args: unknown };
+}
+
 export interface DatasetItem {
   id: string;
   datasetId: string;
@@ -2419,6 +2443,7 @@ export interface DatasetItem {
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
+  toolMocks?: DatasetItemToolMock[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2439,6 +2464,7 @@ export interface DatasetItemRow {
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
+  toolMocks?: DatasetItemToolMock[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2516,6 +2542,7 @@ export interface AddDatasetItemInput {
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
+  toolMocks?: DatasetItemToolMock[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2527,6 +2554,7 @@ export interface UpdateDatasetItemInput {
   input?: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
+  toolMocks?: DatasetItemToolMock[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2581,6 +2609,7 @@ export interface BatchInsertItemsInput {
     input: unknown;
     groundTruth?: unknown;
     expectedTrajectory?: unknown;
+    toolMocks?: DatasetItemToolMock[];
     requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
     source?: DatasetItemSource;
@@ -2636,6 +2665,7 @@ export interface ExperimentResult {
   traceId: string | null;
   status: ExperimentResultStatus | null;
   tags: string[] | null;
+  toolMockReport?: DatasetToolMockReport | null;
   createdAt: Date;
 }
 
@@ -2689,6 +2719,12 @@ export interface AddExperimentResultInput {
   traceId?: string | null;
   status?: ExperimentResultStatus | null;
   tags?: string[] | null;
+  /**
+   * Tool mock diagnostics for this item run. `null`/`undefined` both mean "no
+   * report" (the item ran without tool mocks). A present report means the item
+   * ran with mocks — see `served`/`unconsumed`/`liveCalls`/`failure`.
+   */
+  toolMockReport?: DatasetToolMockReport | null;
 }
 
 export interface ListExperimentsInput {

@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { TooltipProvider } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';

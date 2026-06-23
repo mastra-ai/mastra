@@ -1,4 +1,5 @@
-import { AlertDialog, Input } from '@mastra/playground-ui';
+import { Input } from '@mastra/playground-ui';
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { useEffect, useState } from 'react';
 
 export interface CopySkillDialogProps {
