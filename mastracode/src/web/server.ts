@@ -11,6 +11,7 @@ import { Hono } from 'hono';
 import { createMastraCode } from '../index.js';
 import type { MastraCodeConfig } from '../index.js';
 
+import { mountFsRoutes } from './fs-routes.js';
 import { mountHarnessRoutes } from './hono-routes.js';
 import type { ServerRouteLike } from './hono-routes.js';
 
@@ -25,6 +26,11 @@ export interface WebServerOptions extends MastraCodeConfig {
    * and proxies /api here).
    */
   uiDir?: string;
+  /**
+   * Root directory the project picker may browse. Defaults to the user's home
+   * directory. The fs-browse route confines all listings to this root.
+   */
+  fsRoot?: string;
 }
 
 export interface WebServer {
@@ -44,7 +50,7 @@ export interface WebServer {
  */
 export async function startWebServer(options: WebServerOptions = {}): Promise<WebServer> {
   const port = options.port ?? 4111;
-  const { port: _p, uiDir, ...mastraCodeConfig } = options;
+  const { port: _p, uiDir, fsRoot, ...mastraCodeConfig } = options;
 
   // Build the full production harness (agents, modes, tools, memory, OM, MCP,
   // providers, observability) — identical to the terminal app.
@@ -60,6 +66,9 @@ export async function startWebServer(options: WebServerOptions = {}): Promise<We
 
   const app = new Hono();
   mountHarnessRoutes(app, SERVER_ROUTES as unknown as ServerRouteLike[], mastra);
+  // Server-side directory browser for the project picker (browser can't read
+  // absolute paths). Confined to fsRoot (default: home dir).
+  mountFsRoutes(app, { root: fsRoot });
 
   // Serve the built UI when available (production / `mastracode web`).
   const resolvedUiDir = uiDir ?? defaultUiDir();
@@ -82,14 +91,15 @@ export async function startWebServer(options: WebServerOptions = {}): Promise<We
 }
 
 /**
- * Default built-UI location. After build, this module lives at `dist/web/
- * server.js` and the Vite UI build outputs to `dist/web/` alongside it, so the
- * UI dir is this module's own directory.
+ * Default built-UI location. After build this module lives at
+ * `dist/web/server.js` and the Vite UI build outputs to `dist/web/ui/`, so the
+ * UI dir is the `ui` subdirectory next to this module.
  */
 function defaultUiDir(): string | undefined {
   try {
     const here = dirname(fileURLToPath(import.meta.url));
-    return existsSync(join(here, 'index.html')) ? here : undefined;
+    const uiDir = join(here, 'ui');
+    return existsSync(join(uiDir, 'index.html')) ? uiDir : undefined;
   } catch {
     return undefined;
   }

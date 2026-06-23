@@ -1,13 +1,11 @@
 import type { HarnessThreadInfo } from '@mastra/client-js';
 import { useState } from 'react';
 
+import { DirectoryPicker } from './DirectoryPicker';
 import type { Project } from './projects';
 import { addProject, removeProject } from './projects';
 
 const MAX_THREADS = 5;
-
-/** Whether the browser supports the File System Access API (Chromium). */
-const hasDirectoryPicker = typeof window !== 'undefined' && 'showDirectoryPicker' in window;
 
 interface SidebarProps {
   projects: Project[];
@@ -32,40 +30,13 @@ export function Sidebar({
   onCreateThread,
   onDeleteThread,
 }: SidebarProps) {
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [addName, setAddName] = useState('');
-  const [addPath, setAddPath] = useState('');
+  const [showPicker, setShowPicker] = useState(false);
 
   // ── Project handlers ──────────────────────────────────────────────────
 
-  const handlePickDirectory = async () => {
-    if (hasDirectoryPicker) {
-      try {
-        const handle = await (window as any).showDirectoryPicker({ mode: 'readwrite' });
-        const dirName = handle.name as string;
-        const absPath = prompt(
-          `Selected: "${dirName}"\n\nThe browser can't read the full path. Enter the absolute path:`,
-          dirName,
-        );
-        if (!absPath) return;
-        const project = addProject(dirName, absPath.trim());
-        onProjectsChange([...projects, project]);
-        onSelectProject(project);
-      } catch {
-        // cancelled
-      }
-    } else {
-      setShowAddForm(true);
-    }
-  };
-
-  const handleAddSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!addName.trim() || !addPath.trim()) return;
-    const project = addProject(addName, addPath);
-    setAddName('');
-    setAddPath('');
-    setShowAddForm(false);
+  const handlePickFolder = (path: string, name: string) => {
+    setShowPicker(false);
+    const project = addProject(name || path, path);
     onProjectsChange([...projects, project]);
     onSelectProject(project);
   };
@@ -96,12 +67,7 @@ export function Sidebar({
         <div className="sidebar-section-header">
           <span className="sidebar-section-title">Projects</span>
           <div className="sidebar-section-actions">
-            {hasDirectoryPicker && (
-              <button className="sidebar-icon-btn" title="Enter path manually" onClick={() => setShowAddForm(s => !s)}>
-                ✏️
-              </button>
-            )}
-            <button className="sidebar-icon-btn" title="Add project" onClick={() => void handlePickDirectory()}>
+            <button className="sidebar-icon-btn" title="Add project" onClick={() => setShowPicker(true)}>
               +
             </button>
           </div>
@@ -121,21 +87,12 @@ export function Sidebar({
             </button>
           ))}
 
-          {projects.length === 0 && !showAddForm && (
+          {projects.length === 0 && (
             <div className="sidebar-empty">No projects yet</div>
           )}
         </div>
 
-        {showAddForm && (
-          <form className="sidebar-add-form" onSubmit={handleAddSubmit}>
-            <input className="input input-sm" placeholder="Project name" value={addName} onChange={e => setAddName(e.target.value)} autoFocus />
-            <input className="input input-sm" placeholder="/absolute/path" value={addPath} onChange={e => setAddPath(e.target.value)} />
-            <div className="sidebar-add-actions">
-              <button type="submit" className="btn btn-sm btn-primary" disabled={!addName.trim() || !addPath.trim()}>Add</button>
-              <button type="button" className="btn btn-sm" onClick={() => setShowAddForm(false)}>Cancel</button>
-            </div>
-          </form>
-        )}
+        {showPicker && <DirectoryPicker onPick={handlePickFolder} onCancel={() => setShowPicker(false)} />}
       </div>
 
       {/* ── Threads (scoped to active project) ────────────────────────── */}
