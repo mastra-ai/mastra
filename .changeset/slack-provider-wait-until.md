@@ -14,7 +14,7 @@ Without `waitUntil`, the runtime freezes the invocation as soon as the webhook r
 
 **Requires explicit config:**
 
-Vercel and AWS Lambda need a `waitUntil` function passed directly, because Vercel exposes it via AsyncLocalStorage (not request context) and Lambda has none natively:
+Vercel needs a `waitUntil` function passed directly because it exposes `waitUntil` via AsyncLocalStorage, not the request context. AWS Lambda doesn't need `waitUntil` — it waits for the event loop to drain naturally.
 
 ```ts
 import { waitUntil } from '@vercel/functions';
