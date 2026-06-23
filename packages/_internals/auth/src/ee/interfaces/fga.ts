@@ -60,9 +60,7 @@ export interface FGARouteConfig {
   /** Path/body/query parameter name that contains the resource ID. */
   resourceIdParam?: string;
   /** Static or dynamic resource ID resolver. */
-  resourceId?:
-    | string
-    | ((params: Record<string, unknown>, context: { requestContext?: any }) => string | undefined);
+  resourceId?: string | ((params: Record<string, unknown>, context: { requestContext?: any }) => string | undefined);
   /**
    * Permission(s) to check for this route. Falls back to the route permission when omitted.
    * When an array is provided, the user needs ANY ONE of the listed permissions.

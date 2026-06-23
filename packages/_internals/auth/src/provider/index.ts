@@ -75,7 +75,6 @@ export abstract class MastraAuthProvider<TUser = unknown> extends MastraBase {
   }
 }
 
-
 type PrimitiveAuthUser = string | number | boolean | bigint | symbol | null | undefined;
 
 // Type guards for interface detection
@@ -442,7 +441,6 @@ export class CompositeAuth
     return users.filter(user => user !== null);
   }
 }
-
 
 const DEFAULT_HEADERS = ['Authorization', 'X-Playground-Access'];
 
