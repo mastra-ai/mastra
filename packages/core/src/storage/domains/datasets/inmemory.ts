@@ -306,7 +306,14 @@ export class DatasetsInMemory extends DatasetsStorage {
     // T3.9 — close old row
     currentRow.validTo = newVersion;
 
-    // T3.9 — insert tombstone (tenancy preserved from prior current row)
+    // T3.9 — insert tombstone.
+    // Tenancy is read from the prior current row rather than re-fetched from
+    // the parent dataset (the pattern used by every DB adapter). This is
+    // deliberate and safe: tenancy is immutable post-create on both datasets
+    // and items (see CreateDatasetInput / UpdateDatasetInput in ../../types.ts),
+    // so currentRow.organizationId / currentRow.resourceId are guaranteed to
+    // equal dataset.organizationId / dataset.resourceId. Keep this branch in
+    // sync with the DB adapters if that invariant ever changes.
     const now = new Date();
     rows.push({
       id,
@@ -539,7 +546,9 @@ export class DatasetsInMemory extends DatasetsStorage {
       // Close old row
       currentRow.validTo = newVersion;
 
-      // Insert tombstone (tenancy preserved from prior current row)
+      // Insert tombstone. See _doDeleteItem above for why it's safe to read
+      // tenancy from the prior current row rather than re-fetching from the
+      // parent dataset (tenancy is immutable post-create on both sides).
       rows.push({
         id: itemId,
         datasetId: input.datasetId,
