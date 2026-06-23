@@ -3,6 +3,7 @@ import { Skeleton, lodashTitleCase } from '@mastra/playground-ui';
 import { ReactFlowProvider } from '@xyflow/react';
 import { AlertCircleIcon } from 'lucide-react';
 import { useContext } from 'react';
+import { WorkflowStepDetailPanel } from '../components/workflow-step-detail';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { WorkflowSelectedStepProvider } from '../context/workflow-selected-step-context';
 import { WorkflowStepDetailProvider } from '../context/workflow-step-detail-provider';
@@ -41,9 +42,14 @@ export function WorkflowGraph({ workflowId, workflow, isLoading }: WorkflowGraph
     <ReactFlowProvider>
       <WorkflowSelectedStepProvider>
         <WorkflowStepDetailProvider>
-          <WorkflowGraphInner
-            workflow={snapshot?.serializedStepGraph ? { stepGraph: snapshot?.serializedStepGraph } : workflow}
-          />
+          <div className="flex h-full w-full min-h-0">
+            <div className="relative min-w-0 flex-1">
+              <WorkflowGraphInner
+                workflow={snapshot?.serializedStepGraph ? { stepGraph: snapshot?.serializedStepGraph } : workflow}
+              />
+            </div>
+            <WorkflowStepDetailPanel />
+          </div>
         </WorkflowStepDetailProvider>
       </WorkflowSelectedStepProvider>
     </ReactFlowProvider>
