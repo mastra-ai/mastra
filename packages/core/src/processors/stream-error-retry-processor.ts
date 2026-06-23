@@ -30,7 +30,6 @@ const RETRYABLE_OPENAI_ERROR_CODES = [
 ];
 const OPENAI_RETRY_MESSAGE_PATTERN = /you can retry your request/i;
 const DEFAULT_MATCHERS = [isRetryableOpenAIResponsesStreamError];
-const ECONNRESET_MESSAGE_PATTERN = /econnreset|socket hang up/i;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -102,34 +101,6 @@ function isRetryableProviderMetadata(error: unknown): boolean {
       : undefined;
 
   return retryable === true;
-}
-
-/**
- * Opt-in matcher for transient network-reset failures. Node's `ECONNRESET` is
- * surfaced as an error code (`code === 'ECONNRESET'`) on either the top-level
- * error or a nested `cause`. Some SDKs/undici also surface resets as a
- * `socket hang up` message, which is matched conservatively.
- *
- * This matcher is intentionally NOT part of the default matcher set; consumers
- * that want to retry network resets must opt in via `matchers: [isECONNRESETError]`.
- */
-export function isECONNRESETError(error: unknown): boolean {
-  if (error === null || error === undefined) {
-    return false;
-  }
-
-  const code = isRecord(error) ? getStringProperty(error, 'code') : undefined;
-  if (code && code.toUpperCase() === 'ECONNRESET') {
-    return true;
-  }
-
-  const message =
-    error instanceof Error ? error.message : isRecord(error) ? getStringProperty(error, 'message') : undefined;
-  if (message && ECONNRESET_MESSAGE_PATTERN.test(message)) {
-    return true;
-  }
-
-  return false;
 }
 
 function isRetryableStreamError(error: unknown, matchers: StreamErrorRetryMatcher[]): boolean {

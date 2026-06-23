@@ -166,7 +166,6 @@ vi.mock('@mastra/core/processors', () => ({
       streamErrorRetryProcessorConstructorMock(options);
     }
   },
-  isECONNRESETError: (error: unknown) => Boolean(error),
 }));
 
 vi.mock('../agents/instructions.js', () => ({

@@ -19,7 +19,6 @@ import {
   PrefillErrorHandler,
   ProviderHistoryCompat,
   StreamErrorRetryProcessor,
-  isECONNRESETError,
 } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
@@ -102,6 +101,25 @@ const CODE_AGENT_ID = 'code-agent';
 const MASTRACODE_ECONNRESET_MAX_RETRIES = 2;
 const MASTRACODE_ECONNRESET_RETRY_INITIAL_DELAY_MS = 1000;
 const MASTRACODE_ECONNRESET_RETRY_MAX_DELAY_MS = 30000;
+
+const ECONNRESET_MESSAGE_PATTERN = /econnreset|socket hang up/i;
+
+/**
+ * Matcher for transient network-reset failures. Node's `ECONNRESET` is surfaced
+ * as an error code on either the top-level error or a nested `cause`. Some
+ * SDKs/undici also surface resets as a `socket hang up` message.
+ */
+function isECONNRESETError(error: unknown): boolean {
+  if (!error) return false;
+
+  const code = typeof error === 'object' && 'code' in error ? (error as { code?: unknown }).code : undefined;
+  if (typeof code === 'string' && code.toUpperCase() === 'ECONNRESET') return true;
+
+  const message = error instanceof Error ? error.message : undefined;
+  if (typeof message === 'string' && ECONNRESET_MESSAGE_PATTERN.test(message)) return true;
+
+  return false;
+}
 
 function applyEffectiveDefaultsToModes(modes: HarnessMode[], effectiveDefaults: Record<string, string>): HarnessMode[] {
   return modes.map(mode => {

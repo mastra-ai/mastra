@@ -2,14 +2,14 @@
 '@mastra/core': patch
 ---
 
-Added an optional retry delay and an opt-in ECONNRESET error matcher to `StreamErrorRetryProcessor`. Consumers can now wait before retrying transient network-reset errors. Existing default behavior is unchanged when the new options are not supplied.
+Added an optional `delayMs` retry delay to `StreamErrorRetryProcessor`. Consumers can now wait before retrying transient errors, accepting either a fixed number of milliseconds or a function evaluated with the error args. Existing default behavior is unchanged when the option is not supplied.
 
 ```ts
-import { StreamErrorRetryProcessor, isECONNRESETError } from '@mastra/core/processors';
+import { StreamErrorRetryProcessor } from '@mastra/core/processors';
 
 new StreamErrorRetryProcessor({
   maxRetries: 2,
-  delayMs: 1000,
-  matchers: [isECONNRESETError],
+  delayMs: ({ retryCount }) => Math.min(1000 * 2 ** retryCount, 30000),
+  matchers: [error => error?.code === 'ECONNRESET'],
 });
 ```
