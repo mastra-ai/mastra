@@ -119,7 +119,7 @@ export const HEAD = handle(app);
   private writeVercelJSON(outputDirectory: string) {
     writeFileSync(
       join(outputDirectory, 'config.json'),
-      JSON.stringify({ version: 3, routes: getVercelRoutes(this.studio) }),
+      JSON.stringify({ version: 3, routes: getVercelRoutes({ studio: this.studio }) }),
     );
   }
 

@@ -1,4 +1,8 @@
-export function getVercelRoutes(studio: boolean) {
+type VercelRoutesOptions = {
+  studio: boolean;
+};
+
+export function getVercelRoutes({ studio }: VercelRoutesOptions) {
   return studio
     ? [
         { src: '^/$', dest: '/index.html' },
