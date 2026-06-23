@@ -9,6 +9,7 @@ import {
   listStoredMCPClientsQuerySchema,
 } from '../schemas/stored-mcp-clients';
 import type { ServerContext } from '../server-adapter';
+import { STORED_MCP_CLIENTS_ROUTES } from '../server-adapter/routes/stored-mcp-clients';
 import {
   LIST_STORED_MCP_CLIENTS_ROUTE,
   GET_STORED_MCP_CLIENT_ROUTE,
@@ -931,5 +932,35 @@ describe('listStoredMCPClientsQuerySchema', () => {
     });
 
     expect(result.success).toBe(false);
+  });
+});
+
+describe('Stored MCP Client route ordering', () => {
+  it('keeps literal compare version route before parameterized version-id routes', () => {
+    const compareIndex = STORED_MCP_CLIENTS_ROUTES.findIndex(
+      route => route.path === '/stored/mcp-clients/:mcpClientId/versions/compare',
+    );
+    const getVersionIndex = STORED_MCP_CLIENTS_ROUTES.findIndex(
+      route => route.method === 'GET' && route.path === '/stored/mcp-clients/:mcpClientId/versions/:versionId',
+    );
+    const activateVersionIndex = STORED_MCP_CLIENTS_ROUTES.findIndex(
+      route => route.path === '/stored/mcp-clients/:mcpClientId/versions/:versionId/activate',
+    );
+    const restoreVersionIndex = STORED_MCP_CLIENTS_ROUTES.findIndex(
+      route => route.path === '/stored/mcp-clients/:mcpClientId/versions/:versionId/restore',
+    );
+    const deleteVersionIndex = STORED_MCP_CLIENTS_ROUTES.findIndex(
+      route => route.method === 'DELETE' && route.path === '/stored/mcp-clients/:mcpClientId/versions/:versionId',
+    );
+
+    expect(compareIndex).toBeGreaterThanOrEqual(0);
+    expect(getVersionIndex).toBeGreaterThanOrEqual(0);
+    expect(activateVersionIndex).toBeGreaterThanOrEqual(0);
+    expect(restoreVersionIndex).toBeGreaterThanOrEqual(0);
+    expect(deleteVersionIndex).toBeGreaterThanOrEqual(0);
+    expect(compareIndex).toBeLessThan(getVersionIndex);
+    expect(compareIndex).toBeLessThan(activateVersionIndex);
+    expect(compareIndex).toBeLessThan(restoreVersionIndex);
+    expect(compareIndex).toBeLessThan(deleteVersionIndex);
   });
 });

@@ -38,7 +38,12 @@ test.describe('Agent Builder deterministic flow', () => {
     });
   }
 
-  test('builds a complex freeform prompt with deterministic tool calls', async ({ page }) => {
+  test('builds a complex freeform prompt and persists the configured agent across reloads', async ({ page }) => {
+    /**
+     * USER STORY: A Studio user describes an agent in plain language and expects the builder to save a real
+     * stored-agent draft that can be reopened after a browser refresh.
+     * BEHAVIOR UNDER TEST: Builder tool calls create persisted editor-backed agent config, not just transient UI state.
+     */
     await selectFixture(page, 'agent-builder-complex');
     await page.goto('/agent-builder/agents/create');
 
@@ -48,6 +53,8 @@ test.describe('Agent Builder deterministic flow', () => {
     await page.waitForURL(/\/agent-builder\/agents\/[^/]+\/edit/);
 
     await assertBuilderOutput(page, 'Vuln Triage Sentinel');
+    await assertConfiguredAgentPersistsAfterReload(page, 'Vuln Triage Sentinel');
+    await assertConfiguredAgentAppearsInOrdinaryAgentList(page, 'Vuln Triage Sentinel');
   });
 });
 
@@ -64,4 +71,20 @@ async function assertBuilderOutput(page: Page, expectedName: string) {
   await page.getByTestId('agent-builder-ready-review').click();
   await expect(page.getByTestId('agent-configure-name')).toHaveValue(expectedName);
   await expect(page.getByTestId('agent-configure-description')).not.toHaveValue('');
+}
+
+async function assertConfiguredAgentPersistsAfterReload(page: Page, expectedName: string) {
+  const description = await page.getByTestId('agent-configure-description').inputValue();
+
+  await page.reload();
+
+  await expect(page.getByTestId('agent-configure-name')).toHaveValue(expectedName, { timeout: 10_000 });
+  await expect(page.getByTestId('agent-configure-description')).toHaveValue(description);
+}
+
+async function assertConfiguredAgentAppearsInOrdinaryAgentList(page: Page, expectedName: string) {
+  await page.goto('/agents');
+
+  // Proves builder output is a persisted editor-backed agent visible outside the builder flow.
+  await expect(page.locator('.data-list-row').filter({ hasText: expectedName })).toBeVisible({ timeout: 10_000 });
 }

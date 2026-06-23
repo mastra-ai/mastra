@@ -68,6 +68,7 @@
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:e2e-scenarios": "vitest run src/e2e-scenarios",
     "validate:package": "echo 'Validating package.json...'"
   },
   "repository": {
