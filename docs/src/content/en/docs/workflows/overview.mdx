@@ -499,7 +499,7 @@ export const testStep = createStep({
     const { city } = inputData
 
     const testAgent = mastra?.getAgent('testAgent')
-    const stream = await testAgent?.stream(`What is the weather in ${city}$?`)
+    const stream = await testAgent?.stream(`What is the weather in ${city}?`)
 
     await stream!.textStream.pipeTo(writer!)
 

@@ -782,7 +782,7 @@
     },
     {
       "source": "/docs/streaming/tool-streaming",
-      "destination": "/docs/agents/using-tools#tool-lifecycle-hooks",
+      "destination": "/docs/agents/using-tools#streaming",
       "permanent": true
     },
     {
