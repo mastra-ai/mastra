@@ -848,50 +848,6 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Mastra platform',
-      items: [
-        {
-          type: 'doc',
-          id: 'mastra-platform/overview',
-          label: 'Overview',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/observability',
-          label: 'Observability',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/studio',
-          label: 'Studio',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/server',
-          label: 'Server',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/github',
-          label: 'GitHub integration',
-          customProps: {
-            tags: ['new'],
-          },
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/database',
-          label: 'Hosted databases',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/configuration',
-          label: 'Configuration',
-        },
-      ],
-    },
-    {
-      type: 'category',
       label: 'RAG',
       items: [
         {
@@ -965,6 +921,52 @@ const sidebars = {
           type: 'doc',
           id: 'community/discord',
           label: 'Discord',
+        },
+      ],
+    },
+  ],
+    platformSidebar: [
+    {
+      type: 'category',
+      label: 'Mastra platform',
+      items: [
+        {
+          type: 'doc',
+          id: 'mastra-platform/overview',
+          label: 'Overview',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/observability',
+          label: 'Observability',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/studio',
+          label: 'Studio',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/server',
+          label: 'Server',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/github',
+          label: 'GitHub integration',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/database',
+          label: 'Hosted databases',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/configuration',
+          label: 'Configuration',
         },
       ],
     },
