@@ -5,9 +5,8 @@ import { execFileSync } from 'node:child_process';
 
 import { CombinedAutocompleteProvider, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SlashCommand } from '@earendil-works/pi-tui';
-import type { HarnessEventListener } from '@mastra/core/harness';
-
 import { trace } from '@mastra/core/harness';
+import type { HarnessEventListener } from '@mastra/core/harness';
 import { getUserId } from '../utils/project.js';
 import { loadCustomCommands } from '../utils/slash-command-loader.js';
 import { ThreadLockError } from '../utils/thread-lock.js';

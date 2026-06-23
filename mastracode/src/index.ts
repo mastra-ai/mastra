@@ -2,7 +2,7 @@ import path from 'node:path';
 
 import { Agent } from '@mastra/core/agent';
 import type { PubSub } from '@mastra/core/events';
-import { Harness } from '@mastra/core/harness';
+import { Harness, trace } from '@mastra/core/harness';
 import type {
   HeartbeatHandler,
   HarnessConfig,
@@ -76,7 +76,6 @@ import { setAuthStorage } from './providers/claude-max.js';
 import { setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
 
-import { trace } from '@mastra/core/harness';
 import { stateSchema } from './schema.js';
 import type { MastraCodeState } from './schema.js';
 
