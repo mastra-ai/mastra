@@ -98,7 +98,9 @@ export function parseEnvFileText(text: string): EnvironmentVariableEntry[] {
       continue;
     }
 
-    let value = stripped.slice(eqIndex + 1);
+    const rawValue = stripped.slice(eqIndex + 1);
+    const valueAfterLeadingWhitespace = rawValue.trimStart();
+    let value = valueAfterLeadingWhitespace;
     const quote = value.length > 0 && (value[0] === '"' || value[0] === "'") ? value[0] : null;
 
     if (quote) {
@@ -125,6 +127,7 @@ export function parseEnvFileText(text: string): EnvironmentVariableEntry[] {
 
       value = unescapeQuotedValue(value, quote);
     } else {
+      value = rawValue;
       const commentIndex = value.indexOf(' #');
       if (commentIndex !== -1) {
         value = value.slice(0, commentIndex);

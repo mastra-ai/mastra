@@ -35,13 +35,29 @@ PLAIN=value # inline comment
   it('parses BOM, CRLF, empty values, spaces around equals, hashes, and flexible export syntax', () => {
     expect(
       parseEnvFileText(
-        '\uFEFFexport\tEMPTY=\r\nSPACED = value with spaces \r\nHASH=abc#123\r\nCOMMENTED=abc # remove me\r\n',
+        '\uFEFFexport\tEMPTY=\r\nSPACED = value with spaces \r\nHASH=abc#123\r\nCOMMENTED=abc # remove me\r\nEMPTY_COMMENT= # remove me too\r\n',
       ),
     ).toEqual([
       { key: 'EMPTY', value: '' },
       { key: 'SPACED', value: 'value with spaces' },
       { key: 'HASH', value: 'abc#123' },
       { key: 'COMMENTED', value: 'abc' },
+      { key: 'EMPTY_COMMENT', value: '' },
+    ]);
+  });
+
+  it('parses quoted values when whitespace follows the equals sign', () => {
+    expect(
+      parseEnvFileText(`
+DOUBLE = "quoted value" # trailing comment
+SINGLE = 'quoted # value'
+MULTILINE = "line one
+line two"
+`),
+    ).toEqual([
+      { key: 'DOUBLE', value: 'quoted value' },
+      { key: 'SINGLE', value: 'quoted # value' },
+      { key: 'MULTILINE', value: 'line one\nline two' },
     ]);
   });
 
