@@ -1900,16 +1900,44 @@ export class Mastra<
   }
 
   /**
-   * Get a Harness hosted on this Mastra instance by id. Returns `undefined`
-   * when no harness is registered under that id. Server route handlers use this
-   * to create and drive sessions over HTTP.
+   * Get a Harness hosted on this Mastra instance by its registration key (the
+   * key it was registered under in `new Mastra({ harnesses })`). Returns
+   * `undefined` when no harness is registered under that key. Server route
+   * handlers use this to create and drive sessions over HTTP.
+   *
+   * @example
+   * ```typescript
+   * const code = new Harness({ id: 'code-harness', modes });
+   * const mastra = new Mastra({ harnesses: { code } });
+   *
+   * mastra.getHarness('code'); // → the Harness (by key)
+   * ```
    */
-  public getHarness(id: string): Harness<any> | undefined {
-    return this.#harnesses[id];
+  public getHarness(key: string): Harness<any> | undefined {
+    return this.#harnesses[key];
   }
 
   /**
-   * List all Harnesses hosted on this Mastra instance, keyed by id.
+   * Get a Harness hosted on this Mastra instance by its unique `id` (the `id`
+   * passed to the `Harness` constructor). Falls back to a registration-key
+   * lookup when no harness matches by id, mirroring {@link getAgentById}.
+   * Returns `undefined` when none is found.
+   *
+   * @example
+   * ```typescript
+   * const code = new Harness({ id: 'code-harness', modes });
+   * const mastra = new Mastra({ harnesses: { code } });
+   *
+   * mastra.getHarnessById('code-harness'); // → the Harness (by id)
+   * ```
+   */
+  public getHarnessById(id: string): Harness<any> | undefined {
+    return Object.values(this.#harnesses).find(harness => harness.id === id) ?? this.#harnesses[id];
+  }
+
+  /**
+   * List all Harnesses hosted on this Mastra instance, keyed by their
+   * registration key.
    */
   public listHarnesses(): Record<string, Harness<any>> {
     return this.#harnesses;

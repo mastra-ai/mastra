@@ -40,6 +40,12 @@ describe('Harness ↔ Mastra registration', () => {
     expect(mastra.getHarness('support')).toBe(support);
     expect(Object.keys(mastra.listHarnesses())).toEqual(['code', 'support']);
 
+    // getHarnessById resolves by the Harness's own `id` (not the registration key).
+    expect(mastra.getHarnessById('code-harness')).toBe(code);
+    expect(mastra.getHarnessById('support-harness')).toBe(support);
+    // The registration key is not a valid id lookup, but falls back to a key match.
+    expect(mastra.getHarnessById('code')).toBe(code);
+
     // Each harness resolves to the same parent Mastra but stays independent.
     expect(code.getMastra()).toBe(mastra);
     expect(support.getMastra()).toBe(mastra);
@@ -58,9 +64,10 @@ describe('Harness ↔ Mastra registration', () => {
     expect(agent).toBeDefined();
   });
 
-  it('returns undefined from getHarness when no harness is registered', () => {
+  it('returns undefined from getHarness/getHarnessById when no harness is registered', () => {
     const mastra = new Mastra({});
     expect(mastra.getHarness('code')).toBeUndefined();
+    expect(mastra.getHarnessById('code-harness')).toBeUndefined();
     expect(mastra.listHarnesses()).toEqual({});
   });
 
