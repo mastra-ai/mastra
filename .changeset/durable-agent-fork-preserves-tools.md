@@ -2,4 +2,5 @@
 '@mastra/core': patch
 ---
 
-Fixed durable agents (`createDurableAgent`) losing all of their tools when the editor applies a stored override. Publishing an override that only changes instructions or the model used to swap the per-request served agent for a bare `Agent` with no tools, breaking semantic recall, `rerank()`, GraphRAG and any `minScore` filter. The served agent now stays a durable agent and keeps its code-owned tools, model, memory and other delegating behavior.
+Fixed an issue where publishing instruction-only or model-only overrides could remove tools from request-scoped `createDurableAgent` agents.
+Request-scoped agents now stay durable and preserve code-owned tools plus delegated behavior (model and memory).

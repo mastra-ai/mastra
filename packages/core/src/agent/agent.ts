@@ -414,7 +414,7 @@ export class Agent<
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext, TEditor>;
 
   // This flag is for agent network messages. We should change the agent network formatting and remove this flag after.
-  private _agentNetworkAppend = false;
+  protected _agentNetworkAppend = false;
 
   /**
    * Creates a new Agent instance with the specified configuration.

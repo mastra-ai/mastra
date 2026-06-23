@@ -5,7 +5,8 @@ For work in packages read package local packages/<name>/AGENTS.md first
 turborepo pnpm workspace
 packages use strict TypeScript
 vitest tests are colocated with source
-When you need to add a model name or ID to examples, changesets, tests, or comments, use one of the placeholder tokens from docs/src/plugins/remark-model-tokens/models.ts
+When you need to add a model name or ID to docs examples, markdown code blocks, changesets, or comments, use one of the placeholder `__TOKEN__` strings from docs/src/plugins/remark-model-tokens/models.ts (the remark plugin replaces them at docs build time)
+Do NOT put bare `__TOKEN__` strings in executable code such as .test.ts files — they are not replaced there and reach the model resolver as an invalid id. In executable tests use a real `provider/model` value, or import `MODEL_TOKENS` from docs/src/plugins/remark-model-tokens/models.ts and use its resolved value when a model must actually resolve
 
 Prefer narrowest build test lint typecheck for packages
 when package splits unit integration or E2E coverage run narrowest suite first

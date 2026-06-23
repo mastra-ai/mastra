@@ -444,8 +444,12 @@ export class DurableAgent<
     }
     fork.#innerPubsub = this.#innerPubsub;
     fork.source = this.source;
+    fork._agentNetworkAppend = this._agentNetworkAppend;
 
-    return fork;
+    // DurableAgent intentionally diverges from Agent's `stream` signature, so the
+    // structural assignment to the base `Agent` return type is bridged here — the
+    // editor's fork-then-mutate contract only relies on the base Agent surface.
+    return fork as unknown as Agent<TAgentId, TTools, TOutput>;
   }
 
   // ===========================================================================
