@@ -5,15 +5,14 @@ For work in packages read package local packages/<name>/AGENTS.md first
 turborepo pnpm workspace
 packages use strict TypeScript
 vitest tests are colocated with source
-When you need to add a model name or ID to docs examples, markdown code blocks, changesets, or comments, use one of the placeholder `__TOKEN__` strings from docs/src/plugins/remark-model-tokens/models.ts (the remark plugin replaces them at docs build time)
-Do NOT put bare `__TOKEN__` strings in executable code such as .test.ts files — they are not replaced there and reach the model resolver as an invalid id. In executable tests use a real `provider/model` value, or import `MODEL_TOKENS` from docs/src/plugins/remark-model-tokens/models.ts and use its resolved value when a model must actually resolve
+When adding a model name or ID to docs, changesets, or comments, use a placeholder token from docs/src/plugins/remark-model-tokens/models.ts (remark replaces them at docs build time); in executable tests use a real provider/model value, not a bare token
 
 Prefer narrowest build test lint typecheck for packages
 when package splits unit integration or E2E coverage run narrowest suite first
 From root prefer specific scripts like pnpm build:core or pnpm --filter ./packages/name script
 Do not pnpm run setup pnpm build pnpm build:packages or repo wide test runs when package local is enough
 Building whole monorepo is slow and should be last resort
-Before pushing commits or opening PRs run the narrowest relevant local checks; run pnpm prettier:changed and pnpm lint since CI fails on unformatted files; if CodeRabbit CLI is installed and configured, run a local CodeRabbit review too
+Before pushing commits or opening PRs run the narrowest relevant local checks; if CodeRabbit CLI is installed and configured, run a local CodeRabbit review too
 some integration tests need pnpm i --ignore-workspace
 
 features and new packages need related docs updates
