@@ -193,6 +193,9 @@ export class PostgresStore extends MastraCompositeStore {
   #poolClosed: boolean = false;
   private schema: string;
   private isInitialized: boolean = false;
+  // Caches the in-flight init() so concurrent callers share one initialization
+  // instead of each acquiring + pinning a client. See init() / issue #18282.
+  #initPromise: Promise<void> | null = null;
 
   stores: StorageDomains;
 
@@ -273,10 +276,29 @@ export class PostgresStore extends MastraCompositeStore {
   }
 
   async init(): Promise<void> {
+    // Skip the pinned-init path entirely when initialization is disabled. The
+    // caller manages schema/migrations externally, so init() must not connect,
+    // pin, or run DDL. This also keeps the call-site contract in @mastra/core
+    // (which calls storage.init() directly and assumes it is "a no-op when
+    // disabled") true for Postgres. See issue #18282.
+    if (this.disableInit || process.env.MASTRA_DISABLE_STORAGE_INIT === 'true') {
+      return;
+    }
+
     if (this.isInitialized) {
       return;
     }
 
+    // Coalesce concurrent init() calls into a single in-flight promise. A
+    // PostgresStore shared across request-scoped Mastra instances can have
+    // init() invoked from several callers at once; without this guard both
+    // race past the `isInitialized` check and pin the RoutingDbClient twice,
+    // throwing "RoutingDbClient already has a pinned client" (issue #18282).
+    this.#initPromise ??= this.#runPinnedInit();
+    await this.#initPromise;
+  }
+
+  async #runPinnedInit(): Promise<void> {
     // Acquire a single backend connection and pin every domain's DDL to it
     // for the duration of init(). This avoids:
     //   - per-statement pool.connect() RTT on remote/managed Postgres
@@ -294,6 +316,10 @@ export class PostgresStore extends MastraCompositeStore {
       // queries against tables that aren't yet created.
       this.isInitialized = true;
     } catch (error) {
+      // Drop the cached promise so a transient failure (e.g. a network blip
+      // during boot) can be retried by a later init() call instead of
+      // permanently rejecting. Mirrors storageWithInit's cacheInit behavior.
+      this.#initPromise = null;
       // Rethrow MastraError directly to preserve structured error IDs (e.g., MIGRATION_REQUIRED::DUPLICATE_SPANS)
       if (error instanceof MastraError) {
         throw error;

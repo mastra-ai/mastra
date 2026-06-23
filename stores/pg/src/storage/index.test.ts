@@ -609,3 +609,90 @@ describe('PostgresStore.init() — parallel DDL fan-out (issue #17679)', () => {
     }
   });
 });
+
+describe('PostgresStore.init() — concurrency & disableInit (issue #18282)', () => {
+  /** Best-effort isolation: each test runs against its own schema. */
+  async function dropSchema(schemaName: string) {
+    try {
+      const cleanup = new Pool({ connectionString });
+      await cleanup.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+      await cleanup.end();
+    } catch {}
+  }
+
+  /** Counts how many times `pool.connect()` is called (the pinned-init path). */
+  function countConnects(pool: Pool) {
+    const state = { connects: 0 };
+    const originalConnect = pool.connect.bind(pool);
+    // Forward all args (pg's internal pool.query() calls connect with a
+    // callback) so wrapping connect doesn't break ordinary queries.
+    (pool as any).connect = (...args: any[]) => {
+      state.connects++;
+      return (originalConnect as any)(...args);
+    };
+    return state;
+  }
+
+  /** Queries table existence through a fresh pool to avoid the instrumented one. */
+  async function tableExists(schemaName: string): Promise<boolean> {
+    const probePool = new Pool({ connectionString });
+    try {
+      const res = await probePool.query(`SELECT to_regclass($1) AS tbl`, [`"${schemaName}"."${TABLE_THREADS}"`]);
+      return res.rows[0].tbl !== null;
+    } finally {
+      await probePool.end();
+    }
+  }
+
+  it('does not throw "RoutingDbClient already has a pinned client" on concurrent init()', async () => {
+    // Mirrors the reported architecture: one shared PostgresStore whose
+    // init() is triggered by multiple request-scoped Mastra instances at the
+    // same time. Both calls race past the boolean guard and reach pin(),
+    // and the second pin() throws today. After the single-flight fix, both
+    // callers await one shared init promise.
+    const schemaName = `it18282_concurrent_${Date.now()}`;
+    const pool = new Pool({ connectionString });
+    const store = new PostgresStore({ id: `pg-18282-concurrent-${Date.now()}`, pool, schemaName });
+
+    try {
+      // Fire several overlapping init() calls. Should resolve, not reject.
+      await expect(Promise.all([store.init(), store.init(), store.init()])).resolves.toBeDefined();
+
+      // Schema/tables must actually exist afterwards (init really ran once).
+      expect(await tableExists(schemaName)).toBe(true);
+    } finally {
+      await dropSchema(schemaName);
+      await store.close();
+      await pool.end();
+    }
+  });
+
+  it('init() is a no-op when disableInit is true (skips the pinned-client path)', async () => {
+    // With externally managed schema, init() must not connect/pin/DDL.
+    // The call-site in @mastra/core (mastra/index.ts) asserts init() is
+    // "a no-op when disabled" — this enforces that contract for PG.
+    const schemaName = `it18282_disabled_${Date.now()}`;
+    const pool = new Pool({ connectionString });
+    const probe = countConnects(pool);
+    const store = new PostgresStore({
+      id: `pg-18282-disabled-${Date.now()}`,
+      pool,
+      schemaName,
+      disableInit: true,
+    });
+
+    try {
+      await store.init();
+
+      // No pinned-client connection should have been acquired.
+      expect(probe.connects).toBe(0);
+
+      // And no tables should have been created by init().
+      expect(await tableExists(schemaName)).toBe(false);
+    } finally {
+      await dropSchema(schemaName);
+      await store.close();
+      await pool.end();
+    }
+  });
+});
