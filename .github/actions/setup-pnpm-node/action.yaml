@@ -64,11 +64,12 @@ runs:
         fi
 
         # The restored store cache is corrupt. On these runners pnpm/action-setup
-        # installs pnpm beneath the same directory as the store, and the pnpm
-        # binary is content-addressed into the store, so `rm -rf "$store_path"`
-        # also deletes files the running pnpm depends on. That broke the next
+        # installs pnpm beneath the same directory as the store, and pnpm's own
+        # files are hard-linked into the store, so `rm -rf "$store_path"` also
+        # deletes the pnpm binary the PATH shim points at. That broke the next
         # `pnpm install` with a MODULE_NOT_FOUND for pnpm.mjs. Remove the corrupt
-        # store, then reinstall pnpm so its binary is intact before installing.
+        # store, then reprovision pnpm via corepack (whose cache is independent of
+        # the store) and put it ahead on PATH so later steps use a working pnpm.
         echo "Detected corrupt pnpm store cache at $store_path; removing restored store."
         rm -rf "$store_path"
 
@@ -78,20 +79,27 @@ runs:
 
         # Resolve the pnpm version the same way pnpm/action-setup does: from the
         # explicit input if given, otherwise the packageManager field. This keeps
-        # the reinstall in sync with the rest of the workspace automatically.
+        # the reprovisioned pnpm in sync with the workspace automatically.
         pnpm_version="$PNPM_VERSION"
         if [ -z "$pnpm_version" ]; then
           pnpm_version=$(node -p "(require('./$PACKAGE_JSON_FILE').packageManager||'').replace(/^pnpm@/,'').split('+')[0]")
         fi
 
-        # pnpm/action-setup installs pnpm with `npm install` into the directory
-        # whose node_modules/.bin is PNPM_HOME, so reinstall into that same root.
-        pnpm_install_root=$(cd "$PNPM_HOME/../.." && pwd)
-        echo "pnpm binary was removed with the corrupt store; reinstalling pnpm@$pnpm_version into $pnpm_install_root."
-        npm install --prefix "$pnpm_install_root" "pnpm@$pnpm_version"
+        echo "pnpm binary was removed with the corrupt store; reprovisioning pnpm@$pnpm_version via corepack."
+        # corepack stores its shims and the pnpm package outside the pnpm store,
+        # so it is unaffected by the wipe. Materialize a pnpm shim in a dedicated
+        # directory and prepend it to PATH so the rest of the job stops using the
+        # action-setup shim that points at the deleted store-linked binary.
+        corepack_bin="$RUNNER_TEMP/pnpm-recovery-bin"
+        mkdir -p "$corepack_bin"
+        corepack prepare "pnpm@$pnpm_version" --activate
+        corepack enable pnpm --install-directory "$corepack_bin"
+        echo "$corepack_bin" >> "$GITHUB_PATH"
+        PATH="$corepack_bin:$PATH" pnpm --version
       env:
         PNPM_VERSION: ${{ inputs.version }}
         PACKAGE_JSON_FILE: ${{ inputs.package-json-file || 'package.json' }}
+        COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
 
     - name: Install dependencies
       if: ${{ inputs.install-dependencies == 'true' }}
