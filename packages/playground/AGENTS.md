@@ -1,30 +1,28 @@
-Build from root: pnpm --filter ./packages/playground build
-Unit test from root: pnpm --filter ./packages/playground test
-E2E from root: pnpm --filter ./packages/playground test:e2e
-If E2E setup is needed first, run pnpm --filter ./packages/playground test:e2e:setup
-Typecheck: pnpm --filter ./packages/playground typecheck
+Scripts (root): `pnpm --filter ./packages/playground <script>` — `build`, `test`,
+`test:e2e`, `test:e2e:setup`, `typecheck`.
 
-PRIMARY testing strategy: Vitest + MSW + typed @mastra/client-js fixtures.
-This is the #1 way to validate changes here — ABOVE Playwright E2E.
-Use the `playground-msw-tests` skill whenever you add or modify hooks, pages,
-routes, data-fetching, redirect/gating logic, or any React Query interactions.
+Required skills (NON-OPTIONAL):
 
-- You MUST activate the `playground-msw-tests` skill before adding or
-  modifying any tests in this package. This is non-optional.
+- `react-best-practices` before writing/modifying ANY React code.
+- `playground-msw-tests` before adding/modifying any tests.
 
-Rules for MSW tests in this package:
+Vitest + MSW + typed @mastra/client-js fixtures is the primary test strategy
+(above Playwright). Drive the real stack, mock only the network — never
+`vi.mock` our own hooks, services, or auth gating.
 
-- Drive the real @mastra/client-js + React Query stack; only mock the network.
-- NEVER mock our own data hooks, services, or auth gating with vi.mock.
-- Fixtures live in a nearby `__tests__/fixtures/` folder and MUST be typed
-  with response types re-exported from @mastra/client-js. No bespoke inline
-  types, no `as any`, no `as unknown as`.
-- MSW lifecycle is already wired in `vitest.setup.ts` with
-  `onUnhandledRequest: 'error'`. Unhandled requests fail tests on purpose.
+Test-first (TDD): RED failing MSW test → GREEN minimum code → REFACTOR.
 
-Use Playwright E2E (`e2e-tests-studio` skill) only when MSW cannot model the
-journey — multi-page navigation, real Mastra server, streaming, or genuine
-browser concerns (focus, drag-drop, viewport, real network).
+BDD-style, lint-enforced via `no-restricted-syntax` in `eslint.config.js`; MSW
+runs with `onUnhandledRequest: 'error'`:
 
-Coordinate with packages/playground-ui when a change crosses app and
-component-library boundaries.
+- Outer `describe` = the unit.
+- Inner `describe('when …')` = ONE precondition via a real MSW fixture.
+- Each `it` = ONE outcome.
+
+Fixtures: nearby `__tests__/fixtures/`, typed with @mastra/client-js response
+types (no inline types, no `as any`). MSW is wired in `vitest.setup.ts`.
+
+Use Playwright E2E (`e2e-tests-studio`) only when MSW can't model the journey
+(multi-page, real server, streaming, real browser concerns).
+
+Coordinate with packages/playground-ui for cross-boundary changes.
