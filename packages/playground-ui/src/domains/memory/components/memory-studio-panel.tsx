@@ -1,18 +1,19 @@
-import { XIcon } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { ArrowLeftIcon } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { Button } from '../../../ds/components/Button';
 import { Skeleton } from '../../../ds/components/Skeleton';
 import { Txt } from '../../../ds/components/Txt';
 import { MemoryIcon } from '../../../ds/icons/MemoryIcon';
 import { extractOmMarkers } from '../lib/extract-markers';
-import { findRecordIdAtOrBefore } from '../lib/replay-selection';
+import { findRecordIdAtOrBefore, getObservationTimestampMs } from '../lib/replay-selection';
 import { getLatestThreadContextWindowState } from '../lib/thread-context-window-state';
 import { timestampsToTDomain } from '../lib/timeline';
 import type { MemoryMessage, OMHistoryRecord } from '../types';
 import { FlameGraph } from './flame-graph';
+import type { ZoomRange } from './flame-graph';
 import { ObservationDetailView } from './observation-detail-view';
-import { ThreadContextProgress, formatCompactTokens } from './thread-context-progress';
+import { ThreadContextProgress } from './thread-context-progress';
 
 export interface MemoryStudioPanelProps {
   messages: MemoryMessage[];
@@ -49,13 +50,6 @@ export function MemoryStudioPanel({
 }: MemoryStudioPanelProps) {
   const [manualOMRecordId, setManualOMRecordId] = useState<string | null>(null);
 
-  // Replay cursor (controlled) overrides manual history selection.
-  const replayRecordId = useMemo(
-    () => (selectedTimestamp != null ? findRecordIdAtOrBefore(omRecords, selectedTimestamp) : null),
-    [omRecords, selectedTimestamp],
-  );
-  const selectedOMRecordId = replayRecordId ?? manualOMRecordId;
-
   const markers = useMemo(() => extractOmMarkers(messages), [messages]);
   const tDomain = useMemo(() => {
     if (messages.length === 0) return { tMin: 0, tMax: 1 };
@@ -65,26 +59,50 @@ export function MemoryStudioPanel({
 
   const memoryTokens = contextWindow?.memoryTokens ?? windowState?.memoryTokens;
   const memoryThreshold = contextWindow?.memoryThreshold ?? windowState?.memoryThreshold;
-  const showHeaderTokens = memoryTokens != null && memoryThreshold != null;
+
+  // Zoom range (epoch ms) is owned here so it can both scope the FlameGraph
+  // charts and filter the observation list. It resets to the full domain
+  // whenever the domain changes (mirrors the FlameGraph's own reset behaviour).
+  const [zoomRange, setZoomRange] = useState<ZoomRange>({ left: tDomain.tMin, right: tDomain.tMax });
+  useEffect(() => {
+    setZoomRange({ left: tDomain.tMin, right: tDomain.tMax });
+  }, [tDomain.tMin, tDomain.tMax]);
+
+  // The full-domain case is a strict pass-through so an untouched range never
+  // hides records (e.g. observations outside the message-derived domain).
+  const isFullRange = zoomRange.left <= tDomain.tMin && zoomRange.right >= tDomain.tMax;
+  const visibleRecords = useMemo(() => {
+    if (isFullRange) return omRecords;
+    return omRecords.filter(record => {
+      const t = getObservationTimestampMs(record);
+      return t >= zoomRange.left && t <= zoomRange.right;
+    });
+  }, [omRecords, isFullRange, zoomRange.left, zoomRange.right]);
+
+  // Replay cursor (controlled) overrides manual history selection. Resolve it
+  // against the visible records so selection stays consistent with the list.
+  const replayRecordId = useMemo(
+    () => (selectedTimestamp != null ? findRecordIdAtOrBefore(visibleRecords, selectedTimestamp) : null),
+    [visibleRecords, selectedTimestamp],
+  );
+  // Ignore a manual selection that the range has filtered out, so the detail
+  // view falls back to a record that is actually visible instead of an empty state.
+  const manualSelectionInRange =
+    manualOMRecordId != null && visibleRecords.some(r => r.id === manualOMRecordId) ? manualOMRecordId : null;
+  const selectedOMRecordId = replayRecordId ?? manualSelectionInRange;
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
       <div className="flex shrink-0 items-center gap-2 border-b border-border1 px-3 py-2.5">
+        <Button type="button" variant="ghost" size="icon-sm" tooltip="Back to memory" onClick={() => onClose?.()}>
+          <ArrowLeftIcon />
+        </Button>
         <span className="flex min-w-0 items-center gap-1.5 text-neutral6">
           <MemoryIcon className="h-4 w-4 shrink-0" />
           <Txt as="span" variant="ui-sm" className="font-medium">
             Observational memory
           </Txt>
         </span>
-        {showHeaderTokens ? (
-          <Txt as="span" variant="ui-xs" className="shrink-0 font-mono tabular-nums text-icon3">
-            {formatCompactTokens(memoryTokens)}/{formatCompactTokens(memoryThreshold)}k
-          </Txt>
-        ) : null}
-        <div className="flex-1" />
-        <Button type="button" variant="ghost" size="icon-sm" tooltip="Close memory panel" onClick={() => onClose?.()}>
-          <XIcon />
-        </Button>
       </div>
 
       {isLoading ? (
@@ -97,7 +115,7 @@ export function MemoryStudioPanel({
         <div className="grid min-h-0 flex-1 grid-rows-[1fr_auto] overflow-hidden">
           <div className="min-h-0 flex flex-col overflow-hidden">
             <ObservationDetailView
-              records={omRecords}
+              records={visibleRecords}
               selectedRecordId={selectedOMRecordId}
               onSelectRecord={setManualOMRecordId}
               isLoading={isLoading}
@@ -107,6 +125,9 @@ export function MemoryStudioPanel({
             <ThreadContextProgress
               messageTokens={contextWindow?.messageTokens ?? windowState?.messageTokens}
               messageThreshold={contextWindow?.messageThreshold ?? windowState?.messageThreshold}
+              memoryTokens={memoryTokens}
+              memoryThreshold={memoryThreshold}
+              memoryLabel="Observations"
             />
             <FlameGraph
               omRecords={omRecords}
@@ -114,6 +135,8 @@ export function MemoryStudioPanel({
               messages={messages}
               tDomain={tDomain}
               onSelectTimestamp={onSelectTimestamp}
+              zoomRange={zoomRange}
+              onZoomRangeChange={setZoomRange}
             />
           </div>
         </div>

@@ -1,7 +1,7 @@
 import type { StorageThreadType } from '@mastra/core/memory';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { AnchorHTMLAttributes } from 'react';
 import { forwardRef } from 'react';
@@ -14,8 +14,10 @@ import {
   memoryEnabledStatus,
   observationalMemoryConfig,
   observationalMemoryConfigWithThresholds,
+  observationalMemoryTwoRecords,
   observationalMemoryWithRecord,
   semanticRecallConfig,
+  threadMessagesSpan,
 } from './fixtures/memory';
 import {
   ObservationalMemoryProvider,
@@ -137,11 +139,9 @@ function SignalProbe() {
 // detail panel the same way the surviving "Analyze Observations" CTA does,
 // without depending on a sidebar-local toggle button.
 let openPanel: () => void = () => {};
-let closePanel: () => void = () => {};
 function TimelineProbe() {
   const ctx = useMemoryTimeline();
   openPanel = ctx.openPanel;
-  closePanel = ctx.closePanel;
   return null;
 }
 
@@ -262,7 +262,7 @@ describe('MemorySidebar', () => {
     expect(agentMemoryRoot?.className).not.toContain('h-full');
   });
 
-  it('opens the observational memory detail view as an adjacent subpanel and gates its data fetching until toggled', async () => {
+  it('replaces the memory content with the OM detail when opened and restores it on Back, gating fetches until opened', async () => {
     const onOM = vi.fn();
     const onMessages = vi.fn();
 
@@ -282,29 +282,34 @@ describe('MemorySidebar', () => {
 
     fireEvent.click(await screen.findByTestId('memory-sidebar-card'));
 
-    // The panel is opened by the "Analyze Observations" CTA, which toggles the
-    // shared memory-timeline context; before it opens, the subpanel is absent
-    // and no OM/message data is fetched.
+    // Given the Memory view is open: the regular memory content ("Clone Thread")
+    // is visible, the OM subpanel is absent, and no OM/message data is fetched.
     await screen.findByText('Clone Thread');
     expect(screen.queryByTestId('memory-sidebar-om-detail-subpanel')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Close memory panel' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Back to memory' })).toBeNull();
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(onOM).not.toHaveBeenCalled();
     expect(onMessages).not.toHaveBeenCalled();
 
+    // When the OM detail is opened (as the "Analyze Observations" CTA does): the
+    // OM detail replaces the regular memory content (fills the panel), so
+    // "Clone Thread" is gone and the OM subpanel + Back button are shown.
     act(() => openPanel());
 
     const subpanel = await screen.findByTestId('memory-sidebar-om-detail-subpanel');
     expect(subpanel.closest('[data-testid="memory-sidebar-panel"]')).not.toBeNull();
-    expect(screen.getByText('Clone Thread')).not.toBeNull();
-    expect(await screen.findByRole('button', { name: 'Close memory panel' })).not.toBeNull();
+    expect(await screen.findByRole('button', { name: 'Back to memory' })).not.toBeNull();
+    await waitFor(() => expect(screen.queryByText('Clone Thread')).toBeNull());
     await waitFor(() => expect(onOM).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(onMessages).toHaveBeenCalledTimes(1));
 
-    act(() => closePanel());
+    // When Back is clicked: the OM subpanel is removed and the regular memory
+    // content returns.
+    fireEvent.click(screen.getByRole('button', { name: 'Back to memory' }));
 
     await waitFor(() => expect(screen.queryByTestId('memory-sidebar-om-detail-subpanel')).toBeNull());
-    expect(screen.queryByRole('button', { name: 'Close memory panel' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Back to memory' })).toBeNull();
+    expect(await screen.findByText('Clone Thread')).not.toBeNull();
   });
 
   it('refetches the open OM subpanel when observations are signalled (stream-finish freshness)', async () => {
@@ -365,6 +370,78 @@ describe('MemorySidebar', () => {
     // is lifted into the panel header beside the "Observational memory" title.
     expect(await screen.findByText('14.2/30k')).not.toBeNull();
     expect(await screen.findByText('4.5/6k')).not.toBeNull();
+  });
+
+  it('renders both Messages and Observations progress bars in the open OM panel', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json(observationalMemoryConfigWithThresholds)),
+      http.get(`${BASE_URL}/api/memory/observational-memory`, () => HttpResponse.json(observationalMemoryWithRecord)),
+      http.get(`${BASE_URL}/api/memory/threads/${THREAD_ID}/messages`, () => HttpResponse.json(threadMessages)),
+    );
+
+    renderSidebarWithOM([thread({ id: THREAD_ID, title: 'My first chat' })]);
+
+    fireEvent.click(await screen.findByTestId('memory-sidebar-card'));
+    act(() => openPanel());
+
+    const subpanel = await screen.findByTestId('memory-sidebar-om-detail-subpanel');
+
+    // The OM detail panel shows two progress bars matching the collapsed sidebar:
+    // a Messages bar and an Observations bar, each with record-derived readouts.
+    // (Other "Messages" text can appear in the panel, so assert at least one of
+    // each bar label is present, plus the exact record-derived readouts.)
+    expect((await within(subpanel).findAllByText('Messages')).length).toBeGreaterThan(0);
+    expect((await within(subpanel).findAllByText('Observations')).length).toBeGreaterThan(0);
+    expect(await within(subpanel).findByText('14.2/30k')).not.toBeNull();
+    expect(await within(subpanel).findByText('4.5/6k')).not.toBeNull();
+  });
+
+  it('filters the observation list to the selected zoom range', async () => {
+    // Recharts' ResponsiveContainer needs a measurable size in jsdom so the
+    // FlameGraph (and its zoom track) renders.
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(800);
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(120);
+
+    server.use(
+      http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json(observationalMemoryConfig)),
+      http.get(`${BASE_URL}/api/memory/observational-memory`, () => HttpResponse.json(observationalMemoryTwoRecords)),
+      http.get(`${BASE_URL}/api/memory/threads/${THREAD_ID}/messages`, () => HttpResponse.json(threadMessagesSpan)),
+    );
+
+    renderSidebarWithOM([thread({ id: THREAD_ID, title: 'My first chat' })]);
+
+    fireEvent.click(await screen.findByTestId('memory-sidebar-card'));
+    act(() => openPanel());
+
+    await screen.findByTestId('memory-sidebar-om-detail-subpanel');
+
+    // Both records are visible by default: the body defaults to the latest record
+    // (om-late at 10:05 → "User reported a blocking bug").
+    const bodyBefore = await screen.findByTestId('observation-detail-body');
+    expect(within(bodyBefore).getByText(/User reported a blocking bug/)).toBeTruthy();
+
+    // Collapse the range by dragging the right zoom handle to ~40% of the track
+    // (~10:02), which keeps om-early (10:01) and drops om-late (10:05).
+    const track = document.querySelector('.cursor-pointer.select-none') as HTMLElement;
+    expect(track).toBeTruthy();
+    track.getBoundingClientRect = () => ({ left: 0, width: 100, top: 0, height: 24 }) as DOMRect;
+    fireEvent.mouseDown(track, { clientX: 100 });
+    fireEvent.mouseMove(window, { clientX: 40 });
+    fireEvent.mouseUp(window);
+
+    // Now only om-early is in range: its observation text shows and the
+    // out-of-range om-late observation is gone from the list.
+    await waitFor(() => {
+      const bodyAfter = screen.getByTestId('observation-detail-body');
+      expect(within(bodyAfter).getByText(/User asked about onboarding/)).toBeTruthy();
+      expect(within(bodyAfter).queryByText(/User reported a blocking bug/)).toBeNull();
+    });
+
+    // Reset zoom restores the full list.
+    fireEvent.click(screen.getByLabelText('Reset zoom'));
+    await waitFor(() => {
+      expect(screen.getByText(/User reported a blocking bug/)).toBeTruthy();
+    });
   });
 
   it('returns to the thread list when the card is clicked again', async () => {

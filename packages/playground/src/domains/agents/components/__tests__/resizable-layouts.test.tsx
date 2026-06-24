@@ -3,10 +3,12 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode, Ref } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WorkflowLayout } from '../../../workflows/components/workflow-layout';
+import type * as AgentsContext from '../../context';
 import { AgentLayout } from '../agent-layout';
 
 const resizeLeftPanel = vi.hoisted(() => vi.fn());
 const memoryTimelineState = vi.hoisted(() => ({ isPanelOpen: false }));
+const defaultLayoutId = vi.hoisted(() => ({ value: '' }));
 
 vi.mock('react-resizable-panels', () => ({
   Group: ({ className, children }: { className?: string; children: ReactNode }) => (
@@ -50,11 +52,14 @@ vi.mock('react-resizable-panels', () => ({
       </section>
     );
   },
-  useDefaultLayout: () => ({ defaultLayout: undefined, onLayoutChange: vi.fn() }),
+  useDefaultLayout: ({ id }: { id: string }) => {
+    defaultLayoutId.value = id;
+    return { defaultLayout: undefined, onLayoutChange: vi.fn() };
+  },
 }));
 
 vi.mock('../../context', async () => {
-  const actual = await vi.importActual<typeof import('../../context')>('../../context');
+  const actual = await vi.importActual<typeof AgentsContext>('../../context');
 
   return {
     ...actual,
@@ -128,22 +133,43 @@ describe('resizable service layouts', () => {
     expect(screen.queryByTestId('panel-right-slot')).toBeNull();
   });
 
-  it('keeps observational memory detail inside the single expandable left slot', async () => {
-    memoryTimelineState.isPanelOpen = true;
-
-    render(
+  it('expands the single left slot to 50% when observational memory opens and restores it on close', async () => {
+    const { rerender } = render(
       <AgentLayout agentId="chef-agent" leftSlot={<div>threads and observational memory</div>}>
         <div>chat</div>
       </AgentLayout>,
     );
 
+    // Persisted layout key is bumped so stale narrow widths cannot hide the OM detail.
+    expect(defaultLayoutId.value).toBe('agent-layout-v6-chef-agent');
+
+    // There is no separate adjacent OM slot — the OM detail replaces content in the one left panel.
+    expect(screen.queryByTestId('panel-left-adjacent-slot')).toBeNull();
     const leftPanel = screen.getByTestId('panel-left-slot');
     const mainPanel = screen.getByTestId('panel-main-slot');
     expect(leftPanel.compareDocumentPosition(mainPanel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.queryByTestId('panel-left-adjacent-slot')).toBeNull();
-    expect(leftPanel.getAttribute('data-max-size')).toBe('80%');
-    expect(leftPanel.getAttribute('data-default-size')).toBe('760');
-    await waitFor(() => expect(resizeLeftPanel).toHaveBeenCalledWith('760px'));
+
+    // Opening OM widens the single left panel to ~50% (max-size config permits it).
+    memoryTimelineState.isPanelOpen = true;
+    rerender(
+      <AgentLayout agentId="chef-agent" leftSlot={<div>threads and observational memory</div>}>
+        <div>chat</div>
+      </AgentLayout>,
+    );
+
+    expect(screen.getByTestId('panel-left-slot').getAttribute('data-max-size')).toBe('50%');
+    await waitFor(() => expect(resizeLeftPanel).toHaveBeenCalledWith('50%'));
+
+    // Closing OM restores the previously captured size.
+    resizeLeftPanel.mockClear();
+    memoryTimelineState.isPanelOpen = false;
+    rerender(
+      <AgentLayout agentId="chef-agent" leftSlot={<div>threads and observational memory</div>}>
+        <div>chat</div>
+      </AgentLayout>,
+    );
+
+    await waitFor(() => expect(resizeLeftPanel).toHaveBeenCalledWith('300px'));
   });
 
   it('renders a resizable right slot when rightSlot is provided on desktop', () => {

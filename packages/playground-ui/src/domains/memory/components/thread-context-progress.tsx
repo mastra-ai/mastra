@@ -3,6 +3,8 @@ interface ThreadContextProgressProps {
   messageThreshold?: number;
   memoryTokens?: number;
   memoryThreshold?: number;
+  /** Label for the second (memory-toned) bar. Defaults to "Memory". */
+  memoryLabel?: string;
 }
 
 export function formatCompactTokens(value: number): string {
@@ -47,6 +49,7 @@ export function ThreadContextProgress({
   messageThreshold,
   memoryTokens,
   memoryThreshold,
+  memoryLabel = 'Memory',
 }: ThreadContextProgressProps) {
   const showMessages = messageTokens != null && messageThreshold != null;
   const showMemory = memoryTokens != null && memoryThreshold != null;
@@ -61,7 +64,9 @@ export function ThreadContextProgress({
         {showMessages ? (
           <ProgressBar label="Messages" value={messageTokens} max={messageThreshold} tone="message" />
         ) : null}
-        {showMemory ? <ProgressBar label="Memory" value={memoryTokens} max={memoryThreshold} tone="memory" /> : null}
+        {showMemory ? (
+          <ProgressBar label={memoryLabel} value={memoryTokens} max={memoryThreshold} tone="memory" />
+        ) : null}
       </div>
     </div>
   );

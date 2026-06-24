@@ -17,12 +17,11 @@ describe('MemoryStudioPanel', () => {
     expect(screen.getByText('Observational memory')).toBeTruthy();
     // ObservationDetailView renders its "History" header when records are present.
     expect(screen.getByText('History')).toBeTruthy();
-    // ThreadContextProgress renders only the Messages bar; the Memory bar was
-    // removed. Scope by the uppercase bar-label class because a separate
-    // ObservationDetailView "Memory" label still exists in the panel.
+    // ThreadContextProgress renders both the Messages and Observations bars to
+    // match the collapsed sidebar. Scope by the uppercase bar-label class.
     const barLabels = Array.from(document.querySelectorAll('span.uppercase.tracking-wide')).map(el => el.textContent);
     expect(barLabels).toContain('Messages');
-    expect(barLabels).not.toContain('Memory');
+    expect(barLabels).toContain('Observations');
     // FlameGraph renders its zoom controls.
     expect(screen.getByLabelText('Reset zoom')).toBeTruthy();
   });
@@ -32,14 +31,14 @@ describe('MemoryStudioPanel', () => {
     expect(screen.getByTestId('memory-studio-loading')).toBeTruthy();
   });
 
-  it('calls onClose when the close icon button is clicked', () => {
+  it('calls onClose when the Back button is clicked', () => {
     const onClose = vi.fn();
     render(<MemoryStudioPanel messages={memoryMessages} omRecords={omHistoryRecords} onClose={onClose} />);
 
-    const closeButton = screen.getByRole('button', { name: 'Close memory panel' });
-    expect(closeButton).toBeTruthy();
+    const backButton = screen.getByRole('button', { name: 'Back to memory' });
+    expect(backButton).toBeTruthy();
 
-    fireEvent.click(closeButton);
+    fireEvent.click(backButton);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
@@ -79,19 +78,59 @@ describe('MemoryStudioPanel', () => {
 
     // ThreadContextProgress renders the Messages bar from the explicit value: 14.2/30k.
     expect(screen.getByText('14.2/30k')).toBeTruthy();
-    // The memory token count is lifted into the header beside the title: 4.5/6k.
+    // The observation token count renders as the Observations bar: 4.5/6k.
     expect(screen.getByText('4.5/6k')).toBeTruthy();
+    const barLabels = Array.from(document.querySelectorAll('span.uppercase.tracking-wide')).map(el => el.textContent);
+    expect(barLabels).toContain('Messages');
+    expect(barLabels).toContain('Observations');
     // The marker-derived readout (messages 540/2000 → 0.5/2k) must not appear.
     expect(screen.queryByText('0.5/2k')).toBeNull();
+  });
+
+  it('filters the observation list to the selected zoom range and restores it on reset', () => {
+    // Domain is message-derived: [10:00, 10:05]. om-1 is at 10:01, om-2 at 10:05.
+    render(<MemoryStudioPanel messages={memoryMessages} omRecords={omHistoryRecords} />);
+
+    // Both records visible by default: the History list shows both entries and
+    // the body defaults to the latest (om-2).
+    const bodyBefore = screen.getByTestId('observation-detail-body');
+    expect(within(bodyBefore).getByText(/User reported a blocking bug/)).toBeTruthy();
+    expect(screen.getByText('History')).toBeTruthy();
+
+    // Collapse the range by dragging the right zoom handle to ~40% of the track,
+    // i.e. ~10:02, which keeps om-1 (10:01) and drops om-2 (10:05).
+    const track = document.querySelector('.cursor-pointer.select-none') as HTMLElement;
+    expect(track).toBeTruthy();
+    track.getBoundingClientRect = () => ({ left: 0, width: 100, top: 0, height: 24 }) as DOMRect;
+    // mousedown near the right edge selects the right handle, then drag it left.
+    fireEvent.mouseDown(track, { clientX: 100 });
+    fireEvent.mouseMove(window, { clientX: 40 });
+    fireEvent.mouseUp(window);
+
+    // Now only om-1 is in range: its text shows in the body and the out-of-range
+    // om-2 observation is gone. With a single record the History list collapses.
+    const bodyAfter = screen.getByTestId('observation-detail-body');
+    expect(within(bodyAfter).getByText(/User asked about onboarding/)).toBeTruthy();
+    expect(within(bodyAfter).queryByText(/User reported a blocking bug/)).toBeNull();
+    expect(screen.queryByText('History')).toBeNull();
+
+    // Reset zoom restores the full list: the History rail comes back (it only
+    // renders with more than one record) and the previously out-of-range om-2
+    // observation is selectable again from it.
+    fireEvent.click(screen.getByLabelText('Reset zoom'));
+    expect(screen.getByText('History')).toBeTruthy();
+    expect(screen.getByText(/User reported a blocking bug/)).toBeTruthy();
   });
 
   it('falls back to the marker-derived window state when no contextWindow is supplied', () => {
     render(<MemoryStudioPanel messages={memoryMessages} omRecords={omHistoryRecords} />);
 
     // Marker-derived active window: messages 540/2000 → 0.5/2k (Messages bar)
-    // and memory 320/1000 → 0.3/1k (lifted into the header beside the title).
+    // and observations 320/1000 → 0.3/1k (Observations bar).
     expect(screen.getByText('0.5/2k')).toBeTruthy();
     expect(screen.getByText('0.3/1k')).toBeTruthy();
     expect(screen.queryByText('14.2/30k')).toBeNull();
+    const barLabels = Array.from(document.querySelectorAll('span.uppercase.tracking-wide')).map(el => el.textContent);
+    expect(barLabels).toContain('Observations');
   });
 });

@@ -1,10 +1,10 @@
 import { MemoryStudioPanel, useMemoryThreadMessages, useObservationalMemory } from '@mastra/playground-ui';
 import { useEffect } from 'react';
 
-import { useMemoryTimeline, useObservationalMemoryContext } from '@/domains/agents/context';
-import { useMemoryConfig, useThread } from '@/domains/memory/hooks';
 import { getObservationWindowTokens } from './lib/observation-window';
 import type { OmAgentConfig } from './lib/observation-window';
+import { useMemoryTimeline, useObservationalMemoryContext } from '@/domains/agents/context';
+import { useMemoryConfig, useThread } from '@/domains/memory/hooks';
 
 export interface MemoryDetailViewProps {
   agentId: string;
@@ -15,9 +15,9 @@ export interface MemoryDetailViewProps {
 // observing/reflecting, mirroring the left sidebar OM hook's active poll cadence.
 const ACTIVE_POLL_INTERVAL_MS = 2000;
 
-// Observational-memory detail subpanel rendered as the right column inside the Memory sidepanel.
-// Owns its data fetching (gated on the timeline panel being open) so OM + messages
-// requests do not fire until the user toggles the detail view on.
+// Observational-memory detail subpanel that fills the Memory sidepanel, replacing
+// the regular memory content while open. Owns its data fetching (gated on the
+// timeline panel being open) so OM + messages requests do not fire until opened.
 export function MemoryDetailView({ agentId, threadId }: MemoryDetailViewProps) {
   const { isPanelOpen, closePanel, selectedTimestamp, setSelectedTimestamp } = useMemoryTimeline();
 
@@ -75,9 +75,8 @@ export function MemoryDetailView({ agentId, threadId }: MemoryDetailViewProps) {
   // sidebar section does (live stream progress > record > config), and feed them
   // to the panel so both UIs always agree. The panel falls back to its
   // marker-derived values when this is absent.
-  const omAgentConfig = (
-    configData?.config as { observationalMemory?: OmAgentConfig } | undefined
-  )?.observationalMemory;
+  const omAgentConfig = (configData?.config as { observationalMemory?: OmAgentConfig } | undefined)
+    ?.observationalMemory;
   const liveProgress = streamProgress?.threadId === threadId ? streamProgress : null;
   const windowTokens = getObservationWindowTokens({
     record: omData?.record,
@@ -86,10 +85,7 @@ export function MemoryDetailView({ agentId, threadId }: MemoryDetailViewProps) {
   });
 
   return (
-    <div
-      data-testid="memory-sidebar-om-detail-subpanel"
-      className="h-full min-h-0 min-w-0 overflow-hidden border-l border-border1/50 bg-surface3"
-    >
+    <div data-testid="memory-sidebar-om-detail-subpanel" className="h-full min-h-0 min-w-0 overflow-hidden bg-surface3">
       <MemoryStudioPanel
         messages={messagesData?.messages ?? []}
         omRecords={omData?.history ?? []}

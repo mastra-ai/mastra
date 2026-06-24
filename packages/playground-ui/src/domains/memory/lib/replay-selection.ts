@@ -7,9 +7,14 @@ export function tToTimestampMs(t: number, domain: TDomain): number {
   return tToTimestamp(t, domain).getTime();
 }
 
-function getObservationTimestamp(record: OMHistoryRecord): string {
+export function getObservationTimestamp(record: OMHistoryRecord): string {
   const d = record.lastObservedAt ?? record.updatedAt;
   return typeof d === 'string' ? d : new Date(d).toISOString();
+}
+
+/** Epoch-ms timeline position of an OM record (lastObservedAt ?? updatedAt). */
+export function getObservationTimestampMs(record: OMHistoryRecord): number {
+  return parseUTC(getObservationTimestamp(record));
 }
 
 /**

@@ -17,7 +17,7 @@ export interface AgentLayoutProps {
   browserOverlay?: React.ReactNode;
 }
 
-const MEMORY_DETAIL_LEFT_PANEL_MIN_WIDTH = 760;
+const MEMORY_DETAIL_LEFT_PANEL_DEFAULT_RESTORE = '300px';
 
 export const AgentLayout = ({
   agentId,
@@ -31,23 +31,31 @@ export const AgentLayout = ({
   const isMobile = useIsMobile();
   const { isPanelOpen: isMemoryTimelineOpen } = useMemoryTimeline();
   const leftPanelRef = useRef<PanelImperativeHandle | null>(null);
+  const wasMemoryTimelineOpen = useRef(false);
+  const sizeBeforeMemoryDetail = useRef<string | null>(null);
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
-    // Bumped to v5 because the Memory sidepanel can expand into a two-column
-    // layout; avoids restoring stale narrow widths that hide the OM detail column.
-    id: `agent-layout-v5-${agentId}`,
+    // Bumped to v6 because the OM detail now replaces the Memory content in the
+    // single left panel and expands it to ~50%; avoids restoring stale widths.
+    id: `agent-layout-v6-${agentId}`,
     storage: localStorage,
   });
 
   useEffect(() => {
-    if (!isMemoryTimelineOpen) return;
-
     const leftPanel = leftPanelRef.current;
     if (!leftPanel) return;
 
-    const currentSize = leftPanel.getSize();
-    if (currentSize.inPixels >= MEMORY_DETAIL_LEFT_PANEL_MIN_WIDTH) return;
+    const wasOpen = wasMemoryTimelineOpen.current;
+    wasMemoryTimelineOpen.current = isMemoryTimelineOpen;
 
-    leftPanel.resize(`${MEMORY_DETAIL_LEFT_PANEL_MIN_WIDTH}px`);
+    if (isMemoryTimelineOpen && !wasOpen) {
+      // Opening OM: capture the current width, then expand to half the layout.
+      sizeBeforeMemoryDetail.current = `${leftPanel.getSize().inPixels}px`;
+      leftPanel.resize('50%');
+    } else if (!isMemoryTimelineOpen && wasOpen) {
+      // Closing OM: restore the width the panel had before opening the detail.
+      leftPanel.resize(sizeBeforeMemoryDetail.current ?? MEMORY_DETAIL_LEFT_PANEL_DEFAULT_RESTORE);
+      sizeBeforeMemoryDetail.current = null;
+    }
   }, [isMemoryTimelineOpen]);
 
   // Resizable side panels are a desktop paradigm; below the breakpoint the
@@ -79,8 +87,8 @@ export const AgentLayout = ({
             id="left-slot"
             panelRef={leftPanelRef}
             minSize={256}
-            maxSize={isMemoryTimelineOpen ? '80%' : '50%'}
-            defaultSize={isMemoryTimelineOpen ? MEMORY_DETAIL_LEFT_PANEL_MIN_WIDTH : 300}
+            maxSize={'50%'}
+            defaultSize={300}
             className="min-w-0"
           >
             {leftSlot}

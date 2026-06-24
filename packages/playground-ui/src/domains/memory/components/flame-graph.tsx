@@ -20,6 +20,11 @@ import type { TDomain } from '../lib/timeline';
 import { formatTimeDisplay, toT, tToTimestamp } from '../lib/timeline';
 import type { MemoryMessage, OMHistoryRecord } from '../types';
 
+export interface ZoomRange {
+  left: number;
+  right: number;
+}
+
 interface FlameGraphProps {
   omRecords: OMHistoryRecord[];
   markers: ExtractedOmMarker[];
@@ -28,6 +33,13 @@ interface FlameGraphProps {
   observationThreshold?: number;
   reflectionThreshold?: number;
   onSelectTimestamp?: (timestamp: number | null) => void;
+  /**
+   * Controlled zoom range (epoch ms). When provided together with
+   * `onZoomRangeChange`, the caller owns the range and the graph becomes a
+   * controlled component; otherwise the range is managed internally.
+   */
+  zoomRange?: ZoomRange;
+  onZoomRangeChange?: (range: ZoomRange) => void;
 }
 
 type RechartsClickState = { activeLabel?: string | number } | null | undefined;
@@ -497,6 +509,8 @@ export function FlameGraph({
   observationThreshold,
   reflectionThreshold,
   onSelectTimestamp,
+  zoomRange,
+  onZoomRangeChange,
 }: FlameGraphProps) {
   const domain = tDomainProp ?? FALLBACK_DOMAIN;
 
@@ -507,18 +521,43 @@ export function FlameGraph({
     [onSelectTimestamp, domain],
   );
 
-  const [zoomLeft, setZoomLeft] = useState<number>(domain.tMin);
-  const [zoomRight, setZoomRight] = useState<number>(domain.tMax);
+  const isControlled = zoomRange != null && onZoomRangeChange != null;
+  const [internalZoomLeft, setInternalZoomLeft] = useState<number>(domain.tMin);
+  const [internalZoomRight, setInternalZoomRight] = useState<number>(domain.tMax);
 
+  // Reset the internal (uncontrolled) range whenever the domain changes.
+  // Controlled callers own resetting via `onZoomRangeChange`.
   useEffect(() => {
-    setZoomLeft(domain.tMin);
-    setZoomRight(domain.tMax);
-  }, [domain.tMin, domain.tMax]);
+    if (isControlled) return;
+    setInternalZoomLeft(domain.tMin);
+    setInternalZoomRight(domain.tMax);
+  }, [domain.tMin, domain.tMax, isControlled]);
+
+  const zoomLeft = isControlled ? zoomRange.left : internalZoomLeft;
+  const zoomRight = isControlled ? zoomRange.right : internalZoomRight;
+
+  const setZoomLeft = useCallback(
+    (ts: number) => {
+      if (isControlled) onZoomRangeChange({ left: ts, right: zoomRight });
+      else setInternalZoomLeft(ts);
+    },
+    [isControlled, onZoomRangeChange, zoomRight],
+  );
+  const setZoomRight = useCallback(
+    (ts: number) => {
+      if (isControlled) onZoomRangeChange({ left: zoomLeft, right: ts });
+      else setInternalZoomRight(ts);
+    },
+    [isControlled, onZoomRangeChange, zoomLeft],
+  );
 
   const resetZoom = useCallback(() => {
-    setZoomLeft(domain.tMin);
-    setZoomRight(domain.tMax);
-  }, [domain.tMin, domain.tMax]);
+    if (isControlled) onZoomRangeChange({ left: domain.tMin, right: domain.tMax });
+    else {
+      setInternalZoomLeft(domain.tMin);
+      setInternalZoomRight(domain.tMax);
+    }
+  }, [isControlled, onZoomRangeChange, domain.tMin, domain.tMax]);
 
   const range = domain.tMax - domain.tMin;
   const zoomTLeft = range > 0 ? (zoomLeft - domain.tMin) / range : 0;
