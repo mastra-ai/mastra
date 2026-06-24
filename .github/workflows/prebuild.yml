@@ -155,14 +155,21 @@ jobs:
 
       - name: Save affected-tests outputs for downstream workflow
         if: always()
+        env:
+          AFFECTED_WORKSPACE_TESTS: ${{ steps.compute.outputs.affected_workspace_tests }}
+          AFFECTED_MEMORY_TESTS: ${{ steps.compute.outputs.affected_memory_tests }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           mkdir -p /tmp/affected-outputs
-          echo "${{ steps.compute.outputs.affected_workspace_tests }}" > /tmp/affected-outputs/affected_workspace_tests.txt
-          echo "${{ steps.compute.outputs.affected_memory_tests }}" > /tmp/affected-outputs/affected_memory_tests.txt
+          echo "$AFFECTED_WORKSPACE_TESTS" > /tmp/affected-outputs/affected_workspace_tests.txt
+          echo "$AFFECTED_MEMORY_TESTS" > /tmp/affected-outputs/affected_memory_tests.txt
+          echo "$BASE_SHA" > /tmp/affected-outputs/base_sha.txt
+          echo "$HEAD_SHA" > /tmp/affected-outputs/head_sha.txt
 
       - name: Upload affected-tests artifact
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: affected-tests-outputs
           path: /tmp/affected-outputs/
@@ -248,11 +255,15 @@ jobs:
 
       - name: Check for stores changes
         id: check
+        env:
+          AFFECTED_STORE_TESTS: ${{ needs.affected-tests.outputs.affected_store_tests }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           STORES_CHANGED=false
 
           # Run when the affected-tests graph found store test files impacted
-          if [ "${{ needs.affected-tests.outputs.affected_store_tests }}" = "true" ]; then
+          if [ "$AFFECTED_STORE_TESTS" = "true" ]; then
             STORES_CHANGED=true
           fi
 
@@ -262,7 +273,7 @@ jobs:
           # alias resolution, so they are not duplicated here.
           # Ignore markdown-only changes so docs/changelog-only edits don't trigger.
           DIRECT=$(git diff --name-only \
-            "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" \
+            "$BASE_SHA...$HEAD_SHA" \
             | grep -vE '\.md$' \
             | grep -E '^(stores/|\.github/workflows/test-combined-stores\.yml|\.github/workflows/prebuild\.yml)' \
             || true)
@@ -308,11 +319,15 @@ jobs:
 
       - name: Check for workspace changes
         id: check
+        env:
+          AFFECTED_WORKSPACE_TESTS: ${{ needs.affected-tests.outputs.affected_workspace_tests }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           WORKSPACES_CHANGED=false
 
           # Run when the affected-tests graph found workspace test files impacted
-          if [ "${{ needs.affected-tests.outputs.affected_workspace_tests }}" = "true" ]; then
+          if [ "$AFFECTED_WORKSPACE_TESTS" = "true" ]; then
             WORKSPACES_CHANGED=true
           fi
 
@@ -322,7 +337,7 @@ jobs:
           # cross-package alias resolution, so they are not duplicated here.
           # Ignore markdown-only changes so docs/changelog-only edits don't trigger.
           DIRECT=$(git diff --name-only \
-            "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" \
+            "$BASE_SHA...$HEAD_SHA" \
             | grep -vE '\.md$' \
             | grep -E '^(workspaces/|\.github/workflows/test-workspaces\.yml|\.github/workflows/secrets\.test-workspaces\.yml|\.github/workflows/prebuild\.yml)' \
             || true)
@@ -363,11 +378,15 @@ jobs:
 
       - name: Check for memory changes
         id: check
+        env:
+          AFFECTED_MEMORY_TESTS: ${{ needs.affected-tests.outputs.affected_memory_tests }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           MEMORY_CHANGED=false
 
           # Run when the affected-tests graph found memory integration test files impacted
-          if [ "${{ needs.affected-tests.outputs.affected_memory_tests }}" = "true" ]; then
+          if [ "$AFFECTED_MEMORY_TESTS" = "true" ]; then
             MEMORY_CHANGED=true
           fi
 
@@ -378,7 +397,7 @@ jobs:
           # not duplicated here.
           # Ignore markdown-only changes so docs/changelog-only edits don't trigger.
           DIRECT=$(git diff --name-only \
-            "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" \
+            "$BASE_SHA...$HEAD_SHA" \
             | grep -vE '\.md$' \
             | grep -E '^(packages/memory/|\.github/workflows/prebuild\.yml)' \
             || true)
