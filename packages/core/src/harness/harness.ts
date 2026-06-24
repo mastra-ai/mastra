@@ -339,7 +339,6 @@ export class Harness<TState = {}> {
    */
   async createSession({ resourceId }: { resourceId?: string } = {}): Promise<Session<TState>> {
     const effectiveResourceId = resourceId ?? this.config.resourceId ?? this.config.id;
-    const allowCrossResourceRecovery = resourceId === undefined;
 
     // Get-or-create: a resourceId maps to exactly one durable session per
     // Harness. Asking for the same resource twice returns the same session, so
@@ -351,7 +350,7 @@ export class Harness<TState = {}> {
       return existing;
     }
 
-    const creation = this.#createSessionForResource(effectiveResourceId, { allowCrossResourceRecovery });
+    const creation = this.#createSessionForResource(effectiveResourceId);
     this.#sessionsByResource.set(effectiveResourceId, creation);
     try {
       return await creation;
@@ -364,10 +363,7 @@ export class Harness<TState = {}> {
     }
   }
 
-  async #createSessionForResource(
-    effectiveResourceId: string,
-    { allowCrossResourceRecovery }: { allowCrossResourceRecovery: boolean },
-  ): Promise<Session<TState>> {
+  async #createSessionForResource(effectiveResourceId: string): Promise<Session<TState>> {
     const session = this.#wireSession(
       new Session({
         resourceId: effectiveResourceId,
@@ -392,58 +388,19 @@ export class Harness<TState = {}> {
       session.emit({ type: 'workspace_error', error: this.workspaceError });
     }
 
-    // Bring the session online with a current thread.  The selection strategy
-    // is projectPath-aware so that worktrees sharing a resourceId each resume
-    // their own thread, and threads orphaned by a resourceId change (e.g. a
-    // git remote was added) are recovered via a cross-resource metadata query.
+    // Bring the session online with a current thread. The selection strategy is
+    // projectPath-aware so worktrees sharing a resourceId each resume their own
+    // thread without claiming threads owned by another resource.
     const projectPath = (this.config.initialState as any)?.projectPath as string | undefined;
 
     const threads = await session.thread.list();
+    const candidates = projectPath ? threads.filter(t => (t.metadata as any)?.projectPath === projectPath) : threads;
 
-    // Step 1: narrow to threads whose projectPath matches the current working directory.
-    let candidates = projectPath ? threads.filter(t => (t.metadata as any)?.projectPath === projectPath) : threads;
-
-    // Step 2: cross-resource merge — always query across ALL resources for
-    // threads tagged with this projectPath so that threads orphaned by a
-    // resourceId change (e.g. a git remote was added after the thread was
-    // created) are recovered even when the current resourceId already has a
-    // thread.  Results are merged with Layer 1 and deduplicated by id.
-    if (allowCrossResourceRecovery && projectPath && this.#resolveStorage()) {
-      const memoryStorage = await this.getMemoryStorage();
-      const result = await memoryStorage.listThreads({
-        filter: { metadata: { projectPath } },
-        perPage: false,
-      });
-      const seen = new Set(candidates.map(c => c.id));
-      for (const t of result.threads) {
-        if (seen.has(t.id)) continue;
-        const meta = t.metadata as Record<string, unknown> | undefined;
-        if (meta?.forkedSubagent === true) continue;
-        seen.add(t.id);
-        candidates.push({
-          id: t.id,
-          resourceId: t.resourceId,
-          title: t.title,
-          createdAt: t.createdAt,
-          updatedAt: t.updatedAt,
-          metadata: t.metadata,
-        });
-      }
-    }
-
-    // Step 3: resume most recent candidate, or create a new thread.
+    // Resume the most recent same-resource candidate, or create a new thread.
     if (candidates.length === 0) {
       await session.thread.create();
     } else {
       const mostRecent = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
-
-      // When the recovered thread's resourceId differs from the current one
-      // (cross-resource fallback), migrate it so ownership checks pass and
-      // future lookups find it under the new resourceId.
-      if (mostRecent.resourceId !== effectiveResourceId && this.#resolveStorage()) {
-        await this.persistThreadRow({ ...mostRecent, resourceId: effectiveResourceId });
-        await this.migrateThreadMessagesResourceId({ threadId: mostRecent.id, resourceId: effectiveResourceId });
-      }
 
       await this.config.threadLock?.acquire(mostRecent.id);
       session.thread.set({ threadId: mostRecent.id });
@@ -672,38 +629,6 @@ export class Harness<TState = {}> {
     if (!this.#resolveStorage()) return;
     const memoryStorage = await this.getMemoryStorage();
     await memoryStorage.deleteThread({ threadId });
-  }
-
-  private async migrateThreadMessagesResourceId({
-    threadId,
-    resourceId,
-  }: {
-    threadId: string;
-    resourceId: string;
-  }): Promise<void> {
-    if (!this.#resolveStorage()) return;
-    const memoryStorage = await this.getMemoryStorage();
-    const perPage = 100;
-    let page = 0;
-    let hasMore = true;
-
-    while (hasMore) {
-      const result = await memoryStorage.listMessages({
-        threadId,
-        page,
-        perPage,
-        orderBy: { field: 'createdAt', direction: 'ASC' },
-      });
-      const messages = result.messages.filter(message => message.resourceId !== resourceId);
-      if (messages.length > 0) {
-        await memoryStorage.saveMessages({
-          messages: messages.map(message => ({ ...message, resourceId })),
-        });
-      }
-
-      hasMore = result.hasMore;
-      page += 1;
-    }
   }
 
   /** Clone a thread (and messages) via the host's memory (gateway primitive for the Session thread domain). */
