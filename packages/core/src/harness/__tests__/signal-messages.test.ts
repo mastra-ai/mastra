@@ -32,7 +32,7 @@ describe('Harness signal messages', () => {
       modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
     });
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const threadId = session.thread.getId()!;
     const subscription = createSubscription(() => activeRunId);
 
@@ -71,7 +71,7 @@ describe('Harness signal messages', () => {
       modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
     });
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const threadId = session.thread.getId()!;
     const subscription = createSubscription(() => activeRunId);
 
@@ -106,7 +106,7 @@ describe('Harness signal messages', () => {
       modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
     });
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     await expect(session.sendMessage({ content: 'hello' })).rejects.toThrow('signal failed before stream started');
   });

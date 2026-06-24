@@ -1,5 +1,7 @@
+// @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import { ThreadList, ThreadListItem } from './thread-list';
 
 afterEach(cleanup);
@@ -31,7 +33,6 @@ describe('ThreadList', () => {
     expect(nav.className).not.toContain('rounded-studio-panel');
     expect(nav.className).not.toContain('border-border1/50');
     expect(nav.parentElement!.className).not.toContain('pl-2');
-    // still scrolls inside the parent block
     expect(nav.className).toContain('overflow-y-auto');
   });
 });

@@ -86,7 +86,7 @@ describe('mc send-message reproduction', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     await harness.getMastra()?.startWorkers();
     await session.thread.create();
 
@@ -130,7 +130,7 @@ describe('mc send-message reproduction', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     await harness.getMastra()?.startWorkers();
     await session.thread.create();
 
@@ -184,7 +184,7 @@ describe('mc send-message reproduction', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     await harness.getMastra()?.startWorkers();
     await session.thread.create();
 
