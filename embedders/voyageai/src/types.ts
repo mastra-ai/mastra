@@ -28,7 +28,7 @@ export type VoyageMultimodalModel = 'voyage-multimodal-3' | 'voyage-multimodal-3
 /**
  * VoyageAI contextualized chunk embedding models
  */
-export type VoyageContextModel = 'voyage-context-3';
+export type VoyageContextModel = 'voyage-context-3' | 'voyage-context-4';
 
 /**
  * All VoyageAI embedding models
@@ -292,6 +292,13 @@ export const MULTIMODAL_MODEL_INFO: Record<VoyageMultimodalModel, Omit<VoyageMod
  */
 export const CONTEXTUALIZED_MODEL_INFO: Record<VoyageContextModel, Omit<VoyageModelInfo, 'id'>> = {
   'voyage-context-3': {
+    maxInputTokens: 32000,
+    defaultDimension: 1024,
+    supportedDimensions: [256, 512, 1024, 2048],
+    isMultimodal: false,
+    isContextualized: true,
+  },
+  'voyage-context-4': {
     maxInputTokens: 32000,
     defaultDimension: 1024,
     supportedDimensions: [256, 512, 1024, 2048],

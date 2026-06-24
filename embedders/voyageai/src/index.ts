@@ -196,6 +196,7 @@ export const voyage: VoyageTextEmbeddingModelV3 & {
   // Contextualized model
   contextualized: VoyageContextualizedEmbeddingModel;
   context3: VoyageContextualizedEmbeddingModel;
+  context4: VoyageContextualizedEmbeddingModel;
 
   // Reranker models
   reranker: VoyageRelevanceScorer;
@@ -276,6 +277,7 @@ export const voyage: VoyageTextEmbeddingModelV3 & {
       get: () => lazy('contextualized', () => createVoyageContextualizedEmbedding('voyage-context-3')),
     },
     context3: { get: () => lazy('context3', () => createVoyageContextualizedEmbedding('voyage-context-3')) },
+    context4: { get: () => lazy('context4', () => createVoyageContextualizedEmbedding('voyage-context-4')) },
     // Reranker models
     reranker: { get: () => lazy('reranker', () => createVoyageReranker('rerank-2.5')) },
     reranker25: { get: () => lazy('reranker25', () => createVoyageReranker('rerank-2.5')) },
