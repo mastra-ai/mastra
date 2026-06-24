@@ -11,6 +11,7 @@ import type {
   RoleMapping,
 } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/di';
+import type { IMastraLogger } from '@mastra/core/logger';
 import type { User, OrganizationMembership } from '@workos-inc/node';
 
 // ============================================================================
@@ -312,6 +313,22 @@ export interface MastraFGAWorkosOptions {
    * Throw when a permission Mastra may emit is not configured for WorkOS.
    */
   validatePermissions?: (permissions: MastraFGAPermissionInput[]) => void | Promise<void>;
+  /**
+   * When true, resources not registered in WorkOS FGA are accessible by default.
+   * When false (default), unregistered resources are blocked with a 403 error.
+   *
+   * Set to true for "public by default" semantics where FGA only restricts
+   * explicitly registered resources.
+   *
+   * @default false
+   */
+  publicByDefault?: boolean;
+  /**
+   * Optional logger for FGA operations.
+   * When provided, logs warnings about unregistered resources, permission denials,
+   * and other FGA-related events that help diagnose access control issues.
+   */
+  logger?: IMastraLogger;
 }
 
 // ============================================================================
