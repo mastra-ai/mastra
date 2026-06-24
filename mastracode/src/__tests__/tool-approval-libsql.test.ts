@@ -118,7 +118,7 @@ describe('tool approval with LibSQLStore via Harness', () => {
     (harness as any).getAgentForMode = () => registeredAgent;
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     // Collect events
     const events: any[] = [];

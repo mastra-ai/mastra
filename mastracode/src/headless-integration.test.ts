@@ -198,7 +198,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: HarnessEvent[] = [];
     session.subscribe(event => {
@@ -239,7 +239,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: HarnessEvent[] = [];
     session.subscribe(event => {
@@ -287,7 +287,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: HarnessEvent[] = [];
     session.subscribe(event => {
@@ -331,7 +331,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: HarnessEvent[] = [];
     session.subscribe(event => {
@@ -373,7 +373,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: HarnessEvent[] = [];
     session.subscribe(event => {
@@ -443,7 +443,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: HarnessEvent[] = [];
     session.subscribe(event => {
@@ -546,7 +546,7 @@ describe('headless mode — --output-format contracts', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const {
       result: exitCode,
@@ -573,7 +573,7 @@ describe('headless mode — --output-format contracts', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const {
       result: exitCode,
@@ -611,7 +611,7 @@ describe('headless mode — --output-format contracts', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const {
       result: exitCode,
@@ -730,7 +730,7 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: HarnessEvent[] = [];
     session.subscribe(event => events.push(event));
@@ -761,7 +761,7 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -803,7 +803,7 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -837,7 +837,7 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const writeSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
 
@@ -876,7 +876,7 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const writeSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
 
@@ -909,7 +909,7 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -942,7 +942,7 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const writeSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
 
@@ -970,7 +970,7 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: HarnessEvent[] = [];
     session.subscribe(event => events.push(event));
@@ -996,7 +996,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: HarnessEvent[] = [];
     session.subscribe(event => events.push(event));
@@ -1027,7 +1027,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const exitCode = await runHeadless(
       harness,
@@ -1054,7 +1054,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -1098,7 +1098,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -1133,7 +1133,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -1169,7 +1169,7 @@ describe('headless mode — thread control', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const thread = await session.thread.create({ title: 'target-thread' });
     const updatedAtBefore = thread.updatedAt.getTime();
 
@@ -1201,7 +1201,7 @@ describe('headless mode — thread control', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const thread = await session.thread.create({ title: 'my-feature' });
     const updatedAtBefore = thread.updatedAt.getTime();
 
@@ -1233,7 +1233,7 @@ describe('headless mode — thread control', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const exitCode = await runHeadless(harness, session, {
       prompt: 'Hello',
@@ -1252,7 +1252,7 @@ describe('headless mode — thread control', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     await session.thread.create({ title: 'original-title' });
 
     const exitCode = await runHeadless(harness, session, {
@@ -1276,7 +1276,7 @@ describe('headless mode — thread control', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     harness.setResourceId(session, { resourceId: 'resource-a' });
     const alphaOlderThread = await session.thread.create({ title: 'older-alpha' });
     harness.setResourceId(session, { resourceId: 'resource-b' });
@@ -1354,7 +1354,7 @@ describe('headless mode — thread control', () => {
     (harness as any).getAgentForMode = () => registeredAgent;
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const sourceThread = await session.thread.create({ title: 'source-thread' });
 
     const events: any[] = [];

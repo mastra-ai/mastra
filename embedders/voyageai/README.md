@@ -203,9 +203,10 @@ console.log(grouped.embeddingsByDocument); // [[[...], [...]], [[...]]]
 
 ### Contextualized Models
 
-| Model              | Use Case                     |
-| ------------------ | ---------------------------- |
-| `voyage-context-3` | Chunks with document context |
+| Model              | Use Case                                             |
+| ------------------ | ---------------------------------------------------- |
+| `voyage-context-4` | Chunks with document context, best quality (preview) |
+| `voyage-context-3` | Chunks with document context                         |
 
 ### Reranker Models
 
@@ -339,7 +340,7 @@ type VoyageTextModel =
 
 type VoyageMultimodalModel = 'voyage-multimodal-3' | 'voyage-multimodal-3.5';
 
-type VoyageContextModel = 'voyage-context-3';
+type VoyageContextModel = 'voyage-context-3' | 'voyage-context-4';
 
 type VoyageInputType = 'query' | 'document' | null;
 type VoyageOutputDimension = 256 | 512 | 1024 | 2048;

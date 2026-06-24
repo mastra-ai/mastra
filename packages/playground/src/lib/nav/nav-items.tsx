@@ -16,7 +16,7 @@ import {
   WorkflowIcon,
   WorkspacesIcon,
 } from '@mastra/playground-ui';
-import { BookIcon } from 'lucide-react';
+import { BookIcon, LayoutGrid } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 
 export type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -36,6 +36,19 @@ export interface NavSection {
   href?: string;
   items: NavItem[];
 }
+
+// Signals is an opt-in experimental UI, gated by the server-injected `MASTRA_SIGNALS_UI` flag.
+const isSignalsEnabled =
+  typeof window !== 'undefined' && (window as unknown as Record<string, unknown>).MASTRA_SIGNALS_UI === 'true';
+
+const signalsNavItem: NavItem = {
+  name: 'Signals',
+  url: '/signals',
+  activePaths: ['/signals'],
+  Icon: LayoutGrid,
+  docs: { href: 'https://mastra.ai/en/docs/observability/tracing/overview', label: 'Signals documentation' },
+  isOnMastraPlatform: true,
+};
 
 export const mainNav: NavSection[] = [
   {
@@ -157,6 +170,7 @@ export const mainNav: NavSection[] = [
         docs: { href: 'https://mastra.ai/en/docs/observability/tracing/overview', label: 'Traces documentation' },
         isOnMastraPlatform: true,
       },
+      ...(isSignalsEnabled ? [signalsNavItem] : []),
       {
         name: 'Logs',
         url: '/logs',
