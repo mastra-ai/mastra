@@ -4195,6 +4195,12 @@ importers:
       '@ai-sdk/openai':
         specifier: ^1.3.24
         version: 1.3.24(zod@4.4.3)
+      '@ai-sdk/openai-v6':
+        specifier: npm:@ai-sdk/openai@3.0.63
+        version: '@ai-sdk/openai@3.0.63(zod@4.4.3)'
+      '@copilotkit/aimock':
+        specifier: ^1.29.0
+        version: 1.29.0(vitest@4.1.8)
       '@internal/ai-sdk-v5':
         specifier: workspace:*
         version: link:../_vendored/ai_v5

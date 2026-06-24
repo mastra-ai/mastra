@@ -1,0 +1,145 @@
+---
+title: "Quick Checks | Evals"
+description: "Zero-LLM micro-scorers for fast, deterministic assertions on agent output text and tool usage."
+packages:
+  - "@mastra/evals"
+---
+
+# Quick Checks
+
+Quick Checks are composable micro-scorers for common assertions like "output contains X" or "agent called tool Y." They require no LLM, run instantly, and plug into the same `scorers: [...]` array as any other scorer.
+
+## When to use Quick Checks
+
+Use Quick Checks when you need fast, deterministic assertions:
+
+- Verify output text contains or excludes specific strings
+- Confirm an agent called (or avoided) specific tools
+- Validate tool call ordering and count limits
+- Gate CI pipelines with zero-cost binary checks
+- Combine with LLM-based scorers for layered evaluation
+
+For subjective or semantic evaluation, use [LLM-based scorers](/docs/evals/built-in-scorers) instead.
+
+## Quickstart
+
+```typescript title="src/evals/weather-checks.ts"
+import { checks } from '@mastra/evals/checks'
+import { runEvals } from '@mastra/core/evals'
+import { weatherAgent } from '../agents'
+
+const result = await runEvals({
+  data: [{ input: 'What is the weather in Brooklyn?' }],
+  target: weatherAgent,
+  scorers: [checks.includes('Brooklyn'), checks.calledTool('get_weather'), checks.noToolErrors()],
+})
+
+console.log(result.scores)
+// { 'check-includes': 1, 'check-called-tool': 1, 'check-no-tool-errors': 1 }
+```
+
+## Available checks
+
+Quick Checks fall into two categories:
+
+### Text checks
+
+These scorers evaluate the agent's text output:
+
+| Check | What it does | Score |
+| - | - | - |
+| `checks.includes(str)` | Output contains substring | 1 or 0 |
+| `checks.excludes(str)` | Output does not contain substring | 1 or 0 |
+| `checks.equals(str)` | Output exactly equals string | 1 or 0 |
+| `checks.matches(regex)` | Output matches regular expression | 1 or 0 |
+| `checks.similarity(str)` | Dice coefficient similarity to string | 0-1 (or binary with `threshold`) |
+
+### Tool call checks
+
+These scorers evaluate tool usage from the agent's run:
+
+| Check | What it does | Score |
+| - | - | - |
+| `checks.calledTool(name)` | Tool was called at least N times | 1 or 0 |
+| `checks.didNotCall(name)` | Tool was not called | 1 or 0 |
+| `checks.toolOrder([...])` | Tools called in expected order | 1 or 0 |
+| `checks.maxToolCalls(n)` | No more than N tool calls total | 1 or 0 |
+| `checks.usedNoTools()` | No tools called at all | 1 or 0 |
+| `checks.noToolErrors()` | No tool invocations had errors | 1 or 0 |
+
+## Combining checks with LLM scorers
+
+Checks compose with LLM-based scorers in a single `runEvals` call. Use checks for deterministic gates and LLM scorers for qualitative evaluation:
+
+```typescript title="src/evals/layered-eval.ts"
+import { checks } from '@mastra/evals/checks'
+import { createFaithfulnessScorer } from '@mastra/evals/scorers/prebuilt'
+import { runEvals } from '@mastra/core/evals'
+import { myAgent } from '../agents'
+
+const result = await runEvals({
+  data: [
+    {
+      input: 'What is the weather in Brooklyn?',
+      context: ['Brooklyn weather data: sunny, 72°F'],
+    },
+  ],
+  target: myAgent,
+  scorers: [
+    // Deterministic checks (instant, free)
+    checks.includes('Brooklyn'),
+    checks.calledTool('get_weather'),
+    checks.excludes('error'),
+    checks.noToolErrors(),
+
+    // LLM-based scorer (semantic, costs tokens)
+    createFaithfulnessScorer({ model: '__GATEWAY_OPENAI_MODEL_MINI__' }),
+  ],
+})
+```
+
+## Using checks in live scoring
+
+Attach checks to agents for continuous monitoring:
+
+```typescript title="src/agents/weather-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { checks } from '@mastra/evals/checks'
+
+export const weatherAgent = new Agent({
+  name: 'Weather Agent',
+  instructions: 'Answer weather questions using the get_weather tool.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: { get_weather: weatherTool },
+  scorers: {
+    noErrors: {
+      scorer: checks.noToolErrors(),
+      sampling: { type: 'ratio', rate: 1 },
+    },
+    mentionCity: {
+      scorer: checks.includes('Brooklyn'),
+      sampling: { type: 'ratio', rate: 0.5 },
+    },
+  },
+})
+```
+
+## How checks work
+
+Each check is a standard `createScorer()` instance with a `preprocess` step and a `generateScore` step. They follow the same [four-step pipeline](/docs/evals/custom-scorers#the-four-step-pipeline) as any other scorer:
+
+1. **preprocess**: Extracts and normalizes relevant data from the agent run (text content, tool calls)
+1. **generateScore**: Converts the preprocessed result into a score (typically binary 1 or 0)
+
+Because checks skip the `analyze` and `generateReason` steps and make no LLM calls, they run in microseconds.
+
+:::note
+Visit the [Quick Checks reference](/reference/evals/checks) for the full API, including all parameters and options for each check.
+:::
+
+## Related
+
+- [Quick Checks reference](/reference/evals/checks)
+- [Built-in Scorers](/docs/evals/built-in-scorers)
+- [Custom Scorers](/docs/evals/custom-scorers)
+- [`runEvals()` reference](/reference/evals/run-evals)
