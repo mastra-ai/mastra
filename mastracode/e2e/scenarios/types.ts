@@ -52,6 +52,7 @@ export type ScenarioName =
   | 'openai-strict-schema'
   | 'plan-approval-goal-handoff'
   | 'plan-approval-handoff'
+  | 'plan-approval-request-changes'
   | 'persistent-goal-commands'
   | 'persistent-goal-judge-decision'
   | 'persistent-goal-reload'
@@ -126,7 +127,11 @@ export type ScenarioName =
   | 'workspace-commands'
   | 'workspace-plan-mode-tools'
   | 'workspace-tool-names'
-  | 'workspace-tool-output-rendering';
+  | 'workspace-tool-output-rendering'
+  | 'worktree-cross-thread-resume'
+  | 'worktree-thread-scoping'
+  | 'resourceid-drift-prompt-accept'
+  | 'resourceid-drift-prompt-decline';
 
 export type McE2eTerminal = {
   getByText: (text: string | RegExp, options?: { full?: boolean; strict?: boolean }) => any;

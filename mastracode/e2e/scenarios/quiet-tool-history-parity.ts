@@ -7,6 +7,8 @@ function quoteSql(value: string): string {
   return `'${value.replaceAll("'", "''")}'`;
 }
 
+const HISTORY_RESOURCE_ID = 'mc-e2e-quiet-history-resource';
+
 export const quietToolHistoryParityScenario: McE2eScenario = {
   name: 'quiet-tool-history-parity',
   description: 'Verify quiet mode applies to live tool output and loaded tool history in the real TUI.',
@@ -37,9 +39,9 @@ export const quietToolHistoryParityScenario: McE2eScenario = {
     );
 
     const now = new Date('2026-06-11T18:30:00.000Z');
-    const resourceId = 'mc-e2e-quiet-history-resource';
+    const resourceId = HISTORY_RESOURCE_ID;
     const threadId = 'thread-mc-e2e-quiet-history';
-    const metadata = JSON.stringify({ projectPath: projectDir });
+    const metadata = JSON.stringify({});
     const userContent = JSON.stringify({
       format: 2,
       parts: [{ type: 'text', text: 'Load the quiet mode history fixture.' }],
