@@ -4,6 +4,8 @@ import {
   DataListNameCell,
   DataListDescriptionCell,
   DataListIdCell,
+  DataListRowHeaderCell,
+  DataListNumberCell,
   DataListSelectCell,
   DataListMonoCell,
   DataListDateCell,
@@ -29,6 +31,8 @@ import {
 } from './data-list-top-cell';
 import { DataListTopCells } from './data-list-top-cells';
 
+export type { DataListRootProps, DataListStickyHeaderBackground, DataListVariant } from './data-list-root';
+
 export const DataList = Object.assign(DataListRoot, {
   Top: DataListTop,
   TopCells: DataListTopCells,
@@ -44,6 +48,8 @@ export const DataList = Object.assign(DataListRoot, {
   NameCell: DataListNameCell,
   DescriptionCell: DataListDescriptionCell,
   IdCell: DataListIdCell,
+  RowHeaderCell: DataListRowHeaderCell,
+  NumberCell: DataListNumberCell,
   MonoCell: DataListMonoCell,
   DateCell: DataListDateCell,
   TimeCell: DataListTimeCell,
