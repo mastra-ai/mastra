@@ -173,6 +173,75 @@ describe('WorkflowGraph', () => {
     });
   });
 
+  it('auto-focuses the suspended step of a suspended run, without any selection', async () => {
+    reactFlowViewport.getNodes.mockReturnValue(twoNodes as never);
+
+    // step-a succeeded and step-b is suspended (waiting on human input). A
+    // suspended run is not 'paused', so the viewport must still center on the
+    // step the run is suspended at.
+    render(
+      <Harness
+        contextValue={
+          {
+            workflow: twoStepWorkflow,
+            result: {
+              status: 'suspended',
+              steps: { 'step-a': { status: 'success' }, 'step-b': { status: 'suspended' } },
+            },
+          } as never
+        }
+        workflow={twoStepWorkflow}
+      />,
+    );
+
+    // Center of step-b: x 440 + 300/2 = 590, y 80 + 120/2 = 140.
+    await waitFor(() => {
+      expect(reactFlowViewport.setCenter).toHaveBeenCalledWith(590, 140, { duration: 300, zoom: 1 });
+    });
+  });
+
+  it('refocuses the next suspended step after a resume advances the run', async () => {
+    reactFlowViewport.getNodes.mockReturnValue(twoNodes as never);
+
+    // The run starts suspended at step-a; the graph centers it.
+    const { rerender } = render(
+      <Harness
+        contextValue={
+          {
+            workflow: twoStepWorkflow,
+            result: { status: 'suspended', steps: { 'step-a': { status: 'suspended' } } },
+          } as never
+        }
+        workflow={twoStepWorkflow}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(reactFlowViewport.setCenter).toHaveBeenCalledWith(190, 140, { duration: 300, zoom: 1 });
+    });
+
+    // Resume advances the run: step-a is now done and step-b is the new
+    // suspended step. The viewport must follow to step-b.
+    rerender(
+      <Harness
+        contextValue={
+          {
+            workflow: twoStepWorkflow,
+            result: {
+              status: 'suspended',
+              steps: { 'step-a': { status: 'success' }, 'step-b': { status: 'suspended' } },
+            },
+          } as never
+        }
+        workflow={twoStepWorkflow}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(reactFlowViewport.setCenter).toHaveBeenCalledWith(590, 140, { duration: 300, zoom: 1 });
+    });
+  });
+
   it('retries centering on the waiting step once nodes lay out after the first paint', async () => {
     // Reproduces the reported refocus race: when landing on a paused :runId page,
     // React Flow has not registered/measured its nodes on the first focus attempt.

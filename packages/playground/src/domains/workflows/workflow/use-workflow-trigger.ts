@@ -126,6 +126,21 @@ export function useWaitingStepKey(): string | undefined {
   );
 }
 
+/**
+ * Read-only derivation of the step a suspended run is currently waiting on for
+ * human input. Unlike a paused (per-step/debug) run, a suspended run is gated by
+ * the workflow itself (`await suspend()`), so the waiting step is whichever step
+ * holds `status: 'suspended'`. Returns `undefined` when no step is suspended.
+ */
+export function useSuspendedStepKey(): string | undefined {
+  const { result } = useContext(WorkflowRunContext);
+
+  return useMemo(() => {
+    const entry = Object.entries(result?.steps || {}).find(([_, { status }]) => status === 'suspended');
+    return entry?.[0];
+  }, [result?.steps]);
+}
+
 export function useNextPerStep() {
   const { result, runId, workflowId, workflow, payload, setDebugMode, timeTravelWorkflowStream } =
     useContext(WorkflowRunContext);

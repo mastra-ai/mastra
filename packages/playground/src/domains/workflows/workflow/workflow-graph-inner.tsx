@@ -6,7 +6,7 @@ import { useEffect, useEffectEvent, useRef } from 'react';
 import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
 
 import { useWorkflowGraphRuntime } from './use-workflow-graph-runtime';
-import { useWaitingStepKey } from './use-workflow-trigger';
+import { useSuspendedStepKey, useWaitingStepKey } from './use-workflow-trigger';
 import { constructNodesAndEdges, findFocusNode } from './utils';
 import { ZoomSlider } from './zoom-slider';
 
@@ -25,11 +25,14 @@ export function WorkflowGraphInner({ workflow }: WorkflowGraphInnerProps) {
   const graphRef = useRef<HTMLDivElement>(null);
   const { selectedStepId } = useWorkflowSelectedStep();
   const waitingStepKey = useWaitingStepKey();
+  const suspendedStepKey = useSuspendedStepKey();
   const { getNodes, setCenter } = useReactFlow();
 
-  // An explicit timeline selection always wins; otherwise, in step-by-step (debug)
-  // mode, fall back to centering the step the paused run is waiting to run next.
-  const focusStepId = selectedStepId ?? waitingStepKey;
+  // An explicit timeline selection always wins; otherwise center the step the run
+  // is currently waiting on: the next step of a paused (per-step/debug) run, or
+  // the suspended step of a run awaiting human input (which follows along as a
+  // resume advances the run to the next suspended step).
+  const focusStepId = selectedStepId ?? waitingStepKey ?? suspendedStepKey;
 
   const focusOnStep = useEffectEvent((stepId: string) => {
     const focusNode = findFocusNode(getNodes(), stepId);
