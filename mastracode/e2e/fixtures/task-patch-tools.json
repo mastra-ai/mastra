@@ -3,7 +3,6 @@
     {
       "match": {
         "model": "gpt-5.4-mini",
-        "endpoint": "chat",
         "userMessage": "Exercise task patch tools through real task tools.",
         "hasToolResult": false
       },
@@ -29,9 +28,8 @@
     {
       "match": {
         "model": "gpt-5.4-mini",
-        "endpoint": "chat",
-        "toolCallId": "call_task_patch_write",
-        "hasToolResult": true
+        "hasToolResult": true,
+        "turnIndex": 1
       },
       "response": {
         "toolCalls": [
@@ -50,9 +48,8 @@
     {
       "match": {
         "model": "gpt-5.4-mini",
-        "endpoint": "chat",
-        "toolCallId": "call_task_patch_update",
-        "hasToolResult": true
+        "hasToolResult": true,
+        "turnIndex": 2
       },
       "response": {
         "toolCalls": [
@@ -67,9 +64,8 @@
     {
       "match": {
         "model": "gpt-5.4-mini",
-        "endpoint": "chat",
-        "toolCallId": "call_task_patch_check",
-        "hasToolResult": true
+        "hasToolResult": true,
+        "turnIndex": 3
       },
       "response": {
         "content": "Task patch e2e complete."

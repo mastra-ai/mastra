@@ -1,6 +1,5 @@
 import {
   Button,
-  Spinner,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -8,9 +7,10 @@ import {
   DialogDescription,
   DialogBody,
   DialogFooter,
-  CodeEditor,
-  Label,
 } from '@mastra/playground-ui';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { format } from 'date-fns';
 import { useMemo, useRef, useState } from 'react';

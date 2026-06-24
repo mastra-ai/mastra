@@ -1,5 +1,6 @@
 import type { ListScoresResponse, ScoreRowData } from '@mastra/core/evals';
-import { DataList, DataListSkeleton, getShortId } from '@mastra/playground-ui';
+import { DataList, DataListSkeleton } from '@mastra/playground-ui';
+import { getShortId } from '@mastra/playground-ui/components/Text';
 import { isToday, format } from 'date-fns';
 
 const COLUMNS = 'auto auto auto auto 1fr';

@@ -5,7 +5,6 @@ export const taskPatchToolsScenario: McE2eScenario = {
   name: 'task-patch-tools',
   description: 'Drive task patch/check tools through the real TUI and verify their rendered output.',
   testName: 'patches tasks and renders task check output from real task tools',
-  skipReason: 'current main task-state/tool-result request shape no longer matches the AIMock task patch fixture',
   useOpenAIModel: true,
   aimockFixture: 'task-patch-tools.json',
   async run({ terminal, runtime }) {
@@ -16,6 +15,8 @@ export const taskPatchToolsScenario: McE2eScenario = {
 
     await runtime.waitForScreenText(/Tasks\s+\[0\/1 completed\]/i, terminal, 8_000);
     await runtime.waitForScreenText(/Verifying task patch e2e/i, terminal, 8_000);
+    await runtime.waitForOutputText(/Tasks/i, terminal, 8_000);
+    await runtime.waitForOutputText(/▶ Verifying task patch e2e/i, terminal, 8_000);
     await runtime.waitForScreenText(/Task Status:\s+\[0\/1 completed\]/i, terminal, 8_000);
     await runtime.waitForScreenText(/All tasks completed:\s+NO/i, terminal, 8_000);
     await runtime.waitForScreenText(/Task patch e2e complete\./i, terminal, 8_000);

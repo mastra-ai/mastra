@@ -1291,16 +1291,16 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     return { tools };
   }
 
-  async processOutputStep(args: ProcessOutputStepArgs): Promise<MastraDBMessage[]> {
+  async processOutputStep(args: ProcessOutputStepArgs): Promise<void> {
     const evidence = detectPrWorkEvidence({ text: args.text, toolCalls: args.toolCalls });
-    if (!evidence) return args.messages;
+    if (!evidence) return;
 
     const threadContext = this.#getThreadContext(args);
-    if (!threadContext.threadId || !threadContext.resourceId) return args.messages;
+    if (!threadContext.threadId || !threadContext.resourceId) return;
 
     const { threadStore, loadedThread } = await this.#loadThread(threadContext);
     const githubMetadata = getGithubMetadata(loadedThread.metadata);
-    if (githubMetadata.subscriptionHintShown || githubMetadata.subscriptions.length > 0) return args.messages;
+    if (githubMetadata.subscriptionHintShown || githubMetadata.subscriptions.length > 0) return;
 
     let repository: GithubRepository;
     try {
@@ -1311,7 +1311,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         number: evidence.number,
       });
     } catch {
-      return args.messages;
+      return;
     }
 
     await threadStore.saveThread({
@@ -1339,8 +1339,6 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         },
       },
     });
-
-    return args.messages;
   }
 
   async #resolveThreadStore(): Promise<GithubSignalsThreadStore | undefined> {

@@ -77,6 +77,10 @@ function mergeSignalDataParts<T extends { role: string; parts: Array<{ type: str
   return result;
 }
 
+type MessageListAddOptions = {
+  merge?: boolean;
+};
+
 export class MessageList {
   private messages: MastraDBMessage[] = [];
 
@@ -232,7 +236,7 @@ export class MessageList {
     return signalForTranscript;
   }
 
-  public add(messages: MessageListInput, messageSource: MessageSource) {
+  public add(messages: MessageListInput, messageSource: MessageSource, options: MessageListAddOptions = {}) {
     if (messageSource === `user`) messageSource = `input`;
 
     if (!messages) return this;
@@ -272,6 +276,7 @@ export class MessageList {
                 }
               : nestedMessage,
             messageSource,
+            options,
           );
         }
         continue;
@@ -285,6 +290,7 @@ export class MessageList {
             }
           : messageInput,
         messageSource,
+        options,
       );
     }
     return this;
@@ -1377,7 +1383,7 @@ export class MessageList {
     };
   }
 
-  private addOne(message: MessageInput, messageSource: MessageSource) {
+  private addOne(message: MessageInput, messageSource: MessageSource, options: MessageListAddOptions = {}) {
     if (
       (!(`content` in message) ||
         (!message.content &&
@@ -1469,6 +1475,7 @@ export class MessageList {
     // but replace-by-id can target an older sealed message elsewhere in the list.
     const isLatestFromMemory = latestMessage ? this.memoryMessages.has(latestMessage) : false;
     const shouldMerge =
+      options.merge !== false &&
       latestMessageIsAfterSealedBoundary &&
       !hasSealedReplacementTarget &&
       MessageMerger.shouldMerge(latestMessage, messageV2, messageSource, isLatestFromMemory, this._agentNetworkAppend);
@@ -1555,13 +1562,15 @@ export class MessageList {
           this.messages.push(messageV2);
         } else {
           const isExistingFromMemory = this.memoryMessages.has(existingMessage);
-          const shouldMergeIntoExisting = MessageMerger.shouldMerge(
-            existingMessage,
-            messageV2,
-            messageSource,
-            isExistingFromMemory,
-            this._agentNetworkAppend,
-          );
+          const shouldMergeIntoExisting =
+            options.merge !== false &&
+            MessageMerger.shouldMerge(
+              existingMessage,
+              messageV2,
+              messageSource,
+              isExistingFromMemory,
+              this._agentNetworkAppend,
+            );
           if (shouldMergeIntoExisting) {
             MessageMerger.merge(existingMessage, messageV2);
             this.updateLastCreatedAt(existingMessage);
