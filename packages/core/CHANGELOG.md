@@ -1,5 +1,177 @@
 # @mastra/core
 
+## 1.46.0-alpha.5
+
+### Patch Changes
+
+- Exported isBadRequestError matcher for detecting transient HTTP 400 errors that can be retried ([#18384](https://github.com/mastra-ai/mastra/pull/18384))
+
+## 1.46.0-alpha.4
+
+### Minor Changes
+
+- Add multi-tenant filtering and candidate identity to the datasets domain. ([#18314](https://github.com/mastra-ai/mastra/pull/18314))
+
+  `DatasetRecord`, `DatasetItem`, `DatasetItemRow`, `CreateDatasetInput`, and the `filters` on `ListDatasetsInput` / `ListDatasetItemsInput` now expose optional `organizationId` and `projectId`, matching the per-row tenancy contract already used by the observability domain. Dataset items inherit tenancy from their parent dataset automatically — they cannot be set per-call.
+
+  `DatasetRecord` and `CreateDatasetInput` also gain two new optional identity fields, `candidateKey` and `candidateId`, for use cases that need a stable per-incident identity at the dataset level (such as auto-materialized candidate datasets).
+
+  The `DatasetItemSource['type']` union now includes `'candidate-screener'` so externally-materialized items can be distinguished from user-uploaded ones.
+
+  `DATASETS_SCHEMA` and `DATASET_ITEMS_SCHEMA` gain matching nullable columns, and `DatasetsInMemory` persists and filters on them.
+
+  `DatasetsManager.create()` accepts the new optional fields, and `DatasetsManager.list()` accepts an optional `filters` arg that forwards to the storage layer.
+
+  **Before**
+
+  ```ts
+  const dataset = await storage.createDataset({ name: 'goldens/checkout' });
+  const items = await storage.listDatasets({ pagination: { page: 0, perPage: 20 } });
+  ```
+
+  **After**
+
+  ```ts
+  const dataset = await storage.createDataset({
+    name: 'candidates/missing-tool-call/incident-123',
+    organizationId: 'org_abc',
+    projectId: 'project_xyz',
+    candidateKey: 'missing-tool-call',
+    candidateId: 'incident-123',
+  });
+
+  const items = await storage.listDatasets({
+    pagination: { page: 0, perPage: 20 },
+    filters: { organizationId: 'org_abc', projectId: 'project_xyz' },
+  });
+  ```
+
+- Added multi-tenant scoping columns (`organizationId`, `projectId`) to the experiments domain so experiment records and per-item results inherit the tenancy bucket of their parent dataset. ([#18388](https://github.com/mastra-ai/mastra/pull/18388))
+
+  `Experiment`, `ExperimentResult`, `CreateExperimentInput`, and `AddExperimentResultInput` now carry optional `organizationId` / `projectId` fields. `ListExperimentsInput` and `ListExperimentResultsInput` gain a `filters: ExperimentTenancyFilters` block (mirrors `DatasetTenancyFilters`) for scoping queries within a `(organizationId, projectId)` bucket. Tenancy is hydrated from the parent dataset on `createExperiment` and denormalized onto each `ExperimentResult` for efficient tenancy-scoped queries.
+
+  The corresponding columns are also added to the `mastra_experiments` and `mastra_experiment_results` table schemas. Existing rows backfill to `null`, matching the rest of the dataset-tenancy surface.
+
+  This release also clarifies the `targetType` contract via JSDoc:
+  - `CreateDatasetInput.targetType` remains optional. Datasets without a `TargetType` are **not experiment-eligible** — the experiment runner requires a non-null `CreateExperimentInput.targetType` to resolve an executor.
+  - `Experiment.targetType` / `CreateExperimentInput.targetType` stay required. An experiment by definition replays inputs against a specific target.
+
+  No behavior change for existing OSS-created experiments; the new fields are additive and optional.
+
+  Example:
+
+  ```ts
+  // Create an experiment scoped to a tenancy bucket. When the parent dataset
+  // already carries `organizationId` / `projectId`, `runExperiment` hydrates
+  // these fields automatically from the dataset record.
+  const experiment = await storage.createExperiment({
+    name: 'qa-regression',
+    datasetId: 'ds_123',
+    datasetVersion: 1,
+    targetType: 'agent',
+    targetId: 'agent_qa',
+    totalItems: 10,
+    organizationId: 'org_123',
+    projectId: 'proj_123',
+  });
+
+  // List experiments within a tenancy bucket.
+  const experiments = await storage.listExperiments({
+    pagination: { page: 0, perPage: 20 },
+    filters: { organizationId: 'org_123', projectId: 'proj_123' },
+  });
+
+  // List per-item results within the same bucket.
+  const results = await storage.listExperimentResults({
+    experimentId: experiment.id,
+    pagination: { page: 0, perPage: 50 },
+    filters: { organizationId: 'org_123', projectId: 'proj_123' },
+  });
+  ```
+
+- Added agent-level skills: attach skills directly to an Agent without a Workspace via `createSkill()` and the new `skills` config property. ([#18360](https://github.com/mastra-ai/mastra/pull/18360))
+
+  **New `skills` property on Agent config**
+
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { createSkill } from '@mastra/core/skills';
+
+  const agent = new Agent({
+    id: 'reviewer',
+    model: openai('gpt-4o'),
+    instructions: 'You are a code review assistant.',
+    skills: [
+      './skills/review', // filesystem path
+      createSkill({
+        // inline — no filesystem needed
+        name: 'release-checklist',
+        description: 'Use when preparing a release.',
+        instructions: '## Release Checklist\n1. Run tests...',
+      }),
+    ],
+  });
+  ```
+
+  **Key features:**
+  - `createSkill()` factory for code-defined skills with validation
+  - Filesystem paths and inline skills can be mixed in the same array
+  - Dynamic skill resolution via function: `skills: (ctx) => [...]`
+  - When both `skills` and `workspace.skills` exist, they merge (agent-level wins on conflicts)
+  - `agent.getSkill(name)` and `agent.listSkills()` public API for programmatic access
+  - New `@mastra/core/skills` export path
+
+### Patch Changes
+
+- Added an optional `delayMs` retry delay to `StreamErrorRetryProcessor`. Consumers can now wait before retrying transient errors, accepting either a fixed number of milliseconds or a function evaluated with the error args. Existing default behavior is unchanged when the option is not supplied. ([#18370](https://github.com/mastra-ai/mastra/pull/18370))
+
+  ```ts
+  import { StreamErrorRetryProcessor } from '@mastra/core/processors';
+
+  new StreamErrorRetryProcessor({
+    maxRetries: 2,
+    delayMs: ({ retryCount }) => Math.min(1000 * 2 ** retryCount, 30000),
+    matchers: [error => error?.code === 'ECONNRESET'],
+  });
+  ```
+
+- Fixed follow-up messages being lost after interrupting a stream. When a user aborted a run (e.g. Ctrl+C) and then immediately sent a new message, the follow-up never received a response. ([#18381](https://github.com/mastra-ai/mastra/pull/18381))
+
+  Two issues were addressed in the harness session:
+  - When an aborted run terminated the subscribed-thread consumer loop, the live subscription was left attached but no longer drained. A follow-up signal would start a new run on that subscription, but its chunks were never processed. The run engine now detaches the subscription when the consumer loop breaks on abort, so the next signal re-subscribes and starts a fresh consumer.
+  - `Session.sendSignal` could dispatch a signal onto the dying run because `abort()` clears the `AbortController` immediately while the run id and active-run id linger until `run.reset()` runs after `agent_end`. `sendSignal` now detects the post-abort window (an abort was requested but the run has not reset) and waits for the stream to fully idle before starting a new run.
+
+- Fixed harness follow-up messages sent immediately after an abort so they wait for the aborted stream to finish cleaning up before starting the next run. ([#18390](https://github.com/mastra-ai/mastra/pull/18390))
+
+- Make the evented workflow engine safe for agent streams that carry non-serializable runtime state. ([#17836](https://github.com/mastra-ai/mastra/pull/17836))
+  - Agent streams no longer drop or flatten `Date`, `Error`, `Map`, `Set`, `RegExp`, `URL`, `BigInt`, `undefined`, or registered class instances (e.g. `GeneratedFile`) when workflow events travel across the cross-process pubsub broker.
+  - New per-run `RunScope` on `Mastra` keeps live runtime handles (message lists, memory, tools, background tasks, transports, …) off the wire entirely. The scope is keyed by `runId`, never persisted, never published, and is released when the run ends.
+  - Migrated the agent's `prepare-stream`, `agentic-execution`, and `agentic-loop` workflow steps onto this scope. The legacy `_internal` field on `streamVNext()` options is still accepted as bootstrap input — it is hydrated into the scope once and marked `@deprecated`; no caller changes are required.
+
+  Resolves intermittent `getFullOutput is not a function` and `Workflow not found` errors on multi-instance deployments running the evented workflow engine.
+
+- Fixed parallel sub-agent delegations that require approval. When a supervisor agent delegated the same sub-agent twice in a single step (for example, issuing two refunds in parallel), approving them one at a time only ran the first delegation. The second failed to resume with an "AGENT_RESUME_NO_SNAPSHOT_FOUND" error, and on a page refresh the second delegation's approval was lost entirely. ([#18041](https://github.com/mastra-ai/mastra/pull/18041))
+
+  Now each delegation tracks its own suspended run, so approving both parallel delegations runs both of them, both during a live session and after reloading. Studio also resolves each delegation's suspend payload by tool call id, so parallel approvals render the correct payload per delegation.
+
+  **Before**
+
+  ```ts
+  // Supervisor delegates two refunds to the billing agent in one step
+  await supervisor.stream('Refund order A and order B in parallel.');
+
+  // Approving each one by one
+  await supervisor.approveToolCall({ runId, toolCallId: callA }); // runs refund A
+  await supervisor.approveToolCall({ runId, toolCallId: callB }); // error: AGENT_RESUME_NO_SNAPSHOT_FOUND, refund B never runs
+  ```
+
+  **After**
+
+  ```ts
+  await supervisor.approveToolCall({ runId, toolCallId: callA }); // runs refund A
+  await supervisor.approveToolCall({ runId, toolCallId: callB }); // runs refund B
+  ```
+
 ## 1.46.0-alpha.3
 
 ### Minor Changes

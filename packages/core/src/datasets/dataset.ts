@@ -354,6 +354,8 @@ export class Dataset {
       description: config.description,
       metadata: config.metadata,
       agentVersion: config.agentVersion,
+      organizationId: dataset.organizationId ?? null,
+      projectId: dataset.projectId ?? null,
     });
 
     const experimentId = run.id;

@@ -1,5 +1,42 @@
 # mastracode
 
+## 0.25.0-alpha.5
+
+### Patch Changes
+
+- Exported isBadRequestError matcher for detecting transient HTTP 400 errors that can be retried ([#18384](https://github.com/mastra-ai/mastra/pull/18384))
+
+- Added automatic retry (once) for transient OpenAI Bad Request (400) errors that occur during service degradation ([#18384](https://github.com/mastra-ai/mastra/pull/18384))
+
+- Fix Stagehand AI ops (`observe`, `act`, `extract`) failing with `Bad Request` (HTTP 400) when the user is signed in to OpenAI Codex OAuth. ([#18399](https://github.com/mastra-ai/mastra/pull/18399))
+
+  Stagehand drives its browser actions through AI SDK's non-streaming `generateText`, but Codex's `/responses` backend only accepts streamed requests and replies with Server-Sent Events. The previous integration routed Stagehand traffic to Codex by rewriting the request URL inside a custom `fetch`, but did not translate between the streaming and non-streaming shapes — so every Stagehand AI call was rejected by Codex.
+
+  MastraCode now configures Stagehand with proper AI SDK provider options (`baseURL`, `headers`, `middleware`) and a dedicated `buildCodexStagehandFetch` that:
+  - Injects (and refreshes) the Codex OAuth bearer per call
+  - Forces `stream: true` on the outgoing request body
+  - Aggregates the SSE response into the non-streaming JSON shape `@ai-sdk/openai`'s Responses parser expects
+
+  The shared OAuth-bearer-refresh logic is extracted into a `getCodexBearer` helper used by both the main agent fetch and the Stagehand fetch.
+
+  `observe`, `act`, and `extract` now work end-to-end against Codex OAuth using a Codex-compatible OpenAI model, with no `OPENAI_API_KEY` required.
+
+- Updated dependencies [[`3818814`](https://github.com/mastra-ai/mastra/commit/38188149ce454c4403fe9fcbdf73b735c68d36be)]:
+  - @mastra/core@1.46.0-alpha.5
+
+## 0.25.0-alpha.4
+
+### Patch Changes
+
+- Restored task list progress and history rendering behavior in Mastra Code. ([#18248](https://github.com/mastra-ai/mastra/pull/18248))
+
+- MastraCode now automatically retries transient ECONNRESET model stream failures with exponential backoff. Dropped provider sockets recover without manual intervention using a global policy of 2 retries with delays of 1000ms, 2000ms, and 4000ms (capped at 30000ms), applied to all model calls independent of model-pack settings. ([#18370](https://github.com/mastra-ai/mastra/pull/18370))
+
+- Updated dependencies [[`5c4e9a4`](https://github.com/mastra-ai/mastra/commit/5c4e9a4cfb2216bb3ea7f8988ad3727f3b92bb3a), [`25961e3`](https://github.com/mastra-ai/mastra/commit/25961e3260ff3b1464637af8fcdb36210551c39f), [`7b29f33`](https://github.com/mastra-ai/mastra/commit/7b29f332a357a83e555f29e718e5f2fab9979943), [`24912b1`](https://github.com/mastra-ai/mastra/commit/24912b1f855d29ec36af4ef4bde1f7417e20cdf5), [`7686216`](https://github.com/mastra-ai/mastra/commit/7686216f37e74568feddec17cef3c3d24e10e60a), [`25961e3`](https://github.com/mastra-ai/mastra/commit/25961e3260ff3b1464637af8fcdb36210551c39f), [`975c59a`](https://github.com/mastra-ai/mastra/commit/975c59ae363ee275fc55062392e1ffd2cbccbd53), [`d95f394`](https://github.com/mastra-ai/mastra/commit/d95f394fd24c8411886930d727679c4d5252aa26), [`f3f0c9d`](https://github.com/mastra-ai/mastra/commit/f3f0c9d7c878db5a13177871ce3523a14f14b311)]:
+  - @mastra/core@1.46.0-alpha.4
+  - @mastra/libsql@1.14.1-alpha.1
+  - @mastra/pg@1.14.1-alpha.1
+
 ## 0.25.0-alpha.3
 
 ### Patch Changes

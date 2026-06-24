@@ -1,5 +1,64 @@
 # @internal/playground
 
+## 1.15.1-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`3818814`](https://github.com/mastra-ai/mastra/commit/38188149ce454c4403fe9fcbdf73b735c68d36be)]:
+  - @mastra/core@1.46.0-alpha.5
+  - @mastra/client-js@1.27.0-alpha.5
+  - @mastra/react@1.1.1-alpha.5
+  - @mastra/playground-ui@36.0.0-alpha.5
+
+## 1.15.1-alpha.4
+
+### Patch Changes
+
+- Fixed parallel sub-agent delegations that require approval. When a supervisor agent delegated the same sub-agent twice in a single step (for example, issuing two refunds in parallel), approving them one at a time only ran the first delegation. The second failed to resume with an "AGENT_RESUME_NO_SNAPSHOT_FOUND" error, and on a page refresh the second delegation's approval was lost entirely. ([#18041](https://github.com/mastra-ai/mastra/pull/18041))
+
+  Now each delegation tracks its own suspended run, so approving both parallel delegations runs both of them, both during a live session and after reloading. Studio also resolves each delegation's suspend payload by tool call id, so parallel approvals render the correct payload per delegation.
+
+  **Before**
+
+  ```ts
+  // Supervisor delegates two refunds to the billing agent in one step
+  await supervisor.stream('Refund order A and order B in parallel.');
+
+  // Approving each one by one
+  await supervisor.approveToolCall({ runId, toolCallId: callA }); // runs refund A
+  await supervisor.approveToolCall({ runId, toolCallId: callB }); // error: AGENT_RESUME_NO_SNAPSHOT_FOUND, refund B never runs
+  ```
+
+  **After**
+
+  ```ts
+  await supervisor.approveToolCall({ runId, toolCallId: callA }); // runs refund A
+  await supervisor.approveToolCall({ runId, toolCallId: callB }); // runs refund B
+  ```
+
+- Added Studio support for authoring and viewing item-level tool mocks on dataset items. ([#18038](https://github.com/mastra-ai/mastra/pull/18038))
+  Added trace-derived mock creation with an editable preview before saving to a new or existing item.
+  Added tool mock propagation when creating new items and creating datasets from items.
+  Improved experiment results with a tool mock report (served, unconsumed, live calls, and mismatch details).
+
+  Author tool mocks on a dataset item as a JSON array:
+
+  ```json
+  [
+    {
+      "toolName": "refundUser",
+      "args": { "user": "YJ", "amount": 100 },
+      "output": { "refundId": "refund_1", "user": "YJ", "amount": 100, "newBalance": 100 }
+    }
+  ]
+  ```
+
+- Updated dependencies [[`5c4e9a4`](https://github.com/mastra-ai/mastra/commit/5c4e9a4cfb2216bb3ea7f8988ad3727f3b92bb3a), [`25961e3`](https://github.com/mastra-ai/mastra/commit/25961e3260ff3b1464637af8fcdb36210551c39f), [`7b29f33`](https://github.com/mastra-ai/mastra/commit/7b29f332a357a83e555f29e718e5f2fab9979943), [`24912b1`](https://github.com/mastra-ai/mastra/commit/24912b1f855d29ec36af4ef4bde1f7417e20cdf5), [`7686216`](https://github.com/mastra-ai/mastra/commit/7686216f37e74568feddec17cef3c3d24e10e60a), [`975c59a`](https://github.com/mastra-ai/mastra/commit/975c59ae363ee275fc55062392e1ffd2cbccbd53), [`d95f394`](https://github.com/mastra-ai/mastra/commit/d95f394fd24c8411886930d727679c4d5252aa26), [`25961e3`](https://github.com/mastra-ai/mastra/commit/25961e3260ff3b1464637af8fcdb36210551c39f), [`f3f0c9d`](https://github.com/mastra-ai/mastra/commit/f3f0c9d7c878db5a13177871ce3523a14f14b311), [`6581e28`](https://github.com/mastra-ai/mastra/commit/6581e28a65d72cdb5f0e8d8f892220a5c27160fe), [`f3faedc`](https://github.com/mastra-ai/mastra/commit/f3faedc970a4852400a41bb6e53a4c584704ec85)]:
+  - @mastra/core@1.46.0-alpha.4
+  - @mastra/client-js@1.27.0-alpha.4
+  - @mastra/playground-ui@36.0.0-alpha.4
+  - @mastra/react@1.1.1-alpha.4
+
 ## 1.15.1-alpha.3
 
 ### Patch Changes

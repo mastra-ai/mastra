@@ -339,6 +339,53 @@ export function createDatasetsTests({
           expect(tombstone!.projectId).toBe('proj_batch');
         }
       });
+
+      it('addItem inherits tenancy from parent dataset onto the live row', async () => {
+        const ds = await datasetsStorage.createDataset({
+          name: 'scd2-add-tenancy',
+          organizationId: 'org_add',
+          projectId: 'proj_add',
+        });
+        const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'hello' } });
+
+        expect(item.organizationId).toBe('org_add');
+        expect(item.projectId).toBe('proj_add');
+
+        // Also assert via listItems so we exercise the persisted row mapper, not just the returned value
+        const listed = await datasetsStorage.listItems({
+          datasetId: ds.id,
+          pagination: { page: 0, perPage: 10 },
+        });
+        const persisted = listed.items.find(i => i.id === item.id);
+        expect(persisted).toBeDefined();
+        expect(persisted!.organizationId).toBe('org_add');
+        expect(persisted!.projectId).toBe('proj_add');
+      });
+
+      it('updateItem re-inherits tenancy from parent dataset onto the new live row', async () => {
+        const ds = await datasetsStorage.createDataset({
+          name: 'scd2-update-tenancy',
+          organizationId: 'org_update',
+          projectId: 'proj_update',
+        });
+        const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'v1' } });
+
+        const updated = await datasetsStorage.updateItem({
+          id: item.id,
+          datasetId: ds.id,
+          input: { q: 'v2' },
+        });
+
+        expect(updated.organizationId).toBe('org_update');
+        expect(updated.projectId).toBe('proj_update');
+
+        // History should include the new live row carrying tenancy
+        const history = await datasetsStorage.getItemHistory(item.id);
+        const live = history.find(h => h.validTo === null && !h.isDeleted);
+        expect(live).toBeDefined();
+        expect(live!.organizationId).toBe('org_update');
+        expect(live!.projectId).toBe('proj_update');
+      });
     });
 
     // ---------------------------------------------------------------------------
