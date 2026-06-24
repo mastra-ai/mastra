@@ -6,6 +6,7 @@ import { useCurrentRun } from '../context/use-current-run';
 import type { Step } from '../context/use-current-run';
 import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
 import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
+import { useWaitingStepKey } from './use-workflow-trigger';
 import type { WorkflowCardDisplayStatus, WorkflowConditionCodeCondition } from './components/types';
 import { WorkflowConditionCardView } from './components/workflow-condition-card-view';
 import { WorkflowStepCardView } from './components/workflow-step-card-view';
@@ -37,6 +38,7 @@ const WorkflowStepCard = ({
   const { steps } = useCurrentRun();
   const { selectedStepId, hoverStepId, setHoverStepId } = useWorkflowSelectedStep();
   const { showNestedGraph } = useWorkflowStepDetail();
+  const waitingStepKey = useWaitingStepKey();
   const { label, stepId, description } = data;
   const mapConfig = data.mapConfig ?? ('step' in data.workflowStep ? data.workflowStep.step?.mapConfig : undefined);
   const stepGraph =
@@ -44,6 +46,7 @@ const WorkflowStepCard = ({
   const fullLabel = parentWorkflowName ? `${parentWorkflowName}.${label}` : label;
   const stepKey = parentWorkflowName ? `${parentWorkflowName}.${stepId || label}` : stepId || label;
   const isSelected = selectedStepId === stepKey;
+  const isWaiting = waitingStepKey === stepKey;
   const isHovered = hoverStepId === stepKey;
   const step = steps[stepKey];
   const { displayStatus, isTripwire } = getDisplayStatus(step);
@@ -57,6 +60,7 @@ const WorkflowStepCard = ({
       isNestedWorkflowStep={data.workflowStep.kind === 'nested-workflow-step'}
       stepKey={stepKey}
       isSelected={isSelected}
+      isWaiting={isWaiting}
       isHovered={isHovered}
       onHoverChange={isHovered => setHoverStepId(isHovered ? stepKey : null)}
       duration={data.duration}

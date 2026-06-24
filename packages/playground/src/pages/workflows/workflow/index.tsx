@@ -2,7 +2,6 @@ import type { GetWorkflowResponse } from '@mastra/client-js';
 import { PermissionDenied, SessionExpired, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
 import { useParams } from 'react-router';
 import { WorkflowStepDetailContent } from '@/domains/workflows/components/workflow-step-detail';
-import { WorkflowSelectedStepProvider } from '@/domains/workflows/context/workflow-selected-step-context';
 import { useWorkflowStepDetail } from '@/domains/workflows/context/workflow-step-detail-context';
 import { WorkflowStepDetailProvider } from '@/domains/workflows/context/workflow-step-detail-provider';
 import { WorkflowGraph } from '@/domains/workflows/workflow/workflow-graph';
@@ -60,10 +59,8 @@ export const Workflow = () => {
   }
 
   return (
-    <WorkflowSelectedStepProvider>
-      <WorkflowStepDetailProvider>
-        <WorkflowContent workflowId={workflowId!} workflow={workflow ?? undefined} isLoading={isLoading} />
-      </WorkflowStepDetailProvider>
-    </WorkflowSelectedStepProvider>
+    <WorkflowStepDetailProvider>
+      <WorkflowContent workflowId={workflowId!} workflow={workflow ?? undefined} isLoading={isLoading} />
+    </WorkflowStepDetailProvider>
   );
 };

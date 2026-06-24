@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { GetWorkflowResponse } from '@mastra/client-js';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type * as XyFlowReact from '@xyflow/react';
 import type * as React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -20,12 +20,28 @@ const reactFlowViewport = vi.hoisted(() => ({
   setCenter: vi.fn(),
 }));
 
+// Captures the latest onNodesChange handler React Flow is wired with, so a test
+// can deterministically simulate React Flow's post-mount layout pass (which in a
+// real browser updates the node state and is what should re-trigger the focus
+// effect). jsdom never lays out, so we drive that node-state settle explicitly.
+const reactFlowControl = vi.hoisted(() => ({
+  onNodesChange: undefined as ((changes: unknown[]) => void) | undefined,
+}));
+
 vi.mock('@xyflow/react', async importOriginal => {
   const actual = (await importOriginal()) as typeof XyFlowReact;
 
   return {
     ...actual,
     useReactFlow: () => reactFlowViewport,
+    ReactFlow: ({ children, nodes, onNodesChange }: any) => {
+      reactFlowControl.onNodesChange = onNodesChange;
+      return (
+        <div data-testid="react-flow-stub" data-node-count={nodes?.length ?? 0}>
+          {children}
+        </div>
+      );
+    },
   };
 });
 
@@ -33,6 +49,7 @@ afterEach(() => {
   cleanup();
   reactFlowViewport.getNodes.mockReset();
   reactFlowViewport.setCenter.mockReset();
+  reactFlowControl.onNodesChange = undefined;
 });
 
 function stepGraph(...stepIds: string[]): GetWorkflowResponse['stepGraph'] {
@@ -149,6 +166,44 @@ describe('WorkflowGraph', () => {
         workflow={twoStepWorkflow}
       />,
     );
+
+    // Center of step-b: x 440 + 300/2 = 590, y 80 + 120/2 = 140.
+    await waitFor(() => {
+      expect(reactFlowViewport.setCenter).toHaveBeenCalledWith(590, 140, { duration: 300, zoom: 1 });
+    });
+  });
+
+  it('retries centering on the waiting step once nodes lay out after the first paint', async () => {
+    // Reproduces the reported refocus race: when landing on a paused :runId page,
+    // React Flow has not registered/measured its nodes on the first focus attempt.
+    // getNodes() is empty then, so the initial run finds nothing. The focus effect
+    // must retry once the node state settles (it depends on `nodes`), otherwise the
+    // viewport never centers on the step the run is waiting on.
+    let nodesLaidOut = false;
+    reactFlowViewport.getNodes.mockImplementation(() => (nodesLaidOut ? (twoNodes as never) : ([] as never)));
+
+    render(
+      <Harness
+        contextValue={
+          {
+            workflow: twoStepWorkflow,
+            result: { status: 'paused', steps: { 'step-a': { status: 'success' } } },
+          } as never
+        }
+        workflow={twoStepWorkflow}
+      />,
+    );
+
+    // First paint: React Flow has not registered/measured its nodes, so getNodes()
+    // is empty and the focus attempt finds nothing — nothing is centered.
+    expect(reactFlowViewport.setCenter).not.toHaveBeenCalled();
+
+    // React Flow's layout pass settles the node state. getNodes() now resolves the
+    // waiting node, and the node-state change must re-trigger the focus effect.
+    nodesLaidOut = true;
+    act(() => {
+      reactFlowControl.onNodesChange?.([{ id: 'step-a', type: 'position', position: { x: 1, y: 0 } }]);
+    });
 
     // Center of step-b: x 440 + 300/2 = 590, y 80 + 120/2 = 140.
     await waitFor(() => {

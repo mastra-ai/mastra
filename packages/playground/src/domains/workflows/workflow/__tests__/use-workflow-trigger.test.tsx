@@ -10,12 +10,14 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { WorkflowRunContext } from '../../context/workflow-run-context';
 import { WorkflowRunProvider } from '../../context/workflow-run-provider';
-import { useSuspendedSteps, useWaitingStepKey } from '../use-workflow-trigger';
-import { branchWorkflow, twoStepWorkflow } from './fixtures/workflow-debug-step-controls';
+import { useNextPerStep, useSuspendedSteps, useWaitingStepKey } from '../use-workflow-trigger';
+import { branchWorkflow, parallelWorkflow, twoStepWorkflow } from './fixtures/workflow-debug-step-controls';
 import {
   pausedRunAfterFirstStepState,
   pausedRunBranchResolvedState,
+  pausedRunMidParallelState,
   pausedRunNoStepsState,
+  pausedRunParallelCompleteState,
   successfulRunState,
   suspendedRunState,
 } from './fixtures/workflow-run-states';
@@ -148,6 +150,46 @@ describe('useWaitingStepKey', () => {
       renderWithRun('branch-workflow', pausedRunBranchResolvedState.runId, <WaitingProbe />);
 
       await waitFor(() => expect(screen.getByTestId('waiting').textContent).toBe('mapping_join'));
+    });
+  });
+});
+
+describe('useNextPerStep', () => {
+  // Surfaces the gating flag the "Run next step" control binds to, plus the waited step key
+  // so tests can deterministically await the converted paused run before asserting.
+  function NextStepProbe() {
+    const { canRunNextStep } = useNextPerStep();
+    const waiting = useWaitingStepKey();
+    return (
+      <>
+        <div data-testid="waiting">{waiting ?? 'none'}</div>
+        <div data-testid="can-run">{String(canRunNextStep)}</div>
+      </>
+    );
+  }
+
+  describe('when paused mid-parallel with only one arm finished', () => {
+    it('cannot run the join until every parallel arm has succeeded', async () => {
+      // `add-letter-b` succeeded but `add-letter-c` was skipped (no output), so the waited
+      // step advances to the join. The join needs both arms' outputs, so a partial input is
+      // not runnable and the control must stay disabled.
+      serveWorkflowRun('parallel-workflow', parallelWorkflow, pausedRunMidParallelState);
+
+      renderWithRun('parallel-workflow', pausedRunMidParallelState.runId, <NextStepProbe />);
+
+      await waitFor(() => expect(screen.getByTestId('waiting').textContent).toBe('mapping_join'));
+      expect(screen.getByTestId('can-run').textContent).toBe('false');
+    });
+  });
+
+  describe('when paused after every parallel arm finished', () => {
+    it('can run the join', async () => {
+      serveWorkflowRun('parallel-workflow', parallelWorkflow, pausedRunParallelCompleteState);
+
+      renderWithRun('parallel-workflow', pausedRunParallelCompleteState.runId, <NextStepProbe />);
+
+      await waitFor(() => expect(screen.getByTestId('waiting').textContent).toBe('mapping_join'));
+      expect(screen.getByTestId('can-run').textContent).toBe('true');
     });
   });
 });

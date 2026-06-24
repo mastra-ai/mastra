@@ -56,6 +56,7 @@ export const WorkflowStepCardView = ({
   isNestedWorkflowStep,
   stepKey,
   isSelected,
+  isWaiting,
   isHovered,
   onHoverChange,
   duration,
@@ -80,6 +81,7 @@ export const WorkflowStepCardView = ({
       data-workflow-step-key={stepKey}
       data-workflow-step-status={displayStatus ?? 'idle'}
       data-workflow-step-active={isSelected ? 'true' : undefined}
+      data-workflow-step-waiting={isWaiting ? 'true' : undefined}
       data-workflow-step-hovered={isHovered ? 'true' : undefined}
       data-testid={isNestedWorkflowStep ? 'workflow-nested-node' : 'workflow-default-node'}
       onMouseEnter={() => onHoverChange?.(true)}
@@ -89,6 +91,7 @@ export const WorkflowStepCardView = ({
         'bg-surface3 rounded-lg w-[274px] border border-border1 transition-colors hover:border-neutral6',
         accentColor && 'border-l-4',
         isHovered && !isSelected && 'border-neutral6',
+        isWaiting && !isSelected && 'border-accent3',
         isSelected && 'border-accent1',
       )}
     >

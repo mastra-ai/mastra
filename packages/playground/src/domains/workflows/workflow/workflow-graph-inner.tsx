@@ -7,7 +7,7 @@ import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
 
 import { useWorkflowGraphRuntime } from './use-workflow-graph-runtime';
 import { useWaitingStepKey } from './use-workflow-trigger';
-import { constructNodesAndEdges } from './utils';
+import { constructNodesAndEdges, findFocusNode } from './utils';
 import { ZoomSlider } from './zoom-slider';
 
 export interface WorkflowGraphInnerProps {
@@ -32,10 +32,7 @@ export function WorkflowGraphInner({ workflow }: WorkflowGraphInnerProps) {
   const focusStepId = selectedStepId ?? waitingStepKey;
 
   const focusOnStep = useEffectEvent((stepId: string) => {
-    const focusNode = getNodes().find(node => {
-      const nodeStepId = node.data?.stepId ?? node.data?.label;
-      return nodeStepId === stepId;
-    });
+    const focusNode = findFocusNode(getNodes(), stepId);
     if (!focusNode) return;
     graphRef.current?.focus({ preventScroll: true });
     const width = focusNode.measured?.width ?? focusNode.width ?? 274;
@@ -46,10 +43,15 @@ export function WorkflowGraphInner({ workflow }: WorkflowGraphInnerProps) {
     });
   });
 
+  // Re-run when the node state settles. On the first paint (e.g. landing on a
+  // paused :runId page) React Flow has not registered/measured its nodes yet, so
+  // the initial attempt finds nothing and no-ops. React Flow then emits the layout
+  // pass through onNodesChange, which updates `nodes` and lets this effect retry
+  // against the now-available nodes. focusOnStep is idempotent for a settled target.
   useEffect(() => {
     if (!focusStepId) return;
     focusOnStep(focusStepId);
-  }, [focusStepId]);
+  }, [focusStepId, nodes]);
 
   return (
     <div

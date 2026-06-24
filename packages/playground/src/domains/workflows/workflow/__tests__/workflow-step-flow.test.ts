@@ -1,10 +1,13 @@
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
+import type { Node } from '@xyflow/react';
 import { describe, expect, it } from 'vitest';
 
 import {
+  allPredecessorsResolved,
   buildNextStepInput,
   buildStepSuccessors,
   collectGraphStepFlags,
+  findFocusNode,
   isBranchArmBypassed,
   isLastRunnableStep,
   selectNextStepKey,
@@ -184,6 +187,42 @@ describe('isLastRunnableStep', () => {
   });
 });
 
+describe('allPredecessorsResolved', () => {
+  it('is true only when every predecessor has succeeded', () => {
+    const steps = {
+      a: { status: 'success' },
+      b: { status: 'success' },
+    };
+
+    expect(allPredecessorsResolved(['a', 'b'], steps)).toBe(true);
+  });
+
+  it('is false when any predecessor is skipped or still running', () => {
+    const steps = {
+      a: { status: 'success' },
+      b: { status: 'skipped' },
+      c: { status: 'running' },
+    };
+
+    expect(allPredecessorsResolved(['a', 'b'], steps)).toBe(false);
+    expect(allPredecessorsResolved(['a', 'c'], steps)).toBe(false);
+  });
+
+  it('is vacuously true for an empty predecessor set', () => {
+    expect(allPredecessorsResolved([], {})).toBe(true);
+  });
+
+  it('treats a bypassed predecessor as resolved even if absent from steps', () => {
+    // A dead conditional-branch arm never runs, so the join must still resolve.
+    const steps = { taken: { status: 'success' } };
+    const isBypassed = (stepId: string) => stepId === 'dead-arm';
+
+    expect(allPredecessorsResolved(['taken', 'dead-arm'], steps, isBypassed)).toBe(true);
+    // Without the bypass predicate the missing arm leaves the join unresolved.
+    expect(allPredecessorsResolved(['taken', 'dead-arm'], steps)).toBe(false);
+  });
+});
+
 describe('buildNextStepInput', () => {
   it('passes a single predecessor output directly', () => {
     const stepsFlow = { b: ['a'] };
@@ -215,8 +254,55 @@ describe('buildNextStepInput', () => {
     expect(buildNextStepInput({ nextStepKey: 'b', stepsFlow, steps })).toBeUndefined();
   });
 
+  it('returns undefined for a join when only some predecessors have succeeded', () => {
+    // A skipped/unresolved parallel arm leaves the join input incomplete: it must not
+    // produce a partial map, otherwise the "Run next step" control wrongly enables.
+    const stepsFlow = { join: ['a', 'b'] };
+    const steps = {
+      a: { status: 'success', output: { x: 1 } },
+      b: { status: 'skipped' },
+    };
+
+    expect(buildNextStepInput({ nextStepKey: 'join', stepsFlow, steps })).toBeUndefined();
+  });
+
+  it('builds a join from the taken arm only when the other arm is a bypassed dead branch', () => {
+    // A conditional join: the un-taken arm is bypassed (absent), so the join is runnable
+    // and forwards only the taken arm's output.
+    const stepsFlow = { join: ['taken', 'dead-arm'] };
+    const steps = { taken: { status: 'success', output: { x: 1 } } };
+    const isStepBypassed = (stepId: string) => stepId === 'dead-arm';
+
+    expect(buildNextStepInput({ nextStepKey: 'join', stepsFlow, steps, isStepBypassed })).toEqual({
+      hasMultiSteps: true,
+      input: { taken: { x: 1 } },
+    });
+  });
+
   it('returns undefined when the step has no predecessor or no next step', () => {
     expect(buildNextStepInput({ nextStepKey: 'orphan', stepsFlow: {}, steps: {} })).toBeUndefined();
     expect(buildNextStepInput({ nextStepKey: undefined, stepsFlow: {}, steps: {} })).toBeUndefined();
+  });
+});
+
+describe('findFocusNode', () => {
+  const node = (id: string, data: Record<string, unknown>): Node => ({ id, position: { x: 0, y: 0 }, data });
+
+  it('matches a default/parallel node by its stepId', () => {
+    const nodes = [node('n1', { stepId: 'step-a' }), node('n2', { stepId: 'step-b' })];
+
+    expect(findFocusNode(nodes, 'step-b')?.id).toBe('n2');
+  });
+
+  it('falls back to the label for condition nodes without a stepId', () => {
+    const nodes = [node('cond', { label: 'is-even' })];
+
+    expect(findFocusNode(nodes, 'is-even')?.id).toBe('cond');
+  });
+
+  it('returns undefined when no node matches', () => {
+    const nodes = [node('n1', { stepId: 'step-a' })];
+
+    expect(findFocusNode(nodes, 'missing')).toBeUndefined();
   });
 });

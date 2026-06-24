@@ -87,3 +87,39 @@ export const pausedRunBranchResolvedState: GetWorkflowRunByIdResponse = runState
     },
   },
 );
+
+// A paused run on the parallel workflow where ONE parallel arm finished (`add-letter-b`
+// success) while the sibling arm has NO output: it rehydrated as `skipped`. Because both
+// `success` and `skipped` are treated as "resolved" for step selection, the waited step
+// advances to the join (`mapping_join`) — but the join genuinely cannot run, since the
+// `skipped` arm never produced an output to feed it. The "Run next step" control must
+// therefore stay disabled: a partial join input (only the succeeded arm) is not runnable.
+export const pausedRunMidParallelState: GetWorkflowRunByIdResponse = runState(
+  'run-paused-mid-parallel',
+  'parallel-workflow',
+  {
+    status: 'paused',
+    payload: {},
+    steps: {
+      start: { status: 'success', payload: {}, output: { value: 'a' }, startedAt: AT, endedAt: AT },
+      'add-letter-b': { status: 'success', payload: {}, output: { value: 'ab' }, startedAt: AT, endedAt: AT },
+      'add-letter-c': { status: 'skipped', payload: {}, startedAt: AT, endedAt: AT },
+    },
+  },
+);
+
+// A paused run on the parallel workflow where BOTH parallel arms finished. The join
+// (`mapping_join`) now has all its predecessors and is runnable.
+export const pausedRunParallelCompleteState: GetWorkflowRunByIdResponse = runState(
+  'run-paused-parallel-complete',
+  'parallel-workflow',
+  {
+    status: 'paused',
+    payload: {},
+    steps: {
+      start: { status: 'success', payload: {}, output: { value: 'a' }, startedAt: AT, endedAt: AT },
+      'add-letter-b': { status: 'success', payload: {}, output: { value: 'ab' }, startedAt: AT, endedAt: AT },
+      'add-letter-c': { status: 'success', payload: {}, output: { value: 'ac' }, startedAt: AT, endedAt: AT },
+    },
+  },
+);

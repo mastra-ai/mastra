@@ -785,38 +785,74 @@ export const isLastRunnableStep = ({
 };
 
 /**
- * Build the input payload for the next step from its successful predecessors:
- * - A join with multiple predecessors yields a keyed map of each predecessor's
- *   output (`hasMultiSteps`).
+ * True when every predecessor step has succeeded. A join is only runnable once all of its
+ * parallel arms have produced an output; a skipped or still-running arm makes it false.
+ * An empty predecessor set is vacuously resolved (callers handle the no-predecessor case
+ * separately before consulting this predicate).
+ */
+/**
+ * A join is ready when every predecessor is accounted for: it either succeeded
+ * (it produced an output to forward) or it was bypassed (a dead conditional-branch
+ * arm that will never run). A still-running or pending arm leaves the join unresolved.
+ * Parallel arms are never bypassed, so a paused parallel join only resolves once all
+ * arms succeed.
+ */
+export const allPredecessorsResolved = (
+  previousSteps: string[],
+  steps: Record<string, { status?: string }> | undefined,
+  isBypassed: (stepId: string) => boolean = () => false,
+): boolean => previousSteps.every(stepId => steps?.[stepId]?.status === 'success' || isBypassed(stepId));
+
+/**
+ * Resolve the graph node that represents a given step id. Default/parallel nodes
+ * carry `data.stepId`; condition nodes fall back to `data.label`. Returns
+ * undefined when no node matches (e.g. before React Flow has laid out the graph).
+ */
+export const findFocusNode = (nodes: Node[], stepId: string): Node | undefined =>
+  nodes.find(node => (node.data?.stepId ?? node.data?.label) === stepId);
+
+/**
+ * Build the input payload for the next step from its resolved predecessors:
+ * - A join with multiple predecessors yields a keyed map of each succeeded
+ *   predecessor's output (`hasMultiSteps`); bypassed dead branch arms are excluded.
  * - A single predecessor yields its output directly.
- * Returns undefined when the step has no predecessor or the predecessor has not
- * succeeded yet.
+ * Returns undefined when the step has no predecessor, or when any predecessor is
+ * still unresolved (not succeeded and not bypassed) — e.g. a paused parallel join
+ * where only some arms have finished.
  */
 export const buildNextStepInput = ({
   nextStepKey,
   stepsFlow,
   steps,
+  isStepBypassed = () => false,
 }: {
   nextStepKey: string | undefined;
   stepsFlow: Record<string, string[]>;
   steps: Record<string, { status?: string; output?: any }> | undefined;
+  isStepBypassed?: (stepId: string) => boolean;
 }): { hasMultiSteps: boolean; input: any } | undefined => {
   if (!nextStepKey) return undefined;
   const previousSteps = stepsFlow?.[nextStepKey] ?? [];
   if (previousSteps.length === 0) return undefined;
 
   if (previousSteps.length > 1) {
+    // A join can only run once every predecessor is accounted for. A still-running or pending
+    // arm leaves the input incomplete, so the step is not runnable yet — return undefined rather
+    // than a partial map (which would wrongly enable "Run next step", e.g. on a paused parallel
+    // join where only one arm has finished). Bypassed dead branch arms are excluded from the map.
+    if (!allPredecessorsResolved(previousSteps, steps, isStepBypassed)) return undefined;
+
     return {
       hasMultiSteps: true,
-      input: previousSteps.reduce(
-        (acc, stepId) => {
-          if (steps?.[stepId]?.status === 'success') {
+      input: previousSteps
+        .filter(stepId => steps?.[stepId]?.status === 'success')
+        .reduce(
+          (acc, stepId) => {
             acc[stepId] = steps?.[stepId]?.output;
-          }
-          return acc;
-        },
-        {} as Record<string, any>,
-      ),
+            return acc;
+          },
+          {} as Record<string, any>,
+        ),
     };
   }
 

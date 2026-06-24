@@ -149,7 +149,7 @@ export function useNextPerStep() {
   const nextStepKey = useWaitingStepKey();
 
   const stepPayload = useMemo(() => {
-    const input = buildNextStepInput({ nextStepKey, stepsFlow, steps });
+    const input = buildNextStepInput({ nextStepKey, stepsFlow, steps, isStepBypassed });
     if (input) return input;
     // A predecessor-less step (the first step of a paused run with no completed steps) has no
     // upstream output to build from, so buildNextStepInput returns undefined and the run can never
@@ -158,7 +158,7 @@ export function useNextPerStep() {
       return { hasMultiSteps: false, input: result?.input ?? payload };
     }
     return undefined;
-  }, [nextStepKey, stepsFlow, steps, result?.input, payload]);
+  }, [nextStepKey, stepsFlow, steps, result?.input, payload, isStepBypassed]);
 
   const isLastStep = useMemo(
     () => isLastRunnableStep({ nextStepKey, stepNodesInOrder, isStepSuccess: isStepResolved, isStepBypassed }),
