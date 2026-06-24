@@ -108,6 +108,28 @@ describe('savePlanToDisk', () => {
     expect(files[0]).toMatch(/-untitled\.md$/);
   });
 
+  it('rejects path traversal in resourceId', async () => {
+    await expect(
+      savePlanToDisk({
+        title: 'Malicious',
+        plan: 'exploit',
+        resourceId: '../../../etc',
+        plansDir: tmpDir,
+      }),
+    ).rejects.toThrow('Invalid resourceId');
+  });
+
+  it('rejects absolute path in resourceId', async () => {
+    await expect(
+      savePlanToDisk({
+        title: 'Malicious',
+        plan: 'exploit',
+        resourceId: '/tmp/evil',
+        plansDir: tmpDir,
+      }),
+    ).rejects.toThrow('Invalid resourceId');
+  });
+
   it('does not overwrite existing plans', async () => {
     const opts = {
       title: 'Same plan',

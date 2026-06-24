@@ -29,7 +29,12 @@ export async function savePlanToDisk(opts: {
 }): Promise<void> {
   const { title, plan, resourceId } = opts;
   const plansDir = opts.plansDir ?? getPlansDir();
-  const dir = path.join(plansDir, resourceId);
+  const baseDir = path.resolve(plansDir);
+  const dir = path.resolve(baseDir, resourceId);
+  const rel = path.relative(baseDir, dir);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    throw new Error(`Invalid resourceId: ${resourceId}`);
+  }
 
   await fs.mkdir(dir, { recursive: true });
 
