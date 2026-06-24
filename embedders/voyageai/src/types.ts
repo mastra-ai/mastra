@@ -153,7 +153,7 @@ export interface VoyageMultimodalEmbeddingConfig {
  * Configuration for VoyageAI contextualized chunk embedding models
  */
 export interface VoyageContextualizedEmbeddingConfig {
-  /** The model to use (voyage-context-3) */
+  /** The model to use (voyage-context-3 or voyage-context-4) */
   model: VoyageContextModel;
   /** API key (defaults to VOYAGE_API_KEY env var) */
   apiKey?: string;
