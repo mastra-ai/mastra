@@ -1,15 +1,8 @@
-import {
-  Button,
-  Input,
-  JSONSchemaForm,
-  jsonSchemaToFields,
-  Label,
-  ScrollArea,
-  Spinner,
-  Textarea,
-  Txt,
-} from '@mastra/playground-ui';
-import type { JsonSchema, SchemaField } from '@mastra/playground-ui';
+import { Button, Input, Label, ScrollArea, Spinner, Txt } from '@mastra/playground-ui';
+import type { JsonSchema } from '@mastra/playground-ui';
+import { JSONSchemaForm, jsonSchemaToFields } from '@mastra/playground-ui/components/JSONSchemaForm';
+import type { SchemaField } from '@mastra/playground-ui/components/JSONSchemaForm';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Check, Plus, PlusIcon, Save } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';

@@ -46,6 +46,8 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       succeededCount: 0,
       failedCount: 0,
       skippedCount: 0,
+      organizationId: input.organizationId ?? null,
+      projectId: input.projectId ?? null,
       startedAt: null,
       completedAt: null,
       createdAt: now,
@@ -101,6 +103,12 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     if (args.status) {
       experiments = experiments.filter(r => r.status === args.status);
     }
+    if (args.filters?.organizationId !== undefined) {
+      experiments = experiments.filter(r => (r.organizationId ?? null) === args.filters!.organizationId);
+    }
+    if (args.filters?.projectId !== undefined) {
+      experiments = experiments.filter(r => (r.projectId ?? null) === args.filters!.projectId);
+    }
 
     // Sort by createdAt descending (newest first)
     experiments.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
@@ -149,6 +157,9 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       traceId: input.traceId ?? null,
       status: input.status ?? null,
       tags: input.tags ?? null,
+      toolMockReport: input.toolMockReport ?? null,
+      organizationId: input.organizationId ?? null,
+      projectId: input.projectId ?? null,
       createdAt: now,
     };
     this.db.experimentResults.set(result.id, result);
@@ -185,6 +196,12 @@ export class ExperimentsInMemory extends ExperimentsStorage {
     }
     if (args.status) {
       results = results.filter(r => r.status === args.status);
+    }
+    if (args.filters?.organizationId !== undefined) {
+      results = results.filter(r => (r.organizationId ?? null) === args.filters!.organizationId);
+    }
+    if (args.filters?.projectId !== undefined) {
+      results = results.filter(r => (r.projectId ?? null) === args.filters!.projectId);
     }
 
     // Sort by startedAt ascending (execution order)

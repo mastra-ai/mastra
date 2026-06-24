@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
-import type { AgentSignalInput, Agent } from '@mastra/core/agent';
+import type { AgentSignalInput, Agent, AgentSignalIfIdleOptions } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { Mastra } from '@mastra/core/mastra';
 import type { StorageThreadType } from '@mastra/core/memory';
@@ -269,6 +269,7 @@ type GithubPollingThread = {
   threadId: string;
   resourceId: string;
   agentId?: string;
+  ifIdle?: AgentSignalIfIdleOptions<unknown>;
 };
 
 type GithubPollingState = GithubPollingThread & {
@@ -453,8 +454,119 @@ function getMergedNotificationSummary(label: string): string {
   return `${label} was merged. This thread has been automatically unsubscribed from this PR. Resubscribe if you still need updates.`;
 }
 
+/**
+ * Removes a hidden block (its delimiters *and* its content) starting at every `open` marker.
+ *
+ * For each `open` occurrence the whole region up to and including the matching `close` is dropped.
+ * When `close` is missing the block is treated as unterminated and removed through end-of-string,
+ * so large payloads can't survive by omitting their closing marker. Matching is case-insensitive on
+ * the markers and uses plain `indexOf` scanning, so there is no regex backtracking (ReDoS-safe).
+ */
+function stripBlocks(text: string, open: string, close: string): string {
+  const haystack = text.toLowerCase();
+  const openLower = open.toLowerCase();
+  const closeLower = close.toLowerCase();
+  let result = '';
+  let cursor = 0;
+
+  for (;;) {
+    const start = haystack.indexOf(openLower, cursor);
+    if (start === -1) {
+      result += text.slice(cursor);
+      return result;
+    }
+    result += text.slice(cursor, start);
+    const end = haystack.indexOf(closeLower, start + openLower.length);
+    if (end === -1) return result; // unterminated: drop through EOF
+    cursor = end + closeLower.length;
+  }
+}
+
+/** Sentinel marker wrapping a stashed Markdown code region; `\u0000` cannot appear in GitHub text. */
+const CODE_TOKEN_PREFIX = '\u0000CODE';
+const CODE_TOKEN_SUFFIX = '\u0000';
+
+/**
+ * Temporarily removes Markdown code spans and fenced code blocks so tag stripping can't damage
+ * human-authored code examples.
+ *
+ * GitHub renders Markdown, so legitimate code like `` `<Component>` ``, generic type examples, or
+ * fenced JSX/TSX must survive sanitization. Each code region is replaced with an opaque token and
+ * pushed onto a stash; {@link restore} swaps the tokens back after the surrounding prose has been
+ * stripped of markup. Fenced blocks are matched before inline spans so backtick runs inside a fence
+ * are not mistaken for inline code.
+ */
+function preserveMarkdownCode(text: string): { text: string; restore: (sanitized: string) => string } {
+  const preserved: string[] = [];
+  const stash = (match: string): string => {
+    const token = `${CODE_TOKEN_PREFIX}${preserved.length}${CODE_TOKEN_SUFFIX}`;
+    preserved.push(match);
+    return token;
+  };
+
+  const protectedText = text
+    // Fenced code blocks first so inline-code matching does not touch their contents.
+    .replace(/```[\s\S]*?```/g, stash)
+    // Multi-backtick inline spans (e.g. ``code with ` inside``) before the single-backtick pass.
+    .replace(/(`{2,})(?!`)[\s\S]*?[^`]\1(?!`)/g, stash)
+    // Single-backtick inline code spans.
+    .replace(/`[^`\n]*`/g, stash);
+
+  return {
+    text: protectedText,
+    restore: sanitized =>
+      sanitized.replace(/\u0000CODE(\d+)\u0000/g, (_, index: string) => preserved[Number(index)] ?? ''),
+  };
+}
+
+/**
+ * Removes XML/HTML-like markup — and the content it hides — from a PR comment body, leaving only
+ * human-readable text while preserving Markdown code examples.
+ *
+ * Review bots (e.g. CodeRabbit) embed large machine-only payloads in comments: base64 state blobs
+ * inside `<!-- ... -->` comments (often >100KB) and verbose collapsed `<details>` sections. Rather
+ * than targeting specific bot markers, we strip hidden blocks and tags generically, since none of
+ * that markup is useful to downstream consumers and persisting it balloons notification payloads and
+ * can overflow agent context windows.
+ *
+ * Markdown code spans/fenced blocks are stashed first and restored last, so legitimate code such as
+ * `` `<Component>` `` or fenced JSX is kept intact while bot markup elsewhere is removed. Block
+ * removal (comments, `<details>`) drops the *entire* section including its inner content, and any
+ * unterminated block is removed through end-of-string so a missing closing marker can't smuggle the
+ * payload through. All scanning is `indexOf`-based and the only regex used is a non-backtracking
+ * single-tag matcher, so adversarial input cannot trigger catastrophic backtracking (ReDoS). Any
+ * unterminated markup fragment (e.g. a dangling `<script` with no `>`) is dropped through end-of-
+ * string, and finally every remaining lone `<` is removed so no partial markup survives — while
+ * ordinary prose like `coverage < 80%` keeps its text intact.
+ */
+export function sanitizeCommentText(body: string): string {
+  // Protect Markdown code regions before any stripping touches the text.
+  const { text: protectedBody, restore } = preserveMarkdownCode(body);
+  // Remove whole hidden sections (delimiters + content) before touching individual tags.
+  let text = stripBlocks(protectedBody, '<!--', '-->');
+  text = stripBlocks(text, '<details', '</details>');
+  const stripped = text
+    // Remaining standalone tags, e.g. <summary>, </p>, <br/>. `[^<>]*` cannot backtrack.
+    .replace(/<\/?[a-zA-Z][^<>]*>/g, '')
+    // Drop an unterminated markup fragment (`<!--`, `</`, `<tag`...) from its start through EOF.
+    .replace(/<[!/a-zA-Z][\s\S]*$/g, '')
+    // Strip any lone `<` left over, but keep surrounding prose (e.g. `coverage < 80%`).
+    .replace(/</g, '')
+    // Normalize prose whitespace *before* restoring code, so stashed blocks are never mutated.
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return restore(stripped);
+}
+
+/** Applies {@link sanitizeCommentText} to an optional comment body, preserving `undefined`. */
+function sanitizeCommentBody(body: string | undefined): string | undefined {
+  if (body === undefined) return undefined;
+  const sanitized = sanitizeCommentText(body);
+  return sanitized.length > 0 ? sanitized : undefined;
+}
+
 function getCommentExcerpt(body: string): string {
-  const excerpt = body.replace(/\s+/g, ' ').trim();
+  const excerpt = sanitizeCommentText(body).replace(/\s+/g, ' ').trim();
   return excerpt.length > 240 ? `${excerpt.slice(0, 237)}...` : excerpt;
 }
 
@@ -934,14 +1046,14 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
         latestCommentAuthor: readString(latestComment?.author_login),
         latestCommentAuthorType: readString(latestComment?.author_type),
         latestCommentIsBot: latestComment?.is_bot === 1,
-        latestCommentBody: readString(latestComment?.body),
+        latestCommentBody: sanitizeCommentBody(readString(latestComment?.body)),
         latestCommentUrl: readString(latestComment?.html_url),
         latestCommentUpdatedAt: readString(latestComment?.updated_at),
         latestComments: latestComments.map(comment => ({
           author: readString(comment.author_login),
           authorType: readString(comment.author_type),
           isBot: comment.is_bot === 1,
-          body: readString(comment.body),
+          body: sanitizeCommentBody(readString(comment.body)),
           url: readString(comment.html_url),
           updatedAt: readString(comment.updated_at),
         })),
@@ -1179,16 +1291,16 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     return { tools };
   }
 
-  async processOutputStep(args: ProcessOutputStepArgs): Promise<MastraDBMessage[]> {
+  async processOutputStep(args: ProcessOutputStepArgs): Promise<void> {
     const evidence = detectPrWorkEvidence({ text: args.text, toolCalls: args.toolCalls });
-    if (!evidence) return args.messages;
+    if (!evidence) return;
 
     const threadContext = this.#getThreadContext(args);
-    if (!threadContext.threadId || !threadContext.resourceId) return args.messages;
+    if (!threadContext.threadId || !threadContext.resourceId) return;
 
     const { threadStore, loadedThread } = await this.#loadThread(threadContext);
     const githubMetadata = getGithubMetadata(loadedThread.metadata);
-    if (githubMetadata.subscriptionHintShown || githubMetadata.subscriptions.length > 0) return args.messages;
+    if (githubMetadata.subscriptionHintShown || githubMetadata.subscriptions.length > 0) return;
 
     let repository: GithubRepository;
     try {
@@ -1199,7 +1311,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         number: evidence.number,
       });
     } catch {
-      return args.messages;
+      return;
     }
 
     await threadStore.saveThread({
@@ -1227,8 +1339,6 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         },
       },
     });
-
-    return args.messages;
   }
 
   async #resolveThreadStore(): Promise<GithubSignalsThreadStore | undefined> {
@@ -1572,7 +1682,9 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           latestCommentAuthor: input.snapshot.latestCommentAuthor,
           latestCommentAuthorType: input.snapshot.latestCommentAuthorType,
           latestCommentIsBot: input.snapshot.latestCommentIsBot,
-          latestCommentBody: input.snapshot.latestCommentBody,
+          // Intentionally omit the full latestCommentBody here: persisting it verbatim bloats
+          // notification payloads (a single CodeRabbit comment can exceed 100KB) and can overflow
+          // agent context windows when listed. The 240-char latestCommentExcerpt is stored instead.
           latestCommentExcerpt,
           latestCommentUrl: input.snapshot.latestCommentUrl,
           latestCommentUpdatedAt: input.snapshot.latestCommentUpdatedAt,

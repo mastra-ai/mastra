@@ -2,7 +2,7 @@ import { z } from 'zod/v4';
 
 import { Agent } from '../agent';
 import type { ToolsInput, ToolsetsInput } from '../agent/types';
-import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { MastraModelConfig } from '../llm/model/shared.types';
 import { RequestContext } from '../request-context';
 import { askUserTool } from '../tools/builtin/ask-user';
 import { submitPlanTool } from '../tools/builtin/submit-plan';
@@ -67,7 +67,7 @@ export { TaskStateProcessor } from '../tools/builtin/task-state-processor';
 
 export interface CreateSubagentToolOptions {
   subagents: HarnessSubagent[];
-  resolveModel: (modelId: string) => MastraLanguageModel;
+  resolveModel: (modelId: string) => MastraModelConfig;
   /** Resolved harness tools (already evaluated from DynamicArgument) */
   harnessTools?: ToolsInput;
   /** Fallback model ID when subagent definition has no defaultModelId */
@@ -294,7 +294,7 @@ Use this tool when:
         }
         resolvedModelId = maybeModelId;
 
-        let model: MastraLanguageModel;
+        let model: MastraModelConfig;
         try {
           model = resolveModel(resolvedModelId);
         } catch (err) {

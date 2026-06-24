@@ -2,6 +2,8 @@ import { Readable } from 'node:stream';
 import {
   createDefaultTestContext,
   createStreamWithSensitiveData,
+  createStreamWithUnserializableChunk,
+  expectSerializedStreamChunks,
   consumeSSEStream,
 } from '@internal/server-adapter-test-utils';
 import type { AdapterTestContext } from '@internal/server-adapter-test-utils';
@@ -208,6 +210,28 @@ describe('NestJS Adapter - Stream Data Redaction', () => {
       expect(text).not.toContain('data: ": heartbeat');
     } finally {
       unregisterRoute(commentRoute);
+    }
+  });
+
+  // Repro for https://github.com/mastra-ai/mastra/issues/17821 — a chunk that
+  // JSON.stringify can't handle (e.g. a BigInt step output) used to throw inside
+  // the stream loop and silently close the HTTP stream.
+  it('serializes BigInt chunks and skips unserializable chunks without killing the stream', async () => {
+    const unserializableRoute: ServerRoute<any, any, any> = {
+      method: 'POST',
+      path: '/test/unserializable-stream',
+      responseType: 'stream',
+      streamFormat: 'sse',
+      handler: async () => createStreamWithUnserializableChunk(),
+    };
+
+    registerRoute(unserializableRoute);
+    try {
+      await setupApp();
+      const chunks = await consumeStream('/test/unserializable-stream');
+      expectSerializedStreamChunks(chunks);
+    } finally {
+      unregisterRoute(unserializableRoute);
     }
   });
 

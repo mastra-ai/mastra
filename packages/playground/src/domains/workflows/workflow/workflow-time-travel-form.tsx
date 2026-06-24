@@ -10,11 +10,11 @@ import {
   TooltipTrigger,
   Txt,
   Icon,
-  useCopyToClipboard,
   formatJSON,
   isValidJson,
   cn,
 } from '@mastra/playground-ui';
+import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import CodeMirror from '@uiw/react-codemirror';
 import { Braces, ChevronDown, CopyIcon, EyeIcon, EyeOffIcon } from 'lucide-react';

@@ -68,6 +68,7 @@ export interface ThreadListItemProps {
   onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   onDelete?: () => void;
   deleteLabel?: string;
+  className?: string;
   children: ReactNode;
 }
 
@@ -79,6 +80,7 @@ export const ThreadListItem = ({
   onClick,
   onDelete,
   deleteLabel = 'delete',
+  className,
   children,
 }: ThreadListItemProps) => {
   return (
@@ -93,6 +95,7 @@ export const ThreadListItem = ({
           'min-h-form-md !h-auto w-full min-w-0 justify-start rounded-xl px-3 py-2 text-left',
           onDelete && 'pr-9',
           isActive && 'bg-surface4 text-neutral6',
+          className,
         )}
       >
         <span className="min-w-0 flex-1">{children}</span>
