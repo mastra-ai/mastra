@@ -9,7 +9,7 @@ packages:
 
 :::experimental
 
-The `Harness` feature is in alpha stage and subject to breaking changes in minor versions until it graduates from its alpha status.
+The `Harness` feature is in beta stage and subject to breaking changes in minor versions until it graduates from its beta status.
 
 :::
 
@@ -430,6 +430,33 @@ Initialize the harness. Loads storage, initializes the workspace, propagates mem
 ```typescript
 await harness.init()
 ```
+
+#### `createSession({ id, ownerId, resourceId? })`
+
+Create a new, fully-wired `Session` and bring it online. The session starts in the default mode with the seeded model, connects to the Harness's shared machinery (agent, storage/lock, config catalog), and has a current thread (the most recent thread for the resource, or a freshly created one). Call `init()` once before creating sessions so shared storage and workspace are ready.
+
+The Harness owns no session of its own — every consumer creates its own session and drives all work through it. In a server or multiplayer setting, each request, thread, or user gets its own session, isolated from every other: independent event bus, mode, model, state, and current thread.
+
+`id` and `ownerId` are required — they mirror `SessionRecord.id` and `SessionRecord.ownerId` and are stable for the life of the session. `resourceId` is optional and defaults to `config.resourceId` then `config.id`.
+
+```typescript
+const session = await harness.createSession({
+  id: 'session-xyz',
+  ownerId: 'user-123',
+})
+```
+
+You can also override the resource:
+
+```typescript
+const session = await harness.createSession({
+  id: 'session-xyz',
+  ownerId: 'user-123',
+  resourceId: 'project-abc',
+})
+```
+
+Switching the resource ID via `harness.setResourceId()` changes only the resource ID, not `id` or `ownerId`. Read them through `session.identity.getId()` and `session.identity.getOwnerId()`.
 
 #### `selectOrCreateThread()`
 

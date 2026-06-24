@@ -336,8 +336,20 @@ export class Harness<TState = {}> {
    *
    * Call {@link init} once before creating sessions so shared storage and
    * workspace are ready.
+   *
+   * @param id - Stable session identifier (mirrors `SessionRecord.id`). Required.
+   * @param ownerId - Stable session owner (mirrors `SessionRecord.ownerId`). Required.
+   * @param resourceId - Memory resource to bind this session to. Defaults to the harness `resourceId` or `id`.
    */
-  async createSession({ resourceId }: { resourceId?: string } = {}): Promise<Session<TState>> {
+  async createSession({
+    resourceId,
+    ownerId,
+    id,
+  }: {
+    resourceId?: string;
+    id: string;
+    ownerId: string;
+  }): Promise<Session<TState>> {
     const effectiveResourceId = resourceId ?? this.config.resourceId ?? this.config.id;
 
     // Get-or-create: a resourceId maps to exactly one durable session per
@@ -350,7 +362,7 @@ export class Harness<TState = {}> {
       return existing;
     }
 
-    const creation = this.#createSessionForResource(effectiveResourceId);
+    const creation = this.#createSessionForResource(ownerId, id, effectiveResourceId);
     this.#sessionsByResource.set(effectiveResourceId, creation);
     try {
       return await creation;
@@ -363,10 +375,12 @@ export class Harness<TState = {}> {
     }
   }
 
-  async #createSessionForResource(effectiveResourceId: string): Promise<Session<TState>> {
+  async #createSessionForResource(ownerId: string, id: string, effectiveResourceId: string): Promise<Session<TState>> {
     const session = this.#wireSession(
       new Session({
         resourceId: effectiveResourceId,
+        id,
+        ownerId,
         state: {
           initialState: this.config.initialState,
           stateSchema: this.config.stateSchema,
@@ -1812,6 +1826,8 @@ export class Harness<TState = {}> {
       threadId: session.thread.getId(),
       resourceId: session.identity.getResourceId(),
       session: {
+        id: session.identity.getId(),
+        ownerId: session.identity.getOwnerId(),
         modeId: session.mode.get(),
         modelId: session.model.get(),
         state: {
