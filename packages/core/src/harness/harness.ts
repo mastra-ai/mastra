@@ -683,12 +683,27 @@ export class Harness<TState = {}> {
   }): Promise<void> {
     if (!this.#resolveStorage()) return;
     const memoryStorage = await this.getMemoryStorage();
-    const result = await memoryStorage.listMessages({ threadId, perPage: false });
-    const messages = result.messages.filter(message => message.resourceId !== resourceId);
-    if (messages.length === 0) return;
-    await memoryStorage.saveMessages({
-      messages: messages.map(message => ({ ...message, resourceId })),
-    });
+    const perPage = 100;
+    let page = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const result = await memoryStorage.listMessages({
+        threadId,
+        page,
+        perPage,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      });
+      const messages = result.messages.filter(message => message.resourceId !== resourceId);
+      if (messages.length > 0) {
+        await memoryStorage.saveMessages({
+          messages: messages.map(message => ({ ...message, resourceId })),
+        });
+      }
+
+      hasMore = result.hasMore;
+      page += 1;
+    }
   }
 
   /** Clone a thread (and messages) via the host's memory (gateway primitive for the Session thread domain). */
