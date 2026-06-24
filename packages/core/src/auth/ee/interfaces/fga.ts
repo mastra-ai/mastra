@@ -1,1 +1,1 @@
-export * from '@internal/auth/ee';
+export type { FGARouteConfig, IFGAProvider } from '@internal/auth/ee';

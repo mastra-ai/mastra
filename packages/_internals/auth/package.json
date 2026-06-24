@@ -60,6 +60,16 @@
         "default": "./dist/ee/index.cjs"
       }
     },
+    "./ee/capabilities": {
+      "import": {
+        "types": "./dist/ee/capabilities.d.ts",
+        "default": "./dist/ee/capabilities.js"
+      },
+      "require": {
+        "types": "./dist/ee/capabilities.d.ts",
+        "default": "./dist/ee/capabilities.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

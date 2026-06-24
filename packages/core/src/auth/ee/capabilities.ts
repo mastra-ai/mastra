@@ -1,3 +1,3 @@
 import './telemetry';
 
-export * from '@internal/auth/ee';
+export * from '@internal/auth/ee/capabilities';
