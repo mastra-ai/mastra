@@ -1,8 +1,6 @@
 import { jsonLanguage } from '@codemirror/lang-json';
 import {
   Button,
-  Notice,
-  useCodemirrorTheme,
   Select,
   SelectContent,
   SelectItem,
@@ -18,6 +16,8 @@ import {
   isValidJson,
   toast,
 } from '@mastra/playground-ui';
+import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import CodeMirror from '@uiw/react-codemirror';
 import { Braces, CopyIcon, ExternalLink, X } from 'lucide-react';

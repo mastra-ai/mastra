@@ -1,6 +1,7 @@
-import { MetricsCard, Tabs, TabList, Tab, TabContent } from '@mastra/playground-ui';
+import { MetricsCard } from '@mastra/playground-ui/components/MetricsCard';
 import { MetricsDataTable } from '@mastra/playground-ui/components/MetricsDataTable';
 import { MetricsLineChart } from '@mastra/playground-ui/components/MetricsLineChart';
+import { Tabs, TabList, Tab, TabContent } from '@mastra/playground-ui/components/Tabs';
 import { useMemo } from 'react';
 import type { ScorerSummary, ScoresOverTimePoint } from '../hooks/use-score-metrics';
 

@@ -49,6 +49,13 @@ export interface GeminiToolConfig {
 export interface GeminiSessionConfig {
   /** Enable session resumption after network interruptions */
   enableResumption?: boolean;
+  /**
+   * Opt in to seeding initial conversation history via send_client_content frames.
+   * Required by the Gemini Live v1alpha endpoint when calling sendContext() on
+   * gemini-3.1-flash-live-preview and later 3.x models.
+   * Defaults to true so that sendContext() works out of the box.
+   */
+  initialHistoryInClientContent?: boolean;
   /** Maximum session duration (e.g., '24h', '2h') */
   maxDuration?: string;
   /** Enable automatic context compression */

@@ -1,5 +1,9 @@
 import type { UpdateStoredPromptBlockParams } from '@mastra/client-js';
-import { Notice, Badge, Button, MainContentLayout, Spinner, toast } from '@mastra/playground-ui';
+import { Button, toast } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';

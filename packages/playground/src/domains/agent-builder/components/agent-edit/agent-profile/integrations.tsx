@@ -1,4 +1,6 @@
-import { Skeleton, StatusBadge, Txt } from '@mastra/playground-ui';
+import { Txt } from '@mastra/playground-ui';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
 import { useEditPage } from '@/domains/agent-builder/contexts/edit-page-context';
 import { usePublishAndConnectChannel } from '@/domains/agent-builder/hooks/use-publish-and-connect-channel';
 import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';

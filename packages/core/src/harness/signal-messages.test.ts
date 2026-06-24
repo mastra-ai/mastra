@@ -51,7 +51,7 @@ async function createHarness(
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
   });
   await harness.init();
-  const session = await harness.createSession();
+  const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
   return { harness, session };
 }
 
@@ -433,6 +433,7 @@ describe('Harness signal messages', () => {
     const thread = await session.thread.create();
 
     // Simulate an active run from the harness consumer's perspective
+    session.run.ensureAbortController();
     session.run.setRunId({ runId: 'active-run-id' });
 
     const buildToolsets = vi.spyOn(harness as any, 'buildToolsets');
@@ -450,6 +451,111 @@ describe('Harness signal messages', () => {
       expect.objectContaining({
         resourceId: thread.resourceId,
         threadId: thread.id,
+      }),
+    );
+  });
+
+  it('starts a new run instead of dispatching onto an aborted run when a follow-up arrives mid-abort', async () => {
+    // Regression: after Ctrl+C (abort), the AbortController is cleared
+    // immediately but the run id and active-run id linger until `run.reset()`
+    // fires (after agent_end). Without the isRunning() guard in sendSignal,
+    // the follow-up signal is dispatched onto the dying run and lost.
+    const storage = new InMemoryStore();
+    const agent = new Agent({
+      id: 'abort-followup-agent',
+      name: 'abort-followup-agent',
+      instructions: 'You are a test agent.',
+      model: createTextStreamModel('World'),
+    });
+    const { harness, session } = await createHarness(storage, agent);
+    vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
+      stream: (async function* () {})(),
+      unsubscribe: vi.fn(),
+      abort: vi.fn(),
+      activeRunId: () => 'run-1',
+    });
+    const thread = await session.thread.create();
+
+    // Simulate an active run, then abort it — exactly what Ctrl+C does.
+    session.run.ensureAbortController();
+    session.run.setRunId({ runId: 'run-1' });
+    session.abort();
+
+    // After abort: isRunning() is false, but getRunId() and activeRunId()
+    // still return 'run-1' (not yet reset by agent_end).
+    expect(session.run.isRunning()).toBe(false);
+    expect(session.run.getRunId()).toBe('run-1');
+    expect(session.stream.activeRunId()).toBe('run-1');
+
+    const buildToolsets = vi.spyOn(harness as any, 'buildToolsets');
+    const sendSignal = vi.spyOn(agent, 'sendSignal').mockReturnValue({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'new-run-id' }),
+      signal: createSignal({ type: 'user-message', contents: 'follow-up after abort' }),
+    });
+
+    const signal = session.sendSignal({ content: 'follow-up after abort' });
+    await expect(signal.accepted).resolves.toEqual({ accepted: true, runId: undefined });
+
+    // buildToolsets is only called in the new-run (idle) branch, proving
+    // the signal did NOT dispatch onto the dying run.
+    expect(buildToolsets).toHaveBeenCalledTimes(1);
+    // sendSignal must include streamOptions in ifIdle (new-run branch),
+    // not bare ifActive/ifIdle (active-run branch).
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ contents: 'follow-up after abort' }),
+      expect.objectContaining({
+        resourceId: thread.resourceId,
+        threadId: thread.id,
+        ifIdle: expect.objectContaining({ streamOptions: expect.any(Object) }),
+      }),
+    );
+  });
+
+  it('waits for post-abort stream teardown before starting the follow-up run', async () => {
+    const storage = new InMemoryStore();
+    const agent = new Agent({
+      id: 'abort-idle-wait-agent',
+      name: 'abort-idle-wait-agent',
+      instructions: 'You are a test agent.',
+      model: createTextStreamModel('World'),
+    });
+    const { harness, session } = await createHarness(storage, agent);
+    let activeRunId: string | null = 'run-1';
+    vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
+      stream: (async function* () {})(),
+      unsubscribe: vi.fn(),
+      abort: vi.fn(),
+      activeRunId: () => activeRunId,
+    });
+    const thread = await session.thread.create();
+
+    session.run.ensureAbortController();
+    session.run.setRunId({ runId: 'run-1' });
+    session.abort();
+
+    const buildToolsets = vi.spyOn(harness as any, 'buildToolsets');
+    const sendSignal = vi.spyOn(agent, 'sendSignal').mockReturnValue({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'new-run-id' }),
+      signal: createSignal({ type: 'user-message', contents: 'follow-up after abort' }),
+    });
+
+    const signal = session.sendSignal({ content: 'follow-up after abort' });
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(buildToolsets).not.toHaveBeenCalled();
+    expect(sendSignal).not.toHaveBeenCalled();
+
+    activeRunId = null;
+    session.run.reset();
+
+    await expect(signal.accepted).resolves.toEqual({ accepted: true, runId: undefined });
+    expect(buildToolsets).toHaveBeenCalledTimes(1);
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ contents: 'follow-up after abort' }),
+      expect.objectContaining({
+        resourceId: thread.resourceId,
+        threadId: thread.id,
+        ifIdle: expect.objectContaining({ streamOptions: expect.any(Object) }),
       }),
     );
   });
@@ -736,7 +842,7 @@ describe('Harness signal messages', () => {
       initialState: { yolo: true } as any,
     });
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const events: HarnessEvent[] = [];
     session.subscribe(event => {
       events.push(event);

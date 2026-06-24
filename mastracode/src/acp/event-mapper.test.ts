@@ -1,5 +1,5 @@
 import type { AgentSideConnection } from '@agentclientprotocol/sdk';
-import type { Harness, HarnessEvent } from '@mastra/core/harness';
+import type { HarnessEvent, Session } from '@mastra/core/harness';
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -8,7 +8,7 @@ import { handleHarnessEvent } from './event-mapper.js';
 
 describe('ACP Event Mapper', () => {
   let mockConnection: AgentSideConnection;
-  let mockHarness: Harness;
+  let mockSession: Session;
   let sessionUpdateSpy: ReturnType<typeof vi.fn>;
   let requestPermissionSpy: ReturnType<typeof vi.fn>;
 
@@ -23,12 +23,10 @@ describe('ACP Event Mapper', () => {
       requestPermission: requestPermissionSpy,
     } as unknown as AgentSideConnection;
 
-    mockHarness = {
-      session: {
-        respondToToolApproval: vi.fn(),
-      },
+    mockSession = {
+      respondToToolApproval: vi.fn(),
       respondToToolSuspension: vi.fn(),
-    } as unknown as Harness;
+    } as unknown as Session;
   });
 
   function createPromptState(sessionId: string): PromptState {
@@ -59,7 +57,7 @@ describe('ACP Event Mapper', () => {
         },
       };
 
-      handleHarnessEvent(event1, state, mockConnection, mockHarness);
+      handleHarnessEvent(event1, state, mockConnection, mockSession);
 
       expect(sessionUpdateSpy).toHaveBeenCalledWith({
         sessionId: 'session-1',
@@ -86,7 +84,7 @@ describe('ACP Event Mapper', () => {
         },
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleHarnessEvent(event, state, mockConnection, mockSession);
 
       expect(sessionUpdateSpy).toHaveBeenCalledWith({
         sessionId: 'session-1',
@@ -111,7 +109,7 @@ describe('ACP Event Mapper', () => {
         },
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleHarnessEvent(event, state, mockConnection, mockSession);
       expect(sessionUpdateSpy).not.toHaveBeenCalled();
     });
   });
@@ -127,7 +125,7 @@ describe('ACP Event Mapper', () => {
         args: { path: '/test.js', content: 'code' },
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleHarnessEvent(event, state, mockConnection, mockSession);
 
       expect(sessionUpdateSpy).toHaveBeenCalledWith({
         sessionId: 'session-1',
@@ -161,7 +159,7 @@ describe('ACP Event Mapper', () => {
           args: {},
         };
 
-        handleHarnessEvent(event, state, mockConnection, mockHarness);
+        handleHarnessEvent(event, state, mockConnection, mockSession);
 
         expect(sessionUpdateSpy).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -185,7 +183,7 @@ describe('ACP Event Mapper', () => {
         isError: false,
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleHarnessEvent(event, state, mockConnection, mockSession);
 
       expect(sessionUpdateSpy).toHaveBeenCalledWith({
         sessionId: 'session-1',
@@ -208,7 +206,7 @@ describe('ACP Event Mapper', () => {
         isError: true,
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleHarnessEvent(event, state, mockConnection, mockSession);
 
       expect(sessionUpdateSpy).toHaveBeenCalledWith({
         sessionId: 'session-1',
@@ -233,7 +231,7 @@ describe('ACP Event Mapper', () => {
         args: { path: '/important.js' },
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleHarnessEvent(event, state, mockConnection, mockSession);
 
       // Wait for async permission handling
       await vi.waitFor(() => {
@@ -251,7 +249,7 @@ describe('ACP Event Mapper', () => {
         });
       });
 
-      expect(mockHarness.session.respondToToolApproval).toHaveBeenCalledWith({
+      expect(mockSession.respondToToolApproval).toHaveBeenCalledWith({
         decision: 'approve',
       });
     });
@@ -270,13 +268,13 @@ describe('ACP Event Mapper', () => {
         args: {},
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleHarnessEvent(event, state, mockConnection, mockSession);
 
       await vi.waitFor(() => {
         expect(requestPermissionSpy).toHaveBeenCalled();
       });
 
-      expect(mockHarness.session.respondToToolApproval).toHaveBeenCalledWith({
+      expect(mockSession.respondToToolApproval).toHaveBeenCalledWith({
         decision: 'decline',
       });
     });
@@ -295,11 +293,11 @@ describe('ACP Event Mapper', () => {
           args: {},
         };
 
-        handleHarnessEvent(event, state, mockConnection, mockHarness);
+        handleHarnessEvent(event, state, mockConnection, mockSession);
 
         // Should not request permission
         expect(requestPermissionSpy).not.toHaveBeenCalled();
-        expect(mockHarness.session.respondToToolApproval).toHaveBeenCalledWith({
+        expect(mockSession.respondToToolApproval).toHaveBeenCalledWith({
           decision: 'approve',
         });
       } finally {
@@ -320,9 +318,9 @@ describe('ACP Event Mapper', () => {
         suspendPayload: {},
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleHarnessEvent(event, state, mockConnection, mockSession);
 
-      expect(mockHarness.respondToToolSuspension).toHaveBeenCalledWith({
+      expect(mockSession.respondToToolSuspension).toHaveBeenCalledWith({
         toolCallId: 'tool-123',
         resumeData: 'Yes',
       });
@@ -339,9 +337,9 @@ describe('ACP Event Mapper', () => {
         suspendPayload: { kind: 'sandbox_access_request' },
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleHarnessEvent(event, state, mockConnection, mockSession);
 
-      expect(mockHarness.respondToToolSuspension).toHaveBeenCalledWith({
+      expect(mockSession.respondToToolSuspension).toHaveBeenCalledWith({
         toolCallId: 'tool-123',
         resumeData: 'Yes',
       });
@@ -358,7 +356,7 @@ describe('ACP Event Mapper', () => {
         suspendPayload: {},
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleHarnessEvent(event, state, mockConnection, mockSession);
 
       await vi.waitFor(() => {
         expect(requestPermissionSpy).toHaveBeenCalledWith({
@@ -375,7 +373,7 @@ describe('ACP Event Mapper', () => {
         });
       });
 
-      expect(mockHarness.respondToToolSuspension).toHaveBeenCalledWith({
+      expect(mockSession.respondToToolSuspension).toHaveBeenCalledWith({
         toolCallId: 'tool-123',
         resumeData: { action: 'approved' },
       });
@@ -392,9 +390,9 @@ describe('ACP Event Mapper', () => {
         suspendPayload: {},
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleHarnessEvent(event, state, mockConnection, mockSession);
 
-      expect(mockHarness.respondToToolSuspension).toHaveBeenCalledWith({
+      expect(mockSession.respondToToolSuspension).toHaveBeenCalledWith({
         toolCallId: 'tool-123',
         resumeData: 'Proceed with your best judgment. Do not ask further questions.',
       });
@@ -415,7 +413,7 @@ describe('ACP Event Mapper', () => {
         },
       };
 
-      handleHarnessEvent(event1, state, mockConnection, mockHarness);
+      handleHarnessEvent(event1, state, mockConnection, mockSession);
 
       expect(state.usage).toEqual({
         promptTokens: 100,
@@ -433,7 +431,7 @@ describe('ACP Event Mapper', () => {
         },
       };
 
-      handleHarnessEvent(event2, state, mockConnection, mockHarness);
+      handleHarnessEvent(event2, state, mockConnection, mockSession);
 
       expect(state.usage).toEqual({
         promptTokens: 150,
@@ -453,7 +451,7 @@ describe('ACP Event Mapper', () => {
         reason: 'complete',
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleHarnessEvent(event, state, mockConnection, mockSession);
 
       expect(state.resolve).toHaveBeenCalledWith('complete');
     });
@@ -466,7 +464,7 @@ describe('ACP Event Mapper', () => {
         reason: 'aborted',
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleHarnessEvent(event, state, mockConnection, mockSession);
 
       expect(state.resolve).toHaveBeenCalledWith('aborted');
     });
@@ -479,7 +477,7 @@ describe('ACP Event Mapper', () => {
         reason: 'error',
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleHarnessEvent(event, state, mockConnection, mockSession);
 
       expect(state.resolve).toHaveBeenCalledWith('error');
     });
@@ -497,7 +495,7 @@ describe('ACP Event Mapper', () => {
         },
       };
 
-      handleHarnessEvent(event, null, mockConnection, mockHarness);
+      handleHarnessEvent(event, null, mockConnection, mockSession);
 
       expect(sessionUpdateSpy).not.toHaveBeenCalled();
     });
@@ -514,7 +512,7 @@ describe('ACP Event Mapper', () => {
       ];
 
       ignoredEvents.forEach(event => {
-        handleHarnessEvent(event, state, mockConnection, mockHarness);
+        handleHarnessEvent(event, state, mockConnection, mockSession);
       });
 
       expect(sessionUpdateSpy).not.toHaveBeenCalled();

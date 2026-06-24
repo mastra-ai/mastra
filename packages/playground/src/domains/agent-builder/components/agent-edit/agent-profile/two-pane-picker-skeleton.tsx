@@ -1,4 +1,4 @@
-import { Skeleton } from '@mastra/playground-ui';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 
 interface TwoPanePickerSkeletonProps {
   testId: string;

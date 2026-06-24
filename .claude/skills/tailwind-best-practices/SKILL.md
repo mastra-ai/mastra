@@ -7,7 +7,7 @@ description: Tailwind CSS styling guidelines for Mastra Playground UI. This skil
 
 ## Overview
 
-Styling guidelines for the Mastra Playground UI, containing 5 rules across 3 categories. Rules are prioritized by impact to guide automated refactoring and code generation. These rules ensure design system consistency, prevent token drift, and maintain component library integrity.
+Routing and priority guide for Mastra Playground UI styling, containing 5 rules across 3 categories. Rule files hold the detailed explanations, examples, and review guidance that ensure design system consistency, prevent token drift, and maintain component library integrity.
 
 ## Scope
 
@@ -56,10 +56,12 @@ Rules are prioritized by impact:
 
 ## References
 
-Full documentation with code examples is available in:
+Rule files are the canonical source for detailed guidance and examples:
 
-- `references/tailwind-best-practices-reference.md` - Complete guide with all patterns
-- `references/rules/` - Individual rule files organized by category
+- `references/tailwind-best-practices-reference.md` - Rule catalog with category order and rule-file paths
+- `references/rules/` - Canonical individual rule files organized by category
+
+Load only the relevant rule file when implementing or reviewing a specific styling rule. Use the catalog to choose the right rule without loading every example.
 
 To look up a specific pattern, grep the rules directory:
 

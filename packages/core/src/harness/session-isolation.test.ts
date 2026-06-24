@@ -26,8 +26,8 @@ describe('Harness.createSession — cross-session isolation', () => {
     const harness = createHarness(new InMemoryStore());
     await harness.init();
 
-    const a = await harness.createSession({ resourceId: 'user-a' });
-    const b = await harness.createSession({ resourceId: 'user-b' });
+    const a = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
+    const b = await harness.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
 
     expect(a.thread.getId()).toBeDefined();
     expect(b.thread.getId()).toBeDefined();
@@ -38,8 +38,8 @@ describe('Harness.createSession — cross-session isolation', () => {
     const harness = createHarness(new InMemoryStore());
     await harness.init();
 
-    const a = await harness.createSession({ resourceId: 'user-a' });
-    const b = await harness.createSession({ resourceId: 'user-b' });
+    const a = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
+    const b = await harness.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
 
     expect(a.mode.get()).toBe('build');
     expect(b.mode.get()).toBe('build');
@@ -55,8 +55,8 @@ describe('Harness.createSession — cross-session isolation', () => {
     const harness = createHarness(new InMemoryStore());
     await harness.init();
 
-    const a = await harness.createSession({ resourceId: 'user-a' });
-    const b = await harness.createSession({ resourceId: 'user-b' });
+    const a = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
+    const b = await harness.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
 
     await a.model.switch({ modelId: 'cerebras/zai-glm-4.7' });
 
@@ -80,8 +80,8 @@ describe('Harness.createSession — cross-session isolation', () => {
     });
     await harness.init();
 
-    const a = await harness.createSession({ resourceId: 'user-a' });
-    const b = await harness.createSession({ resourceId: 'user-b' });
+    const a = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
+    const b = await harness.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
 
     await a.state.set({ counter: 5 });
 
@@ -93,8 +93,8 @@ describe('Harness.createSession — cross-session isolation', () => {
     const harness = createHarness(new InMemoryStore());
     await harness.init();
 
-    const a = await harness.createSession({ resourceId: 'user-a' });
-    const b = await harness.createSession({ resourceId: 'user-b' });
+    const a = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
+    const b = await harness.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
 
     const aEvents: HarnessEvent[] = [];
     const bEvents: HarnessEvent[] = [];
@@ -112,13 +112,90 @@ describe('Harness.createSession — cross-session isolation', () => {
   });
 });
 
-describe('Harness session registry', () => {
-  it('resolves a created session by its resourceId', async () => {
+describe('Harness session — cross-resource thread ownership', () => {
+  it('cannot switch to a thread owned by another resource', async () => {
     const harness = createHarness(new InMemoryStore());
     await harness.init();
 
     const a = await harness.createSession({ resourceId: 'user-a' });
     const b = await harness.createSession({ resourceId: 'user-b' });
+
+    const aThreadId = a.thread.requireId();
+    const bThreadBefore = b.thread.getId();
+
+    await expect(b.thread.switch({ threadId: aThreadId })).rejects.toThrow(`Thread not found: ${aThreadId}`);
+    // b stays bound to its own thread; it never moved onto a's.
+    expect(b.thread.getId()).toBe(bThreadBefore);
+
+    // The failed switch released its lock on b's thread before validating
+    // ownership; b must still own (and be able to re-bind) its own thread,
+    // proving the previous lock was restored on the failure path.
+    await expect(b.thread.switch({ threadId: bThreadBefore! })).resolves.toBeUndefined();
+    expect(b.thread.getId()).toBe(bThreadBefore);
+  });
+
+  it('cannot delete a thread owned by another resource', async () => {
+    const harness = createHarness(new InMemoryStore());
+    await harness.init();
+
+    const a = await harness.createSession({ resourceId: 'user-a' });
+    const b = await harness.createSession({ resourceId: 'user-b' });
+
+    const aThreadId = a.thread.requireId();
+
+    await expect(b.thread.delete({ threadId: aThreadId })).rejects.toThrow(`Thread not found: ${aThreadId}`);
+    // a's thread still exists and is reachable by its owner.
+    expect(await a.thread.getById({ threadId: aThreadId })).not.toBeNull();
+  });
+
+  it('cannot list messages of a thread owned by another resource', async () => {
+    const harness = createHarness(new InMemoryStore());
+    await harness.init();
+
+    const a = await harness.createSession({ resourceId: 'user-a' });
+    const b = await harness.createSession({ resourceId: 'user-b' });
+
+    const aThreadId = a.thread.requireId();
+
+    await expect(b.thread.listMessages({ threadId: aThreadId })).rejects.toThrow(`Thread not found: ${aThreadId}`);
+  });
+
+  it('cannot clone a thread owned by another resource', async () => {
+    const harness = createHarness(new InMemoryStore());
+    await harness.init();
+
+    const a = await harness.createSession({ resourceId: 'user-a' });
+    const b = await harness.createSession({ resourceId: 'user-b' });
+
+    const aThreadId = a.thread.requireId();
+
+    await expect(b.thread.clone({ sourceThreadId: aThreadId })).rejects.toThrow(`Thread not found: ${aThreadId}`);
+  });
+
+  it('still allows the owning resource to switch, list, and delete its own thread', async () => {
+    const harness = createHarness(new InMemoryStore());
+    await harness.init();
+
+    const a = await harness.createSession({ resourceId: 'user-a' });
+    const aThreadId = a.thread.requireId();
+
+    // Owner can read its own messages and switch to its own thread.
+    await expect(a.thread.listMessages({ threadId: aThreadId })).resolves.toEqual([]);
+    await expect(a.thread.switch({ threadId: aThreadId })).resolves.toBeUndefined();
+
+    // Owner can delete its own thread.
+    await expect(a.thread.delete({ threadId: aThreadId })).resolves.toBeUndefined();
+    expect(await a.thread.getById({ threadId: aThreadId })).toBeNull();
+  });
+});
+
+describe('Harness session registry', () => {
+  it('resolves a created session by its resourceId', async () => {
+    const harness = createHarness(new InMemoryStore());
+    await harness.init();
+
+    const a = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
+    const b = await harness.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
 
     expect(await harness.getSessionByResource('user-a')).toBe(a);
     expect(await harness.getSessionByResource('user-b')).toBe(b);
@@ -129,8 +206,8 @@ describe('Harness session registry', () => {
     const harness = createHarness(new InMemoryStore());
     await harness.init();
 
-    const first = await harness.createSession({ resourceId: 'user-a' });
-    const second = await harness.createSession({ resourceId: 'user-a' });
+    const first = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
+    const second = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
 
     expect(second).toBe(first);
   });
@@ -139,7 +216,7 @@ describe('Harness session registry', () => {
     const harness = createHarness(new InMemoryStore());
     await harness.init();
 
-    const a = await harness.createSession({ resourceId: 'user-a' });
+    const a = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
     harness.setResourceId(a, { resourceId: 'user-a-renamed' });
 
     expect(await harness.getSessionByResource('user-a-renamed')).toBe(a);
