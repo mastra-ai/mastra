@@ -1881,9 +1881,10 @@ describe('MessageList V5 Support', () => {
       const toolRole = prompt.find(m => m.role === 'tool');
       expect(toolRole).toBeDefined();
       const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
+      // normalizeModelOutput converts 'media' -> 'image-data' for Gemini inlineData compatibility
       expect(toolResultPart.output).toEqual({
         type: 'content',
-        value: [{ type: 'media', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+        value: [{ type: 'image-data', data: 'base64imagedata', mediaType: 'image/jpeg' }],
       });
 
       // Raw result should still be preserved in the stored messages
@@ -2379,9 +2380,10 @@ describe('MessageList V5 Support', () => {
       const modelMessages = list.get.all.aiV5.model();
       const toolModelMessage = modelMessages.find(message => message.role === 'tool') as any;
       const toolModelPart = toolModelMessage.content.find((part: any) => part.type === 'tool-result');
+      // model() now applies stored modelOutput so the provider sees the transformed output
       expect(toolModelPart.output).toEqual({
-        type: 'json',
-        value: { status: 200, body: 'lots of data here' },
+        type: 'text',
+        value: 'Data fetched successfully',
       });
       expect(toolModelPart.providerOptions?.mastra?.modelOutput).toEqual({
         type: 'text',
@@ -2392,7 +2394,10 @@ describe('MessageList V5 Support', () => {
       const roundTrippedToolPart = roundTrippedDbMessage.content.parts?.find(
         (part: any) => part.type === 'tool-invocation',
       ) as any;
-      expect(roundTrippedToolPart.toolInvocation.result).toEqual({ status: 200, body: 'lots of data here' });
+      // model() substitutes modelOutput into output for LLM consumption,
+      // so fromModelMessage round-trip reads modelOutput as result.
+      // Raw result is preserved in the DB messages (this.messages), not in model message round-trips.
+      expect(roundTrippedToolPart.toolInvocation.result).toEqual('Data fetched successfully');
       expect(roundTrippedToolPart.providerMetadata?.mastra?.modelOutput).toEqual({
         type: 'text',
         value: 'Data fetched successfully',

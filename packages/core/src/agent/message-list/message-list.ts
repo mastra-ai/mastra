@@ -40,6 +40,7 @@ import type {
   SerializedMessageListState,
 } from './state';
 import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
+import { normalizeModelOutput } from '../../loop/workflows/agentic-execution/normalize-model-output';
 import { ensureGeminiCompatibleMessages } from './utils/provider-compat';
 import { stampPart } from './utils/stamp-part';
 
@@ -523,10 +524,11 @@ export class MessageList {
     aiV5: {
       model: (): AIV5Type.ModelMessage[] => {
         const promptMessages = this.getMessagesForModelPrompt();
-        return convertAIV5UIToModelMessages(
+        const modelMessages = convertAIV5UIToModelMessages(
           this.toAIV5UIMessages(promptMessages, { transformToolPayloads: false }),
           promptMessages,
         );
+        return this.applyStoredModelOutputs(modelMessages);
       },
       ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.all.db()),
 
@@ -545,7 +547,8 @@ export class MessageList {
           this.filterIncompleteToolCalls,
         );
 
-        const messages = [...systemMessages, ...modelMessages];
+        const promptModelMessages = this.applyStoredModelOutputs(modelMessages);
+        const messages = [...systemMessages, ...promptModelMessages];
 
         return ensureGeminiCompatibleMessages(messages, this.logger);
       },
@@ -568,41 +571,7 @@ export class MessageList {
           this.filterIncompleteToolCalls,
         );
 
-        const storedModelOutputs = new Map<string, unknown>();
-        for (const dbMsg of this.messages) {
-          if (dbMsg.content?.format !== 2 || !dbMsg.content.parts) continue;
-
-          for (const part of dbMsg.content.parts) {
-            if (
-              part.type === 'tool-invocation' &&
-              part.toolInvocation?.state === 'result' &&
-              part.providerMetadata?.mastra &&
-              typeof part.providerMetadata.mastra === 'object' &&
-              'modelOutput' in (part.providerMetadata.mastra as Record<string, unknown>)
-            ) {
-              storedModelOutputs.set(
-                part.toolInvocation.toolCallId,
-                (part.providerMetadata.mastra as Record<string, unknown>).modelOutput,
-              );
-            }
-          }
-        }
-
-        if (storedModelOutputs.size > 0) {
-          for (const modelMsg of modelMessages) {
-            if (modelMsg.role !== 'tool' || !Array.isArray(modelMsg.content)) continue;
-
-            for (let i = 0; i < modelMsg.content.length; i++) {
-              const part = modelMsg.content[i]!;
-              if (part.type === 'tool-result' && storedModelOutputs.has(part.toolCallId)) {
-                modelMsg.content[i] = {
-                  ...part,
-                  output: storedModelOutputs.get(part.toolCallId) as any,
-                };
-              }
-            }
-          }
-        }
+        const promptModelMessages = this.applyStoredModelOutputs(modelMessages);
         const systemMessages = convertAIV4CoreToAIV5ModelMessages(
           [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()],
           `system`,
@@ -617,7 +586,7 @@ export class MessageList {
           supportedUrls: options?.supportedUrls,
         });
 
-        let messages = [...systemMessages, ...modelMessages];
+        let messages = [...systemMessages, ...promptModelMessages];
 
         // Check if any messages have image/file content that needs processing
         const hasImageOrFileContent = modelMessages.some(
@@ -1381,6 +1350,51 @@ export class MessageList {
       this.addOneSystem(message, tag);
     }
     return this;
+  }
+
+  /**
+   * Substitutes stored toModelOutput results into tool-result parts.
+   * modelOutput is stored at providerMetadata.mastra.modelOutput at execution time
+   * and applied here when building model prompts so multimodal tool outputs
+   * (images, files) reach the provider correctly.
+   */
+  private applyStoredModelOutputs(modelMessages: AIV5Type.ModelMessage[]): AIV5Type.ModelMessage[] {
+    const storedModelOutputs = new Map<string, unknown>();
+    for (const dbMsg of this.messages) {
+      if (dbMsg.content?.format !== 2 || !dbMsg.content.parts) continue;
+      for (const part of dbMsg.content.parts) {
+        if (
+          part.type === 'tool-invocation' &&
+          part.toolInvocation?.state === 'result' &&
+          part.providerMetadata?.mastra &&
+          typeof part.providerMetadata.mastra === 'object' &&
+          'modelOutput' in (part.providerMetadata.mastra as Record<string, unknown>)
+        ) {
+          storedModelOutputs.set(
+            part.toolInvocation.toolCallId,
+            (part.providerMetadata.mastra as Record<string, unknown>).modelOutput,
+          );
+        }
+      }
+    }
+    if (storedModelOutputs.size === 0) return modelMessages;
+    // Return a new array with copied messages — never mutate in place so that
+    // round-trips through AIV5Adapter.fromModelMessage still read the original result.
+    return modelMessages.map(modelMsg => {
+      if (modelMsg.role !== 'tool' || !Array.isArray(modelMsg.content)) return modelMsg;
+      let modified = false;
+      const newContent = modelMsg.content.map(part => {
+        if (part.type === 'tool-result' && storedModelOutputs.has(part.toolCallId)) {
+          modified = true;
+          return {
+            ...part,
+            output: normalizeModelOutput(storedModelOutputs.get(part.toolCallId)) as any,
+          };
+        }
+        return part;
+      });
+      return modified ? { ...modelMsg, content: newContent } : modelMsg;
+    });
   }
 
   private addOneSystem(
