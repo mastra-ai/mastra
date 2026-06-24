@@ -364,7 +364,7 @@ const sidebars = {
       type: 'category',
       label: 'Harness',
       customProps: {
-        tags: ['alpha'],
+        tags: ['beta'],
       },
       items: [
         {

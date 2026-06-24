@@ -539,7 +539,7 @@ const sidebars = {
           label: 'createNotificationInboxTool()',
           customProps: { tags: ['beta'] },
         },
-        { type: 'doc', id: 'signals/signal-provider', label: 'SignalProvider', customProps: { tags: ['alpha'] } },
+        { type: 'doc', id: 'signals/signal-provider', label: 'SignalProvider', customProps: { tags: ['beta'] } },
         {
           type: 'doc',
           id: 'signals/task-signal-provider',
@@ -622,7 +622,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'tools/brightdata', label: 'Bright Data Tools' },
-        { type: 'doc', id: 'tools/create-code-mode', label: 'createCodeMode()', customProps: { tags: ['alpha'] } },
+        { type: 'doc', id: 'tools/create-code-mode', label: 'createCodeMode()', customProps: { tags: ['beta'] } },
         { type: 'doc', id: 'tools/document-chunker-tool', label: 'createDocumentChunkerTool()' },
         { type: 'doc', id: 'tools/graph-rag-tool', label: 'createGraphRAGTool()' },
         { type: 'doc', id: 'tools/create-tool', label: 'createTool()' },
