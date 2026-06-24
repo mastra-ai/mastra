@@ -1,7 +1,7 @@
 name: Regenerate Providers & Docs
 
 permissions:
-  contents: write
+  contents: read
 
 on:
   # Run every 6 hours to keep provider registry and documentation up-to-date
@@ -18,14 +18,14 @@ jobs:
   regenerate:
     # Only run on the main repository, not on forks
     if: ${{ github.repository == 'mastra-ai/mastra' }}
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     timeout-minutes: 30
     env:
       HUSKY: 0
 
     steps:
       - name: Initial checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           # Use default GITHUB_TOKEN for initial checkout
           # This is needed to access the .github/actions/app-auth action
@@ -39,9 +39,11 @@ jobs:
         with:
           client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
 
       - name: Re-checkout with app token
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           ref: main
           token: ${{ steps.app-auth.outputs.token }}
@@ -54,6 +56,13 @@ jobs:
       - name: Build vendored ai-v6 package
         run: pnpm --filter @internal/ai-v6 build
 
+      - name: Build internal core package
+        # The generate:providers script imports @mastra/core source, which
+        # re-exports @internal/core/error. That subpath resolves to the
+        # package's dist output, so @internal/core must be built first or the
+        # script fails with ERR_MODULE_NOT_FOUND.
+        run: pnpm turbo build --filter @internal/core
+
       - name: Generate provider registry
         run: pnpm --filter @mastra/core generate:providers
 
@@ -64,11 +73,13 @@ jobs:
         run: |
           pnpm prettier --write packages/core/src/llm/model/provider-registry.json
           pnpm prettier --write packages/core/src/llm/model/provider-types.generated.d.ts
+          pnpm prettier --write packages/core/src/llm/model/capabilities/
           pnpm prettier --write docs/src/content/en/models/**/*.{mdx,ts,js}
       - name: Check for changes
         id: git-check
         run: |
-          git diff --exit-code packages/core/src/llm/model/provider-registry.json packages/core/src/llm/model/provider-types.generated.d.ts docs/src/content/en/models/ || echo "changed=true" >> $GITHUB_OUTPUT
+          git add --intent-to-add packages/core/src/llm/model/capabilities/
+          git diff --exit-code packages/core/src/llm/model/provider-registry.json packages/core/src/llm/model/provider-types.generated.d.ts packages/core/src/llm/model/capabilities/ docs/src/content/en/models/ || echo "changed=true" >> $GITHUB_OUTPUT
 
       - name: Create changeset
         if: steps.git-check.outputs.changed == 'true'
@@ -107,12 +118,19 @@ jobs:
         run: |
           git add packages/core/src/llm/model/provider-registry.json
           git add packages/core/src/llm/model/provider-types.generated.d.ts
+          # The generator rewrites and adds per-provider capability files. These
+          # must be staged too; otherwise they linger as unstaged/untracked
+          # changes that abort the rebase below and never make it onto main.
+          git add packages/core/src/llm/model/capabilities/
           git add docs/src/content/en/models/
           if [ -n "${CHANGESET_FILE}" ]; then
             git add "${CHANGESET_FILE}"
           fi
           git commit -m "chore: regenerate providers and docs [skip ci]"
-          git pull --rebase
+          # Use --autostash as a safeguard so any unexpected leftover unstaged
+          # changes don't abort the rebase with "cannot pull with rebase: You
+          # have unstaged changes." Autostash safely stashes and restores them.
+          git pull --rebase --autostash
           git push
 
       - name: Log summary

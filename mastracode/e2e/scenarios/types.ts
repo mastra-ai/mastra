@@ -5,12 +5,14 @@ import type { MastraTUIOptions } from '../../src/tui/index.js';
 
 export type ScenarioName =
   | 'startup'
+  | 'abort-followup'
   | 'branch-context-long-name'
   | 'active-signal-followup'
   | 'autocomplete-wrapping-navigation'
   | 'api-key-delete-env'
   | 'api-key-multi-provider-delete'
   | 'api-key-prompt'
+  | 'api-key-reopen-stored'
   | 'ask-user-advanced-prompts'
   | 'automated-chat'
   | 'browser-active-pending-status'
@@ -117,6 +119,7 @@ export type ScenarioName =
   | 'thread-history'
   | 'tool-history-reload'
   | 'tool-schema-compat'
+  | 'tool-suspension-same-run-resume'
   | 'update-command-prompt'
   | 'update-startup-prompt'
   | 'web-search-rendering'

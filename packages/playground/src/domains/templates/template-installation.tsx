@@ -1,5 +1,7 @@
-import { Spinner, ProcessStepList, ProcessStepProgressBar, cn } from '@mastra/playground-ui';
-import type { ProcessStep } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { ProcessStepList, ProcessStepProgressBar } from '@mastra/playground-ui/components/Steps';
+import type { ProcessStep } from '@mastra/playground-ui/components/Steps';
 import { OctagonXIcon } from 'lucide-react';
 import { Container } from './shared';
 

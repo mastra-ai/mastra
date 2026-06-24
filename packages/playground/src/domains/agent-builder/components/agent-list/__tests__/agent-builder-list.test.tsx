@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import type { BuilderSettingsResponse, StoredAgentResponse } from '@mastra/client-js';
 import type * as PlaygroundUi from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';

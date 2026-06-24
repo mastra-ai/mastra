@@ -12,9 +12,9 @@ export function showThreadLockPrompt(
   lockedThreadId?: string,
 ): void {
   ctx.analytics?.trackInteractivePrompt('thread_lock_prompt', {
-    threadId: lockedThreadId ?? ctx.state.harness.session.thread.getId(),
-    resourceId: ctx.state.harness.session.identity.getResourceId(),
-    mode: ctx.state.harness.session.mode.get(),
+    threadId: lockedThreadId ?? ctx.state.session.thread.getId(),
+    resourceId: ctx.state.session.identity.getResourceId(),
+    mode: ctx.state.session.mode.get(),
   });
 
   void (async () => {
@@ -33,7 +33,7 @@ export function showThreadLockPrompt(
     } else if (answer === 'Clone thread' && lockedThreadId) {
       try {
         const customTitle = await askCloneName(ctx.state);
-        const clonedThread = await ctx.state.harness.cloneThread({
+        const clonedThread = await ctx.state.session.thread.clone({
           sourceThreadId: lockedThreadId,
           ...(customTitle ? { title: customTitle } : {}),
         });
@@ -52,9 +52,9 @@ export function showThreadLockPrompt(
 
 export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<void> {
   const { state } = ctx;
-  const threads = await state.harness.session.thread.list({ allResources: true });
-  const currentId = state.pendingNewThread ? null : state.harness.session.thread.getId();
-  const currentResourceId = state.harness.session.identity.getResourceId();
+  const threads = await state.session.thread.list({ allResources: true });
+  const currentId = state.pendingNewThread ? null : state.session.thread.getId();
+  const currentResourceId = state.session.identity.getResourceId();
   const threadById = new Map(threads.map(thread => [thread.id, thread] as const));
 
   for (const [threadId, cachedPreview] of [...state.threadPreviewCache.entries()]) {
@@ -116,10 +116,10 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
         }
 
         if (thread.resourceId !== currentResourceId) {
-          state.harness.setResourceId({ resourceId: thread.resourceId });
+          await state.harness.setResourceId(state.session, { resourceId: thread.resourceId });
         }
         try {
-          await state.harness.switchThread({ threadId: thread.id });
+          await state.session.thread.switch({ threadId: thread.id });
         } catch (error) {
           if (error instanceof ThreadLockError) {
             showThreadLockPrompt(ctx, thread.title || thread.id, error.ownerPid, thread.id);
@@ -151,7 +151,7 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
         }
         try {
           const customTitle = await askCloneName(state);
-          const clonedThread = await state.harness.cloneThread({
+          const clonedThread = await state.session.thread.clone({
             sourceThreadId: thread.id,
             ...(customTitle ? { title: customTitle } : {}),
           });

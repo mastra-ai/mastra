@@ -13,15 +13,17 @@ function createCtx(options?: {
   addFeedback?: any;
 }) {
   const addFeedback = options?.addFeedback ?? vi.fn().mockResolvedValue(undefined);
+  const session = {
+    run: { getTraceId: vi.fn(() => (options && 'traceId' in options ? options.traceId : 'trace-123')) },
+    getCurrentRunId: vi.fn(() => (options && 'runId' in options ? options.runId : 'run-123')),
+    thread: {
+      getId: vi.fn(() => (options && 'threadId' in options ? options.threadId : 'thread-123')),
+    },
+  };
   return {
+    state: { session },
+    session,
     harness: {
-      session: {
-        run: { getTraceId: vi.fn(() => (options && 'traceId' in options ? options.traceId : 'trace-123')) },
-        getCurrentRunId: vi.fn(() => (options && 'runId' in options ? options.runId : 'run-123')),
-        thread: {
-          getId: vi.fn(() => (options && 'threadId' in options ? options.threadId : 'thread-123')),
-        },
-      },
       getMastra: vi.fn(() => ({ observability: { addFeedback } })),
     },
     showInfo: vi.fn(),
@@ -31,8 +33,17 @@ function createCtx(options?: {
 }
 
 describe('handleFeedbackCommand', () => {
-  it('requires trace, run, or thread context before recording feedback', async () => {
+  it('requires trace or run context before recording feedback', async () => {
     const ctx = createCtx({ traceId: null, runId: null, threadId: null });
+
+    await handleFeedbackCommand(ctx, ['up']);
+
+    expect(ctx.addFeedback).not.toHaveBeenCalled();
+    expect(ctx.showError).toHaveBeenCalledWith('No active session to attach feedback to.');
+  });
+
+  it('rejects feedback when only a thread is bound but no run has happened', async () => {
+    const ctx = createCtx({ traceId: null, runId: null, threadId: 'thread-only' });
 
     await handleFeedbackCommand(ctx, ['up']);
 

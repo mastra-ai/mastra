@@ -25,7 +25,7 @@ import { getMarkdownTheme } from '../theme.js';
 import type { EventHandlerContext } from './types.js';
 
 function getCurrentModeColor(ctx: EventHandlerContext): string | undefined {
-  const color = ctx.state.harness.getCurrentMode?.()?.metadata?.color;
+  const color = ctx.state.session?.mode?.resolve?.()?.metadata?.color;
   return typeof color === 'string' ? color : undefined;
 }
 
@@ -145,23 +145,23 @@ export function handleToolApprovalRequired(
       state.ui.hideOverlay();
       state.pendingApprovalDismiss = null;
       if (action.type === 'approve') {
-        state.harness.session.respondToToolApproval({ decision: 'approve' });
+        state.session.respondToToolApproval({ decision: 'approve' });
       } else if (action.type === 'always_allow_category') {
-        state.harness.session.respondToToolApproval({ decision: 'always_allow_category' });
+        state.session.respondToToolApproval({ decision: 'always_allow_category' });
       } else if (action.type === 'yolo') {
-        state.harness.setState({ yolo: true } as any);
-        state.harness.session.respondToToolApproval({ decision: 'approve' });
+        void state.session.state.set({ yolo: true } as any);
+        state.session.respondToToolApproval({ decision: 'approve' });
       } else {
-        state.harness.session.respondToToolApproval({ decision: 'decline' });
+        state.session.respondToToolApproval({ decision: 'decline' });
       }
     },
   });
 
-  // Set up Ctrl+C dismiss to decline
-  state.pendingApprovalDismiss = () => {
+  // Set up dismissal to decline
+  state.pendingApprovalDismiss = declineContext => {
     state.ui.hideOverlay();
     state.pendingApprovalDismiss = null;
-    state.harness.session.respondToToolApproval({ decision: 'decline' });
+    state.session.respondToToolApproval({ decision: 'decline', declineContext });
   };
 
   // Show the dialog as an overlay
@@ -363,7 +363,7 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
  */
 export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: string, _argsTextDelta: string): void {
   const { state } = ctx;
-  const ds = state.harness.getDisplayState();
+  const ds = state.session.displayState.get();
   const buffer = ds.toolInputBuffers.get(toolCallId);
   if (buffer === undefined) return;
 

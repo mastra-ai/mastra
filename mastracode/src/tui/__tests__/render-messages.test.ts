@@ -30,8 +30,15 @@ function createState(): TUIState {
     messageComponentsById: new Map(),
     pendingSignalMessageComponentsById: new Map(),
     followUpComponents: [],
-    harness: {
-      getDisplayState: () => ({ isRunning: false }),
+    session: {
+      state: {
+        get: vi.fn(() => ({})),
+        set: vi.fn(),
+      },
+      displayState: {
+        get: () => ({ isRunning: false }),
+        restoreTasks: vi.fn(),
+      },
     },
   } as unknown as TUIState;
 }
@@ -61,6 +68,20 @@ function createReminderMessage(
 }
 
 describe('addUserMessage', () => {
+  it('replaces pending active steering only when the subscription echoes the user message', () => {
+    const state = createState();
+    addPendingUserMessage(state, 'signal-1', 'steer me', undefined, { isInterjection: true });
+    const pendingComponent = state.chatContainer.children[0];
+
+    addUserMessage(state, createUserMessage('steer me', 'signal-1'));
+
+    expect(state.pendingSignalMessageComponentsById.has('signal-1')).toBe(false);
+    const rendered = state.messageComponentsById.get('signal-1');
+    expect(rendered).toBeInstanceOf(UserMessageComponent);
+    expect(rendered).not.toBe(pendingComponent);
+    expect(rendered?.render(80).join('\n')).toContain('steer');
+  });
+
   it('renders state signals as inline state components', () => {
     const state = createState();
 
@@ -569,17 +590,20 @@ describe('renderExistingMessages signals', () => {
     const state = createState();
     addPendingUserMessage(state, 'stale-signal', 'stale preview', undefined, { isInterjection: true });
 
+    state.session = {
+      ...state.session,
+      thread: {
+        listActiveMessages: vi
+          .fn()
+          .mockResolvedValue([
+            createUserMessage('continue from history', 'signal-history-1', { delivery: 'while-active' }),
+          ]),
+      },
+    } as unknown as TUIState['session'];
     state.harness = {
       session: {
-        thread: {
-          listActiveMessages: vi
-            .fn()
-            .mockResolvedValue([
-              createUserMessage('continue from history', 'signal-history-1', { delivery: 'while-active' }),
-            ]),
-        },
+        displayState: { get: () => ({ isRunning: false }) },
       },
-      getDisplayState: () => ({ isRunning: false }),
     } as unknown as TUIState['harness'];
 
     await renderExistingMessages(state);
@@ -596,6 +620,115 @@ describe('renderExistingMessages signals', () => {
     expect(rendered).toContain('╭ steer ');
     expect(rendered).toContain('continue from history');
     expect(rendered).not.toContain('stale preview');
+  });
+});
+
+describe('renderExistingMessages tasks', () => {
+  it('renders persisted task additions and crossed-off tasks inline', async () => {
+    const initialTasks = [
+      {
+        id: 'history-task-1',
+        content: 'Loaded history task one',
+        status: 'pending',
+        activeForm: 'Loading history task one',
+      },
+    ];
+    const updatedTasks = [
+      { ...initialTasks[0], status: 'completed' },
+      {
+        id: 'history-task-2',
+        content: 'Loaded history task two',
+        status: 'in_progress',
+        activeForm: 'Loading history task two',
+      },
+      {
+        id: 'history-task-3',
+        content: 'Loaded history task three',
+        status: 'pending',
+        activeForm: 'Loading history task three',
+      },
+    ];
+    const message: HarnessMessage = {
+      id: 'assistant-task-delta-history',
+      role: 'assistant',
+      createdAt: new Date(),
+      content: [
+        { type: 'tool_call', id: 'task-write-1', name: 'task_write', args: { tasks: initialTasks } },
+        {
+          type: 'tool_result',
+          id: 'task-write-1',
+          name: 'task_write',
+          result: { tasks: initialTasks },
+          isError: false,
+        },
+        { type: 'tool_call', id: 'task-complete-1', name: 'task_complete', args: { id: 'history-task-1' } },
+        {
+          type: 'tool_result',
+          id: 'task-complete-1',
+          name: 'task_complete',
+          result: { tasks: updatedTasks },
+          isError: false,
+        },
+      ],
+    } as unknown as HarnessMessage;
+    const state = createState();
+    state.session = {
+      ...state.session,
+      thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
+    } as unknown as TUIState['session'];
+
+    await renderExistingMessages(state);
+
+    const rendered = state.chatContainer
+      .render(100)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('Tasks');
+    expect(rendered).toContain('○ Loaded history task one');
+    expect(rendered).toContain('▶ Loading history task two');
+    expect(rendered).toContain('○ Loaded history task three');
+    expect(rendered).toContain('✓ Loaded history task one');
+  });
+
+  it('renders completed persisted task_write history inline', async () => {
+    const tasks = [
+      {
+        id: 'history-task-1',
+        content: 'Loaded history task one',
+        status: 'completed',
+        activeForm: 'Loading history task one',
+      },
+      {
+        id: 'history-task-2',
+        content: 'Loaded history task two',
+        status: 'completed',
+        activeForm: 'Loading history task two',
+      },
+    ];
+    const message: HarnessMessage = {
+      id: 'assistant-task-history',
+      role: 'assistant',
+      createdAt: new Date(),
+      content: [
+        { type: 'tool_call', id: 'task-write-1', name: 'task_write', args: { tasks } },
+        { type: 'tool_result', id: 'task-write-1', name: 'task_write', result: { tasks }, isError: false },
+      ],
+    } as unknown as HarnessMessage;
+    const state = createState();
+    state.session = {
+      ...state.session,
+      thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
+    } as unknown as TUIState['session'];
+
+    await renderExistingMessages(state);
+
+    const rendered = state.chatContainer
+      .render(100)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('Tasks [2/2 completed]');
+    expect(rendered).toContain('Loaded history task one');
+    expect(rendered).toContain('Loaded history task two');
   });
 });
 
@@ -627,10 +760,13 @@ describe('renderExistingMessages subagents', () => {
     };
     const state = createState();
     state.quietMode = true;
+    state.session = {
+      ...state.session,
+      thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
+      model: { get: () => 'openai/gpt-5.5' },
+    } as unknown as TUIState['session'];
     state.harness = {
-      session: { thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) } },
-      getDisplayState: () => ({ isRunning: false }),
-      getFullModelId: () => 'openai/gpt-5.5',
+      session: state.session,
     } as unknown as TUIState['harness'];
 
     await renderExistingMessages(state);

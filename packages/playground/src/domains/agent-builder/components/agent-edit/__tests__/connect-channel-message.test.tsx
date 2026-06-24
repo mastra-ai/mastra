@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { TooltipProvider } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -197,8 +196,10 @@ describe('ConnectChannelMessage', () => {
     const button = await screen.findByTestId('agent-builder-chat-connect-channel-slack-button');
     fireEvent.click(button);
 
-    // Give the failed mutation a chance to resolve
-    await new Promise(r => setTimeout(r, 50));
+    // The button shows "Connecting…" while the mutation is in flight and reverts
+    // once it settles. Wait for that deterministic transition instead of a sleep
+    // so the failed-mutation state update lands inside act.
+    await waitFor(() => expect(button.textContent).toBe('Continue with Slack'));
     expect(locationStub.href).toBe('http://localhost/start');
 
     Object.defineProperty(window, 'location', {

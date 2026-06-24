@@ -1,7 +1,7 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 
-import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
+import { isUnauthenticatedError, useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 
 export interface UseExistingConnectionsOptions {
   /**
@@ -36,7 +36,9 @@ export const useExistingConnections = (
   const currentUserQuery = useCurrentUser();
   const callerAuthorId = currentUserQuery.data?.id;
 
-  const enabled = !!providerId && !!toolkit && (!scopeToSelf || Boolean(callerAuthorId));
+  const callerReady = !scopeToSelf || currentUserQuery.isSuccess || isUnauthenticatedError(currentUserQuery.error);
+
+  const enabled = !!providerId && !!toolkit && callerReady;
 
   return useQuery({
     queryKey: scopeToSelf

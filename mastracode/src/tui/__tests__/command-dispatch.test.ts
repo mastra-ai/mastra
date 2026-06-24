@@ -76,6 +76,7 @@ import { dispatchSlashCommand } from '../command-dispatch.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
 import { SlashCommandComponent } from '../components/slash-command.js';
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
+import { createMockState } from './harness-mock.js';
 
 describe('dispatchSlashCommand models routing', () => {
   beforeEach(() => {
@@ -97,12 +98,10 @@ describe('dispatchSlashCommand models routing', () => {
   it('routes /models to handleModelsPackCommand', async () => {
     const state = {
       customSlashCommands: [],
-      harness: {
-        session: {
-          identity: { getResourceId: vi.fn(() => 'resource-1') },
-          thread: { getId: vi.fn(() => 'thread-1') },
-          mode: { get: vi.fn(() => 'build') },
-        },
+      session: {
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        thread: { getId: vi.fn(() => 'thread-1') },
+        mode: { get: vi.fn(() => 'build') },
       },
     } as any;
     const ctx = { analytics: { trackCommand: mocks.trackCommand } } as any;
@@ -123,12 +122,10 @@ describe('dispatchSlashCommand models routing', () => {
   it('routes /custom-providers to handleCustomProvidersCommand', async () => {
     const state = {
       customSlashCommands: [],
-      harness: {
-        session: {
-          identity: { getResourceId: vi.fn(() => 'resource-1') },
-          thread: { getId: vi.fn(() => 'thread-1') },
-          mode: { get: vi.fn(() => 'build') },
-        },
+      session: {
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        thread: { getId: vi.fn(() => 'thread-1') },
+        mode: { get: vi.fn(() => 'build') },
       },
     } as any;
     const ctx = { analytics: { trackCommand: mocks.trackCommand } } as any;
@@ -341,6 +338,7 @@ describe('dispatchSlashCommand models routing', () => {
     };
     const workspace = { skills: { get: vi.fn().mockResolvedValue(skill) } };
     const ctx = {
+      state,
       getResolvedWorkspace: vi.fn(() => undefined),
       harness: {
         hasWorkspace: vi.fn(() => true),
@@ -378,27 +376,27 @@ describe('dispatchSlashCommand models routing', () => {
     (previousComponent as any).getChatSpacingKind = () => 'user-message';
     const chatContainer = new Container();
     chatContainer.addChild(previousComponent);
-    const state = {
-      customSlashCommands: [{ name: 'deploy', description: 'Deploy to prod', template: 'deploy now', sourcePath: '' }],
-      session: { thread: { getId: vi.fn(() => 'thread-1') } },
-      pendingNewThread: false,
-      allSlashCommandComponents: [],
-      messageComponentsById: new Map(),
-      chatContainer,
-      ui: { requestRender: vi.fn() },
-      harness: {
-        createThread: vi.fn().mockResolvedValue(undefined),
-        sendMessage: vi.fn().mockResolvedValue(undefined),
+    const state = createMockState({
+      threadId: 'thread-1',
+      extra: {
+        customSlashCommands: [
+          { name: 'deploy', description: 'Deploy to prod', template: 'deploy now', sourcePath: '' },
+        ],
+        pendingNewThread: false,
+        allSlashCommandComponents: [],
+        messageComponentsById: new Map(),
+        chatContainer,
+        ui: { requestRender: vi.fn() },
       },
-    } as any;
+    }) as any;
 
     const handled = await dispatchSlashCommand('//deploy', state, () => ({}) as any);
 
     expect(handled).toBe(true);
     expect(mocks.processSlashCommand).toHaveBeenCalledTimes(1);
     expect(mocks.processSlashCommand).toHaveBeenCalledWith(state.customSlashCommands[0], [], process.cwd());
-    expect(state.harness.createThread).not.toHaveBeenCalled();
-    expect(state.harness.sendMessage).toHaveBeenCalledWith({
+    expect(state.session.thread.create).not.toHaveBeenCalled();
+    expect(state.session.sendMessage).toHaveBeenCalledWith({
       content: '<slash-command name="deploy">\ncustom output\n</slash-command>',
     });
     expect(state.chatContainer.children).toHaveLength(3);
@@ -412,22 +410,25 @@ describe('dispatchSlashCommand models routing', () => {
     const sendSignal = vi
       .fn()
       .mockReturnValue({ id: 'signal-custom-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
-    const state = {
-      customSlashCommands: [{ name: 'deploy', description: 'Deploy to prod', template: 'deploy now', sourcePath: '' }],
-      pendingNewThread: false,
-      allSlashCommandComponents: [],
-      messageComponentsById: new Map(),
-      pendingSignalMessageComponentsById: new Map(),
-      followUpComponents: [],
-      chatContainer: new Container(),
-      ui: { requestRender: vi.fn() },
-      harness: {
-        session: { stream: { isActive: vi.fn(() => true) } },
-        getDisplayState: vi.fn(() => ({ isRunning: true })),
+    const state = createMockState({
+      session: {
+        stream: { isActive: vi.fn(() => true) },
+        displayState: { get: vi.fn(() => ({ isRunning: true })) },
         sendSignal,
-        sendMessage: vi.fn().mockResolvedValue(undefined),
       },
-    } as any;
+      extra: {
+        customSlashCommands: [
+          { name: 'deploy', description: 'Deploy to prod', template: 'deploy now', sourcePath: '' },
+        ],
+        pendingNewThread: false,
+        allSlashCommandComponents: [],
+        messageComponentsById: new Map(),
+        pendingSignalMessageComponentsById: new Map(),
+        followUpComponents: [],
+        chatContainer: new Container(),
+        ui: { requestRender: vi.fn() },
+      },
+    }) as any;
 
     const handled = await dispatchSlashCommand('//deploy staging', state, () => ({}) as any);
 
@@ -435,7 +436,7 @@ describe('dispatchSlashCommand models routing', () => {
     expect(sendSignal).toHaveBeenCalledWith({
       content: '<slash-command name="deploy">\ncustom output\n</slash-command>',
     });
-    expect(state.harness.sendMessage).not.toHaveBeenCalled();
+    expect(state.session.sendMessage).not.toHaveBeenCalled();
     expect(state.pendingSignalMessageComponentsById.get('signal-custom-1')?.text).toBe('//deploy staging');
     expect(state.allSlashCommandComponents).toHaveLength(0);
     expect(state.chatContainer.children.length).toBe(1);
@@ -445,22 +446,25 @@ describe('dispatchSlashCommand models routing', () => {
     const sendSignal = vi
       .fn()
       .mockReturnValue({ id: 'signal-custom-1', accepted: Promise.reject(new Error('rejected')) });
-    const state = {
-      customSlashCommands: [{ name: 'deploy', description: 'Deploy to prod', template: 'deploy now', sourcePath: '' }],
-      pendingNewThread: false,
-      allSlashCommandComponents: [],
-      messageComponentsById: new Map(),
-      pendingSignalMessageComponentsById: new Map(),
-      followUpComponents: [],
-      chatContainer: new Container(),
-      ui: { requestRender: vi.fn() },
-      harness: {
-        session: { stream: { isActive: vi.fn(() => true) } },
-        getDisplayState: vi.fn(() => ({ isRunning: true })),
+    const state = createMockState({
+      session: {
+        stream: { isActive: vi.fn(() => true) },
+        displayState: { get: vi.fn(() => ({ isRunning: true })) },
         sendSignal,
-        sendMessage: vi.fn().mockResolvedValue(undefined),
       },
-    } as any;
+      extra: {
+        customSlashCommands: [
+          { name: 'deploy', description: 'Deploy to prod', template: 'deploy now', sourcePath: '' },
+        ],
+        pendingNewThread: false,
+        allSlashCommandComponents: [],
+        messageComponentsById: new Map(),
+        pendingSignalMessageComponentsById: new Map(),
+        followUpComponents: [],
+        chatContainer: new Container(),
+        ui: { requestRender: vi.fn() },
+      },
+    }) as any;
 
     const handled = await dispatchSlashCommand('//deploy staging', state, () => ({}) as any);
 
@@ -471,28 +475,28 @@ describe('dispatchSlashCommand models routing', () => {
   });
 
   it('creates the pending new thread before sending a custom slash command', async () => {
-    const state = {
-      customSlashCommands: [{ name: 'deploy', description: 'Deploy to prod', template: 'deploy now', sourcePath: '' }],
-      pendingNewThread: true,
-      allSlashCommandComponents: [],
-      messageComponentsById: new Map(),
-      chatContainer: new Container(),
-      ui: { requestRender: vi.fn() },
-      harness: {
-        createThread: vi.fn().mockResolvedValue(undefined),
-        sendMessage: vi.fn().mockResolvedValue(undefined),
+    const state = createMockState({
+      extra: {
+        customSlashCommands: [
+          { name: 'deploy', description: 'Deploy to prod', template: 'deploy now', sourcePath: '' },
+        ],
+        pendingNewThread: true,
+        allSlashCommandComponents: [],
+        messageComponentsById: new Map(),
+        chatContainer: new Container(),
+        ui: { requestRender: vi.fn() },
       },
-    } as any;
+    }) as any;
 
     const handled = await dispatchSlashCommand('//deploy', state, () => ({}) as any);
 
     expect(handled).toBe(true);
-    expect(state.harness.createThread).toHaveBeenCalledTimes(1);
-    expect(state.harness.sendMessage).toHaveBeenCalledWith({
+    expect(state.session.thread.create).toHaveBeenCalledTimes(1);
+    expect(state.session.sendMessage).toHaveBeenCalledWith({
       content: '<slash-command name="deploy">\ncustom output\n</slash-command>',
     });
-    expect(state.harness.createThread.mock.invocationCallOrder[0]).toBeLessThan(
-      state.harness.sendMessage.mock.invocationCallOrder[0],
+    expect(state.session.thread.create.mock.invocationCallOrder[0]).toBeLessThan(
+      state.session.sendMessage.mock.invocationCallOrder[0],
     );
     expect(state.pendingNewThread).toBe(false);
   });
@@ -500,12 +504,10 @@ describe('dispatchSlashCommand models routing', () => {
   it('keeps /new routed to the built-in command when a custom command has the same name', async () => {
     const state = {
       customSlashCommands: [{ name: 'new', description: 'Custom new', template: 'custom new', sourcePath: '' }],
-      harness: {
-        session: {
-          identity: { getResourceId: vi.fn(() => 'resource-1') },
-          thread: { getId: vi.fn(() => null) },
-          mode: { get: vi.fn(() => 'build') },
-        },
+      session: {
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        thread: { getId: vi.fn(() => null) },
+        mode: { get: vi.fn(() => 'build') },
       },
     } as any;
     const ctx = { analytics: { trackCommand: mocks.trackCommand } } as any;
@@ -524,15 +526,16 @@ describe('dispatchSlashCommand models routing', () => {
   });
 
   it('routes //new to the matching custom command even when a built-in exists', async () => {
-    const state = {
-      customSlashCommands: [{ name: 'new', description: 'Custom new', template: 'custom new', sourcePath: '' }],
-      session: { thread: { getId: vi.fn(() => 'thread-1') } },
-      allSlashCommandComponents: [],
-      messageComponentsById: new Map(),
-      chatContainer: new Container(),
-      ui: { requestRender: vi.fn() },
-      harness: { sendMessage: vi.fn().mockResolvedValue(undefined) },
-    } as any;
+    const state = createMockState({
+      threadId: 'thread-1',
+      extra: {
+        customSlashCommands: [{ name: 'new', description: 'Custom new', template: 'custom new', sourcePath: '' }],
+        allSlashCommandComponents: [],
+        messageComponentsById: new Map(),
+        chatContainer: new Container(),
+        ui: { requestRender: vi.fn() },
+      },
+    }) as any;
 
     const handled = await dispatchSlashCommand('//new', state, () => ({}) as any);
 

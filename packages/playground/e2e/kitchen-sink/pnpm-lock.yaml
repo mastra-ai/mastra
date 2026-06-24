@@ -42,7 +42,7 @@ importers:
         version: link:../../../memory
       ai:
         specifier: ^5.0.196
-        version: 5.0.197(zod@4.4.3)
+        version: 5.0.203(zod@4.4.3)
       mastra:
         specifier: link:../../../cli
         version: link:../../../cli
@@ -62,14 +62,14 @@ importers:
 
 packages:
 
-  '@ai-sdk/gateway@2.0.98':
-    resolution: {integrity: sha512-JNMc5Fbz8AwiLIR3Ar/lV2egbLFE+A5nfwbRKrdfgusoVN2VjgMX2U2KCLux5iWD/Q9+rg9+njHPZNw4HmzBJQ==}
+  '@ai-sdk/gateway@2.0.102':
+    resolution: {integrity: sha512-5OxMbtF4AFeyHjKS2smzCYDvjkE+nWktLCS0xsWNnI71cP0mTKXqkygta5lq1WTytVVkonLMP9J0OqEbteBzfQ==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/provider-utils@3.0.25':
-    resolution: {integrity: sha512-CvsRu+32Y8a167s+lrIBtsybvgTHp8j9y+6BeTvLeoW3Q+okw/b4CnNUFOLIXsRaKHQKAH+IHNJPYWywfpw0LA==}
+  '@ai-sdk/provider-utils@3.0.26':
+    resolution: {integrity: sha512-dNciNI4knep6z3cqDNng7yORCcBnEDBHZYj8rJLcLn9pLzEtNVkf6WLg9HR6AnVDDRxHsUeGAEqyF8M+FAtRgg==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -149,8 +149,8 @@ packages:
     resolution: {integrity: sha512-Fw28YZpRnA3cAHHDlkt7xQHiJ0fcL+NRcIqsocZQUSmbzeIKRpwttJjik5ZGanXP+vlA4SbTg+AbA3bP363l+w==}
     engines: {node: '>= 20'}
 
-  ai@5.0.197:
-    resolution: {integrity: sha512-iUzFb2M3ZUL/Bbmfonh75DIZ354svWO5xh8VPC2wYNR6zzEMFghPOlJG5rtEpqRa037lHfdcjt0qmzg3em/WDw==}
+  ai@5.0.203:
+    resolution: {integrity: sha512-U50l+Np0IDzkUJ59QOBb80y3x1QH8+XJqzoIIxkO756mPlOuoRfj80CFIBKtaHmDSTJoEAMdt0iaaDOqMCGZkQ==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -279,11 +279,11 @@ packages:
     resolution: {integrity: sha512-yEFYrVhod+hdNyx7g5Bnkkb0G6si8HJurOoOEgC8B/O0uXLHlaey/65KRv6cuWBNhBgHKAROVpc7QyYqE5gFng==}
     engines: {node: '>=20'}
 
-  tldts-core@7.4.2:
-    resolution: {integrity: sha512-nwEyF4vl4RSJjwSjBUmOSxc3BFPoIFdlRthJ6e+5v9P3bHNsoD06UjuqMUspqp7vsEZ1beaHi1km+optiE17yA==}
+  tldts-core@7.4.3:
+    resolution: {integrity: sha512-27ep5H9PzdBrNd5OFM/j3WCU8F3kPwM9D0BOaOf7uYfxMJfyr0K5Tjj69Gri+sZlh2WXd5buIm47NuPF29CDiw==}
 
-  tldts@7.4.2:
-    resolution: {integrity: sha512-kCwffuaH8ntKtygnWe1b4BJKWiCUH30n5KfoTr6IchcXOwR7chAOFJxFrH3vjANafUYrIA4a7SDL+nn7SiR4Sw==}
+  tldts@7.4.3:
+    resolution: {integrity: sha512-A3BDQBeeukYPzB4QdQ1DtdlUmp4x2OCH8n5UVhEWbyANxNep8GavottKzd1xYKFJKjUgMyPT7EzOfnBO55s8Sg==}
     hasBin: true
 
   tough-cookie@6.0.1:
@@ -326,14 +326,14 @@ packages:
 
 snapshots:
 
-  '@ai-sdk/gateway@2.0.98(zod@4.4.3)':
+  '@ai-sdk/gateway@2.0.102(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 3.0.25(zod@4.4.3)
+      '@ai-sdk/provider-utils': 3.0.26(zod@4.4.3)
       '@vercel/oidc': 3.1.0
       zod: 4.4.3
 
-  '@ai-sdk/provider-utils@3.0.25(zod@4.4.3)':
+  '@ai-sdk/provider-utils@3.0.26(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 2.0.3
       '@standard-schema/spec': 1.1.0
@@ -407,11 +407,11 @@ snapshots:
 
   '@vercel/oidc@3.1.0': {}
 
-  ai@5.0.197(zod@4.4.3):
+  ai@5.0.203(zod@4.4.3):
     dependencies:
-      '@ai-sdk/gateway': 2.0.98(zod@4.4.3)
+      '@ai-sdk/gateway': 2.0.102(zod@4.4.3)
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 3.0.25(zod@4.4.3)
+      '@ai-sdk/provider-utils': 3.0.26(zod@4.4.3)
       '@opentelemetry/api': 1.9.0
       zod: 4.4.3
 
@@ -525,15 +525,15 @@ snapshots:
 
   tagged-tag@1.0.0: {}
 
-  tldts-core@7.4.2: {}
+  tldts-core@7.4.3: {}
 
-  tldts@7.4.2:
+  tldts@7.4.3:
     dependencies:
-      tldts-core: 7.4.2
+      tldts-core: 7.4.3
 
   tough-cookie@6.0.1:
     dependencies:
-      tldts: 7.4.2
+      tldts: 7.4.3
 
   type-fest@5.7.0:
     dependencies:

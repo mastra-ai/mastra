@@ -2,14 +2,14 @@ import { sendSlashCommandMessage } from './send-slash-command-message.js';
 import type { SlashCommandContext } from './types.js';
 
 export async function handleReviewCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
-  if (!ctx.state.harness.session.model.hasSelection()) {
+  if (!ctx.state.session.model.hasSelection()) {
     ctx.showInfo('No model selected. Use /models to select a model, or /login to authenticate.');
     return;
   }
 
   // Ensure thread exists
   if (ctx.state.pendingNewThread) {
-    await ctx.state.harness.createThread();
+    await ctx.state.session.thread.create();
     ctx.state.pendingNewThread = false;
   }
 

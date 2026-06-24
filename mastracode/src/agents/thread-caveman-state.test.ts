@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { restoreOMThreadStateForCurrentThread } from './thread-caveman-state.js';
 
-function createHarness({
+function createSession({
   currentThreadId = 'thread-1',
   metadata,
   state = {},
@@ -14,119 +14,120 @@ function createHarness({
   onListThreads?: () => void;
 }) {
   let activeThreadId: string | undefined = currentThreadId;
-  const harness = {
-    session: {
-      thread: {
-        getId: vi.fn(() => activeThreadId),
-        list: vi.fn(async () => {
-          onListThreads?.();
-          return [{ id: 'thread-1', metadata }];
-        }),
-        setSetting: vi.fn(async () => {}),
-      },
+  const setState = vi.fn(async (nextState: Record<string, unknown>) => {
+    Object.assign(state, nextState);
+  });
+  const session = {
+    state: {
+      get: vi.fn(() => state),
+      set: setState,
     },
-    getState: vi.fn(() => state),
+    thread: {
+      getId: vi.fn(() => activeThreadId),
+      list: vi.fn(async () => {
+        onListThreads?.();
+        return [{ id: 'thread-1', metadata }];
+      }),
+      setSetting: vi.fn(async () => {}),
+    },
     switchCurrentThread: (threadId: string | undefined) => {
       activeThreadId = threadId;
     },
-    setState: vi.fn(async (nextState: Record<string, unknown>) => {
-      Object.assign(state, nextState);
-    }),
   };
 
-  return harness;
+  return session;
 }
 
 describe('restoreOMThreadStateForCurrentThread', () => {
   it('mirrors persisted caveman metadata into harness state for the current thread', async () => {
-    const harness = createHarness({ metadata: { cavemanObservations: true }, state: { cavemanObservations: false } });
+    const session = createSession({ metadata: { cavemanObservations: true }, state: { cavemanObservations: false } });
 
-    await restoreOMThreadStateForCurrentThread(harness as never);
+    await restoreOMThreadStateForCurrentThread(session as never);
 
-    expect(harness.session.thread.list).toHaveBeenCalledWith({ allResources: true });
-    expect(harness.setState).toHaveBeenCalledWith({ cavemanObservations: true });
-    expect(harness.session.thread.setSetting).not.toHaveBeenCalled();
+    expect(session.thread.list).toHaveBeenCalledWith({ allResources: true });
+    expect(session.state.set).toHaveBeenCalledWith({ cavemanObservations: true });
+    expect(session.thread.setSetting).not.toHaveBeenCalled();
   });
 
   it('mirrors persisted false caveman metadata into harness state for the current thread', async () => {
-    const harness = createHarness({ metadata: { cavemanObservations: false }, state: { cavemanObservations: true } });
+    const session = createSession({ metadata: { cavemanObservations: false }, state: { cavemanObservations: true } });
 
-    await restoreOMThreadStateForCurrentThread(harness as never);
+    await restoreOMThreadStateForCurrentThread(session as never);
 
-    expect(harness.session.thread.list).toHaveBeenCalledWith({ allResources: true });
-    expect(harness.setState).toHaveBeenCalledWith({ cavemanObservations: false });
-    expect(harness.session.thread.setSetting).not.toHaveBeenCalled();
+    expect(session.thread.list).toHaveBeenCalledWith({ allResources: true });
+    expect(session.state.set).toHaveBeenCalledWith({ cavemanObservations: false });
+    expect(session.thread.setSetting).not.toHaveBeenCalled();
   });
 
   it('seeds missing thread metadata from the current harness state', async () => {
-    const harness = createHarness({ metadata: {}, state: { cavemanObservations: true } });
+    const session = createSession({ metadata: {}, state: { cavemanObservations: true } });
 
-    await restoreOMThreadStateForCurrentThread(harness as never);
+    await restoreOMThreadStateForCurrentThread(session as never);
 
-    expect(harness.setState).not.toHaveBeenCalled();
-    expect(harness.session.thread.setSetting).toHaveBeenCalledWith({ key: 'cavemanObservations', value: true });
+    expect(session.state.set).not.toHaveBeenCalled();
+    expect(session.thread.setSetting).toHaveBeenCalledWith({ key: 'cavemanObservations', value: true });
   });
 
   it('seeds missing thread metadata from false current harness state', async () => {
-    const harness = createHarness({ metadata: {}, state: { cavemanObservations: false } });
+    const session = createSession({ metadata: {}, state: { cavemanObservations: false } });
 
-    await restoreOMThreadStateForCurrentThread(harness as never);
+    await restoreOMThreadStateForCurrentThread(session as never);
 
-    expect(harness.setState).not.toHaveBeenCalled();
-    expect(harness.session.thread.setSetting).toHaveBeenCalledWith({ key: 'cavemanObservations', value: false });
+    expect(session.state.set).not.toHaveBeenCalled();
+    expect(session.thread.setSetting).toHaveBeenCalledWith({ key: 'cavemanObservations', value: false });
   });
 
   it('does nothing when there is no current thread', async () => {
-    const harness = createHarness({ currentThreadId: '', metadata: { cavemanObservations: true } });
+    const session = createSession({ currentThreadId: '', metadata: { cavemanObservations: true } });
 
-    await restoreOMThreadStateForCurrentThread(harness as never);
+    await restoreOMThreadStateForCurrentThread(session as never);
 
-    expect(harness.session.thread.list).not.toHaveBeenCalled();
-    expect(harness.setState).not.toHaveBeenCalled();
-    expect(harness.session.thread.setSetting).not.toHaveBeenCalled();
+    expect(session.thread.list).not.toHaveBeenCalled();
+    expect(session.state.set).not.toHaveBeenCalled();
+    expect(session.thread.setSetting).not.toHaveBeenCalled();
   });
 
   it('does not apply stale persisted metadata after the current thread changes', async () => {
-    const harness = createHarness({
+    const session = createSession({
       metadata: { cavemanObservations: true },
       state: { cavemanObservations: false },
-      onListThreads: () => harness.switchCurrentThread('thread-2'),
+      onListThreads: () => session.switchCurrentThread('thread-2'),
     });
 
-    await restoreOMThreadStateForCurrentThread(harness as never);
+    await restoreOMThreadStateForCurrentThread(session as never);
 
-    expect(harness.setState).not.toHaveBeenCalled();
-    expect(harness.session.thread.setSetting).not.toHaveBeenCalled();
+    expect(session.state.set).not.toHaveBeenCalled();
+    expect(session.thread.setSetting).not.toHaveBeenCalled();
   });
 
   it('does not seed stale metadata after the current thread changes', async () => {
-    const harness = createHarness({
+    const session = createSession({
       metadata: {},
       state: { cavemanObservations: true },
-      onListThreads: () => harness.switchCurrentThread('thread-2'),
+      onListThreads: () => session.switchCurrentThread('thread-2'),
     });
 
-    await restoreOMThreadStateForCurrentThread(harness as never);
+    await restoreOMThreadStateForCurrentThread(session as never);
 
-    expect(harness.setState).not.toHaveBeenCalled();
-    expect(harness.session.thread.setSetting).not.toHaveBeenCalled();
+    expect(session.state.set).not.toHaveBeenCalled();
+    expect(session.thread.setSetting).not.toHaveBeenCalled();
   });
 
   it('mirrors persisted observeAttachments metadata into harness state', async () => {
-    const harness = createHarness({ metadata: { observeAttachments: 'auto' }, state: { observeAttachments: true } });
+    const session = createSession({ metadata: { observeAttachments: 'auto' }, state: { observeAttachments: true } });
 
-    await restoreOMThreadStateForCurrentThread(harness as never);
+    await restoreOMThreadStateForCurrentThread(session as never);
 
-    expect(harness.setState).toHaveBeenCalledWith({ observeAttachments: 'auto' });
-    expect(harness.session.thread.setSetting).not.toHaveBeenCalled();
+    expect(session.state.set).toHaveBeenCalledWith({ observeAttachments: 'auto' });
+    expect(session.thread.setSetting).not.toHaveBeenCalled();
   });
 
   it('seeds missing observeAttachments metadata from current harness state', async () => {
-    const harness = createHarness({ metadata: {}, state: { observeAttachments: false } });
+    const session = createSession({ metadata: {}, state: { observeAttachments: false } });
 
-    await restoreOMThreadStateForCurrentThread(harness as never);
+    await restoreOMThreadStateForCurrentThread(session as never);
 
-    expect(harness.setState).not.toHaveBeenCalled();
-    expect(harness.session.thread.setSetting).toHaveBeenCalledWith({ key: 'observeAttachments', value: false });
+    expect(session.state.set).not.toHaveBeenCalled();
+    expect(session.thread.setSetting).toHaveBeenCalledWith({ key: 'observeAttachments', value: false });
   });
 });

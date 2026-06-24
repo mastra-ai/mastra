@@ -6,10 +6,10 @@ export async function handleNameCommand(ctx: SlashCommandContext, args: string[]
     ctx.showInfo('Usage: /name <title>');
     return;
   }
-  if (!ctx.harness.session.thread.getId()) {
+  if (!ctx.state.session.thread.getId()) {
     ctx.showInfo('No active thread. Send a message first.');
     return;
   }
-  await ctx.harness.renameThread({ title });
+  await ctx.state.session.thread.rename({ title });
   ctx.showInfo(`Thread renamed to: ${title}`);
 }

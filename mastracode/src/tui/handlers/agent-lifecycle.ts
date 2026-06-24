@@ -78,7 +78,7 @@ function drainQueuedAction(ctx: EventHandlerContext): boolean {
   // Drain queued follow-up actions once all harness-level follow-ups are done.
   // Each queued action that starts a new agent operation will eventually trigger
   // handleAgentEnd again, which drains the next FIFO item.
-  if (state.harness.session.followUps.count() > 0) {
+  if (state.session.followUps.count() > 0) {
     return true;
   }
 
@@ -286,7 +286,7 @@ export function handleGoalEvaluation(ctx: EventHandlerContext, payload: GoalEval
     if (goal && goal.id === state.planStartedGoalId) {
       const goalId = state.planStartedGoalId;
       state.planStartedGoalId = undefined;
-      state.harness.switchMode({ modeId: 'plan' }).catch(error => {
+      state.session.mode.switch({ modeId: 'plan' }).catch(error => {
         ctx.showError(`Failed to switch to Plan mode: ${error instanceof Error ? error.message : String(error)}`);
         state.planStartedGoalId = goalId;
       });

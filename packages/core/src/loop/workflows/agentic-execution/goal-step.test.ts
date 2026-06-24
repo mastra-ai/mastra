@@ -63,6 +63,12 @@ async function runGoalStep(
 
   const messageList: any = {
     add: (m: any, source?: string) => messages.push({ ...m, _source: source }),
+    addSignal: (signal: any) => {
+      const message = signal.toDBMessage();
+      messages.push({ ...message, _source: 'input' });
+      return signal;
+    },
+    markResponseMessageBoundary: vi.fn(),
     get: { all: { db: () => opts?.dbMessages ?? [] } },
   };
 

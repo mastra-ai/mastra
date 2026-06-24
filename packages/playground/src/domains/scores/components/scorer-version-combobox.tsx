@@ -1,5 +1,6 @@
-import { Badge, Combobox } from '@mastra/playground-ui';
-import type { ComboboxProps } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
 import { useScorerVersions } from '../hooks/use-scorer-versions';
 
 function formatTimestamp(isoString: string): string {

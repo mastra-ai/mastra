@@ -59,6 +59,7 @@ vi.mock('../status-line.js', () => ({
 import { showError, showInfo } from '../display.js';
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
 import { refreshSkillsAutocomplete, setupAutocomplete, setupKeyboardShortcuts } from '../setup.js';
+import { createMockState } from './harness-mock.js';
 
 const originalPlatform = process.platform;
 
@@ -87,43 +88,39 @@ function createState(isRunning: boolean) {
     setAutocompleteProvider: vi.fn(),
   };
 
-  const state = {
-    editor,
-    harness: {
-      session: {
-        run: { isRunning: vi.fn(() => isRunning) },
-        suspensions: { hasPending: vi.fn(() => false) },
-        mode: { get: vi.fn() },
+  const state = createMockState({
+    session: {
+      run: { isRunning: vi.fn(() => isRunning) },
+      suspensions: { hasPending: vi.fn(() => false) },
+      mode: { get: vi.fn() },
+      state: { get: vi.fn(() => ({})), set: vi.fn() },
+    },
+    extra: {
+      editor,
+      pendingApprovalDismiss: undefined,
+      activeInlinePlanApproval: undefined,
+      activeInlineQuestion: undefined,
+      pendingInlineQuestions: [],
+      userInitiatedAbort: false,
+      lastCtrlCTime: 0,
+      lastClearedText: '',
+      customSlashCommands: [],
+      skillCommands: [],
+      goalSkillCommands: [],
+      hideThinkingBlock: false,
+      toolOutputExpanded: false,
+      allToolComponents: [],
+      allSlashCommandComponents: [],
+      allSystemReminderComponents: [],
+      allShellComponents: [],
+      ui: { requestRender: vi.fn(), start: vi.fn(), stop: vi.fn() },
+      goalManager: {
+        isActive: vi.fn(() => false),
+        pause: vi.fn(),
+        saveToThread: vi.fn(),
       },
-      getState: vi.fn(() => ({})),
-      listModes: vi.fn(() => []),
-      switchMode: vi.fn(),
-      setState: vi.fn(),
-      abort: vi.fn(),
     },
-    pendingApprovalDismiss: undefined,
-    activeInlinePlanApproval: undefined,
-    activeInlineQuestion: undefined,
-    pendingInlineQuestions: [],
-    userInitiatedAbort: false,
-    lastCtrlCTime: 0,
-    lastClearedText: '',
-    customSlashCommands: [],
-    skillCommands: [],
-    goalSkillCommands: [],
-    hideThinkingBlock: false,
-    toolOutputExpanded: false,
-    allToolComponents: [],
-    allSlashCommandComponents: [],
-    allSystemReminderComponents: [],
-    allShellComponents: [],
-    ui: { requestRender: vi.fn(), start: vi.fn(), stop: vi.fn() },
-    goalManager: {
-      isActive: vi.fn(() => false),
-      pause: vi.fn(),
-      saveToThread: vi.fn(),
-    },
-  } as any;
+  }) as any;
 
   return { state, editor, actions };
 }
@@ -395,7 +392,7 @@ describe('setupKeyboardShortcuts', () => {
     expect(abortController.signal.aborted).toBe(true);
     expect(component.setInterrupted).toHaveBeenCalledTimes(1);
     expect(state.userInitiatedAbort).toBe(true);
-    expect(state.harness.abort).toHaveBeenCalledTimes(1);
+    expect(state.session.abort).toHaveBeenCalledTimes(1);
     expect(editor.setText).not.toHaveBeenCalled();
     expect(state.ui.requestRender).toHaveBeenCalled();
   });
@@ -422,7 +419,7 @@ describe('setupKeyboardShortcuts', () => {
   it('aborts when parked in a tool suspension even though isRunning() is false', () => {
     const { state, editor, actions } = createState(false);
     editor.getText.mockReturnValue('');
-    state.harness.session.suspensions.hasPending.mockReturnValue(true);
+    state.session.suspensions.hasPending.mockReturnValue(true);
 
     setupKeyboardShortcuts(state, {
       stop: vi.fn(),
@@ -432,7 +429,7 @@ describe('setupKeyboardShortcuts', () => {
 
     actions.get('clear')?.();
 
-    expect(state.harness.abort).toHaveBeenCalledTimes(1);
+    expect(state.session.abort).toHaveBeenCalledTimes(1);
     expect(state.userInitiatedAbort).toBe(true);
     expect(editor.setText).not.toHaveBeenCalled();
   });
@@ -453,7 +450,7 @@ describe('setupKeyboardShortcuts', () => {
 
     expect(abortController.abort).toHaveBeenCalledTimes(1);
     expect(component.setInterrupted).toHaveBeenCalledTimes(1);
-    expect(state.harness.abort).toHaveBeenCalledTimes(1);
+    expect(state.session.abort).toHaveBeenCalledTimes(1);
     expect(state.goalManager.pause).toHaveBeenCalledWith('Judge evaluation was interrupted.');
     expect(state.goalManager.saveToThread).toHaveBeenCalledWith(state);
     expect(state.activeGoalJudge).toBeUndefined();
@@ -467,7 +464,7 @@ describe('setupKeyboardShortcuts', () => {
     // aborts and clears the inline plan-approval component.
     const { state, editor, actions } = createState(false);
     editor.getText.mockReturnValue('');
-    state.harness.session.suspensions.hasPending.mockReturnValue(true);
+    state.session.suspensions.hasPending.mockReturnValue(true);
     state.activeInlinePlanApproval = { handleInput: vi.fn() } as any;
 
     setupKeyboardShortcuts(state, {
@@ -478,7 +475,7 @@ describe('setupKeyboardShortcuts', () => {
 
     actions.get('clear')?.();
 
-    expect(state.harness.abort).toHaveBeenCalledTimes(1);
+    expect(state.session.abort).toHaveBeenCalledTimes(1);
     expect(state.activeInlinePlanApproval).toBeUndefined();
     expect(state.userInitiatedAbort).toBe(true);
     expect(editor.setText).not.toHaveBeenCalled();

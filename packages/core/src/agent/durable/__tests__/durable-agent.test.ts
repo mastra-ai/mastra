@@ -10,6 +10,7 @@ import { Agent } from '../../agent';
 import { MessageList } from '../../message-list';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
+import { DurableAgent } from '../durable-agent';
 import { RunRegistry, ExtendedRunRegistry, globalRunRegistry } from '../run-registry';
 import type { AgentStreamEvent } from '../types';
 
@@ -1133,5 +1134,86 @@ describe('DurableAgent resume model metadata', () => {
     globalRunRegistry.delete(runId);
     createStreamSpy.mockRestore();
     await pubsub.close();
+  });
+
+  // ==========================================================================
+  // __fork — per-request editor override path
+  //
+  // The editor serves per-request agents by calling `__fork()` on the registered
+  // agent and then mutating the fork (instructions/tools). The base Agent.__fork
+  // builds a bare Agent, which for a DurableAgent dropped the wrapped agent and
+  // every delegating override — the served agent lost all of its tools.
+  // ==========================================================================
+  describe('__fork (editor override path)', () => {
+    const ping = createTool({
+      id: 'ping',
+      description: 'Ping',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async () => ({ ok: true }),
+    });
+
+    it('re-wraps as a DurableAgent that keeps the wrapped agent tools and delegating behavior', async () => {
+      const pubsub = new EventEmitterPubSub();
+      const baseAgent = new Agent({
+        id: 'fork-agent',
+        name: 'Fork Agent',
+        instructions: 'Code instructions',
+        model: 'openai/gpt-4o',
+        tools: { ping },
+        editor: { instructions: true, tools: false },
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      // The editor reads tool/instruction ownership from the served agent.
+      expect(durableAgent.__getEditorConfig()).toEqual({ instructions: true, tools: false });
+
+      const fork = durableAgent.__fork();
+
+      // The served fork stays a DurableAgent (delegating behavior intact)…
+      expect(fork).toBeInstanceOf(DurableAgent);
+      // …and keeps the wrapped agent's code-owned tool.
+      expect(Object.keys(await fork.listTools())).toContain('ping');
+
+      // An instructions override applied to the fork is reflected…
+      fork.__updateInstructions('Overridden instructions');
+      expect(await fork.getInstructions()).toBe('Overridden instructions');
+
+      // …without mutating the original singleton.
+      expect(await durableAgent.getInstructions()).toBe('Code instructions');
+      expect(Object.keys(await durableAgent.listTools())).toContain('ping');
+
+      await pubsub.close();
+    });
+
+    it('forwards __setTools on the fork to the wrapped agent', async () => {
+      const pubsub = new EventEmitterPubSub();
+      const extra = createTool({
+        id: 'extra',
+        description: 'Extra',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ ok: z.boolean() }),
+        execute: async () => ({ ok: true }),
+      });
+      const baseAgent = new Agent({
+        id: 'fork-tools-agent',
+        name: 'Fork Tools Agent',
+        instructions: 'Code instructions',
+        model: 'openai/gpt-4o',
+        tools: { ping },
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const fork = durableAgent.__fork();
+      const codeTools = await fork.listTools();
+      fork.__setTools({ ...codeTools, extra });
+
+      // The merged tool set is served by the fork…
+      expect(Object.keys(await fork.listTools())).toEqual(expect.arrayContaining(['ping', 'extra']));
+      // …while the original singleton is untouched.
+      expect(Object.keys(await durableAgent.listTools())).not.toContain('extra');
+
+      await pubsub.close();
+    });
   });
 });

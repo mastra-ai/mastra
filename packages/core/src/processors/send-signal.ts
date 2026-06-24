@@ -10,9 +10,10 @@ export function createProcessorSendSignal(args: {
 }): (signalInput: AgentSignalInput) => Promise<CreatedAgentSignal> {
   return async signalInput => {
     const signal = createSignal(signalInput);
+    args.messageList.markResponseMessageBoundary();
     args.rotateResponseMessageId?.();
-    args.messageList.add(signal.toDBMessage(), 'input');
-    await args.writer?.custom(signal.toDataPart());
-    return signal;
+    const signalForTranscript = args.messageList.addSignal(signal);
+    await args.writer?.custom(signalForTranscript.toDataPart());
+    return signalForTranscript;
   };
 }
