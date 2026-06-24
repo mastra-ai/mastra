@@ -6,6 +6,8 @@ import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideD
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { EyeIcon } from 'lucide-react';
+import { collectToolMocks } from './collect-tool-mocks';
+import type { ToolCallTrajectoryStep } from './collect-tool-mocks';
 import { SaveAsDatasetItemDialog } from '@/domains/datasets/components/save-as-dataset-item-dialog';
 
 type TraceAsItemDialogProps = {
@@ -81,12 +83,17 @@ export function TraceAsItemDialog({
         )
       : undefined;
 
+  // Derive item-level tool mocks from the recorded tool calls in the trajectory
+  const toolMocks = trajectory?.steps ? collectToolMocks(trajectory.steps as ToolCallTrajectoryStep[]) : [];
+  const initialToolMocks = toolMocks.length > 0 ? JSON.stringify(toolMocks, null, 2) : undefined;
+
   return (
     <SaveAsDatasetItemDialog
       initialInput={getInitialInput(traceDetails)}
       initialGroundTruth={traceDetails?.output != null ? JSON.stringify(traceDetails.output, null, 2) : ''}
       initialTrajectory={initialTrajectory}
       trajectoryLoading={isTrajectoryLoading}
+      initialToolMocks={initialToolMocks}
       breadcrumb={
         <TextAndIcon>
           <EyeIcon /> {getShortId(traceId)}

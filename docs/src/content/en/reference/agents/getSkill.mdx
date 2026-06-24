@@ -1,0 +1,88 @@
+---
+title: "Reference: .getSkill() | Agents"
+description: "API reference for the Agent .getSkill() method, which retrieves a specific skill by name."
+packages:
+  - "@mastra/core"
+---
+
+# `.getSkill()`
+
+Retrieves a specific skill by name from the agent's configured skills (both agent-level and workspace skills).
+
+## Usage example
+
+```typescript title="src/routes/skills.ts"
+import { agent } from '../mastra/agents'
+
+const skill = await agent.getSkill('code-review')
+
+if (skill) {
+  console.log(skill.name) // "code-review"
+  console.log(skill.description) // "Use when reviewing code changes."
+  console.log(skill.instructions) // Full markdown instructions
+}
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'skillName',
+    type: 'string',
+    description: 'The name of the skill to retrieve.',
+  },
+  {
+    name: 'options',
+    type: 'object',
+    isOptional: true,
+    description: 'Options for skill resolution.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'requestContext',
+            type: 'RequestContext',
+            isOptional: true,
+            description: 'Request context passed to dynamic skill resolvers.',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Return value
+
+Returns `Promise<Skill | null>`.
+
+Returns the `Skill` object if found, or `null` if no skill with that name exists.
+
+```typescript
+interface Skill {
+  name: string
+  description: string
+  instructions: string
+  path: string
+  source: { type: string; projectPath: string }
+  references: string[]
+  scripts: string[]
+  assets: string[]
+  license?: string
+  compatibility?: string[]
+  'user-invocable'?: boolean
+  metadata?: Record<string, unknown>
+}
+```
+
+## Merging behavior
+
+When both agent-level skills and workspace skills are configured, `.getSkill()` searches the merged set. Agent-level skills take precedence on name conflicts.
+
+## Related
+
+- [Agent skills](/docs/agents/skills)
+- [`.listSkills()` reference](/reference/agents/listSkills)
+- [`createSkill()` reference](/reference/agents/createSkill)

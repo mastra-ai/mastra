@@ -808,6 +808,29 @@ export class SessionStream {
   #subscription: AgentThreadSubscription<any> | null = null;
   /** Dedup key (`agentId:resourceId:threadId`) for the open subscription, or null. */
   #key: string | null = null;
+  readonly #teardownWaiters = new Set<() => void>();
+
+  #notifyTeardown(): void {
+    const waiters = [...this.#teardownWaiters];
+    this.#teardownWaiters.clear();
+    for (const waiter of waiters) waiter();
+  }
+
+  waitForTeardown(signal: AbortSignal): Promise<void> {
+    return new Promise(resolve => {
+      const done = () => {
+        signal.removeEventListener('abort', abort);
+        resolve();
+      };
+      const abort = () => {
+        this.#teardownWaiters.delete(done);
+        resolve();
+      };
+      if (signal.aborted) return resolve();
+      this.#teardownWaiters.add(done);
+      signal.addEventListener('abort', abort, { once: true });
+    });
+  }
 
   /** Build the dedup key identifying a subscription to `threadId` for `agent`. */
   static keyFor({ agent, resourceId, threadId }: { agent: Agent; resourceId: string; threadId: string }): string {
@@ -857,6 +880,7 @@ export class SessionStream {
     this.#subscription?.unsubscribe();
     this.#subscription = null;
     this.#key = null;
+    this.#notifyTeardown();
   }
 
   /** Fully tear down the live subscription: abort, unsubscribe, and clear. */
@@ -865,6 +889,7 @@ export class SessionStream {
     this.#subscription?.unsubscribe();
     this.#subscription = null;
     this.#key = null;
+    this.#notifyTeardown();
   }
 }
 
@@ -1125,6 +1150,29 @@ export class SessionRun {
   #abortController: AbortController | null = null;
   /** Whether an abort has been requested for the current run. */
   #abortRequested = false;
+  readonly #teardownWaiters = new Set<() => void>();
+
+  #notifyTeardown(): void {
+    const waiters = [...this.#teardownWaiters];
+    this.#teardownWaiters.clear();
+    for (const waiter of waiters) waiter();
+  }
+
+  waitForTeardown(signal: AbortSignal): Promise<void> {
+    return new Promise(resolve => {
+      const done = () => {
+        signal.removeEventListener('abort', abort);
+        resolve();
+      };
+      const abort = () => {
+        this.#teardownWaiters.delete(done);
+        resolve();
+      };
+      if (signal.aborted) return resolve();
+      this.#teardownWaiters.add(done);
+      signal.addEventListener('abort', abort, { once: true });
+    });
+  }
 
   /** The current run id (null when idle). */
   getRunId(): string | null {
@@ -1155,6 +1203,7 @@ export class SessionRun {
     this.#traceId = null;
     this.#abortController = null;
     this.#abortRequested = false;
+    this.#notifyTeardown();
   }
 
   /** Bump and return the operation counter at the start of a new operation. */
@@ -2698,9 +2747,30 @@ export class Session<TState = unknown> {
    * to avoid the new signal being queued onto the dying run, which would then
    * be drained with the previous run's already-aborted abortSignal.
    */
-  private async waitForStreamIdle(): Promise<void> {
-    while (this.stream.isActive() || this.run.getRunId() !== null) {
-      await new Promise(resolve => setTimeout(resolve, 0));
+  private async waitForStreamIdle(timeoutMs = 1_000): Promise<void> {
+    if (!this.stream.isActive() && this.run.getRunId() === null) return;
+
+    let lifecycleWait: AbortController | undefined;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<'timeout'>(resolve => {
+      timeout = setTimeout(() => resolve('timeout'), timeoutMs);
+    });
+
+    try {
+      while (this.stream.isActive() || this.run.getRunId() !== null) {
+        lifecycleWait = new AbortController();
+        const result = await Promise.race([
+          this.stream.waitForTeardown(lifecycleWait.signal),
+          this.run.waitForTeardown(lifecycleWait.signal),
+          timeoutPromise,
+        ]);
+        lifecycleWait.abort();
+        lifecycleWait = undefined;
+        if (result === 'timeout') return;
+      }
+    } finally {
+      lifecycleWait?.abort();
+      if (timeout) clearTimeout(timeout);
     }
   }
 
@@ -2736,6 +2806,16 @@ export class Session<TState = unknown> {
     const ifIdle = 'content' in input ? input.ifIdle : undefined;
     const submittedRunId = this.run.getRunId();
     const submittedActiveRunId = this.stream.activeRunId();
+    // After `abort()` the AbortController is cleared immediately but the run id
+    // and active-run id linger until `run.reset()` runs (after `agent_end`).
+    // Without this guard, a signal sent right after an interrupt is dispatched
+    // onto the dying run and lost — the follow-up message never gets a response.
+    const submittedIsRunning = this.run.isRunning();
+    // An abort was requested but the previous run hasn't finished tearing down
+    // yet (the flag stays set until `run.reset()` after `agent_end`). This is
+    // the post-interrupt window where a fresh signal must wait for the dying
+    // run to fully idle before starting a new run.
+    const submittedAbortRequested = this.run.isAbortRequested();
     const signal = createSignal(
       'content' in input ? { type: 'user', tagName: 'user', contents: input.content } : input,
     );
@@ -2749,7 +2829,7 @@ export class Session<TState = unknown> {
       const agent = this.machinery.getAgent();
       await this.thread.ensureSubscription(threadId);
 
-      if (submittedRunId && submittedActiveRunId) {
+      if (submittedRunId && submittedActiveRunId && submittedIsRunning) {
         this.approval.respond({
           decision: 'decline',
           declineContext: {
@@ -2764,6 +2844,18 @@ export class Session<TState = unknown> {
           ifIdle,
         });
         return { accepted: true as const, runId: await settleRunId(result) };
+      }
+
+      // Post-abort lingering state: the AbortController was cleared (so
+      // `submittedIsRunning` is false) but the previous run is still finalizing
+      // — its run id / active-run id linger until `run.reset()` runs after
+      // `agent_end`. Dispatching a fresh signal now would let the agent queue it
+      // onto the dying run instead of starting a new run, and the follow-up
+      // would never get a response. Wait for the stream to fully idle first.
+      // Only do this in the post-abort window (an abort was requested but the
+      // run hasn't reset yet) so normal idle signals aren't delayed.
+      if (submittedAbortRequested && (submittedRunId || submittedActiveRunId)) {
+        await this.waitForStreamIdle();
       }
 
       const streamOptions = await this.machinery.buildStreamOptions({
