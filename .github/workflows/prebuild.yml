@@ -82,6 +82,7 @@ jobs:
       run_full: ${{ steps.compute.outputs.run_full }}
       test_files: ${{ steps.compute.outputs.test_files }}
       affected_store_tests: ${{ steps.compute.outputs.affected_store_tests }}
+      affected_workspace_tests: ${{ steps.compute.outputs.affected_workspace_tests }}
     permissions:
       contents: read
     steps:
@@ -107,6 +108,7 @@ jobs:
             echo "run_full=true" >> $GITHUB_OUTPUT
             echo "test_files=" >> $GITHUB_OUTPUT
             echo "affected_store_tests=false" >> $GITHUB_OUTPUT
+            echo "affected_workspace_tests=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
@@ -127,6 +129,9 @@ jobs:
             const affectedStoreTests = (data.affectedTests || []).some(file => file.startsWith('stores/'));
             fs.appendFileSync(process.env.GITHUB_OUTPUT, \`affected_store_tests=\${affectedStoreTests}\n\`);
 
+            const affectedWorkspaceTests = (data.affectedTests || []).some(file => file.startsWith('workspaces/'));
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, \`affected_workspace_tests=\${affectedWorkspaceTests}\n\`);
+
             console.error(\`Affected: \${count}/\${total} tests (\${(ratio * 100).toFixed(1)}%)\`);
 
             if (ratio > 0.5) {
@@ -142,6 +147,20 @@ jobs:
               fs.appendFileSync(process.env.GITHUB_OUTPUT, 'AFFECTED_EOF\n');
             }
           "
+
+      - name: Save affected-tests outputs for downstream workflow
+        if: always()
+        run: |
+          mkdir -p /tmp/affected-outputs
+          echo "${{ steps.compute.outputs.affected_workspace_tests }}" > /tmp/affected-outputs/affected_workspace_tests.txt
+
+      - name: Upload affected-tests artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: affected-tests-outputs
+          path: /tmp/affected-outputs/
+          retention-days: 1
 
   test-suite:
     name: Unit and E2E Tests
@@ -266,10 +285,52 @@ jobs:
       ABHI_CLOUDFLARE_API_TOKEN: ${{ secrets.ABHI_CLOUDFLARE_API_TOKEN }}
       ABHI_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.ABHI_CLOUDFLARE_ACCOUNT_ID }}
 
+  workspace-check-changes:
+    name: Detect workspace changes
+    if: github.repository == 'mastra-ai/mastra' && needs.changes.outputs.has_code == 'true'
+    needs: [changes, affected-tests]
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      workspaces-changed: ${{ steps.check.outputs.workspaces-changed }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+
+      - name: Check for workspace changes
+        id: check
+        run: |
+          WORKSPACES_CHANGED=false
+
+          # Run when the affected-tests graph found workspace test files impacted
+          if [ "${{ needs.affected-tests.outputs.affected_workspace_tests }}" = "true" ]; then
+            WORKSPACES_CHANGED=true
+          fi
+
+          # Direct path fallback for changes not covered by the affected-test graph
+          # (workspace packages/configs, CI workflow edits). Core source changes that
+          # affect workspace tests are already caught by the affected-tests graph via
+          # cross-package alias resolution, so they are not duplicated here.
+          # Ignore markdown-only changes so docs/changelog-only edits don't trigger.
+          DIRECT=$(git diff --name-only \
+            "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" \
+            | grep -vE '\.md$' \
+            | grep -E '^(workspaces/|\.github/workflows/test-workspaces\.yml|\.github/workflows/secrets\.test-workspaces\.yml|\.github/workflows/prebuild\.yml)' \
+            || true)
+
+          if [ -n "$DIRECT" ]; then
+            WORKSPACES_CHANGED=true
+          fi
+
+          echo "workspaces-changed=$WORKSPACES_CHANGED" >> "$GITHUB_OUTPUT"
+
   workspace-tests:
     name: Workspace Tests
-    needs: [changes, prebuild]
-    if: always() && github.repository == 'mastra-ai/mastra' && needs.changes.outputs.has_code == 'true' && needs.prebuild.result == 'success'
+    needs: [changes, workspace-check-changes, prebuild]
+    if: always() && github.repository == 'mastra-ai/mastra' && needs.workspace-check-changes.outputs.workspaces-changed == 'true' && needs.prebuild.result == 'success'
     uses: ./.github/workflows/test-workspaces.yml
     permissions:
       contents: read
