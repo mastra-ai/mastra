@@ -1,4 +1,5 @@
-import { CodeEditor, AgentIcon } from '@mastra/playground-ui';
+import { AgentIcon } from '@mastra/playground-ui';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import React from 'react';
 import Markdown from 'react-markdown';
 import { ToolCard } from '../tool-card';

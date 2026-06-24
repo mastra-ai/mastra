@@ -1,4 +1,5 @@
-import { CodeEditor, cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { ChevronRight, Check, X, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import type { BrowserToolCallEntry } from '../../context/browser-tool-calls-context';
