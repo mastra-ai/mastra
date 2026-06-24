@@ -6,6 +6,8 @@ import { mastraDBMessageToSignal } from '../agent/signals';
 import type { AgentInstructions, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import { getErrorFromUnknown } from '../error';
+import { GatewayManager } from '../llm/model/gateways';
+import { defaultGateways } from '../llm/model/gateways/defaults';
 import { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
@@ -214,6 +216,7 @@ export class Harness<TState = {}> {
    * server's storage/agents/gateways instead of spinning up its own.
    */
   #externalMastra: Mastra | undefined = undefined;
+  #gatewayManager: GatewayManager | undefined = undefined;
   #legacyAgentMode: Record<string, Agent<any, any, any, any>> = {};
 
   constructor(config: HarnessConfig<TState>) {
@@ -222,6 +225,10 @@ export class Harness<TState = {}> {
     this.id = config.id;
     this.config = config;
     this.#instructions = config.instructions;
+    // Gateway manager merges configured gateways with the router defaults
+    // (custom takes precedence). Shared by listAvailableModels,
+    // getCurrentModelAuthStatus, and the OM model resolver.
+    this.#gatewayManager = new GatewayManager([...(config.gateways ?? []), ...defaultGateways]);
 
     const defaultMode = config.defaultModeId
       ? config.modes.find(mode => mode.id === config.defaultModeId)
@@ -281,7 +288,7 @@ export class Harness<TState = {}> {
       setState: updates => void session.state.set(updates as Partial<TState>),
       setSetting: ({ key, value }) => session.thread.setSetting({ key, value }),
       omConfig: this.config.omConfig,
-      resolveModel: this.config.resolveModel,
+      gateways: this.config.gateways ?? [],
     });
     session.permissions.setResolver({
       getState: () => session.state.get() as Record<string, unknown>,
@@ -883,7 +890,11 @@ export class Harness<TState = {}> {
         ...mode.additionalTools,
       };
 
-      const model = this.config.resolveModel ? this.config.resolveModel(mode.defaultModelId) : mode.defaultModelId;
+      // Model resolution flows through the gateways registered on the internal
+      // Mastra instance: the bare model id string is handed to the Agent, and
+      // `propagateRuntimeServicesToAgent` attaches the internal Mastra so the
+      // model router resolves it via the configured gateways (auth included).
+      const model = mode.defaultModelId;
       this.#legacyAgentMode[mode.id] = new Agent({
         id: `${this.id}-agent`,
         name: `Harness ${this.id} agent`,
@@ -940,32 +951,29 @@ export class Harness<TState = {}> {
 
   /**
    * Check if the current model's provider has authentication configured.
-   * Uses app-provided catalog/auth hooks; Harness does not resolve gateway auth itself.
+   * Delegates to the {@link GatewayManager} auth chain (the same resolution
+   * the model router uses at run time). Falls back to `hasAuth: true` when
+   * no model is selected or the chain cannot resolve auth.
    */
   async getCurrentModelAuthStatus(session: Session<TState>): Promise<ModelAuthStatus> {
     const modelId = session.model.get();
     if (!modelId) return { hasAuth: true };
 
+    const hasAuth = this.#gatewayManager ? await this.#gatewayManager.hasAuth(modelId) : true;
+    if (hasAuth) return { hasAuth: true };
+
+    // Surface the env-var hint from the catalog when available.
     try {
       const availableModels = await this.listAvailableModels();
       const currentModel = availableModels.find(model => model.id === modelId);
       if (currentModel) {
-        return {
-          hasAuth: currentModel.hasApiKey,
-          apiKeyEnvVar: currentModel.hasApiKey ? undefined : currentModel.apiKeyEnvVar,
-        };
+        return { hasAuth: false, apiKeyEnvVar: currentModel.apiKeyEnvVar };
       }
     } catch {
-      // Ignore catalog lookup errors and fall through to provider-based checks.
+      // Ignore catalog lookup errors.
     }
 
-    const provider = modelId.split('/', 1)[0];
-    if (this.config.modelAuthChecker && provider) {
-      const result = this.config.modelAuthChecker(provider);
-      if (result !== undefined) return { hasAuth: result };
-    }
-
-    return { hasAuth: true };
+    return { hasAuth: false };
   }
 
   /**
@@ -988,21 +996,9 @@ export class Harness<TState = {}> {
       });
     };
 
-    if (this.config.customModelCatalogProvider) {
-      try {
-        const customModels = await Promise.resolve(this.config.customModelCatalogProvider());
-        for (const model of customModels) {
-          upsertModel({
-            id: model.id,
-            provider: model.provider,
-            modelName: model.modelName,
-            hasApiKey: model.hasApiKey,
-            apiKeyEnvVar: model.apiKeyEnvVar,
-          });
-        }
-      } catch (error) {
-        console.warn('Failed to load available models:', error);
-      }
+    const catalog = await this.#gatewayManager!.listAvailableModels();
+    for (const model of catalog) {
+      upsertModel(model);
     }
 
     const result = [...modelsById.values()];
@@ -1716,13 +1712,18 @@ export class Harness<TState = {}> {
       }
     }
 
-    // Auto-create subagent tool if subagent definitions are configured
-    if (this.config.subagents?.length && this.config.resolveModel) {
+    // Auto-create subagent tool if subagent definitions are configured.
+    // Model resolution flows through the gateways registered on the internal
+    // Mastra instance: `resolveModel` returns the bare model id string and the
+    // created subagent Agent receives the internal Mastra via its constructor
+    // so the model router resolves through the same gateways as the parent.
+    if (this.config.subagents?.length) {
       const currentMode = session.mode.resolve();
       const hasMemory = Boolean(this.config.memory);
       builtInTools.subagent = createSubagentTool({
         subagents: this.config.subagents,
-        resolveModel: this.config.resolveModel,
+        resolveModel: (modelId: string) => modelId,
+        mastra: this.getMastra(),
         harnessTools: resolvedHarnessTools,
         fallbackModelId: currentMode?.defaultModelId,
         getParentModelId: () => session.model.get(),
