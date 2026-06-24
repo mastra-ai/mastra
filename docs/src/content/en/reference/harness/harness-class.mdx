@@ -1,40 +1,48 @@
 ---
 title: "Reference: Harness class | Harness"
-description: "Documentation for the Harness class, the core orchestrator for multi-mode agents, shared state, memory, and storage in Mastra."
+description: "API reference for the Harness class, the orchestrator for multi-mode agents with shared state, threads, and tool approvals."
 packages:
   - "@mastra/core"
 ---
 
 # Harness class
 
-**Added in:** `@mastra/core@1.5.0`
-
 :::experimental
 
-The `Harness` class is in alpha stage and subject to change. It won't follow semantic versioning guarantees until it graduates from experimental status. Use with caution and expect breaking changes in minor versions.
-
-[Mastra Code](https://code.mastra.ai/) is the flagship implementation of the `Harness` class, showcasing how it can be used to build a powerful terminal-based coding agent with multi-model support, persistent conversations, and built-in tools.
+The `Harness` feature is in beta stage and subject to breaking changes in minor versions until it graduates from its beta status.
 
 :::
 
 The `Harness` class orchestrates multiple agent modes, shared state, memory, and storage. It provides a control layer that a TUI or other UI can drive to manage threads, switch models and modes, send messages, handle tool approvals, and track events.
 
+Per-conversation state — identity, the active thread, mode and model selection, run state, grants, and the display snapshot — lives on the [`Session`](/reference/harness/session), accessed through `harness.session`.
+
+For a conceptual introduction, see the [Harness overview](/docs/harness/overview).
+
 ## Usage example
 
-```typescript
+Import the `Harness` class and create a new instance with your agent, storage backend, and modes:
+
+```typescript title="src/mastra/harness.ts"
 import { Harness } from '@mastra/core/harness'
 import { LibSQLStore } from '@mastra/libsql'
 import { z } from 'zod'
 
 const harness = new Harness({
   id: 'my-coding-agent',
+  agent: myAgent,
   storage: new LibSQLStore({ url: 'file:./data.db' }),
   stateSchema: z.object({
     currentModelId: z.string().optional(),
   }),
   modes: [
-    { id: 'plan', name: 'Plan', default: true, agent: planAgent },
-    { id: 'build', name: 'Build', agent: buildAgent },
+    {
+      id: 'plan',
+      name: 'Plan',
+      metadata: { default: true },
+      instructions: 'Reason about changes before making them.',
+    },
+    { id: 'build', name: 'Build', transitionsTo: 'plan' },
   ],
 })
 
@@ -75,7 +83,7 @@ await harness.sendMessage({ content: 'Hello!' })
     name: 'stateSchema',
     type: 'StandardJSONSchemaV1',
     description:
-      'Standard JSON Schema defining the shape of harness state. Used for validation and extracting defaults.',
+      'Standard JSON Schema defining the shape of application state, accessed at runtime via session.state. Used for validation and extracting defaults.',
     isOptional: true,
   },
   {
@@ -95,7 +103,7 @@ await harness.sendMessage({ content: 'Hello!' })
     name: 'modes',
     type: 'HarnessMode[]',
     description:
-      'Available agent modes. At least one mode is required. Each mode defines an agent and optional defaults.',
+      'Available agent modes. At least one mode is required. When a top-level `agent` is provided, each mode layers its own instructions and tool overrides on top of the shared agent.',
     properties: [
       {
         type: 'HarnessMode',
@@ -114,7 +122,8 @@ await harness.sendMessage({ content: 'Hello!' })
           {
             name: 'default',
             type: 'boolean',
-            description: 'Whether this is the default mode when the harness starts.',
+            description:
+              'Whether this is the default mode when the harness starts. Deprecated in favor of `metadata.default` or the top-level `defaultModeId`.',
             isOptional: true,
             defaultValue: 'false',
           },
@@ -126,20 +135,72 @@ await harness.sendMessage({ content: 'Hello!' })
             isOptional: true,
           },
           {
-            name: 'color',
+            name: 'description',
             type: 'string',
-            description: 'Hex color for the mode indicator (e.g., `"#7c3aed"`).',
+            description: 'Description surfaced in mode pickers and Studio UI.',
+            isOptional: true,
+          },
+          {
+            name: 'instructions',
+            type: 'string',
+            description: "Additional instructions layered above the backing agent's own instructions for this mode.",
+            isOptional: true,
+          },
+          {
+            name: 'transitionsTo',
+            type: 'string',
+            description: "Target mode ID to switch to on `submit_plan` approval. Must reference another mode's `id`.",
+            isOptional: true,
+          },
+          {
+            name: 'metadata',
+            type: 'Record<string, unknown>',
+            description:
+              'Arbitrary metadata. `metadata.default === true` marks the default mode when `defaultModeId` is unset.',
+            isOptional: true,
+          },
+          {
+            name: 'tools',
+            type: 'ToolsInput',
+            description: "Replaces the backing agent's tools for this mode. Mutually exclusive with `additionalTools`.",
+            isOptional: true,
+          },
+          {
+            name: 'additionalTools',
+            type: 'ToolsInput',
+            description: "Tools layered on top of the backing agent's tools. Mutually exclusive with `tools`.",
             isOptional: true,
           },
           {
             name: 'agent',
-            type: 'Agent | ((state) => Agent)',
+            type: 'Agent',
             description:
-              'The agent for this mode. It can be a static Agent instance or a function that receives harness state and returns an Agent.',
+              'The agent for this mode. Deprecated in favor of the top-level `agent` config with mode-level overrides.',
+            isOptional: true,
           },
         ],
       },
     ],
+  },
+  {
+    name: 'agent',
+    type: 'Agent',
+    description:
+      'Shared backing agent that each mode forks and decorates. When provided, modes layer instructions and tool overrides on top of this agent instead of providing their own.',
+    isOptional: true,
+  },
+  {
+    name: 'defaultModeId',
+    type: 'string',
+    description:
+      'Default mode to enter when a thread has no persisted mode. Takes precedence over `metadata.default` on individual modes.',
+    isOptional: true,
+  },
+  {
+    name: 'instructions',
+    type: 'string',
+    description: "Base instructions shared across all modes. Appended to the backing agent's instructions.",
+    isOptional: true,
   },
   {
     name: 'tools',
@@ -153,6 +214,13 @@ await harness.sendMessage({ content: 'Hello!' })
     type: 'Workspace | WorkspaceConfig | ((ctx) => Workspace)',
     description:
       'Workspace configuration. Accepts a pre-constructed Workspace, a WorkspaceConfig for the harness to construct internally, or a dynamic factory function.',
+    isOptional: true,
+  },
+  {
+    name: 'browser',
+    type: 'MastraBrowser | ((ctx) => MastraBrowser)',
+    description:
+      "Browser automation configuration. Propagated to mode agents that don't have their own browser configured.",
     isOptional: true,
   },
   {
@@ -283,6 +351,27 @@ await harness.sendMessage({ content: 'Hello!' })
     isOptional: true,
   },
   {
+    name: 'modelUseCountTracker',
+    type: 'ModelUseCountTracker',
+    description:
+      'Callback invoked when a model is selected via `session.model.switch()`. Use to track and persist model usage for ranking.',
+    isOptional: true,
+  },
+  {
+    name: 'customModelCatalogProvider',
+    type: 'CustomModelCatalogProvider',
+    description:
+      'Catalog hook for additional models (e.g., user-defined custom providers). Returned entries are merged into `listAvailableModels()`.',
+    isOptional: true,
+  },
+  {
+    name: 'gateways',
+    type: 'MastraModelGatewayInterface[]',
+    description:
+      'Model gateways registered on the internal Mastra instance. Apps that need gateway-backed model resolution should also provide `resolveModel`.',
+    isOptional: true,
+  },
+  {
     name: 'toolCategoryResolver',
     type: '(toolName: string) => ToolCategory | null',
     description:
@@ -290,10 +379,23 @@ await harness.sendMessage({ content: 'Hello!' })
     isOptional: true,
   },
   {
+    name: 'pubsub',
+    type: 'PubSub',
+    description: 'PubSub instance used by the internal Mastra instance and mode agents for event coordination.',
+    isOptional: true,
+  },
+  {
     name: 'threadLock',
     type: '{ acquire, release }',
     description:
       'Thread locking callbacks to prevent concurrent access from multiple processes. `acquire` should throw if the lock is held.',
+    isOptional: true,
+  },
+  {
+    name: 'observability',
+    type: 'ObservabilityEntrypoint',
+    description:
+      'Observability entrypoint for tracing, scoring, and feedback. When provided, the internal Mastra instance produces trace spans for agent runs.',
     isOptional: true,
   },
 ]}
@@ -307,6 +409,12 @@ await harness.sendMessage({ content: 'Hello!' })
     name: 'id',
     type: 'string',
     description: 'Harness identifier, set at construction.',
+  },
+  {
+    name: 'session',
+    type: 'Session',
+    description:
+      'The per-conversation state for the active conversation: identity, the active thread binding and reads, mode and model selection, run and abort state, the live stream, tool suspensions, follow-ups, approvals, permission grants, token usage, and the display-state snapshot. See the Session reference for the full API.',
   },
 ]}
 />
@@ -322,6 +430,33 @@ Initialize the harness. Loads storage, initializes the workspace, propagates mem
 ```typescript
 await harness.init()
 ```
+
+#### `createSession({ id, ownerId, resourceId? })`
+
+Create a new, fully-wired `Session` and bring it online. The session starts in the default mode with the seeded model, connects to the Harness's shared machinery (agent, storage/lock, config catalog), and has a current thread (the most recent thread for the resource, or a freshly created one). Call `init()` once before creating sessions so shared storage and workspace are ready.
+
+The Harness owns no session of its own — every consumer creates its own session and drives all work through it. In a server or multiplayer setting, each request, thread, or user gets its own session, isolated from every other: independent event bus, mode, model, state, and current thread.
+
+`id` and `ownerId` are required — they mirror `SessionRecord.id` and `SessionRecord.ownerId` and are stable for the life of the session. `resourceId` is optional and defaults to `config.resourceId` then `config.id`.
+
+```typescript
+const session = await harness.createSession({
+  id: 'session-xyz',
+  ownerId: 'user-123',
+})
+```
+
+You can also override the resource:
+
+```typescript
+const session = await harness.createSession({
+  id: 'session-xyz',
+  ownerId: 'user-123',
+  resourceId: 'project-abc',
+})
+```
+
+Switching the resource ID via `harness.setResourceId()` changes only the resource ID, not `id` or `ownerId`. Read them through `session.identity.getId()` and `session.identity.getOwnerId()`.
 
 #### `selectOrCreateThread()`
 
@@ -339,40 +474,44 @@ Stop all heartbeat handlers and clean up resources.
 await harness.destroy()
 ```
 
-### State
+#### `removeHeartbeat({ id })`
 
-#### `getState()`
-
-Return a read-only snapshot of the current harness state.
+Remove a specific heartbeat handler by ID. Calls the handler's `shutdown()` callback if defined.
 
 ```typescript
-const state = harness.getState()
+await harness.removeHeartbeat({ id: 'gateway-sync' })
 ```
 
-#### `getDisplayState()`
+#### `stopHeartbeats()`
 
-Return the current `HarnessDisplayState` snapshot for UI rendering.
+Stop and remove all heartbeat handlers.
 
 ```typescript
-const displayState = harness.getDisplayState()
+await harness.stopHeartbeats()
 ```
 
-#### `restoreDisplayTasks(tasks)`
+#### `getCurrentAgent()`
 
-Restore the task portion of `HarnessDisplayState` after a UI replays persisted task tool history. This emits `display_state_changed` without emitting a live `task_updated` event.
-
-The task list itself is held in the thread-scoped `tasks` storage domain (the task store) and projected onto the agent state-signal lane (`stateId: "tasks"`), not in Harness state, so this method only updates the display snapshot. Task tools read and write the task store directly; you no longer need to seed `setState({ tasks })`.
+Return the fully-configured Agent for the current mode with runtime services (storage, memory, workspace, pubsub, telemetry) propagated.
 
 ```typescript
-harness.restoreDisplayTasks(replayedTasks)
+const agent = harness.getCurrentAgent()
 ```
 
-#### `setState(updates)`
+#### `getResolvedMemory()`
 
-Update the harness state. Validates against `stateSchema` if provided, and emits a `state_changed` event with the new state and changed keys.
+Return the resolved memory instance, or `null` if no memory is configured.
 
 ```typescript
-await harness.setState({ currentModelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
+const memory = await harness.getResolvedMemory()
+```
+
+#### `getMastra()`
+
+Return the internal `Mastra` instance, or `undefined` before `init()`. Useful for scorer registration, observability access, and eval tooling.
+
+```typescript
+const mastra = harness.getMastra()
 ```
 
 ### Modes
@@ -385,77 +524,11 @@ Return all configured `HarnessMode` instances.
 const modes = harness.listModes()
 ```
 
-#### `getCurrentModeId()`
-
-Return the ID of the currently active mode.
-
-```typescript
-const modeId = harness.getCurrentModeId()
-```
-
-#### `getCurrentMode()`
-
-Return the `HarnessMode` object for the current mode.
-
-```typescript
-const mode = harness.getCurrentMode()
-```
-
-#### `switchMode({ modeId })`
-
-Switch to a different mode. Aborts any in-progress generation, saves the current model to the outgoing mode, loads the incoming mode's model, and emits `mode_changed` and `model_changed` events.
-
-```typescript
-await harness.switchMode({ modeId: 'build' })
-```
+To read the active mode, use [`session.mode.get()`](/reference/harness/session#mode); to resolve it to a full `HarnessMode`, use [`session.mode.resolve()`](/reference/harness/session#mode).
 
 ### Models
 
-#### `getCurrentModelId()`
-
-Return the ID of the currently selected model from state.
-
-```typescript
-const modelId = harness.getCurrentModelId()
-```
-
-#### `getModelName()`
-
-Return a short display name from the current model ID. For example, `"claude-sonnet-4"` from `"anthropic/claude-sonnet-4"`.
-
-```typescript
-const name = harness.getModelName()
-```
-
-#### `getFullModelId()`
-
-Return the complete model ID string.
-
-```typescript
-const fullId = harness.getFullModelId()
-```
-
-#### `hasModelSelected()`
-
-Check if a model ID is currently selected.
-
-```typescript
-if (harness.hasModelSelected()) {
-  // Ready to send messages
-}
-```
-
-#### `switchModel({ modelId, scope?, modeId? })`
-
-Switch the active model. When `scope` is `'thread'`, the model ID is persisted to thread metadata so it's restored when switching back. Emits a `model_changed` event.
-
-```typescript
-// Set for current session only
-await harness.switchModel({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
-
-// Persist to the current thread
-await harness.switchModel({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__', scope: 'thread' })
-```
+To read the active model ID, use [`session.model.get()`](/reference/harness/session#model); for a short display name, use [`session.model.displayName()`](/reference/harness/session#model); to check whether a model is selected, use [`session.model.hasSelection()`](/reference/harness/session#model).
 
 #### `getCurrentModelAuthStatus()`
 
@@ -477,13 +550,7 @@ const models = await harness.listAvailableModels()
 
 ### Threads
 
-#### `getCurrentThreadId()`
-
-Return the ID of the currently active thread.
-
-```typescript
-const threadId = harness.getCurrentThreadId()
-```
+The harness owns thread lifecycle transitions — creating, switching, cloning, renaming, and deleting threads — because they coordinate the shared thread lock and emit events. The active thread binding and thread/message reads live on [`session.thread`](/reference/harness/session#thread).
 
 #### `createThread({ title? })`
 
@@ -501,22 +568,7 @@ Switch to a different thread. Aborts any in-progress operations, acquires a lock
 await harness.switchThread({ threadId: 'thread-abc123' })
 ```
 
-#### `listThreads(options?)`
-
-List threads from storage. By default, only threads for the current resource are returned, and transient [forked subagent](#forked-subagents) threads are hidden so they don’t appear in user-facing thread pickers / startup flows.
-
-```typescript
-// List threads for current resource (forks hidden)
-const threads = await harness.listThreads()
-
-// List all threads across resources (forks still hidden)
-const allThreads = await harness.listThreads({ allResources: true })
-
-// Include forked subagent fork threads (debug / admin tooling only)
-const everything = await harness.listThreads({ includeForkedSubagents: true })
-```
-
-Fork threads are tagged with `metadata.forkedSubagent === true` (and `metadata.parentThreadId`) by the harness. Set `includeForkedSubagents: true` to opt back into seeing them — e.g. for a debug panel.
+To list threads from storage, use [`session.thread.list()`](/reference/harness/session#thread). By default it returns only threads for the current resource and hides transient [forked subagent](#forked-subagents) threads; pass `includeForkedSubagents: true` to opt back into seeing them — e.g. for a debug panel.
 
 #### `renameThread({ title })`
 
@@ -543,13 +595,7 @@ const cloned = await harness.cloneThread({
 
 See [`Memory.cloneThread()`](/reference/memory/cloneThread) for details on what gets cloned.
 
-#### `getResourceId()`
-
-Return the current resource ID.
-
-```typescript
-const resourceId = harness.getResourceId()
-```
+To read the current resource ID, use [`session.identity.getResourceId()`](/reference/harness/session#identity).
 
 #### `setResourceId({ resourceId })`
 
@@ -557,6 +603,14 @@ Set the resource ID and clear the current thread.
 
 ```typescript
 harness.setResourceId({ resourceId: 'project-xyz' })
+```
+
+#### `getKnownResourceIds()`
+
+Return the distinct resource IDs that have threads in storage.
+
+```typescript
+const resourceIds = await harness.getKnownResourceIds()
 ```
 
 #### `getSession()`
@@ -578,52 +632,11 @@ Send a message to the current agent. Creates a thread if none exists, builds a `
 await harness.sendMessage({ content: 'Explain the authentication flow' })
 ```
 
-#### `listMessages(options?)`
-
-Retrieve messages for the current thread.
-
-```typescript
-const messages = await harness.listMessages()
-
-// Limit to the last 50 messages
-const recent = await harness.listMessages({ limit: 50 })
-```
-
-#### `listMessagesForThread({ threadId, limit? })`
-
-Retrieve messages for a specific thread.
-
-```typescript
-const messages = await harness.listMessagesForThread({ threadId: 'thread-abc123' })
-```
-
-#### `getFirstUserMessageForThread({ threadId })`
-
-Retrieve the first user message for a given thread.
-
-```typescript
-const firstMsg = await harness.getFirstUserMessageForThread({ threadId: 'thread-abc123' })
-```
+Reading messages is owned by [`session.thread`](/reference/harness/session#thread): use `listActiveMessages()` for the active thread, `listMessages({ threadId })` for a specific thread, and `firstUserMessage({ threadId })` / `firstUserMessages({ threadIds })` for thread previews.
 
 ### Memory
 
-The `memory` property exposes thread management operations. These are also available as top-level methods on the harness.
-
-#### `memory.createThread({ title? })`
-
-Create a new thread. Same as `harness.createThread()`.
-
-#### `memory.switchThread({ threadId })`
-
-Switch to a different thread. Same as `harness.switchThread()`.
-
-#### `memory.listThreads(options?)`
-
-List threads from storage. Same as `harness.listThreads()`.
-
-#### `memory.renameThread({ title })`
-
-Update the title of the current thread. Same as `harness.renameThread()`.
+The `memory` property bundles thread management operations into a single namespace. `memory.createThread`, `memory.switchThread`, and `memory.renameThread` delegate to the corresponding Harness lifecycle methods documented above; `memory.listThreads` delegates to [`session.thread.list()`](/reference/harness/session#thread).
 
 #### `memory.deleteThread({ threadId })`
 
@@ -661,14 +674,7 @@ harness.followUp({ content: 'Now apply those changes' })
 
 ### Tool approvals
 
-#### `respondToToolApproval({ decision, requestContext? })`
-
-Respond to a pending tool approval request. Called when a `tool_approval_required` event is received.
-
-```typescript
-harness.respondToToolApproval({ decision: 'approve' })
-harness.respondToToolApproval({ decision: 'decline' })
-```
+Responding to a pending tool approval is owned by the session — see [`session.respondToToolApproval()`](/reference/harness/session#tool-approvals). The harness owns the permission _policy_ that decides when approval is required, documented under [Permissions](#permissions) below.
 
 ### Tool suspensions and plans
 
@@ -718,56 +724,6 @@ harness.respondToToolSuspension({
 ```
 
 ### Permissions
-
-#### `grantSessionCategory({ category })`
-
-Grant a tool category for the current session. Tools in this category are auto-approved without prompting.
-
-```typescript
-harness.grantSessionCategory({ category: 'edit' })
-```
-
-#### `grantSessionTool({ toolName })`
-
-Grant a specific tool for the current session.
-
-```typescript
-harness.grantSessionTool({ toolName: 'mastra_workspace_execute_command' })
-```
-
-#### `getSessionGrants()`
-
-Return currently granted session categories and tools.
-
-```typescript
-const grants = harness.getSessionGrants()
-// { categories: Set<string>, tools: Set<string> }
-```
-
-#### `setPermissionForCategory({ category, policy })`
-
-Set the permission policy for a tool category.
-
-```typescript
-harness.setPermissionForCategory({ category: 'execute', policy: 'ask' })
-```
-
-#### `setPermissionForTool({ toolName, policy })`
-
-Set the permission policy for a specific tool. Per-tool policies take precedence over category policies.
-
-```typescript
-harness.setPermissionForTool({ toolName: 'dangerous_tool', policy: 'deny' })
-```
-
-#### `getPermissionRules()`
-
-Return the current permission rules.
-
-```typescript
-const rules = harness.getPermissionRules()
-// { categories: { execute: 'ask' }, tools: { dangerous_tool: 'deny' } }
-```
 
 #### `getToolCategory({ toolName })`
 
@@ -848,78 +804,7 @@ if (record) {
 }
 ```
 
-#### `getObserverModelId()`
-
-Return the observer model ID from state or the default from `omConfig`.
-
-```typescript
-const modelId = harness.getObserverModelId()
-```
-
-#### `getReflectorModelId()`
-
-Return the reflector model ID from state or the default from `omConfig`.
-
-```typescript
-const modelId = harness.getReflectorModelId()
-```
-
-#### `switchObserverModel({ modelId })`
-
-Switch the observer model. Persists the setting to thread metadata and emits an `om_model_changed` event.
-
-```typescript
-await harness.switchObserverModel({ modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__' })
-```
-
-#### `switchReflectorModel({ modelId })`
-
-Switch the reflector model. Persists the setting to thread metadata and emits an `om_model_changed` event.
-
-```typescript
-await harness.switchReflectorModel({ modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__' })
-```
-
-#### `getObservationThreshold()`
-
-Return the observation threshold in tokens from state or the default from `omConfig`.
-
-```typescript
-const threshold = harness.getObservationThreshold()
-```
-
-#### `getReflectionThreshold()`
-
-Return the reflection threshold in tokens from state or the default from `omConfig`.
-
-```typescript
-const threshold = harness.getReflectionThreshold()
-```
-
-### Subagents
-
-#### `getSubagentModelId({ agentType? })`
-
-Retrieve the subagent model ID. Prioritizes per-type settings over the global setting.
-
-```typescript
-const modelId = harness.getSubagentModelId({ agentType: 'explore' })
-```
-
-#### `setSubagentModelId({ modelId, agentType? })`
-
-Set the subagent model ID. Pass an `agentType` to set a per-type override, or omit it to set the global default. Persists to thread settings and emits a `subagent_model_changed` event.
-
-```typescript
-// Set global subagent model
-await harness.setSubagentModelId({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
-
-// Set per-type model
-await harness.setSubagentModelId({
-  modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
-  agentType: 'explore',
-})
-```
+The observer/reflector model selection and observation/reflection thresholds live on the Session under [`session.om`](/reference/harness/session#observational-memory), grouped by role. Read them with `session.om.observer.modelId()` / `session.om.reflector.modelId()` and `session.om.observer.threshold()` / `session.om.reflector.threshold()`, and change a role's model with `session.om.observer.switchModel()` / `session.om.reflector.switchModel()`.
 
 ### Forked subagents
 
@@ -949,7 +834,7 @@ The model can also pass `forked: true` (or `forked: false`) per-invocation in th
 - **Memory required.** Forked mode calls `memory.cloneThread` to create the fork, so the harness must have `memory` configured and an active parent thread. Calls without those return a structured error rather than throwing.
 - **Parent agent reused.** The fork runs through the parent agent's `stream(...)` call. The parent's instructions, tools, model, `maxSteps`, and `stopWhen` apply. The subagent definition's `instructions`, `tools`, `allowedHarnessTools`, `allowedWorkspaceTools`, `defaultModelId`, `maxSteps`, and `stopWhen` are ignored in forked mode — this is what preserves the prompt-cache prefix.
 - **Toolsets inherited, recursive forks blocked at runtime.** Forks inherit the parent's toolsets verbatim (`ask_user`, `submit_plan`, user-configured harness tools, _including the `subagent` tool itself_) so the LLM request prefix — system prompt + tool list + tool schemas + tool descriptions — stays byte-identical to the parent's. This is what preserves the prompt cache. The `subagent` entry is kept on the model side but its `execute` is replaced inside the fork with a stub that returns a non-error "tool unavailable inside a forked subagent" message: nested forks are blocked at the runtime layer without perturbing the cached prefix.
-- **Fork threads are tagged.** Each fork thread is created with `metadata.forkedSubagent === true` and `metadata.parentThreadId === <parent>`. By default, [`listThreads`](#listthreadsoptions) hides these so they don't show up in user-facing thread pickers / startup flows. Pass `includeForkedSubagents: true` to see them in admin / debug tooling.
+- **Fork threads are tagged.** Each fork thread is created with `metadata.forkedSubagent === true` and `metadata.parentThreadId === <parent>`. By default, [`session.thread.list()`](/reference/harness/session#thread) hides these so they don't show up in user-facing thread pickers / startup flows. Pass `includeForkedSubagents: true` to see them in admin / debug tooling.
 - **Save-queue flushed before clone.** The agent stream batches message saves through a debounced `SaveQueueManager`, so the parent's latest user / assistant turn may not be on disk yet when the subagent tool call fires. The fork tool flushes pending saves first via the `flushMessages` callback on `AgentToolExecutionContext` before cloning, so the fork actually carries the latest turn. Flush failures are non-fatal — the clone still runs.
 - **Parent thread untouched.** All subagent activity (messages, OM writes) lands on the fork. The parent thread is never appended to during a forked subagent run.
 
@@ -959,34 +844,25 @@ Forked mode trades isolation for context inheritance. If the subagent should run
 
 ### Events
 
-#### `subscribeDisplayState(listener, options?)`
-
-Register a listener for coalesced display state snapshots. Use this method for UI, Server-Sent Events (SSE), terminal UI (TUI), and bridge rendering paths that only need the latest `HarnessDisplayState`. Use [`subscribe`](#subscribelistener) when you need the raw event log.
-
-```typescript
-const unsubscribe = harness.subscribeDisplayState(displayState => {
-  render(displayState)
-})
-
-// Optional tuning:
-harness.subscribeDisplayState(render, {
-  windowMs: 250,
-  maxWaitMs: 500,
-})
-
-// Later:
-unsubscribe()
-```
-
-Returns: `() => void`
-
-`subscribeDisplayState()` doesn't call the listener immediately. Call [`getDisplayState`](#getdisplaystate) first if the UI needs an initial render before the next harness event.
-
 #### `subscribe(listener)`
 
 Register an event listener. Returns an unsubscribe function.
 
-Use this method for audit logs, debugging, analytics, deterministic replay, or consumers that need every raw event. For display rendering, prefer [`subscribeDisplayState`](#subscribedisplaystatelistener-options) so high-frequency events such as `message_update`, `tool_update`, and `tool_input_delta` are coalesced into the latest display state snapshot.
+Use this method for all consumers — UI, Server-Sent Events (SSE), terminal UI (TUI), bridge rendering, audit logs, debugging, analytics, and deterministic replay. For display rendering, watch for the `display_state_changed` event and read the latest snapshot from [`session.displayState.get()`](/reference/harness/session#display-state). After every event the harness emits `display_state_changed`, so high-frequency events such as `message_update`, `tool_update`, and `tool_input_delta` are coalesced into the next snapshot.
+
+```typescript
+// Render from the coalesced display-state snapshot:
+const unsubscribe = harness.subscribe(event => {
+  if (event.type === 'display_state_changed') {
+    render(harness.session.displayState.get())
+  }
+})
+
+// Render an initial frame before the next harness event:
+render(harness.session.displayState.get())
+```
+
+To handle raw events directly, switch on `event.type`:
 
 ```typescript
 const unsubscribe = harness.subscribe(event => {
@@ -1035,15 +911,28 @@ The harness emits events through registered listeners. The following table lists
 | `usage_update` | Token usage was updated. |
 | `error` | An error occurred. |
 | `info` | An informational message was emitted. |
+| `system_reminder` | A system reminder was injected into the conversation. |
+| `state_signal` | A state signal was emitted (state-driven prompt injection). |
+| `reactive_signal` | A reactive signal fired in response to a state change. |
+| `notification` | A notification was delivered to the thread inbox. |
+| `notification_summary` | A summary of pending notifications was emitted. |
 | `follow_up_queued` | A follow-up message was queued. |
 | `workspace_status_changed` | The workspace status changed. |
 | `workspace_ready` | The workspace finished initializing. |
 | `workspace_error` | The workspace encountered an error. |
 | `om_status` | Observational Memory status update. |
+| `om_activation` | Observational Memory was activated for the thread. |
+| `om_model_changed` | An Observational Memory role model changed (`observer` or `reflector`). |
 | `om_observation_start` | An observation started. |
 | `om_observation_end` | An observation completed. |
+| `om_observation_failed` | An observation failed. |
 | `om_reflection_start` | A reflection started. |
 | `om_reflection_end` | A reflection completed. |
+| `om_reflection_failed` | A reflection failed. |
+| `om_buffering_start` | Observational Memory started buffering messages. |
+| `om_buffering_end` | Observational Memory finished buffering messages. |
+| `om_buffering_failed` | Observational Memory buffering failed. |
+| `om_thread_title_updated` | Observational Memory updated the thread title. |
 | `subagent_start` | A subagent started processing. |
 | `subagent_text_delta` | A subagent emitted a text delta. |
 | `subagent_tool_start` | A subagent started a tool call. |
@@ -1051,6 +940,11 @@ The harness emits events through registered listeners. The following table lists
 | `subagent_end` | A subagent finished processing. |
 | `subagent_model_changed` | A subagent's model changed. |
 | `task_updated` | A task list was updated. |
+| `goal_evaluation` | A goal evaluation completed (when native agent goals are configured). |
+| `shell_output` | A tool emitted shell output (stdout or stderr). |
+| `display_state_changed` | The canonical `HarnessDisplayState` snapshot changed. Read it from [`session.displayState.get()`](/reference/harness/session#display-state). |
+
+The harness also emits low-level streaming content chunks — `text`, `thinking`, `tool_call`, `tool_result`, `image`, and `file`. These are the raw pieces that get assembled into messages; most UIs render from `message_update` (or read the [`session.displayState`](/reference/harness/session#display-state) snapshot) rather than subscribing to them directly.
 
 ## Built-in tools
 
@@ -1085,3 +979,10 @@ harness.subscribe(event => {
   }
 })
 ```
+
+## Related
+
+- [Session class](/reference/harness/session)
+- [Harness overview](/docs/harness/overview)
+- [Threads and state](/docs/harness/threads-and-state)
+- [Tool approvals](/docs/harness/tool-approvals)

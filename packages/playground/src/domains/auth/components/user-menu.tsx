@@ -1,4 +1,5 @@
-import { Button, Popover, PopoverContent, PopoverTrigger, Txt } from '@mastra/playground-ui';
+import { Button, Txt } from '@mastra/playground-ui';
+import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Loader2, Settings, X } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';

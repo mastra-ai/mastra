@@ -1,12 +1,7 @@
+import { Txt, cn } from '@mastra/playground-ui';
+import { CodeBlock } from '@mastra/playground-ui/components/CodeBlock';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import {
-  CodeBlock,
-  CopyButton,
-  Spinner,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-  Txt,
-  cn,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -14,7 +9,9 @@ import {
   DialogTrigger,
   DialogDescription,
   DialogBody,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Dialog';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { MoveRight, ExternalLink, Info } from 'lucide-react';
 import { useState } from 'react';
 import { useMastraPackages } from '../hooks/use-mastra-packages';

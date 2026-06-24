@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   selectLists: [] as any[],
 }));
 
-vi.mock('@mariozechner/pi-tui', () => {
+vi.mock('@earendil-works/pi-tui', () => {
   class MockNode {
     children: MockNode[] = [];
 

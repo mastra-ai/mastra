@@ -1,0 +1,42 @@
+import { Icon, cn } from '@mastra/playground-ui';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+
+import type { WorkflowCardIndicator } from './workflow-card-badge-utils';
+
+export interface WorkflowCardIndicatorListProps {
+  indicators: WorkflowCardIndicator[];
+  className?: string;
+}
+
+export const WorkflowCardBadges = ({ indicators, className }: WorkflowCardIndicatorListProps) => {
+  if (!indicators.length) {
+    return null;
+  }
+
+  return (
+    <div className={cn('flex items-center gap-1', className)}>
+      {indicators.map(indicator => {
+        const IndicatorIcon = indicator.icon;
+
+        return (
+          <Tooltip key={indicator.id}>
+            <TooltipTrigger asChild>
+              <span
+                role="img"
+                tabIndex={0}
+                aria-label={indicator.label}
+                data-testid={`workflow-card-indicator-${indicator.id}`}
+                className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-neutral5 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1"
+              >
+                <Icon size="sm">
+                  <IndicatorIcon className="text-current" style={{ color: indicator.color }} />
+                </Icon>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{indicator.label}</TooltipContent>
+          </Tooltip>
+        );
+      })}
+    </div>
+  );
+};

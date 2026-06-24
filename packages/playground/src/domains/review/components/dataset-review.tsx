@@ -1,22 +1,18 @@
+import { Button, DataList, Txt, Icon, cn } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import {
-  Badge,
-  Button,
-  Checkbox,
-  DataList,
-  DropdownMenu,
-  Label,
-  Spinner,
-  Textarea,
-  Txt,
-  Icon,
-  cn,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Dialog';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { useMastraClient } from '@mastra/react';
 import {
   CheckCircle,

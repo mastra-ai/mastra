@@ -49,42 +49,25 @@ new MastraEditor({
         tools: true,
         agents: true,
         workflows: true,
+        scorers: true,
         skills: true,
         memory: true,
+        variables: true,
+        favorites: true,
+        avatarUpload: true,
         model: true,
         browser: true,
-        avatarUpload: true,
-        favorites: true,
       },
     },
   },
 })
 ```
 
-The shipping UI consumes these `AgentFeatures` keys: `tools`, `agents`, `workflows`, `skills`, `memory`, `model`, `browser`, `avatarUpload`, and `favorites`. See the [AgentBuilderOptions reference](/reference/editor/agent-builder/agent-builder-options) for the full schema.
+The shipping UI consumes these `AgentFeatures` keys: `tools`, `agents`, `workflows`, `scorers`, `skills`, `memory`, `variables`, `favorites`, `avatarUpload`, `model`, and `browser`. See the [AgentBuilderOptions reference](/reference/editor/agent-builder/agent-builder-options) for the full schema.
 
 ## Admin defaults
 
 `builder.configuration.agent` pins admin-controlled defaults onto every agent the Builder produces.
-
-```typescript title="src/mastra/index.ts"
-new MastraEditor({
-  builder: {
-    enabled: true,
-    configuration: {
-      agent: {
-        models: {
-          allowed: [
-            { provider: 'openai', modelId: 'gpt-5.4-mini' },
-            { provider: 'openai', modelId: 'gpt-5.4' },
-            { provider: 'anthropic', modelId: 'claude-opus-4-7' },
-          ],
-        },
-      },
-    },
-  },
-})
-```
 
 `configuration.agent` accepts `models`, `memory`, `workspace`, `browser`, `tools`, `agents`, and `workflows`. See the [BuilderAgentDefaults reference](/reference/editor/agent-builder/builder-agent-defaults) for the full shape.
 
@@ -128,9 +111,9 @@ MCP tools work the same way: load them via `MCPClient.getTools()` and spread the
 
 `configuration.agent.tools`, `configuration.agent.agents`, and `configuration.agent.workflows` constrain which registered entries appear in the Builder's pickers. Allowlist semantics are the same for all three:
 
-- **Omitted**: unrestricted. The picker shows every registered entry.
-- **`allowed: []`**: explicit lockdown. The picker is empty.
-- **`allowed: [...ids]`**: the picker shows only the listed IDs.
+- **Omitted**: Unrestricted. The picker shows every registered entry.
+- **`allowed: []`**: Explicit lockdown. The picker is empty.
+- **`allowed: [...ids]`**: The picker shows only the listed IDs.
 
 Unknown IDs are dropped and surfaced as warnings through `getModelPolicyWarnings()` and the server logs.
 
@@ -151,7 +134,7 @@ new MastraEditor({
 
 ## Related
 
-- [Model policy](/docs/agent-builder/model-policy) — pin the allowed models and default model.
-- [Memory](/docs/agent-builder/memory) — set the default memory shape for new agents.
-- [AgentBuilderOptions reference](/reference/editor/agent-builder/agent-builder-options) — full property list.
-- [BuilderAgentDefaults reference](/reference/editor/agent-builder/builder-agent-defaults) — every field on `configuration.agent`.
+- [Model policy](/docs/agent-builder/model-policy): Pin the allowed models and default model.
+- [Memory](/docs/agent-builder/memory): Set the default memory shape for new agents.
+- [AgentBuilderOptions reference](/reference/editor/agent-builder/agent-builder-options): Full property list.
+- [BuilderAgentDefaults reference](/reference/editor/agent-builder/builder-agent-defaults): Every field on `configuration.agent`.

@@ -1,26 +1,13 @@
-import {
-  Button,
-  Checkbox,
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  Entry,
-  Label,
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-  RadioGroup,
-  RadioGroupItem,
-  Skeleton,
-  Slider,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-  Txt,
-  cn,
-} from '@mastra/playground-ui';
+import { Button, Txt, cn } from '@mastra/playground-ui';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
+import { Entry } from '@mastra/playground-ui/components/Entry';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
+import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Slider } from '@mastra/playground-ui/components/Slider';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Info, Sliders } from 'lucide-react';
 import { useState } from 'react';
 
@@ -194,7 +181,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
             <Sliders className="h-5 w-5 text-neutral3 hover:text-neutral6" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="end" className="w-80 p-4">
+        <PopoverContent align="start" className="w-80 p-4">
           {isLoading || isMemoryLoading ? (
             <Skeleton className="h-40 w-full" data-testid="composer-model-settings-skeleton" />
           ) : (

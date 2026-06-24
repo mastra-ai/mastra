@@ -9,7 +9,8 @@
  * fable-5 only, so other models are unaffected.
  */
 import { describe, it, expect } from 'vitest';
-import { buildFableFallbackProviderOptions, describeServerSideFallback } from '../harness';
+import { buildFableFallbackProviderOptions } from '../harness';
+import { describeServerSideFallback } from '../stream-content';
 
 describe('buildFableFallbackProviderOptions', () => {
   it('enables an opus-4-8 fallback for the provider-prefixed fable-5 id', () => {

@@ -36,6 +36,13 @@ export type Step = {
   suspendOutput?: any;
   suspendPayload?: any;
   foreachProgress?: ForeachProgress;
+  duration?: number;
+  date?: Date;
+  isForEach?: boolean;
+  mapConfig?: string;
+  canSuspend?: boolean;
+  isParallel?: boolean;
+  stepGraph?: unknown;
 };
 
 type UseCurrentRunReturnType = {
@@ -66,6 +73,13 @@ export const useCurrentRun = (): UseCurrentRunReturnType => {
         suspendOutput: 'suspendOutput' in value ? value.suspendOutput : undefined,
         suspendPayload: 'suspendPayload' in value ? value.suspendPayload : undefined,
         foreachProgress: 'foreachProgress' in value ? value.foreachProgress : undefined,
+        duration: 'duration' in value ? value.duration : undefined,
+        date: 'date' in value ? value.date : undefined,
+        isForEach: 'isForEach' in value ? value.isForEach : undefined,
+        mapConfig: 'mapConfig' in value ? value.mapConfig : undefined,
+        canSuspend: 'canSuspend' in value ? value.canSuspend : undefined,
+        isParallel: 'isParallel' in value ? value.isParallel : undefined,
+        stepGraph: 'stepGraph' in value ? value.stepGraph : undefined,
       },
     };
   }, {});

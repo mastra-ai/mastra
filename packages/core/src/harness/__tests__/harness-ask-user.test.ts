@@ -15,6 +15,7 @@ import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
 import { askUserTool } from '../../tools/builtin/ask-user';
 
 import { Harness } from '../harness';
+import { SessionApproval } from '../session';
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -87,13 +88,14 @@ async function buildHarness(id: string, input: string) {
   });
 
   await harness.init();
-  await harness.createThread();
-  return { harness, registeredAgent };
+  const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+  await session.thread.create();
+  return { harness, session, registeredAgent };
 }
 
 describe('Harness: ask_user native suspension', () => {
   it('emits tool_suspended carrying the question payload when ask_user suspends', async () => {
-    const { harness } = await buildHarness(
+    const { session } = await buildHarness(
       'emit',
       JSON.stringify({
         question: 'Which environment?',
@@ -102,9 +104,9 @@ describe('Harness: ask_user native suspension', () => {
     );
 
     const events: any[] = [];
-    harness.subscribe(event => events.push(event));
+    session.subscribe(event => events.push(event));
 
-    await harness.sendMessage({ content: 'Ask me where to deploy' });
+    await session.sendMessage({ content: 'Ask me where to deploy' });
 
     const suspendEvent = events.find(e => e.type === 'tool_suspended');
     expect(suspendEvent).toBeDefined();
@@ -115,24 +117,24 @@ describe('Harness: ask_user native suspension', () => {
     expect(suspendEvent.suspendPayload.selectionMode).toBe('single_select');
 
     // Display state should reflect the pending suspension.
-    expect(harness.getDisplayState().pendingSuspensions.get('call-1')?.toolCallId).toBe('call-1');
-    expect(harness.getDisplayState().pendingSuspensions.get('call-1')?.toolName).toBe('ask_user');
+    expect(session.displayState.get().pendingSuspensions.get('call-1')?.toolCallId).toBe('call-1');
+    expect(session.displayState.get().pendingSuspensions.get('call-1')?.toolName).toBe('ask_user');
   });
 
   it('resumes the suspended ask_user tool with the answer via respondToToolSuspension', async () => {
-    const { harness } = await buildHarness('resume', JSON.stringify({ question: 'Your name?' }));
+    const { session } = await buildHarness('resume', JSON.stringify({ question: 'Your name?' }));
 
     const events: any[] = [];
-    harness.subscribe(event => events.push(event));
+    session.subscribe(event => events.push(event));
 
-    await harness.sendMessage({ content: 'Ask my name' });
+    await session.sendMessage({ content: 'Ask my name' });
 
     const suspendEvent = events.find(e => e.type === 'tool_suspended');
     expect(suspendEvent).toBeDefined();
 
     events.length = 0;
 
-    await harness.respondToToolSuspension({ toolCallId: suspendEvent.toolCallId, resumeData: 'Ada' });
+    await session.respondToToolSuspension({ toolCallId: suspendEvent.toolCallId, resumeData: 'Ada' });
 
     // Wait for the resumed run to finish.
     await vi.waitFor(() => {
@@ -141,11 +143,11 @@ describe('Harness: ask_user native suspension', () => {
     });
 
     expect(events.some(e => e.type === 'error')).toBe(false);
-    expect(harness.getDisplayState().pendingSuspensions.size).toBe(0);
+    expect(session.displayState.get().pendingSuspensions.size).toBe(0);
   });
 
   it('emits multi_select in the suspend payload when requested', async () => {
-    const { harness } = await buildHarness(
+    const { session } = await buildHarness(
       'multi',
       JSON.stringify({
         question: 'Pick any',
@@ -155,9 +157,9 @@ describe('Harness: ask_user native suspension', () => {
     );
 
     const events: any[] = [];
-    harness.subscribe(event => events.push(event));
+    session.subscribe(event => events.push(event));
 
-    await harness.sendMessage({ content: 'Ask me to pick' });
+    await session.sendMessage({ content: 'Ask me to pick' });
 
     const suspendEvent = events.find(e => e.type === 'tool_suspended');
     expect(suspendEvent.suspendPayload.selectionMode).toBe('multi_select');
@@ -167,77 +169,117 @@ describe('Harness: ask_user native suspension', () => {
     // The agent only surfaces one suspension per step, but the harness must be able
     // to hold several pending suspensions at once and resume exactly the requested
     // one. Drive the toolCallId-keyed tracking directly to assert that selection.
-    const { harness } = await buildHarness('concurrent', JSON.stringify({ question: 'First?' }));
+    const { session } = await buildHarness('concurrent', JSON.stringify({ question: 'First?' }));
 
     const resumed: string[] = [];
-    (harness as any).handleToolResume = async ({ toolCallId }: { toolCallId: string }) => {
+    (session as any).resumeToolCall = async ({ toolCallId }: { toolCallId: string }) => {
       resumed.push(toolCallId);
-      (harness as any).pendingSuspensions.delete(toolCallId);
+      session.suspensions.delete({ toolCallId });
     };
 
-    const pending: Map<string, { runId: string }> = (harness as any).pendingSuspensions;
-    pending.set('call-a', { runId: 'run-a' });
-    pending.set('call-b', { runId: 'run-b' });
+    const pending = session.suspensions;
+    pending.register({ toolCallId: 'call-a', runId: 'run-a', toolName: 'ask_user' });
+    pending.register({ toolCallId: 'call-b', runId: 'run-b', toolName: 'ask_user' });
 
     // Explicit toolCallId resumes only that suspension; the other stays pending.
-    await harness.respondToToolSuspension({ toolCallId: 'call-b', resumeData: 'two' });
+    await session.respondToToolSuspension({ toolCallId: 'call-b', resumeData: 'two' });
     expect(resumed).toEqual(['call-b']);
-    expect(pending.has('call-a')).toBe(true);
-    expect(pending.has('call-b')).toBe(false);
+    expect(pending.has({ toolCallId: 'call-a' })).toBe(true);
+    expect(pending.has({ toolCallId: 'call-b' })).toBe(false);
 
     // The remaining suspension can then be resumed by its own toolCallId.
-    await harness.respondToToolSuspension({ toolCallId: 'call-a', resumeData: 'one' });
+    await session.respondToToolSuspension({ toolCallId: 'call-a', resumeData: 'one' });
     expect(resumed).toEqual(['call-b', 'call-a']);
-    expect(pending.size).toBe(0);
+    expect(pending.hasPending()).toBe(false);
   });
 
   it('resolves the sole pending suspension when toolCallId is omitted', async () => {
-    const { harness } = await buildHarness('sole', JSON.stringify({ question: 'Only?' }));
+    const { session } = await buildHarness('sole', JSON.stringify({ question: 'Only?' }));
 
     const resumed: string[] = [];
-    (harness as any).handleToolResume = async ({ toolCallId }: { toolCallId: string }) => {
+    (session as any).resumeToolCall = async ({ toolCallId }: { toolCallId: string }) => {
       resumed.push(toolCallId);
-      (harness as any).pendingSuspensions.delete(toolCallId);
+      session.suspensions.delete({ toolCallId });
     };
 
-    const pending: Map<string, { runId: string }> = (harness as any).pendingSuspensions;
-    pending.set('call-only', { runId: 'run-only' });
+    const pending = session.suspensions;
+    pending.register({ toolCallId: 'call-only', runId: 'run-only', toolName: 'ask_user' });
 
-    await harness.respondToToolSuspension({ resumeData: 'ok' });
+    await session.respondToToolSuspension({ resumeData: 'ok' });
     expect(resumed).toEqual(['call-only']);
 
     // With more than one pending and no toolCallId, the call is a no-op.
-    pending.set('call-x', { runId: 'run-x' });
-    pending.set('call-y', { runId: 'run-y' });
-    await harness.respondToToolSuspension({ resumeData: 'ambiguous' });
+    pending.register({ toolCallId: 'call-x', runId: 'run-x', toolName: 'ask_user' });
+    pending.register({ toolCallId: 'call-y', runId: 'run-y', toolName: 'ask_user' });
+    await session.respondToToolSuspension({ resumeData: 'ambiguous' });
     expect(resumed).toEqual(['call-only']);
-    expect(pending.size).toBe(2);
+    expect(pending.has({ toolCallId: 'call-x' })).toBe(true);
+    expect(pending.has({ toolCallId: 'call-y' })).toBe(true);
   });
 
   it('clears pending suspensions on abort so the harness is no longer parked (and resume is a no-op)', async () => {
     // A run parked in a tool suspend() is not actively streaming, so abort() must
     // drop the pending suspensions itself — otherwise the harness reports it is
     // awaiting input forever and the UI can never recover.
-    const { harness } = await buildHarness('abort', JSON.stringify({ question: 'Pick?' }));
+    const { session } = await buildHarness('abort', JSON.stringify({ question: 'Pick?' }));
 
     let resumed = false;
-    (harness as any).handleToolResume = async () => {
+    (session as any).resumeToolCall = async () => {
       resumed = true;
     };
 
-    const pending: Map<string, { runId: string }> = (harness as any).pendingSuspensions;
-    pending.set('call-a', { runId: 'run-a' });
-    pending.set('call-b', { runId: 'run-b' });
-    expect(harness.hasPendingSuspensions()).toBe(true);
+    const pending = session.suspensions;
+    pending.register({ toolCallId: 'call-a', runId: 'run-a', toolName: 'ask_user' });
+    pending.register({ toolCallId: 'call-b', runId: 'run-b', toolName: 'ask_user' });
+    expect(session.suspensions.hasPending()).toBe(true);
 
-    harness.abort();
+    session.abort();
 
-    expect(harness.hasPendingSuspensions()).toBe(false);
-    expect(pending.size).toBe(0);
+    expect(session.suspensions.hasPending()).toBe(false);
+    expect(pending.hasPending()).toBe(false);
 
     // Resuming a suspension that abort already dropped is a safe no-op.
-    await harness.respondToToolSuspension({ toolCallId: 'call-a', resumeData: 'late' });
+    await session.respondToToolSuspension({ toolCallId: 'call-a', resumeData: 'late' });
     expect(resumed).toBe(false);
+  });
+
+  it('releases a parked tool-approval gate on abort (resolves as decline) so the run can finalize', async () => {
+    // A run awaiting approval.arm() is not actively streaming, so abort() must
+    // resolve the parked gate itself — otherwise the await never settles and the
+    // run hangs. Resolving as a decline rejects the gated tool, which is correct
+    // for an aborted run.
+    const { session } = await buildHarness('approval-abort', JSON.stringify({ question: 'Pick?' }));
+
+    const approval = session.approval;
+    const parked = approval.arm({ toolName: 'edit_file' });
+    expect(approval.isArmed()).toBe(true);
+
+    session.abort();
+
+    const decision = await parked;
+    expect(decision.decision).toBe('decline');
+    expect(approval.isArmed()).toBe(false);
+  });
+
+  it('ignores a tool-approval response whose toolCallId does not match the armed gate', async () => {
+    // A stale/delayed approval request must not resolve a different pending gate.
+    // When a toolCallId is supplied it has to match the armed call; a mismatch is
+    // a no-op so the gate stays parked for the correct responder.
+    const approval = new SessionApproval();
+    const parked = approval.arm({ toolName: 'edit_file', toolCallId: 'call-current' });
+    expect(approval.isArmed()).toBe(true);
+    expect(approval.getToolCallId()).toBe('call-current');
+
+    // Wrong id: ignored, gate remains armed.
+    approval.respond({ decision: 'approve', toolCallId: 'call-stale' });
+    expect(approval.isArmed()).toBe(true);
+
+    // Correct id resolves it. Omitting toolCallId is also accepted (backwards compatible).
+    approval.respond({ decision: 'approve', toolCallId: 'call-current' });
+    const decision = await parked;
+    expect(decision.decision).toBe('approve');
+    expect(approval.isArmed()).toBe(false);
+    expect(approval.getToolCallId()).toBeNull();
   });
 
   it('surfaces three ask_user questions one at a time across resumes (#13642 serialized flow)', async () => {
@@ -301,12 +343,13 @@ describe('Harness: ask_user native suspension', () => {
       initialState: { yolo: true } as any,
     });
     await harness.init();
-    await harness.createThread();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await session.thread.create();
 
     const events: any[] = [];
-    harness.subscribe(event => events.push(event));
+    session.subscribe(event => events.push(event));
 
-    await harness.sendMessage({ content: 'Ask me three things' });
+    await session.sendMessage({ content: 'Ask me three things' });
 
     // Only the first question suspends on the initial run.
     let suspensions = events.filter(e => e.type === 'tool_suspended');
@@ -315,7 +358,7 @@ describe('Harness: ask_user native suspension', () => {
     // Answering each question resumes the run and surfaces exactly the next one.
     for (let i = 0; i < questions.length; i++) {
       events.length = 0;
-      await harness.respondToToolSuspension({ toolCallId: questions[i].toolCallId, resumeData: 'answer' });
+      await session.respondToToolSuspension({ toolCallId: questions[i].toolCallId, resumeData: 'answer' });
 
       suspensions = events.filter(e => e.type === 'tool_suspended');
       const next = questions[i + 1];
@@ -325,12 +368,16 @@ describe('Harness: ask_user native suspension', () => {
         expect(suspensions.map(e => e.toolCallId)).toEqual([next.toolCallId]);
         expect(events.some(e => e.type === 'tool_start')).toBe(false);
       } else {
-        // Last answer completes the run with no further suspensions.
+        // Last answer completes the run with no further suspensions. The resume
+        // call returns once the matching tool result boundary is observed, so the
+        // final agent_end may arrive on the subscription shortly after.
         expect(suspensions).toHaveLength(0);
-        expect(events.some(e => e.type === 'agent_end' && e.reason === 'complete')).toBe(true);
+        await vi.waitFor(() => {
+          expect(events.some(e => e.type === 'agent_end' && e.reason === 'complete')).toBe(true);
+        });
       }
     }
 
-    expect(harness.getDisplayState().pendingSuspensions.size).toBe(0);
+    expect(session.displayState.get().pendingSuspensions.size).toBe(0);
   });
 });

@@ -1,13 +1,12 @@
-// @vitest-environment jsdom
-import { TooltipProvider } from '@mastra/playground-ui';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { MemoryRouter, useLocation } from 'react-router';
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import { AgentBuilderMobileMenu } from '../agent-builder-mobile-menu';
 import { server } from '@/test/msw-server';
@@ -76,6 +75,17 @@ const installRadixDomShims = () => {
 describe('AgentBuilderMobileMenu', () => {
   beforeAll(() => {
     installRadixDomShims();
+  });
+
+  beforeEach(() => {
+    // The visibility-change flow warms the agent's dependents to decide whether
+    // to show impact warnings. Default to an empty list so the dialog renders
+    // without unhandled-request noise; individual cases can override.
+    server.use(
+      http.get(`${BASE_URL}/api/stored/agents/:id/dependents`, () =>
+        HttpResponse.json({ dependents: [], hiddenCount: 0 }),
+      ),
+    );
   });
 
   afterEach(() => {
@@ -155,15 +165,11 @@ describe('AgentBuilderMobileMenu', () => {
 
     await openDropdown();
     const addItem = screen.getByTestId('agent-builder-mobile-menu-visibility-add');
-    await act(async () => {
-      fireEvent.pointerDown(addItem, { pointerType: 'mouse', button: 0 });
-      fireEvent.pointerUp(addItem, { pointerType: 'mouse', button: 0 });
-      fireEvent.click(addItem);
-    });
+    fireEvent.pointerDown(addItem, { pointerType: 'mouse', button: 0 });
+    fireEvent.pointerUp(addItem, { pointerType: 'mouse', button: 0 });
+    fireEvent.click(addItem);
 
-    await act(async () => {
-      fireEvent.click(await screen.findByTestId('agent-builder-visibility-confirm-yes'));
-    });
+    fireEvent.click(await screen.findByTestId('agent-builder-visibility-confirm-yes'));
 
     await waitFor(() => {
       expect(capturedBody).toEqual({ visibility: 'public' });
@@ -212,9 +218,7 @@ describe('AgentBuilderMobileMenu', () => {
     expect(editItem).toBeTruthy();
     expect(editItem.textContent).toContain('Edit agent');
 
-    await act(async () => {
-      fireEvent.click(editItem);
-    });
+    fireEvent.click(editItem);
 
     await waitFor(() => {
       expect(screen.getByTestId('current-location').textContent).toBe('/agent-builder/agents/agent-1/edit');

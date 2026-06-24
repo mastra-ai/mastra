@@ -2,7 +2,8 @@ import { z } from 'zod/v4';
 
 import { Agent } from '../agent';
 import type { ToolsInput, ToolsetsInput } from '../agent/types';
-import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { MastraModelConfig } from '../llm/model/shared.types';
+import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
 import { askUserTool } from '../tools/builtin/ask-user';
 import { submitPlanTool } from '../tools/builtin/submit-plan';
@@ -67,7 +68,7 @@ export { TaskStateProcessor } from '../tools/builtin/task-state-processor';
 
 export interface CreateSubagentToolOptions {
   subagents: HarnessSubagent[];
-  resolveModel: (modelId: string) => MastraLanguageModel;
+  resolveModel: (modelId: string) => MastraModelConfig;
   /** Resolved harness tools (already evaluated from DynamicArgument) */
   harnessTools?: ToolsInput;
   /** Fallback model ID when subagent definition has no defaultModelId */
@@ -98,6 +99,12 @@ export interface CreateSubagentToolOptions {
    * stability, but its runtime execute function is patched to block recursion.
    */
   getParentToolsets?: (requestContext?: RequestContext) => Promise<ToolsetsInput | undefined>;
+  /**
+   * Internal Mastra instance passed to each subagent Agent constructor so the
+   * bare model id resolves through the same gateways as the parent and the
+   * agent inherits pubsub/observability.
+   */
+  mastra?: Mastra;
 }
 
 /**
@@ -106,7 +113,7 @@ export interface CreateSubagentToolOptions {
  * streams the response, and forwards events to the harness.
  */
 export function createSubagentTool(opts: CreateSubagentToolOptions) {
-  const { subagents, resolveModel, harnessTools, fallbackModelId } = opts;
+  const { subagents, resolveModel, harnessTools, fallbackModelId, mastra } = opts;
 
   const subagentIds = subagents.map(s => s.id);
 
@@ -294,7 +301,7 @@ Use this tool when:
         }
         resolvedModelId = maybeModelId;
 
-        let model: MastraLanguageModel;
+        let model: MastraModelConfig;
         try {
           model = resolveModel(resolvedModelId);
         } catch (err) {
@@ -311,6 +318,7 @@ Use this tool when:
           model,
           tools: mergedTools,
           workspace,
+          mastra,
         });
 
         // Only resolve workspace tool names when an allowlist is configured,

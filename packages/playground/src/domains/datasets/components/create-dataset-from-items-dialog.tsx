@@ -1,17 +1,10 @@
 'use client';
 
 import type { DatasetItem } from '@mastra/client-js';
-import {
-  Button,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogBody,
-  Input,
-  Label,
-  toast,
-} from '@mastra/playground-ui';
+import { Button, toast } from '@mastra/playground-ui';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Label } from '@mastra/playground-ui/components/Label';
 import { useState } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 
@@ -59,6 +52,9 @@ export function CreateDatasetFromItemsDialog({
           datasetId: dataset.id,
           input: item.input,
           groundTruth: item.groundTruth,
+          expectedTrajectory: item.expectedTrajectory,
+          toolMocks: item.toolMocks,
+          requestContext: item.requestContext,
           metadata: item.metadata as Record<string, unknown> | undefined,
         });
         setProgress(i + 1);

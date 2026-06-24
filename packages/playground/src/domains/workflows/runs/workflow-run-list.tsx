@@ -1,26 +1,50 @@
-import { AlertDialog, Icon, Skeleton, Spinner } from '@mastra/playground-ui';
-import { formatDate } from 'date-fns';
-import { Plus } from 'lucide-react';
-import { useState } from 'react';
-import { WorkflowRunStatusBadge } from '../components/workflow-run-status-badge';
+import { Icon, Txt } from '@mastra/playground-ui';
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import {
   ThreadList,
   ThreadListEmpty,
   ThreadListItem,
   ThreadListItems,
-  ThreadListNewItem,
-  ThreadListSeparator,
-} from '@/components/thread-list';
+} from '@mastra/playground-ui/components/ThreadList';
+import { formatDate } from 'date-fns';
+import { useState } from 'react';
+import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useDeleteWorkflowRun, useWorkflowRuns } from '@/hooks/use-workflow-runs';
 import { useLinkComponent } from '@/lib/framework';
 
-export interface WorkflowRunListProps {
+export interface WorkflowRecentRunsProps {
   workflowId: string;
   runId?: string;
 }
 
-export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => {
+function formatRunInput(snapshot: unknown): string | null {
+  if (!snapshot || typeof snapshot !== 'object') {
+    return null;
+  }
+
+  const input = (snapshot as { context?: { input?: unknown } }).context?.input;
+  if (input === undefined || input === null) {
+    return null;
+  }
+
+  if (typeof input === 'string') {
+    return input;
+  }
+
+  const inputValue =
+    typeof input === 'object' && input !== null && 'output' in input ? (input as { output: unknown }).output : input;
+
+  try {
+    return JSON.stringify(inputValue);
+  } catch {
+    return null;
+  }
+}
+
+export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProps) => {
   const [deleteRunId, setDeleteRunId] = useState<string | null>(null);
   const { canDelete } = usePermissions();
 
@@ -42,65 +66,79 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
 
   const actualRuns = runs || [];
 
-  if (isLoading) {
-    return (
-      <div className="p-4">
-        <Skeleton className="h-[600px]" />
-      </div>
-    );
-  }
-
   return (
     <>
-      <div className="h-full pt-2">
-        <ThreadList aria-label="Workflow runs">
-          <ThreadListNewItem as={Link} to={paths.workflowLink(workflowId)}>
-            <Icon>
-              <Plus />
-            </Icon>
-            New workflow run
-          </ThreadListNewItem>
-          <ThreadListSeparator />
+      {isLoading ? (
+        <div className="p-4">
+          <Skeleton className="h-32" />
+        </div>
+      ) : (
+        <div>
+          <div className="px-5 pb-2 pt-3 text-left">
+            <Txt as="h2" variant="ui-md" className="text-neutral3">
+              Recent runs
+            </Txt>
+          </div>
+          <ThreadList aria-label="Workflow runs" embedded>
+            {actualRuns.length === 0 ? (
+              <ThreadListEmpty>Your run history will appear here once you run the workflow</ThreadListEmpty>
+            ) : (
+              <ThreadListItems>
+                {actualRuns.map(run => {
+                  const isActiveRun = run.runId === runId;
+                  const runInput = isActiveRun ? formatRunInput(run.snapshot) : null;
 
-          {actualRuns.length === 0 ? (
-            <ThreadListEmpty>Your run history will appear here once you run the workflow</ThreadListEmpty>
-          ) : (
-            <ThreadListItems>
-              {actualRuns.map(run => (
-                <ThreadListItem
-                  key={run.runId}
-                  as={Link}
-                  to={paths.workflowRunLink(workflowId, run.runId)}
-                  isActive={run.runId === runId}
-                  onDelete={canDeleteRun ? () => setDeleteRunId(run.runId) : undefined}
-                  deleteLabel="delete run"
-                >
-                  <span className="flex w-full min-w-0 flex-col items-start gap-1 text-left">
-                    {run?.snapshot && typeof run.snapshot === 'object' && (
-                      <WorkflowRunStatusBadge status={run.snapshot.status} />
-                    )}
-                    <span className="block max-w-full truncate">{run.runId}</span>
-                    {run?.snapshot && typeof run.snapshot === 'object' && run.snapshot.timestamp && (
-                      <span>{formatDate(run.snapshot.timestamp, 'MMM d, yyyy h:mm a')}</span>
-                    )}
-                  </span>
-                </ThreadListItem>
-              ))}
+                  return (
+                    <ThreadListItem
+                      key={run.runId}
+                      as={Link}
+                      to={paths.workflowRunLink(workflowId, run.runId)}
+                      isActive={isActiveRun}
+                      onDelete={canDeleteRun ? () => setDeleteRunId(run.runId) : undefined}
+                      deleteLabel="delete run"
+                      className="h-auto min-h-0 items-stretch py-1"
+                    >
+                      <span className="flex w-full min-w-0 items-center gap-2.5 px-1 text-left">
+                        {run?.snapshot && typeof run.snapshot === 'object' && (
+                          <span className="shrink-0">
+                            <WorkflowRunStatusIcon status={run.snapshot.status} />
+                          </span>
+                        )}
+                        <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+                          <span className="flex w-full min-w-0 items-center gap-2 text-xs">
+                            <span className="min-w-0 flex-1 truncate font-medium text-neutral5" title={run.runId}>
+                              {run.runId}
+                            </span>
+                            {run?.snapshot && typeof run.snapshot === 'object' && run.snapshot.timestamp && (
+                              <span className="shrink-0 text-neutral3">
+                                {formatDate(run.snapshot.timestamp, 'MMM d, yyyy h:mm a')}
+                              </span>
+                            )}
+                          </span>
+                          {runInput && (
+                            <span className="block w-full min-w-0 truncate text-xs text-neutral3">{runInput}</span>
+                          )}
+                        </span>
+                      </span>
+                    </ThreadListItem>
+                  );
+                })}
 
-              {isFetchingNextPage && (
-                <li className="flex justify-center items-center py-2">
-                  <Icon>
-                    <Spinner />
-                  </Icon>
+                {isFetchingNextPage && (
+                  <li className="flex justify-center items-center py-2">
+                    <Icon>
+                      <Spinner />
+                    </Icon>
+                  </li>
+                )}
+                <li>
+                  <div ref={setEndOfListElement} />
                 </li>
-              )}
-              <li>
-                <div ref={setEndOfListElement} />
-              </li>
-            </ThreadListItems>
-          )}
-        </ThreadList>
-      </div>
+              </ThreadListItems>
+            )}
+          </ThreadList>
+        </div>
+      )}
 
       <DeleteRunDialog
         open={!!deleteRunId}

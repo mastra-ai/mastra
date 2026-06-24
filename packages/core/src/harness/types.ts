@@ -2,7 +2,7 @@ import type { Agent } from '../agent';
 import type { AgentInstructions, ToolsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import type { PubSub } from '../events/pubsub';
-import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
 import type { ObservabilityEntrypoint } from '../observability/types/core';
@@ -42,31 +42,72 @@ export interface HeartbeatHandler {
  * Configuration for a single agent mode within the harness.
  * Each mode represents a different "personality" or capability set.
  */
-export interface HarnessMode<TState> {
-  /** Unique identifier for this mode (e.g., "plan", "build", "review") */
+interface HarnessModeBase {
+  /** Unique within `HarnessConfig.modes`. Validated at construction. */
   id: string;
 
-  /** Human-readable name for display */
   name?: string;
 
-  /** Whether this is the default mode when harness starts */
+  /** bootstrap model default when a session enters this mode. */
+  defaultModelId?: string;
+
+  /** Surfaced in mode pickers / Studio UI. Free text. */
+  description?: string;
+
+  /**
+   * Layered above the backing agent's own instructions for the duration
+   * of this mode. Plain text by design — modes carve operating profile,
+   * not full system-message overrides.
+   */
+  instructions?: string;
+
+  /** @deprecated Use HarnessConfig.agent as the shared backing agent. */
+  agent?: Agent<any, any, any, any>;
+
+  /** @deprecated Prefer metadata.default. */
   default?: boolean;
 
   /**
-   * Default model ID for this mode (e.g., "anthropic/claude-sonnet-4-20250514").
-   * Used when no per-mode model has been explicitly selected.
+   * Optional plan→build target. When `submit_plan` runs in this mode, the
+   * registered `PendingResume` freezes this value as `transitionModeId`.
+   * On approval, the session flips to this mode
+   * idempotently (§5.1, §5.7). If unset, plan approval resumes with no
+   * mode change. Must reference another mode's `id`.
    */
-  defaultModelId?: string;
-
-  /** Hex color for the mode indicator (e.g., "#7c3aed") */
-  color?: string;
+  transitionsTo?: string;
 
   /**
-   * The agent for this mode.
-   * Can be a static Agent or a function that receives harness state.
+   * Arbitrary user-defined metadata. `metadata.default === true` is a
+   * reserved harness hint for choosing the default mode when `defaultModeId`
+   * is unset; all other metadata is pass-through and unvalidated. Use for UI
+   * affordances like display color, icon, display name overrides, or any
+   * per-mode configuration that isn't part of the harness's own contract.
+   *
+   * Surfaced verbatim on `getCurrentMode()` and `listModes()`.
    */
-  agent: Agent | ((state: TState) => Agent);
+  metadata?: Record<string, unknown>;
 }
+
+type HarnessModeToolOverrides =
+  | {
+      /**
+       * The tool set this mode runs with. **Replaces** the backing agent's
+       * tools — the agent's own tools are hidden for the duration of the
+       * mode. Mutually exclusive with `additionalTools`.
+       */
+      tools?: ToolsInput;
+      additionalTools?: never;
+    }
+  | {
+      tools?: never;
+      /**
+       * Tools layered on top of the backing agent's tools. The agent's tools
+       * stay; these are added. Mutually exclusive with `tools`.
+       */
+      additionalTools?: ToolsInput;
+    };
+
+export type HarnessMode = HarnessModeBase & HarnessModeToolOverrides;
 
 // =============================================================================
 // Subagents
@@ -179,7 +220,15 @@ export interface HarnessConfig<TState = {}> {
   memory?: DynamicArgument<MastraMemory>;
 
   /** Available agent modes */
-  modes: HarnessMode<TState>[];
+  modes: HarnessMode[];
+
+  /** Shared backing agent that each mode forks and decorates. */
+  agent?: Agent<any, any, any, any>;
+
+  /** Default mode to enter when a thread has no persisted mode. */
+  defaultModeId?: string;
+
+  instructions?: string;
 
   /**
    * Tools available to all agents across all modes.
@@ -217,13 +266,6 @@ export interface HarnessConfig<TState = {}> {
   idGenerator?: () => string;
 
   /**
-   * Custom auth checker for model providers.
-   * Lets the app layer provide additional auth sources (e.g., OAuth tokens)
-   * beyond the default env var check from the provider registry.
-   */
-  modelAuthChecker?: ModelAuthChecker;
-
-  /**
    * Provides per-model use counts for `listAvailableModels()` sorting/display.
    * Lets the app layer track and report how often each model has been used.
    */
@@ -236,22 +278,19 @@ export interface HarnessConfig<TState = {}> {
   modelUseCountTracker?: ModelUseCountTracker;
 
   /**
-   * Optional catalog hook for additional models (e.g., user-defined custom providers).
-   * Returned entries are merged into `listAvailableModels()`.
-   */
-  customModelCatalogProvider?: CustomModelCatalogProvider;
-
-  /**
    * Subagent definitions. The Harness auto-creates a `subagent` built-in tool
    * that parent agents can call to spawn focused subagents.
    */
   subagents?: HarnessSubagent[];
 
   /**
-   * Converts a model ID string (e.g., "anthropic/claude-sonnet-4-20250514") to a
-   * language model instance. Used by subagents and OM model resolution.
+   * Model gateways registered on Harness' internal Mastra instance.
+   * The Harness resolves every model — mode agents, Observational Memory,
+   * subagents — and builds the `listAvailableModels()` catalog through these
+   * gateways. Provider auth (API keys, OAuth, stored credentials) is resolved
+   * via each gateway's `resolveAuth()` / env-var configuration.
    */
-  resolveModel?: (modelId: string) => MastraLanguageModel;
+  gateways?: MastraModelGatewayInterface[];
 
   /**
    * Observational Memory configuration defaults.
@@ -370,25 +409,15 @@ export interface AvailableModel {
 }
 
 /**
- * Additional model entries supplied by the app layer.
+ * Same as {@link AvailableModel} but without the runtime `useCount` field.
+ * Used by providers that supply catalog entries before use-count tracking.
  */
 export type CustomAvailableModel = Omit<AvailableModel, 'useCount'>;
 
 /**
- * Provides additional model catalog entries for `listAvailableModels()`.
+ * Function that returns a list of custom available models (without use counts).
  */
-export type CustomModelCatalogProvider = () => CustomAvailableModel[] | Promise<CustomAvailableModel[]>;
-
-/**
- * Custom auth checker for model providers.
- * Called by `getCurrentModelAuthStatus()` and `listAvailableModels()` to determine
- * whether a provider has valid authentication beyond just env var checks
- * (e.g., OAuth tokens, stored credentials).
- *
- * Return `true` if the provider is authenticated, `false` if not,
- * or `undefined` to fall back to the default env var check.
- */
-export type ModelAuthChecker = (provider: string) => boolean | undefined;
+export type CustomModelCatalogProvider = () => Promise<CustomAvailableModel[]>;
 
 /**
  * Provides per-model use counts for sorting in `listAvailableModels()`.
@@ -417,15 +446,6 @@ export interface HarnessThread {
   updatedAt: Date;
   tokenUsage?: TokenUsage;
   metadata?: Record<string, unknown>;
-}
-
-/**
- * Session info for the current harness instance.
- */
-export interface HarnessSession {
-  currentThreadId: string | null;
-  currentModeId: string;
-  threads: HarnessThread[];
 }
 
 // =============================================================================
@@ -862,27 +882,6 @@ export type HarnessEvent =
  */
 export type HarnessEventListener = (event: HarnessEvent) => void | Promise<void>;
 
-/**
- * Listener function for coalesced harness display state snapshots.
- */
-export type HarnessDisplayStateListener = (displayState: HarnessDisplayState) => void | Promise<void>;
-
-export interface HarnessDisplayStateSubscriptionOptions {
-  /**
-   * Minimum quiet window before non-critical display state callbacks.
-   *
-   * @default 250
-   */
-  windowMs?: number;
-
-  /**
-   * Maximum time a pending display state snapshot may wait while updates continue.
-   *
-   * @default 500
-   */
-  maxWaitMs?: number;
-}
-
 // =============================================================================
 // Messages
 // =============================================================================
@@ -924,6 +923,7 @@ export type HarnessMessageContent =
       timestamp?: string;
       goalMaxTurns?: number;
       judgeModelId?: string;
+      goalEvaluation?: GoalEvaluationPayload;
     }
   | {
       type: 'state_signal';
@@ -996,33 +996,69 @@ export type HarnessMessageContent =
  * Harness-specific context set on the RequestContext under the 'harness' key.
  * Tools can access harness state and methods through requestContext.get('harness').
  */
+/**
+ * Snapshot of the session-owned values exposed to request-context consumers.
+ * Plain data captured per request; mutating it does not affect the Session.
+ */
+export type HarnessRequestStateUpdateResult<TState, TResult> = {
+  updates?: Partial<TState>;
+  events?: HarnessEvent[];
+  result: TResult;
+};
+
+export type HarnessRequestStateUpdater<TState, TResult> = (
+  state: Readonly<TState>,
+) => HarnessRequestStateUpdateResult<TState, TResult> | Promise<HarnessRequestStateUpdateResult<TState, TResult>>;
+
+export interface HarnessRequestState<TState = unknown> {
+  /** Get the current session-owned harness state (live, not request-context snapshot). */
+  get: () => Readonly<TState>;
+  /** Update session-owned harness state. */
+  set: (updates: Partial<TState>) => Promise<void>;
+  /** Update session-owned harness state from the latest snapshot in a serialized transaction. */
+  update: <TResult>(updater: HarnessRequestStateUpdater<TState, TResult>) => Promise<TResult>;
+}
+
+export interface HarnessRequestSession<TState = unknown> {
+  /** Stable session identifier (mirrors SessionRecord.id in storage). */
+  id: string;
+  /** Stable session owner (mirrors SessionRecord.ownerId in storage). */
+  ownerId: string;
+  /** Currently-selected mode ID */
+  modeId: string;
+  /** Currently-selected model ID ('' when none selected yet) */
+  modelId: string;
+  /** Live session-owned harness state accessors. */
+  state: HarnessRequestState<TState>;
+}
+
 export interface HarnessRequestContext<TState = unknown> {
   /** The harness instance ID */
   harnessId: string;
 
-  /** Current harness state (read-only snapshot) */
-  state: TState;
+  /**
+   * Current harness state (read-only snapshot captured when the request context is built).
+   * @deprecated Prefer `session.state.get()` for live state reads.
+   */
+  state: Readonly<TState>;
 
-  /** Get the current harness state (live, not snapshot) */
-  getState: () => TState;
+  /**
+   * Get the current harness state (live, not snapshot).
+   * @deprecated Prefer `session.state.get()`.
+   */
+  getState: () => Readonly<TState>;
 
-  /** Update harness state */
+  /**
+   * Update harness state.
+   * @deprecated Prefer `session.state.set(...)`.
+   */
   setState: (updates: Partial<TState>) => Promise<void>;
 
-  /** Update harness state from the latest state snapshot in a serialized transaction */
-  updateState?: <TResult>(
-    updater: (state: Readonly<TState>) =>
-      | {
-          updates?: Partial<TState>;
-          events?: HarnessEvent[];
-          result: TResult;
-        }
-      | Promise<{
-          updates?: Partial<TState>;
-          events?: HarnessEvent[];
-          result: TResult;
-        }>,
-  ) => Promise<TResult>;
+  /**
+   * Update harness state from the latest state snapshot in a serialized transaction.
+   * @deprecated Prefer `session.state.update(...)`.
+   */
+  updateState?: <TResult>(updater: HarnessRequestStateUpdater<TState, TResult>) => Promise<TResult>;
 
   /** Current thread ID */
   threadId: string | null;
@@ -1030,8 +1066,11 @@ export interface HarnessRequestContext<TState = unknown> {
   /** Current resource ID */
   resourceId: string;
 
-  /** Current mode ID */
-  modeId: string;
+  /**
+   * Snapshot of the relevant session-owned values for this request.
+   * Plain data (not the live Session); read-only at the point of use.
+   */
+  session: HarnessRequestSession<TState>;
 
   /** Abort signal for the current operation */
   abortSignal?: AbortSignal;

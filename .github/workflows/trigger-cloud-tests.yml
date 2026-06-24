@@ -14,7 +14,7 @@ jobs:
   trigger:
     # Only run on the main repository, not on forks
     if: ${{ github.repository == 'mastra-ai/mastra' }}
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     steps:
       - name: Trigger mastra-cloud integration tests
         uses: peter-evans/repository-dispatch@v3

@@ -1,10 +1,12 @@
-import { Button, Spinner, Tooltip, TooltipContent, TooltipTrigger, Icon, fileToBase64 } from '@mastra/playground-ui';
+import { Button, Icon, fileToBase64, isBrowserFetchableUrl } from '@mastra/playground-ui';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { TooltipProvider } from '@radix-ui/react-tooltip';
 import { X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { useLoadBrowserFile } from '../hooks/use-load-browser-file';
-import { ImageEntry, TxtEntry, PdfEntry } from './attachment-preview-dialog';
+import { ImageEntry, TxtEntry, PdfEntry, FileChipEntry } from './attachment-preview-dialog';
 import { useComposerAttachments } from './composer-attachments';
 import type { ComposerAttachment } from './composer-attachments';
 
@@ -79,6 +81,12 @@ const AttachmentThumbnail = ({ attachment }: { attachment: ComposerAttachment })
                 <ImageAttachmentThumbnail attachment={attachment} />
               ) : attachment.kind === 'pdf' ? (
                 <ComposerPdfAttachment attachment={attachment} />
+              ) : attachment.kind === 'video' ? (
+                <FileChipEntry
+                  name={attachment.name}
+                  url={attachment.isUrl && isBrowserFetchableUrl(attachment.name) ? attachment.name : undefined}
+                  contentType={attachment.contentType}
+                />
               ) : (
                 <ComposerTxtAttachment file={attachment.file} />
               )}

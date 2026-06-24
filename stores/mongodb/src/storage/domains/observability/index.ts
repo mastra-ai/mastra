@@ -393,18 +393,49 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     };
   }
 
+  private createDateRangeCondition(
+    field: 'startedAt' | 'endedAt',
+    range: { start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean },
+  ): Record<string, any> | null {
+    const dateFilter: Record<string, Date> = {};
+    const stringFilter: Record<string, string> = {};
+
+    if (range.start) {
+      const operator = range.startExclusive ? '$gt' : '$gte';
+      const start = range.start instanceof Date ? range.start : new Date(range.start);
+      dateFilter[operator] = start;
+      stringFilter[operator] = start.toISOString();
+    }
+
+    if (range.end) {
+      const operator = range.endExclusive ? '$lt' : '$lte';
+      const end = range.end instanceof Date ? range.end : new Date(range.end);
+      dateFilter[operator] = end;
+      stringFilter[operator] = end.toISOString();
+    }
+
+    if (Object.keys(dateFilter).length === 0) {
+      return null;
+    }
+
+    return {
+      $or: [{ [field]: dateFilter }, { [field]: stringFilter }],
+    };
+  }
+
   async createSpan(args: CreateSpanArgs): Promise<void> {
     const { span } = args;
     try {
-      const startedAt = span.startedAt instanceof Date ? span.startedAt.toISOString() : span.startedAt;
-      const endedAt = span.endedAt instanceof Date ? span.endedAt.toISOString() : span.endedAt;
+      const startedAt = span.startedAt instanceof Date ? span.startedAt : new Date(span.startedAt);
+      const endedAt =
+        span.endedAt == null ? span.endedAt : span.endedAt instanceof Date ? span.endedAt : new Date(span.endedAt);
 
       const record = {
         ...span,
         startedAt,
         endedAt,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
       };
 
       const collection = await this.getCollection(TABLE_SPANS);
@@ -558,17 +589,17 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
     const { traceId, spanId, updates } = args;
     try {
       const data = { ...updates };
-      if (data.endedAt instanceof Date) {
-        data.endedAt = data.endedAt.toISOString() as any;
+      if (data.endedAt != null && !(data.endedAt instanceof Date)) {
+        data.endedAt = new Date(data.endedAt) as any;
       }
-      if (data.startedAt instanceof Date) {
-        data.startedAt = data.startedAt.toISOString() as any;
+      if (data.startedAt != null && !(data.startedAt instanceof Date)) {
+        data.startedAt = new Date(data.startedAt) as any;
       }
 
       // Add updatedAt timestamp
       const updateData = {
         ...data,
-        updatedAt: new Date().toISOString(),
+        updatedAt: new Date(),
       };
 
       const collection = await this.getCollection(TABLE_SPANS);
@@ -607,28 +638,16 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
       if (filters) {
         // Date range filters
         if (filters.startedAt) {
-          const startedAtFilter: Record<string, any> = {};
-          if (filters.startedAt.start) {
-            startedAtFilter.$gte = filters.startedAt.start.toISOString();
-          }
-          if (filters.startedAt.end) {
-            startedAtFilter.$lte = filters.startedAt.end.toISOString();
-          }
-          if (Object.keys(startedAtFilter).length > 0) {
-            mongoFilter.startedAt = startedAtFilter;
+          const startedAtCondition = this.createDateRangeCondition('startedAt', filters.startedAt);
+          if (startedAtCondition) {
+            andConditions.push(startedAtCondition);
           }
         }
 
         if (filters.endedAt) {
-          const endedAtFilter: Record<string, any> = {};
-          if (filters.endedAt.start) {
-            endedAtFilter.$gte = filters.endedAt.start.toISOString();
-          }
-          if (filters.endedAt.end) {
-            endedAtFilter.$lte = filters.endedAt.end.toISOString();
-          }
-          if (Object.keys(endedAtFilter).length > 0) {
-            andConditions.push({ endedAt: endedAtFilter });
+          const endedAtCondition = this.createDateRangeCondition('endedAt', filters.endedAt);
+          if (endedAtCondition) {
+            andConditions.push(endedAtCondition);
           }
         }
 
@@ -890,15 +909,20 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
   async batchCreateSpans(args: BatchCreateSpansArgs): Promise<void> {
     try {
       const records = args.records.map(record => {
-        const startedAt = record.startedAt instanceof Date ? record.startedAt.toISOString() : record.startedAt;
-        const endedAt = record.endedAt instanceof Date ? record.endedAt.toISOString() : record.endedAt;
+        const startedAt = record.startedAt instanceof Date ? record.startedAt : new Date(record.startedAt);
+        const endedAt =
+          record.endedAt == null
+            ? record.endedAt
+            : record.endedAt instanceof Date
+              ? record.endedAt
+              : new Date(record.endedAt);
 
         return {
           ...record,
           startedAt,
           endedAt,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
         };
       });
 
@@ -934,17 +958,17 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
       const bulkOps = args.records.map(record => {
         const data: Partial<UpdateSpanRecord> = { ...record.updates };
 
-        if (data.endedAt instanceof Date) {
-          data.endedAt = data.endedAt.toISOString() as any;
+        if (data.endedAt != null && !(data.endedAt instanceof Date)) {
+          data.endedAt = new Date(data.endedAt) as any;
         }
-        if (data.startedAt instanceof Date) {
-          data.startedAt = data.startedAt.toISOString() as any;
+        if (data.startedAt != null && !(data.startedAt instanceof Date)) {
+          data.startedAt = new Date(data.startedAt) as any;
         }
 
         // Add updatedAt timestamp
         const updateData = {
           ...data,
-          updatedAt: new Date().toISOString(),
+          updatedAt: new Date(),
         };
 
         return {

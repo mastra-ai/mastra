@@ -2,15 +2,17 @@ import fs, { existsSync } from 'node:fs';
 import os from 'node:os';
 import path, { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { ToolsInput } from '@mastra/core/agent';
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
-import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
+import { Workspace, LocalFilesystem, LocalSandbox, createWorkspaceTools } from '@mastra/core/workspace';
 import type { LSPConfig, WorkspaceToolsConfig } from '@mastra/core/workspace';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { loadSettings } from '../onboarding/settings.js';
 import type { MastraCodeState } from '../schema';
-import { TOOL_NAME_OVERRIDES } from '../tool-names.js';
+import { MC_TOOLS, TOOL_NAME_OVERRIDES } from '../tool-names.js';
+import { getPlansDir } from '../utils/plans.js';
 
 // =============================================================================
 // Sandbox Environment
@@ -40,9 +42,6 @@ function buildSandboxEnv(): NodeJS.ProcessEnv {
 // 4. Global: ~/<configDir>/skills (user-wide mastracode skills)
 // 5. Global: ~/.claude/skills (user-wide Claude Code skills)
 // 6. Global: ~/.agents/skills (user-wide Agent Skills spec compatible)
-
-const claudeGlobalSkillsPath = path.join(os.homedir(), '.claude', 'skills');
-const agentSkillsGlobalPath = path.join(os.homedir(), '.agents', 'skills');
 
 // Mastra's LocalSkillSource.readdir uses Node's Dirent.isDirectory() which
 // returns false for symlinks. Tools like `npx skills add` install skills as
@@ -86,11 +85,13 @@ function collectSkillPaths(skillsDirs: string[]): string[] {
 }
 
 // Build skill paths dynamically based on configDir and projectPath
-export function buildSkillPaths(projectPath: string, configDir: string): string[] {
+export function buildSkillPaths(projectPath: string, configDir: string, homeDir = os.homedir()): string[] {
   const mastraCodeLocalSkillsPath = path.join(projectPath, configDir, 'skills');
   const claudeLocalSkillsPath = path.join(projectPath, '.claude', 'skills');
   const agentSkillsLocalPath = path.join(projectPath, '.agents', 'skills');
-  const mastraCodeGlobalSkillsPath = path.join(os.homedir(), configDir, 'skills');
+  const mastraCodeGlobalSkillsPath = path.join(homeDir, configDir, 'skills');
+  const claudeGlobalSkillsPath = path.join(homeDir, '.claude', 'skills');
+  const agentSkillsGlobalPath = path.join(homeDir, '.agents', 'skills');
 
   return collectSkillPaths([
     mastraCodeLocalSkillsPath,
@@ -107,7 +108,7 @@ export function buildSkillPaths(projectPath: string, configDir: string): string[
  * and any per-thread sandboxAllowedPaths). The OS temp directory is included
  * so the agent can use it as a scratchpad without requesting access every time.
  */
-const DEFAULT_ALLOWED_PATHS: string[] = [os.tmpdir(), '/tmp'].reduce<string[]>((acc, p) => {
+const DEFAULT_ALLOWED_PATHS: string[] = [os.tmpdir(), '/tmp', getPlansDir()].reduce<string[]>((acc, p) => {
   const resolved = path.resolve(p);
   if (!acc.includes(resolved)) acc.push(resolved);
   return acc;
@@ -129,8 +130,8 @@ function detectPackageRunner(projectPath: string): string | undefined {
 
 export function getDynamicWorkspace({ requestContext, mastra }: { requestContext: RequestContext; mastra?: Mastra }) {
   const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
-  const state = ctx?.getState();
-  const modeId = ctx?.modeId ?? 'build';
+  const state = ctx?.session.state.get();
+  const modeId = ctx?.session?.modeId ?? 'build';
   const rawProjectPath = state?.projectPath;
 
   if (!rawProjectPath) {
@@ -139,15 +140,16 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
 
   const projectPath = path.resolve(rawProjectPath);
   const configDir = state?.configDir ?? DEFAULT_CONFIG_DIR;
-  const skillPaths = buildSkillPaths(projectPath, configDir);
+  const skillPaths = buildSkillPaths(projectPath, configDir, state?.homeDir);
   const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectPath}`;
   const sandboxPaths = state?.sandboxAllowedPaths ?? [];
   const allowedPaths = [...skillPaths, ...DEFAULT_ALLOWED_PATHS, ...sandboxPaths.map((p: string) => path.resolve(p))];
   const isPlanMode = modeId === 'plan';
 
   const planModeTools = {
-    mastra_workspace_write_file: { ...TOOL_NAME_OVERRIDES.mastra_workspace_write_file, enabled: false },
-    mastra_workspace_edit_file: { ...TOOL_NAME_OVERRIDES.mastra_workspace_edit_file, enabled: false },
+    // write_file stays enabled — the agent uses it to create the initial plan .md file.
+    // edit_file (string_replace_lsp) stays enabled for targeted plan revisions.
+    // ast_edit is disabled because plans are markdown, not code.
     mastra_workspace_ast_edit: { ...TOOL_NAME_OVERRIDES.mastra_workspace_ast_edit, enabled: false },
   };
 
@@ -193,4 +195,49 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
     ...(skillPaths.length > 0 ? { skills: skillPaths } : {}),
     lsp: lspConfig,
   });
+}
+
+/**
+ * Read-only workspace tools the goal judge is allowed to call to verify the
+ * agent's work. Mirrors the original (pre-native-goal) MastraCode judge, which
+ * could inspect the workspace before deciding `done`/`continue`/`waiting`
+ * instead of grading the assistant's prose alone. Strictly read-only: no write,
+ * edit, delete, mkdir, or command-execution tools.
+ */
+const GOAL_JUDGE_READONLY_TOOLS: readonly string[] = [
+  MC_TOOLS.VIEW,
+  MC_TOOLS.SEARCH_CONTENT,
+  MC_TOOLS.FIND_FILES,
+  MC_TOOLS.FILE_STAT,
+  MC_TOOLS.LSP_INSPECT,
+];
+
+/**
+ * Resolver for the agent's `goal.tools` config. Builds the request's workspace
+ * (same per-request resolution as the agent's own tools) and returns only the
+ * read-only verification subset, remapped to mastracode's tool names (`view`,
+ * `search_content`, etc.). Returns `undefined` when no workspace can be resolved
+ * (e.g. no project path), keeping the default judge text-only rather than
+ * throwing inside the goal step.
+ */
+export async function getGoalJudgeTools({
+  requestContext,
+  mastra,
+}: {
+  requestContext: RequestContext;
+  mastra?: Mastra;
+}): Promise<ToolsInput | undefined> {
+  let workspace: Workspace<LocalFilesystem, LocalSandbox>;
+  try {
+    workspace = getDynamicWorkspace({ requestContext, mastra });
+  } catch {
+    return undefined;
+  }
+
+  const allTools = await createWorkspaceTools(workspace, { requestContext, workspace });
+  const readonly: ToolsInput = {};
+  for (const name of GOAL_JUDGE_READONLY_TOOLS) {
+    if (allTools[name]) readonly[name] = allTools[name];
+  }
+  return Object.keys(readonly).length > 0 ? readonly : undefined;
 }

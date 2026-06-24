@@ -19,10 +19,14 @@ function createRequestContext(projectPath: string) {
   const requestContext = new RequestContext();
   requestContext.set('harness', {
     modeId: 'build',
-    getState: () => ({
-      projectPath,
-      sandboxAllowedPaths: [],
-    }),
+    session: {
+      state: {
+        get: () => ({
+          projectPath,
+          sandboxAllowedPaths: [],
+        }),
+      },
+    },
   });
   return requestContext;
 }

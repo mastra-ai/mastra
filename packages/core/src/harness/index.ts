@@ -1,4 +1,5 @@
 export { Harness } from './harness';
+export { Session } from './session';
 export {
   askUserTool,
   assignTaskIds,
@@ -19,8 +20,6 @@ export type {
   CustomModelCatalogProvider,
   HarnessConfig,
   HarnessDisplayState,
-  HarnessDisplayStateListener,
-  HarnessDisplayStateSubscriptionOptions,
   HarnessEvent,
   HarnessEventListener,
   HarnessMessage,
@@ -28,13 +27,15 @@ export type {
   HarnessMode,
   HarnessOMConfig,
   HarnessRequestContext,
-  HarnessSession,
+  HarnessRequestSession,
+  HarnessRequestState,
+  HarnessRequestStateUpdater,
+  HarnessRequestStateUpdateResult,
   HarnessStateSchema,
   HarnessSubagent,
   HarnessSubagentHistoryEntry,
   HarnessThread,
   HeartbeatHandler,
-  ModelAuthChecker,
   ModelAuthStatus,
   ModelUseCountProvider,
   ModelUseCountTracker,

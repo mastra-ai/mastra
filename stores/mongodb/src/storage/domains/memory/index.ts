@@ -1097,6 +1097,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       });
     }
 
+    const now = new Date();
     const updatedThread = {
       ...thread,
       title,
@@ -1104,6 +1105,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         ...thread.metadata,
         ...metadata,
       },
+      updatedAt: now,
     };
 
     try {
@@ -1114,6 +1116,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           $set: {
             title,
             metadata: updatedThread.metadata,
+            updatedAt: now,
           },
         },
       );

@@ -28,7 +28,12 @@ export const DataListTopCells = forwardRef<HTMLDivElement, DataListTopCellsProps
     return (
       <div
         ref={ref}
-        className={cn('grid grid-cols-subgrid gap-8 col-span-full px-5', flushLeft && 'pl-0!', className)}
+        className={cn(
+          'grid grid-cols-subgrid gap-8 px-5 pointer-events-none [&>*]:pointer-events-auto',
+          !colStart && 'col-span-full',
+          flushLeft && 'pl-0!',
+          className,
+        )}
         style={colStart ? { ...style, gridColumn: `${colStart} / -1` } : style}
         {...rest}
       >
