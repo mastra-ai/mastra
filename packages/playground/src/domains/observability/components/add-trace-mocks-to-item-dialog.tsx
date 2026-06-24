@@ -1,19 +1,10 @@
 import type { DatasetItemToolMock } from '@mastra/client-js';
-import {
-  Button,
-  CodeEditor,
-  Label,
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-  TextAndIcon,
-  getShortId,
-  toast,
-} from '@mastra/playground-ui';
+import { Button, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, toast } from '@mastra/playground-ui';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { Label } from '@mastra/playground-ui/components/Label';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
+import { TextAndIcon, getShortId } from '@mastra/playground-ui/components/Text';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { EyeIcon, WrenchIcon } from 'lucide-react';
