@@ -1,16 +1,9 @@
-import {
-  Button,
-  Skeleton,
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@mastra/playground-ui';
+import { Button, Skeleton, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui';
 import { Brain, ExternalLink, Info } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
+import { getObservationWindowTokens } from './lib/observation-window';
 import { useMemoryTimeline, useObservationalMemoryContext } from '@/domains/agents/context';
 import { useObservationalMemory, useMemoryWithOMStatus, useMemoryConfig } from '@/domains/memory/hooks';
-import { getObservationWindowTokens } from './lib/observation-window';
 
 // Format tokens helper
 const formatTokens = (n: number) => {

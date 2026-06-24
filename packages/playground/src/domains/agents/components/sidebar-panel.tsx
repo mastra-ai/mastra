@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
 import { cn } from '@mastra/playground-ui';
+import type { ReactNode } from 'react';
 
 export function SidebarPanel({ children, className }: { children: ReactNode; className?: string }) {
   return (

@@ -1,5 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
+import { observationalMemoryQueryKey, memoryThreadMessagesQueryKey, memoryStatusQueryKey } from '@mastra/playground-ui';
 import { useChat } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
@@ -20,7 +21,6 @@ import {
 } from '@/services/om-parts-converter';
 import { ToolCallProvider } from '@/services/tool-call-provider';
 import type { ChatProps } from '@/types';
-import { observationalMemoryQueryKey, memoryThreadMessagesQueryKey, memoryStatusQueryKey } from '@mastra/playground-ui';
 
 /**
  * Runtime + dispatch context for the main agent chat.

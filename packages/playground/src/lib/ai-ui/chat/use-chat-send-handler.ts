@@ -1,5 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
+import { observationalMemoryQueryKey, memoryThreadMessagesQueryKey, memoryStatusQueryKey } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useRef } from 'react';
@@ -12,7 +13,6 @@ import {
   buildStreamErrorMessage,
   isMaxStepsFinishChunk,
 } from '@/services/stream-error-message';
-import { observationalMemoryQueryKey, memoryThreadMessagesQueryKey, memoryStatusQueryKey } from '@mastra/playground-ui';
 
 /**
  * The OM/error stream chunks this hook reacts to are not part of the typed
