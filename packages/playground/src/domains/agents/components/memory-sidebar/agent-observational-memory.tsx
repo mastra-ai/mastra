@@ -1,4 +1,5 @@
-import { Button, Skeleton, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui';
+import { Button, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Brain, ExternalLink, Info } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { getObservationWindowTokens } from './lib/observation-window';
