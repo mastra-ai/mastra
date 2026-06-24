@@ -339,6 +339,7 @@ export class Harness<TState = {}> {
    */
   async createSession({ resourceId }: { resourceId?: string } = {}): Promise<Session<TState>> {
     const effectiveResourceId = resourceId ?? this.config.resourceId ?? this.config.id;
+    const allowCrossResourceRecovery = resourceId === undefined;
 
     // Get-or-create: a resourceId maps to exactly one durable session per
     // Harness. Asking for the same resource twice returns the same session, so
@@ -350,7 +351,7 @@ export class Harness<TState = {}> {
       return existing;
     }
 
-    const creation = this.#createSessionForResource(effectiveResourceId);
+    const creation = this.#createSessionForResource(effectiveResourceId, { allowCrossResourceRecovery });
     this.#sessionsByResource.set(effectiveResourceId, creation);
     try {
       return await creation;
@@ -363,7 +364,10 @@ export class Harness<TState = {}> {
     }
   }
 
-  async #createSessionForResource(effectiveResourceId: string): Promise<Session<TState>> {
+  async #createSessionForResource(
+    effectiveResourceId: string,
+    { allowCrossResourceRecovery }: { allowCrossResourceRecovery: boolean },
+  ): Promise<Session<TState>> {
     const session = this.#wireSession(
       new Session({
         resourceId: effectiveResourceId,
@@ -404,7 +408,7 @@ export class Harness<TState = {}> {
     // resourceId change (e.g. a git remote was added after the thread was
     // created) are recovered even when the current resourceId already has a
     // thread.  Results are merged with Layer 1 and deduplicated by id.
-    if (projectPath && this.#resolveStorage()) {
+    if (allowCrossResourceRecovery && projectPath && this.#resolveStorage()) {
       const memoryStorage = await this.getMemoryStorage();
       const result = await memoryStorage.listThreads({
         filter: { metadata: { projectPath } },
@@ -438,6 +442,7 @@ export class Harness<TState = {}> {
       // future lookups find it under the new resourceId.
       if (mostRecent.resourceId !== effectiveResourceId && this.#resolveStorage()) {
         await this.persistThreadRow({ ...mostRecent, resourceId: effectiveResourceId });
+        await this.migrateThreadMessagesResourceId({ threadId: mostRecent.id, resourceId: effectiveResourceId });
       }
 
       await this.config.threadLock?.acquire(mostRecent.id);
@@ -667,6 +672,23 @@ export class Harness<TState = {}> {
     if (!this.#resolveStorage()) return;
     const memoryStorage = await this.getMemoryStorage();
     await memoryStorage.deleteThread({ threadId });
+  }
+
+  private async migrateThreadMessagesResourceId({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId: string;
+  }): Promise<void> {
+    if (!this.#resolveStorage()) return;
+    const memoryStorage = await this.getMemoryStorage();
+    const result = await memoryStorage.listMessages({ threadId, perPage: false });
+    const messages = result.messages.filter(message => message.resourceId !== resourceId);
+    if (messages.length === 0) return;
+    await memoryStorage.saveMessages({
+      messages: messages.map(message => ({ ...message, resourceId })),
+    });
   }
 
   /** Clone a thread (and messages) via the host's memory (gateway primitive for the Session thread domain). */
