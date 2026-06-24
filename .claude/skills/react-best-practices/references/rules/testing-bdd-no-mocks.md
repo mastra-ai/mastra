@@ -85,7 +85,6 @@ describe('AgentEditPage', () => {
 - **Outer `describe`** = the unit under test (the hook, component, or function).
 - **Inner `describe('when <context>')`** = one precondition: an input shape, an RBAC capability, a feature flag, or a loading/error/empty/success state — each set up with a **real MSW fixture**, never a mocked hook.
 - **`it('<outcome>')`** = one Then. Split multi-assert cases into separate `it`s so a failure names the exact broken outcome.
-- Avoid implementation-mirror tests: do not duplicate source class strings, branch logic, generated shapes, or calculations unless the assertion protects a real behavior or regression.
 - Keep single-context units **flat** — don't nest `when` blocks for their own sake.
 
 Fixtures live in a nearby `__tests__/fixtures/` folder, typed with response types re-exported from `@mastra/client-js`. No bespoke inline types, no `as any`, no `as unknown as`.
