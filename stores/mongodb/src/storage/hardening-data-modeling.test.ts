@@ -1,6 +1,6 @@
 import { MastraError } from '@mastra/core/error';
 import { MongoClient } from 'mongodb';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { MemoryStorageMongoDB } from './domains/memory';
 import { MongoDBStore } from './index';
 
@@ -21,7 +21,7 @@ describe('Hardening: NODE-7556 — data modeling (Tranche A)', () => {
   beforeAll(dropTestDb);
   afterAll(dropTestDb);
 
-  it('A1: memory collections have exactly the audited index set after init', async () => {
+  test('A1: memory collections have exactly the audited index set after init', async () => {
     const store = new MongoDBStore({ id: 'hardening-a1', uri: URI, dbName: DB });
     await store.init();
 
@@ -69,7 +69,7 @@ describe('Hardening: NODE-7556 — data modeling (Tranche A)', () => {
     }
   });
 
-  it('A3: resource metadata is stored as a native object and reads back as an object (and legacy strings still parse)', async () => {
+  test('A3: resource metadata is stored as a native object and reads back as an object (and legacy strings still parse)', async () => {
     const store = new MongoDBStore({ id: 'hardening-a3', uri: URI, dbName: DB });
     await store.init();
     const memory = await store.getStore('memory');
@@ -122,7 +122,7 @@ describe('Hardening: NODE-7556 — data modeling (Tranche A)', () => {
     }
   });
 
-  it('A4: createDefaultIndexes throws a MastraError when an index cannot be created', async () => {
+  test('A4: createDefaultIndexes throws a MastraError when an index cannot be created', async () => {
     const throwingMemory = new MemoryStorageMongoDB({
       connectorHandler: {
         getCollection: async () =>
@@ -140,7 +140,7 @@ describe('Hardening: NODE-7556 — data modeling (Tranche A)', () => {
     expect(String(err.id)).toContain('CREATE_DEFAULT_INDEXES');
   });
 
-  it('A4: createDefaultIndexes resolves when index creation succeeds', async () => {
+  test('A4: createDefaultIndexes resolves when index creation succeeds', async () => {
     const okMemory = new MemoryStorageMongoDB({
       connectorHandler: {
         getCollection: async () => ({ createIndex: async () => 'ok' }) as any,

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { MongoDBConnector } from './connectors/MongoDBConnector';
 
 const STANDALONE_URI = process.env.MONGODB_URL || 'mongodb://localhost:27017';
@@ -8,7 +8,7 @@ const REPLICA_SET_URI =
 const DB = 'mastra-hardening-tx';
 
 describe('Hardening: NODE-7556 — transactions (Tranche B)', () => {
-  it('B1: supportsTransactions() is false on a standalone server', async () => {
+  test('B1: supportsTransactions() is false on a standalone server', async () => {
     const connector = MongoDBConnector.fromDatabaseConfig({ id: 'tx-standalone', url: STANDALONE_URI, dbName: DB });
     try {
       expect(await connector.supportsTransactions()).toBe(false);
@@ -17,7 +17,7 @@ describe('Hardening: NODE-7556 — transactions (Tranche B)', () => {
     }
   });
 
-  it('B1: supportsTransactions() is true on a replica set', async () => {
+  test('B1: supportsTransactions() is true on a replica set', async () => {
     const connector = MongoDBConnector.fromDatabaseConfig({ id: 'tx-rs', url: REPLICA_SET_URI, dbName: DB });
     try {
       expect(await connector.supportsTransactions()).toBe(true);
@@ -26,7 +26,7 @@ describe('Hardening: NODE-7556 — transactions (Tranche B)', () => {
     }
   });
 
-  it('B1: withTransaction rolls back all writes when the callback throws (replica set)', async () => {
+  test('B1: withTransaction rolls back all writes when the callback throws (replica set)', async () => {
     const connector = MongoDBConnector.fromDatabaseConfig({ id: 'tx-rollback', url: REPLICA_SET_URI, dbName: DB });
     try {
       const col = await connector.getCollection('tx_probe');
@@ -43,7 +43,7 @@ describe('Hardening: NODE-7556 — transactions (Tranche B)', () => {
     }
   });
 
-  it('B1: withTransaction degrades on standalone — write persists, error still propagates', async () => {
+  test('B1: withTransaction degrades on standalone — write persists, error still propagates', async () => {
     const connector = MongoDBConnector.fromDatabaseConfig({ id: 'tx-degrade', url: STANDALONE_URI, dbName: DB });
     try {
       const col = await connector.getCollection('tx_probe');
