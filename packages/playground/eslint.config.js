@@ -35,8 +35,25 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import Avatar exports from @mastra/playground-ui/components/Avatar.',
   },
   {
+    importNames: ['Badge', 'BadgeProps'],
+    message: 'Import Badge exports from @mastra/playground-ui/components/Badge.',
+  },
+  {
     importNames: ['Breadcrumb', 'BreadcrumbProps', 'Crumb', 'CrumbProps'],
     message: 'Import Breadcrumb exports from @mastra/playground-ui/components/Breadcrumb.',
+  },
+  {
+    importNames: [
+      'ButtonsGroup',
+      'ButtonsGroupProps',
+      'ButtonsGroupSeparator',
+      'ButtonsGroupSeparatorProps',
+      'ButtonsGroupSpacing',
+      'ButtonsGroupText',
+      'ButtonsGroupTextProps',
+      'buttonsGroupVariants',
+    ],
+    message: 'Import ButtonsGroup exports from @mastra/playground-ui/components/ButtonsGroup.',
   },
   {
     importNames: [
@@ -84,6 +101,22 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
   {
     importNames: ['CodeBlock', 'CodeBlockOption', 'CodeBlockOverflow', 'CodeBlockProps', 'CodeBlockSelector'],
     message: 'Import CodeBlock exports from @mastra/playground-ui/components/CodeBlock.',
+  },
+  {
+    importNames: [
+      'CodeEditor',
+      'CodeEditorProps',
+      'CodeEditorLanguage',
+      'useCodemirrorTheme',
+      'codeLanguages',
+      'highlight',
+      'variableHighlight',
+      'VARIABLE_PATTERN',
+      'createVariableAutocomplete',
+      'flattenSchemaToVariables',
+      'VariableCompletion',
+    ],
+    message: 'Import CodeEditor exports from @mastra/playground-ui/components/CodeEditor.',
   },
   {
     importNames: ['CodeDiff', 'CodeDiffProps'],
@@ -148,6 +181,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import EntityHeader exports from @mastra/playground-ui/components/EntityHeader.',
   },
   {
+    importNames: ['EmptyState', 'EmptyStateProps'],
+    message: 'Import EmptyState exports from @mastra/playground-ui/components/EmptyState.',
+  },
+  {
     importNames: ['Entry', 'EntryProps'],
     message: 'Import Entry exports from @mastra/playground-ui/components/Entry.',
   },
@@ -181,8 +218,16 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import HorizontalBars from @mastra/playground-ui/components/HorizontalBars.',
   },
   {
+    importNames: ['Input', 'InputProps'],
+    message: 'Import Input exports from @mastra/playground-ui/components/Input.',
+  },
+  {
     importNames: ['Kbd', 'KbdProps'],
     message: 'Import Kbd exports from @mastra/playground-ui/components/Kbd.',
+  },
+  {
+    importNames: ['Label'],
+    message: 'Import Label from @mastra/playground-ui/components/Label.',
   },
   {
     importNames: [
@@ -293,6 +338,16 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
   },
   {
     importNames: [
+      'MainContentLayout',
+      'MainContentContent',
+      'MainContentContentProps',
+      'GetMainContentContentClassNameArgs',
+      'getMainContentContentClassName',
+    ],
+    message: 'Import MainContent exports from @mastra/playground-ui/components/MainContent.',
+  },
+  {
+    importNames: [
       'MainSidebar',
       'MainSidebarProvider',
       'SidebarState',
@@ -343,6 +398,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
   {
     importNames: ['PendingIndicator', 'PendingIndicatorProps'],
     message: 'Import PendingIndicator exports from @mastra/playground-ui/components/PendingIndicator.',
+  },
+  {
+    importNames: ['PermissionDenied', 'PermissionDeniedProps'],
+    message: 'Import PermissionDenied exports from @mastra/playground-ui/components/PermissionDenied.',
   },
   {
     importNames: [
@@ -397,8 +456,20 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import Sections exports from @mastra/playground-ui/components/Sections.',
   },
   {
+    importNames: ['SessionExpired', 'SessionExpiredProps'],
+    message: 'Import SessionExpired exports from @mastra/playground-ui/components/SessionExpired.',
+  },
+  {
     importNames: ['Slider', 'SliderProps'],
     message: 'Import Slider exports from @mastra/playground-ui/components/Slider.',
+  },
+  {
+    importNames: ['Skeleton'],
+    message: 'Import Skeleton from @mastra/playground-ui/components/Skeleton.',
+  },
+  {
+    importNames: ['Spinner', 'SpinnerProps', 'SpinnerSize', 'SpinnerVariant'],
+    message: 'Import Spinner exports from @mastra/playground-ui/components/Spinner.',
   },
   {
     importNames: ['StatusBadge', 'StatusBadgeProps'],
@@ -460,6 +531,23 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import Table exports from @mastra/playground-ui/components/Table.',
   },
   {
+    importNames: [
+      'Tabs',
+      'TabsRootProps',
+      'TabList',
+      'TabListProps',
+      'Tab',
+      'TabProps',
+      'TabContent',
+      'TabContentProps',
+    ],
+    message: 'Import Tabs exports from @mastra/playground-ui/components/Tabs.',
+  },
+  {
+    importNames: ['TextAndIcon', 'TextAndIconProps', 'getShortId'],
+    message: 'Import Text exports from @mastra/playground-ui/components/Text.',
+  },
+  {
     importNames: ['Truncate', 'TruncateProps'],
     message: 'Import Truncate exports from @mastra/playground-ui/components/Truncate.',
   },
@@ -469,6 +557,57 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: restriction.message,
   })),
 );
+
+// Enforce the playground testing contract (packages/playground/AGENTS.md + the
+// `playground-msw-tests` skill): drive the real @mastra/client-js + React Query
+// stack and ONLY mock the network. Mocking our own data hooks/services/auth
+// gating or the SDK hides cache, transport, and gating bugs. The allowed seams
+// are MSW network handlers, jsdom DOM-API polyfills in vitest.setup.ts, and the
+// three thin presentational seams (react-router's Navigate, a heavy child that
+// has its own dedicated test, atoms needing global context).
+const PROHIBITED_MOCK_MESSAGE =
+  'Do not vi.mock our own data hooks/services/auth gating or the SDK. ' +
+  'Drive the real @mastra/client-js + React Query stack through MSW network ' +
+  'handlers and typed fixtures instead (see packages/playground/AGENTS.md and ' +
+  'the playground-msw-tests skill). Allowed seams: MSW handlers, DOM-API ' +
+  "polyfills in vitest.setup.ts, react-router's Navigate, and thin stubs of a " +
+  'heavy child that has its own test.';
+
+// First-argument string literals to vi.mock() that are always prohibited.
+// Covers @ aliases for our domains/hooks/services and the two SDK packages.
+// Relative-path mocks of the same modules (e.g. ../../hooks/use-x) are caught
+// by the second selector.
+// Patterns are matched against the vi.mock() module string. Forward slashes
+// must be escaped as `\/` because esquery parses the value as a regex literal,
+// and we use `(\/|$)` boundaries instead of a bare `$`.
+const prohibitedMockModulePatterns = [
+  '^@\\/domains\\/[^\\/]+(?:\\/[^\\/]+)*\\/(hooks|services)(\\/|$)',
+  '^@\\/domains\\/auth(\\/|$)',
+  '^@\\/domains\\/(llm|agent-builder|agents)$',
+  '^@\\/hooks(\\/|$)',
+  '^@mastra\\/client-js$',
+  '^@mastra\\/react$',
+];
+
+const restrictedTestMockSelectors = [
+  {
+    selector: prohibitedMockModulePatterns
+      .map(
+        pattern =>
+          `CallExpression[callee.object.name="vi"][callee.property.name="mock"] > Literal[value=/${pattern}/]:first-child`,
+      )
+      .join(', '),
+    message: PROHIBITED_MOCK_MESSAGE,
+  },
+  {
+    // Relative-path mocks resolving to our own hooks/services/auth, use-* hooks,
+    // or a domain barrel that re-exports them (agent-builder/llm/agents).
+    selector:
+      'CallExpression[callee.object.name="vi"][callee.property.name="mock"] > ' +
+      'Literal[value=/^\\.\\.?\\/.*(\\/(hooks|services)\\/|\\/use-|\\/auth(\\/|$)|\\/(agent-builder|llm|agents)$)/]:first-child',
+    message: PROHIBITED_MOCK_MESSAGE,
+  },
+];
 
 /** @type {import("eslint").Linter.Config[]} */
 export default [
@@ -484,6 +623,16 @@ export default [
       'react-hooks/exhaustive-deps': 'warn',
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
       'no-restricted-syntax': ['error', ...restrictedPlaygroundUiBarrelImportSpecifiers],
+    },
+  },
+  {
+    files: ['src/**/*.{test,spec}.{ts,tsx}'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...restrictedPlaygroundUiBarrelImportSpecifiers,
+        ...restrictedTestMockSelectors,
+      ],
     },
   },
 ];

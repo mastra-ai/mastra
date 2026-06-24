@@ -520,6 +520,10 @@ export const DATASETS_SCHEMA: Record<string, StorageColumn> = {
   targetType: { type: 'text', nullable: true },
   targetIds: { type: 'jsonb', nullable: true },
   scorerIds: { type: 'jsonb', nullable: true },
+  organizationId: { type: 'text', nullable: true },
+  projectId: { type: 'text', nullable: true },
+  candidateKey: { type: 'text', nullable: true },
+  candidateId: { type: 'text', nullable: true },
   version: { type: 'integer', nullable: false },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
@@ -529,6 +533,8 @@ export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false },
   datasetId: { type: 'text', nullable: false, references: { table: 'mastra_datasets', column: 'id' } },
   datasetVersion: { type: 'integer', nullable: false },
+  organizationId: { type: 'text', nullable: true },
+  projectId: { type: 'text', nullable: true },
   validTo: { type: 'integer', nullable: true },
   isDeleted: { type: 'boolean', nullable: false },
   input: { type: 'jsonb', nullable: false },
@@ -537,6 +543,7 @@ export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
   metadata: { type: 'jsonb', nullable: true },
   source: { type: 'jsonb', nullable: true },
   expectedTrajectory: { type: 'jsonb', nullable: true },
+  toolMocks: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
@@ -566,6 +573,8 @@ export const EXPERIMENTS_SCHEMA: Record<string, StorageColumn> = {
   startedAt: { type: 'timestamp', nullable: true },
   completedAt: { type: 'timestamp', nullable: true },
   agentVersion: { type: 'text', nullable: true },
+  organizationId: { type: 'text', nullable: true },
+  projectId: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
@@ -585,6 +594,9 @@ export const EXPERIMENT_RESULTS_SCHEMA: Record<string, StorageColumn> = {
   traceId: { type: 'text', nullable: true },
   status: { type: 'text', nullable: true },
   tags: { type: 'jsonb', nullable: true },
+  toolMockReport: { type: 'jsonb', nullable: true },
+  organizationId: { type: 'text', nullable: true },
+  projectId: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
 };
 

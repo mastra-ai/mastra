@@ -2,13 +2,13 @@ import {
   Button,
   NoDataPageLayout,
   PageLayout,
-  PermissionDenied,
-  SessionExpired,
   Txt,
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { ArrowLeftIcon, PauseIcon, PlayIcon } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 import { ScheduleStatusText } from '@/domains/schedules/components/schedule-status-badge';

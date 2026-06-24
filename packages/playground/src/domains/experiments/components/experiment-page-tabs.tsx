@@ -6,10 +6,6 @@ import {
   Button,
   Icon,
   SpanDataPanelView,
-  Tabs,
-  Tab,
-  TabList,
-  TabContent,
   TraceDataPanelView,
   cn,
   toast,
@@ -18,6 +14,7 @@ import {
   useTraceSpanNavigation,
 } from '@mastra/playground-ui';
 import { Chip } from '@mastra/playground-ui/components/Chip';
+import { Tabs, Tab, TabList, TabContent } from '@mastra/playground-ui/components/Tabs';
 import { ClipboardCheck } from 'lucide-react';
 import { useState, useMemo, useCallback } from 'react';
 

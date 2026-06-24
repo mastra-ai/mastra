@@ -56,7 +56,9 @@ import {
   addUserMessage,
   removePendingUserMessage,
   renderClearedTasksInline,
+  renderCompletedTasksInline,
   renderExistingMessages,
+  renderTaskDeltaInline,
 } from './render-messages.js';
 import {
   setupKeyboardShortcuts,
@@ -1102,6 +1104,10 @@ export class MastraTUI {
       renderExistingMessages: () => this.renderExistingMessagesAndSeedIdleCounter(),
       renderClearedTasksInline: (clearedTasks, insertIndex) =>
         renderClearedTasksInline(this.state, clearedTasks, insertIndex),
+      renderCompletedTasksInline: (completedTasks, insertIndex) =>
+        renderCompletedTasksInline(this.state, completedTasks, insertIndex),
+      renderTaskDeltaInline: (previousTasks, nextTasks, insertIndex) =>
+        renderTaskDeltaInline(this.state, previousTasks, nextTasks, insertIndex),
       refreshModelAuthStatus: () => this.refreshModelAuthStatus(),
     };
   }

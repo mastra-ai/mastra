@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import type { BuilderSettingsResponse } from '@mastra/client-js';
 import { TooltipProvider } from '@mastra/playground-ui';
 import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';

@@ -1,5 +1,7 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import { PermissionDenied, SessionExpired, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';

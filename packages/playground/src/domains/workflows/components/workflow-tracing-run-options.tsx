@@ -1,5 +1,6 @@
 import { jsonLanguage } from '@codemirror/lang-json';
-import { Button, cn, useCodemirrorTheme, Txt } from '@mastra/playground-ui';
+import { Button, cn, Txt } from '@mastra/playground-ui';
+import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
 import CodeMirror from '@uiw/react-codemirror';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';

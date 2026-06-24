@@ -9,6 +9,10 @@ export class GoogleCloudPubSub extends PubSub {
   private ackBuffer: Record<string, Promise<any>> = {};
   private activeSubscriptions: Record<string, Subscription> = {};
   private activeCbs: Record<string, Set<EventCallback>> = {};
+  // `localOnly` publishes never touch Google Cloud — they are delivered to
+  // same-process subscribers only. Tracks live callbacks per (normalized) topic
+  // so we can fan out without going through PubSub.
+  private localCallbacks: Map<string, Set<EventCallback>> = new Map();
   // Coalesces concurrent init() calls for the same subscription so racing
   // subscribers (e.g. a producer stream and a consumer observe on the same
   // run topic) share a single createTopic/createSubscription attempt.
@@ -100,7 +104,11 @@ export class GoogleCloudPubSub extends PubSub {
     await this.pubsub.topic(topicName).delete();
   }
 
-  async publish(topicName: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
+  async publish(
+    topicName: string,
+    event: Omit<Event, 'id' | 'createdAt'>,
+    options?: { localOnly?: boolean },
+  ): Promise<void> {
     if (topicName.startsWith('workflow.events.')) {
       const parts = topicName.split('.');
       if (parts[parts.length - 2] === 'v2') {
@@ -108,6 +116,17 @@ export class GoogleCloudPubSub extends PubSub {
       } else {
         topicName = 'workflow.events.v1';
       }
+    }
+
+    // `localOnly` events stay entirely within the publishing process. They are
+    // never serialized through Google Cloud, so live methods on payload values
+    // (e.g. `MastraModelOutput.getFullOutput`) survive intact. The agent's
+    // execution-workflow relies on this: the run result is delivered via
+    // `workflows-finish` and includes the `MastraModelOutput` instance —
+    // round-tripping it through Pub/Sub would strip its methods.
+    if (options?.localOnly) {
+      await this.deliverLocal(topicName, event);
+      return;
     }
 
     let topic = this.pubsub.topic(topicName);
@@ -141,6 +160,16 @@ export class GoogleCloudPubSub extends PubSub {
     // Use a composite key when group is set so grouped and non-grouped subscriptions
     // on the same topic don't collide
     const subscriptionKey = group ? `${topic}:${group}` : topic;
+
+    // Register callback for `localOnly` delivery. Local delivery bypasses Google
+    // Cloud entirely so live class instances on the payload (e.g. Date, Map,
+    // Error, MastraModelOutput) keep their prototypes.
+    let localSet = this.localCallbacks.get(topic);
+    if (!localSet) {
+      localSet = new Set();
+      this.localCallbacks.set(topic, localSet);
+    }
+    localSet.add(cb);
 
     // Update tracked callbacks
     const subscription = this.activeSubscriptions[subscriptionKey] ?? (await this.init(topic, group));
@@ -199,6 +228,21 @@ export class GoogleCloudPubSub extends PubSub {
   }
 
   async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
+    if (topic.startsWith('workflow.events.')) {
+      const parts = topic.split('.');
+      if (parts[parts.length - 2] === 'v2') {
+        topic = 'workflow.events.v2';
+      } else {
+        topic = 'workflow.events.v1';
+      }
+    }
+
+    // Drop from the local-delivery set; if nobody is left, tear down the bucket.
+    const localSet = this.localCallbacks.get(topic);
+    if (localSet?.delete(cb) && localSet.size === 0) {
+      this.localCallbacks.delete(topic);
+    }
+
     // Check both grouped and non-grouped subscription keys for this callback
     const keysToCheck = [topic];
     for (const key of Object.keys(this.activeCbs)) {
@@ -230,5 +274,34 @@ export class GoogleCloudPubSub extends PubSub {
 
   async flush(): Promise<void> {
     await Promise.all(Object.values(this.ackBuffer));
+  }
+
+  /**
+   * Fan a `localOnly` event out to in-process subscribers without going through
+   * Google Cloud. The payload is delivered by reference, so live class instances
+   * and functions on the event survive intact.
+   */
+  private async deliverLocal(topicName: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
+    const callbacks = this.localCallbacks.get(topicName);
+    if (!callbacks || callbacks.size === 0) return;
+
+    const localEvent: Event = {
+      ...event,
+      id: crypto.randomUUID(),
+      createdAt: new Date(),
+      deliveryAttempt: 1,
+    };
+
+    for (const cb of [...callbacks]) {
+      try {
+        cb(
+          localEvent,
+          async () => {},
+          async () => {},
+        );
+      } catch (error) {
+        console.error('Error delivering local event', error);
+      }
+    }
   }
 }
