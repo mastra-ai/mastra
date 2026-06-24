@@ -2,4 +2,21 @@
 '@mastra/evals': minor
 ---
 
-Added Quick Checks — composable micro-scorers for common eval assertions. New `checks` namespace provides zero-LLM, zero-ceremony scorers: `checks.includes()`, `checks.excludes()`, `checks.equals()`, `checks.matches()`, `checks.similarity()`, `checks.calledTool()`, `checks.didNotCall()`, `checks.toolOrder()`, `checks.maxToolCalls()`, `checks.usedNoTools()`, and `checks.noToolErrors()`. Available via `import { checks } from '@mastra/evals/checks'` or `import { checks } from '@mastra/evals/scorers/prebuilt'`. They compose into the existing `scorers: [...]` array anywhere scorers are used.
+Added `checks`, a new namespace of micro-scorers for common eval assertions.
+
+**What changed**
+- Added text checks: `includes`, `excludes`, `equals`, `matches`, and `similarity`.
+- Added tool checks: `calledTool`, `didNotCall`, `toolOrder`, `maxToolCalls`, `usedNoTools`, and `noToolErrors`.
+- You can now import checks from `@mastra/evals/checks`.
+
+**Example**
+```ts
+import { checks } from '@mastra/evals/checks';
+
+const scorers = [
+  checks.includes('sunny'),
+  checks.calledTool('get_weather'),
+  checks.toolOrder(['search', 'summarize']),
+  checks.noToolErrors(),
+];
+```

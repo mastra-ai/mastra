@@ -205,6 +205,28 @@ describe('checks.similarity', () => {
     expect(result.score).toBeLessThan(0.3);
   });
 
+  test('should score 1 when similarity meets threshold', async () => {
+    const scorer = checks.similarity('hello world', { threshold: 0.8 });
+    const run = createAgentTestRun({
+      inputMessages: [createTestMessage({ content: 'Say hi', role: 'user', id: 'i1' })],
+      output: [createTestMessage({ content: 'hello world', role: 'assistant', id: 'o1' })],
+    });
+
+    const result = await scorer.run(run);
+    expect(result.score).toBe(1);
+  });
+
+  test('should score 0 when similarity is below threshold', async () => {
+    const scorer = checks.similarity('hello world', { threshold: 0.9 });
+    const run = createAgentTestRun({
+      inputMessages: [createTestMessage({ content: 'Say hi', role: 'user', id: 'i1' })],
+      output: [createTestMessage({ content: 'xyz12345', role: 'assistant', id: 'o1' })],
+    });
+
+    const result = await scorer.run(run);
+    expect(result.score).toBe(0);
+  });
+
   test('named export matches namespace', () => {
     expect(similarity).toBe(checks.similarity);
   });
@@ -583,6 +605,32 @@ describe('checks.noToolErrors', () => {
               args: {},
               result: { error: 'Network timeout' },
               state: 'result',
+            }),
+          ],
+        }),
+      ],
+    });
+
+    const result = await scorer.run(run);
+    expect(result.score).toBe(0);
+  });
+
+  test('should score 0 when a tool call has state "call" (incomplete)', async () => {
+    const scorer = checks.noToolErrors();
+    const run = createAgentTestRun({
+      inputMessages: [createTestMessage({ content: 'Do stuff', role: 'user', id: 'i1' })],
+      output: [
+        createTestMessage({
+          content: 'Calling tool...',
+          role: 'assistant',
+          id: 'o1',
+          toolInvocations: [
+            createToolInvocation({
+              toolCallId: 'c1',
+              toolName: 'search',
+              args: {},
+              result: {},
+              state: 'call',
             }),
           ],
         }),

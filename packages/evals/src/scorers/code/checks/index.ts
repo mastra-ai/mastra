@@ -27,7 +27,10 @@ export function includes(expected: string, options: IncludesOptions = {}) {
     type: 'agent',
   })
     .preprocess(async ({ run }) => {
-      let output = run.output.map(m => getTextContentFromMastraDBMessage(m)).join(' ');
+      let output = run.output
+        .filter(m => m.role === 'assistant')
+        .map(m => getTextContentFromMastraDBMessage(m))
+        .join(' ');
       let target = expected;
       if (ignoreCase) {
         output = output.toLowerCase();
@@ -58,7 +61,10 @@ export function excludes(unwanted: string, options: IncludesOptions = {}) {
     type: 'agent',
   })
     .preprocess(async ({ run }) => {
-      let output = run.output.map(m => getTextContentFromMastraDBMessage(m)).join(' ');
+      let output = run.output
+        .filter(m => m.role === 'assistant')
+        .map(m => getTextContentFromMastraDBMessage(m))
+        .join(' ');
       let target = unwanted;
       if (ignoreCase) {
         output = output.toLowerCase();
@@ -159,7 +165,7 @@ export interface SimilarityOptions {
  * ```
  */
 export function similarity(expected: string, options: SimilarityOptions = {}) {
-  const { ignoreCase = true } = options;
+  const { ignoreCase = true, threshold } = options;
   return createScorer({
     id: 'check-similarity',
     name: 'Similarity Check',
@@ -177,10 +183,12 @@ export function similarity(expected: string, options: SimilarityOptions = {}) {
         target = target.toLowerCase();
       }
       const score = stringSimilarity.compareTwoStrings(output, target);
-      return { output, target, score };
+      return { output, target, score, threshold };
     })
     .generateScore(({ results }) => {
-      return results.preprocessStepResult?.score ?? 0;
+      const score = results.preprocessStepResult?.score ?? 0;
+      const t = results.preprocessStepResult?.threshold;
+      return t !== undefined ? (score >= t ? 1 : 0) : score;
     });
 }
 
@@ -346,38 +354,33 @@ export function noToolErrors() {
     type: 'agent',
   })
     .preprocess(async ({ run }) => {
-      let hasErrors = false;
-      let errorCount = 0;
-      let totalCalls = 0;
-
-      for (const message of run.output) {
-        const legacy = message?.content?.toolInvocations;
-        const fromParts = legacy
-          ? undefined
-          : (message?.content as any)?.parts
-              ?.filter((p: any) => p.type === 'tool-invocation')
-              .map((p: any) => p.toolInvocation);
-        const toolInvocations = legacy ?? fromParts;
-
-        if (!toolInvocations?.length) continue;
-
-        for (const invocation of toolInvocations) {
-          if (!invocation) continue;
-          totalCalls++;
-          // A tool invocation is an error if it has state 'call' but no 'result' follow-up,
-          // or if the result itself indicates an error
-          if (invocation.state === 'call' || (invocation.result && invocation.result.error)) {
-            hasErrors = true;
-            errorCount++;
-          }
-        }
-      }
-
-      return { hasErrors, errorCount, totalCalls, passed: !hasErrors };
+      const invocations = extractRawInvocations(run.output);
+      const errorCount = invocations.filter(
+        inv => inv.state === 'call' || (inv.result && inv.result.error),
+      ).length;
+      return { errorCount, totalCalls: invocations.length, passed: errorCount === 0 };
     })
     .generateScore(({ results }) => {
       return results.preprocessStepResult?.passed ? 1 : 0;
     });
+}
+
+// ─── Internal helpers ──────────────────────────────────────────────────────────
+
+function extractRawInvocations(output: Parameters<typeof extractToolCalls>[0]) {
+  const invocations: any[] = [];
+  for (const message of output) {
+    const legacy = message?.content?.toolInvocations;
+    const fromParts = legacy
+      ? undefined
+      : (message?.content as any)?.parts
+          ?.filter((p: any) => p.type === 'tool-invocation')
+          .map((p: any) => p.toolInvocation);
+    for (const inv of legacy ?? fromParts ?? []) {
+      if (inv) invocations.push(inv);
+    }
+  }
+  return invocations;
 }
 
 // ─── Convenience namespace ────────────────────────────────────────────────────
