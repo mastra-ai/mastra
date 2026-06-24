@@ -1,6 +1,7 @@
 # @mastra/voyageai
 
-VoyageAI embeddings integration for Mastra. Provides text, multimodal, and contextualized chunk embeddings using the official VoyageAI TypeScript SDK.
+VoyageAI embeddings integration for Mastra. Provides text, multimodal, and contextualized chunk embeddings using the
+official VoyageAI TypeScript SDK.
 
 ## Installation
 
