@@ -1,5 +1,4 @@
 import {
-  Spinner,
   Txt,
   cn,
   Dialog,
@@ -9,6 +8,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@mastra/playground-ui';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { FileText, Search } from 'lucide-react';
 import { useState } from 'react';
 

@@ -1,5 +1,6 @@
-import { Combobox, Skeleton } from '@mastra/playground-ui';
-import type { ComboboxOption, ComboboxProps } from '@mastra/playground-ui';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import type { ComboboxOption, ComboboxProps } from '@mastra/playground-ui/components/Combobox';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { useMemo } from 'react';
 import { useAllModels, useFilteredModels } from '../hooks/use-filtered-models';
 import { useLLMProviders } from '../hooks/use-llm-providers';

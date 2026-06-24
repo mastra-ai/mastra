@@ -1,9 +1,9 @@
 import {
   Button,
-  CodeEditor,
-  Label,
-  RadioGroup,
-  RadioGroupItem,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+  Icon,
   Select,
   SelectContent,
   SelectItem,
@@ -12,13 +12,31 @@ import {
   Txt,
   cn,
 } from '@mastra/playground-ui';
-import { Loader2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { ChevronRight, Loader2, Play } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import type { ZodSchema } from 'zod';
 
+import { WorkflowInputTypeToggle } from './workflow-input-type-toggle';
+import type { WorkflowInputType } from './workflow-input-type-toggle';
 import { DynamicForm } from '@/lib/form';
 
-type InputType = 'simple' | 'form' | 'json';
+type InputType = WorkflowInputType;
+
+type WorkflowSubmitRowProps = Pick<
+  WorkflowInputDataProps,
+  | 'isSubmitLoading'
+  | 'submitButtonLabel'
+  | 'disableSubmit'
+  | 'submitActions'
+  | 'leftActions'
+  | 'submitButtonClassName'
+  | 'submitButtonIcon'
+  | 'submitButtonVariant'
+> & {
+  onSubmit: () => void;
+};
 
 export interface WorkflowInputDataProps {
   schema: ZodSchema;
@@ -27,114 +45,262 @@ export interface WorkflowInputDataProps {
   submitButtonLabel: string;
   onSubmit: (data: any) => void;
   withoutSubmit?: boolean;
+  isReadOnly?: boolean;
+  disableSubmit?: boolean;
   children?: React.ReactNode;
   isProcessorWorkflow?: boolean;
+  submitActions?: React.ReactNode;
+  leftActions?: React.ReactNode;
+  heading?: string;
+  headingSlot?: ReactNode;
+  collapsible?: boolean;
+  headingClassName?: string;
+  submitButtonClassName?: string;
+  submitButtonIcon?: ReactNode;
+  submitButtonVariant?: React.ComponentProps<typeof Button>['variant'];
+  submitButtonFullWidth?: boolean;
+  hideInputTypeLabel?: boolean;
+  inputTypeLabel?: string;
+  hideHeading?: boolean;
 }
 
 export const WorkflowInputData = ({
   schema,
   defaultValues,
   withoutSubmit,
+  isReadOnly,
+  disableSubmit,
   isSubmitLoading,
   submitButtonLabel,
   onSubmit,
   children,
   isProcessorWorkflow,
+  submitActions,
+  leftActions,
+  heading,
+  headingSlot,
+  collapsible = true,
+  headingClassName,
+  submitButtonClassName,
+  submitButtonIcon,
+  submitButtonVariant,
+  submitButtonFullWidth,
+  hideInputTypeLabel,
+  inputTypeLabel = 'Run input',
+  hideHeading,
 }: WorkflowInputDataProps) => {
   const [type, setType] = useState<InputType>(isProcessorWorkflow ? 'simple' : 'form');
-  const [mounted, setMounted] = useState(false);
+  const processorInputKey = useMemo(
+    () =>
+      JSON.stringify({
+        message: getDefaultProcessorMessage(defaultValues),
+        phase: getDefaultProcessorPhase(defaultValues),
+      }),
+    [defaultValues],
+  );
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const defaultHeading = (
+    <Txt as="span" variant="ui-md" className={cn('text-neutral5 font-semibold', headingClassName)}>
+      {heading ?? (withoutSubmit ? 'Run input' : 'Trigger a run')}
+    </Txt>
+  );
+  const inputTypeToggle = (
+    <WorkflowInputTypeToggle
+      value={type}
+      onChange={setType}
+      disabled={isSubmitLoading}
+      includeSimple={isProcessorWorkflow}
+      compact={!collapsible && !hideHeading}
+    />
+  );
 
-  if (!mounted) {
-    return null;
+  const body = (
+    <>
+      {!hideInputTypeLabel && (
+        <div className="flex justify-between gap-3 py-3 px-5">
+          <Txt as="p" variant="ui-sm" className="text-neutral3">
+            {inputTypeLabel}
+          </Txt>
+          {!collapsible && !hideHeading && <div className="shrink-0">{inputTypeToggle}</div>}
+        </div>
+      )}
+
+      <div className="px-5">
+        {(collapsible || hideHeading || hideInputTypeLabel) && <div className="pb-4">{inputTypeToggle}</div>}
+
+        <div
+          className={cn('pb-4', {
+            'opacity-50 pointer-events-none': isSubmitLoading,
+          })}
+        >
+          {type === 'simple' && isProcessorWorkflow ? (
+            <WorkflowProcessorInput
+              key={processorInputKey}
+              schema={schema}
+              defaultValues={defaultValues}
+              isSubmitLoading={isSubmitLoading}
+              submitButtonLabel={submitButtonLabel}
+              submitButtonClassName={submitButtonClassName}
+              onSubmit={onSubmit}
+              withoutSubmit={withoutSubmit}
+              isReadOnly={isReadOnly}
+              disableSubmit={disableSubmit}
+              submitActions={submitActions}
+              leftActions={leftActions}
+            >
+              {children}
+            </WorkflowProcessorInput>
+          ) : type === 'form' ? (
+            <WorkflowFormInput
+              schema={schema}
+              defaultValues={defaultValues}
+              isSubmitLoading={isSubmitLoading}
+              submitButtonLabel={submitButtonLabel}
+              submitButtonClassName={submitButtonClassName}
+              submitButtonIcon={submitButtonIcon}
+              submitButtonVariant={submitButtonVariant}
+              submitButtonFullWidth={submitButtonFullWidth}
+              onSubmit={onSubmit}
+              withoutSubmit={withoutSubmit}
+              isReadOnly={isReadOnly}
+              disableSubmit={disableSubmit}
+              submitActions={submitActions}
+              leftActions={leftActions}
+            >
+              {children}
+            </WorkflowFormInput>
+          ) : (
+            <WorkflowJsonInput
+              schema={schema}
+              defaultValues={defaultValues}
+              isSubmitLoading={isSubmitLoading}
+              submitButtonLabel={submitButtonLabel}
+              submitButtonClassName={submitButtonClassName}
+              onSubmit={onSubmit}
+              withoutSubmit={withoutSubmit}
+              isReadOnly={isReadOnly}
+              disableSubmit={disableSubmit}
+              submitActions={submitActions}
+              leftActions={leftActions}
+            >
+              {children}
+            </WorkflowJsonInput>
+          )}
+        </div>
+      </div>
+    </>
+  );
+
+  if (!collapsible) {
+    return (
+      <>
+        {!hideHeading && <div className="border-b border-border1/50 pb-3">{headingSlot ?? defaultHeading}</div>}
+        <div>{body}</div>
+      </>
+    );
   }
 
   return (
-    <div>
-      <RadioGroup
-        disabled={isSubmitLoading}
-        value={type}
-        onValueChange={value => setType(value as InputType)}
-        className="pb-4"
-      >
-        <div className="flex flex-row gap-4">
-          {isProcessorWorkflow && (
-            <div className="flex items-center gap-3">
-              <RadioGroupItem value="simple" id="simple" />
-              <Label htmlFor="simple" className="text-neutral3! text-ui-sm">
-                Simple
-              </Label>
-            </div>
-          )}
-          <div className="flex items-center gap-3">
-            <RadioGroupItem value="form" id="form" />
-            <Label htmlFor="form" className="text-neutral3! text-ui-sm">
-              Form
-            </Label>
-          </div>
-          <div className="flex items-center gap-3">
-            <RadioGroupItem value="json" id="json" />
-            <Label htmlFor="json" className="text-neutral3! text-ui-sm">
-              JSON
-            </Label>
-          </div>
-        </div>
-      </RadioGroup>
+    <Collapsible defaultOpen>
+      <CollapsibleTrigger className="flex w-full items-center gap-2 pb-3 text-left">
+        <ChevronRight className="h-4 w-4 shrink-0 text-neutral3" />
+        {headingSlot ?? defaultHeading}
+      </CollapsibleTrigger>
 
-      <div
-        className={cn({
-          'opacity-50 pointer-events-none': isSubmitLoading,
-        })}
-      >
-        {type === 'simple' && isProcessorWorkflow ? (
-          <SimpleProcessorInput
-            schema={schema}
-            defaultValues={defaultValues}
-            isSubmitLoading={isSubmitLoading}
-            submitButtonLabel={submitButtonLabel}
-            onSubmit={onSubmit}
-            withoutSubmit={withoutSubmit}
-          >
-            {children}
-          </SimpleProcessorInput>
-        ) : type === 'form' ? (
-          <DynamicForm
-            schema={schema}
-            defaultValues={defaultValues}
-            isSubmitLoading={isSubmitLoading}
-            submitButtonLabel={submitButtonLabel}
-            onSubmit={withoutSubmit ? undefined : onSubmit}
-          >
-            {children}
-          </DynamicForm>
-        ) : (
-          <JSONInput
-            schema={schema}
-            defaultValues={defaultValues}
-            isSubmitLoading={isSubmitLoading}
-            submitButtonLabel={submitButtonLabel}
-            onSubmit={onSubmit}
-            withoutSubmit={withoutSubmit}
-          >
-            {children}
-          </JSONInput>
-        )}
-      </div>
-    </div>
+      <CollapsibleContent>{body}</CollapsibleContent>
+    </Collapsible>
   );
 };
 
-const JSONInput = ({
+const WorkflowSubmitRow = ({
+  isSubmitLoading,
+  submitButtonLabel,
+  disableSubmit,
+  submitActions,
+  leftActions,
+  submitButtonClassName,
+  submitButtonIcon,
+  submitButtonVariant,
+  onSubmit,
+}: WorkflowSubmitRowProps) => (
+  <div className="flex items-center justify-between gap-1">
+    {leftActions ?? <div />}
+    <div className="flex items-center gap-1">
+      {submitActions}
+      <Button
+        variant={submitButtonVariant ?? 'primary'}
+        onClick={onSubmit}
+        disabled={isSubmitLoading || disableSubmit}
+        className={submitButtonClassName}
+      >
+        {isSubmitLoading ? (
+          <Icon>
+            <Loader2 className="animate-spin" />
+          </Icon>
+        ) : (
+          (submitButtonIcon ?? (
+            <Icon>
+              <Play />
+            </Icon>
+          ))
+        )}
+        {submitButtonLabel}
+      </Button>
+    </div>
+  </div>
+);
+
+const WorkflowFormInput = ({
   schema,
   defaultValues,
   isSubmitLoading,
   submitButtonLabel,
   onSubmit,
   withoutSubmit,
+  isReadOnly,
+  disableSubmit,
   children,
+  submitActions,
+  leftActions,
+  submitButtonClassName,
+  submitButtonIcon,
+  submitButtonVariant,
+  submitButtonFullWidth,
+}: WorkflowInputDataProps) => (
+  <DynamicForm
+    schema={schema}
+    defaultValues={defaultValues}
+    isSubmitLoading={isSubmitLoading}
+    submitButtonLabel={submitButtonLabel}
+    submitButtonClassName={submitButtonClassName}
+    submitButtonIcon={submitButtonIcon}
+    submitButtonVariant={submitButtonVariant}
+    submitButtonFullWidth={submitButtonFullWidth}
+    onSubmit={withoutSubmit ? undefined : onSubmit}
+    readOnly={isReadOnly}
+    disableSubmit={disableSubmit}
+    submitActions={submitActions}
+    leftActions={leftActions}
+  >
+    {children}
+  </DynamicForm>
+);
+
+const WorkflowJsonInput = ({
+  schema,
+  defaultValues,
+  isSubmitLoading,
+  submitButtonLabel,
+  onSubmit,
+  withoutSubmit,
+  isReadOnly,
+  disableSubmit,
+  children,
+  submitActions,
+  leftActions,
+  submitButtonClassName,
+  submitButtonIcon,
+  submitButtonVariant,
 }: WorkflowInputDataProps) => {
   const [errors, setErrors] = useState<string[]>([]);
   const [inputData, setInputData] = useState<string>(() => JSON.stringify(defaultValues ?? {}, null, 2));
@@ -179,14 +345,27 @@ const JSONInput = ({
         </div>
       )}
 
-      <CodeEditor data={data} onChange={setInputData} />
+      <div>
+        <Txt as="label" variant="ui-sm" className="text-neutral3 pb-1 block">
+          Input data
+        </Txt>
+        <CodeEditor data={data} onChange={setInputData} editable={!isReadOnly} />
+      </div>
 
       {children}
 
       {withoutSubmit ? null : (
-        <Button variant="default" onClick={handleSubmit} className="w-full" size="lg">
-          {isSubmitLoading ? <Loader2 className="animate-spin" /> : submitButtonLabel}
-        </Button>
+        <WorkflowSubmitRow
+          isSubmitLoading={isSubmitLoading}
+          submitButtonLabel={submitButtonLabel}
+          disableSubmit={disableSubmit}
+          submitActions={submitActions}
+          leftActions={leftActions}
+          submitButtonClassName={submitButtonClassName}
+          submitButtonIcon={submitButtonIcon}
+          submitButtonVariant={submitButtonVariant}
+          onSubmit={handleSubmit}
+        />
       )}
     </div>
   );
@@ -200,16 +379,36 @@ const PROCESSOR_PHASES = [
   { value: 'outputStep', label: 'Output Step - Process after each LLM response' },
 ];
 
-const SimpleProcessorInput = ({
+const DEFAULT_PROCESSOR_MESSAGE = 'Hello, this is a test message.';
+const DEFAULT_PROCESSOR_PHASE = 'input';
+
+function getDefaultProcessorMessage(defaultValues: any) {
+  const textPart = defaultValues?.messages?.[0]?.content?.parts?.find((part: any) => part?.type === 'text');
+  return typeof textPart?.text === 'string' ? textPart.text : DEFAULT_PROCESSOR_MESSAGE;
+}
+
+function getDefaultProcessorPhase(defaultValues: any) {
+  return typeof defaultValues?.phase === 'string' ? defaultValues.phase : DEFAULT_PROCESSOR_PHASE;
+}
+
+const WorkflowProcessorInput = ({
   schema,
+  defaultValues,
   isSubmitLoading,
   submitButtonLabel,
   onSubmit,
   withoutSubmit,
+  isReadOnly,
+  disableSubmit,
   children,
+  submitActions,
+  leftActions,
+  submitButtonClassName,
+  submitButtonIcon,
+  submitButtonVariant,
 }: WorkflowInputDataProps) => {
-  const [message, setMessage] = useState('Hello, this is a test message.');
-  const [phase, setPhase] = useState('input');
+  const [message, setMessage] = useState(() => getDefaultProcessorMessage(defaultValues));
+  const [phase, setPhase] = useState(() => getDefaultProcessorPhase(defaultValues));
   const [errors, setErrors] = useState<string[]>([]);
 
   const handleSubmit = () => {
@@ -268,7 +467,7 @@ const SimpleProcessorInput = ({
         <Txt as="label" variant="ui-sm" className="text-neutral3">
           Phase
         </Txt>
-        <Select value={phase} onValueChange={setPhase}>
+        <Select value={phase} onValueChange={setPhase} disabled={isReadOnly}>
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Select phase" />
           </SelectTrigger>
@@ -294,16 +493,25 @@ const SimpleProcessorInput = ({
           onChange={e => setMessage(e.target.value)}
           placeholder="Enter a test message..."
           rows={4}
-          className="w-full bg-transparent border border-border1 rounded-md p-3 text-ui-sm text-neutral6 placeholder:text-neutral3 focus:outline-hidden focus:ring-2 focus:ring-accent1"
+          disabled={isReadOnly}
+          className="w-full bg-transparent border border-border1 rounded-md p-3 text-ui-sm text-neutral6 placeholder:text-neutral3 focus:outline-hidden focus:ring-2 focus:ring-accent1 disabled:opacity-50"
         />
       </div>
 
       {children}
 
       {withoutSubmit ? null : (
-        <Button variant="default" onClick={handleSubmit} className="w-full" size="lg">
-          {isSubmitLoading ? <Loader2 className="animate-spin" /> : submitButtonLabel}
-        </Button>
+        <WorkflowSubmitRow
+          isSubmitLoading={isSubmitLoading}
+          submitButtonLabel={submitButtonLabel}
+          disableSubmit={disableSubmit}
+          submitActions={submitActions}
+          leftActions={leftActions}
+          submitButtonClassName={submitButtonClassName}
+          submitButtonIcon={submitButtonIcon}
+          submitButtonVariant={submitButtonVariant}
+          onSubmit={handleSubmit}
+        />
       )}
     </div>
   );

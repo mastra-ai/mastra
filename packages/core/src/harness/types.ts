@@ -475,15 +475,6 @@ export interface HarnessThread {
   metadata?: Record<string, unknown>;
 }
 
-/**
- * Session info for the current harness instance.
- */
-export interface HarnessSession {
-  currentThreadId: string | null;
-  currentModeId: string;
-  threads: HarnessThread[];
-}
-
 // =============================================================================
 // Events
 // =============================================================================
@@ -959,6 +950,7 @@ export type HarnessMessageContent =
       timestamp?: string;
       goalMaxTurns?: number;
       judgeModelId?: string;
+      goalEvaluation?: GoalEvaluationPayload;
     }
   | {
       type: 'state_signal';
@@ -1031,33 +1023,69 @@ export type HarnessMessageContent =
  * Harness-specific context set on the RequestContext under the 'harness' key.
  * Tools can access harness state and methods through requestContext.get('harness').
  */
+/**
+ * Snapshot of the session-owned values exposed to request-context consumers.
+ * Plain data captured per request; mutating it does not affect the Session.
+ */
+export type HarnessRequestStateUpdateResult<TState, TResult> = {
+  updates?: Partial<TState>;
+  events?: HarnessEvent[];
+  result: TResult;
+};
+
+export type HarnessRequestStateUpdater<TState, TResult> = (
+  state: Readonly<TState>,
+) => HarnessRequestStateUpdateResult<TState, TResult> | Promise<HarnessRequestStateUpdateResult<TState, TResult>>;
+
+export interface HarnessRequestState<TState = unknown> {
+  /** Get the current session-owned harness state (live, not request-context snapshot). */
+  get: () => Readonly<TState>;
+  /** Update session-owned harness state. */
+  set: (updates: Partial<TState>) => Promise<void>;
+  /** Update session-owned harness state from the latest snapshot in a serialized transaction. */
+  update: <TResult>(updater: HarnessRequestStateUpdater<TState, TResult>) => Promise<TResult>;
+}
+
+export interface HarnessRequestSession<TState = unknown> {
+  /** Stable session identifier (mirrors SessionRecord.id in storage). */
+  id: string;
+  /** Stable session owner (mirrors SessionRecord.ownerId in storage). */
+  ownerId: string;
+  /** Currently-selected mode ID */
+  modeId: string;
+  /** Currently-selected model ID ('' when none selected yet) */
+  modelId: string;
+  /** Live session-owned harness state accessors. */
+  state: HarnessRequestState<TState>;
+}
+
 export interface HarnessRequestContext<TState = unknown> {
   /** The harness instance ID */
   harnessId: string;
 
-  /** Current harness state (read-only snapshot) */
-  state: TState;
+  /**
+   * Current harness state (read-only snapshot captured when the request context is built).
+   * @deprecated Prefer `session.state.get()` for live state reads.
+   */
+  state: Readonly<TState>;
 
-  /** Get the current harness state (live, not snapshot) */
-  getState: () => TState;
+  /**
+   * Get the current harness state (live, not snapshot).
+   * @deprecated Prefer `session.state.get()`.
+   */
+  getState: () => Readonly<TState>;
 
-  /** Update harness state */
+  /**
+   * Update harness state.
+   * @deprecated Prefer `session.state.set(...)`.
+   */
   setState: (updates: Partial<TState>) => Promise<void>;
 
-  /** Update harness state from the latest state snapshot in a serialized transaction */
-  updateState?: <TResult>(
-    updater: (state: Readonly<TState>) =>
-      | {
-          updates?: Partial<TState>;
-          events?: HarnessEvent[];
-          result: TResult;
-        }
-      | Promise<{
-          updates?: Partial<TState>;
-          events?: HarnessEvent[];
-          result: TResult;
-        }>,
-  ) => Promise<TResult>;
+  /**
+   * Update harness state from the latest state snapshot in a serialized transaction.
+   * @deprecated Prefer `session.state.update(...)`.
+   */
+  updateState?: <TResult>(updater: HarnessRequestStateUpdater<TState, TResult>) => Promise<TResult>;
 
   /** Current thread ID */
   threadId: string | null;
@@ -1065,8 +1093,11 @@ export interface HarnessRequestContext<TState = unknown> {
   /** Current resource ID */
   resourceId: string;
 
-  /** Current mode ID */
-  modeId: string;
+  /**
+   * Snapshot of the relevant session-owned values for this request.
+   * Plain data (not the live Session); read-only at the point of use.
+   */
+  session: HarnessRequestSession<TState>;
 
   /** Abort signal for the current operation */
   abortSignal?: AbortSignal;

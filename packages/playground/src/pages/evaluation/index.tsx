@@ -1,13 +1,8 @@
-import {
-  ErrorState,
-  MetricsFlexGrid,
-  NoDataPageLayout,
-  PageLayout,
-  PermissionDenied,
-  SessionExpired,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
+import { NoDataPageLayout, PageLayout, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { MetricsFlexGrid } from '@mastra/playground-ui/components/MetricsFlexGrid';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { useMemo } from 'react';
 import { DatasetHealthCard } from '@/domains/datasets';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';

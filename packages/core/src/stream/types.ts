@@ -410,6 +410,12 @@ export interface IsTaskCompletePayload {
  * Payload for `goal` events emitted by the in-loop goal scorer. Consumers (TUIs,
  * `@mastra/client-js`) use this to render judge progress and the result.
  */
+export interface GoalEvaluationActivity {
+  type: 'tool-call' | 'tool-result' | 'reason';
+  name?: string;
+  message: string;
+}
+
 export interface GoalEvaluationPayload {
   /** The objective being judged. */
   objective: string;
@@ -423,8 +429,22 @@ export interface GoalEvaluationPayload {
   status: 'active' | 'paused' | 'done';
   /** Individual scorer results. */
   results: ScorerResult[];
-  /** Judge feedback / stop reason. */
+  /** Judge feedback / stop reason. Falls back to the pause reason when parked. */
   reason?: string;
+  /**
+   * Why the objective is parked (`status === 'paused'`). Set for judge failure
+   * or budget exhaustion. Cleared when `status` is `'active'` or `'done'`.
+   */
+  pausedReason?: string;
+  /**
+   * True when the judge decided the goal is not finished but explicitly wants
+   * the user to provide input before continuing. The record stays `active` (so
+   * the next agent turn is still judged), but `isContinued` is `false` (the
+   * auto-loop stops). Display layers use this to show a "waiting" indicator.
+   */
+  waitingForUser?: boolean;
+  /** True when the scorer/judge itself errored (as opposed to scoring 0). */
+  judgeFailed?: boolean;
   /** Total duration of the goal scoring check. */
   duration: number;
   /** Whether scoring timed out. */
@@ -433,6 +453,15 @@ export interface GoalEvaluationPayload {
   maxRunsReached: boolean;
   /** Whether the goal feedback message is suppressed from memory. */
   suppressFeedback: boolean;
+  /**
+   * True on the "pre-evaluation" chunk emitted before scoring starts. Display
+   * layers use this to show a loading/evaluating indicator while the scorer
+   * runs. A second chunk with `pending: false` (or absent) follows once the
+   * evaluation is complete.
+   */
+  pending?: boolean;
+  /** Judge activity emitted while the evaluation is still running. */
+  activity?: GoalEvaluationActivity[];
 }
 
 export interface BackgroundTaskStartedPayload {

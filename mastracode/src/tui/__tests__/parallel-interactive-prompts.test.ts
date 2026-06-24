@@ -32,11 +32,11 @@ function createMockState(): TUIState {
   chatContainer.addChild = chatContainer.addChild.bind(chatContainer);
   chatContainer.clear = chatContainer.clear.bind(chatContainer);
 
+  const session = { respondToToolSuspension: vi.fn() };
   return {
     options: { inlineQuestions: true, harness: {} as any },
-    harness: {
-      respondToToolSuspension: vi.fn(),
-    },
+    harness: { session },
+    session,
     chatContainer,
     ui: {
       requestRender: vi.fn(),
@@ -65,6 +65,8 @@ function createMockContext(state: TUIState): EventHandlerContext {
     queueFollowUpMessage: vi.fn(),
     renderExistingMessages: vi.fn(),
     renderClearedTasksInline: vi.fn(),
+    renderCompletedTasksInline: vi.fn(),
+    renderTaskDeltaInline: vi.fn(),
     refreshModelAuthStatus: vi.fn(),
   };
 }
@@ -117,14 +119,14 @@ describe('Parallel interactive tool calls (issue #13642)', () => {
 
       expect(state.activeInlineQuestion).toBeDefined();
       expect(answerQuestion).not.toHaveBeenCalled();
-      expect(state.harness.respondToToolSuspension).not.toHaveBeenCalled();
+      expect(state.session.respondToToolSuspension).not.toHaveBeenCalled();
 
       state.activeInlineQuestion!.handleInput('\r');
       await prompt;
     });
 
     it('should allow answering all parallel questions sequentially', async () => {
-      const respondToToolSuspension = state.harness.respondToToolSuspension as ReturnType<typeof vi.fn>;
+      const respondToToolSuspension = state.session.respondToToolSuspension as ReturnType<typeof vi.fn>;
 
       // Fire 3 concurrent ask_question events (simulating parallel tool calls)
       const p1 = handleAskQuestion(ctx, 'q1', 'Question 1?');
@@ -232,7 +234,7 @@ describe('Parallel interactive tool calls (issue #13642)', () => {
     });
 
     it('should resolve all promises even when questions arrive concurrently', async () => {
-      const respondToToolSuspension = state.harness.respondToToolSuspension as ReturnType<typeof vi.fn>;
+      const respondToToolSuspension = state.session.respondToToolSuspension as ReturnType<typeof vi.fn>;
 
       // Fire concurrent questions
       const p1 = handleAskQuestion(ctx, 'q1', 'Q1?');
@@ -259,7 +261,7 @@ describe('Parallel interactive tool calls (issue #13642)', () => {
 
   describe('concurrent sandbox_access_request calls', () => {
     it('should queue parallel sandbox access requests', async () => {
-      const respondToToolSuspension = state.harness.respondToToolSuspension as ReturnType<typeof vi.fn>;
+      const respondToToolSuspension = state.session.respondToToolSuspension as ReturnType<typeof vi.fn>;
 
       const p1 = handleSandboxAccessRequest(ctx, 'sa1', '/path/a', 'reason A');
       const p2 = handleSandboxAccessRequest(ctx, 'sa2', '/path/b', 'reason B');
@@ -290,7 +292,7 @@ describe('Parallel interactive tool calls (issue #13642)', () => {
 
   describe('abort clears queued prompts', () => {
     it('should clear the queue and not activate pending questions after abort', async () => {
-      const respondToToolSuspension = state.harness.respondToToolSuspension as ReturnType<typeof vi.fn>;
+      const respondToToolSuspension = state.session.respondToToolSuspension as ReturnType<typeof vi.fn>;
 
       // Fire two concurrent questions: first is active, second is queued
       handleAskQuestion(ctx, 'q1', 'Active question?');
@@ -342,7 +344,7 @@ describe('Parallel interactive tool calls (issue #13642)', () => {
     // ("answering one doesn't activate the next") only reproduces with this timing,
     // not when all three handleAskQuestion calls fire synchronously together.
     it('activates the next streamed question when its tool_suspended arrives after resume', async () => {
-      const respondToToolSuspension = state.harness.respondToToolSuspension as ReturnType<typeof vi.fn>;
+      const respondToToolSuspension = state.session.respondToToolSuspension as ReturnType<typeof vi.fn>;
 
       // All three streamed boxes exist from the initial step's tool-call chunks.
       const colorComp = AskQuestionInlineComponent.createStreaming();
@@ -389,7 +391,7 @@ describe('Parallel interactive tool calls (issue #13642)', () => {
 
   describe('mixed interactive tool calls', () => {
     it('should handle ask_question and sandbox_access_request arriving concurrently', async () => {
-      const respondToToolSuspension = state.harness.respondToToolSuspension as ReturnType<typeof vi.fn>;
+      const respondToToolSuspension = state.session.respondToToolSuspension as ReturnType<typeof vi.fn>;
 
       const p1 = handleAskQuestion(ctx, 'q1', 'Pick one', [{ label: 'A' }, { label: 'B' }]);
       const p2 = handleSandboxAccessRequest(ctx, 'sa1', '/some/path', 'need access');

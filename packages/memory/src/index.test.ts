@@ -1785,6 +1785,107 @@ describe('Memory', () => {
     });
   });
 
+  describe('semantic recall threshold', () => {
+    const createSemanticRecallMemory = async (threshold?: number) => {
+      const suffix = `${threshold ?? 'none'}`;
+      const resourceId = `threshold-resource-${suffix}`;
+      const threadId = `threshold-thread-${suffix}`;
+      const messages: MastraDBMessage[] = [
+        {
+          id: `threshold-low-${suffix}`,
+          role: 'user',
+          createdAt: new Date('2024-01-01T00:00:00Z'),
+          threadId,
+          resourceId,
+          content: { format: 2, parts: [{ type: 'text', text: 'low score memory' }] },
+        },
+        {
+          id: `threshold-high-${suffix}`,
+          role: 'assistant',
+          createdAt: new Date('2024-01-01T00:01:00Z'),
+          threadId,
+          resourceId,
+          content: { format: 2, parts: [{ type: 'text', text: 'high score memory' }] },
+        },
+      ];
+
+      const mockVector: MastraVector = {
+        createIndex: vi.fn().mockResolvedValue(undefined),
+        upsert: vi.fn().mockResolvedValue(undefined),
+        query: vi.fn().mockResolvedValue([
+          { id: 'low-vector', score: 0.6, metadata: { message_id: messages[0]!.id, thread_id: threadId } },
+          { id: 'high-vector', score: 0.9, metadata: { message_id: messages[1]!.id, thread_id: threadId } },
+        ]),
+        listIndexes: vi.fn().mockResolvedValue([]),
+        deleteVectors: vi.fn().mockResolvedValue(undefined),
+        describeIndex: vi.fn().mockResolvedValue({ dimension: 3 }),
+        id: 'threshold-vector',
+      } as any;
+
+      const mockEmbedder = {
+        doEmbed: vi.fn().mockResolvedValue({ embeddings: [[0.1, 0.2, 0.3]], usage: { tokens: 3 } }),
+        modelId: 'threshold-embedder',
+        specificationVersion: 'v1',
+        provider: 'mock',
+      } as any;
+
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        vector: mockVector,
+        embedder: mockEmbedder,
+        options: {
+          lastMessages: false,
+          semanticRecall: {
+            scope: 'thread',
+            topK: 2,
+            messageRange: 0,
+            ...(threshold !== undefined ? { threshold } : {}),
+          },
+          generateTitle: false,
+        },
+      });
+
+      await memory.createThread({ threadId, resourceId });
+      await memory.saveMessages({ messages });
+
+      return { memory, messages, mockVector, threadId, resourceId };
+    };
+
+    it('filters out vector results below semanticRecall.threshold in direct recall', async () => {
+      const { memory, messages, threadId, resourceId } = await createSemanticRecallMemory(0.8);
+
+      const result = await memory.recall({ threadId, resourceId, vectorSearchString: 'remember this' });
+
+      expect(result.messages.map(m => m.id)).toEqual([messages[1]!.id]);
+    });
+
+    it('includes vector results that meet semanticRecall.threshold in direct recall', async () => {
+      const { memory, messages, threadId, resourceId } = await createSemanticRecallMemory(0.9);
+
+      const result = await memory.recall({ threadId, resourceId, vectorSearchString: 'remember this' });
+
+      expect(result.messages.map(m => m.id)).toEqual([messages[1]!.id]);
+    });
+
+    it('preserves existing direct recall behavior when semanticRecall.threshold is not set', async () => {
+      const { memory, messages, threadId, resourceId } = await createSemanticRecallMemory();
+
+      const result = await memory.recall({ threadId, resourceId, vectorSearchString: 'remember this' });
+
+      expect(result.messages.map(m => m.id)).toEqual(messages.map(m => m.id));
+    });
+
+    it('matches processor-based threshold behavior by filtering before message inclusion', async () => {
+      const { memory, messages, mockVector, threadId, resourceId } = await createSemanticRecallMemory(0.8);
+
+      const result = await memory.recall({ threadId, resourceId, vectorSearchString: 'remember this' });
+
+      expect(mockVector.query).toHaveBeenCalledTimes(1);
+      expect(result.messages.some(m => m.id === messages[0]!.id)).toBe(false);
+      expect(result.messages.some(m => m.id === messages[1]!.id)).toBe(true);
+    });
+  });
+
   describe('toModelOutput persistence', () => {
     it('should preserve raw tool result and stored modelOutput through save/load cycle', async () => {
       const memory = new Memory({

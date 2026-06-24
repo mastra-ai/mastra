@@ -1,10 +1,10 @@
-// @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { ReactFlowProvider } from '@xyflow/react';
 import type { NodeProps } from '@xyflow/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { WorkflowStepDetailProvider } from '../../context/workflow-step-detail-context';
+import { WorkflowSelectedStepProvider } from '../../context/workflow-selected-step-context';
+import { WorkflowStepDetailProvider } from '../../context/workflow-step-detail-provider';
 import { WorkflowGraphNode } from '../workflow-graph-node';
 import { resolveWorkflowGraphStep, WORKFLOW_STEP_NODE_TYPE } from '../workflow-step-node-utils';
 import type { WorkflowStepNode, WorkflowStepNodeData } from '../workflow-step-node-utils';
@@ -26,9 +26,11 @@ const renderNode = (data: WorkflowStepNodeData) => {
 
   return render(
     <ReactFlowProvider>
-      <WorkflowStepDetailProvider>
-        <WorkflowGraphNode {...props} stepsFlow={{}} />
-      </WorkflowStepDetailProvider>
+      <WorkflowSelectedStepProvider>
+        <WorkflowStepDetailProvider>
+          <WorkflowGraphNode {...props} stepsFlow={{}} />
+        </WorkflowStepDetailProvider>
+      </WorkflowSelectedStepProvider>
     </ReactFlowProvider>,
   );
 };

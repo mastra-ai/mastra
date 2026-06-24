@@ -549,14 +549,12 @@ describe('ProcessorRunner', () => {
       const result = await runner.runOutputProcessors(messageList);
 
       const messages = await result.get.all.prompt();
-      expect(messages).toHaveLength(2);
+      const assistantTexts = messages
+        .filter(m => m.role === 'assistant')
+        .flatMap(m => (Array.isArray(m.content) ? m.content : [{ type: 'text' as const, text: m.content }]))
+        .map(part => (part as TextPart).text);
 
-      const assistantMessage = messages.find(m => m.role === 'assistant');
-      expect(assistantMessage).toBeDefined();
-      expect(assistantMessage!.content).toHaveLength(3);
-      expect((assistantMessage!.content[0] as TextPart).text).toBe('initial response');
-      expect((assistantMessage!.content[1] as TextPart).text).toBe('extra message A');
-      expect((assistantMessage!.content[2] as TextPart).text).toBe('extra message B');
+      expect(assistantTexts).toEqual(['initial response', 'extra message A', 'extra message B']);
     });
 
     it('should abort if tripwire is triggered in output processor', async () => {
@@ -622,15 +620,12 @@ describe('ProcessorRunner', () => {
 
       const result = await runner.runOutputProcessors(messageList);
       const messages = await result.get.all.prompt();
+      const assistantTexts = messages
+        .filter(m => m.role === 'assistant')
+        .flatMap(m => (Array.isArray(m.content) ? m.content : [{ type: 'text' as const, text: m.content }]))
+        .map(part => (part as TextPart).text);
 
-      expect(messages).toHaveLength(2);
-
-      const assistantMessage = messages.find(m => m.role === 'assistant');
-      expect(assistantMessage).toBeDefined();
-      expect(assistantMessage!.content).toHaveLength(3);
-      expect((assistantMessage!.content[0] as TextPart).text).toBe('initial response');
-      expect((assistantMessage!.content[1] as TextPart).text).toBe('message from processor 1');
-      expect((assistantMessage!.content[2] as TextPart).text).toBe('message from processor 3');
+      expect(assistantTexts).toEqual(['initial response', 'message from processor 1', 'message from processor 3']);
     });
   });
 
@@ -3270,10 +3265,11 @@ describe('ProcessorRunner', () => {
         perPage: false,
         hasMore: false,
       }));
+      const listMessagesById = vi.fn(async () => ({ messages: storedMessages.get.all.db() }));
       const memory = {
         getThreadById: vi.fn(async () => thread),
         saveThread: vi.fn(async ({ thread }) => thread),
-        storage: { getStore: vi.fn(async () => ({ listMessages })) },
+        storage: { getStore: vi.fn(async () => ({ listMessages, listMessagesById })) },
       };
       const computeStateSignal = vi.fn((_args: any) => undefined);
 
@@ -3295,9 +3291,8 @@ describe('ProcessorRunner', () => {
         memory: memory as any,
       });
 
-      expect(listMessages).toHaveBeenCalledWith(
-        expect.objectContaining({ threadId: 'thread-1', resourceId: 'resource-1', perPage: false }),
-      );
+      expect(listMessages).not.toHaveBeenCalled();
+      expect(listMessagesById).toHaveBeenCalledWith({ messageIds: ['stored-snapshot'] });
       const computeArgs = computeStateSignal.mock.calls[0]?.[0];
       expect(computeArgs.activeStateSignals.map(signal => signal.id)).toEqual(
         expect.arrayContaining([snapshot.id, delta.id, localDelta.id]),

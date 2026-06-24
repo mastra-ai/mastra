@@ -842,7 +842,7 @@ export interface ObservationalMemoryConfig {
   storage: MemoryStorage;
 
   /**
-   * **Experimental.** Enable retrieval-mode observation group metadata.
+   * Enable retrieval-mode observation group metadata.
    * When true, observation groups are treated as durable pointers to raw
    * message history and a `recall` tool is registered so the actor can
    * inspect raw messages behind a stored observation summary.
@@ -851,7 +851,6 @@ export interface ObservationalMemoryConfig {
    * configured vector store for semantic recall, and `scope` to limit recall
    * browsing to the current thread instead of the whole resource.
    *
-   * @experimental
    * @default false
    */
   retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };

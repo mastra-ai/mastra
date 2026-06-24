@@ -47,6 +47,9 @@ describe('Harness listThreads — forked subagent filter', () => {
   it('hides forkedSubagent threads by default', async () => {
     const harness = createHarness('rid-1');
     await harness.init();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    // Drop the auto-created starter thread so assertions see only seeded threads.
+    await session.thread.delete({ threadId: session.thread.getId()! });
 
     await writeThreadDirect(harness, { id: 'normal-1', resourceId: 'rid-1', title: 'Normal' });
     await writeThreadDirect(harness, {
@@ -56,7 +59,7 @@ describe('Harness listThreads — forked subagent filter', () => {
       metadata: { forkedSubagent: true, parentThreadId: 'normal-1' },
     });
 
-    const threads = await harness.listThreads();
+    const threads = await session.thread.list();
 
     expect(threads.map(t => t.id)).toEqual(['normal-1']);
   });
@@ -64,6 +67,9 @@ describe('Harness listThreads — forked subagent filter', () => {
   it('includes forks when includeForkedSubagents=true', async () => {
     const harness = createHarness('rid-2');
     await harness.init();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    // Drop the auto-created starter thread so assertions see only seeded threads.
+    await session.thread.delete({ threadId: session.thread.getId()! });
 
     await writeThreadDirect(harness, { id: 'normal-2', resourceId: 'rid-2' });
     await writeThreadDirect(harness, {
@@ -72,7 +78,7 @@ describe('Harness listThreads — forked subagent filter', () => {
       metadata: { forkedSubagent: true, parentThreadId: 'normal-2' },
     });
 
-    const threads = await harness.listThreads({ includeForkedSubagents: true });
+    const threads = await session.thread.list({ includeForkedSubagents: true });
 
     expect(threads.map(t => t.id).sort()).toEqual(['fork-2', 'normal-2']);
   });
@@ -82,6 +88,9 @@ describe('Harness listThreads — forked subagent filter', () => {
     // explicitly requested.
     const harness = createHarness('rid-3');
     await harness.init();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    // Drop the auto-created starter thread so assertions see only seeded threads.
+    await session.thread.delete({ threadId: session.thread.getId()! });
 
     await writeThreadDirect(harness, { id: 'a-normal', resourceId: 'rid-other' });
     await writeThreadDirect(harness, {
@@ -90,7 +99,7 @@ describe('Harness listThreads — forked subagent filter', () => {
       metadata: { forkedSubagent: true },
     });
 
-    const threads = await harness.listThreads({ allResources: true });
+    const threads = await session.thread.list({ allResources: true });
 
     expect(threads.map(t => t.id)).toEqual(['a-normal']);
   });
@@ -99,6 +108,9 @@ describe('Harness listThreads — forked subagent filter', () => {
     // Defensive: only `forkedSubagent === true` should hide a thread.
     const harness = createHarness('rid-4');
     await harness.init();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    // Drop the auto-created starter thread so assertions see only seeded threads.
+    await session.thread.delete({ threadId: session.thread.getId()! });
 
     await writeThreadDirect(harness, { id: 't-undef', resourceId: 'rid-4' });
     await writeThreadDirect(harness, { id: 't-false', resourceId: 'rid-4', metadata: { forkedSubagent: false } });
@@ -108,7 +120,7 @@ describe('Harness listThreads — forked subagent filter', () => {
       metadata: { forkedSubagent: 'true' as unknown as boolean },
     });
 
-    const threads = await harness.listThreads();
+    const threads = await session.thread.list();
     expect(threads.map(t => t.id).sort()).toEqual(['t-false', 't-string', 't-undef']);
   });
 });
