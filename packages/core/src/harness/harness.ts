@@ -484,6 +484,22 @@ export class Harness<TState = {}> {
     return this.#externalMastra?.getStorage() ?? this.config.storage;
   }
 
+  private async resolveConfiguredMemory(): Promise<MastraMemory | undefined> {
+    const configuredMemory = this.config.memory;
+    if (!configuredMemory) return undefined;
+
+    const memory =
+      typeof configuredMemory === 'function'
+        ? await configuredMemory({ requestContext: new RequestContext(), mastra: this.getMastra() })
+        : configuredMemory;
+
+    if (!memory) {
+      throw new Error('Dynamic memory factory returned empty value');
+    }
+
+    return memory;
+  }
+
   /**
    * Sets or updates the harness-level browser and propagates it to mode agents.
    */
@@ -666,8 +682,15 @@ export class Harness<TState = {}> {
     title?: string;
     metadata?: Record<string, unknown>;
   }): Promise<HarnessThread> {
-    const memoryStorage = await this.getMemoryStorage();
-    const result = await memoryStorage.cloneThread({ sourceThreadId, resourceId, title, metadata });
+    const storage = this.#resolveStorage();
+    const memory = storage ? await storage.getStore('memory') : await this.resolveConfiguredMemory();
+    if (!memory) {
+      throw new Error(
+        storage ? 'Storage does not have a memory domain configured' : 'Memory is not configured on this Harness',
+      );
+    }
+
+    const result = await memory.cloneThread({ sourceThreadId, resourceId, title, metadata });
     return {
       id: result.thread.id,
       resourceId: result.thread.resourceId,
