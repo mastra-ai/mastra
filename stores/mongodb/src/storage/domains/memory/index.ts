@@ -83,24 +83,24 @@ export class MemoryStorageMongoDB extends MemoryStorage {
    */
   getDefaultIndexDefinitions(): MongoDBIndexConfig[] {
     return [
-      // Threads collection indexes
+      // Threads: point lookups (id) + resource-scoped listing sorted by createdAt or updatedAt.
+      // A single descending compound serves both ASC and DESC sorts, and its resourceId prefix
+      // covers resourceId-only filters. Unfiltered (no resourceId) listing is a rare admin path
+      // left to an in-memory sort rather than carrying standalone single-field sort indexes.
       { collection: TABLE_THREADS, keys: { id: 1 }, options: { unique: true } },
-      { collection: TABLE_THREADS, keys: { resourceId: 1 } },
-      { collection: TABLE_THREADS, keys: { createdAt: -1 } },
-      { collection: TABLE_THREADS, keys: { updatedAt: -1 } },
-      // Messages collection indexes
+      { collection: TABLE_THREADS, keys: { resourceId: 1, createdAt: -1 } },
+      { collection: TABLE_THREADS, keys: { resourceId: 1, updatedAt: -1 } },
+      // Messages: point lookups (id) + per-thread retrieval (listMessages) and per-resource
+      // retrieval (listMessagesByResourceId), both sorted by createdAt. The compound prefixes
+      // cover thread_id-only and resourceId-only filters.
       { collection: TABLE_MESSAGES, keys: { id: 1 }, options: { unique: true } },
-      { collection: TABLE_MESSAGES, keys: { thread_id: 1 } },
-      { collection: TABLE_MESSAGES, keys: { resourceId: 1 } },
-      { collection: TABLE_MESSAGES, keys: { createdAt: -1 } },
       { collection: TABLE_MESSAGES, keys: { thread_id: 1, createdAt: 1 } },
-      // Resources collection indexes
+      { collection: TABLE_MESSAGES, keys: { resourceId: 1, createdAt: 1 } },
+      // Resources: only ever fetched by id.
       { collection: TABLE_RESOURCES, keys: { id: 1 }, options: { unique: true } },
-      { collection: TABLE_RESOURCES, keys: { createdAt: -1 } },
-      { collection: TABLE_RESOURCES, keys: { updatedAt: -1 } },
-      // Observational Memory collection indexes
+      // Observational Memory: point lookups (id) + latest-generation-per-lookupKey. The compound
+      // prefix covers lookupKey-only filters.
       { collection: OM_TABLE, keys: { id: 1 }, options: { unique: true } },
-      { collection: OM_TABLE, keys: { lookupKey: 1 } },
       { collection: OM_TABLE, keys: { lookupKey: 1, generationCount: -1 } },
     ];
   }
