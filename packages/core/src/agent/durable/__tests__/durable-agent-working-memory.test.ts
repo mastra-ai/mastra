@@ -106,7 +106,10 @@ describe('DurableAgent working memory injection (AIC-4279)', () => {
       },
     });
 
-    const systemText = result.messageList.getAllSystemMessages().map(m => JSON.stringify(m.content)).join('\n');
+    const systemText = result.messageList
+      .getAllSystemMessages()
+      .map(m => JSON.stringify(m.content))
+      .join('\n');
 
     // The working-memory injector ran (its system instruction is present)...
     expect(systemText).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
@@ -138,7 +141,10 @@ describe('DurableAgent working memory injection (AIC-4279)', () => {
       },
     });
 
-    const systemText = result.messageList.getAllSystemMessages().map(m => JSON.stringify(m.content)).join('\n');
+    const systemText = result.messageList
+      .getAllSystemMessages()
+      .map(m => JSON.stringify(m.content))
+      .join('\n');
 
     expect(systemText).not.toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
     expect(systemText).not.toContain(STORED_WORKING_MEMORY);
@@ -164,7 +170,10 @@ describe('DurableAgent working memory injection (AIC-4279)', () => {
       },
     });
 
-    const systemText = result.messageList.getAllSystemMessages().map(m => JSON.stringify(m.content)).join('\n');
+    const systemText = result.messageList
+      .getAllSystemMessages()
+      .map(m => JSON.stringify(m.content))
+      .join('\n');
 
     expect(systemText).not.toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
   });
@@ -199,7 +208,10 @@ describe('DurableAgent working memory injection (AIC-4279)', () => {
       requestContext,
     });
 
-    const systemText = result.messageList.getAllSystemMessages().map(m => JSON.stringify(m.content)).join('\n');
+    const systemText = result.messageList
+      .getAllSystemMessages()
+      .map(m => JSON.stringify(m.content))
+      .join('\n');
 
     expect(systemText).not.toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
     expect(systemText).not.toContain(STORED_WORKING_MEMORY);
@@ -220,9 +232,11 @@ describe('DurableAgent working memory injection (AIC-4279)', () => {
     // Reach the uncombined LLM-request processor list, mirroring how the durable
     // path resolves the chain. This is the exact ordering that the bug got wrong.
     const resolve = (rc: RequestContext) =>
-      (agent as unknown as {
-        listResolvedLLMRequestProcessors(rc: RequestContext): Promise<Array<{ id: string }>>;
-      }).listResolvedLLMRequestProcessors(rc);
+      (
+        agent as unknown as {
+          listResolvedLLMRequestProcessors(rc: RequestContext): Promise<Array<{ id: string }>>;
+        }
+      ).listResolvedLLMRequestProcessors(rc);
 
     // Without MastraMemory in context (what the durable path used to do): the
     // per-request enablement is invisible, so no working-memory processor.
