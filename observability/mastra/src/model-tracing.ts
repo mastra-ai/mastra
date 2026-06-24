@@ -98,8 +98,9 @@ function summarizePart(part: unknown): string {
       case 'tool-call':
         return `[tool: ${formatPreviewLabel((part as { toolName?: unknown }).toolName, 'unknown')}]`;
       case 'tool-result': {
-        const toolResult = (part as { result?: unknown; output?: unknown });
-        const resultValue = toolResult.result ?? toolResult.output;
+        const toolResult = part as { result?: unknown; output?: unknown; providerMetadata?: Record<string, unknown> };
+        const mastraMeta = toolResult.providerMetadata?.mastra as Record<string, unknown> | undefined;
+        const resultValue = mastraMeta?.modelOutput ?? toolResult.result ?? toolResult.output;
         if (resultValue !== undefined) {
           const text = typeof resultValue === 'string' ? resultValue : JSON.stringify(resultValue);
           return `[tool-result: ${text}]`;
