@@ -120,14 +120,6 @@ const summarizeTool = createTool({
   execute: async () => ({ summary: 'A brief summary.' }),
 });
 
-const deleteTool = createTool({
-  id: 'delete_user',
-  description: 'Delete a user',
-  inputSchema: z.object({ userId: z.string() }),
-  outputSchema: z.object({ deleted: z.boolean() }),
-  execute: async () => ({ deleted: true }),
-});
-
 // ─── Scenarios ──────────────────────────────────────────────────────────────────
 
 describe('Quick Checks — scenario tests via runEvals', () => {
