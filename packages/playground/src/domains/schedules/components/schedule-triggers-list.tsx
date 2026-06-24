@@ -1,5 +1,6 @@
 import type { ScheduleTriggerResponse } from '@mastra/client-js';
-import { DataList, DataListSkeleton, Txt } from '@mastra/playground-ui';
+import { Txt } from '@mastra/playground-ui';
+import { DataList, DataListSkeleton } from '@mastra/playground-ui/components/DataList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { AlertTriangleIcon } from 'lucide-react';
 import { formatScheduleTimestamp, formatRelativeTime } from '../utils/format';

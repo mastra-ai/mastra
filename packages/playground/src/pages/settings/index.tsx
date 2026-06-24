@@ -1,4 +1,4 @@
-import { PageLayout } from '@mastra/playground-ui';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { SectionCard } from '@mastra/playground-ui/components/SectionCard';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';

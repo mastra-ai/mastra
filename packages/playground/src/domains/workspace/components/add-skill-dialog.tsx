@@ -1,4 +1,4 @@
-import { Button, ScrollArea, SkillIcon, cn } from '@mastra/playground-ui';
+import { Button, SkillIcon, cn } from '@mastra/playground-ui';
 import {
   Dialog,
   DialogContent,
@@ -9,6 +9,7 @@ import {
 } from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Search, Download, ExternalLink, Loader2, Package, Github, Check, Folder } from 'lucide-react';
 import { useState, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';

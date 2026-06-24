@@ -1,6 +1,7 @@
 import type { InfrastructureStatusResponse } from '@mastra/client-js';
-import { PageLayout, Txt } from '@mastra/playground-ui';
+import { Txt } from '@mastra/playground-ui';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { SectionCard } from '@mastra/playground-ui/components/SectionCard';
 
 import { useInfrastructureStatus } from '@/domains/agent-builder/hooks/use-infrastructure-status';

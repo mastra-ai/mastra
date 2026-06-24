@@ -77,6 +77,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import Checkbox exports from @mastra/playground-ui/components/Checkbox.',
   },
   {
+    importNames: ['Collapsible', 'CollapsibleContent', 'CollapsibleTrigger'],
+    message: 'Import Collapsible exports from @mastra/playground-ui/components/Collapsible.',
+  },
+  {
     importNames: ['Chip', 'ChipProps', 'ChipsGroup', 'ChipsGroupProps'],
     message: 'Import Chip exports from @mastra/playground-ui/components/Chip.',
   },
@@ -152,6 +156,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import DateTimeRangePicker exports from @mastra/playground-ui/components/DateTimeRangePicker.',
   },
   {
+    importNames: ['DataList', 'DataListSkeleton', 'ScoresDataList'],
+    message: 'Import DataList exports from @mastra/playground-ui/components/DataList.',
+  },
+  {
     importNames: [
       'DataKeysAndValues',
       'DataKeysAndValuesProps',
@@ -191,6 +199,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
       'DialogDescription',
     ],
     message: 'Import Dialog exports from @mastra/playground-ui/components/Dialog.',
+  },
+  {
+    importNames: ['Entity', 'EntityContent', 'EntityName', 'EntityDescription', 'EntityIcon'],
+    message: 'Import Entity exports from @mastra/playground-ui/components/Entity.',
   },
   {
     importNames: ['EntityHeader', 'EntityHeaderProps'],
@@ -404,6 +416,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import Notice exports from @mastra/playground-ui/components/Notice.',
   },
   {
+    importNames: ['PageLayout', 'NoDataPageLayout', 'PageHeadingContext'],
+    message: 'Import PageLayout exports from @mastra/playground-ui/components/PageLayout.',
+  },
+  {
     importNames: ['PageHeader', 'PageHeaderRootProps', 'PageHeaderTitleProps', 'PageHeaderDescriptionProps'],
     message: 'Import PageHeader exports from @mastra/playground-ui/components/PageHeader.',
   },
@@ -446,6 +462,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
   {
     importNames: ['Searchbar', 'SearchbarWrapper', 'SearchbarProps'],
     message: 'Import Searchbar exports from @mastra/playground-ui/components/Searchbar.',
+  },
+  {
+    importNames: ['ScrollArea'],
+    message: 'Import ScrollArea from @mastra/playground-ui/components/ScrollArea.',
   },
   {
     importNames: [

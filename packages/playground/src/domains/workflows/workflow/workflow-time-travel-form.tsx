@@ -1,15 +1,7 @@
 import { jsonLanguage } from '@codemirror/lang-json';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-  Txt,
-  Icon,
-  formatJSON,
-  isValidJson,
-  cn,
-} from '@mastra/playground-ui';
+import { Txt, Icon, formatJSON, isValidJson, cn } from '@mastra/playground-ui';
 import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
