@@ -31,7 +31,12 @@ function renderSignalDetailsPage(tracePanel: ReactNode = <aside aria-label="Trac
   return render(
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
-        <SignalDetailsPage signalId="tasks" selectedTraceId="trace-1" tracePanel={tracePanel} onTraceSelect={() => {}} />
+        <SignalDetailsPage
+          signalId="tasks"
+          selectedTraceId="trace-1"
+          tracePanel={tracePanel}
+          onTraceSelect={() => {}}
+        />
       </QueryClientProvider>
     </MastraReactProvider>,
   );
@@ -65,9 +70,7 @@ afterAll(() => server.close());
 
 describe('SignalDetailsPage', () => {
   it('shows the trace panel only while the trace list tab is active', () => {
-    server.use(
-      http.get(`${BASE_URL}/api/observability/traces`, () => HttpResponse.json(singleTraceResponse)),
-    );
+    server.use(http.get(`${BASE_URL}/api/observability/traces`, () => HttpResponse.json(singleTraceResponse)));
 
     renderSignalDetailsPage();
 

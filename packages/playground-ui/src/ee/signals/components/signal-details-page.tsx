@@ -41,7 +41,10 @@ export function SignalClusterSidebar({
   ariaLabel = 'Signal clusters',
 }: SignalClusterSidebarProps) {
   return (
-    <aside className="min-h-0 w-72 shrink-0 overflow-y-auto border-r border-border1/60 pr-4 py-4" aria-label={ariaLabel}>
+    <aside
+      className="min-h-0 w-72 shrink-0 overflow-y-auto border-r border-border1/60 pr-4 py-4"
+      aria-label={ariaLabel}
+    >
       <ul className="space-y-1" role={multiple ? 'group' : undefined}>
         {signal.clusters.map(cluster => {
           const selected = selectedClusterIds.includes(cluster.id);
@@ -97,7 +100,13 @@ export function SignalTraceListTab({
   selectedTraceId: string | null;
   onTraceSelect: () => void;
 }) {
-  return <SignalTraceSummaryList traces={cluster.traceSummaries} selectedTraceId={selectedTraceId} onTraceSelect={onTraceSelect} />;
+  return (
+    <SignalTraceSummaryList
+      traces={cluster.traceSummaries}
+      selectedTraceId={selectedTraceId}
+      onTraceSelect={onTraceSelect}
+    />
+  );
 }
 
 interface SignalChartTabProps {
@@ -165,21 +174,38 @@ export function SignalClusterTabs({
   onTraceSelect,
 }: SignalClusterTabsProps) {
   return (
-    <Tabs<SignalTab> defaultTab="trace-list" value={activeTab} onValueChange={onActiveTabChange} className="flex h-full min-h-0 flex-col overflow-hidden">
+    <Tabs<SignalTab>
+      defaultTab="trace-list"
+      value={activeTab}
+      onValueChange={onActiveTabChange}
+      className="flex h-full min-h-0 flex-col overflow-hidden"
+    >
       <TabList variant="line">
         <Tab value="trace-list">Trace list</Tab>
         <Tab value="chart">Chart</Tab>
       </TabList>
       <TabContent value="trace-list" className="min-h-0 flex-1 overflow-hidden py-0">
         <div className="flex h-full min-w-0 gap-6">
-          <SignalClusterSidebar signal={signal} selectedClusterIds={[selectedCluster.id]} onClusterSelect={onClusterSelect} />
+          <SignalClusterSidebar
+            signal={signal}
+            selectedClusterIds={[selectedCluster.id]}
+            onClusterSelect={onClusterSelect}
+          />
           <div className="min-w-0 flex-1 overflow-hidden py-4">
-            <SignalTraceListTab cluster={selectedCluster} selectedTraceId={selectedTraceId} onTraceSelect={onTraceSelect} />
+            <SignalTraceListTab
+              cluster={selectedCluster}
+              selectedTraceId={selectedTraceId}
+              onTraceSelect={onTraceSelect}
+            />
           </div>
         </div>
       </TabContent>
       <TabContent value="chart" className="min-h-0 flex-1 overflow-hidden py-0">
-        <SignalChartTab signal={signal} selectedClusterIds={selectedChartClusterIds} onClusterToggle={onChartClusterToggle} />
+        <SignalChartTab
+          signal={signal}
+          selectedClusterIds={selectedChartClusterIds}
+          onClusterToggle={onChartClusterToggle}
+        />
       </TabContent>
     </Tabs>
   );
@@ -194,9 +220,12 @@ export interface SignalDetailsPageProps {
 
 export function SignalDetailsPage({ signalId, selectedTraceId, tracePanel, onTraceSelect }: SignalDetailsPageProps) {
   const selectedSignal = useMemo(() => signals.find(signal => signal.id === signalId), [signalId]);
-  const initialCluster = findClusterByTraceId(selectedSignal, selectedTraceId ?? undefined) ?? selectedSignal?.clusters[0];
+  const initialCluster =
+    findClusterByTraceId(selectedSignal, selectedTraceId ?? undefined) ?? selectedSignal?.clusters[0];
   const [selectedClusterId, setSelectedClusterId] = useState<string | null>(() => initialCluster?.id ?? null);
-  const [selectedChartClusterIds, setSelectedChartClusterIds] = useState<string[]>(() => selectedSignal?.clusters.map(cluster => cluster.id) ?? []);
+  const [selectedChartClusterIds, setSelectedChartClusterIds] = useState<string[]>(
+    () => selectedSignal?.clusters.map(cluster => cluster.id) ?? [],
+  );
   const [activeTab, setActiveTab] = useState<SignalTab>('trace-list');
   const selectedCluster = selectedSignal?.clusters.find(cluster => cluster.id === selectedClusterId) ?? initialCluster;
   const { data: tracesData } = useTraces({});
@@ -209,7 +238,9 @@ export function SignalDetailsPage({ signalId, selectedTraceId, tracePanel, onTra
   };
 
   const handleChartClusterToggle = (clusterId: string) => {
-    setSelectedChartClusterIds(current => (current.includes(clusterId) ? current.filter(id => id !== clusterId) : [...current, clusterId]));
+    setSelectedChartClusterIds(current =>
+      current.includes(clusterId) ? current.filter(id => id !== clusterId) : [...current, clusterId],
+    );
   };
 
   if (!selectedSignal || !selectedCluster) {

@@ -11,14 +11,28 @@ const topics: Topic[] = [
         id: 'refunds',
         name: 'Refunds',
         traceSummaries: [
-          { id: 'trace-1', name: 'Refund request', status: 'success', startedAt: '2026-06-15T10:00:00.000Z', durationMs: 250 },
-          { id: 'trace-2', name: 'Refund failed', status: 'error', startedAt: '2026-06-15T11:00:00.000Z', durationMs: 50 },
+          {
+            id: 'trace-1',
+            name: 'Refund request',
+            status: 'success',
+            startedAt: '2026-06-15T10:00:00.000Z',
+            durationMs: 250,
+          },
+          {
+            id: 'trace-2',
+            name: 'Refund failed',
+            status: 'error',
+            startedAt: '2026-06-15T11:00:00.000Z',
+            durationMs: 50,
+          },
         ],
       },
       {
         id: 'shipping',
         name: 'Shipping',
-        traceSummaries: [{ id: 'trace-3', name: 'Track package', startedAt: '2026-06-15T09:00:00.000Z', durationMs: 500 }],
+        traceSummaries: [
+          { id: 'trace-3', name: 'Track package', startedAt: '2026-06-15T09:00:00.000Z', durationMs: 500 },
+        ],
       },
     ],
   },
@@ -50,6 +64,10 @@ describe('topics utilities', () => {
     const traces = topics[0].subtopics.flatMap(subtopic => subtopic.traceSummaries);
 
     expect(sortTraceSummaries(traces, 'newest').map(trace => trace.id)).toEqual(['trace-2', 'trace-1', 'trace-3']);
-    expect(sortTraceSummaries(traces, 'duration-desc').map(trace => trace.id)).toEqual(['trace-3', 'trace-1', 'trace-2']);
+    expect(sortTraceSummaries(traces, 'duration-desc').map(trace => trace.id)).toEqual([
+      'trace-3',
+      'trace-1',
+      'trace-2',
+    ]);
   });
 });

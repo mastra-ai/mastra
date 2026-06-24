@@ -1,4 +1,12 @@
-import type { Topic, TopicSubtopic, TopicSubtopicWithCounts, TopicTraceShare, TopicTraceSort, TopicTraceSummary, TopicWithCounts } from './types';
+import type {
+  Topic,
+  TopicSubtopic,
+  TopicSubtopicWithCounts,
+  TopicTraceShare,
+  TopicTraceSort,
+  TopicTraceSummary,
+  TopicWithCounts,
+} from './types';
 
 const TOPIC_COLORS = ['#7C3AED', '#2563EB', '#0891B2', '#059669', '#CA8A04', '#EA580C', '#DC2626', '#DB2777'];
 
@@ -61,7 +69,9 @@ export function filterTraceSummaries(traces: TopicTraceSummary[], search: string
   if (!normalizedSearch) return traces;
 
   return traces.filter(trace =>
-    [trace.id, trace.name, trace.entityName, trace.status].some(value => value?.toLowerCase().includes(normalizedSearch)),
+    [trace.id, trace.name, trace.entityName, trace.status].some(value =>
+      value?.toLowerCase().includes(normalizedSearch),
+    ),
   );
 }
 

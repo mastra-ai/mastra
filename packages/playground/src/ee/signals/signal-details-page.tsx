@@ -10,7 +10,9 @@ function SignalDetailsRouteContent({ selectedTraceId }: { selectedTraceId: strin
     void navigate(`/signals/${nextSignalId}/traces/${traceId}`);
   };
 
-  return <SignalDetailsPageContent signalId={signalId} selectedTraceId={selectedTraceId} onTraceSelect={handleTraceSelect} />;
+  return (
+    <SignalDetailsPageContent signalId={signalId} selectedTraceId={selectedTraceId} onTraceSelect={handleTraceSelect} />
+  );
 }
 
 export function SignalDetailsPage() {

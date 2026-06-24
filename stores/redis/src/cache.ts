@@ -48,12 +48,7 @@ const defaultPushToList = (client: RedisClient, key: string, value: unknown): Pr
   return client.rpush(key, value);
 };
 
-const defaultGetListRange = (
-  client: RedisClient,
-  key: string,
-  start: number,
-  stop: number,
-): Promise<unknown[]> => {
+const defaultGetListRange = (client: RedisClient, key: string, start: number, stop: number): Promise<unknown[]> => {
   return client.lrange(key, start, stop);
 };
 
