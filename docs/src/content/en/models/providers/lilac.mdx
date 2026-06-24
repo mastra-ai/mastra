@@ -58,16 +58,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.35
   },
   {
-    "model": "lilac/minimaxai/minimax-m2.7",
-    "imageInput": false,
+    "model": "lilac/minimaxai/minimax-m3",
+    "imageInput": true,
     "audioInput": false,
-    "videoInput": false,
+    "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 204800,
-    "inputCost": 0.3,
-    "outputCost": 1.2
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 0.28,
+    "outputCost": 1.1
   },
   {
     "model": "lilac/moonshotai/kimi-k2.6",
@@ -82,14 +82,14 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3.5
   },
   {
-    "model": "lilac/zai-org/glm-5.1",
+    "model": "lilac/zai-org/glm-5.2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 202800,
-    "maxOutput": 131072,
+    "contextWindow": 524288,
+    "maxOutput": 524288,
     "inputCost": 0.9,
     "outputCost": 3
   }
@@ -124,7 +124,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "lilac/zai-org/glm-5.1"
+      ? "lilac/zai-org/glm-5.2"
       : "lilac/google/gemma-4-31b-it";
   }
 });
