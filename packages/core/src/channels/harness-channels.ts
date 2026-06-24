@@ -446,7 +446,10 @@ export class HarnessChannels {
         'HarnessChannels is not bound to a Harness — pass `harness` in config or configure `channels` on a Harness.',
       );
     }
-    const session = await this.harness.createSession({ resourceId });
+    // One chat thread ⇒ one resourceId ⇒ one durable Session. `createSession`
+    // is get-or-create keyed by resourceId, so deriving `id`/`ownerId` from the
+    // resourceId keeps the binding stable across redeliveries and restarts.
+    const session = await this.harness.createSession({ id: resourceId, ownerId: resourceId, resourceId });
     const renderState = createHarnessRenderState();
     const deps = this.buildRenderDeps(chatThread);
 

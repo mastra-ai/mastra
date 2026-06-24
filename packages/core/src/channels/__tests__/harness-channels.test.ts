@@ -120,7 +120,11 @@ describe('HarnessChannels', () => {
       await (channels as any).handleChatMessage(chatThread, baseMessage);
 
       expect(harness.createSession).toHaveBeenCalledTimes(1);
-      expect(harness.createSession).toHaveBeenCalledWith({ resourceId: 'slack:channel-1:thread-1' });
+      expect(harness.createSession).toHaveBeenCalledWith({
+        id: 'slack:channel-1:thread-1',
+        ownerId: 'slack:channel-1:thread-1',
+        resourceId: 'slack:channel-1:thread-1',
+      });
       expect(session.sendMessage).toHaveBeenCalledTimes(1);
       expect(session.sendMessage).toHaveBeenCalledWith({ content: 'hello harness' });
     });
@@ -137,7 +141,11 @@ describe('HarnessChannels', () => {
       const chatThread = makeChatThread(channels.adapters.slack);
       await (channels as any).handleChatMessage(chatThread, baseMessage);
 
-      expect(harness.createSession).toHaveBeenCalledWith({ resourceId: 'user:user-1' });
+      expect(harness.createSession).toHaveBeenCalledWith({
+        id: 'user:user-1',
+        ownerId: 'user:user-1',
+        resourceId: 'user:user-1',
+      });
     });
 
     it('opens the session subscription once per thread', async () => {
