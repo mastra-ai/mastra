@@ -280,7 +280,10 @@ describe('MemorySidebar', () => {
 
     renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
 
-    fireEvent.click(await screen.findByTestId('memory-sidebar-card'));
+    const memoryCard = await screen.findByTestId('memory-sidebar-card');
+    await act(async () => {
+      fireEvent.click(memoryCard);
+    });
 
     // Given the Memory view is open: the regular memory content ("Clone Thread")
     // is visible, the OM subpanel is absent, and no OM/message data is fetched.
