@@ -80,8 +80,6 @@ import { quietSettingsScenario } from './quiet-settings.js';
 import { quietToolHistoryParityScenario } from './quiet-tool-history-parity.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
 import { requestAccessModalScenario } from './request-access-modal.js';
-import { resourceidDriftAutoResumeScenario } from './resourceid-drift-auto-resume.js';
-import { resourceidDriftCrossResourceMergeScenario } from './resourceid-drift-cross-resource-merge.js';
 import { resourceidDriftPromptAcceptScenario } from './resourceid-drift-prompt-accept.js';
 import { resourceidDriftPromptDeclineScenario } from './resourceid-drift-prompt-decline.js';
 import { settingsApiKeysNavigationScenario } from './settings-api-keys-navigation.js';
@@ -255,8 +253,6 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'workspace-plan-mode-tools': workspacePlanModeToolsScenario,
   'workspace-tool-names': workspaceToolNamesScenario,
   'workspace-tool-output-rendering': workspaceToolOutputRenderingScenario,
-  'resourceid-drift-auto-resume': resourceidDriftAutoResumeScenario,
-  'resourceid-drift-cross-resource-merge': resourceidDriftCrossResourceMergeScenario,
   'resourceid-drift-prompt-accept': resourceidDriftPromptAcceptScenario,
   'resourceid-drift-prompt-decline': resourceidDriftPromptDeclineScenario,
   'worktree-cross-thread-resume': worktreeCrossThreadResumeScenario,

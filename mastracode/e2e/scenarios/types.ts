@@ -129,8 +129,6 @@ export type ScenarioName =
   | 'workspace-tool-output-rendering'
   | 'worktree-cross-thread-resume'
   | 'worktree-thread-scoping'
-  | 'resourceid-drift-auto-resume'
-  | 'resourceid-drift-cross-resource-merge'
   | 'resourceid-drift-prompt-accept'
   | 'resourceid-drift-prompt-decline';
 
