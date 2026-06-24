@@ -177,6 +177,22 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import DataPanel exports from @mastra/playground-ui/components/DataPanel.',
   },
   {
+    importNames: [
+      'Dialog',
+      'DialogPortal',
+      'DialogOverlay',
+      'DialogTrigger',
+      'DialogClose',
+      'DialogContent',
+      'DialogHeader',
+      'DialogFooter',
+      'DialogBody',
+      'DialogTitle',
+      'DialogDescription',
+    ],
+    message: 'Import Dialog exports from @mastra/playground-ui/components/Dialog.',
+  },
+  {
     importNames: ['EntityHeader', 'EntityHeaderProps'],
     message: 'Import EntityHeader exports from @mastra/playground-ui/components/EntityHeader.',
   },
@@ -396,6 +412,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import PendingIndicator exports from @mastra/playground-ui/components/PendingIndicator.',
   },
   {
+    importNames: ['Popover', 'PopoverTrigger', 'PopoverContent', 'HoverPopover'],
+    message: 'Import Popover exports from @mastra/playground-ui/components/Popover.',
+  },
+  {
     importNames: ['PermissionDenied', 'PermissionDeniedProps'],
     message: 'Import PermissionDenied exports from @mastra/playground-ui/components/PermissionDenied.',
   },
@@ -426,6 +446,22 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
   {
     importNames: ['Searchbar', 'SearchbarWrapper', 'SearchbarProps'],
     message: 'Import Searchbar exports from @mastra/playground-ui/components/Searchbar.',
+  },
+  {
+    importNames: [
+      'Select',
+      'SelectGroup',
+      'SelectValue',
+      'SelectTrigger',
+      'SelectContent',
+      'SelectItem',
+      'SelectValueProps',
+      'SelectTriggerVariant',
+      'SelectTriggerProps',
+      'SelectContentProps',
+      'SelectItemProps',
+    ],
+    message: 'Import Select exports from @mastra/playground-ui/components/Select.',
   },
   {
     importNames: ['Section', 'SectionProps', 'SectionRoot', 'SubSectionRoot', 'SectionRootProps'],
@@ -542,6 +578,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
   {
     importNames: ['TextAndIcon', 'TextAndIconProps', 'getShortId'],
     message: 'Import Text exports from @mastra/playground-ui/components/Text.',
+  },
+  {
+    importNames: ['Tooltip', 'TooltipTrigger', 'TooltipContent', 'TooltipProvider'],
+    message: 'Import Tooltip exports from @mastra/playground-ui/components/Tooltip.',
   },
   {
     importNames: ['Truncate', 'TruncateProps'],

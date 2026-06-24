@@ -4,9 +4,6 @@ import {
   EntityDescription,
   EntityContent,
   Entity,
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
   ScrollArea,
   Icon,
   ToolsIcon,
@@ -14,6 +11,7 @@ import {
 } from '@mastra/playground-ui';
 import type { RuleGroup } from '@mastra/playground-ui';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { PlusIcon, XIcon } from 'lucide-react';
 import { useCallback, useMemo } from 'react';

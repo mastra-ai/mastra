@@ -1,17 +1,13 @@
+import { Button, ScrollArea, Txt, Icon, toast } from '@mastra/playground-ui';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import {
-  Button,
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogBody,
   DialogFooter,
-  ScrollArea,
-  Txt,
-  Icon,
-  toast,
-} from '@mastra/playground-ui';
-import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+} from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';

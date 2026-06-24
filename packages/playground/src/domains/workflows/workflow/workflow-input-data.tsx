@@ -1,18 +1,6 @@
-import {
-  Button,
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-  Icon,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  Txt,
-  cn,
-} from '@mastra/playground-ui';
+import { Button, Collapsible, CollapsibleContent, CollapsibleTrigger, Icon, Txt, cn } from '@mastra/playground-ui';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { ChevronRight, Loader2, Play } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';

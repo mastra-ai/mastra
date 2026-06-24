@@ -1,12 +1,6 @@
+import { Button, Icon, toast } from '@mastra/playground-ui';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import {
-  Button,
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-  Icon,
-  toast,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -14,9 +8,9 @@ import {
   DialogDescription,
   DialogBody,
   DialogFooter,
-} from '@mastra/playground-ui';
-import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+} from '@mastra/playground-ui/components/Dialog';
 import { Label } from '@mastra/playground-ui/components/Label';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@mastra/playground-ui/components/Select';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useMastraClient } from '@mastra/react';
 import { DatabaseIcon, Save } from 'lucide-react';
