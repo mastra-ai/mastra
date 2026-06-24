@@ -8,6 +8,7 @@ import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { SignalDetailsPage } from './signal-details-page';
+import { singleTraceResponse } from './__tests__/fixtures/signal-traces';
 
 const BASE_URL = 'http://localhost:4111';
 const server = setupServer();
@@ -36,7 +37,24 @@ function renderSignalDetailsPage(tracePanel: ReactNode = <aside aria-label="Trac
   );
 }
 
-beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => {
+  // jsdom does not implement matchMedia; CollapsiblePanel reads it to detect the
+  // reduced-motion preference. Provide a minimal stub so the real first-party
+  // layout components render without a third-party DOM API gap.
+  window.matchMedia ??= (query: string) =>
+    ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }) as unknown as MediaQueryList;
+
+  server.listen({ onUnhandledRequest: 'error' });
+});
 
 afterEach(() => {
   cleanup();
@@ -48,12 +66,7 @@ afterAll(() => server.close());
 describe('SignalDetailsPage', () => {
   it('shows the trace panel only while the trace list tab is active', () => {
     server.use(
-      http.get(`${BASE_URL}/api/observability/traces`, () =>
-        HttpResponse.json({
-          pagination: { total: 1, page: 0, perPage: 25, hasMore: false },
-          spans: [{ traceId: 'trace-1', spanId: 'span-1', name: 'Test trace' }],
-        }),
-      ),
+      http.get(`${BASE_URL}/api/observability/traces`, () => HttpResponse.json(singleTraceResponse)),
     );
 
     renderSignalDetailsPage();
