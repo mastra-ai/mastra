@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { classifyServerEntry, validateConfig } from '../config.js';
+import { classifyServerEntry, expandEnvVars, validateConfig } from '../config.js';
 
 describe('classifyServerEntry', () => {
   it('classifies stdio entry', () => {
@@ -84,6 +84,25 @@ describe('validateConfig', () => {
       url: 'https://mcp.example.com/sse',
       headers: { Authorization: 'Bearer tok' },
     });
+  });
+
+  it('expands ${VAR} references in http header values from the environment', () => {
+    const previous = process.env.MC_TEST_MCP_KEY;
+    process.env.MC_TEST_MCP_KEY = 'secret-123';
+    try {
+      const result = validateConfig({
+        mcpServers: {
+          remote: { url: 'https://api.example.com/mcp', headers: { 'x-api-key': '${MC_TEST_MCP_KEY}' } },
+        },
+      });
+      expect(result.mcpServers!['remote']).toEqual({
+        url: 'https://api.example.com/mcp',
+        headers: { 'x-api-key': 'secret-123' },
+      });
+    } finally {
+      if (previous === undefined) delete process.env.MC_TEST_MCP_KEY;
+      else process.env.MC_TEST_MCP_KEY = previous;
+    }
   });
 
   it('accepts http server entry with OAuth config', () => {
@@ -258,5 +277,43 @@ describe('validateConfig', () => {
       args: undefined,
       env: undefined,
     });
+  });
+});
+
+describe('expandEnvVars', () => {
+  const env = { TOKEN: 'abc', API_KEY: 'secret-123', EMPTY: '' };
+
+  it('expands a ${VAR} reference', () => {
+    expect(expandEnvVars('${API_KEY}', env)).toBe('secret-123');
+  });
+
+  it('expands references embedded in a larger string', () => {
+    expect(expandEnvVars('Bearer ${TOKEN}', env)).toBe('Bearer abc');
+  });
+
+  it('uses the ${VAR:-default} fallback when the variable is unset or empty', () => {
+    expect(expandEnvVars('${MISSING:-fallback}', env)).toBe('fallback');
+    expect(expandEnvVars('${EMPTY:-fallback}', env)).toBe('fallback');
+  });
+
+  it('expands an unset reference with no default to an empty string', () => {
+    expect(expandEnvVars('${MISSING}', env)).toBe('');
+  });
+
+  it('leaves strings without references untouched', () => {
+    expect(expandEnvVars('plain value with a $ sign', env)).toBe('plain value with a $ sign');
+  });
+
+  it('expands a bare $VAR reference', () => {
+    expect(expandEnvVars('$API_KEY', env)).toBe('secret-123');
+    expect(expandEnvVars('Bearer $TOKEN', env)).toBe('Bearer abc');
+  });
+
+  it('expands an unset bare $VAR reference to an empty string', () => {
+    expect(expandEnvVars('$MISSING', env)).toBe('');
+  });
+
+  it('does not treat $ followed by a non-identifier as a reference', () => {
+    expect(expandEnvVars('it costs $5 today', env)).toBe('it costs $5 today');
   });
 });

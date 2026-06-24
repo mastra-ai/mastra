@@ -1,6 +1,6 @@
 {
   "name": "@mastra/vercel",
-  "version": "1.0.3",
+  "version": "1.1.1",
   "description": "Vercel serverless sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",

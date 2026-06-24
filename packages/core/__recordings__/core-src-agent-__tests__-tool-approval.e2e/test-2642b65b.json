@@ -1,11 +1,11 @@
 {
   "meta": {
     "name": "test-2642b65b",
-    "testFile": "packages/core/src/agent/__tests__/tool-approval.e2e.test.ts",
+    "testFile": "src/agent/__tests__/tool-approval.e2e.test.ts",
     "testName": "tool approval and suspension > suspension > should call findUserTool with suspend and resume via stream when autoResumeSuspendedTools is true",
     "model": "gpt-4o-mini",
     "createdAt": "2026-05-18T10:51:48.641Z",
-    "updatedAt": "2026-05-18T11:57:34.568Z"
+    "updatedAt": "2026-06-17T13:35:32.902Z"
   },
   "recordings": [
     {
@@ -64,9 +64,16 @@
                     ]
                   }
                 },
-                "required": ["name", "suspendedToolRunId", "resumeData"],
+                "required": [
+                  "name",
+                  "suspendedToolRunId",
+                  "resumeData"
+                ],
                 "additionalProperties": false,
-                "x-optional": ["suspendedToolRunId", "resumeData"]
+                "x-optional": [
+                  "suspendedToolRunId",
+                  "resumeData"
+                ]
               },
               "strict": false
             },
@@ -103,9 +110,16 @@
                     ]
                   }
                 },
-                "required": ["name", "suspendedToolRunId", "resumeData"],
+                "required": [
+                  "name",
+                  "suspendedToolRunId",
+                  "resumeData"
+                ],
                 "additionalProperties": false,
-                "x-optional": ["suspendedToolRunId", "resumeData"]
+                "x-optional": [
+                  "suspendedToolRunId",
+                  "resumeData"
+                ]
               },
               "strict": false
             }
@@ -113,7 +127,7 @@
           "tool_choice": "auto",
           "stream": true
         },
-        "timestamp": 1779105448554
+        "timestamp": 1781703327893
       },
       "response": {
         "status": 200,
@@ -122,41 +136,54 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9fdaaf3d9c5bb753-BRU",
+          "cf-ray": "a0d270093d572953-SJC",
           "connection": "keep-alive",
           "content-type": "text/event-stream; charset=utf-8",
-          "date": "Mon, 18 May 2026 11:57:28 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "123",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 17 Jun 2026 13:35:28 GMT",
+          "openai-organization": "work-kxidzh",
+          "openai-processing-ms": "227",
+          "openai-project": "proj_FCyHAyf1sRhVrYbrkAklMIPx",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-request-id": "req_8914b8993cc143af8fdc441075121c88"
+          "x-request-id": "req_0bdd44b9ee824ddcbd77fe8fd22b30bb"
         },
         "chunks": [
-          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_0226ff8d659bc1ec006a0afea8aeb081959b84f6a58acbe8ae\",\"object\":\"response\",\"created_at\":1779105448,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name and email\",\"name\":\"findUserTool\",\"parameters\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false},{\"type\":\"function\",\"description\":\"This is a test tool that returns the profession of the user\",\"name\":\"findUserProfessionTool\",\"parameters\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
-          "event: response.in_progress",
-          "\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_0226ff8d659bc1ec006a0afea8aeb081959b84f6a58acbe8ae\",\"object\":\"response\",\"created_at\":1779105448,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name and email\",\"name\":\"findUserTool\",\"parameters\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false},{\"type\":\"function\",\"description\":\"This is a test tool that returns the profession of the user\",\"name\":\"findUserProfessionTool\",\"parameters\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
-          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0226ff8d659bc1ec006a0afeaa0c088195b23956f35fa368f3\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_gKt1vtxbHuH29BohswIsxlWF\",\"name\":\"findUserTool\"},\"output_index\":0,\"sequence_number\":2}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"name\\\":\\\"Dero Israel\\\",\\\"suspendedToolRunId\\\":null,\\\"resumeData\\\":null}\",\"item_id\":\"fc_0226ff8d659bc1ec006a0afeaa0c088195b23956f35fa368f3\",\"obfuscation\":\"Nw6Mfbof5S663v\",\"output_index\":0,\"sequence_number\":3}\n\n",
-          "event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"name\\\":\\\"Dero Israel\\\",\\\"suspendedToolRunId\\\":null,\\\"resumeData\\\":null}\",\"item_id\":\"fc_0226ff8d659bc1ec006a0afeaa0c088195b23956f35fa368f3\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_034ddb021450302f006a32a2a0406c819bb8ea69d2d133e8fe\",\"object\":\"response\",\"created_at\":1781703328,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name and email\",\"name\":\"findUserTool\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false},{\"type\":\"function\",\"description\":\"This is a test tool that returns the profession of the user\",\"name\":\"findUserProfessionTool\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
+          "event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_034ddb021450302f006a32a2a0406c819bb8ea69d2d133e8fe\",\"object\":\"response\",\"created_at\":1781703328,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name and email\",\"name\":\"findUserTool\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false},{\"type\":\"function\",\"description\":\"This is a test tool that returns the profession of the user\",\"name\":\"findUserProfessionTool\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
           "event: response.output_item",
-          ".done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0226ff8d659bc1ec006a0afeaa0c088195b23956f35fa368f3\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"name\\\":\\\"Dero Israel\\\",\\\"suspendedToolRunId\\\":null,\\\"resumeData\\\":null}\",\"call_id\":\"call_gKt1vtxbHuH29BohswIsxlWF\",\"name\":\"findUserTool\"},\"output_index\":0,\"sequence_number\":5}\n\n",
-          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0226ff8d659bc1ec006a0afeaa0c188195b8f5a89b17d5ee6f\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_OVbkGXGC1DzIrYPIwu7FndPi\",\"name\":\"findUserProfessionTool\"},\"output_index\":1,\"sequence_number\":6}\n\n",
+          ".added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_034ddb021450302f006a32a2a1bcb8819bb51a183eb7562483\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_aABDj2u5uRNiujyT1BMkeT0v\",\"name\":\"findUserTool\"},\"output_index\":0,\"sequence_number\":2}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"name\\\":\\\"Dero Israel\\\",\\\"suspendedToolRunId\\\":null,\\\"resumeData\\\":null}\",\"item_id\":\"fc_034ddb021450302f006a32a2a1bcb8819bb51a183eb7562483\",\"obfuscation\":\"TyV7oGNOiT5DcC\",\"output_index\":0,\"sequence_number\":3}\n\nevent: response.function_",
+          "call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"name\\\":\\\"Dero Israel\\\",\\\"suspendedToolRunId\\\":null,\\\"resumeData\\\":null}\",\"item_id\":\"fc_034ddb021450302f006a32a2a1bcb8819bb51a183eb7562483\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_034ddb021450302f006a32a2a1bcb8819bb51a183eb7562483\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"name\\\":\\\"Dero Israel\\\",\\\"suspendedToolRunId\\\":null,\\\"resumeData\\\":null}\",\"call_id\":\"call_aABDj2u5uRNiujyT1BMkeT0v\",\"name\":\"findUserTool\"},\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_034ddb021450302f006a32a2a1bcd0819b9fe0b677c55fead3\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_HP8KUeHavJSnGX2NwMbZNLf4\",\"name\":\"findUserProfessionTool\"},\"output_index\":1,\"sequence_number\":6}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"name\\\":\\\"Dero Israel\\\",\\\"suspendedToolRunId\\\":null,\\\"resumeData\\\":null}\",\"item_id\":\"fc_034ddb021450302f006a32a2a1bcd0819b9fe0b677c55fead3\",\"obfuscation\":\"8a8DegQSgUjIwd\",\"output_index\":1,\"sequence_number\":7}\n\n",
           "event: response.function_ca",
-          "ll_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"name\\\":\\\"Dero Israel\\\",\\\"suspendedToolRunId\\\":null,\\\"resumeData\\\":null}\",\"item_id\":\"fc_0226ff8d659bc1ec006a0afeaa0c188195b8f5a89b17d5ee6f\",\"obfuscation\":\"pL2xG9b7Y9UUhW\",\"output_index\":1,\"sequence_number\":7}\n\n",
-          "event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"name\\\":\\\"Dero Israel\\\",\\\"suspendedToolRunId\\\":null,\\\"resumeData\\\":null}\",\"item_id\":\"fc_0226ff8d659bc1ec006a0afeaa0c188195b8f5a89b17d5ee6f\",\"output_index\":1,\"sequence_number\":8}\n\n",
-          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0226ff8d659bc1ec006a0afeaa0c188195b8f5a89b17d5ee6f\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"name\\\":\\\"Dero Israel\\\",\\\"suspendedToolRunId\\\":null,\\\"resumeData\\\":null}\",\"call_id\":\"call_OVbkGXGC1DzIrYPIwu7FndPi\",\"name\":\"findUserProfessionTool\"},\"output_index\":1,\"sequence_number\":9}\n\n",
-          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0226ff8d659bc1ec006a0afea8aeb081959b84f6a58acbe8ae\",\"object\":\"response\",\"created_at\":1779105448,\"status\":\"completed\",\"background\":false,\"completed_at\":1779105450,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"fc_0226ff8d659bc1ec006a0afeaa0c088195b23956f35fa368f3\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"name\\\":\\\"Dero Israel\\\",\\\"suspendedToolRunId\\\":null,\\\"resumeData\\\":null}\",\"call_id\":\"call_gKt1vtxbHuH29BohswIsxlWF\",\"name\":\"findUserTool\"},{\"id\":\"fc_0226ff8d659bc1ec006a0afeaa0c188195b8f5a89b17d5ee6f\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"name\\\":\\\"Dero Israel\\\",\\\"suspendedToolRunId\\\":null,\\\"resumeData\\\":null}\",\"call_id\":\"call_OVbkGXGC1DzIrYPIwu7FndPi\",\"name\":\"findUserProfessionTool\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name and email\",\"name\":\"findUserTool\",\"parameters\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false},{\"type\":\"function\",\"description\":\"This is a test tool that returns the profession of the user\",\"name\":\"findUserProfessionTool\",\"parameters\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":196,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":78,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":274},\"user\":null,\"metadata\":{}},\"sequence_number\":10}\n\n"
+          "ll_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"name\\\":\\\"Dero Israel\\\",\\\"suspendedToolRunId\\\":null,\\\"resumeData\\\":null}\",\"item_id\":\"fc_034ddb021450302f006a32a2a1bcd0819b9fe0b677c55fead3\",\"output_index\":1,\"sequence_number\":8}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_034ddb021450302f006a32a2a1bcd0819b9fe0b677c55fead3\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"name\\\":\\\"Dero Israel\\\",\\\"suspendedToolRunId\\\":null,\\\"resumeData\\\":null}\",\"call_id\":\"call_HP8KUeHavJSnGX2NwMbZNLf4\",\"name\":\"findUserProfessionTool\"},\"output_index\":1,\"sequence_number\":9}\n\n",
+          "event: response.completed\nd",
+          "ata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_034ddb021450302f006a32a2a0406c819bb8ea69d2d133e8fe\",\"object\":\"response\",\"created_at\":1781703328,\"status\":\"completed\",\"background\":false,\"completed_at\":1781703329,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"fc_034ddb021450302f006a32a2a1bcb8819bb51a183eb7562483\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"name\\\":\\\"Dero Israel\\\",\\\"suspendedToolRunId\\\":null,\\\"resumeData\\\":null}\",\"call_id\":\"call_aABDj2u5uRNiujyT1BMkeT0v\",\"name\":\"findUserTool\"},{\"id\":\"fc_034ddb021450302f006a32a2a1bcd0819b9fe0b677c55fead3\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"name\\\":\\\"Dero Israel\\\",\\\"suspendedToolRunId\\\":null,\\\"resumeData\\\":null}\",\"call_id\":\"call_HP8KUeHavJSnGX2NwMbZNLf4\",\"name\":\"findUserProfessionTool\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name and email\",\"name\":\"findUserTool\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false},{\"type\":\"function\",\"description\":\"This is a test tool that returns the profession of the user\",\"name\":\"findUserProfessionTool\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":196,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":78,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":274},\"user\":null,\"metadata\":{}},\"sequence_number\":10}\n\n"
         ],
-        "chunkTimings": [1, 15, 0, 1238, 2, 2, 3, 1, 0, 64, 0, 4, 4, 162],
+        "chunkTimings": [
+          0,
+          0,
+          1233,
+          0,
+          0,
+          0,
+          1,
+          0,
+          21,
+          0,
+          4,
+          173,
+          2
+        ],
         "isStreaming": true
       }
     },
     {
-      "hash": "9e9e91a79f08d5f9",
+      "hash": "60c0e8466da16b4c",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -165,7 +192,7 @@
           "input": [
             {
               "role": "system",
-              "content": "You are an agent that can get list of users using findUserTool.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"call_gKt1vtxbHuH29BohswIsxlWF\",\"toolName\":\"findUserTool\",\"args\":{\"name\":\"Dero Israel\",\"suspendedToolRunId\":null},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-000000000003\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"age\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"age\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. \n                      "
+              "content": "You are an agent that can get list of users using findUserTool.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"call_aABDj2u5uRNiujyT1BMkeT0v\",\"toolName\":\"findUserTool\",\"args\":{\"name\":\"Dero Israel\",\"suspendedToolRunId\":null},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-000000000003\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"age\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"age\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. \n                      "
             },
             {
               "role": "user",
@@ -220,9 +247,16 @@
                     ]
                   }
                 },
-                "required": ["name", "suspendedToolRunId", "resumeData"],
+                "required": [
+                  "name",
+                  "suspendedToolRunId",
+                  "resumeData"
+                ],
                 "additionalProperties": false,
-                "x-optional": ["suspendedToolRunId", "resumeData"]
+                "x-optional": [
+                  "suspendedToolRunId",
+                  "resumeData"
+                ]
               },
               "strict": false
             },
@@ -259,9 +293,16 @@
                     ]
                   }
                 },
-                "required": ["name", "suspendedToolRunId", "resumeData"],
+                "required": [
+                  "name",
+                  "suspendedToolRunId",
+                  "resumeData"
+                ],
                 "additionalProperties": false,
-                "x-optional": ["suspendedToolRunId", "resumeData"]
+                "x-optional": [
+                  "suspendedToolRunId",
+                  "resumeData"
+                ]
               },
               "strict": false
             }
@@ -269,7 +310,7 @@
           "tool_choice": "auto",
           "stream": true
         },
-        "timestamp": 1779105450365
+        "timestamp": 1781703329798
       },
       "response": {
         "status": 200,
@@ -278,42 +319,124 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9fdaaf48ea95b753-BRU",
+          "cf-ray": "a0d270151e2b2953-SJC",
           "connection": "keep-alive",
           "content-type": "text/event-stream; charset=utf-8",
-          "date": "Mon, 18 May 2026 11:57:30 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "210",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 17 Jun 2026 13:35:30 GMT",
+          "openai-organization": "work-kxidzh",
+          "openai-processing-ms": "199",
+          "openai-project": "proj_FCyHAyf1sRhVrYbrkAklMIPx",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-request-id": "req_bbc7436bb65d447c9c0dc639c1d5287d"
+          "x-request-id": "req_5b231198848d4819b4975e2f884b4441"
         },
         "chunks": [
-          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_09d73fdba63b2d11006a0afeaa7de88197af89f1d25a62b4b2\",\"object\":\"response\",\"created_at\":1779105450,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name and email\",\"name\":\"findUserTool\",\"parameters\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false},{\"type\":\"function\",\"description\":\"This is a test tool that returns the profession of the user\",\"name\":\"findUserProfessionTool\",\"parameters\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
-          "event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_09d73fdba63b2d11006a0afeaa7de88197af89f1d25a62b4b2\",\"object\":\"response\",\"created_at\":1779105450,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name and email\",\"name\":\"findUserTool\",\"parameters\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRun",
-          "Id\",\"resumeData\"]},\"strict\":false},{\"type\":\"function\",\"description\":\"This is a test tool that returns the profession of the user\",\"name\":\"findUserProfessionTool\",\"parameters\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
-          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_09d73fdba63b2d11006a0afeaca7e0819781bc1cf61de27eb3\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_UgdljaXMuAQgT4xPJAvKskWL\",\"name\":\"findUserTool\"},\"output_index\":0,\"sequence_number\":2}\n\n",
-          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"name\\\":\\\"Dero Israel\\\",\\\"suspendedToolRunId\\\":\\\"00000000-0000-4000-8000-000000000003\\\",\\\"resumeData\\\":{\\\"age\\\":25}}\",\"item_id\":\"fc_09d73fdba63b2d11006a0afeaca7e0819781bc1cf61de27eb3\",\"obfuscation\":\"24fF3r\",\"output_index\":0,\"sequence_number\":3}\n\n",
-          "event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"name\\\":\\\"Dero Israel\\\",\\\"suspendedToolRunId\\\":\\\"00000000-0000-4000-8000-000000000003\\\",\\\"resumeData\\\":{\\\"age\\\":25}}\",\"item_id\":\"fc_09d73fdba63b2d11006a0afeaca7e0819781bc1cf61de27eb3\",\"output_index\":0,\"sequence_number\":4}\n\n",
-          "event: response.output_item",
-          ".done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_09d73fdba63b2d11006a0afeaca7e0819781bc1cf61de27eb3\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"name\\\":\\\"Dero Israel\\\",\\\"suspendedToolRunId\\\":\\\"00000000-0000-4000-8000-000000000003\\\",\\\"resumeData\\\":{\\\"age\\\":25}}\",\"call_id\":\"call_UgdljaXMuAQgT4xPJAvKskWL\",\"name\":\"findUserTool\"},\"output_index\":0,\"sequence_number\":5}\n\n",
-          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_09d73fdba63b2d11006a0afeaca7f081979be1b394ad7f3004\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_M96j0RdGKU7hOWRSwijo8zWJ\",\"name\":\"findUserProfessionTool\"},\"output_index\":1,\"sequence_number\":6}\n\n",
-          "event: response.function_ca",
-          "ll_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"name\\\":\\\"Dero Israel\\\",\\\"suspendedToolRunId\\\":null,\\\"resumeData\\\":null}\",\"item_id\":\"fc_09d73fdba63b2d11006a0afeaca7f081979be1b394ad7f3004\",\"obfuscation\":\"VHaCxWMefeS4o3\",\"output_index\":1,\"sequence_number\":7}\n\n",
-          "event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"name\\\":\\\"Dero Israel\\\",\\\"suspendedToolRunId\\\":null,\\\"resumeData\\\":null}\",\"item_id\":\"fc_09d73fdba63b2d11006a0afeaca7f081979be1b394ad7f3004\",\"output_index\":1,\"sequence_number\":8}\n\n",
-          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_09d73fdba63b2d11006a0afeaca7f081979be1b394ad7f3004\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"name\\\":\\\"Dero Israel\\\",\\\"suspendedToolRunId\\\":null,\\\"resumeData\\\":null}\",\"call_id\":\"call_M96j0RdGKU7hOWRSwijo8zWJ\",\"name\":\"findUserProfessionTool\"},\"output_index\":1,\"sequence_number\":9}\n\n",
-          "event: response.completed\nd",
-          "ata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_09d73fdba63b2d11006a0afeaa7de88197af89f1d25a62b4b2\",\"object\":\"response\",\"created_at\":1779105450,\"status\":\"completed\",\"background\":false,\"completed_at\":1779105452,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"fc_09d73fdba63b2d11006a0afeaca7e0819781bc1cf61de27eb3\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"name\\\":\\\"Dero Israel\\\",\\\"suspendedToolRunId\\\":\\\"00000000-0000-4000-8000-000000000003\\\",\\\"resumeData\\\":{\\\"age\\\":25}}\",\"call_id\":\"call_UgdljaXMuAQgT4xPJAvKskWL\",\"name\":\"findUserTool\"},{\"id\":\"fc_09d73fdba63b2d11006a0afeaca7f081979be1b394ad7f3004\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"name\\\":\\\"Dero Israel\\\",\\\"suspendedToolRunId\\\":null,\\\"resumeData\\\":null}\",\"call_id\":\"call_M96j0RdGKU7hOWRSwijo8zWJ\",\"name\":\"findUserProfessionTool\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name and email\",\"name\":\"findUserTool\",\"parameters\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false},{\"type\":\"function\",\"description\":\"This is a test tool that returns the profession of the user\",\"name\":\"findUserProfessionTool\",\"parameters\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":549,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":96,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":645},\"user\":null,\"metadata\":{}},\"sequence_number\":10}\n\n"
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_052f84229e5c4b1b006a32a2a226c081988524cbca0c9870bf\",\"object\":\"response\",\"created_at\":1781703330,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name and email\",\"name\":\"findUserTool\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false},{\"type\":\"function\",\"description\":\"This is a test tool that returns the profession of the user\",\"name\":\"findUserProfessionTool\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
+          "event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_052f84229e5c4b1b006a32a2a226c081988524cbca0c9870bf\",\"object\":\"response\",\"created_at\":1781703330,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name and email\",\"name\":\"findUserTool\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false},{\"type\":\"function\",\"description\":\"This is a test tool that returns the profession of the user\",\"name\":\"findUserProfessionTool\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_GGi8aMVzaUmbxWvpSiNEclKb\",\"name\":\"findUserTool\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"VjkKusBoTAWBTo\",\"output_index\":0,\"sequence_number\":3}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"name\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"GwP2QBdsRdBA\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"E8dBSgoyB7GMR\",\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"D\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"t6i3heeO07atRg5\",\"output_index\":0,\"sequence_number\":6}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"ero\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"fQOvJUlykUZnc\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\" Israel\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"XjGruhOh6\",\"output_index\":0,\"sequence_number\":8}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\",\\\"\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"5uixNdIPmOO2l\",\"output_index\":0,\"sequence_number\":9}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"s\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"omQYOYun6wIZWPR\",\"output_index\":0,\"sequence_number\":10}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"uspended\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"cOeU2HGl\",\"output_index\":0,\"sequence_number\":11}\n\n",
+          "event: response.function_cal",
+          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Tool\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"FIns6BHxXOdn\",\"output_index\":0,\"sequence_number\":12}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Run\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"ekNBQVB45XQyX\",\"output_index\":0,\"sequence_number\":13}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Id\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"fIB6m29bNe2IQ2\",\"output_index\":0,\"sequence_number\":14}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"NEbNlgCFzL6eB\",\"output_index\":0,\"sequence_number\":15}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"000\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"gZxRija5RsvuO\",\"output_index\":0,\"sequence_number\":16}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"000\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"fadAluBGtiVJ6\",\"output_index\":0,\"sequence_number\":17}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"00\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"AdODZP6GD9J4fI\",\"output_index\":0,\"sequence_number\":18}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"-\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"mZlQq1wQsExuNy5\",\"output_index\":0,\"sequence_number\":19}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"000\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"uqMUMrlMZQlMz\",\"output_index\":0,\"sequence_number\":20}\n\n",
+          "event: response.function_cal",
+          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"0\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"dDq2Dwcw37Rkxwz\",\"output_index\":0,\"sequence_number\":21}\n\n",
+          "event: response.function_cal",
+          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"-\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"3ncFGXqDkQjea9t\",\"output_index\":0,\"sequence_number\":22}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"400\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"2wQ46AMgV8sKK\",\"output_index\":0,\"sequence_number\":23}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"0\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"LhUcypauEWftc5V\",\"output_index\":0,\"sequence_number\":24}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"-\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"pk771pnkIKkWfvn\",\"output_index\":0,\"sequence_number\":25}\n\n",
+          "event: response.function_cal",
+          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"800\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"eECO2xvKhuMc1\",\"output_index\":0,\"sequence_number\":26}\n\n",
+          "event: response.function_cal",
+          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"0\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"KOcR1bbtxwMOgAa\",\"output_index\":0,\"sequence_number\":27}\n\n",
+          "event: response.function_cal",
+          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"-\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"ujwd3Dw7Q8MNzpW\",\"output_index\":0,\"sequence_number\":28}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"000\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"Dq8lntdVlPVir\",\"output_index\":0,\"sequence_number\":29}\n\n",
+          "event: response.function_cal",
+          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"000\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"2M5krLJ5OaWwu\",\"output_index\":0,\"sequence_number\":30}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"000\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"xHjUWz5luBtaT\",\"output_index\":0,\"sequence_number\":31}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"003\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"m7HXArJCy70px\",\"output_index\":0,\"sequence_number\":32}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\",\\\"\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"7CqCmsCOZe23A\",\"output_index\":0,\"sequence_number\":33}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"resume\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"6qPOLRp6Fu\",\"output_index\":0,\"sequence_number\":34}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Data\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"v5hQGUSkhLlb\",\"output_index\":0,\"sequence_number\":35}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":{\\\"\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"fyosybhKlahF\",\"output_index\":0,\"sequence_number\":36}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"age\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"3GekKi1hdVacb\",\"output_index\":0,\"sequence_number\":37}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"MeK6vtP3nI7wmO\",\"output_index\":0,\"sequence_number\":38}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"25\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"3AGlVY7QS5rG4D\",\"output_index\":0,\"sequence_number\":39}\n\n",
+          "event: response.function_cal",
+          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"}}\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"obfuscation\":\"zsjzQ2wUST9ziQ\",\"output_index\":0,\"sequence_number\":40}\n\n",
+          "event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"name\\\":\\\"Dero Israel\\\",\\\"suspendedToolRunId\\\":\\\"00000000-0000-4000-8000-000000000003\\\",\\\"resumeData\\\":{\\\"age\\\":25}}\",\"item_id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"output_index\":0,\"sequence_number\":41}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"name\\\":\\\"Dero Israel\\\",\\\"suspendedToolRunId\\\":\\\"00000000-0000-4000-8000-000000000003\\\",\\\"resumeData\\\":{\\\"age\\\":25}}\",\"call_id\":\"call_GGi8aMVzaUmbxWvpSiNEclKb\",\"name\":\"findUserTool\"},\"output_index\":0,\"sequence_number\":42}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_052f84229e5c4b1b006a32a2a226c081988524cbca0c9870bf\",\"object\":\"response\",\"created_at\":1781703330,\"status\":\"completed\",\"background\":false,\"completed_at\":1781703331,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"name\\\":\\\"Dero Israel\\\",\\\"suspendedToolRunId\\\":\\\"00000000-0000-4000-8000-000000000003\\\",\\\"resumeData\\\":{\\\"age\\\":25}}\",\"call_id\":\"call_GGi8aMVzaUmbxWvpSiNEclKb\",\"name\":\"findUserTool\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name and email\",\"name\":\"findUserTool\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false},{\"type\":\"function\",\"description\":\"This is a test tool that returns the profession of the user\",\"name\":\"findUserProfessionTool\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":552,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":49,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":601},\"user\":null,\"metadata\":{}},\"sequence_number\":43}\n\n"
         ],
-        "chunkTimings": [0, 1, 1, 1969, 3, 3, 3, 0, 4, 0, 0, 1, 60, 177, 1],
+        "chunkTimings": [
+          0,
+          0,
+          699,
+          37,
+          0,
+          3,
+          3,
+          0,
+          36,
+          2,
+          1,
+          9,
+          0,
+          0,
+          1,
+          4,
+          0,
+          0,
+          5,
+          2,
+          0,
+          1,
+          0,
+          2,
+          0,
+          4,
+          4,
+          6,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          2,
+          0,
+          41,
+          29,
+          2,
+          21,
+          0,
+          30,
+          12,
+          1,
+          64,
+          0,
+          147
+        ],
         "isStreaming": true
       }
     },
     {
-      "hash": "2425de8150e4cff5",
+      "hash": "0d0175cffebff5cf",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -344,21 +467,12 @@
             },
             {
               "type": "item_reference",
-              "id": "fc_09d73fdba63b2d11006a0afeaca7e0819781bc1cf61de27eb3"
-            },
-            {
-              "type": "item_reference",
-              "id": "fc_09d73fdba63b2d11006a0afeaca7f081979be1b394ad7f3004"
+              "id": "fc_052f84229e5c4b1b006a32a2a30e00819888070741c8cd096b"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_UgdljaXMuAQgT4xPJAvKskWL",
+              "call_id": "call_GGi8aMVzaUmbxWvpSiNEclKb",
               "output": "{\"name\":\"Dero Israel\",\"age\":25,\"email\":\"test@test.com\"}"
-            },
-            {
-              "type": "function_call_output",
-              "call_id": "call_M96j0RdGKU7hOWRSwijo8zWJ",
-              "output": "{\"profession\":\"Software Engineer\"}"
             }
           ],
           "tools": [
@@ -395,9 +509,16 @@
                     ]
                   }
                 },
-                "required": ["name", "suspendedToolRunId", "resumeData"],
+                "required": [
+                  "name",
+                  "suspendedToolRunId",
+                  "resumeData"
+                ],
                 "additionalProperties": false,
-                "x-optional": ["suspendedToolRunId", "resumeData"]
+                "x-optional": [
+                  "suspendedToolRunId",
+                  "resumeData"
+                ]
               },
               "strict": false
             },
@@ -434,9 +555,16 @@
                     ]
                   }
                 },
-                "required": ["name", "suspendedToolRunId", "resumeData"],
+                "required": [
+                  "name",
+                  "suspendedToolRunId",
+                  "resumeData"
+                ],
                 "additionalProperties": false,
-                "x-optional": ["suspendedToolRunId", "resumeData"]
+                "x-optional": [
+                  "suspendedToolRunId",
+                  "resumeData"
+                ]
               },
               "strict": false
             }
@@ -444,7 +572,7 @@
           "tool_choice": "auto",
           "stream": true
         },
-        "timestamp": 1779105452980
+        "timestamp": 1781703331383
       },
       "response": {
         "status": 200,
@@ -453,67 +581,140 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9fdaaf593e31b753-BRU",
+          "cf-ray": "a0d2701f0a5f2953-SJC",
           "connection": "keep-alive",
           "content-type": "text/event-stream; charset=utf-8",
-          "date": "Mon, 18 May 2026 11:57:33 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "126",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Wed, 17 Jun 2026 13:35:31 GMT",
+          "openai-organization": "work-kxidzh",
+          "openai-processing-ms": "264",
+          "openai-project": "proj_FCyHAyf1sRhVrYbrkAklMIPx",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-request-id": "req_0f4c875708074047a25516c73d65bab6"
+          "x-request-id": "req_61f0166209b743609fe6612096f622c4"
         },
         "chunks": [
-          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_09d73fdba63b2d11006a0afead1f2c81978848ec6b5056edc2\",\"object\":\"response\",\"created_at\":1779105453,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name and email\",\"name\":\"findUserTool\",\"parameters\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false},{\"type\":\"function\",\"description\":\"This is a test tool that returns the profession of the user\",\"name\":\"findUserProfessionTool\",\"parameters\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
-          "event: response.in_progress",
-          "\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_09d73fdba63b2d11006a0afead1f2c81978848ec6b5056edc2\",\"object\":\"response\",\"created_at\":1779105453,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name and email\",\"name\":\"findUserTool\",\"parameters\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false},{\"type\":\"function\",\"description\":\"This is a test tool that returns the profession of the user\",\"name\":\"findUserProfessionTool\",\"parameters\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
-          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":2}\n\n",
-          "event: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":3}\n\n",
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_052f84229e5c4b1b006a32a2a3bc588198a949afdbb9bec043\",\"object\":\"response\",\"created_at\":1781703331,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name and email\",\"name\":\"findUserTool\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false},{\"type\":\"function\",\"description\":\"This is a test tool that returns the profession of the user\",\"name\":\"findUserProfessionTool\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\nevent: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_052f84229e5c4b1b006a32a2a3bc588198a949afdbb9bec043\",\"object\":\"response\",\"created_at\":1781703331,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name and email\",\"name\":\"findUserTool\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false},{\"type\":\"function\",\"description\":\"This is a test tool that returns the profession of the user\",\"name\":\"findUserProfessionTool\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":3}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"The\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"OA5olPRfPeCFs\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" user\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"cCrECbvg8a5\",\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" **\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"hmTI97DkF20Kt\",\"output_index\":0,\"sequence_number\":6}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"D\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"OH9HwpqriEVPP1c\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"ero\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"ZRUEd37qOtpYf\",\"output_index\":0,\"sequence_number\":8}\n\n",
           "event: response.output_text",
-          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"The\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"GI5HUCe4Aw6T7\",\"output_index\":0,\"sequence_number\":4}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" user\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"slYiYLWM5Vd\",\"output_index\":0,\"sequence_number\":5}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" D\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"ZkjX5LLei6gpVi\",\"output_index\":0,\"sequence_number\":6}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"ero\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"UBWFe8LmqnFKi\",\"output_index\":0,\"sequence_number\":7}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Israel\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"jFUihfT3q\",\"output_index\":0,\"sequence_number\":8}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" is\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"44l2VMrfsMWQ0\",\"output_index\":0,\"sequence_number\":9}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"pDR0Z6kshdeRz7k\",\"output_index\":0,\"sequence_number\":10}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"25\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"66GUghiAzncdCK\",\"output_index\":0,\"sequence_number\":11}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" years\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"21R9Hh7TVJ\",\"output_index\":0,\"sequence_number\":12}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" old\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"pwfOXl382NAu\",\"output_index\":0,\"sequence_number\":13}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" and\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"WRBybRuzPmAa\",\"output_index\":0,\"sequence_number\":14}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" works\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"nirzIG4Qo5\",\"output_index\":0,\"sequence_number\":15}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" as\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"w7gLeC689tEBZ\",\"output_index\":0,\"sequence_number\":16}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" a\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"P5eeOjsGsWzOPN\",\"output_index\":0,\"sequence_number\":17}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Software\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"zBqRSoG\",\"output_index\":0,\"sequence_number\":18}\n\n",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Israel\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"WayrZyYxy\",\"output_index\":0,\"sequence_number\":9}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"**\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"c1Rn6YiZTVUgyB\",\"output_index\":0,\"sequence_number\":10}\n\n",
           "event: response.output_text",
-          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Engineer\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"lvHNOJj\",\"output_index\":0,\"sequence_number\":19}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"A6TBouPSCqz1J24\",\"output_index\":0,\"sequence_number\":20}\n\n",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" is\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"xaGGjizXxUdd5\",\"output_index\":0,\"sequence_number\":11}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"9averQwfdvvMCpG\",\"output_index\":0,\"sequence_number\":12}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"25\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"MEbcsUHfyEnE4D\",\"output_index\":0,\"sequence_number\":13}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" years\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"PMdceqcKsz\",\"output_index\":0,\"sequence_number\":14}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" old\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"1uxW2dqqdkBi\",\"output_index\":0,\"sequence_number\":15}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"7zRtpPcPf7Ti98M\",\"output_index\":0,\"sequence_number\":16}\n\n",
           "event: response.output_text",
-          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" You\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"YwWrG0EQYoGo\",\"output_index\":0,\"sequence_number\":21}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" can\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"HYbLQphDGaCX\",\"output_index\":0,\"sequence_number\":22}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" reach\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"WCxdJxtqiD\",\"output_index\":0,\"sequence_number\":23}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" him\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"Ba0LpHbai6kf\",\"output_index\":0,\"sequence_number\":24}\n\n",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" His\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"vV4EQpu7Boen\",\"output_index\":0,\"sequence_number\":17}\n\n",
           "event: response.output_text",
-          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" at\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"YGYRPCvMp0hk6\",\"output_index\":0,\"sequence_number\":25}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"3LSH2QOpgkL0\",\"output_index\":0,\"sequence_number\":26}\n\n",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" email\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"jAACQPMeHc\",\"output_index\":0,\"sequence_number\":18}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" is\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"BtrbV6rLktjle\",\"output_index\":0,\"sequence_number\":19}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" **\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"SClimoQ03q5Qy\",\"output_index\":0,\"sequence_number\":20}\n\n",
           "event: response.output_text",
-          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" email\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"JW1N76R4lL\",\"output_index\":0,\"sequence_number\":27}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" address\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"wV8eXjNL\",\"output_index\":0,\"sequence_number\":28}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\":\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"XXnmO4WCHRPZuNn\",\"output_index\":0,\"sequence_number\":29}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" test\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"dKqjua5lKvE\",\"output_index\":0,\"sequence_number\":30}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"@test\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"dJZzrxgBV0t\",\"output_index\":0,\"sequence_number\":31}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".com\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"FtPmZw5fRrns\",\"output_index\":0,\"sequence_number\":32}\n\n",
-          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"obfuscation\":\"1qtM3y79cplrMjg\",\"output_index\":0,\"sequence_number\":33}\n\n",
-          "event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":34,\"text\":\"The user Dero Israel is 25 years old and works as a Software Engineer. You can reach him at the email address: test@test.com.\"}\n\n",
-          "event: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"The user Dero Israel is 25 years old and works as a Software Engineer. You can reach him at the email address: test@test.com.\"},\"sequence_number\":35}\n\n",
-          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"The user Dero Israel is 25 years old and works as a Software Engineer. You can reach him at the email address: test@test.com.\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":36}\n\n",
-          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_09d73fdba63b2d11006a0afead1f2c81978848ec6b5056edc2\",\"object\":\"response\",\"created_at\":1779105453,\"status\":\"completed\",\"background\":false,\"completed_at\":1779105454,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"msg_09d73fdba63b2d11006a0afeadade48197ba29265f271c0a71\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"The user Dero Israel is 25 years old and works as a Software Engineer. You can reach him at the email address: test@test.com.\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name and email\",\"name\":\"findUserTool\",\"parameters\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false},{\"type\":\"function\",\"description\":\"This is a test tool that returns the profession of the user\",\"name\":\"findUserProfessionTool\",\"parameters\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":323,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":32,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":355},\"user\":null,\"metadata\":{}},\"sequence_number\":37}\n\n"
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"test\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"NYsaqi2qslXs\",\"output_index\":0,\"sequence_number\":21}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"@test\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"qr6YSuz6il4\",\"output_index\":0,\"sequence_number\":22}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".com\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"2oLOja9vvHgU\",\"output_index\":0,\"sequence_number\":23}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"**\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"kLSTSzwhUmAlQz\",\"output_index\":0,\"sequence_number\":24}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"gorDYPXRfwCSxEF\",\"output_index\":0,\"sequence_number\":25}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \\n\\n\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"LDqWKPWcTBf9T\",\"output_index\":0,\"sequence_number\":26}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"Unfortunately\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"sSX\",\"output_index\":0,\"sequence_number\":27}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"uYMvfePfiU3JC6F\",\"output_index\":0,\"sequence_number\":28}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" I\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"p6eKKErj1PWShe\",\"output_index\":0,\"sequence_number\":29}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" don't\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"cd5SMHWIxp\",\"output_index\":0,\"sequence_number\":30}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" have\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"vTYnINntzVo\",\"output_index\":0,\"sequence_number\":31}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" information\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"aZjy\",\"output_index\":0,\"sequence_number\":32}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" on\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"Pb421dVLDfqTV\",\"output_index\":0,\"sequence_number\":33}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" his\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"F3M87woOOkM9\",\"output_index\":0,\"sequence_number\":34}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" profession\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"yAjPQ\",\"output_index\":0,\"sequence_number\":35}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"vlS4HVB0kTl7o6W\",\"output_index\":0,\"sequence_number\":36}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Would\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"ROp3ayINNU\",\"output_index\":0,\"sequence_number\":37}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" you\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"L7WNRcSSye6n\",\"output_index\":0,\"sequence_number\":38}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" like\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"L9q2VHeNini\",\"output_index\":0,\"sequence_number\":39}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" me\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"FCfZSUhQQJhXa\",\"output_index\":0,\"sequence_number\":40}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" to\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"0NUjBYthWt5PG\",\"output_index\":0,\"sequence_number\":41}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" find\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"KWbRlMvu0yf\",\"output_index\":0,\"sequence_number\":42}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" that\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"ipgeBizdKmo\",\"output_index\":0,\"sequence_number\":43}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" as\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"lr3RanKjNWzdG\",\"output_index\":0,\"sequence_number\":44}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" well\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"RRNLzsShLCW\",\"output_index\":0,\"sequence_number\":45}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"?\",\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"obfuscation\":\"DaaSdTbUyxGvR24\",\"output_index\":0,\"sequence_number\":46}\n\n",
+          "event: response.output_text",
+          ".done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":47,\"text\":\"The user **Dero Israel** is 25 years old. His email is **test@test.com**. \\n\\nUnfortunately, I don't have information on his profession. Would you like me to find that as well?\"}\n\n",
+          "event: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"The user **Dero Israel** is 25 years old. His email is **test@test.com**. \\n\\nUnfortunately, I don't have information on his profession. Would you like me to find that as well?\"},\"sequence_number\":48}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"The user **Dero Israel** is 25 years old. His email is **test@test.com**. \\n\\nUnfortunately, I don't have information on his profession. Would you like me to find that as well?\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":49}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_052f84229e5c4b1b006a32a2a3bc588198a949afdbb9bec043\",\"object\":\"response\",\"created_at\":1781703331,\"status\":\"completed\",\"background\":false,\"completed_at\":1781703332,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"msg_052f84229e5c4b1b006a32a2a456208198abdb121c25f0d0ac\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"The user **Dero Israel** is 25 years old. His email is **test@test.com**. \\n\\nUnfortunately, I don't have information on his profession. Would you like me to find that as well?\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tools\":[{\"type\":\"function\",\"description\":\"This is a test tool that returns the name and email\",\"name\":\"findUserTool\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false},{\"type\":\"function\",\"description\":\"This is a test tool that returns the profession of the user\",\"name\":\"findUserProfessionTool\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"suspendedToolRunId\":{\"anyOf\":[{\"type\":\"string\",\"description\":\"The runId of the suspended tool\"},{\"type\":\"null\"}]},\"resumeData\":{\"anyOf\":[{\"description\":\"The resumeData object created from the resumeSchema of suspended tool\"},{\"type\":\"null\"}]}},\"required\":[\"name\",\"suspendedToolRunId\",\"resumeData\"],\"additionalProperties\":false,\"x-optional\":[\"suspendedToolRunId\",\"resumeData\"]},\"strict\":false}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":281,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":45,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":326},\"user\":null,\"metadata\":{}},\"sequence_number\":50}\n\n"
         ],
         "chunkTimings": [
-          0, 0, 0, 450, 1, 1, 0, 19, 0, 139, 1, 7, 0, 8, 2, 4, 0, 11, 1, 82, 22, 4, 0, 31, 0, 2, 28, 0, 16, 0, 3, 25, 0,
-          0, 11, 2, 24, 0, 6, 95, 4, 0, 214
+          0,
+          337,
+          1,
+          29,
+          2,
+          9,
+          0,
+          31,
+          0,
+          0,
+          39,
+          0,
+          0,
+          6,
+          0,
+          10,
+          1,
+          16,
+          0,
+          0,
+          0,
+          33,
+          1,
+          14,
+          0,
+          1,
+          81,
+          0,
+          2,
+          0,
+          2,
+          3,
+          0,
+          28,
+          0,
+          11,
+          1,
+          15,
+          0,
+          1,
+          0,
+          14,
+          4,
+          25,
+          0,
+          36,
+          0,
+          19,
+          0,
+          9,
+          0,
+          1,
+          12,
+          0,
+          96,
+          0,
+          0,
+          0,
+          141
         ],
         "isStreaming": true
       }

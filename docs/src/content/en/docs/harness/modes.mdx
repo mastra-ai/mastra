@@ -105,10 +105,10 @@ On plan approval, the Harness automatically switches to `build` mode. On rejecti
 
 ## Switching modes
 
-Call `switchMode()` to change the active mode. The Harness aborts any in-progress generation, saves the current model to the outgoing mode, loads the incoming mode's model, and emits `mode_changed` and `model_changed` events:
+The active mode lives on the Session, so call `harness.session.mode.switch()` to change it. The switch aborts any in-progress generation, saves the current model to the outgoing mode, and emits a `mode_changed` event. It then resolves the incoming mode's model and, when one resolves, applies it and emits a `model_changed` event:
 
 ```typescript
-await harness.switchMode({ modeId: 'build' })
+await harness.session.mode.switch({ modeId: 'build' })
 ```
 
 ## Querying modes

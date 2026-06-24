@@ -9,7 +9,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { extractTrajectoryFromTrace } from '@mastra/core/evals';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, Trajectory } from '@mastra/core/evals';
-import type { Harness } from '@mastra/core/harness';
+import type { Harness, Session } from '@mastra/core/harness';
 import type { CoreMessage, CoreSystemMessage } from '@mastra/core/llm';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 
@@ -31,6 +31,8 @@ export type MastraCodeEvalContext = {
 export type BuildContextOptions = {
   /** Harness instance to extract data from */
   harness: Harness<any>;
+  /** Session whose state/model/thread is being evaluated */
+  session: Session<any>;
   /** Thread ID to build context for (defaults to current thread) */
   threadId?: string;
   /** Limit messages to the last N turns (user+assistant pairs). Undefined = all messages */
@@ -44,8 +46,8 @@ export type BuildContextOptions = {
  * and packages everything into the format scorers expect.
  */
 export async function buildEvalContext(options: BuildContextOptions): Promise<MastraCodeEvalContext> {
-  const { harness, lastNTurns } = options;
-  const threadId = options.threadId ?? harness.session.thread.getId();
+  const { harness, session, lastNTurns } = options;
+  const threadId = options.threadId ?? session.thread.getId();
 
   if (!threadId) {
     throw new Error('No thread ID available. Start a session before building eval context.');
@@ -64,7 +66,7 @@ export async function buildEvalContext(options: BuildContextOptions): Promise<Ma
   const { trajectory, traceId } = await extractSessionTrajectory(storage, threadId);
 
   // 4. Build request context from Harness state
-  const requestContext = buildRequestContext(harness, threadId);
+  const requestContext = buildRequestContext(session, threadId);
 
   return {
     agentInput: {
@@ -214,13 +216,13 @@ async function extractSessionTrajectory(
 /**
  * Build request context from Harness state for scorer evaluation.
  */
-function buildRequestContext(harness: Harness<any>, threadId: string): Record<string, unknown> {
-  const state = harness.session.state.get() as Record<string, unknown>;
+function buildRequestContext(session: Session<any>, threadId: string): Record<string, unknown> {
+  const state = session.state.get() as Record<string, unknown>;
 
   return {
     threadId,
     mode: state.currentMode ?? state.mode,
-    modelId: harness.session.model.get(),
+    modelId: session.model.get(),
     projectPath: state.projectPath,
     projectName: state.projectName,
     gitBranch: state.gitBranch,

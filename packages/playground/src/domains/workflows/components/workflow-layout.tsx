@@ -1,4 +1,5 @@
-import { CollapsiblePanel, PanelSeparator } from '@mastra/playground-ui';
+import { CollapsiblePanel, PanelDrawer, PanelSeparator } from '@mastra/playground-ui';
+import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
 import { Panel, useDefaultLayout, Group } from 'react-resizable-panels';
@@ -17,11 +18,32 @@ const TIMELINE_LEFT_PANEL_OVERLAP = 8;
 const getTimelineLeftOffset = (panelWidth: number) => Math.max(panelWidth - TIMELINE_LEFT_PANEL_OVERLAP, 0);
 
 export const WorkflowLayout = ({ workflowId, children, leftSlot, rightSlot }: WorkflowLayoutProps) => {
-  const [leftPanelWidth, setLeftPanelWidth] = useState(getTimelineLeftOffset(LEFT_PANEL_DEFAULT_WIDTH));
+  const isMobile = useIsMobile();
+  const [leftPanelWidth, setLeftPanelWidth] = useState(() => getTimelineLeftOffset(LEFT_PANEL_DEFAULT_WIDTH));
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
     id: `workflow-layout-v6-${workflowId}`,
     storage: localStorage,
   });
+
+  // Resizable side panels are a desktop paradigm; below the breakpoint the
+  // slots move into edge drawers and the main content takes the full width.
+  if (isMobile) {
+    return (
+      <div className="relative h-full w-full overflow-hidden">
+        <div className="h-full w-full min-w-0 overflow-y-auto">{children}</div>
+        {leftSlot && (
+          <PanelDrawer direction="left" label="Open left panel">
+            {leftSlot}
+          </PanelDrawer>
+        )}
+        {rightSlot && (
+          <PanelDrawer direction="right" label="Open right panel">
+            {rightSlot}
+          </PanelDrawer>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -42,7 +64,7 @@ export const WorkflowLayout = ({ workflowId, children, leftSlot, rightSlot }: Wo
             minSize={LEFT_PANEL_MIN_WIDTH}
             maxSize={'50%'}
             defaultSize={LEFT_PANEL_DEFAULT_WIDTH}
-            collapsedSize={60}
+            collapsedSize={0}
             collapsible={true}
             className="pointer-events-auto min-w-0 bg-transparent"
             onResize={size => setLeftPanelWidth(getTimelineLeftOffset(size.inPixels))}
@@ -68,7 +90,7 @@ export const WorkflowLayout = ({ workflowId, children, leftSlot, rightSlot }: Wo
             minSize={300}
             maxSize={'40%'}
             defaultSize={340}
-            collapsedSize={60}
+            collapsedSize={0}
             collapsible={true}
             className="pointer-events-auto min-w-0 bg-transparent"
           >

@@ -1,4 +1,4 @@
-import { Spinner } from '@mastra/playground-ui';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { CheckIcon } from 'lucide-react';
 import type { AutosaveStatus } from '@/domains/agent-builder/hooks/use-autosave-agent';
 

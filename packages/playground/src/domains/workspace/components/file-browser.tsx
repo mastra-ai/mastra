@@ -1,7 +1,5 @@
 import {
-  AlertDialog,
   Button,
-  CopyButton,
   Tooltip,
   TooltipTrigger,
   TooltipContent,
@@ -15,6 +13,8 @@ import {
   MarkdownRenderer,
   SkillIcon,
 } from '@mastra/playground-ui';
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import {
   File,
   Folder,

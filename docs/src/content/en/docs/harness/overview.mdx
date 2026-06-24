@@ -9,7 +9,7 @@ packages:
 
 :::experimental
 
-The `Harness` feature is in alpha stage and subject to breaking changes in minor versions until it graduates from its alpha status.
+The `Harness` feature is in beta stage and subject to breaking changes in minor versions until it graduates from its beta status.
 
 :::
 
@@ -107,33 +107,31 @@ Visit the [Harness reference](/reference/harness/harness-class) for the full con
 The Harness sits between your application layer and the underlying agent loop:
 
 ```
-┌──────────────────────────┐
-│   Your App (TUI/Web/API) │
-└────────────┬─────────────┘
-             │ commands (sendMessage, switchMode, approve)
-             │ events (message_update, tool_approval_required)
-┌────────────▼─────────────┐
-│  Harness (shared host)   │
-│  Config · Storage        │
-│  Thread lifecycle        │
-│  Permission policy        │
-│  Subagent spawning        │
-│  Event bus               │
-│  ┌─────────────────────┐ │
-│  │ harness.session      │ │
-│  │ identity · thread    │ │
-│  │ mode · model · run   │ │
-│  │ grants · follow-ups  │ │
-│  │ display state        │ │
-│  └─────────────────────┘ │
-└────────────┬─────────────┘
-             │
-┌────────────▼──────────────┐
-│  Agent + Memory + Tools   │
-└───────────────────────────┘
+┌───────────────────────────────────────┐
+│         Your App (TUI/Web/API)        │
+└───────────────────────────────────────┘
+      │  commands              ▲  events
+      ▼                        │
+┌───────────────────────────────────────┐
+│                Harness                │
+│ Config · storage · threads            │
+│ permissions · subagents · events      │
+│                                       │
+│  ┌─────────────────────────────────┐  │
+│  │         harness.session         │  │
+│  │ identity · thread · mode        │  │
+│  │ model · run · grants            │  │
+│  │ display state                   │  │
+│  └─────────────────────────────────┘  │
+└───────────────────────────────────────┘
+                   │
+                   ▼
+┌───────────────────────────────────────┐
+│         Agent + Memory + Tools        │
+└───────────────────────────────────────┘
 ```
 
-Your app sends commands (send a message, switch mode, approve a tool call) and receives typed events. The Harness manages the lifecycle internally: persisting threads, routing to the correct mode agent, enforcing permissions, and emitting events as state changes.
+Your app sends commands — send a message, switch mode, approve a tool call — and receives typed events such as `message_update` and `tool_approval_required`. The Harness manages the lifecycle internally: persisting threads, routing to the correct mode agent, enforcing permissions, and emitting events as state changes.
 
 ## Next steps
 

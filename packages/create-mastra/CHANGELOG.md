@@ -1,5 +1,35 @@
 # create-mastra
 
+## 1.15.2-alpha.1
+
+## 1.15.2-alpha.0
+
+## 1.15.1
+
+## 1.15.1-alpha.5
+
+## 1.15.1-alpha.4
+
+## 1.15.1-alpha.3
+
+## 1.15.1-alpha.2
+
+## 1.15.1-alpha.1
+
+## 1.15.1-alpha.0
+
+## 1.15.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+## 1.15.0-alpha.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
 ## 1.14.1
 
 ### Patch Changes

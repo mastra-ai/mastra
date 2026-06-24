@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { act, cleanup, render } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useEffect } from 'react';
@@ -97,6 +96,9 @@ describe('composer attachments', () => {
     expect(pdfPart!.type).toBe('file');
     expect(pdfPart!.filename).toBe('doc.pdf');
     expect(pdfPart!.data).toMatch(/^data:application\/pdf;base64,/);
+    // The data URL prefix must appear exactly once; `fileToBase64` already
+    // returns a full data URL, so it must not be prepended a second time.
+    expect(pdfPart!.data).not.toMatch(/data:application\/pdf;base64,data:/);
 
     // text -> plain string content
     expect(text!.content).toBe('hello world');
@@ -122,5 +124,75 @@ describe('composer attachments', () => {
     const messages = await ref.current!.toCoreUserMessages();
     const imagePart = (messages[0]!.content as Array<{ type: string; image?: string }>)[0];
     expect(imagePart!.image).toBe('https://example.com/pic.png');
+  });
+
+  it('classifies a gs:// URL as a forwarded URL attachment', async () => {
+    // No HEAD handler: fetch('gs://...') rejects, so the content type is
+    // inferred from the extension (video/mp4).
+    const { ref } = renderProvider();
+
+    await act(async () => {
+      await ref.current!.addUrl('gs://my-bucket/clip.mp4');
+    });
+
+    const att = ref.current!.attachments[0] as ComposerAttachment;
+    expect(att.isUrl).toBe(true);
+    expect(att.kind).toBe('video');
+    expect(att.contentType).toBe('video/mp4');
+  });
+
+  it('forwards a gs:// video as a file part containing the raw URI', async () => {
+    const { ref } = renderProvider();
+
+    await act(async () => {
+      await ref.current!.addUrl('gs://my-bucket/clip.mp4');
+    });
+
+    const messages = await ref.current!.toCoreUserMessages();
+    const filePart = (messages[0]!.content as Array<{ type: string; data?: string; mimeType?: string }>)[0];
+    expect(filePart!.type).toBe('file');
+    expect(filePart!.data).toBe('gs://my-bucket/clip.mp4');
+    expect(filePart!.mimeType).toBe('video/mp4');
+  });
+
+  it('forwards an audio URL as a file part instead of empty text', async () => {
+    // Audio shares the file-chip ('video') path so the URL is forwarded as a
+    // file part rather than falling through to the empty-text branch.
+    const { ref } = renderProvider();
+
+    await act(async () => {
+      await ref.current!.addUrl('gs://my-bucket/track.mp3');
+    });
+
+    const att = ref.current!.attachments[0] as ComposerAttachment;
+    expect(att.isUrl).toBe(true);
+    expect(att.kind).toBe('video');
+    expect(att.contentType).toBe('audio/mpeg');
+
+    const messages = await ref.current!.toCoreUserMessages();
+    const filePart = (messages[0]!.content as Array<{ type: string; data?: string; mimeType?: string }>)[0];
+    expect(filePart!.type).toBe('file');
+    expect(filePart!.data).toBe('gs://my-bucket/track.mp3');
+    expect(filePart!.mimeType).toBe('audio/mpeg');
+  });
+
+  it('inlines a local video file as a data URI file part', async () => {
+    const { ref } = renderProvider();
+
+    act(() => {
+      ref.current!.addFiles([new File(['video-bytes'], 'movie.mp4', { type: 'video/mp4' })]);
+    });
+
+    const att = ref.current!.attachments[0] as ComposerAttachment;
+    expect(att.kind).toBe('video');
+    expect(att.isUrl).toBe(false);
+
+    const messages = await ref.current!.toCoreUserMessages();
+    const filePart = (messages[0]!.content as Array<{ type: string; data?: string }>)[0];
+    expect(filePart!.type).toBe('file');
+    // A single, well-formed data URI — guards against double-wrapping the
+    // base64 payload (e.g. `data:video/mp4;base64,data:video/mp4;base64,...`).
+    expect(filePart!.data).toMatch(/^data:video\/mp4;base64,[^,]+$/);
+    expect(filePart!.data).not.toContain('base64,data:');
   });
 });

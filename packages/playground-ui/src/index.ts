@@ -57,6 +57,7 @@ export * from './ds/components/ThemeProvider';
 export * from './ds/components/ThemeToggle';
 export * from './ds/components/Tooltip';
 export * from './ds/components/Truncate';
+export * from './ds/components/ThreadList';
 
 // DS Components - Migrated Containers
 export * from './ds/components/ButtonsGroup';
@@ -98,9 +99,8 @@ export * from './ds/components/DataKeysAndValues';
 export * from './ds/components/DataPanel';
 export * from './ds/components/DateTimeRangePicker';
 export * from './ds/components/HorizontalBars';
-export * from './ds/components/MetricsDataTable';
 export * from './ds/components/MetricsLineChart';
-export * from './ds/components/ScrollableContainer';
+export * from './ds/components/ScatterPlotChart';
 export * from './ds/components/StatusBadge';
 
 // DS Icons
@@ -118,6 +118,8 @@ export * from './ds/primitives/transitions';
 export * from './hooks/use-copy-to-clipboard';
 export * from './hooks/use-in-view';
 export * from './hooks/use-autoscroll';
+export * from './hooks/use-is-mobile';
+export * from './hooks/use-keyboard-shortcut-label';
 
 // Pure lib utilities
 export { cn } from './lib/utils';
@@ -134,7 +136,9 @@ export * from './lib/toast';
 // Pure lib modules
 export * from './lib/rule-engine';
 export * from './lib/json-schema';
-export * from './lib/resize';
+export * from './lib/resize/collapsible-panel';
+export * from './lib/resize/separator';
+export * from './lib/resize/panel-drawer';
 export * from './lib/file';
 export * from './lib/template';
 
@@ -145,6 +149,8 @@ export { usePlaygroundStore } from './store/playground-store';
 export * from './domains/metrics';
 export * from './domains/traces';
 export * from './domains/logs';
+export * from './domains/memory';
+export * from './ee';
 
 // DS Types
 export type { LinkComponent, LinkComponentProps } from './ds/types/link-component';

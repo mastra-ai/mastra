@@ -80,6 +80,8 @@ import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, MASTRA_VE
 import type { InferStandardSchemaOutput } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import type { SignalProvider } from '../signals/signal-provider';
+import { resolveAgentSkills, mergeWorkspaceSkills } from '../skills/agent-skills-resolver';
+import type { AgentSkillsInput, SkillInput } from '../skills/types';
 import { InMemoryStore } from '../storage';
 import type { GoalObjectiveRecord } from '../storage/domains/thread-state/base';
 import { ChunkFrom } from '../stream';
@@ -111,6 +113,7 @@ import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
 import { createSkillTools } from '../workspace/skills';
 import type { SkillFormat } from '../workspace/skills';
+import type { Skill, SkillMetadata, WorkspaceSkills } from '../workspace/skills/types';
 import { AgentLegacyHandler } from './agent-legacy';
 import type {
   AgentExecutionOptions,
@@ -157,10 +160,13 @@ import type {
   SendAgentMessageResult,
   SendAgentNotificationSignalOptions,
   SendAgentNotificationSignalResult,
+  SendAgentSignalAccepted,
   SendAgentSignalOptions,
   SendAgentSignalResult,
   SendAgentStateSignalOptions,
   SendAgentStateSignalResult,
+  SendAgentStreamResumeOptions,
+  SendAgentStreamResumeResult,
   StructuredOutputOptions,
   ModelFallbackSettings,
   ModelWithRetries,
@@ -369,6 +375,7 @@ export class Agent<
   #pubsub?: PubSub;
   #inheritedPubSub?: PubSub;
   #memory?: DynamicArgument<MastraMemory, TRequestContext>;
+  #skills?: AgentSkillsInput;
   #skillsFormat?: SkillFormat;
   #workflows?: DynamicArgument<Record<string, AnyWorkflow>, TRequestContext>;
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions, TRequestContext>;
@@ -513,6 +520,10 @@ export class Agent<
 
     if (config.memory) {
       this.#memory = config.memory;
+    }
+
+    if (config.skills) {
+      this.#skills = config.skills;
     }
 
     if (config.skillsFormat) {
@@ -970,19 +981,52 @@ export class Agent<
   }
 
   /**
-   * Gets the skills processors to add to input processors when workspace has skills.
+   * Resolves the combined WorkspaceSkills from agent-level skills and/or workspace skills.
+   * Agent-level skills win on name conflicts when both are present.
+   * @internal
+   */
+  private async resolveSkills(
+    requestContext?: RequestContext,
+    workspaceOverride?: AnyWorkspace,
+  ): Promise<WorkspaceSkills | undefined> {
+    const rc = requestContext || new RequestContext();
+
+    // Resolve agent-level skills (if configured)
+    let agentSkills: WorkspaceSkills | undefined;
+    if (this.#skills) {
+      let resolvedInputs: SkillInput[];
+      if (typeof this.#skills === 'function') {
+        resolvedInputs = await this.#skills({ requestContext: rc });
+      } else {
+        resolvedInputs = this.#skills;
+      }
+      if (resolvedInputs.length > 0) {
+        agentSkills = resolveAgentSkills(resolvedInputs);
+      }
+    }
+
+    // Resolve workspace-level skills (if configured)
+    const workspace = workspaceOverride ?? (await this.getWorkspace({ requestContext: rc }));
+    const workspaceSkills = workspace?.skills;
+
+    // Merge if both exist (agent skills win on name conflicts)
+    if (agentSkills && workspaceSkills) {
+      const { merged } = await mergeWorkspaceSkills(agentSkills, workspaceSkills);
+      return merged;
+    }
+
+    return agentSkills || workspaceSkills;
+  }
+
+  /**
+   * Gets the skills processors to add to input processors when skills are configured.
+   * Supports both agent-level skills and workspace skills.
    * @internal
    */
   private async getSkillsProcessors(
     configuredProcessors: InputProcessorOrWorkflow[],
     requestContext?: RequestContext,
   ): Promise<InputProcessorOrWorkflow[]> {
-    // Check if workspace has skills configured
-    const workspace = await this.getWorkspace({ requestContext: requestContext || new RequestContext() });
-    if (!workspace?.skills) {
-      return [];
-    }
-
     // Check for existing SkillsProcessor in configured processors to avoid duplicates
     const hasSkillsProcessor = hasEagerSkillsProcessor(configuredProcessors);
     const hasOnDemandProcessor = hasOnDemandSkillDiscoveryProcessor(configuredProcessors);
@@ -990,8 +1034,16 @@ export class Agent<
       return [];
     }
 
-    // Create new SkillsProcessor using workspace
-    return [new SkillsProcessor({ workspace, format: this.#skillsFormat })];
+    const rc = requestContext || new RequestContext();
+    const workspace = await this.getWorkspace({ requestContext: rc });
+
+    // Resolve combined skills from agent-level and/or workspace
+    const skills = await this.resolveSkills(rc, workspace ?? undefined);
+    if (!skills) {
+      return [];
+    }
+
+    return [new SkillsProcessor({ skills, format: this.#skillsFormat })];
   }
 
   /**
@@ -1823,6 +1875,53 @@ export class Agent<
       this.#browser = undefined;
     }
     return globalWorkspace;
+  }
+
+  /**
+   * Programmatically invoke a skill by name.
+   *
+   * Loads the full skill instructions and returns them, or returns the skill
+   * object directly. This is the programmatic equivalent of the `skill` tool
+   * that the LLM calls — useful in workflows and custom pipelines.
+   *
+   * @param skillName - Name or path of the skill to invoke
+   * @param options - Optional request context for dynamic skill resolution
+   * @returns The full Skill object with instructions, or null if not found
+   *
+   * @example
+   * ```typescript
+   * // In a workflow step
+   * const skill = await agent.getSkill('code-review');
+   * if (skill) {
+   *   console.log(skill.instructions); // Full skill instructions
+   *   console.log(skill.references);   // Available reference files
+   * }
+   * ```
+   */
+  public async getSkill(skillName: string, options?: { requestContext?: RequestContext }): Promise<Skill | null> {
+    const skills = await this.resolveSkills(options?.requestContext);
+    if (!skills) return null;
+    return skills.get(skillName);
+  }
+
+  /**
+   * List all skills available to this agent (from both agent-level and workspace).
+   *
+   * @param options - Optional request context for dynamic skill resolution
+   * @returns Array of skill metadata (name, description, path)
+   *
+   * @example
+   * ```typescript
+   * const skills = await agent.listSkills();
+   * for (const skill of skills) {
+   *   console.log(`${skill.name}: ${skill.description}`);
+   * }
+   * ```
+   */
+  public async listSkills(options?: { requestContext?: RequestContext }): Promise<SkillMetadata[]> {
+    const skills = await this.resolveSkills(options?.requestContext);
+    if (!skills) return [];
+    return skills.list();
   }
 
   /**
@@ -3382,11 +3481,14 @@ export class Agent<
     }
 
     const workspace = await this.getWorkspace({ requestContext });
-    if (!workspace?.skills) {
+
+    // Resolve skills from agent-level config and/or workspace (pass workspace to avoid double resolution)
+    const skills = await this.resolveSkills(requestContext, workspace ?? undefined);
+    if (!skills) {
       return convertedSkillTools;
     }
 
-    const skillTools = createSkillTools(workspace.skills);
+    const skillTools = createSkillTools(skills);
 
     if (Object.keys(skillTools).length > 0) {
       this.logger.debug('Adding skill tools', { agent: this.name, tools: Object.keys(skillTools), runId });
@@ -3622,6 +3724,7 @@ export class Agent<
       inputProcessorOverrides?.length ||
       this.#inputProcessors ||
       this.#memory ||
+      this.#skills ||
       this.#workspace ||
       this.#mastra?.getWorkspace() ||
       this.#browser ||
@@ -3721,7 +3824,7 @@ export class Agent<
     let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
     let nextTools = tools;
 
-    if (inputProcessorOverrides?.length || this.#inputProcessors || this.#memory) {
+    if (inputProcessorOverrides?.length || this.#inputProcessors || this.#memory || this.#skills) {
       const runner = await this.getProcessorRunner({
         requestContext,
         inputProcessorOverrides,
@@ -4560,6 +4663,12 @@ export class Agent<
 
               const subAgentPromptCreatedAt = new Date();
 
+              // Forward the parent's abortSignal so aborting the supervisor stream/generate cancels
+              // in-flight sub-agents. The signal reaches this delegation tool via the tool-execution
+              // context; without forwarding it the sub-agent would run with a detached, never-aborted
+              // signal and keep looping after the parent is cancelled. See issue #14820.
+              const subAgentAbortOptions = context?.abortSignal ? { abortSignal: context.abortSignal } : {};
+
               if (
                 (methodType === 'generate' || methodType === 'generateLegacy') &&
                 supportedLanguageModelSpecifications.includes(resolvedModelVersion)
@@ -4582,6 +4691,7 @@ export class Agent<
                             },
                           }
                         : {}),
+                      ...subAgentAbortOptions,
                       disableBackgroundTasks: true,
                     })
                   : await resolvedAgent.generate(messagesForSubAgent, {
@@ -4600,6 +4710,7 @@ export class Agent<
                             },
                           }
                         : {}),
+                      ...subAgentAbortOptions,
                       disableBackgroundTasks: true,
                     });
 
@@ -4685,6 +4796,7 @@ export class Agent<
                   actor: invocationActor,
                   ...resolveObservabilityContext(context ?? {}),
                   context: filteredContextMessages as unknown as CoreMessage[],
+                  ...subAgentAbortOptions,
                 });
                 result = {
                   text: generateResult.text,
@@ -4714,6 +4826,7 @@ export class Agent<
                             },
                           }
                         : {}),
+                      ...subAgentAbortOptions,
                       disableBackgroundTasks: true,
                     })
                   : await resolvedAgent.stream(messagesForSubAgent, {
@@ -4734,6 +4847,7 @@ export class Agent<
                             },
                           }
                         : {}),
+                      ...subAgentAbortOptions,
                       disableBackgroundTasks: true,
                     });
 
@@ -4853,6 +4967,7 @@ export class Agent<
                   requestContext,
                   actor: invocationActor,
                   ...resolveObservabilityContext(context ?? {}),
+                  ...subAgentAbortOptions,
                 });
 
                 let fullText = '';
@@ -5617,6 +5732,18 @@ export class Agent<
 
     const formattedTools = this.formatTools(allTools);
     return this.wrapToolsWithHooks(formattedTools, this.resolveToolHooks(hooks));
+  }
+
+  /**
+   * Returns the agent's statically-configured tool hooks, if any.
+   *
+   * @internal Used by dataset experiments to compose item-level tool mocks with
+   * the user's configured `beforeToolCall`/`afterToolCall` hooks. Run-level hooks
+   * override these via {@link resolveToolHooks}, so callers that need to preserve
+   * the configured hooks must read and compose them explicitly.
+   */
+  getConfiguredToolHooks(): ToolHooks | undefined {
+    return this.#hooks;
   }
 
   private resolveToolHooks(runHooks?: ToolHooks): ToolHooks | undefined {
@@ -7077,8 +7204,13 @@ export class Agent<
   sendMessage<OUTPUT = TOutput>(
     message: AgentMessageInput,
     target: SendAgentMessageOptions<OUTPUT>,
-  ): SendAgentMessageResult {
-    return agentThreadStreamRuntime.sendMessage(this as Agent<any, any, any, any>, message, target, this.getPubSub());
+  ): SendAgentMessageResult<OUTPUT> {
+    return agentThreadStreamRuntime.sendMessage<OUTPUT>(
+      this as Agent<any, any, any, any>,
+      message,
+      target,
+      this.getPubSub(),
+    );
   }
 
   /**
@@ -7087,8 +7219,13 @@ export class Agent<
   queueMessage<OUTPUT = TOutput>(
     message: AgentMessageInput,
     target: QueueAgentMessageOptions<OUTPUT>,
-  ): QueueAgentMessageResult {
-    return agentThreadStreamRuntime.queueMessage(this as Agent<any, any, any, any>, message, target, this.getPubSub());
+  ): QueueAgentMessageResult<OUTPUT> {
+    return agentThreadStreamRuntime.queueMessage<OUTPUT>(
+      this as Agent<any, any, any, any>,
+      message,
+      target,
+      this.getPubSub(),
+    );
   }
 
   /**
@@ -7097,8 +7234,13 @@ export class Agent<
   sendStateSignal<OUTPUT = TOutput>(
     state: AgentStateSignalInput,
     target: SendAgentStateSignalOptions<OUTPUT>,
-  ): Promise<SendAgentStateSignalResult> {
-    return agentThreadStreamRuntime.sendStateSignal(this as Agent<any, any, any, any>, state, target, this.getPubSub());
+  ): Promise<SendAgentStateSignalResult<OUTPUT>> {
+    return agentThreadStreamRuntime.sendStateSignal<OUTPUT>(
+      this as Agent<any, any, any, any>,
+      state,
+      target,
+      this.getPubSub(),
+    );
   }
 
   /**
@@ -7107,25 +7249,25 @@ export class Agent<
   async sendNotificationSignal<OUTPUT = TOutput>(
     notification: SendNotificationSignalInput,
     target: SendAgentNotificationSignalOptions<OUTPUT>,
-  ): Promise<SendAgentNotificationSignalResult>;
+  ): Promise<SendAgentNotificationSignalResult<OUTPUT>>;
   async sendNotificationSignal<OUTPUT = TOutput>(
     notification: SendNotificationSignalInput[],
     target: SendAgentNotificationSignalOptions<OUTPUT>,
-  ): Promise<SendAgentNotificationSignalResult[]>;
+  ): Promise<SendAgentNotificationSignalResult<OUTPUT>[]>;
   async sendNotificationSignal<OUTPUT = TOutput>(
     notification: SendNotificationSignalInput | SendNotificationSignalInput[],
     target: SendAgentNotificationSignalOptions<OUTPUT>,
-  ): Promise<SendAgentNotificationSignalResult | SendAgentNotificationSignalResult[]> {
+  ): Promise<SendAgentNotificationSignalResult<OUTPUT> | SendAgentNotificationSignalResult<OUTPUT>[]> {
     const isBatch = Array.isArray(notification);
     const inputs = isBatch ? notification : [notification];
-    const results = await this.#sendNotificationSignalBatch(inputs, target);
+    const results = await this.#sendNotificationSignalBatch<OUTPUT>(inputs, target);
     return isBatch ? results : results[0]!;
   }
 
   async #sendNotificationSignalBatch<OUTPUT = TOutput>(
     inputs: SendNotificationSignalInput[],
     target: SendAgentNotificationSignalOptions<OUTPUT>,
-  ): Promise<SendAgentNotificationSignalResult[]> {
+  ): Promise<SendAgentNotificationSignalResult<OUTPUT>[]> {
     const notifications = await this.#mastra?.getStorage()?.getStore('notifications');
     if (!notifications) {
       throw new Error('sendNotificationSignal requires a notifications storage domain');
@@ -7161,7 +7303,7 @@ export class Agent<
       });
     }
 
-    const results: SendAgentNotificationSignalResult[] = [];
+    const results: SendAgentNotificationSignalResult<OUTPUT>[] = [];
     for (const { record, decision } of planned) {
       if (decision.action === 'discard') {
         const updated = await notifications.updateNotification({
@@ -7170,7 +7312,7 @@ export class Agent<
           status: 'discarded',
           deliveryReason: decision.reason,
         });
-        results.push({ accepted: true, record: updated, decision });
+        results.push({ record: updated, decision });
         continue;
       }
 
@@ -7180,7 +7322,7 @@ export class Agent<
           threadId: record.threadId,
           deliveryReason: decision.reason,
         });
-        results.push({ accepted: true, record: updated, decision });
+        results.push({ record: updated, decision });
         continue;
       }
 
@@ -7205,21 +7347,37 @@ export class Agent<
 
         if (shouldEmitSummaryNow) {
           const signal = createNotificationSummarySignal(summarizeNotifications([updated]));
-          const result = agentThreadStreamRuntime.sendSignal(
+          const result = agentThreadStreamRuntime.sendSignal<OUTPUT>(
             this as Agent<any, any, any, any>,
             signal,
             { ...target, ifIdle: { ...target.ifIdle, behavior: record.priority === 'high' ? 'persist' : 'wake' } },
             this.getPubSub(),
           );
-          if (!result.accepted) {
+          let summaryAccepted: SendAgentSignalAccepted<OUTPUT>;
+          try {
+            summaryAccepted = await result.accepted;
+          } catch (error) {
             const failed = await notifications.updateNotification({
               id: updated.id,
               threadId: updated.threadId,
               deliveryAttempts: (updated.deliveryAttempts ?? 0) + 1,
               lastDeliveryAttemptAt: new Date(),
-              lastDeliveryError: 'Notification summary signal was rejected',
+              lastDeliveryError: error instanceof Error ? error.message : 'Notification summary signal was rejected',
             });
-            results.push({ ...result, record: failed, decision });
+            results.push({ record: failed, decision });
+            continue;
+          }
+          // The routing policy can resolve to `persist`/`discard` (no run, no
+          // delivery). Only stamp `summarySignalId` when a run actually picked
+          // the signal up (`wake`/`deliver`).
+          if (summaryAccepted.action === 'persist' || summaryAccepted.action === 'discard') {
+            results.push({
+              record: updated,
+              decision,
+              signal: result.signal,
+              persisted: result.persisted,
+              accepted: result.accepted,
+            });
             continue;
           }
           const summarized = await notifications.updateNotification({
@@ -7227,31 +7385,55 @@ export class Agent<
             threadId: updated.threadId,
             summarySignalId: result.signal.id,
           });
-          results.push({ ...result, record: summarized, decision });
+          results.push({
+            record: summarized,
+            decision,
+            runId: 'runId' in summaryAccepted ? summaryAccepted.runId : undefined,
+            signal: result.signal,
+            persisted: result.persisted,
+            accepted: result.accepted,
+          });
           continue;
         }
 
-        results.push({ accepted: true, record: updated, decision });
+        results.push({ record: updated, decision });
         continue;
       }
 
       const signal = createNotificationSignal({ ...record, status: 'delivered' });
-      const result = agentThreadStreamRuntime.sendSignal(
+      const result = agentThreadStreamRuntime.sendSignal<OUTPUT>(
         this as Agent<any, any, any, any>,
         signal,
         target,
         this.getPubSub(),
       );
-      if (!result.accepted) {
+      let delivered: SendAgentSignalAccepted<OUTPUT>;
+      try {
+        delivered = await result.accepted;
+      } catch (error) {
         const failed = await notifications.updateNotification({
           id: record.id,
           threadId: record.threadId,
           deliveryAttempts: (record.deliveryAttempts ?? 0) + 1,
           lastDeliveryAttemptAt: new Date(),
-          lastDeliveryError: 'Notification signal was rejected',
+          lastDeliveryError: error instanceof Error ? error.message : 'Notification signal was rejected',
           deliveryReason: decision.reason,
         });
-        results.push({ ...result, record: failed, decision });
+        results.push({ record: failed, decision });
+        continue;
+      }
+
+      // The routing policy can resolve to `persist`/`discard` (no run picked the
+      // signal up). Don't mark the notification `delivered` in that case — the
+      // record stays in its current state with the emitted signal attached.
+      if (delivered.action === 'persist' || delivered.action === 'discard') {
+        results.push({
+          record,
+          decision,
+          signal: result.signal,
+          persisted: result.persisted,
+          accepted: result.accepted,
+        });
         continue;
       }
 
@@ -7263,7 +7445,14 @@ export class Agent<
         deliveryReason: decision.reason,
       });
 
-      results.push({ ...result, record: updated, decision });
+      results.push({
+        record: updated,
+        decision,
+        runId: 'runId' in delivered ? delivered.runId : undefined,
+        signal: result.signal,
+        persisted: result.persisted,
+        accepted: result.accepted,
+      });
     }
 
     return results;
@@ -7272,8 +7461,16 @@ export class Agent<
   /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
-  sendSignal<OUTPUT = TOutput>(signal: AgentSignal, target: SendAgentSignalOptions<OUTPUT>): SendAgentSignalResult {
-    return agentThreadStreamRuntime.sendSignal(this as Agent<any, any, any, any>, signal, target, this.getPubSub());
+  sendSignal<OUTPUT = TOutput>(
+    signal: AgentSignal,
+    target: SendAgentSignalOptions<OUTPUT>,
+  ): SendAgentSignalResult<OUTPUT> {
+    return agentThreadStreamRuntime.sendSignal<OUTPUT>(
+      this as Agent<any, any, any, any>,
+      signal,
+      target,
+      this.getPubSub(),
+    );
   }
 
   async stream<
@@ -7433,7 +7630,7 @@ export class Agent<
       });
     }
 
-    agentThreadStreamRuntime.registerRun(
+    await agentThreadStreamRuntime.registerRun(
       this as Agent<any, any, any, any>,
       result.result,
       preparedOptions as AgentExecutionOptions<OUTPUT>,
@@ -7758,7 +7955,7 @@ export class Agent<
       });
     }
 
-    agentThreadStreamRuntime.registerRun(
+    await agentThreadStreamRuntime.registerRun(
       this as Agent<any, any, any, any>,
       result.result as unknown as MastraModelOutput<OUTPUT>,
       preparedOptions as AgentExecutionOptions<OUTPUT>,
@@ -7945,17 +8142,68 @@ export class Agent<
     return this.resumeStream({ approved: true }, options);
   }
 
+  async sendStreamResume<OUTPUT = undefined>(
+    options: SendAgentStreamResumeOptions<OUTPUT>,
+  ): Promise<SendAgentStreamResumeResult> {
+    const { threadId, resourceId, runId, toolCallId, resumeData, streamOptions } = options;
+
+    if (!threadId || !resourceId || !runId) {
+      throw new MastraError({
+        id: 'AGENT_SEND_STREAM_RESUME_MISSING_TARGET',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'sendStreamResume() requires threadId, resourceId, and runId.',
+        details: { threadId, resourceId, runId, agentName: this.name },
+      });
+    }
+
+    const resumableRun = agentThreadStreamRuntime.getResumableThreadRun(
+      { threadId, resourceId, runId, toolCallId },
+      this.getPubSub(),
+    );
+    if (!resumableRun) {
+      throw new MastraError({
+        id: 'AGENT_SEND_STREAM_RESUME_NO_SUSPENDED_THREAD_RUN',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" sendStreamResume() could not find a suspended run "${runId}" for thread "${threadId}".`,
+        details: {
+          threadId,
+          resourceId,
+          runId,
+          agentName: this.name,
+        },
+      });
+    }
+
+    const resumeOptions = (streamOptions ?? {}) as AgentExecutionOptionsBase<unknown> & { toolCallId?: string };
+
+    await this.resumeStream(resumeData, {
+      ...resumeOptions,
+      runId,
+      ...(resumableRun.toolCallId ? { toolCallId: resumableRun.toolCallId } : {}),
+      memory: {
+        ...(resumeOptions.memory ?? {}),
+        thread: threadId,
+        resource: resourceId,
+      },
+    });
+
+    return { accepted: true, runId, toolCallId: resumableRun.toolCallId };
+  }
+
   async sendToolApproval<OUTPUT = undefined>(
     options: AgentExecutionOptions<OUTPUT> & {
       threadId: string;
       resourceId: string;
       toolCallId?: string;
       approved: boolean;
+      declineContext?: { reason?: string; message?: string };
       messages?: MessageListInput;
       streamOptions?: AgentExecutionOptions<OUTPUT>;
     },
   ): Promise<{ accepted: true; runId: string; toolCallId?: string }> {
-    const { threadId, resourceId, approved, messages, streamOptions, ...executionOptions } = options;
+    const { threadId, resourceId, approved, declineContext, messages, streamOptions, ...executionOptions } = options;
 
     if (messages && approved) {
       const continuation = agentThreadStreamRuntime.continueWithMessages(
@@ -7990,22 +8238,26 @@ export class Agent<
       });
     }
 
-    const approvalOptions = {
-      ...executionOptions,
-      runId,
-      memory: {
-        ...(executionOptions.memory ?? {}),
-        thread: executionOptions.memory?.thread ?? threadId,
-        resource: executionOptions.memory?.resource ?? resourceId,
-      },
-    } as unknown as AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string };
+    const resumeOptions = deepMerge(
+      (streamOptions ?? {}) as Record<string, unknown>,
+      executionOptions as Record<string, unknown>,
+    ) as unknown as AgentExecutionOptions<OUTPUT>;
 
-    if (approved) {
-      await this.approveToolCall(approvalOptions);
-    } else {
-      await this.declineToolCall(approvalOptions);
-    }
-    return { accepted: true, runId, toolCallId: options.toolCallId };
+    return this.sendStreamResume({
+      threadId,
+      resourceId,
+      runId,
+      toolCallId: options.toolCallId,
+      resumeData: approved ? { approved } : declineContext ? { approved, ...declineContext } : { approved },
+      streamOptions: {
+        ...resumeOptions,
+        memory: {
+          ...(resumeOptions.memory ?? {}),
+          thread: resumeOptions.memory?.thread ?? threadId,
+          resource: resumeOptions.memory?.resource ?? resourceId,
+        },
+      },
+    });
   }
 
   /**

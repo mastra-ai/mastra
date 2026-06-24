@@ -1,13 +1,7 @@
-import {
-  Badge,
-  EntityHeader,
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-  WorkflowIcon,
-  useCopyToClipboard,
-} from '@mastra/playground-ui';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, WorkflowIcon } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { EntityHeader } from '@mastra/playground-ui/components/EntityHeader';
+import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { CopyIcon, Cpu } from 'lucide-react';
 
 import { useWorkflow } from '@/hooks/use-workflows';

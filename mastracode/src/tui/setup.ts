@@ -48,13 +48,13 @@ export function setupKeyboardShortcuts(
     }
 
     if (state.pendingApprovalDismiss) {
-      // Dismiss active approval dialog and abort
+      // Dismiss active approval dialogs by declining the gated tool. Do not abort
+      // the run: the decline is delivered through the normal approval resume path.
       state.pendingApprovalDismiss();
       state.activeInlinePlanApproval = undefined;
       state.activeInlineQuestion = undefined;
       state.pendingInlineQuestions.length = 0;
-      state.userInitiatedAbort = true;
-      state.harness.abort();
+      return;
     } else if (state.session.run.isRunning() || state.session.suspensions.hasPending()) {
       // Clean up active inline components on abort. suspensions.hasPending() covers
       // the case where the run is parked in a tool suspend() (e.g. ask_user) —
@@ -65,7 +65,7 @@ export function setupKeyboardShortcuts(
       state.pendingInlineQuestions.length = 0;
       state.pendingAskUserComponents?.clear();
       state.userInitiatedAbort = true;
-      state.harness.abort();
+      state.session.abort();
     } else {
       const current = state.editor.getText();
       if (current.length > 0) {
@@ -156,7 +156,7 @@ export function setupKeyboardShortcuts(
     const currentIndex = modes.findIndex(m => m.id === currentId);
     const nextIndex = (currentIndex + 1) % modes.length;
     const nextMode = modes[nextIndex]!;
-    await state.harness.switchMode({ modeId: nextMode.id });
+    await state.session.mode.switch({ modeId: nextMode.id });
   });
 
   // Ctrl+Y - toggle YOLO mode
@@ -219,7 +219,7 @@ function abortActiveGoalJudge(state: TUIState): boolean {
   // continue on the next iteration. Abort the active harness run too: the core
   // scorer owns the judge stream, so the TUI-local controller alone only changes
   // the visual component and lets the judge continue in the background.
-  state.harness.abort();
+  state.session.abort();
   // Persist the paused state immediately so a thread switch or exit before the
   // next save does not reload the old active objective and effectively undo the
   // pause. `saveToThread` is best-effort, so run it fire-and-forget to keep this
@@ -472,7 +472,7 @@ export async function loadSkillCommands(state: TUIState): Promise<void> {
   try {
     let workspace = state.harness.getWorkspace() ?? state.workspace;
     if (!workspace && state.harness.hasWorkspace()) {
-      workspace = await state.harness.resolveWorkspace();
+      workspace = await state.harness.resolveWorkspace({ session: state.session });
     }
     if (!workspace?.skills) {
       state.skillCommands = [];
@@ -524,7 +524,7 @@ export function setupKeyHandlers(
     state.pendingInlineQuestions.length = 0;
     state.pendingAskUserComponents?.clear();
     state.userInitiatedAbort = true;
-    state.harness.abort();
+    state.session.abort();
   };
   process.on('SIGINT', sigintHandler);
 
@@ -544,18 +544,22 @@ export function setupKeyHandlers(
 // =============================================================================
 
 export function subscribeToHarness(state: TUIState, handleEvent: (event: any) => Promise<void>): void {
-  const listener: HarnessEventListener = async event => {
-    try {
-      await handleEvent(event);
-    } catch (err) {
-      // Log but don't crash — individual event errors shouldn't kill the process
-      const msg = err instanceof Error ? err.message : String(err);
-      const stack = err instanceof Error ? err.stack : undefined;
-      process.stderr.write(`[event error] ${event.type}: ${msg}\n`);
-      if (stack) process.stderr.write(stack + '\n');
-    }
+  let eventQueue = Promise.resolve();
+  const listener: HarnessEventListener = event => {
+    eventQueue = eventQueue.then(async () => {
+      try {
+        await handleEvent(event);
+      } catch (err) {
+        // Log but don't crash — individual event errors shouldn't kill the process
+        const msg = err instanceof Error ? err.message : String(err);
+        const stack = err instanceof Error ? err.stack : undefined;
+        process.stderr.write(`[event error] ${event.type}: ${msg}\n`);
+        if (stack) process.stderr.write(stack + '\n');
+      }
+    });
+    return eventQueue;
   };
-  state.unsubscribe = state.harness.subscribe(listener);
+  state.unsubscribe = state.session.subscribe(listener);
 }
 
 // =============================================================================
@@ -587,6 +591,9 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
   const threads = allThreads.filter(t => {
     const threadPath = t.metadata?.projectPath as string | undefined;
     if (threadPath) return threadPath === currentPath;
+    // In a worktree, only show threads explicitly tagged for this path.
+    // Untagged threads likely belong to the main repo or another worktree.
+    if (state.projectInfo.isWorktree) return false;
     if (dirCreatedAt) return t.createdAt >= dirCreatedAt;
     return true;
   });
@@ -604,7 +611,7 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
   if (sortedThreads.length === 1) {
     const thread = sortedThreads[0]!;
     try {
-      await state.harness.switchThread({ threadId: thread.id });
+      await state.session.thread.switch({ threadId: thread.id });
       if (!thread.metadata?.projectPath) {
         await state.session.thread.setSetting({ key: 'projectPath', value: currentPath });
       }
@@ -624,7 +631,7 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
   // Multiple threads — try each in order until one is unlocked
   for (const thread of sortedThreads) {
     try {
-      await state.harness.switchThread({ threadId: thread.id });
+      await state.session.thread.switch({ threadId: thread.id });
       if (!thread.metadata?.projectPath) {
         await state.session.thread.setSetting({ key: 'projectPath', value: currentPath });
       }
@@ -647,7 +654,7 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
 
 export async function renderExistingTasks(state: TUIState): Promise<void> {
   try {
-    const tasks = state.harness.session.displayState.get().tasks;
+    const tasks = state.session.displayState.get().tasks;
 
     if (tasks.length > 0 && state.taskProgress) {
       state.taskProgress.updateTasks(tasks);

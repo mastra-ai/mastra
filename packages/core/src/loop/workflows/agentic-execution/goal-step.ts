@@ -16,6 +16,7 @@ import { resolveModelConfig } from '../../../llm';
 import type { MastraLanguageModel } from '../../../llm/model/shared.types';
 import { createProcessorSendSignal } from '../../../processors/send-signal';
 import type { GoalObjectiveRecord } from '../../../storage/domains/thread-state/base';
+import { safeEnqueue } from '../../../stream/base';
 import type { ChunkType, GoalEvaluationActivity } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createStep } from '../../../workflows/workflow';
@@ -145,7 +146,7 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
         if (inputData.stepResult) {
           inputData.stepResult.isContinued = false;
         }
-        controller.enqueue({
+        safeEnqueue(controller, {
           type: 'goal',
           runId,
           from: ChunkFrom.AGENT,
@@ -205,7 +206,7 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
               ? activity.message
               : formatJudgeActivityMessage(activity.name ?? activity.message, args);
           if (!message) return;
-          controller.enqueue({
+          safeEnqueue(controller, {
             type: 'goal',
             runId,
             from: ChunkFrom.AGENT,
@@ -330,7 +331,7 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
 
         // Emit a pending chunk so consumers (the TUI judge display) can show a
         // loading indicator while the scorer runs.
-        controller.enqueue({
+        safeEnqueue(controller, {
           type: 'goal',
           runId,
           from: ChunkFrom.AGENT,
@@ -488,7 +489,7 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
         metadata: { goalEvaluation: goalEvaluationPayload },
       });
 
-      controller.enqueue({
+      safeEnqueue(controller, {
         type: 'goal',
         runId,
         from: ChunkFrom.AGENT,
