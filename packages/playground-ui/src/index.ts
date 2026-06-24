@@ -99,7 +99,6 @@ export * from './ds/components/DataKeysAndValues';
 export * from './ds/components/DataPanel';
 export * from './ds/components/DateTimeRangePicker';
 export * from './ds/components/HorizontalBars';
-export * from './ds/components/MetricsDataTable';
 export * from './ds/components/MetricsLineChart';
 export * from './ds/components/ScatterPlotChart';
 export * from './ds/components/StatusBadge';
@@ -150,6 +149,7 @@ export { usePlaygroundStore } from './store/playground-store';
 export * from './domains/metrics';
 export * from './domains/traces';
 export * from './domains/logs';
+export * from './domains/memory';
 export * from './ee';
 
 // DS Types
