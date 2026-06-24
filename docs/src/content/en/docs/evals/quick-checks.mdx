@@ -31,11 +31,7 @@ import { weatherAgent } from '../agents'
 const result = await runEvals({
   data: [{ input: 'What is the weather in Brooklyn?' }],
   target: weatherAgent,
-  scorers: [
-    checks.includes('Brooklyn'),
-    checks.calledTool('get_weather'),
-    checks.noToolErrors(),
-  ],
+  scorers: [checks.includes('Brooklyn'), checks.calledTool('get_weather'), checks.noToolErrors()],
 })
 
 console.log(result.scores)
@@ -51,7 +47,7 @@ Quick Checks fall into two categories:
 These scorers evaluate the agent's text output:
 
 | Check | What it does | Score |
-|---|---|---|
+| - | - | - |
 | `checks.includes(str)` | Output contains substring | 1 or 0 |
 | `checks.excludes(str)` | Output does not contain substring | 1 or 0 |
 | `checks.equals(str)` | Output exactly equals string | 1 or 0 |
@@ -63,7 +59,7 @@ These scorers evaluate the agent's text output:
 These scorers evaluate tool usage from the agent's run:
 
 | Check | What it does | Score |
-|---|---|---|
+| - | - | - |
 | `checks.calledTool(name)` | Tool was called at least N times | 1 or 0 |
 | `checks.didNotCall(name)` | Tool was not called | 1 or 0 |
 | `checks.toolOrder([...])` | Tools called in expected order | 1 or 0 |
@@ -133,7 +129,7 @@ export const weatherAgent = new Agent({
 Each check is a standard `createScorer()` instance with a `preprocess` step and a `generateScore` step. They follow the same [four-step pipeline](/docs/evals/custom-scorers#the-four-step-pipeline) as any other scorer:
 
 1. **preprocess**: Extracts and normalizes relevant data from the agent run (text content, tool calls)
-2. **generateScore**: Converts the preprocessed result into a score (typically binary 1 or 0)
+1. **generateScore**: Converts the preprocessed result into a score (typically binary 1 or 0)
 
 Because checks skip the `analyze` and `generateReason` steps and make no LLM calls, they run in microseconds.
 

@@ -355,9 +355,7 @@ export function noToolErrors() {
   })
     .preprocess(async ({ run }) => {
       const invocations = extractRawInvocations(run.output);
-      const errorCount = invocations.filter(
-        inv => inv.state === 'call' || (inv.result && inv.result.error),
-      ).length;
+      const errorCount = invocations.filter(inv => inv.state === 'call' || (inv.result && inv.result.error)).length;
       return { errorCount, totalCalls: invocations.length, passed: errorCount === 0 };
     })
     .generateScore(({ results }) => {

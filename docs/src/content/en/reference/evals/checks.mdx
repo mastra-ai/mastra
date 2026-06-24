@@ -45,19 +45,19 @@ checks.includes('Sunny', { ignoreCase: false })
 
 <PropertiesTable
   content={[
-    {
-      name: 'expected',
-      type: 'string',
-      description: 'Substring to search for in the output.',
-    },
-    {
-      name: 'options.ignoreCase',
-      type: 'boolean',
-      isOptional: true,
-      defaultValue: 'true',
-      description: 'Case-insensitive matching.',
-    },
-  ]}
+  {
+    name: 'expected',
+    type: 'string',
+    description: 'Substring to search for in the output.',
+  },
+  {
+    name: 'options.ignoreCase',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description: 'Case-insensitive matching.',
+  },
+]}
 />
 
 Returns: `1` if found, `0` otherwise.
@@ -73,19 +73,19 @@ checks.excludes('Error', { ignoreCase: false })
 
 <PropertiesTable
   content={[
-    {
-      name: 'unwanted',
-      type: 'string',
-      description: 'Substring that must not appear in the output.',
-    },
-    {
-      name: 'options.ignoreCase',
-      type: 'boolean',
-      isOptional: true,
-      defaultValue: 'true',
-      description: 'Case-insensitive matching.',
-    },
-  ]}
+  {
+    name: 'unwanted',
+    type: 'string',
+    description: 'Substring that must not appear in the output.',
+  },
+  {
+    name: 'options.ignoreCase',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description: 'Case-insensitive matching.',
+  },
+]}
 />
 
 Returns: `1` if absent, `0` otherwise.
@@ -101,19 +101,19 @@ checks.equals('Hello', { ignoreCase: false })
 
 <PropertiesTable
   content={[
-    {
-      name: 'expected',
-      type: 'string',
-      description: 'Exact string the output must match.',
-    },
-    {
-      name: 'options.ignoreCase',
-      type: 'boolean',
-      isOptional: true,
-      defaultValue: 'true',
-      description: 'Case-insensitive matching.',
-    },
-  ]}
+  {
+    name: 'expected',
+    type: 'string',
+    description: 'Exact string the output must match.',
+  },
+  {
+    name: 'options.ignoreCase',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description: 'Case-insensitive matching.',
+  },
+]}
 />
 
 Returns: `1` if equal, `0` otherwise.
@@ -129,19 +129,19 @@ checks.matches(/^hello$/, { exact: true })
 
 <PropertiesTable
   content={[
-    {
-      name: 'pattern',
-      type: 'RegExp',
-      description: 'Regular expression to test against the output.',
-    },
-    {
-      name: 'options.exact',
-      type: 'boolean',
-      isOptional: true,
-      defaultValue: 'false',
-      description: 'Anchor the pattern to match the entire output (adds ^ and $).',
-    },
-  ]}
+  {
+    name: 'pattern',
+    type: 'RegExp',
+    description: 'Regular expression to test against the output.',
+  },
+  {
+    name: 'options.exact',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description: 'Anchor the pattern to match the entire output (adds ^ and $).',
+  },
+]}
 />
 
 Returns: `1` if matched, `0` otherwise.
@@ -157,25 +157,25 @@ checks.similarity('Sunny, 72°F', { threshold: 0.7 })
 
 <PropertiesTable
   content={[
-    {
-      name: 'expected',
-      type: 'string',
-      description: 'Reference string to compare against.',
-    },
-    {
-      name: 'options.threshold',
-      type: 'number',
-      isOptional: true,
-      description: 'Minimum similarity score (0-1) to return 1. When omitted, returns the raw similarity score.',
-    },
-    {
-      name: 'options.ignoreCase',
-      type: 'boolean',
-      isOptional: true,
-      defaultValue: 'true',
-      description: 'Case-insensitive comparison.',
-    },
-  ]}
+  {
+    name: 'expected',
+    type: 'string',
+    description: 'Reference string to compare against.',
+  },
+  {
+    name: 'options.threshold',
+    type: 'number',
+    isOptional: true,
+    description: 'Minimum similarity score (0-1) to return 1. When omitted, returns the raw similarity score.',
+  },
+  {
+    name: 'options.ignoreCase',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description: 'Case-insensitive comparison.',
+  },
+]}
 />
 
 Returns: Raw similarity score (0-1), or binary `1`/`0` when `threshold` is set.
@@ -193,19 +193,19 @@ checks.calledTool('search', { times: 2 })
 
 <PropertiesTable
   content={[
-    {
-      name: 'toolName',
-      type: 'string',
-      description: 'Name of the tool to look for.',
-    },
-    {
-      name: 'options.times',
-      type: 'number',
-      isOptional: true,
-      defaultValue: '1',
-      description: 'Minimum number of times the tool must be called.',
-    },
-  ]}
+  {
+    name: 'toolName',
+    type: 'string',
+    description: 'Name of the tool to look for.',
+  },
+  {
+    name: 'options.times',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '1',
+    description: 'Minimum number of times the tool must be called.',
+  },
+]}
 />
 
 Returns: `1` if called at least `times` times, `0` otherwise.
@@ -220,12 +220,12 @@ checks.didNotCall('delete_user')
 
 <PropertiesTable
   content={[
-    {
-      name: 'toolName',
-      type: 'string',
-      description: 'Name of the tool that must not appear.',
-    },
-  ]}
+  {
+    name: 'toolName',
+    type: 'string',
+    description: 'Name of the tool that must not appear.',
+  },
+]}
 />
 
 Returns: `1` if the tool was not called, `0` otherwise.
@@ -240,12 +240,12 @@ checks.toolOrder(['search', 'summarize', 'respond'])
 
 <PropertiesTable
   content={[
-    {
-      name: 'expectedOrder',
-      type: 'string[]',
-      description: 'Tool names in the expected calling sequence. Must appear as a subsequence of the actual tool calls.',
-    },
-  ]}
+  {
+    name: 'expectedOrder',
+    type: 'string[]',
+    description: 'Tool names in the expected calling sequence. Must appear as a subsequence of the actual tool calls.',
+  },
+]}
 />
 
 Returns: `1` if the expected order is satisfied, `0` otherwise.
@@ -260,12 +260,12 @@ checks.maxToolCalls(5)
 
 <PropertiesTable
   content={[
-    {
-      name: 'max',
-      type: 'number',
-      description: 'Maximum number of tool calls allowed.',
-    },
-  ]}
+  {
+    name: 'max',
+    type: 'number',
+    description: 'Maximum number of tool calls allowed.',
+  },
+]}
 />
 
 Returns: `1` if within the limit, `0` otherwise.

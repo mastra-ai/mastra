@@ -323,14 +323,8 @@ describe('Quick Checks — scenario tests via runEvals', () => {
       const agent = textAgent('The answer is 42.');
 
       const result = await runEvals({
-        data: [
-          { input: 'What is the answer?' },
-          { input: 'What is the answer?' },
-        ],
-        scorers: [
-          checks.includes('42'),
-          checks.excludes('error'),
-        ],
+        data: [{ input: 'What is the answer?' }, { input: 'What is the answer?' }],
+        scorers: [checks.includes('42'), checks.excludes('error')],
         target: agent,
       });
 
