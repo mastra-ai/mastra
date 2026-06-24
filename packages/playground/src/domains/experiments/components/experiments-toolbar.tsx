@@ -1,4 +1,5 @@
-import { Button, ButtonsGroup } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { XIcon } from 'lucide-react';

@@ -4,13 +4,13 @@ import {
   EntityDescription,
   EntityIcon,
   EntityName,
-  Spinner,
   Txt,
   Icon,
   McpServerIcon,
   ToolsIcon,
   cn,
 } from '@mastra/playground-ui';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import type { TryConnectMcpMutation } from '../../hooks/use-try-connect-mcp';
 

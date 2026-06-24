@@ -1,7 +1,6 @@
 import type { StorageThreadType } from '@mastra/core/memory';
 import {
   Button,
-  EmptyState,
   MemoryIcon,
   Tooltip,
   TooltipContent,
@@ -10,6 +9,7 @@ import {
   Txt,
   cn,
 } from '@mastra/playground-ui';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { ChevronDown, ChevronUp, Eye, MessageSquare, NotebookPen, Search } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';

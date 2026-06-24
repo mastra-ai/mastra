@@ -26,7 +26,7 @@ async function createSession(options: {
   });
 
   await harness.init();
-  const session = await harness.createSession();
+  const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
   if (options.onEvent) session.subscribe(options.onEvent);
   return { harness, session };
 }

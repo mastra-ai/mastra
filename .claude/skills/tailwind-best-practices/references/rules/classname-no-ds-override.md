@@ -38,7 +38,7 @@ Never pass `className` props to DS components to override their styles, except f
 <Alert className="bg-yellow-500">Warning</Alert>
 ```
 
-**Correct (use component variants and props):**
+**Correct (use component variants):**
 
 ```tsx
 // DO: Use component variants
@@ -50,11 +50,11 @@ Never pass `className` props to DS components to override their styles, except f
 <Button size="sm">Small</Button>
 <Button size="lg">Large</Button>
 
-// DO: Use Badge variants
+// DO: Use component props
 <Badge variant="success">Active</Badge>
 <Badge variant="error">Failed</Badge>
 
-// EXCEPTION: Height/width on DialogContent
+// EXCEPTION: Height/width on DialogContent and Popover
 <DialogContent className="h-[500px] w-[600px]">
   Content
 </DialogContent>

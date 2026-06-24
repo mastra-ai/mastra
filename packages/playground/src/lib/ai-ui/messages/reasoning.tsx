@@ -1,4 +1,5 @@
-import { Badge, Icon, cn } from '@mastra/playground-ui';
+import { Icon, cn } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { BrainIcon, ChevronUpIcon } from 'lucide-react';
 import { useState } from 'react';
 

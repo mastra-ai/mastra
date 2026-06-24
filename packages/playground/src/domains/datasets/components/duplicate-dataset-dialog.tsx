@@ -1,16 +1,8 @@
 'use client';
 
-import {
-  Button,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogBody,
-  Input,
-  Label,
-  toast,
-} from '@mastra/playground-ui';
+import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, toast } from '@mastra/playground-ui';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Label } from '@mastra/playground-ui/components/Label';
 import { useMastraClient } from '@mastra/react';
 import { useState, useEffect } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
