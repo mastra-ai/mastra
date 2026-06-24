@@ -832,7 +832,16 @@ export class SessionRunEngine {
               aborted,
             });
             currentRun = undefined;
-            if (aborted) break;
+            if (aborted) {
+              // The abort chunk terminates this consumer loop, so the live
+              // subscription is no longer being drained. Detach it so the next
+              // signal (e.g. a follow-up message sent right after Ctrl+C)
+              // re-subscribes and starts a fresh consumer — otherwise the new
+              // run's chunks would never be processed and the follow-up would
+              // get no response.
+              this.#session.stream.detach();
+              break;
+            }
           }
         } catch (error) {
           await this.handleSubscribedStreamError(error);
