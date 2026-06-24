@@ -798,20 +798,28 @@ export class CoreToolBuilder extends MastraBase {
       try {
         logger.debug(start, { ...logData, ...rest, model: logModelObject, args });
 
+        // When a tool is being resumed (resumeData present in execOptions), skip input
+        // validation. The original args were already validated during the initial
+        // execution, and during resume the tool's execute function checks resumeData
+        // and returns early without using the input args.
+        const isResuming = !!execOptions?.resumeData;
+
         // Validate input parameters if schema exists
         // Use the processed schema for validation if available, otherwise fall back to original
         const parameters = this.getParameters();
-        const { data, error } = validateToolInput(parameters, args, options.name);
-        //suspendedToolRunId is only required when resumeData is provided
-        const suspendedToolRunIdErrToIgnore =
-          error?.message?.includes('suspendedToolRunId: Required') && !(args as Record<string, unknown>)?.resumeData;
-        if (error && !suspendedToolRunIdErrToIgnore) {
-          logger.warn('Tool input validation failed', { ...logData, validationError: error.message });
-          toolSpan?.end({ output: error, attributes: { success: false } });
-          return error;
+        if (!isResuming) {
+          const { data, error } = validateToolInput(parameters, args, options.name);
+          //suspendedToolRunId is only required when resumeData is provided
+          const suspendedToolRunIdErrToIgnore =
+            error?.message?.includes('suspendedToolRunId: Required') && !(args as Record<string, unknown>)?.resumeData;
+          if (error && !suspendedToolRunIdErrToIgnore) {
+            logger.warn('Tool input validation failed', { ...logData, validationError: error.message });
+            toolSpan?.end({ output: error, attributes: { success: false } });
+            return error;
+          }
+          // Use validated/transformed data
+          args = data;
         }
-        // Use validated/transformed data
-        args = data;
 
         // there is a small delay in stream output so we add an immediate to ensure the stream is ready
         return await new Promise((resolve, reject) => {
