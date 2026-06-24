@@ -1,4 +1,5 @@
-import { Avatar, Txt } from '@mastra/playground-ui';
+import { Txt } from '@mastra/playground-ui';
+import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { CircleCheckIcon, LightbulbIcon, ListChecksIcon, WrenchIcon } from 'lucide-react';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';

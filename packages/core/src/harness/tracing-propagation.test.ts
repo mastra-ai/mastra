@@ -42,6 +42,16 @@ describe('Harness tracing propagation', () => {
   let session: Session;
   let streamSpy: ReturnType<typeof vi.spyOn>;
 
+  function getInitialStreamOptions() {
+    const initialStreamCall = streamSpy.mock.calls.find(([, options]) => {
+      return !(options as Record<string, unknown> | undefined)?.untilIdle;
+    });
+
+    expect(initialStreamCall).toBeDefined();
+
+    return initialStreamCall![1] as Record<string, unknown>;
+  }
+
   beforeEach(async () => {
     agent = createAgent();
     harness = new Harness({
@@ -58,7 +68,7 @@ describe('Harness tracing propagation', () => {
     });
 
     await harness.init();
-    session = await harness.createSession();
+    session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
   });
 
   it('should forward tracingContext to agent.stream() when provided', async () => {
@@ -67,9 +77,7 @@ describe('Harness tracing propagation', () => {
 
     await session.sendMessage({ content: 'hello', tracingContext });
 
-    expect(streamSpy).toHaveBeenCalledTimes(1);
-
-    const [, streamOptions] = streamSpy.mock.calls[0]!;
+    const streamOptions = getInitialStreamOptions();
 
     expect(streamOptions).toHaveProperty('tracingContext');
     expect((streamOptions as any).tracingContext).toBe(tracingContext);
@@ -84,9 +92,7 @@ describe('Harness tracing propagation', () => {
 
     await session.sendMessage({ content: 'hello', tracingOptions });
 
-    expect(streamSpy).toHaveBeenCalledTimes(1);
-
-    const [, streamOptions] = streamSpy.mock.calls[0]!;
+    const streamOptions = getInitialStreamOptions();
 
     expect(streamOptions).toHaveProperty('tracingOptions');
     expect((streamOptions as any).tracingOptions).toBe(tracingOptions);
@@ -95,9 +101,7 @@ describe('Harness tracing propagation', () => {
   it('should not include tracingContext/tracingOptions when not provided', async () => {
     await session.sendMessage({ content: 'hello' });
 
-    expect(streamSpy).toHaveBeenCalledTimes(1);
-
-    const [, streamOptions] = streamSpy.mock.calls[0]!;
+    const streamOptions = getInitialStreamOptions();
 
     expect(streamOptions).not.toHaveProperty('tracingContext');
     expect(streamOptions).not.toHaveProperty('tracingOptions');

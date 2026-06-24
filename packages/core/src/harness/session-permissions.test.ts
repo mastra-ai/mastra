@@ -17,7 +17,7 @@ async function createSession(storage: InMemoryStore) {
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
   });
   await harness.init();
-  const session = await harness.createSession();
+  const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
   return { harness, session };
 }
 

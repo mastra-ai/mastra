@@ -44,6 +44,55 @@ runs:
         cache: ${{ inputs.package-manager-cache == 'true' }}
         cache_dependency_path: ${{ inputs.cache-dependency-path || 'pnpm-lock.yaml' }}
 
+    - name: Reset corrupt pnpm store cache
+      if: ${{ inputs.package-manager-cache == 'true' }}
+      shell: bash
+      run: |
+        set +e
+        store_path=$(pnpm store path --silent)
+        pnpm store status >/tmp/pnpm-store-status.log 2>&1
+        status=$?
+        set -e
+
+        if [ "$status" -eq 0 ]; then
+          exit 0
+        fi
+
+        if ! grep -q "database disk image is malformed" /tmp/pnpm-store-status.log; then
+          cat /tmp/pnpm-store-status.log
+          exit "$status"
+        fi
+
+        # The restored store cache is corrupt. On these runners pnpm/action-setup
+        # installs pnpm beneath the same directory as the store, and the pnpm
+        # binary is content-addressed into the store, so `rm -rf "$store_path"`
+        # also deletes files the running pnpm depends on. That broke the next
+        # `pnpm install` with a MODULE_NOT_FOUND for pnpm.mjs. Remove the corrupt
+        # store, then reinstall pnpm so its binary is intact before installing.
+        echo "Detected corrupt pnpm store cache at $store_path; removing restored store."
+        rm -rf "$store_path"
+
+        if pnpm --version >/dev/null 2>&1; then
+          exit 0
+        fi
+
+        # Resolve the pnpm version the same way pnpm/action-setup does: from the
+        # explicit input if given, otherwise the packageManager field. This keeps
+        # the reinstall in sync with the rest of the workspace automatically.
+        pnpm_version="$PNPM_VERSION"
+        if [ -z "$pnpm_version" ]; then
+          pnpm_version=$(node -p "(require('./$PACKAGE_JSON_FILE').packageManager||'').replace(/^pnpm@/,'').split('+')[0]")
+        fi
+
+        # pnpm/action-setup installs pnpm with `npm install` into the directory
+        # whose node_modules/.bin is PNPM_HOME, so reinstall into that same root.
+        pnpm_install_root=$(cd "$PNPM_HOME/../.." && pwd)
+        echo "pnpm binary was removed with the corrupt store; reinstalling pnpm@$pnpm_version into $pnpm_install_root."
+        npm install --prefix "$pnpm_install_root" "pnpm@$pnpm_version"
+      env:
+        PNPM_VERSION: ${{ inputs.version }}
+        PACKAGE_JSON_FILE: ${{ inputs.package-json-file || 'package.json' }}
+
     - name: Install dependencies
       if: ${{ inputs.install-dependencies == 'true' }}
       shell: bash

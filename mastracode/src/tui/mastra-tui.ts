@@ -56,7 +56,9 @@ import {
   addUserMessage,
   removePendingUserMessage,
   renderClearedTasksInline,
+  renderCompletedTasksInline,
   renderExistingMessages,
+  renderTaskDeltaInline,
 } from './render-messages.js';
 import {
   setupKeyboardShortcuts,
@@ -99,6 +101,11 @@ const USER_SIGNAL_DELIVERY_OPTIONS: {
 } = {
   ifActive: { attributes: { delivery: 'while-active' } },
   ifIdle: { attributes: { delivery: 'message' } },
+};
+
+const USER_MESSAGE_APPROVAL_INTERRUPT = {
+  reason: 'interrupted_by_user_message',
+  message: 'The pending tool approval was declined because the user sent a new message.',
 };
 
 /** How often to recheck for updates during a long-running session (ms). */
@@ -461,6 +468,10 @@ export class MastraTUI {
 
     const send = () => {
       this.clearIdleCounter();
+      if (hasActiveRun) {
+        this.state.pendingApprovalDismiss?.(USER_MESSAGE_APPROVAL_INTERRUPT);
+      }
+
       const signal = this.state.session.sendSignal({
         content: this.createUserSignalContent(content, images),
         ...USER_SIGNAL_DELIVERY_OPTIONS,
@@ -1093,6 +1104,10 @@ export class MastraTUI {
       renderExistingMessages: () => this.renderExistingMessagesAndSeedIdleCounter(),
       renderClearedTasksInline: (clearedTasks, insertIndex) =>
         renderClearedTasksInline(this.state, clearedTasks, insertIndex),
+      renderCompletedTasksInline: (completedTasks, insertIndex) =>
+        renderCompletedTasksInline(this.state, completedTasks, insertIndex),
+      renderTaskDeltaInline: (previousTasks, nextTasks, insertIndex) =>
+        renderTaskDeltaInline(this.state, previousTasks, nextTasks, insertIndex),
       refreshModelAuthStatus: () => this.refreshModelAuthStatus(),
     };
   }

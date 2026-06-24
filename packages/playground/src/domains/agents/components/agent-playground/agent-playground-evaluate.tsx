@@ -1,27 +1,23 @@
 import type { DatasetRecord } from '@mastra/client-js';
 import {
-  Badge,
   Button,
-  Column,
-  Columns,
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogBody,
-  EmptyState,
   DataList,
   DataListSkeleton,
-  Searchbar,
-  Spinner,
-  StatusBadge,
-  Tabs,
-  TabContent,
-  TabList,
-  Tab,
   Txt,
   toast,
 } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Column, Columns } from '@mastra/playground-ui/components/Columns';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Searchbar } from '@mastra/playground-ui/components/Searchbar';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
+import { Tabs, TabContent, TabList, Tab } from '@mastra/playground-ui/components/Tabs';
 import { Database, GaugeIcon, FlaskConical, ChevronLeft, Plus, Paperclip } from 'lucide-react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useWatch } from 'react-hook-form';

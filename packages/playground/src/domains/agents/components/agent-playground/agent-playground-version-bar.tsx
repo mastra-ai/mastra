@@ -1,15 +1,8 @@
 import {
-  Badge,
   Button,
-  ButtonsGroup,
-  CopyButton,
-  DropdownMenu,
-  Input,
-  Label,
   HoverPopover,
   PopoverTrigger,
   PopoverContent,
-  Spinner,
   Txt,
   Icon,
   Dialog,
@@ -20,7 +13,14 @@ import {
   DialogBody,
   DialogFooter,
 } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Check, ChevronDown, Clock, Download, GitPullRequest, Info, MessageSquare, Save } from 'lucide-react';
 import { useMemo, useState, useCallback } from 'react';
 

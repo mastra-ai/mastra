@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { MockMemory } from '../../../../memory/mock';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
 /**
  * Regression class: multi-turn message persistence and recall.
@@ -11,7 +11,7 @@ import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
  * - Message ordering across multiple saves
  * - Tool call results persisted and recalled correctly
  */
-describe('AIMock loop scenario: multi-turn memory persistence', () => {
+describeForAllEngines('AIMock loop scenario: multi-turn memory persistence', engine => {
   const getMock = useLoopScenarioAimock();
 
   it('persists and recalls 3+ turns with correct ordering', async () => {
@@ -32,6 +32,7 @@ describe('AIMock loop scenario: multi-turn memory persistence', () => {
 
     // Turn 1
     await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'My name is Alice.',
       memory,
@@ -48,6 +49,7 @@ describe('AIMock loop scenario: multi-turn memory persistence', () => {
 
     // Turn 2
     await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'I am 28 years old.',
       memory,
@@ -64,6 +66,7 @@ describe('AIMock loop scenario: multi-turn memory persistence', () => {
 
     // Turn 3 - verify all prior turns are recalled
     const { requests } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Tell me what you know about me.',
       memory,
@@ -113,6 +116,7 @@ describe('AIMock loop scenario: multi-turn memory persistence', () => {
     });
 
     await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'My favorite food is PIZZA_USER1.',
       memory,
@@ -143,6 +147,7 @@ describe('AIMock loop scenario: multi-turn memory persistence', () => {
     getMock().resetMatchCounts();
 
     await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'My favorite food is SUSHI_USER2.',
       memory,
@@ -159,6 +164,7 @@ describe('AIMock loop scenario: multi-turn memory persistence', () => {
 
     // User 1 asks what we know - should NOT see User 2's data
     const { requests } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'What do you know about my food preferences?',
       memory,
@@ -196,6 +202,7 @@ describe('AIMock loop scenario: multi-turn memory persistence', () => {
 
     // Turn 1: agent calls a tool
     await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'What is the weather in Tokyo?',
       memory,
@@ -243,6 +250,7 @@ describe('AIMock loop scenario: multi-turn memory persistence', () => {
 
     // Turn 2: verify tool results are recalled
     const { requests } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'What did you say about Tokyo weather?',
       memory,

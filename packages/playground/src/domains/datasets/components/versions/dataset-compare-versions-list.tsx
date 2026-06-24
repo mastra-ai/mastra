@@ -1,5 +1,7 @@
 import type { DatasetItem } from '@mastra/client-js';
-import { ItemList, Tooltip, TooltipContent, TooltipTrigger, Chip, cn } from '@mastra/playground-ui';
+import { Tooltip, TooltipContent, TooltipTrigger, cn } from '@mastra/playground-ui';
+import { Chip } from '@mastra/playground-ui/components/Chip';
+import { ItemList } from '@mastra/playground-ui/components/ItemList';
 import { BanIcon, EqualIcon, PenIcon, PlusIcon } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
 

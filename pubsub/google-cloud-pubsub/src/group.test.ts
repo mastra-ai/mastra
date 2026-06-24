@@ -284,4 +284,75 @@ describe.sequential('GoogleCloudPubSub group support', () => {
       expect(collected[0]!.type).toBe('unique-msg');
     });
   });
+
+  describe('localOnly publish', () => {
+    it('delivers to subscribers in the same process without round-tripping through Pub/Sub', async () => {
+      const pubsub = createPubSub();
+      const topic = uniqueTopic();
+      const collected: Event[] = [];
+
+      await pubsub.subscribe(topic, (event, ack) => {
+        collected.push(event);
+        ack?.();
+      });
+
+      // Payload carries a live class instance — if this hit Pub/Sub it would be
+      // JSON-serialized and lose its prototype on the way back.
+      class Holder {
+        constructor(public readonly value: string) {}
+        describe() {
+          return `holder(${this.value})`;
+        }
+      }
+      const holder = new Holder('alpha');
+      await pubsub.publish(topic, makeEvent({ type: 'local', data: { holder } }), { localOnly: true });
+
+      await waitForMessages(1, collected, 1000);
+      expect(collected.length).toBe(1);
+      const delivered = collected[0]!.data.holder as Holder;
+      expect(delivered).toBe(holder);
+      expect(delivered.describe()).toBe('holder(alpha)');
+    });
+
+    it('does not leak local-only events to other instances sharing the same topic', async () => {
+      const publisher = createPubSub();
+      const remote = createPubSub();
+      const topic = uniqueTopic();
+      const remoteCollected: Event[] = [];
+
+      // Remote instance subscribes via real Pub/Sub.
+      await remote.subscribe(topic, (event, ack) => {
+        remoteCollected.push(event);
+        ack?.();
+      });
+
+      // Give the remote subscription a moment to attach to the emulator.
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      await publisher.publish(topic, makeEvent({ type: 'private' }), { localOnly: true });
+
+      // The remote subscriber should never see this — confirm by waiting.
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      expect(remoteCollected.length).toBe(0);
+    });
+
+    it('unsubscribe stops local delivery too', async () => {
+      const pubsub = createPubSub();
+      const topic = uniqueTopic();
+      const collected: Event[] = [];
+
+      const cb = (event: Event, ack?: () => Promise<void>) => {
+        collected.push(event);
+        ack?.();
+      };
+
+      await pubsub.subscribe(topic, cb);
+      await pubsub.unsubscribe(topic, cb);
+
+      await pubsub.publish(topic, makeEvent(), { localOnly: true });
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+      expect(collected.length).toBe(0);
+    });
+  });
 });

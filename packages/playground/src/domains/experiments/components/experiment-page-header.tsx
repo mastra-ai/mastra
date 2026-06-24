@@ -1,7 +1,9 @@
 'use client';
 
 import type { DatasetExperiment } from '@mastra/client-js';
-import { CopyButton, MainHeader, TextAndIcon } from '@mastra/playground-ui';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
+import { TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { format } from 'date-fns';
 import { PlayCircle, Calendar1Icon, CrosshairIcon, GitBranch } from 'lucide-react';
 import { useAgents } from '../../agents/hooks/use-agents';

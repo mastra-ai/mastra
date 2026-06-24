@@ -1,5 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { Avatar, Button, ButtonsGroup, cn, ScrollArea } from '@mastra/playground-ui';
+import { Button, cn, ScrollArea } from '@mastra/playground-ui';
+import { Avatar } from '@mastra/playground-ui/components/Avatar';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { PendingIndicator } from '@mastra/playground-ui/components/PendingIndicator';
 import { useAutoscroll } from '@mastra/playground-ui/hooks/use-autoscroll';
 import type { MessageFactoryPart } from '@mastra/react';

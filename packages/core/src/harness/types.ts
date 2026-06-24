@@ -3,7 +3,6 @@ import type { AgentInstructions, ToolsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import type { PubSub } from '../events/pubsub';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
-import type { MastraModelConfig } from '../llm/model/shared.types';
 import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
 import type { ObservabilityEntrypoint } from '../observability/types/core';
@@ -267,13 +266,6 @@ export interface HarnessConfig<TState = {}> {
   idGenerator?: () => string;
 
   /**
-   * Custom auth checker for model providers.
-   * Lets the app layer provide additional auth sources (e.g., OAuth tokens)
-   * beyond the default env var check from the provider registry.
-   */
-  modelAuthChecker?: ModelAuthChecker;
-
-  /**
    * Provides per-model use counts for `listAvailableModels()` sorting/display.
    * Lets the app layer track and report how often each model has been used.
    */
@@ -286,12 +278,6 @@ export interface HarnessConfig<TState = {}> {
   modelUseCountTracker?: ModelUseCountTracker;
 
   /**
-   * Optional catalog hook for additional models (e.g., user-defined custom providers).
-   * Returned entries are merged into `listAvailableModels()`.
-   */
-  customModelCatalogProvider?: CustomModelCatalogProvider;
-
-  /**
    * Subagent definitions. The Harness auto-creates a `subagent` built-in tool
    * that parent agents can call to spawn focused subagents.
    */
@@ -299,15 +285,12 @@ export interface HarnessConfig<TState = {}> {
 
   /**
    * Model gateways registered on Harness' internal Mastra instance.
-   * Apps that need gateway-backed model resolution should provide `resolveModel`.
+   * The Harness resolves every model — mode agents, Observational Memory,
+   * subagents — and builds the `listAvailableModels()` catalog through these
+   * gateways. Provider auth (API keys, OAuth, stored credentials) is resolved
+   * via each gateway's `resolveAuth()` / env-var configuration.
    */
   gateways?: MastraModelGatewayInterface[];
-
-  /**
-   * Converts a model ID string (e.g., "anthropic/claude-sonnet-4-20250514") to a
-   * language model instance for Harness-managed observer, reflector, and subagent models.
-   */
-  resolveModel?: (modelId: string) => MastraModelConfig;
 
   /**
    * Observational Memory configuration defaults.
@@ -426,25 +409,15 @@ export interface AvailableModel {
 }
 
 /**
- * Additional model entries supplied by the app layer.
+ * Same as {@link AvailableModel} but without the runtime `useCount` field.
+ * Used by providers that supply catalog entries before use-count tracking.
  */
 export type CustomAvailableModel = Omit<AvailableModel, 'useCount'>;
 
 /**
- * Provides additional model catalog entries for `listAvailableModels()`.
+ * Function that returns a list of custom available models (without use counts).
  */
-export type CustomModelCatalogProvider = () => CustomAvailableModel[] | Promise<CustomAvailableModel[]>;
-
-/**
- * Custom auth checker for model providers.
- * Called by `getCurrentModelAuthStatus()` and `listAvailableModels()` to determine
- * whether a provider has valid authentication beyond just env var checks
- * (e.g., OAuth tokens, stored credentials).
- *
- * Return `true` if the provider is authenticated, `false` if not,
- * or `undefined` to fall back to the default env var check.
- */
-export type ModelAuthChecker = (provider: string) => boolean | undefined;
+export type CustomModelCatalogProvider = () => Promise<CustomAvailableModel[]>;
 
 /**
  * Provides per-model use counts for sorting in `listAvailableModels()`.
@@ -1047,6 +1020,10 @@ export interface HarnessRequestState<TState = unknown> {
 }
 
 export interface HarnessRequestSession<TState = unknown> {
+  /** Stable session identifier (mirrors SessionRecord.id in storage). */
+  id: string;
+  /** Stable session owner (mirrors SessionRecord.ownerId in storage). */
+  ownerId: string;
   /** Currently-selected mode ID */
   modeId: string;
   /** Currently-selected model ID ('' when none selected yet) */

@@ -1,4 +1,5 @@
-import { MarkdownRenderer, SkillIcon } from '@mastra/playground-ui';
+import { SkillIcon } from '@mastra/playground-ui';
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import {
   FileText,
   Code,

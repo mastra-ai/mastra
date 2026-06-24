@@ -1,17 +1,9 @@
-import {
-  Collapsible,
-  CollapsibleTrigger,
-  CollapsibleContent,
-  Button,
-  Input,
-  Label,
-  RadioGroup,
-  RadioGroupItem,
-  Textarea,
-  JudgeIcon,
-  Icon,
-} from '@mastra/playground-ui';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent, Button, JudgeIcon, Icon } from '@mastra/playground-ui';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Trash2, ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { Control } from 'react-hook-form';
