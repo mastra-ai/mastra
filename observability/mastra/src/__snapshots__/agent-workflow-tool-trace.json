@@ -448,7 +448,7 @@
                   },
                   {
                     "role": "tool",
-                    "content": "[tool-result: {\"type\":\"json\",\"value\":{\"result\":{\"output\":\"test input processed\"}}}]"
+                    "content": "[tool-result]"
                   }
                 ],
                 "output": {

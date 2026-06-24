@@ -1456,6 +1456,54 @@ describe('ModelSpanTracker', () => {
       ]);
     });
 
+    it('should not expose raw result when modelOutput is absent', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        {
+          type: 'step-start',
+          payload: {
+            messageId: 'msg-1',
+            request: {
+              body: JSON.stringify({
+                messages: [
+                  {
+                    role: 'tool',
+                    content: [
+                      {
+                        type: 'tool-result',
+                        toolCallId: 'call_789',
+                        toolName: 'readFile',
+                        result: { rawBase64: 'sensitive-data-here' },
+                      },
+                    ],
+                  },
+                ],
+              }),
+            },
+          },
+        },
+        { type: 'text-delta', payload: { text: 'Done.' } },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      expect(stepSpans[0]!.input).toEqual([
+        { role: 'tool', content: '[tool-result]' },
+      ]);
+    });
+
     it('should fall back to [tool-result] when result is absent', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,

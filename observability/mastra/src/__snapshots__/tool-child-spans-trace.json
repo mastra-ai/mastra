@@ -380,7 +380,7 @@
                   },
                   {
                     "role": "tool",
-                    "content": "[tool-result: {\"type\":\"json\",\"value\":{\"output\":\"Tool processed: test-data\"}}]"
+                    "content": "[tool-result]"
                   }
                 ],
                 "output": {

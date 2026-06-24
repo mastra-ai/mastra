@@ -387,7 +387,7 @@
                   },
                   {
                     "role": "tool",
-                    "content": "[tool-result: {\"type\":\"json\",\"value\":{\"result\":8}}]"
+                    "content": "[tool-result]"
                   }
                 ],
                 "output": {

@@ -358,7 +358,7 @@
                   },
                   {
                     "role": "tool",
-                    "content": "[tool-result: {\"type\":\"json\",\"value\":{\"output\":\"Processed: some data\"}}]"
+                    "content": "[tool-result]"
                   }
                 ],
                 "output": {
