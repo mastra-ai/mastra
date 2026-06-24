@@ -16,6 +16,7 @@ import type {
 } from '@mastra/core/harness';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { ProviderConfig } from '@mastra/core/llm';
+import { Mastra } from '@mastra/core/mastra';
 import {
   AgentsMDInjector,
   isBadRequestError,
@@ -231,7 +232,15 @@ function resolveCloudObservabilityConfig(
   };
 }
 
-export async function createMastraCode(config?: MastraCodeConfig) {
+/**
+ * Base factory: builds every shared MastraCode resource (storage, observability,
+ * memory, MCP, providers, gateways, agent, modes) and the {@link Harness}, but
+ * does NOT call `init()` or create a session. The harness is returned inert so
+ * the composition layer can decide its Mastra ownership and session model.
+ *
+ * See {@link bootLocalHarness} (Case 3) and `mountHarnessOnMastra` (Cases 1 & 2).
+ */
+export async function createMastraCodeHarness(config?: MastraCodeConfig) {
   const cwd = config?.cwd ?? process.cwd();
   const homeDir = config?.homeDir ?? config?.initialState?.homeDir;
   const configDir = config?.configDir ?? DEFAULT_CONFIG_DIR;
@@ -767,12 +776,68 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     // , harnessV1
   });
 
-  // Bring up shared harness resources, then mint the single session that all
-  // work in this process runs through. The Harness owns no session of its own.
-  await harness.init();
-  await harness.getMastra()?.startWorkers();
-  const session = await harness.createSession({ id: sessionId, ownerId });
-  activeSession = session;
+  // The Harness is fully constructed but intentionally NOT inited here. Init and
+  // session creation are deferred to the composition layer (see below) so the
+  // harness can be wired in three ways:
+  //
+  //   1. Server + Web   — registered on a server Mastra, then inited; sessions
+  //                       minted per browser client over HTTP.
+  //   2. Server + TUI   — same server composition; the TUI drives a session
+  //                       (in-process today; remote transport is future work).
+  //   3. Local  + TUI   — harness builds its own internal Mastra on init() and
+  //                       mints one eager session for the whole process.
+  //
+  // Cases 1 & 2 use `mountHarnessOnMastra` (register-before-init, no eager
+  // session). Case 3 uses `bootLocalHarness` (init + one wired session).
+  return {
+    harness,
+    storage,
+    observability,
+    memory,
+    mcpManager,
+    hookManager,
+    signalsPubSub,
+    authStorage,
+    resolveModel,
+    storageWarning,
+    observabilityWarning,
+    builtinPacks,
+    builtinOmPacks,
+    effectiveDefaults,
+    githubSignals,
+    // Identity for the single local session (Case 3). Servers ignore these and
+    // mint per-request sessions with client-supplied resourceIds instead.
+    sessionId,
+    ownerId,
+    // Lets the composition layer publish the created session back into the
+    // config closures (e.g. notification stream options read it lazily).
+    setActiveSession: (session: Session<MastraCodeState>) => {
+      activeSession = session;
+    },
+  };
+}
+
+/**
+ * Result of {@link createMastraCodeHarness}: every shared resource plus the
+ * inert Harness, ready to be either booted locally or mounted on a server
+ * Mastra.
+ */
+export type MastraCodeHarness = Awaited<ReturnType<typeof createMastraCodeHarness>>;
+
+/**
+ * Wires the session-scoped concerns MastraCode layers on top of a Session:
+ * hookManager thread-id sync, GitHub PR polling for the current thread, and
+ * per-thread persistence of the mastracode-only `/om` settings.
+ *
+ * Used by {@link bootLocalHarness} for the single local session. A server can
+ * call this for any session it mints if it wants the same background wiring.
+ */
+export async function wireSessionConcerns(
+  base: Pick<MastraCodeHarness, 'hookManager' | 'githubSignals' | 'setActiveSession'>,
+  session: Session<MastraCodeState>,
+): Promise<void> {
+  const { hookManager, githubSignals } = base;
+  base.setActiveSession(session);
 
   // Sync hookManager session ID on thread changes
   if (hookManager) {
@@ -818,21 +883,73 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   await restoreOMThreadStateForCurrentThread(omThreadStateSession).catch(() => {
     // Persistence is best-effort; don't crash startup if storage hiccups.
   });
-
-  return {
-    harness,
-    session,
-    storage,
-    mcpManager,
-    hookManager,
-    signalsPubSub,
-    authStorage,
-    resolveModel,
-    storageWarning,
-    observabilityWarning,
-    builtinPacks,
-    builtinOmPacks,
-    effectiveDefaults,
-    githubSignals,
-  };
 }
+
+/**
+ * Case 3 (Harness local + TUI/headless): build the harness, let it stand up its
+ * own internal Mastra via `init()`, and mint the single eager session that all
+ * work in this process runs through. The Harness owns no session of its own.
+ */
+export async function bootLocalHarness(config?: MastraCodeConfig) {
+  const base = await createMastraCodeHarness(config);
+  const { harness, sessionId, ownerId } = base;
+
+  await harness.init();
+  await harness.getMastra()?.startWorkers();
+  const session = await harness.createSession({ id: sessionId, ownerId });
+  await wireSessionConcerns(base, session);
+
+  return { ...base, session };
+}
+
+/** Result of {@link mountHarnessOnMastra}: shared handles plus the owning Mastra. */
+export type MountedMastraCode = MastraCodeHarness & { mastra: Mastra };
+
+/**
+ * Cases 1 & 2 (Harness in Server + Web/TUI): build the harness, register it on a
+ * server-owned Mastra, THEN init it. Registering before `init()` is what makes
+ * the harness inherit the server's Mastra (storage, agents, gateways) instead of
+ * spinning up its own internal one — there is a single shared Mastra.
+ *
+ * No eager session is minted: each client (browser or terminal) creates/resumes
+ * its own isolated session via `harness.createSession({ resourceId })`, so one
+ * server can drive many concurrent users.
+ *
+ * Pass an existing `mastra` to mount onto a Mastra that already hosts other
+ * primitives; otherwise a Mastra is created that owns the harness's storage so
+ * durability is configured in one place.
+ */
+export async function mountHarnessOnMastra(
+  config?: MastraCodeConfig & { mastra?: Mastra; harnessId?: string },
+): Promise<MountedMastraCode> {
+  const base = await createMastraCodeHarness(config);
+  const { harness, storage } = base;
+  const harnessId = config?.harnessId ?? harness.id;
+
+  // Construct (or reuse) the Mastra and register the harness on it BEFORE init.
+  // The Mastra constructor calls harness.__registerMastra(this), so the
+  // subsequent init() takes the "inherit parent storage" branch rather than
+  // building a duplicate internal Mastra.
+  let mastra: Mastra;
+  if (config?.mastra) {
+    // Mounting onto a Mastra the caller already built. Ensure the harness's
+    // back-reference points at it (idempotent — only sets #externalMastra).
+    mastra = config.mastra;
+    harness.__registerMastra(mastra);
+  } else {
+    mastra = new Mastra({ harnesses: { [harnessId]: harness }, storage });
+  }
+
+  await harness.init();
+  await harness.getMastra()?.startWorkers();
+
+  return { ...base, mastra };
+}
+
+/**
+ * Back-compat alias. Historically `createMastraCode` built and booted a local
+ * harness with a single session; that behavior now lives in
+ * {@link bootLocalHarness}. New code should call the explicit factory for its
+ * case: `bootLocalHarness` (local) or {@link mountHarnessOnMastra} (server).
+ */
+export const createMastraCode = bootLocalHarness;

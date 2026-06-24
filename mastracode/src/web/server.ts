@@ -4,12 +4,11 @@ import { fileURLToPath } from 'node:url';
 
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { Mastra } from '@mastra/core/mastra';
 import { MastraServer } from '@mastra/hono';
 import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { Hono } from 'hono';
 
-import { createMastraCode } from '../index.js';
+import { mountHarnessOnMastra } from '../index.js';
 import type { MastraCodeConfig } from '../index.js';
 
 import { mountConfigRoutes } from './config-routes.js';
@@ -53,16 +52,15 @@ export async function startWebServer(options: WebServerOptions = {}): Promise<We
   const { port: _p, uiDir, fsRoot, ...mastraCodeConfig } = options;
 
   // Build the full production harness (agents, modes, tools, memory, OM, MCP,
-  // providers, observability) — identical to the terminal app.
-  const result = await createMastraCode(mastraCodeConfig);
+  // providers, observability) — identical to the terminal app — and register it
+  // on a server-owned Mastra. Registration happens BEFORE init (inside
+  // mountHarnessOnMastra), so the harness inherits the server's single Mastra
+  // and storage instead of spinning up a duplicate internal one. No eager
+  // session is minted; each browser client creates/resumes its own isolated
+  // session via the harness routes.
+  const result = await mountHarnessOnMastra({ ...mastraCodeConfig, harnessId: HARNESS_ID });
   const harness = result.harness;
-
-  // Register the harness on a Mastra so the server route handlers can resolve it
-  // via `mastra.getHarness(id)`. Storage is owned by the Mastra: we hand it the
-  // same composite store the harness was built with, so durability is
-  // configured in one place and every harness registered here inherits it
-  // (see Harness#resolveStorage — config.storage ?? parent Mastra storage).
-  const mastra = new Mastra({ harnesses: { [HARNESS_ID]: harness }, storage: result.storage });
+  const mastra = result.mastra;
 
   // Mount the real Mastra HTTP surface (including the harness session routes)
   // via the official Hono server adapter. `init()` registers context + auth
