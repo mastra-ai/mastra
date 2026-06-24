@@ -69,6 +69,7 @@ import {
   saveSettings,
 } from './onboarding/settings.js';
 import { getToolCategory } from './permissions.js';
+import { PlanRejectionAbortProcessor } from './processors/plan-rejection-abort.js';
 import { setAuthStorage } from './providers/claude-max.js';
 import { setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
@@ -545,6 +546,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       tools: getGoalJudgeTools,
     },
     inputProcessors: [
+      new PlanRejectionAbortProcessor(),
       new AgentsMDInjector({
         getIgnoredInstructionPaths: ({ requestContext }) => {
           const harnessContext = requestContext?.get('harness') as
