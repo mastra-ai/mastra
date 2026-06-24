@@ -99,7 +99,6 @@ export * from './ds/components/DataKeysAndValues';
 export * from './ds/components/DataPanel';
 export * from './ds/components/DateTimeRangePicker';
 export * from './ds/components/HorizontalBars';
-export * from './ds/components/MetricsDataTable';
 export * from './ds/components/MetricsLineChart';
 export * from './ds/components/ScatterPlotChart';
 export * from './ds/components/StatusBadge';
