@@ -436,9 +436,8 @@ export class CompositeAuth
     return null;
   }
 
-  async getUsers(userIds: string[]): Promise<User[]> {
-    const users = await Promise.all(userIds.map(userId => this.getUser(userId)));
-    return users.filter(user => user !== null);
+  async getUsers(userIds: string[]): Promise<Array<User | null>> {
+    return Promise.all(userIds.map(userId => this.getUser(userId)));
   }
 }
 
@@ -533,8 +532,8 @@ export class SimpleAuth<TUser> extends MastraAuthProvider<TUser> {
     return this.userById.get(userId) ?? null;
   }
 
-  async getUsers(userIds: string[]): Promise<TUser[]> {
-    return userIds.map(userId => this.userById.get(userId)).filter(user => user !== undefined);
+  async getUsers(userIds: string[]): Promise<Array<TUser | null>> {
+    return userIds.map(userId => this.userById.get(userId) ?? null);
   }
 
   /**

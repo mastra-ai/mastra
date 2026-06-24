@@ -62,9 +62,9 @@ export interface IUserProvider<TUser extends User = User> {
    * Implement for efficient batch loading in user enrichment flows.
    *
    * @param userIds - User identifiers
-   * @returns User objects for the requested IDs (missing users omitted)
+   * @returns User objects for the requested IDs (null for missing users, order preserved)
    */
-  getUsers?(userIds: string[]): Promise<TUser[]>;
+  getUsers?(userIds: string[]): Promise<Array<TUser | null>>;
 
   /**
    * Optional: Get URL to user's profile page.
