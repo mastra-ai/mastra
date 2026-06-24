@@ -106,13 +106,12 @@ describe('Harness mode-model persistence across restarts', () => {
     const planThread = await session1.thread.create();
     await session1.mode.switch({ modeId: 'plan' });
 
-    // Create a second thread (in default 'build' mode) so that when session2
-    // resumes from storage it lands on the most-recent thread — the build one
-    // — and starts in default mode. We then explicitly switch to the plan
-    // thread and observe the mode restoration event.
-    await session1.thread.create();
-
     const { session: session2 } = await buildHarness(storage);
+    // Simulate the UI currently being in build mode before the user switches
+    // to a plan-mode thread. `set` is intentional here: this test cares about
+    // the restore event emitted by thread metadata hydration, not about
+    // persisting another mode switch onto the original thread.
+    session2.mode.set({ modeId: 'build' });
     expect(session2.mode.get()).toBe('build');
 
     const events: Array<{ type: 'mode_changed'; modeId: string; previousModeId: string }> = [];
@@ -138,17 +137,15 @@ describe('Harness mode-model persistence across restarts', () => {
     await session.thread.create();
     await session.mode.switch({ modeId: 'plan' });
 
-    const controller = session.run.ensureAbortController();
-
     // Simulate a submit_plan tool that suspended during a plan-mode run.
     session.suspensions.register({ toolCallId: 'plan-call-1', runId: 'run-1', toolName: 'submit_plan' });
 
     await session.respondToToolSuspension({ toolCallId: 'plan-call-1', resumeData: { action: 'approved' } });
 
-    // Approval abandons the parked plan suspension and switches to the default
-    // (execution) mode, aborting the plan-mode run.
+    // Approval resumes the parked submit_plan suspension after switching to the
+    // default execution mode. It must not abort the plan run before the approved
+    // tool result is persisted.
     expect(session.suspensions.has({ toolCallId: 'plan-call-1' })).toBe(false);
-    expect(controller.signal.aborted).toBe(true);
     expect(session.mode.get()).toBe('build');
   });
 });

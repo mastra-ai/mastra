@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { act, cleanup, render } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useEffect } from 'react';

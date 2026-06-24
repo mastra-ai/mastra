@@ -1,4 +1,5 @@
-import { Button, EmptyState } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { CogIcon, ExternalLinkIcon } from 'lucide-react';
 
 export const WorkspaceNotConfigured = () => (

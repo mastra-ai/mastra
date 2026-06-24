@@ -12,10 +12,11 @@ export type NavLink = {
   name: string;
   url: string;
   icon?: React.ReactNode;
+  children?: NavLink[];
   isActive?: boolean;
   variant?: 'default' | 'featured';
   tooltipMsg?: string;
-  /** @deprecated Sidebar nav items now render flush; this option is accepted but ignored. */
+  /** @deprecated Prefer nested `children`; accepted for callers still rendering manual sublinks. */
   indent?: boolean;
 };
 
@@ -26,6 +27,10 @@ export type MainSidebarNavLinkProps = Omit<ComponentPropsWithoutRef<'li'>, 'chil
   children?: React.ReactNode;
   /** Override the Provider-level LinkComponent for this row. Defaults to `<a>` when neither is set. */
   LinkComponent?: LinkComponent;
+  /** Nesting depth for manually composed subitems. Data-driven sections set this automatically. */
+  level?: number;
+  /** Nested list rendered below the row while keeping valid `<li><a /><ul /></li>` structure. */
+  subItems?: React.ReactNode;
   /**
    * When true, render `children` as the interactive element.
    * Use for `<button>` items or custom router Links. Item classes are forwarded
@@ -46,6 +51,8 @@ export function MainSidebarNavLink({
   isActive,
   className,
   LinkComponent: LinkProp,
+  level: levelProp,
+  subItems,
   asChild = false,
   ...props
 }: MainSidebarNavLinkProps) {
@@ -55,6 +62,7 @@ export function MainSidebarNavLink({
   const Link: LinkComponent | 'a' = LinkProp ?? ctx?.LinkComponent ?? 'a';
   const isCollapsed = state === 'collapsed';
   const isFeatured = link?.variant === 'featured';
+  const level = levelProp ?? (link?.indent ? 1 : 0);
   const isExternal = Boolean(link?.url && /^(https?:)?\/\//.test(link.url));
   const linkParams = isExternal ? { target: '_blank', rel: 'noreferrer' } : {};
   const needsTooltip = link ? isCollapsed || Boolean(link.tooltipMsg) : false;
@@ -63,6 +71,7 @@ export function MainSidebarNavLink({
     isActive,
     isCollapsed,
     isFeatured,
+    level,
   });
 
   let interactiveEl: React.ReactNode = null;
@@ -88,7 +97,7 @@ export function MainSidebarNavLink({
   }
 
   return (
-    <li {...props} className={cn('flex relative min-w-0', className)}>
+    <li {...props} className={cn('flex flex-col relative min-w-0', className)}>
       {link && needsTooltip && React.isValidElement(interactiveEl) ? (
         <Tooltip>
           <TooltipTrigger render={interactiveEl} />
@@ -99,6 +108,7 @@ export function MainSidebarNavLink({
       ) : (
         (interactiveEl ?? children)
       )}
+      {!isCollapsed && subItems}
     </li>
   );
 }

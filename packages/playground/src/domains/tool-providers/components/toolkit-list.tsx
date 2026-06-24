@@ -1,4 +1,5 @@
-import { ScrollArea, Skeleton, transitions, cn } from '@mastra/playground-ui';
+import { ScrollArea, transitions, cn } from '@mastra/playground-ui';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { useToolkits } from '../hooks/use-toolkits';
 
 export const SELECTED_TOOLKIT_SENTINEL = '__selected__';

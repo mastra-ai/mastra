@@ -7,6 +7,9 @@ import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createWorkflow as createDirectWorkflow, createEventedWorkflow } from '../../../workflows/create';
 import type { OutputWriter } from '../../../workflows/types';
+import type { RunScopeContext } from '../../run-scope-access';
+import { readScoped, writeScoped } from '../../run-scope-access';
+import { DELEGATION_BAILED_KEY, DRAIN_PENDING_SIGNALS_KEY, RESOURCE_ID_KEY, THREAD_ID_KEY } from '../../run-scope-keys';
 import type { LoopRun } from '../../types';
 import { createAgenticExecutionWorkflow } from '../agentic-execution';
 import { llmIterationOutputSchema } from '../schema';
@@ -32,6 +35,8 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
     outputWriter,
     ...rest
   } = params;
+
+  const scopeCtx: RunScopeContext = { mastra: rest.mastra, runId, _internal };
 
   // Track accumulated steps across iterations to pass to stopWhen
   const accumulatedSteps: StepResult<Tools>[] = [];
@@ -83,7 +88,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
       let hasFinishedSteps = false;
 
-      const pendingSignals = _internal.drainPendingSignals?.(runId) ?? [];
+      const pendingSignals = readScoped(scopeCtx, DRAIN_PENDING_SIGNALS_KEY, 'drainPendingSignals')?.(runId) ?? [];
       if (pendingSignals.length > 0) {
         messageList.markResponseMessageBoundary(typedInputData.stepResult?.messageId ?? typedInputData.messageId);
 
@@ -188,8 +193,8 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
           isFinal,
           finishReason: typedInputData.stepResult?.reason || 'unknown',
           runId: runId,
-          threadId: _internal?.threadId,
-          resourceId: _internal?.resourceId,
+          threadId: readScoped(scopeCtx, THREAD_ID_KEY, 'threadId'),
+          resourceId: readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId'),
           agentId: rest.agentId,
           agentName: rest.agentName || rest.agentId,
           messages: messageList.get.all.db(),
@@ -252,9 +257,9 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       }
 
       // Check if a delegation hook called ctx.bail() — stop the loop after this iteration
-      if (!hasFinishedSteps && _internal?._delegationBailed) {
+      if (!hasFinishedSteps && readScoped(scopeCtx, DELEGATION_BAILED_KEY, '_delegationBailed')) {
         hasFinishedSteps = true;
-        _internal._delegationBailed = false;
+        writeScoped(scopeCtx, DELEGATION_BAILED_KEY, '_delegationBailed', false);
       }
 
       if (typedInputData.stepResult) {

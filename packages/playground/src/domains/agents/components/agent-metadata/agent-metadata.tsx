@@ -1,11 +1,6 @@
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import type { GetToolResponse, GetWorkflowResponse } from '@mastra/client-js';
 import {
-  codeLanguages,
-  Notice,
-  Badge,
-  useCodemirrorTheme,
-  Skeleton,
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -16,6 +11,10 @@ import {
   ToolsIcon,
   WorkflowIcon,
 } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { codeLanguages, useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import CodeMirror, { EditorView } from '@uiw/react-codemirror';
 import { GaugeIcon, Folder, Globe } from 'lucide-react';
 import { useActivatedSkills } from '../../context/activated-skills-context';

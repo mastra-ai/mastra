@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  Notice,
   Collapsible,
   CollapsibleTrigger,
   CollapsibleContent,
@@ -11,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@mastra/playground-ui';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import type { JSONSchema7 } from 'json-schema';
 import { ChevronRight } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';

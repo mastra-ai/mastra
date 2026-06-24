@@ -1,4 +1,5 @@
-import { Button, StatusBadge, cn } from '@mastra/playground-ui';
+import { Button, cn } from '@mastra/playground-ui';
+import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
 import { Monitor, ChevronUp, ChevronDown, Maximize2, X } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useBrowserFrame, useBrowserSession } from '../../context/browser-session-context';

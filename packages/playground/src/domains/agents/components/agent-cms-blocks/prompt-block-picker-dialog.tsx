@@ -1,6 +1,4 @@
 import {
-  Badge,
-  Spinner,
   Txt,
   cn,
   Dialog,
@@ -10,6 +8,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { FileText, Search } from 'lucide-react';
 import { useState } from 'react';
 

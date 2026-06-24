@@ -150,10 +150,10 @@ describe('Working Memory Utils - ReDoS Prevention', () => {
     });
 
     it('should demonstrate regex has quadratic complexity on pathological input', () => {
-      // Test with smaller inputs to show the growth pattern without taking too long
+      // Use large enough inputs that timer/JIT noise does not hide the growth pattern.
       const times: { n: number; ms: number }[] = [];
 
-      for (const n of [500, 1000, 2000]) {
+      for (const n of [1000, 2000, 4000]) {
         const input = createPathologicalInput(n);
 
         const start = performance.now();
@@ -163,8 +163,8 @@ describe('Working Memory Utils - ReDoS Prevention', () => {
         times.push({ n, ms: elapsed });
       }
 
-      // When n doubles, time should roughly quadruple for O(n²)
-      // Check that 2000 takes significantly longer than 500 (should be ~16x for O(n²))
+      // When n doubles, time should roughly quadruple for O(n²).
+      // Check that 4000 takes significantly longer than 1000 (should be ~16x for O(n²)).
       const ratio = times[2].ms / times[0].ms;
       // Allow some variance, but it should be at least 4x (would be 16x for perfect O(n²))
       expect(ratio).toBeGreaterThan(4);

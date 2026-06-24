@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { TooltipProvider } from '@mastra/playground-ui';
 import { cleanup, render } from '@testing-library/react';
 import { FormProvider, useForm } from 'react-hook-form';

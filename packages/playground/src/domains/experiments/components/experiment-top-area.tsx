@@ -1,5 +1,6 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { DataKeysAndValues, PageLayout } from '@mastra/playground-ui';
+import { PageLayout } from '@mastra/playground-ui';
+import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { format } from 'date-fns';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { ExperimentStats } from '@/domains/experiments/components/experiment-stats';

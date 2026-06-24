@@ -1,4 +1,5 @@
-import { Button, StatusBadge, Txt } from '@mastra/playground-ui';
+import { Button, Txt } from '@mastra/playground-ui';
+import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
 import { useState } from 'react';
 import { ChannelDialog } from './publish-channel-dialogs';
 import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
