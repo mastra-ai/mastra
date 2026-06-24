@@ -149,6 +149,7 @@ export { usePlaygroundStore } from './store/playground-store';
 export * from './domains/metrics';
 export * from './domains/traces';
 export * from './domains/logs';
+export * from './domains/memory';
 export * from './ee';
 
 // DS Types

@@ -109,6 +109,7 @@
   "peerDependencies": {
     "@mastra/client-js": "workspace:^",
     "@mastra/core": ">=1.7.1-0 <2.0.0-0",
+    "@mastra/memory": ">=1.21.0-0 <2.0.0-0",
     "@mastra/react": "workspace:*",
     "@tanstack/react-query": "^5.90.21",
     "lucide-react": "^0.474.0",
@@ -120,6 +121,7 @@
     "@internal/lint": "workspace:*",
     "@mastra/client-js": "workspace:^",
     "@mastra/core": "workspace:*",
+    "@mastra/memory": "workspace:*",
     "@mastra/react": "workspace:*",
     "@storybook/addon-a11y": "^10.4.1",
     "@storybook/addon-docs": "^10.4.1",
