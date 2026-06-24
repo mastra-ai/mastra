@@ -307,7 +307,9 @@ function isScorerWithThreshold(entry: ScorerEntry): entry is ScorerWithThreshold
   return typeof entry === 'object' && 'scorer' in entry && 'threshold' in entry;
 }
 
-function normalizeScorerEntries(scorers: ScorerEntry[] | MastraScorer<any, any, any, any>[] | WorkflowScorerConfig | AgentScorerConfig): {
+function normalizeScorerEntries(
+  scorers: ScorerEntry[] | MastraScorer<any, any, any, any>[] | WorkflowScorerConfig | AgentScorerConfig,
+): {
   bareScorers: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig | AgentScorerConfig;
   thresholdMap: Map<string, number>;
 } {
