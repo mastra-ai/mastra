@@ -118,8 +118,18 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         const collection = await this.getCollection(indexDef.collection);
         await collection.createIndex(indexDef.keys, indexDef.options);
       } catch (error) {
-        // Log but continue - indexes are performance optimizations
-        this.logger?.warn?.(`Failed to create index on ${indexDef.collection}:`, error);
+        // Fail loud: a silently missing index degrades query performance at scale.
+        // Users who manage their own indexes can set skipDefaultIndexes.
+        throw new MastraError(
+          {
+            id: createStorageErrorId('MONGODB', 'CREATE_DEFAULT_INDEXES', 'FAILED'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.THIRD_PARTY,
+            text: `Failed to create default index on collection "${indexDef.collection}". Set skipDefaultIndexes to manage indexes yourself.`,
+            details: { collection: indexDef.collection },
+          },
+          error,
+        );
       }
     }
   }
