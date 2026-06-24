@@ -68,8 +68,8 @@ runs:
         # files are hard-linked into the store, so `rm -rf "$store_path"` also
         # deletes the pnpm binary the PATH shim points at. That broke the next
         # `pnpm install` with a MODULE_NOT_FOUND for pnpm.mjs. Remove the corrupt
-        # store, then reprovision pnpm via corepack (whose cache is independent of
-        # the store) and put it ahead on PATH so later steps use a working pnpm.
+        # store, then reinstall pnpm into a dedicated directory and put it ahead
+        # on PATH so later steps use a working pnpm instead of the broken shim.
         echo "Detected corrupt pnpm store cache at $store_path; removing restored store."
         rm -rf "$store_path"
 
@@ -79,27 +79,26 @@ runs:
 
         # Resolve the pnpm version the same way pnpm/action-setup does: from the
         # explicit input if given, otherwise the packageManager field. This keeps
-        # the reprovisioned pnpm in sync with the workspace automatically.
+        # the reinstalled pnpm in sync with the workspace automatically.
         pnpm_version="$PNPM_VERSION"
         if [ -z "$pnpm_version" ]; then
           pnpm_version=$(node -p "(require('./$PACKAGE_JSON_FILE').packageManager||'').replace(/^pnpm@/,'').split('+')[0]")
         fi
 
-        echo "pnpm binary was removed with the corrupt store; reprovisioning pnpm@$pnpm_version via corepack."
-        # corepack stores its shims and the pnpm package outside the pnpm store,
-        # so it is unaffected by the wipe. Materialize a pnpm shim in a dedicated
-        # directory and prepend it to PATH so the rest of the job stops using the
-        # action-setup shim that points at the deleted store-linked binary.
-        corepack_bin="$RUNNER_TEMP/pnpm-recovery-bin"
-        mkdir -p "$corepack_bin"
-        corepack prepare "pnpm@$pnpm_version" --activate
-        corepack enable pnpm --install-directory "$corepack_bin"
-        echo "$corepack_bin" >> "$GITHUB_PATH"
-        PATH="$corepack_bin:$PATH" pnpm --version
+        echo "pnpm binary was removed with the corrupt store; reinstalling pnpm@$pnpm_version."
+        # Install into a dedicated prefix with npm (corepack on the bundled Node
+        # version fails signature verification with "Cannot find matching keyid").
+        # npm places a working pnpm at <prefix>/bin; prepend it to PATH so the
+        # rest of the job stops using the action-setup shim that points at the
+        # deleted store-linked binary.
+        recovery_prefix="$RUNNER_TEMP/pnpm-recovery"
+        mkdir -p "$recovery_prefix"
+        npm install -g --prefix "$recovery_prefix" "pnpm@$pnpm_version"
+        echo "$recovery_prefix/bin" >> "$GITHUB_PATH"
+        PATH="$recovery_prefix/bin:$PATH" pnpm --version
       env:
         PNPM_VERSION: ${{ inputs.version }}
         PACKAGE_JSON_FILE: ${{ inputs.package-json-file || 'package.json' }}
-        COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
 
     - name: Install dependencies
       if: ${{ inputs.install-dependencies == 'true' }}
