@@ -1542,7 +1542,7 @@ describe('ModelSpanTracker', () => {
 
       const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
       expect(stepSpans).toHaveLength(1);
-      expect(stepSpans[0]!.input).toEqual([{ role: 'tool', content: '[tool-result]' }]);
+      expect(stepSpans[0]!.input).toEqual([{ role: 'tool', content: '[tool-result: readFile]' }]);
     });
 
     it('should not expose raw result from final inputMessages when transformed output is absent', async () => {
@@ -1585,7 +1585,7 @@ describe('ModelSpanTracker', () => {
 
       const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
       expect(stepSpans).toHaveLength(1);
-      expect(stepSpans[0]!.input).toEqual([{ role: 'tool', content: '[tool-result]' }]);
+      expect(stepSpans[0]!.input).toEqual([{ role: 'tool', content: '[tool-result: readFile]' }]);
     });
 
     it('should not expose unmarked output from final inputMessages', async () => {
@@ -1628,10 +1628,10 @@ describe('ModelSpanTracker', () => {
 
       const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
       expect(stepSpans).toHaveLength(1);
-      expect(stepSpans[0]!.input).toEqual([{ role: 'tool', content: '[tool-result]' }]);
+      expect(stepSpans[0]!.input).toEqual([{ role: 'tool', content: '[tool-result: readFile]' }]);
     });
 
-    it('should fall back to [tool-result] when result is absent', async () => {
+    it('should fall back to [tool-result: toolName] when result is absent', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'test-generation',
@@ -1673,7 +1673,7 @@ describe('ModelSpanTracker', () => {
 
       const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
       expect(stepSpans).toHaveLength(1);
-      expect(stepSpans[0]!.input).toEqual([{ role: 'tool', content: '[tool-result]' }]);
+      expect(stepSpans[0]!.input).toEqual([{ role: 'tool', content: '[tool-result: someTool]' }]);
     });
   });
 

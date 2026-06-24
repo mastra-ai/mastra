@@ -380,7 +380,7 @@
                   },
                   {
                     "role": "tool",
-                    "content": "[tool-result]"
+                    "content": "[tool-result: childSpanTool]"
                   }
                 ],
                 "output": {
