@@ -1,5 +1,6 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import { Button, TooltipProvider } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { Tree } from '@mastra/playground-ui/components/Tree';
 import { File, FileCode, FileJson, FileText, Folder, FolderOpen, FolderPlus, Image, Plus, Trash2 } from 'lucide-react';
 import type { MouseEvent, ReactNode } from 'react';

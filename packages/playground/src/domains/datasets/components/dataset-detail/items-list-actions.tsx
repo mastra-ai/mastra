@@ -1,6 +1,6 @@
 'use client';
-
-import { Button, Popover, PopoverTrigger, PopoverContent, Icon } from '@mastra/playground-ui';
+import { Button, Icon } from '@mastra/playground-ui';
+import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { MoreVertical, Download, FolderPlus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
