@@ -142,7 +142,7 @@ const sidebars = {
           id: 'agents/goals',
           label: 'Goals',
           customProps: {
-            tags: ['alpha'],
+            tags: ['beta'],
           },
         },
         {
@@ -191,7 +191,7 @@ const sidebars = {
           id: 'agents/code-mode',
           label: 'Code Mode',
           customProps: {
-            tags: ['alpha'],
+            tags: ['beta'],
           },
         },
         {
@@ -199,7 +199,7 @@ const sidebars = {
           id: 'agents/signals',
           label: 'Signals',
           customProps: {
-            tags: ['alpha'],
+            tags: ['beta'],
           },
         },
         {
@@ -207,7 +207,7 @@ const sidebars = {
           id: 'agents/signal-providers',
           label: 'Signal Providers',
           customProps: {
-            tags: ['alpha'],
+            tags: ['beta'],
           },
         },
         {
@@ -364,7 +364,7 @@ const sidebars = {
       type: 'category',
       label: 'Harness',
       customProps: {
-        tags: ['alpha'],
+        tags: ['beta'],
       },
       items: [
         {
@@ -794,6 +794,11 @@ const sidebars = {
           type: 'doc',
           id: 'evals/built-in-scorers',
           label: 'Built-in Scorers',
+        },
+        {
+          type: 'doc',
+          id: 'evals/quick-checks',
+          label: 'Quick Checks',
         },
         {
           type: 'doc',

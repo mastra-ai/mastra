@@ -1,4 +1,5 @@
-import { Spinner, cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import type { ExperimentUISpan } from '../types';
 import { ExperimentTraceTimelineSpan } from './experiment-trace-timeline-span';
 

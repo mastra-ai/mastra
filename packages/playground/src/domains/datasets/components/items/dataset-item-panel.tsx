@@ -1,8 +1,9 @@
 'use client';
 
 import type { DatasetItem, DatasetItemToolMock } from '@mastra/client-js';
-import { Button, ButtonsGroup, toast } from '@mastra/playground-ui';
+import { Button, toast } from '@mastra/playground-ui';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';

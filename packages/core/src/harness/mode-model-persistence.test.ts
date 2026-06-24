@@ -43,7 +43,7 @@ async function buildHarness(
     ],
   });
   await harness.init();
-  const session = await harness.createSession();
+  const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
   return { harness, session };
 }
 

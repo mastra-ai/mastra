@@ -142,6 +142,7 @@ describeWithApiKey('VoyageAI Integration Tests', () => {
     it('should have contextualized model', () => {
       expect(voyage.contextualized.modelId).toBe('voyage-context-3');
       expect(voyage.context3.modelId).toBe('voyage-context-3');
+      expect(voyage.context4.modelId).toBe('voyage-context-4');
     });
   });
 
@@ -206,6 +207,40 @@ describeWithApiKey('VoyageAI Integration Tests', () => {
     it('should support custom dimensions for contextualized embeddings', async () => {
       const model = voyageContextualizedEmbedding({
         model: 'voyage-context-3',
+        outputDimension: 512,
+      });
+
+      const result = await model.doEmbed({
+        values: [['Single chunk for testing']],
+        inputType: 'document',
+      });
+
+      expect(result.embeddings[0]!.length).toBe(512);
+    });
+
+    it('should create voyage-context-4 model', () => {
+      const model = voyageContextualizedEmbedding('voyage-context-4');
+      expect(model.modelId).toBe('voyage-context-4');
+    });
+
+    it('should embed document chunks with voyage-context-4', async () => {
+      const model = voyageContextualizedEmbedding('voyage-context-4');
+
+      const result = await model.doEmbed({
+        values: [['This is the first paragraph of document one.', 'This is the second paragraph.']],
+        inputType: 'document',
+      });
+
+      // Should return 2 embeddings (one per chunk)
+      expect(result.embeddings).toHaveLength(2);
+      expect(result.chunkCounts).toEqual([2]);
+      // Default dimension is 1024
+      expect(result.embeddings[0]!.length).toBe(1024);
+    });
+
+    it('should support custom dimensions with voyage-context-4', async () => {
+      const model = voyageContextualizedEmbedding({
+        model: 'voyage-context-4',
         outputDimension: 512,
       });
 

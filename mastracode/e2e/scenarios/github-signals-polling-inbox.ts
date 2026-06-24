@@ -251,16 +251,7 @@ values
     terminal.submit('Read the GitHub polling notification from the inbox.');
     await runtime.waitForScreenText(/Read the GitHub polling notification from the inbox\./i, terminal, 8_000);
     await runtime.waitForScreenText(/mastra-ai\/mastra#17640 CI recovered/i, terminal, 30_000);
-    await terminal.flushInput?.();
-    await runtime.waitForScreenText(/│ ›/i, terminal, 60_000);
-    terminal.submit(
-      `!sqlite3 "$MC_E2E_DB_PATH" "select 'GITHUB_POLLING_INBOX_STATUS=' || status || ':' || kind from mastra_notifications where source='github' order by createdAt desc limit 1;"`,
-    );
-    await runtime.waitForScreenText(
-      /GITHUB_POLLING_INBOX_STATUS=(seen|pending):pull-request-ci-recovered/i,
-      terminal,
-      8_000,
-    );
+    await runtime.waitForScreenText(/"markedSeen": 1/i, terminal, 30_000);
 
     await terminal.flushInput?.();
     await runtime.waitForScreenText(/│ ›/i, terminal, 15_000);

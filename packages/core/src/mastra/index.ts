@@ -23,7 +23,7 @@ import { AvailableHooks, registerHook } from '../hooks';
 import { LicenseClient } from '../license';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import { getGatewayId } from '../llm/model/gateways';
-import { defaultGateways } from '../llm/model/router';
+import { defaultGateways } from '../llm/model/gateways/defaults';
 import { LogLevel, noopLogger, ConsoleLogger, DualLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
@@ -2771,6 +2771,15 @@ export class Mastra<
         // time — never parse it back out of the composite key, since callers
         // can pass runIds that contain ':'.
         this.#releaseRunScope(entry.runId);
+        // Surface the eviction so operators can investigate long-suspended
+        // runs that never resumed. The refcounted lifecycle in
+        // `__createRunScope`/`__releaseRunScope` covers the happy path; this
+        // branch only fires when a registration was abandoned past the TTL.
+        this.#logger.warn('Evicted stale run-scoped workflow after TTL expired', {
+          runId: entry.runId,
+          ageMs: now - entry.registeredAt,
+          ttlMs: Mastra.INTERNAL_WORKFLOW_TTL_MS,
+        });
       }
     }
   }
