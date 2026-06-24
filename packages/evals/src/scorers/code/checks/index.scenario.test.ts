@@ -5,9 +5,9 @@
  * with hand-crafted MastraDBMessage arrays, these tests wire checks through
  * the full `runEvals` pipeline with a real Agent backed by AIMock.
  * This validates that checks work end-to-end: AIMock scripted responses →
- * OpenAI v5 provider → Agent → runEvals → checks score correctly.
+ * OpenAI v6 provider → Agent → runEvals → checks score correctly.
  */
-import { createOpenAI } from '@ai-sdk/openai-v5';
+import { createOpenAI } from '@ai-sdk/openai-v6';
 import { LLMock } from '@copilotkit/aimock';
 import { Agent } from '@mastra/core/agent';
 import { runEvals } from '@mastra/core/evals';
