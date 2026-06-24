@@ -2,7 +2,7 @@ import type { ListStoredPromptBlocksResponse, StoredPromptBlockResponse } from '
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -246,6 +246,55 @@ describe('useAgentCmsForm — empty-runtime guard', () => {
     });
 
     // The save must be blocked — no agent update request goes out.
+    expect(patchCalled).toBe(false);
+  });
+
+  it('blocks saving before the prompt block list has loaded by resolving the ref on demand', async () => {
+    let patchCalled = false;
+    let detailsFetched = false;
+    server.use(
+      // The list never resolves — simulates saving right after the form mounts,
+      // before `useStoredPromptBlocks` has settled.
+      http.get(`${BASE_URL}/api/stored/prompt-blocks`, async () => {
+        await delay('infinite');
+        return HttpResponse.json(listResponse([]));
+      }),
+      // The guard falls back to an on-demand lookup, which resolves the ref to an
+      // unpublished draft.
+      http.get(`${BASE_URL}/api/stored/prompt-blocks/draft-block`, () => {
+        detailsFetched = true;
+        return HttpResponse.json(promptBlock({ id: 'draft-block', status: 'draft' }));
+      }),
+      http.patch(`${BASE_URL}/api/stored/agents/${GUARD_AGENT_ID}`, () => {
+        patchCalled = true;
+        return HttpResponse.json({ id: GUARD_AGENT_ID });
+      }),
+    );
+
+    const { wrapper } = makeGuardWrapper();
+    const { result } = renderHook(
+      () =>
+        useAgentCmsForm({
+          mode: 'edit',
+          agentId: GUARD_AGENT_ID,
+          dataSource: DRAFT_REF_DATA_SOURCE,
+          onSuccess: () => {},
+        }),
+      { wrapper },
+    );
+
+    // Save as soon as the form has the ref — deliberately without waiting for the
+    // prompt block list to load.
+    await waitFor(() => {
+      expect(result.current.form.getValues('instructionBlocks')).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.handleSaveDraft();
+    });
+
+    // The guard resolved the ref on demand and blocked the save.
+    expect(detailsFetched).toBe(true);
     expect(patchCalled).toBe(false);
   });
 

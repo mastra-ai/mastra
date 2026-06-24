@@ -55,4 +55,4 @@ export function instructionsResolveEmptyDueToDrafts(
 
 /** User-facing message shown when a save/publish is blocked by the guard above. */
 export const EMPTY_RUNTIME_INSTRUCTIONS_MESSAGE =
-  'This agent only references unpublished prompt blocks, so it would run with an empty prompt. Publish the referenced prompt blocks (or add inline instructions) before saving.';
+  'This agent only references unpublished prompt blocks, so it would run with an empty prompt. Publish the referenced prompt blocks (or add inline instructions) before continuing.';
