@@ -2,9 +2,9 @@
 '@mastra/pg': patch
 ---
 
-Fixed PgVector numeric range filters (`$gt`, `$gte`, `$lt`, `$lte`) failing the entire query when any row's metadata held a non-numeric value at the filtered path.
+Fixed PgVector numeric range filters (`$gt`, `$gte`, `$lt`, `$lte`) so rows with non-numeric metadata values no longer fail the whole query.
 
-Because JSONB metadata is schemaless, a single document with a value like `{ price: 'N/A' }` made Postgres cast the whole column to `numeric` and raise `invalid input syntax for type numeric` (`22P02`), breaking all range-filtered vector queries (and semantic recall using `semanticRecall.filter`) on that index. Non-numeric values are now simply excluded from the result, matching the behavior of the other Mastra vector stores and MongoDB-style `$gt` semantics.
+A single document with a value like `{ price: 'N/A' }` used to make the entire query error out, breaking all range-filtered vector queries (and semantic recall using `semanticRecall.filter`) on that index. Rows whose value isn't a number are now skipped for numeric range checks instead, matching the behavior of the other Mastra vector stores. Numeric rows still match as expected.
 
 ```typescript
 await pgVector.upsert({
