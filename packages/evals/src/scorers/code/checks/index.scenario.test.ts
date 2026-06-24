@@ -3,93 +3,141 @@
  *
  * Unlike the unit tests (index.test.ts) which call `scorer.run()` directly
  * with hand-crafted MastraDBMessage arrays, these tests wire checks through
- * the full `runEvals` pipeline with a real Agent backed by MockLanguageModelV2.
- * This validates that checks work end-to-end: agent generates → runEvals
- * extracts output → checks score correctly.
+ * the full `runEvals` pipeline with a real Agent backed by AIMock.
+ * This validates that checks work end-to-end: AIMock scripted responses →
+ * OpenAI v5 provider → Agent → runEvals → checks score correctly.
  */
-import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { createOpenAI } from '@ai-sdk/openai-v5';
+import { LLMock } from '@copilotkit/aimock';
 import { Agent } from '@mastra/core/agent';
 import { runEvals } from '@mastra/core/evals';
 import { createTool } from '@mastra/core/tools';
-import { describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { checks } from './index';
 
+// ─── AIMock lifecycle ───────────────────────────────────────────────────────────
+
+let mock: LLMock;
+
+beforeAll(async () => {
+  mock = new LLMock({ port: 0 });
+  await mock.start();
+});
+
+afterEach(() => {
+  mock.clearFixtures();
+  mock.clearRequests();
+  mock.resetMatchCounts();
+});
+
+afterAll(async () => {
+  await mock.stop();
+});
+
 // ─── Helpers ────────────────────────────────────────────────────────────────────
 
-/** Build a text-only agent that always returns the given response. */
+const MODEL_ID = 'gpt-4o-mini';
+let agentCounter = 0;
+
+/** Build a text-only agent backed by AIMock that returns the scripted content. */
 function textAgent(response: string) {
-  const model = new MockLanguageModelV2({
-    doGenerate: async () => ({
-      content: [{ type: 'text' as const, text: response }],
-      finishReason: 'stop' as const,
-      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-      rawCall: { rawPrompt: null, rawSettings: {} },
-      warnings: [],
-    }),
-    doStream: async () => ({
-      rawCall: { rawPrompt: null, rawSettings: {} },
-      warnings: [],
-      stream: convertArrayToReadableStream([
-        { type: 'stream-start', warnings: [] },
-        { type: 'text-start', id: 'text-1' },
-        { type: 'text-delta', id: 'text-1', delta: response },
-        { type: 'text-end', id: 'text-1' },
-        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
-      ]),
-    }),
+  mock.on({ endpoint: 'chat' }, { content: response });
+
+  const openai = createOpenAI({
+    apiKey: 'aimock-test-key',
+    baseURL: `${mock.url.replace(/\/+$/, '')}/v1`,
   });
 
   return new Agent({
-    id: `text-agent-${Date.now()}`,
+    id: `text-agent-${++agentCounter}`,
     name: 'Text Agent',
     instructions: 'Respond with the scripted text.',
-    model,
+    model: openai(MODEL_ID),
   });
 }
 
-/** Build a tool-calling agent: calls tools in sequence then returns text. */
+/**
+ * Build a tool-calling agent backed by AIMock: first request triggers a tool
+ * call, second request (after tool result) returns final text.
+ */
 function toolCallingAgent(
+  tools: Record<string, ReturnType<typeof createTool>>,
+  toolCalls: { name: string; id: string; input: Record<string, unknown> }[],
+  finalText: string,
+) {
+  // First request: model calls tool(s)
+  mock.on(
+    { endpoint: 'chat', hasToolResult: false },
+    {
+      toolCalls: toolCalls.map(tc => ({
+        id: tc.id,
+        name: tc.name,
+        arguments: tc.input,
+      })),
+    },
+  );
+
+  // Second request: after tool results, model returns text
+  mock.on({ endpoint: 'chat', hasToolResult: true }, { content: finalText });
+
+  const openai = createOpenAI({
+    apiKey: 'aimock-test-key',
+    baseURL: `${mock.url.replace(/\/+$/, '')}/v1`,
+  });
+
+  return new Agent({
+    id: `tool-agent-${++agentCounter}`,
+    name: 'Tool Agent',
+    instructions: 'Call tools and respond.',
+    model: openai(MODEL_ID),
+    tools,
+  });
+}
+
+/**
+ * Build a multi-tool-calling agent backed by AIMock: calls tools in sequence
+ * (one per turn), then returns final text.
+ */
+function multiToolCallingAgent(
   tools: Record<string, ReturnType<typeof createTool>>,
   toolSequence: { name: string; id: string; input: Record<string, unknown> }[],
   finalText: string,
 ) {
-  let callCount = 0;
-  const model = new MockLanguageModelV2({
-    doGenerate: async () => {
-      callCount++;
-      if (callCount <= toolSequence.length) {
-        const step = toolSequence[callCount - 1]!;
-        return {
-          content: [
-            {
-              type: 'tool-call' as const,
-              toolCallId: step.id,
-              toolName: step.name,
-              input: JSON.stringify(step.input),
-            },
-          ],
-          finishReason: 'tool-calls' as const,
-          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-        };
-      }
-      return {
-        content: [{ type: 'text' as const, text: finalText }],
-        finishReason: 'stop' as const,
-        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-      };
-    },
+  // Each tool call response is matched by its preceding tool result id
+  for (let i = 0; i < toolSequence.length; i++) {
+    const tc = toolSequence[i]!;
+    if (i === 0) {
+      // First request: no tool results yet
+      mock.on(
+        { endpoint: 'chat', hasToolResult: false },
+        { toolCalls: [{ id: tc.id, name: tc.name, arguments: tc.input }] },
+      );
+    } else {
+      // After previous tool result, call next tool
+      mock.on(
+        { endpoint: 'chat', toolCallId: toolSequence[i - 1]!.id, hasToolResult: true },
+        { toolCalls: [{ id: tc.id, name: tc.name, arguments: tc.input }] },
+      );
+    }
+  }
+
+  // After last tool result, return final text
+  mock.on(
+    { endpoint: 'chat', toolCallId: toolSequence[toolSequence.length - 1]!.id, hasToolResult: true },
+    { content: finalText },
+  );
+
+  const openai = createOpenAI({
+    apiKey: 'aimock-test-key',
+    baseURL: `${mock.url.replace(/\/+$/, '')}/v1`,
   });
 
   return new Agent({
-    id: `tool-agent-${Date.now()}`,
-    name: 'Tool Agent',
-    instructions: 'Call tools and respond.',
-    model,
+    id: `multi-tool-agent-${++agentCounter}`,
+    name: 'Multi Tool Agent',
+    instructions: 'Call tools in sequence and respond.',
+    model: openai(MODEL_ID),
     tools,
   });
 }
@@ -122,7 +170,7 @@ const summarizeTool = createTool({
 
 // ─── Scenarios ──────────────────────────────────────────────────────────────────
 
-describe('Quick Checks — scenario tests via runEvals', () => {
+describe('Quick Checks — scenario tests via runEvals + AIMock', () => {
   describe('text output checks with a text-only agent', () => {
     it('includes, excludes, similarity, matches all score correctly on a weather response', async () => {
       const agent = textAgent('It is sunny and 72°F in Brooklyn today.');
@@ -184,7 +232,7 @@ describe('Quick Checks — scenario tests via runEvals', () => {
   });
 
   describe('tool call checks with a tool-calling agent', () => {
-    it('calledTool, toolOrder, noToolErrors, and maxToolCalls pass for a well-behaved agent', async () => {
+    it('calledTool, noToolErrors, and maxToolCalls pass for a well-behaved agent', async () => {
       const agent = toolCallingAgent(
         { get_weather: weatherTool },
         [{ name: 'get_weather', id: 'call-1', input: { city: 'Brooklyn' } }],
@@ -209,7 +257,7 @@ describe('Quick Checks — scenario tests via runEvals', () => {
     });
 
     it('toolOrder verifies multi-tool sequence through runEvals', async () => {
-      const agent = toolCallingAgent(
+      const agent = multiToolCallingAgent(
         { search: searchTool, summarize: summarizeTool },
         [
           { name: 'search', id: 'call-s1', input: { query: 'AI trends' } },
@@ -264,7 +312,7 @@ describe('Quick Checks — scenario tests via runEvals', () => {
     });
 
     it('maxToolCalls scores 0 when agent exceeds the limit', async () => {
-      const agent = toolCallingAgent(
+      const agent = multiToolCallingAgent(
         { search: searchTool, summarize: summarizeTool },
         [
           { name: 'search', id: 'call-1', input: { query: 'a' } },
@@ -318,8 +366,6 @@ describe('Quick Checks — scenario tests via runEvals', () => {
 
   describe('multi-item dataset with checks', () => {
     it('computes average scores across multiple data items', async () => {
-      // Agent always responds with the same text — some data items will match,
-      // some won't, so average scores should reflect partial passing.
       const agent = textAgent('The answer is 42.');
 
       const result = await runEvals({
@@ -328,7 +374,6 @@ describe('Quick Checks — scenario tests via runEvals', () => {
         target: agent,
       });
 
-      // Both items should match, so averages should be 1.0
       expect(result.scores['check-includes']).toBe(1);
       expect(result.scores['check-excludes']).toBe(1);
       expect(result.summary.totalItems).toBe(2);
