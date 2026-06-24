@@ -4,7 +4,7 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import type { ButtonHTMLAttributes, ChangeEvent, HTMLAttributes, PropsWithChildren } from 'react';
+import type { ButtonHTMLAttributes, ChangeEvent, PropsWithChildren } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AddItemDialog } from '../add-item-dialog';
@@ -12,11 +12,6 @@ import { createdDatasetItem, createdDatasetItemWithoutMocks } from './fixtures/a
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
-
-type CodeEditorProps = {
-  value?: string;
-  onChange?: (value: string) => void;
-};
 
 // Thin stubs for playground-ui atoms so this test focuses on the real client + mutation behavior.
 vi.mock('@mastra/playground-ui', () => {
@@ -35,18 +30,12 @@ vi.mock('@mastra/playground-ui', () => {
   };
 });
 
-vi.mock('@mastra/playground-ui/components/CodeEditor', () => ({
-  CodeEditor: ({ value, onChange }: CodeEditorProps) => (
+vi.mock('@uiw/react-codemirror', () => ({
+  default: ({ value, onChange }: { value?: string; onChange?: (value: string) => void }) => (
     <textarea
       value={value ?? ''}
       onChange={(event: ChangeEvent<HTMLTextAreaElement>) => onChange?.(event.target.value)}
     />
-  ),
-}));
-
-vi.mock('@mastra/playground-ui/components/Label', () => ({
-  Label: ({ children, ...props }: PropsWithChildren<HTMLAttributes<HTMLLabelElement>>) => (
-    <label {...props}>{children}</label>
   ),
 }));
 
