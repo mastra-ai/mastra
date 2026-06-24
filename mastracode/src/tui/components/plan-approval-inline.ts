@@ -19,6 +19,7 @@ import {
 } from '@earendil-works/pi-tui';
 import type { Component, Focusable, SelectItem, TUI } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
+import { getPlanFilename } from '../../utils/plans.js';
 import { BOX_INDENT, theme, getSelectListTheme, getMarkdownTheme, mastra } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 
@@ -26,6 +27,8 @@ export interface PlanApprovalInlineOptions {
   toolCallId: string;
   title: string;
   plan: string;
+  /** Filename on disk (e.g. `add-dark-mode.md`). */
+  planFilename?: string;
   /** Previous plan content for diff display on resubmission. */
   previousPlan?: string;
   onApprove: () => void;
@@ -155,6 +158,7 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
   private mode: 'streaming' | 'select' = 'select';
   private planTitle: string;
   private planContent: string;
+  private planFilename?: string;
   private previousPlan?: string;
 
   private _focused = false;
@@ -172,6 +176,7 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     super();
     this.planTitle = options.title;
     this.planContent = options.plan;
+    this.planFilename = options.planFilename;
     this.previousPlan = options.previousPlan;
     this.contentBox = new Box(BOX_INDENT, 0, (text: string) => text);
     this.addChild(this.contentBox);
@@ -202,6 +207,7 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     this.onReject = options.onReject;
     this.planTitle = options.title;
     this.planContent = options.plan;
+    this.planFilename = options.planFilename;
     this.previousPlan = options.previousPlan;
     this.mode = 'select';
     this.resolved = false;
@@ -217,6 +223,7 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     const partial = args as { title?: unknown; plan?: unknown };
     if (typeof partial.title === 'string') {
       this.planTitle = partial.title || 'Untitled plan';
+      this.planFilename = getPlanFilename(this.planTitle);
     }
     if (typeof partial.plan === 'string') {
       this.planContent = partial.plan;
@@ -280,6 +287,9 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
 
   private renderPlanHeader(prefix = ''): void {
     this.contentBox.addChild(new Text(`${prefix}${theme.bold(theme.fg('accent', `Plan: ${this.planTitle}`))}`, 0, 0));
+    if (this.planFilename) {
+      this.contentBox.addChild(new Text(theme.fg('dim', `.mastracode/plans/${this.planFilename}`), 0, 0));
+    }
     this.contentBox.addChild(new Spacer(1));
   }
 
@@ -355,6 +365,8 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
 export interface PlanResultOptions {
   title: string;
   plan: string;
+  /** Filename on disk (e.g. `add-dark-mode.md`). */
+  planFilename?: string;
   isApproved: boolean;
   feedback?: string;
 }
@@ -374,6 +386,9 @@ export class PlanResultComponent extends Container {
     const status = options.isApproved ? 'Approved' : options.feedback ? 'Changes requested' : 'Rejected';
 
     contentBox.addChild(new Text(theme.bold(theme.fg('accent', `Plan: ${options.title}`)), 0, 0));
+    if (options.planFilename) {
+      contentBox.addChild(new Text(theme.fg('dim', `.mastracode/plans/${options.planFilename}`), 0, 0));
+    }
     contentBox.addChild(new Spacer(1));
     contentBox.addChild(new PlanContentBox(options.plan));
     contentBox.addChild(new Spacer(1));

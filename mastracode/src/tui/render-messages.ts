@@ -9,6 +9,7 @@ import type { HarnessMessage, HarnessMessageContent, TaskItemInput, TaskItemSnap
 import { assignTaskIds, parseSubagentMeta } from '@mastra/core/harness';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { TASKS_STATE_ID } from '@mastra/core/tools';
+import { getPlanFilename } from '../utils/plans.js';
 import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
@@ -918,6 +919,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
               const planResult = new PlanResultComponent({
                 title: args.title,
                 plan: args.plan,
+                planFilename: getPlanFilename(args.title),
                 isApproved,
                 feedback,
               });

@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { describe, it, expect, afterEach, afterAll } from 'vitest';
-import { savePlanToDisk, savePlanSnapshot } from '../plans.js';
+import { savePlanToDisk, savePlanSnapshot, getPlanFilename } from '../plans.js';
 
 const projectRoot = path.resolve(import.meta.dirname, '../../..');
 const tmpDir = path.join(projectRoot, '.test-tmp-plans');
@@ -127,15 +127,15 @@ describe('savePlanToDisk', () => {
 });
 
 describe('savePlanSnapshot', () => {
-  it('writes a current-plan.md file to the local project plans dir', async () => {
-    await savePlanSnapshot({
+  it('writes a title-based filename to the local project plans dir', async () => {
+    const filename = await savePlanSnapshot({
       title: 'My plan',
       plan: 'Step 1\nStep 2',
-      resourceId: 'proj-snapshot',
       projectPath: tmpProjectPath,
     });
 
-    const filePath = path.join(tmpProjectPath, '.mastracode', 'plans', 'proj-snapshot', 'current-plan.md');
+    expect(filename).toBe('my-plan.md');
+    const filePath = path.join(tmpProjectPath, '.mastracode', 'plans', 'my-plan.md');
     expect(fs.existsSync(filePath)).toBe(true);
 
     const content = fs.readFileSync(filePath, 'utf-8');
@@ -144,38 +144,67 @@ describe('savePlanSnapshot', () => {
     expect(content).toContain('Step 2');
   });
 
-  it('overwrites the snapshot on resubmission', async () => {
+  it('overwrites the snapshot on resubmission with the same title', async () => {
     await savePlanSnapshot({
       title: 'Plan v1',
       plan: 'Original content',
-      resourceId: 'proj-overwrite',
       projectPath: tmpProjectPath,
     });
 
     await savePlanSnapshot({
-      title: 'Plan v2',
+      title: 'Plan v1',
       plan: 'Updated content',
-      resourceId: 'proj-overwrite',
       projectPath: tmpProjectPath,
     });
 
-    const filePath = path.join(tmpProjectPath, '.mastracode', 'plans', 'proj-overwrite', 'current-plan.md');
+    const filePath = path.join(tmpProjectPath, '.mastracode', 'plans', 'plan-v1.md');
     const content = fs.readFileSync(filePath, 'utf-8');
-    expect(content).toContain('# Plan v2');
+    expect(content).toContain('# Plan v1');
     expect(content).toContain('Updated content');
     expect(content).not.toContain('Original content');
+  });
+
+  it('creates separate files for different plan titles', async () => {
+    await savePlanSnapshot({
+      title: 'Plan A',
+      plan: 'Content A',
+      projectPath: tmpProjectPath,
+    });
+
+    await savePlanSnapshot({
+      title: 'Plan B',
+      plan: 'Content B',
+      projectPath: tmpProjectPath,
+    });
+
+    const plansDir = path.join(tmpProjectPath, '.mastracode', 'plans');
+    expect(fs.existsSync(path.join(plansDir, 'plan-a.md'))).toBe(true);
+    expect(fs.existsSync(path.join(plansDir, 'plan-b.md'))).toBe(true);
   });
 
   it('respects plansDir override', async () => {
     await savePlanSnapshot({
       title: 'Custom dir plan',
       plan: 'Custom location.',
-      resourceId: 'proj-custom',
       projectPath: tmpProjectPath,
       plansDir: tmpDir,
     });
 
-    const filePath = path.join(tmpDir, 'proj-custom', 'current-plan.md');
+    const filePath = path.join(tmpDir, 'custom-dir-plan.md');
     expect(fs.existsSync(filePath)).toBe(true);
+  });
+});
+
+describe('getPlanFilename', () => {
+  it('returns a slugified filename from the title', () => {
+    expect(getPlanFilename('Add dark mode toggle')).toBe('add-dark-mode-toggle.md');
+  });
+
+  it('handles special characters', () => {
+    expect(getPlanFilename('Fix bug #42: handle "quotes"')).toBe('fix-bug-42-handle-quotes.md');
+  });
+
+  it('falls back to untitled for empty slugs', () => {
+    expect(getPlanFilename('#@!$%')).toBe('untitled.md');
   });
 });

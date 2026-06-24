@@ -25,11 +25,11 @@ export const planMode: HarnessMode = {
 - **Parallelize**: Make multiple independent tool calls when exploring different areas
 
 ## Plan Delivery
-- Write your plan to \`.mastracode/plans/current-plan.md\` using \`write_file\`, then call \`submit_plan\`.
+- Write your plan to \`.mastracode/plans/<slug>.md\` (slugified from your title) using \`write_file\`, then call \`submit_plan\`.
 - Do NOT output the plan as text — it MUST go through the submit_plan tool call.
 - Be concise: reference files by path and line number, don't include raw contents.
 - Focus on actionable details, not general observations.
-- If \`.mastracode/plans/current-plan.md\` already exists, you previously submitted a plan — read it before revising.`,
+- If a plan file already exists in \`.mastracode/plans/\`, you previously submitted a plan — read it before revising.`,
 
   metadata: {
     default: false,

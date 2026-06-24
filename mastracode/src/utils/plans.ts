@@ -46,22 +46,29 @@ export async function savePlanToDisk(opts: {
 /**
  * Write a plan snapshot to disk on each submission (not just approval).
  * This lets users view/edit the plan file and enables diffing between revisions.
- * The snapshot writes to `$cwd/.mastracode/plans/<resourceId>/current-plan.md`
- * so the agent can read and edit it with regular workspace tools.
+ * Each plan gets a stable filename derived from its title (e.g. `add-dark-mode.md`)
+ * so multiple plans can coexist on the same branch and be committed.
+ *
+ * Returns the filename used (e.g. `add-dark-mode.md`).
  */
 export async function savePlanSnapshot(opts: {
   title: string;
   plan: string;
-  resourceId: string;
   projectPath: string;
   plansDir?: string;
-}): Promise<void> {
-  const { title, plan, resourceId, projectPath } = opts;
+}): Promise<string> {
+  const { title, plan, projectPath } = opts;
   const plansDir = opts.plansDir ?? getLocalPlansDir(projectPath);
-  const dir = path.join(plansDir, resourceId);
 
-  await fs.mkdir(dir, { recursive: true });
+  await fs.mkdir(plansDir, { recursive: true });
 
+  const filename = `${slugify(title)}.md`;
   const content = `# ${title}\n\n${plan}\n`;
-  await fs.writeFile(path.join(dir, 'current-plan.md'), content, 'utf-8');
+  await fs.writeFile(path.join(plansDir, filename), content, 'utf-8');
+  return filename;
+}
+
+/** Derive the plan filename from a title without writing to disk. */
+export function getPlanFilename(title: string): string {
+  return `${slugify(title)}.md`;
 }

@@ -3,7 +3,7 @@
  * tool_suspended (ask_user / request_access / submit_plan).
  */
 import type { AskUserSelectionMode } from '@mastra/core/tools';
-import { savePlanToDisk, savePlanSnapshot } from '../../utils/plans.js';
+import { savePlanToDisk, savePlanSnapshot, getPlanFilename } from '../../utils/plans.js';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { PlanApprovalInlineComponent } from '../components/plan-approval-inline.js';
@@ -287,19 +287,16 @@ export async function handlePlanApproval(
   state.previousPlanSnapshot = { title, plan };
   const projectPath = (state.session.state.get() as any)?.projectPath as string | undefined;
   if (projectPath) {
-    savePlanSnapshot({
-      title,
-      plan,
-      resourceId: state.session.identity.getResourceId(),
-      projectPath,
-    }).catch(() => {});
+    savePlanSnapshot({ title, plan, projectPath }).catch(() => {});
   }
 
   return new Promise(resolve => {
+    const planFilename = getPlanFilename(title);
     const approvalOptions = {
       toolCallId,
       title,
       plan,
+      planFilename,
       previousPlan,
       onApprove: async () => {
         state.activeInlinePlanApproval = undefined;

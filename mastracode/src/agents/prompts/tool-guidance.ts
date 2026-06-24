@@ -218,7 +218,7 @@ ${patchToolGuidance}
 
   if (modeId === 'plan') {
     sections.push(`
-**Plan file access** — Your plan lives at \`.mastracode/plans/current-plan.md\`
+**Plan file access** — Your plan lives in \`.mastracode/plans/\` with a filename derived from the title (e.g. \`add-dark-mode-toggle.md\`)
 - Use \`write_file\` to create the plan file, \`view\` to read it, and \`string_replace_lsp\` for targeted edits.
 - On first submission: write the plan to the file, then call \`submit_plan\`.
 - On revision: read the existing file, edit specific sections, re-read, then call \`submit_plan\` with updated content.

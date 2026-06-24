@@ -61,16 +61,16 @@ For each step:
 
 ## Plan File Workflow
 
-Your plan lives as a \`.md\` file at \`.mastracode/plans/current-plan.md\`. Use regular workspace tools to manage it:
+Your plan lives as a \`.md\` file in \`.mastracode/plans/\` — the filename is derived from your plan title (e.g. \`add-dark-mode-toggle.md\`). Use regular workspace tools to manage it:
 
-1. **First submission**: Write your plan to \`.mastracode/plans/current-plan.md\` using \`write_file\`, then call \`submit_plan\` with the plan content.
+1. **First submission**: Write your plan to \`.mastracode/plans/<slug>.md\` using \`write_file\`, then call \`submit_plan\` with the plan content.
 2. **Reading**: Use \`view\` to read the plan file.
 3. **Editing**: Use \`string_replace_lsp\` for targeted edits to specific sections.
 
 ## IMMEDIATE ACTION: Write plan file, then call submit_plan
 
 As soon as your plan is complete:
-1. Write it to \`.mastracode/plans/current-plan.md\` using \`write_file\`
+1. Write it to \`.mastracode/plans/<slug>.md\` (slugified from your title) using \`write_file\`
 2. Call \`submit_plan\` with the plan content
 
 **CRITICAL:** Do NOT generate a long text response describing your plan. The plan content belongs in the file and the \`submit_plan\` tool call, not in your text output.
@@ -90,14 +90,14 @@ The user will see the plan rendered inline and can:
 ## Revision Workflow
 
 If the user requests changes, you will be stopped immediately. Wait for their next message — it will contain their revision feedback. When you receive it:
-1. Use \`view\` to read the current plan file at \`.mastracode/plans/current-plan.md\`
+1. Use \`view\` to read your plan file in \`.mastracode/plans/\`
 2. Use \`string_replace_lsp\` to make targeted edits based on feedback
 3. Use \`view\` to re-read the updated file
 4. Call \`submit_plan\` again with the full updated plan content
 
 The user will see a diff of what changed between the previous and revised plan. Use \`string_replace_lsp\` for targeted edits so the diff is clear and meaningful — do NOT rewrite the entire plan from scratch for small changes.
 
-**IMPORTANT**: If a plan file already exists at \`.mastracode/plans/current-plan.md\`, you previously submitted a plan that was rejected. Read it to see your previous attempt before revising.
+**IMPORTANT**: If a plan file already exists in \`.mastracode/plans/\`, you previously submitted a plan that was rejected. Read it to see your previous attempt before revising.
 
 Do NOT start implementing until the plan is approved.
 `;
