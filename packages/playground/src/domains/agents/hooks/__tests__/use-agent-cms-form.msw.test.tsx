@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createInstructionBlock } from '../../components/agent-edit-page/utils/form-validation';
 import type { AgentDataSource } from '../../utils/compute-agent-initial-values';
@@ -337,5 +337,81 @@ describe('useAgentCmsForm — empty-runtime guard', () => {
     await waitFor(() => {
       expect(patchCalled).toBe(true);
     });
+  });
+
+  it('blocks publishing the current draft when every referenced prompt block is unpublished', async () => {
+    let activateCalled = false;
+    server.use(
+      http.get(`${BASE_URL}/api/stored/prompt-blocks`, () =>
+        HttpResponse.json(listResponse([promptBlock({ id: 'draft-block', status: 'draft' })])),
+      ),
+      http.post(`${BASE_URL}/api/stored/agents/${GUARD_AGENT_ID}/versions/:versionId/activate`, () => {
+        activateCalled = true;
+        return HttpResponse.json({ id: GUARD_AGENT_ID });
+      }),
+    );
+
+    const { wrapper, queryClient } = makeGuardWrapper();
+    const { result } = renderHook(
+      () =>
+        useAgentCmsForm({
+          mode: 'edit',
+          agentId: GUARD_AGENT_ID,
+          dataSource: DRAFT_REF_DATA_SOURCE,
+          onSuccess: () => {},
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.form.getValues('instructionBlocks')).toHaveLength(1);
+    });
+    await waitForPromptBlocksLoaded(queryClient);
+
+    await act(async () => {
+      await result.current.handlePublish();
+    });
+
+    // The guard blocks the publish before any version is activated.
+    expect(activateCalled).toBe(false);
+  });
+
+  it('still activates a specific version even when every referenced block is unpublished', async () => {
+    let activatedVersionId: string | undefined;
+    const onSuccess = vi.fn();
+    server.use(
+      http.get(`${BASE_URL}/api/stored/prompt-blocks`, () =>
+        HttpResponse.json(listResponse([promptBlock({ id: 'draft-block', status: 'draft' })])),
+      ),
+      http.post(`${BASE_URL}/api/stored/agents/${GUARD_AGENT_ID}/versions/:versionId/activate`, ({ params }) => {
+        activatedVersionId = params.versionId as string;
+        return HttpResponse.json({ id: GUARD_AGENT_ID });
+      }),
+    );
+
+    const { wrapper } = makeGuardWrapper();
+    const { result } = renderHook(
+      () =>
+        useAgentCmsForm({
+          mode: 'edit',
+          agentId: GUARD_AGENT_ID,
+          dataSource: DRAFT_REF_DATA_SOURCE,
+          onSuccess,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.form.getValues('instructionBlocks')).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.handlePublish('version-1');
+    });
+
+    // Activating an existing version is read-only, so the draft guard does not
+    // apply — the version is activated and the success callback fires.
+    expect(activatedVersionId).toBe('version-1');
+    expect(onSuccess).toHaveBeenCalledWith(GUARD_AGENT_ID);
   });
 });
