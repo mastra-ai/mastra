@@ -438,16 +438,12 @@ export default function Workspace() {
     ) : null;
 
   return (
-    <PageLayout width="wide" height="full" className="p-0">
+    <PageLayout width="wide" height="full" className="grid-rows-[1fr] p-0">
       {workspaceCrumbs && <RouteHeaderCrumbs crumbs={workspaceCrumbs} />}
-      {/* RouteHeaderCrumbs renders into the shell header (no inline DOM), so the
-          page's only grid child must occupy the `1fr` row to fill the viewport.
-          The framed box (rounded border, like other studio pages) bounds the IDE
-          split to the content-box height; panes scroll internally, never the page. */}
-      <PageLayout.MainArea className="row-start-2 flex min-h-0 flex-col gap-6">
+      <PageLayout.MainArea className="min-h-0 flex flex-col gap-6 overflow-hidden">
         {hasFilesystem && (
           <Group
-            className="min-h-0 w-full min-w-0 flex-1"
+            className="relative h-full min-h-0 w-full min-w-0 overflow-hidden"
             defaultLayout={defaultFilesLayout}
             onLayoutChange={onFilesLayoutChange}
           >
