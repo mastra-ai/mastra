@@ -18,6 +18,7 @@ import {
   GET_ROLE_PERMISSIONS_ROUTE,
   GET_SSO_LOGIN_ROUTE,
   GET_SSO_CALLBACK_ROUTE,
+  POST_REFRESH_ROUTE,
 } from './auth';
 import { createTestServerContext } from './test-utils';
 
@@ -298,6 +299,68 @@ describe('GET /auth/capabilities — no auth provider', () => {
     } as any);
 
     expect(result).toEqual({ enabled: false, login: null });
+  });
+});
+
+describe('POST /auth/refresh — expected refresh misses', () => {
+  it('returns 404 without throwing when refresh is not configured', async () => {
+    const auth = {
+      name: 'token-only',
+      authenticateToken: vi.fn().mockResolvedValue(null),
+      authorizeUser: vi.fn().mockResolvedValue(false),
+    } as unknown as MastraAuthProvider;
+    const mastra = createMastraWithAuth(auth);
+    const ctx = {
+      ...createTestServerContext({ mastra }),
+      request: new Request('http://localhost:4000/api/auth/refresh', { method: 'POST' }),
+    };
+
+    const response = (await POST_REFRESH_ROUTE.handler(ctx as any)) as Response;
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({ error: 'Session refresh not configured' });
+  });
+
+  it('returns 401 without throwing when no session cookie is present', async () => {
+    const auth = {
+      name: 'session-auth',
+      authenticateToken: vi.fn().mockResolvedValue(null),
+      authorizeUser: vi.fn().mockResolvedValue(false),
+      getSessionIdFromRequest: vi.fn().mockReturnValue(null),
+      refreshSession: vi.fn(),
+    } as unknown as MastraAuthProvider;
+    const mastra = createMastraWithAuth(auth);
+    const ctx = {
+      ...createTestServerContext({ mastra }),
+      request: new Request('http://localhost:4000/api/auth/refresh', { method: 'POST' }),
+    };
+
+    const response = (await POST_REFRESH_ROUTE.handler(ctx as any)) as Response;
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({ error: 'No session' });
+    expect((auth as any).refreshSession).not.toHaveBeenCalled();
+  });
+
+  it('returns 401 without throwing when the session cannot be refreshed', async () => {
+    const auth = {
+      name: 'session-auth',
+      authenticateToken: vi.fn().mockResolvedValue(null),
+      authorizeUser: vi.fn().mockResolvedValue(false),
+      getSessionIdFromRequest: vi.fn().mockReturnValue('expired-session'),
+      refreshSession: vi.fn().mockResolvedValue(null),
+    } as unknown as MastraAuthProvider;
+    const mastra = createMastraWithAuth(auth);
+    const ctx = {
+      ...createTestServerContext({ mastra }),
+      request: new Request('http://localhost:4000/api/auth/refresh', { method: 'POST' }),
+    };
+
+    const response = (await POST_REFRESH_ROUTE.handler(ctx as any)) as Response;
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({ error: 'Session expired' });
+    expect((auth as any).refreshSession).toHaveBeenCalledWith('expired-session');
   });
 });
 

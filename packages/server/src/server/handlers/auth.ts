@@ -602,19 +602,28 @@ export const POST_REFRESH_ROUTE = createPublicRoute({
         !implementsInterface<ISessionProvider>(auth, 'refreshSession') ||
         !implementsInterface<ISessionProvider>(auth, 'getSessionIdFromRequest')
       ) {
-        throw new HTTPException(404, { message: 'Session refresh not configured' });
+        return new Response(JSON.stringify({ error: 'Session refresh not configured' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' },
+        });
       }
 
       // Get session ID from request
       const sessionId = auth.getSessionIdFromRequest(request);
       if (!sessionId) {
-        throw new HTTPException(401, { message: 'No session' });
+        return new Response(JSON.stringify({ error: 'No session' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        });
       }
 
       // Refresh the session
       const newSession = await auth.refreshSession(sessionId);
       if (!newSession) {
-        throw new HTTPException(401, { message: 'Session expired' });
+        return new Response(JSON.stringify({ error: 'Session expired' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        });
       }
 
       // Build response with new session headers
