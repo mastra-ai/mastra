@@ -1,4 +1,5 @@
-import { Badge, Entity, EntityContent, EntityName, EntityDescription, stringToColor } from '@mastra/playground-ui';
+import { Entity, EntityContent, EntityName, EntityDescription, stringToColor } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { Plug } from 'lucide-react';
 import { useMemo, useState } from 'react';

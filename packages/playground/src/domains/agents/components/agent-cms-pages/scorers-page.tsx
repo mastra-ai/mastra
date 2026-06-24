@@ -1,15 +1,7 @@
-import {
-  EntityName,
-  EntityDescription,
-  EntityContent,
-  Entity,
-  Input,
-  Label,
-  ScrollArea,
-  JudgeIcon,
-  cn,
-} from '@mastra/playground-ui';
+import { EntityName, EntityDescription, EntityContent, Entity, ScrollArea, JudgeIcon, cn } from '@mastra/playground-ui';
 import type { RuleGroup } from '@mastra/playground-ui';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Label } from '@mastra/playground-ui/components/Label';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { Searchbar } from '@mastra/playground-ui/components/Searchbar';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';

@@ -1,4 +1,6 @@
-import { PermissionDenied, SessionExpired, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { useParams } from 'react-router';
 import { WorkflowSelectedStepProvider } from '@/domains/workflows/context/workflow-selected-step-context';
 import { WorkflowStepDetailProvider } from '@/domains/workflows/context/workflow-step-detail-provider';

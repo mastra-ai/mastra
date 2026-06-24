@@ -1,12 +1,9 @@
 import {
   Button,
-  EmptyState,
   Entity,
   EntityContent,
   EntityName,
   EntityDescription,
-  Input,
-  Label,
   ScrollArea,
   Select,
   SelectContent,
@@ -15,6 +12,9 @@ import {
   SelectValue,
   MemoryIcon,
 } from '@mastra/playground-ui';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Label } from '@mastra/playground-ui/components/Label';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Controller, useWatch } from 'react-hook-form';
 

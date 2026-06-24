@@ -1,5 +1,4 @@
 import {
-  Badge,
   Button,
   Dialog,
   DialogContent,
@@ -8,16 +7,17 @@ import {
   DialogBody,
   DialogFooter,
   DataList,
-  Label,
-  Spinner,
   Txt,
   Icon,
   toast,
   cn,
 } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { Column, Columns } from '@mastra/playground-ui/components/Columns';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { useMastraClient } from '@mastra/react';
 import {

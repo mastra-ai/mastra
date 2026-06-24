@@ -216,6 +216,26 @@ describe('Mastra runScope lifecycle', () => {
       expect(m.__getRunScope('fresh-run')).toBeDefined();
     });
 
+    it('emits a warning when the sweep evicts a still-registered run', () => {
+      const warn = vi.fn();
+      const m = new Mastra({
+        logger: { warn, info: vi.fn(), debug: vi.fn(), error: vi.fn(), trackException: vi.fn() } as any,
+      });
+      m.__registerInternalWorkflow(makeWorkflow('agentic-loop'), 'abandoned-run');
+
+      vi.setSystemTime(Date.now() + Mastra.INTERNAL_WORKFLOW_TTL_MS + 1000);
+      m.__registerInternalWorkflow(makeWorkflow('agentic-loop'), 'fresh-run');
+
+      expect(warn).toHaveBeenCalledWith(
+        'Evicted stale run-scoped workflow after TTL expired',
+        expect.objectContaining({
+          runId: 'abandoned-run',
+          ttlMs: Mastra.INTERNAL_WORKFLOW_TTL_MS,
+          ageMs: expect.any(Number),
+        }),
+      );
+    });
+
     it('releases the correct scope when the runId contains a colon', () => {
       const m = makeMastra();
       // runIds are caller-controlled; nothing prevents a custom id from

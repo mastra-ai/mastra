@@ -59,7 +59,7 @@ export function MainSidebarNavLink({
   // Auto-inherit state + LinkComponent from context; explicit props still win.
   const ctx = useMaybeSidebar();
   const state: SidebarState = stateProp ?? ctx?.state ?? 'default';
-  const Link: LinkComponent | 'a' = LinkProp ?? ctx?.LinkComponent ?? 'a';
+  const Link: LinkComponent = LinkProp ?? ctx?.LinkComponent ?? 'a';
   const isCollapsed = state === 'collapsed';
   const isFeatured = link?.variant === 'featured';
   const level = levelProp ?? (link?.indent ? 1 : 0);

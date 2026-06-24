@@ -31,7 +31,7 @@ describe('Harness OM threshold persistence', () => {
       reflectionThreshold: 40000,
     });
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const threadA = await session.thread.create();
     await session.state.set({ observationThreshold: 12000, reflectionThreshold: 21000 } as any);
@@ -53,7 +53,7 @@ describe('Harness OM threshold persistence', () => {
       reflectionThreshold: 25000,
     });
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const thread = await session.thread.create();
     await session.state.set({ observationThreshold: 18000, reflectionThreshold: 28000 } as any);

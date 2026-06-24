@@ -13,12 +13,12 @@ describe('AgentObservationalMemory token display', () => {
   const sourceFile = resolve(__dirname, '../agent-observational-memory.tsx');
   const source = readFileSync(sourceFile, 'utf-8');
 
-  it('uses the live observation window token count for the observations header label', () => {
-    expect(source).toContain(
-      'const observationTokenCount =\n    liveProgress?.windows?.active?.observations?.tokens ?? record?.observationTokenCount ?? 0;',
-    );
-
-    expect(source).toContain('const tokenCount = observationTokenCount;');
+  it('derives observation token counts from the shared observation-window helper', () => {
+    // The header label and the progress bar must read from the same source so the
+    // sidebar never disagrees with the OM buffering marker during active cycles.
+    // That derivation now lives in the shared getObservationWindowTokens helper.
+    expect(source).toContain("import { getObservationWindowTokens } from './lib/observation-window';");
+    expect(source).toContain('getObservationWindowTokens({ record, liveProgress, agentConfig: omAgentConfig });');
     expect(source).not.toContain('const tokenCount = statusData?.observationalMemory?.observationTokenCount;');
   });
 

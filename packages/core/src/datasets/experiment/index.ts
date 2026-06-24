@@ -319,6 +319,8 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         targetId: targetId ?? 'inline',
         totalItems: items.length,
         agentVersion,
+        organizationId: datasetRecord?.organizationId ?? null,
+        projectId: datasetRecord?.projectId ?? null,
       });
     }
     // Update status to running (both sync and async paths)
@@ -467,6 +469,8 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
               completedAt: itemCompletedAt,
               retryCount,
               traceId: execResult.traceId,
+              organizationId: datasetRecord?.organizationId ?? null,
+              projectId: datasetRecord?.projectId ?? null,
               ...(execResult.toolMockReport ? { toolMockReport: execResult.toolMockReport } : {}),
             });
           } catch (persistError) {
