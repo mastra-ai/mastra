@@ -12,6 +12,7 @@ import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { loadSettings } from '../onboarding/settings.js';
 import type { MastraCodeState } from '../schema';
 import { MC_TOOLS, TOOL_NAME_OVERRIDES } from '../tool-names.js';
+import { getPlansDir } from '../utils/plans.js';
 
 // =============================================================================
 // Sandbox Environment
@@ -107,7 +108,7 @@ export function buildSkillPaths(projectPath: string, configDir: string, homeDir 
  * and any per-thread sandboxAllowedPaths). The OS temp directory is included
  * so the agent can use it as a scratchpad without requesting access every time.
  */
-const DEFAULT_ALLOWED_PATHS: string[] = [os.tmpdir(), '/tmp'].reduce<string[]>((acc, p) => {
+const DEFAULT_ALLOWED_PATHS: string[] = [os.tmpdir(), '/tmp', getPlansDir()].reduce<string[]>((acc, p) => {
   const resolved = path.resolve(p);
   if (!acc.includes(resolved)) acc.push(resolved);
   return acc;
@@ -146,8 +147,9 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
   const isPlanMode = modeId === 'plan';
 
   const planModeTools = {
-    mastra_workspace_write_file: { ...TOOL_NAME_OVERRIDES.mastra_workspace_write_file, enabled: false },
-    mastra_workspace_edit_file: { ...TOOL_NAME_OVERRIDES.mastra_workspace_edit_file, enabled: false },
+    // write_file stays enabled — the agent uses it to create the initial plan .md file.
+    // edit_file (string_replace_lsp) stays enabled for targeted plan revisions.
+    // ast_edit is disabled because plans are markdown, not code.
     mastra_workspace_ast_edit: { ...TOOL_NAME_OVERRIDES.mastra_workspace_ast_edit, enabled: false },
   };
 
