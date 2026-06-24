@@ -52,7 +52,7 @@ describe('step-finish token usage extraction', () => {
   beforeEach(async () => {
     harness = createHarness();
     await harness.init();
-    session = await harness.createSession();
+    session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
   });
 
   it('extracts token usage from AI SDK v5/v6 format (inputTokens/outputTokens)', async () => {
@@ -113,7 +113,7 @@ describe('step-finish token usage extraction', () => {
     const storage = new InMemoryStore();
     harness = createHarness(storage);
     await harness.init();
-    session = await harness.createSession();
+    session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const thread = await session.thread.create();
     const usage = {
       inputTokens: 100,

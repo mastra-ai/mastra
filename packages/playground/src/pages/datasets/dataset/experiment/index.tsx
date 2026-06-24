@@ -1,14 +1,14 @@
 import {
   Button,
-  EmptyState,
   PageLayout,
-  PermissionDenied,
-  SessionExpired,
   is401UnauthorizedError,
   is403ForbiddenError,
   is404NotFoundError,
 } from '@mastra/playground-ui';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { ArrowLeft, PlayCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router';

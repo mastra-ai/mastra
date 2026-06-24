@@ -1,4 +1,6 @@
-import { Button, Icon, Input, Label, Popover, PopoverContent, PopoverTrigger, Txt } from '@mastra/playground-ui';
+import { Button, Icon, Popover, PopoverContent, PopoverTrigger, Txt } from '@mastra/playground-ui';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Label } from '@mastra/playground-ui/components/Label';
 
 import { CloudUpload, Link, PlusIcon } from 'lucide-react';
 import { useState } from 'react';

@@ -1,8 +1,9 @@
 'use client';
 
 import type { SpanRecord } from '@mastra/core/storage';
-import { TextAndIcon, getShortId, useSpanDetail } from '@mastra/playground-ui';
+import { useSpanDetail } from '@mastra/playground-ui';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
+import { TextAndIcon, getShortId } from '@mastra/playground-ui/components/Text';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { EyeIcon } from 'lucide-react';

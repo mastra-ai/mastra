@@ -8,7 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogBody,
-  Label,
   Select,
   SelectTrigger,
   SelectValue,
@@ -16,6 +15,7 @@ import {
   SelectItem,
   toast,
 } from '@mastra/playground-ui';
+import { Label } from '@mastra/playground-ui/components/Label';
 import { useState } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 import { useDatasets } from '../hooks/use-datasets';

@@ -1,4 +1,6 @@
-import { Button, Icon, MainContentLayout, Spinner } from '@mastra/playground-ui';
+import { Button, Icon } from '@mastra/playground-ui';
+import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Check } from 'lucide-react';
 import { Outlet, useLocation } from 'react-router';
 import { AgentCmsFormShell } from '@/domains/agents/components/agent-cms-form-shell';

@@ -130,7 +130,7 @@ describe('harness routes', () => {
       // Emit an event on the session the route subscribed to.
       const harness = mastra.getHarness('code')!;
       await harness.init();
-      const session = await harness.createSession({ resourceId: 'user-1' });
+      const session = await harness.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: 'code' });
       // Any emit fans out a synthetic display_state_changed to subscribers.
       session.emit({ type: 'agent_start' } as any);
 
@@ -205,7 +205,9 @@ describe('harness routes', () => {
     it('caps the result to `limit`, newest first', async () => {
       await CREATE_HARNESS_SESSION_ROUTE.handler({ mastra, harnessId: 'code', resourceId: 'user-limit' } as any);
       // Create a few more threads so there's something to page.
-      const session = await mastra.getHarness('code')!.createSession({ resourceId: 'user-limit' });
+      const session = await mastra
+        .getHarness('code')!
+        .createSession({ resourceId: 'user-limit', id: 'user-limit', ownerId: 'code' });
       for (let i = 0; i < 4; i++) await session.thread.create({ title: `t${i}` });
 
       const res = (await LIST_HARNESS_THREADS_ROUTE.handler({
