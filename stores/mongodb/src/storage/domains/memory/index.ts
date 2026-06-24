@@ -817,10 +817,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       await collection.updateOne(
         { id: resource.id },
         {
-          $set: {
-            ...resource,
-            metadata: JSON.stringify(resource.metadata),
-          },
+          $set: { ...resource },
         },
         { upsert: true },
       );
@@ -878,7 +875,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       }
 
       if (metadata) {
-        updateDoc.metadata = JSON.stringify(updatedResource.metadata);
+        updateDoc.metadata = updatedResource.metadata;
       }
 
       await collection.updateOne({ id: resourceId }, { $set: updateDoc });

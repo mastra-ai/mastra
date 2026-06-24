@@ -66,4 +66,57 @@ describe('Hardening: NODE-7556 — data modeling (Tranche A)', () => {
       await store.close();
     }
   });
+
+  it('A3: resource metadata is stored as a native object and reads back as an object (and legacy strings still parse)', async () => {
+    const store = new MongoDBStore({ id: 'hardening-a3', uri: URI, dbName: DB });
+    await store.init();
+    const memory = await store.getStore('memory');
+
+    const resourceId = `res-a3-${Date.now()}`;
+    await memory?.saveResource({
+      resource: {
+        id: resourceId,
+        workingMemory: 'wm',
+        metadata: { tier: 'gold', nested: { count: 3 } },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    const client = new MongoClient(URI);
+    try {
+      await client.connect();
+      const resources = client.db(DB).collection('mastra_resources');
+
+      // saveResource stores metadata as a native sub-document, not a JSON string.
+      const raw = await resources.findOne<any>({ id: resourceId });
+      expect(typeof raw.metadata).toBe('object');
+      expect(raw.metadata.tier).toBe('gold');
+
+      // getResourceById returns an object.
+      const fetched = await memory?.getResourceById({ resourceId });
+      expect(fetched?.metadata).toEqual({ tier: 'gold', nested: { count: 3 } });
+
+      // updateResource also writes metadata natively (merging with existing).
+      await memory?.updateResource({ resourceId, metadata: { tier: 'platinum' } });
+      const rawUpdated = await resources.findOne<any>({ id: resourceId });
+      expect(typeof rawUpdated.metadata).toBe('object');
+      expect(rawUpdated.metadata).toEqual({ tier: 'platinum', nested: { count: 3 } });
+
+      // Back-compat: a legacy row whose metadata is a JSON string still parses on read.
+      const legacyId = `res-a3-legacy-${Date.now()}`;
+      await resources.insertOne({
+        id: legacyId,
+        workingMemory: '',
+        metadata: JSON.stringify({ tier: 'silver' }),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      const legacy = await memory?.getResourceById({ resourceId: legacyId });
+      expect(legacy?.metadata).toEqual({ tier: 'silver' });
+    } finally {
+      await client.close();
+      await store.close();
+    }
+  });
 });
