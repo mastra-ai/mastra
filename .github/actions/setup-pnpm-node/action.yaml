@@ -58,47 +58,47 @@ runs:
           exit 0
         fi
 
-        if ! grep -q "database disk image is malformed" /tmp/pnpm-store-status.log; then
+        # A corrupt store index surfaces as a SQLite error from `pnpm store
+        # status`. The exact message depends on how the index got truncated
+        # ("database disk image is malformed", "file is not a database", etc.),
+        # so match the SQLite error family rather than one literal string. Any
+        # other non-zero status is a real failure and should be surfaced.
+        if ! grep -qE "ERR_SQLITE_ERROR|database disk image is malformed|file is not a database" /tmp/pnpm-store-status.log; then
           cat /tmp/pnpm-store-status.log
           exit "$status"
         fi
 
-        # The restored store cache is corrupt. On these runners pnpm/action-setup
-        # installs pnpm beneath the same directory as the store, and pnpm's own
-        # files are hard-linked into the store, so `rm -rf "$store_path"` also
-        # deletes the pnpm binary the PATH shim points at. That broke the next
-        # `pnpm install` with a MODULE_NOT_FOUND for pnpm.mjs. Remove the corrupt
-        # store, then reinstall pnpm into a dedicated directory and put it ahead
-        # on PATH so later steps use a working pnpm instead of the broken shim.
-        echo "Detected corrupt pnpm store cache at $store_path; removing restored store."
-        rm -rf "$store_path"
+        # The restored store cache is corrupt: pnpm's store index (a SQLite
+        # database) is malformed, usually because the cache archive was snapshot
+        # mid-write. Only the index is corrupt — the content-addressed package
+        # files under files/ are intact.
+        #
+        # Earlier attempts to recover by removing the whole store (rm -rf) and
+        # reinstalling pnpm did not work on these runners:
+        #   * pnpm/action-setup installs pnpm beneath the store and hard-links
+        #     pnpm's own files into it, so wiping the store deleted the pnpm
+        #     binary the PATH shim pointed at (MODULE_NOT_FOUND for pnpm.mjs).
+        #   * Reinstalling pnpm and relinking the store left the remaining
+        #     content mismatched against the lockfile integrity, so the next
+        #     frozen install failed with ERR_PNPM_MODIFIED_DEPENDENCY.
+        #
+        # Instead, delete only the corrupt index and keep files/ (and the pnpm
+        # binary hard-linked into it). pnpm rebuilds the index from the content
+        # files on the next operation, so the binary survives and store content
+        # still matches the lockfile.
+        echo "Detected corrupt pnpm store index at $store_path; deleting only the store index, preserving content."
+        # pnpm >=11 keeps the index in index.db; older versions used
+        # index-v5.json* plus an index/ directory. Remove whichever exist.
+        rm -rf \
+          "$store_path/index.db" \
+          "$store_path/index.db-shm" \
+          "$store_path/index.db-wal" \
+          "$store_path"/index-v*.json* \
+          "$store_path/index"
 
-        if pnpm --version >/dev/null 2>&1; then
-          exit 0
-        fi
-
-        # Resolve the pnpm version the same way pnpm/action-setup does: from the
-        # explicit input if given, otherwise the packageManager field. This keeps
-        # the reinstalled pnpm in sync with the workspace automatically.
-        pnpm_version="$PNPM_VERSION"
-        if [ -z "$pnpm_version" ]; then
-          pnpm_version=$(node -p "(require('./$PACKAGE_JSON_FILE').packageManager||'').replace(/^pnpm@/,'').split('+')[0]")
-        fi
-
-        echo "pnpm binary was removed with the corrupt store; reinstalling pnpm@$pnpm_version."
-        # Install into a dedicated prefix with npm (corepack on the bundled Node
-        # version fails signature verification with "Cannot find matching keyid").
-        # npm places a working pnpm at <prefix>/bin; prepend it to PATH so the
-        # rest of the job stops using the action-setup shim that points at the
-        # deleted store-linked binary.
-        recovery_prefix="$RUNNER_TEMP/pnpm-recovery"
-        mkdir -p "$recovery_prefix"
-        npm install -g --prefix "$recovery_prefix" "pnpm@$pnpm_version"
-        echo "$recovery_prefix/bin" >> "$GITHUB_PATH"
-        PATH="$recovery_prefix/bin:$PATH" pnpm --version
-      env:
-        PNPM_VERSION: ${{ inputs.version }}
-        PACKAGE_JSON_FILE: ${{ inputs.package-json-file || 'package.json' }}
+        # Confirm pnpm and the store are usable again before continuing.
+        pnpm --version
+        pnpm store status
 
     - name: Install dependencies
       if: ${{ inputs.install-dependencies == 'true' }}
