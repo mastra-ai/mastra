@@ -1,4 +1,5 @@
-import { CodeBlock, CodeEditor, ToolsIcon } from '@mastra/playground-ui';
+import { CodeEditor, ToolsIcon } from '@mastra/playground-ui';
+import { CodeBlock } from '@mastra/playground-ui/components/CodeBlock';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import { BadgeWrapper } from './badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';

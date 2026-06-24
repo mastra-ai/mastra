@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { aggregateTopics, filterTraceSummaries, getTraceShare, sortTraceSummaries } from '../utils';
 import type { Topic } from '../types';
+import { aggregateTopics, filterTraceSummaries, getTraceShare, sortTraceSummaries } from '../utils';
 
 const topics: Topic[] = [
   {

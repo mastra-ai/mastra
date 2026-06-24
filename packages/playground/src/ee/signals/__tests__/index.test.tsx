@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
+import type * as ReactRouter from 'react-router';
 import { MemoryRouter, Outlet, Route, Routes, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import SignalsOverviewPage, { SignalDetailsPage, SignalTraceIdPage } from '..';
@@ -11,7 +12,7 @@ const { navigate } = vi.hoisted(() => ({
 }));
 
 vi.mock('react-router', async importOriginal => {
-  const actual = await importOriginal<typeof import('react-router')>();
+  const actual = await importOriginal<typeof ReactRouter>();
 
   return {
     ...actual,

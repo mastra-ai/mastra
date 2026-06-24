@@ -2,14 +2,14 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { Colors } from '@/ds/tokens';
-import { ScatterPlotChartTooltip } from './scatter-plot-chart-tooltip';
 import {
   formatScatterPlotAxisTick,
   getScatterPlotClickedPoint,
   getScatterPlotPointColor,
   ScatterPlotChart,
 } from './scatter-plot-chart';
+import { ScatterPlotChartTooltip } from './scatter-plot-chart-tooltip';
+import { Colors } from '@/ds/tokens';
 
 afterEach(() => {
   cleanup();

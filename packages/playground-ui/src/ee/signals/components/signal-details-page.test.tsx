@@ -7,8 +7,8 @@ import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { SignalDetailsPage } from './signal-details-page';
 import { singleTraceResponse } from './__tests__/fixtures/signal-traces';
+import { SignalDetailsPage } from './signal-details-page';
 
 const BASE_URL = 'http://localhost:4111';
 const server = setupServer();

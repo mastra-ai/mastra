@@ -1,9 +1,9 @@
 import { X } from 'lucide-react';
 import type { ElementType, MouseEvent, ReactNode } from 'react';
 
+import { cn } from '../../../lib/utils';
 import { Button } from '../Button';
 import { Txt } from '../Txt';
-import { cn } from '../../../lib/utils';
 
 export interface ThreadListProps {
   children: ReactNode;
@@ -92,7 +92,7 @@ export const ThreadListItem = ({
         onClick={onClick}
         variant="ghost"
         className={cn(
-          'min-h-form-md !h-auto w-full min-w-0 justify-start rounded-xl px-3 py-2 text-left',
+          'min-h-form-md h-auto! w-full min-w-0 justify-start rounded-xl px-3 py-2 text-left',
           onDelete && 'pr-9',
           isActive && 'bg-surface4 text-neutral6',
           className,

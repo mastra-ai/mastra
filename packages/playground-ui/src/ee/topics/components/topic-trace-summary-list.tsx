@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
+import type { TopicTraceSummary } from '../types';
+import { getVisibleTraceSummaries } from '../utils';
 import { Button } from '@/ds/components/Button';
 import { DataList } from '@/ds/components/DataList/data-list';
 import { Searchbar } from '@/ds/components/Searchbar';
-import { getVisibleTraceSummaries } from '../utils';
-import type { TopicTraceSummary } from '../types';
 
 export interface TopicTraceSummaryListProps {
   traces: TopicTraceSummary[];

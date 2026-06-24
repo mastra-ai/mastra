@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
+import { useTraces } from '../../../domains/traces/hooks';
 import { ScatterPlotChart } from '../../../ds/components/ScatterPlotChart';
 import { Tab, TabContent, TabList, Tabs } from '../../../ds/components/Tabs';
 import { stringToColor } from '../../../lib/colors';
 import { cn } from '../../../lib/utils';
-import { useTraces } from '../../../domains/traces/hooks';
 import { TopicTraceDetailsPanel, TopicTraceSummaryList, TopicsLayout } from '../../topics';
 import { getSignalChartData } from '../signals-chart-data';
 import { signals } from '../signals-data';

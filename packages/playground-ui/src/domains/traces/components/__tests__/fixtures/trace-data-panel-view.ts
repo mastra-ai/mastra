@@ -1,13 +1,14 @@
+import type { MastraClient } from '@mastra/client-js';
 import { SpanType } from '@mastra/core/observability';
 
-import type { TraceDataPanelViewProps } from '../../trace-data-panel-view';
-
-type Spans = NonNullable<TraceDataPanelViewProps['spans']>;
-type TraceSpan = Spans[number];
+// Bind the fixture to the live wire contract: the trace panel renders the
+// lightweight spans returned by `client.getTraceLight`, so we derive the span
+// shape from the client method rather than the component prop type.
+type GetTraceLightResponse = Awaited<ReturnType<MastraClient['getTraceLight']>>;
+type TraceSpan = GetTraceLightResponse['spans'][number];
 
 // One root span so the panel renders the actions row (the button is gated on
-// `hierarchicalSpans.length > 0`). Fully typed against the component's `spans`
-// prop so no cast is needed — the timeline reads these fields directly.
+// `hierarchicalSpans.length > 0`). The timeline reads these fields directly.
 const rootSpan: TraceSpan = {
   traceId: 'trace-1',
   spanId: 'root',
@@ -21,4 +22,4 @@ const rootSpan: TraceSpan = {
   updatedAt: new Date('2026-06-01T10:00:01.000Z'),
 };
 
-export const rootSpanFixture: Spans = [rootSpan];
+export const rootSpanFixture: TraceSpan[] = [rootSpan];

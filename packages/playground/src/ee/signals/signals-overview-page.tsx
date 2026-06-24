@@ -1,6 +1,6 @@
 import { SignalsOverviewPage as SignalsOverviewPageContent } from '@mastra/playground-ui';
-import { useNavigate } from 'react-router';
 import type { Signal } from '@mastra/playground-ui';
+import { useNavigate } from 'react-router';
 
 export function SignalsOverviewPage() {
   const navigate = useNavigate();

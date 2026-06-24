@@ -10,6 +10,8 @@ import { RoutePermissionGuard } from './domains/auth/components/route-permission
 import { RoutePermissionsGate } from './domains/auth/components/route-permissions-gate';
 import { DatasetCrumb } from './domains/datasets/dataset-crumb';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
+import SignalsOverviewPage, { SignalDetailsPage, SignalTraceIdPage } from './ee/signals';
+import { SignalCrumb } from './ee/signals/signal-crumb';
 import { PostHogProvider } from './lib/analytics';
 import { Link } from './lib/link';
 import { StudioIndexRedirect } from './lib/studio-index-redirect';
@@ -76,8 +78,6 @@ import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import AgentTool from './pages/tools/agent-tool';
 import Tool from './pages/tools/tool';
-import SignalsOverviewPage, { SignalDetailsPage, SignalTraceIdPage } from './ee/signals';
-import { SignalCrumb } from './ee/signals/signal-crumb';
 import Traces from './pages/traces';
 import TraceDetails from './pages/traces/trace';
 import Workflows from './pages/workflows';
