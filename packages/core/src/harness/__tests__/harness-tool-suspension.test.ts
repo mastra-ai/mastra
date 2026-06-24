@@ -97,7 +97,7 @@ describe('Harness: tool suspension and resumption', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     await session.thread.create();
 
     await session.sendMessage({ content: 'Hello' });
@@ -164,7 +164,7 @@ describe('Harness: tool suspension and resumption', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     // Collect all events
     const events: any[] = [];
@@ -232,7 +232,7 @@ describe('Harness: tool suspension and resumption', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     await session.thread.create();
     await session.sendMessage({ content: 'Do it' });
 
@@ -295,7 +295,7 @@ describe('Harness: tool suspension and resumption', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: any[] = [];
     session.subscribe(event => {
@@ -380,7 +380,7 @@ describe('Harness: tool suspension and resumption', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const events: any[] = [];
     session.subscribe(event => {
       events.push(event);
@@ -458,7 +458,7 @@ describe('Harness: tool suspension and resumption', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     await session.thread.create();
 
     await session.sendMessage({ content: 'Deploy to production' });
