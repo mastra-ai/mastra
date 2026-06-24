@@ -22,7 +22,7 @@ async function createSession() {
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
   });
   await harness.init();
-  const session = await harness.createSession();
+  const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
   return { harness, session };
 }
 
@@ -222,7 +222,7 @@ describe('harness state transactions', () => {
       ],
     });
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const setStatePromise = session.state.set({ seed: 'initial' });
     const transactionPromise = session.state.update((state: Record<string, unknown>) => {
@@ -276,7 +276,7 @@ describe('task tool permissions', () => {
       ],
     });
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const toolsets = await (harness as any).buildToolsets(session, new RequestContext());
 
