@@ -6,10 +6,10 @@ import { useCurrentRun } from '../context/use-current-run';
 import type { Step } from '../context/use-current-run';
 import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
 import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
-import { useWaitingStepKey } from './use-workflow-trigger';
 import type { WorkflowCardDisplayStatus, WorkflowConditionCodeCondition } from './components/types';
 import { WorkflowConditionCardView } from './components/workflow-condition-card-view';
 import { WorkflowStepCardView } from './components/workflow-step-card-view';
+import { useWaitingStepKey } from './use-workflow-trigger';
 import { WorkflowStepActionBar } from './workflow-step-action-bar';
 import type { WorkflowStepNode, WorkflowStepNodeData } from './workflow-step-node-utils';
 
