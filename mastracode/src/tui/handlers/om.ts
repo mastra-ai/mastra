@@ -129,7 +129,7 @@ export function handleOMReflectionEnd(
   // Note: Harness has already updated observationTokens to compressedTokens,
   // so we use tokensToReflect from the start event via the cycleId context.
   // For display purposes, we read the event parameter directly.
-  const ds = state.harness.session.displayState.get();
+  const ds = state.session.displayState.get();
   // Remove in-progress marker — the output box replaces it
   if (state.activeOMMarker) {
     const idx = state.chatContainer.children.indexOf(state.activeOMMarker);

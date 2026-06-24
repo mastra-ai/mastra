@@ -508,7 +508,8 @@ describe('cloneThread – Observational Memory', () => {
       });
 
       await harness.init();
-      const clonedThread = await harness.cloneThread({ sourceThreadId: 'src-thread-harness-dynamic' });
+      const session = await harness.createSession({ resourceId });
+      const clonedThread = await session.thread.clone({ sourceThreadId: 'src-thread-harness-dynamic' });
 
       expect(memoryFactory).toHaveBeenCalledTimes(1);
 

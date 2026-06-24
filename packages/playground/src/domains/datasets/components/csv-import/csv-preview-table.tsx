@@ -1,4 +1,4 @@
-import { Table, Thead, Tbody, Th, Row, Cell } from '@mastra/playground-ui';
+import { Cell, Row, Table, Tbody, Th, Thead } from '@mastra/playground-ui/components/Table';
 ('use client');
 
 export interface CSVPreviewTableProps {

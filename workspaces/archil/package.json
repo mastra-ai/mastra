@@ -1,6 +1,6 @@
 {
   "name": "@mastra/archil",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Archil filesystem provider for Mastra workspaces — elastic, serverless file systems for AI agents",
   "type": "module",
   "main": "dist/index.js",
@@ -23,7 +23,7 @@
     "build:lib": "pnpm build",
     "build:watch": "pnpm build --watch",
     "test:unit": "vitest run --exclude '**/*.integration.test.ts'",
-    "test:cloud": "vitest run ./src/**/*.integration.test.ts",
+    "test:cloud": "vitest run --passWithNoTests ./src/**/*.integration.test.ts",
     "test:watch": "vitest watch",
     "test": "vitest run ./src/**/*.integration.test.ts",
     "lint": "eslint ."

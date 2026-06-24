@@ -5,7 +5,7 @@ import { Pencil } from 'lucide-react';
 
 /** Schema validation error from API */
 export interface SchemaValidationError {
-  field: 'input' | 'groundTruth';
+  field: 'input' | 'groundTruth' | 'toolMocks';
   errors: Array<{ path: string; message: string }>;
 }
 
@@ -40,6 +40,8 @@ export interface EditModeContentProps {
   setMetadataValue: (value: string) => void;
   trajectoryValue: string;
   setTrajectoryValue: (value: string) => void;
+  toolMocksValue: string;
+  setToolMocksValue: (value: string) => void;
   requestContextValue: string;
   setRequestContextValue: (value: string) => void;
   validationErrors: SchemaValidationError | null;
@@ -57,6 +59,8 @@ export function EditModeContent({
   setMetadataValue,
   trajectoryValue,
   setTrajectoryValue,
+  toolMocksValue,
+  setToolMocksValue,
   requestContextValue,
   setRequestContextValue,
   validationErrors,
@@ -100,6 +104,24 @@ export function EditModeContent({
             showCopyButton={false}
             className="min-h-[80px]"
           />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Tool Mocks (JSON array, optional)</Label>
+          <p className="text-xs text-muted-foreground">
+            Ordered static mocks served in place of executing the tool. Each entry is{' '}
+            <code>{`{ "toolName", "args", "output" }`}</code>. Calling a mocked tool with non-matching args fails the
+            item; unmocked tools run live.
+          </p>
+          <CodeEditor
+            value={toolMocksValue}
+            onChange={setToolMocksValue}
+            showCopyButton={false}
+            className="min-h-[100px]"
+          />
+          {validationErrors?.field === 'toolMocks' && (
+            <ValidationErrors field="toolMocks" errors={validationErrors.errors} />
+          )}
         </div>
 
         <div className="space-y-2">

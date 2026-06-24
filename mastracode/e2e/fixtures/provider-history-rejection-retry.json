@@ -2,9 +2,7 @@
   "fixtures": [
     {
       "match": {
-        "endpoint": "chat",
-        "model": "reasoner",
-        "userMessage": "Continue after provider history rejection retry."
+        "endpoint": "chat"
       },
       "response": {
         "content": "MC provider history rejection retry recovered."

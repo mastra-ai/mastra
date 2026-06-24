@@ -384,25 +384,25 @@ async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackI
     const modelId = (pack.models as Record<string, string>)[mode.id];
     if (modelId) {
       (mode as any).defaultModelId = modelId;
-      await harness.session.thread.setSetting({ key: `modeModelId_${mode.id}`, value: modelId });
+      await ctx.state.session.thread.setSetting({ key: `modeModelId_${mode.id}`, value: modelId });
     }
   }
 
-  const currentModeId = harness.session.mode.get();
+  const currentModeId = ctx.state.session.mode.get();
   const currentModeModel = (pack.models as Record<string, string>)[currentModeId];
   if (currentModeModel) {
-    await harness.session.model.switch({ modelId: currentModeModel });
+    await ctx.state.session.model.switch({ modelId: currentModeModel });
   }
 
   const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
   for (const [agentType, modeId] of Object.entries(subagentModeMap)) {
     const saModelId = (pack.models as Record<string, string>)[modeId];
     if (saModelId) {
-      await harness.setSubagentModelId({ modelId: saModelId, agentType });
+      await ctx.state.session.subagents.model.set({ modelId: saModelId, agentType });
     }
   }
 
-  await harness.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: pack.id });
+  await ctx.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: pack.id });
 
   const s = loadSettings();
   const modeDefaults: Record<string, string> = {};
@@ -469,12 +469,11 @@ async function saveCustomPackEdits(ctx: SlashCommandContext, pack: ModePack, pre
   saveSettings(settings);
 
   if (previousPackId && previousPackId !== pack.id) {
-    const harness = ctx.state.harness;
-    const threadId = harness.session.thread.getId();
-    const thread = threadId ? (await harness.session.thread.list()).find(t => t.id === threadId) : undefined;
+    const threadId = ctx.state.session.thread.getId();
+    const thread = threadId ? (await ctx.state.session.thread.list()).find(t => t.id === threadId) : undefined;
     const threadPackId = (thread?.metadata?.[THREAD_ACTIVE_MODEL_PACK_ID_KEY] as string | undefined) ?? null;
     if (threadPackId === previousPackId) {
-      await harness.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: pack.id });
+      await ctx.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: pack.id });
     }
   }
 }
@@ -482,9 +481,8 @@ async function saveCustomPackEdits(ctx: SlashCommandContext, pack: ModePack, pre
 async function deleteCustomPack(ctx: SlashCommandContext, pack: ModePack): Promise<void> {
   if (!pack.id.startsWith('custom:')) return;
 
-  const harness = ctx.state.harness;
-  const threadId = harness.session.thread.getId();
-  const thread = threadId ? (await harness.session.thread.list()).find(t => t.id === threadId) : undefined;
+  const threadId = ctx.state.session.thread.getId();
+  const thread = threadId ? (await ctx.state.session.thread.list()).find(t => t.id === threadId) : undefined;
   const threadPackId = (thread?.metadata?.[THREAD_ACTIVE_MODEL_PACK_ID_KEY] as string | undefined) ?? null;
 
   const settings = loadSettings();
@@ -492,7 +490,7 @@ async function deleteCustomPack(ctx: SlashCommandContext, pack: ModePack): Promi
   saveSettings(settings);
 
   if (threadPackId === pack.id) {
-    await harness.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: null });
+    await ctx.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: null });
   }
 }
 
@@ -607,8 +605,8 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
     return;
   }
 
-  const threadId = harness.session.thread.getId();
-  const thread = threadId ? (await harness.session.thread.list()).find(t => t.id === threadId) : undefined;
+  const threadId = ctx.state.session.thread.getId();
+  const thread = threadId ? (await ctx.state.session.thread.list()).find(t => t.id === threadId) : undefined;
   const currentPackId = resolveThreadActiveModelPackId(
     settings,
     packs,

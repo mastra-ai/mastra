@@ -1,14 +1,9 @@
+import type { DatasetItemToolMock } from '@mastra/client-js';
 import {
-  AlertDialog,
   Button,
   ButtonsGroup,
-  Column,
-  Columns,
-  CopyButton,
   MainContentContent,
   MainContentLayout,
-  MainHeader,
-  Notice,
   PermissionDenied,
   SessionExpired,
   TextAndIcon,
@@ -16,6 +11,11 @@ import {
   is403ForbiddenError,
   toast,
 } from '@mastra/playground-ui';
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Column, Columns } from '@mastra/playground-ui/components/Columns';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { format } from 'date-fns';
 import {
   ArrowRightToLineIcon,
@@ -55,13 +55,14 @@ function DatasetItemPage() {
   // Derive form defaults from latest version (recomputes when version changes)
   const formDefaults = useMemo(() => {
     if (!latestVersion || isDeleted)
-      return { input: '', groundTruth: '', metadata: '', trajectory: '', requestContext: '' };
+      return { input: '', groundTruth: '', metadata: '', trajectory: '', toolMocks: '', requestContext: '' };
     return {
       input: JSON.stringify(latestVersion.input, null, 2),
       groundTruth: latestVersion.groundTruth ? JSON.stringify(latestVersion.groundTruth, null, 2) : '',
       metadata: latestVersion.metadata ? JSON.stringify(latestVersion.metadata, null, 2) : '',
       trajectory:
         latestVersion.expectedTrajectory != null ? JSON.stringify(latestVersion.expectedTrajectory, null, 2) : '',
+      toolMocks: latestVersion.toolMocks?.length ? JSON.stringify(latestVersion.toolMocks, null, 2) : '',
       requestContext: latestVersion.requestContext ? JSON.stringify(latestVersion.requestContext, null, 2) : '',
     };
   }, [latestVersion, isDeleted]);
@@ -75,6 +76,7 @@ function DatasetItemPage() {
   const [groundTruthValue, setGroundTruthValue] = useState(formDefaults.groundTruth);
   const [metadataValue, setMetadataValue] = useState(formDefaults.metadata);
   const [trajectoryValue, setTrajectoryValue] = useState(formDefaults.trajectory);
+  const [toolMocksValue, setToolMocksValue] = useState(formDefaults.toolMocks);
   const [requestContextValue, setRequestContextValue] = useState(formDefaults.requestContext);
 
   // Reset form values when version changes (key-based reset pattern)
@@ -85,6 +87,7 @@ function DatasetItemPage() {
     setGroundTruthValue(formDefaults.groundTruth);
     setMetadataValue(formDefaults.metadata);
     setTrajectoryValue(formDefaults.trajectory);
+    setToolMocksValue(formDefaults.toolMocks);
     setRequestContextValue(formDefaults.requestContext);
   }
 
@@ -165,6 +168,22 @@ function DatasetItemPage() {
       }
     }
 
+    let parsedToolMocks: DatasetItemToolMock[] | undefined;
+    const toolMocksChanged = toolMocksValue !== formDefaults.toolMocks;
+    if (toolMocksChanged && toolMocksValue.trim()) {
+      try {
+        const parsed = JSON.parse(toolMocksValue);
+        if (!Array.isArray(parsed)) {
+          toast.error('Tool Mocks must be a JSON array');
+          return;
+        }
+        parsedToolMocks = parsed as DatasetItemToolMock[];
+      } catch {
+        toast.error('Tool Mocks must be valid JSON');
+        return;
+      }
+    }
+
     let parsedRequestContext: Record<string, unknown> | undefined;
     const requestContextChanged = requestContextValue !== formDefaults.requestContext;
     if (requestContextChanged && requestContextValue.trim()) {
@@ -184,6 +203,7 @@ function DatasetItemPage() {
         groundTruth: parsedGroundTruth,
         metadata: parsedMetadata,
         ...(trajectoryChanged ? { expectedTrajectory: parsedTrajectory ?? null } : {}),
+        ...(toolMocksChanged ? { toolMocks: parsedToolMocks ?? [] } : {}),
         ...(requestContextChanged ? { requestContext: parsedRequestContext } : {}),
       });
       toast.success('Item updated successfully');
@@ -202,6 +222,7 @@ function DatasetItemPage() {
       setTrajectoryValue(
         latestVersion.expectedTrajectory != null ? JSON.stringify(latestVersion.expectedTrajectory, null, 2) : '',
       );
+      setToolMocksValue(latestVersion.toolMocks?.length ? JSON.stringify(latestVersion.toolMocks, null, 2) : '');
       setRequestContextValue(latestVersion.requestContext ? JSON.stringify(latestVersion.requestContext, null, 2) : '');
     }
     setIsEditing(false);
@@ -353,6 +374,8 @@ function DatasetItemPage() {
                     setMetadataValue={setMetadataValue}
                     trajectoryValue={trajectoryValue}
                     setTrajectoryValue={setTrajectoryValue}
+                    toolMocksValue={toolMocksValue}
+                    setToolMocksValue={setToolMocksValue}
                     requestContextValue={requestContextValue}
                     setRequestContextValue={setRequestContextValue}
                     validationErrors={null}

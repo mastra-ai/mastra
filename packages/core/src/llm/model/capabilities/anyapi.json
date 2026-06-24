@@ -1,0 +1,29 @@
+{
+  "attachment": [
+    "anthropic/claude-haiku-4-5",
+    "anthropic/claude-opus-4-6",
+    "anthropic/claude-opus-4-7",
+    "anthropic/claude-sonnet-4-5",
+    "anthropic/claude-sonnet-4-6",
+    "deepseek/deepseek-chat",
+    "deepseek/deepseek-r1",
+    "google/gemini-2.5-flash",
+    "google/gemini-2.5-flash-lite",
+    "google/gemini-2.5-pro",
+    "google/gemini-3-flash-preview",
+    "google/gemini-3-pro-preview",
+    "mistralai/mistral-large-2512",
+    "openai/gpt-4.1",
+    "openai/gpt-4.1-mini",
+    "openai/gpt-5",
+    "openai/gpt-5-mini",
+    "openai/gpt-5.1",
+    "openai/gpt-5.2",
+    "openai/gpt-5.4",
+    "openai/o3",
+    "openai/o4-mini",
+    "perplexity/sonar-pro",
+    "perplexity/sonar-reasoning-pro",
+    "xai/grok-4.3"
+  ]
+}

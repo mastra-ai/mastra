@@ -1,4 +1,5 @@
-import { ErrorState, Spinner, Button } from '@mastra/playground-ui';
+import { Spinner, Button } from '@mastra/playground-ui';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 
 import { usePermissionPatterns } from '../hooks/use-permission-patterns';
 import { ALL_SIDEBAR_PERMISSIONS } from '../route-permissions';

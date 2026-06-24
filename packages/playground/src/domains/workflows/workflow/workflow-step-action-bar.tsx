@@ -7,8 +7,8 @@ import {
   DialogHeader,
   DialogDescription,
   DialogBody,
-  DropdownMenu,
 } from '@mastra/playground-ui';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import {
   AlertCircleIcon,
   BracesIcon,

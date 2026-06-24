@@ -1,4 +1,5 @@
-import { CodeBlock, CodeEditor, ToolCoinIcon, formatTypeScript } from '@mastra/playground-ui';
+import { CodeEditor, ToolCoinIcon, formatTypeScript } from '@mastra/playground-ui';
+import { CodeBlock } from '@mastra/playground-ui/components/CodeBlock';
 import { useEffect, useState } from 'react';
 import { BadgeWrapper } from './badge-wrapper';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';

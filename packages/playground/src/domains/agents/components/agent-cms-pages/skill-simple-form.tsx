@@ -1,4 +1,5 @@
-import { CodeEditor, Input, MarkdownRenderer, Txt } from '@mastra/playground-ui';
+import { CodeEditor, Input, Txt } from '@mastra/playground-ui';
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 
 export interface SkillSimpleFormProps {
   name: string;

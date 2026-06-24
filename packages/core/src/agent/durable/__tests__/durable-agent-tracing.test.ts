@@ -3,7 +3,8 @@
  *
  * Durable runs used to create no AGENT_RUN span, so traces were dropped entirely.
  * These assert the durable path now opens an AGENT_RUN root with a MODEL_GENERATION
- * child for both DurableAgent and EventedAgent.
+ * child for both DurableAgent and EventedAgent, and that agent-level input/output
+ * processor_run spans nest under it instead of orphaning.
  */
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
@@ -61,6 +62,14 @@ describe('DurableAgent observability tracing', () => {
       update: vi.fn(),
       exportSpan: vi.fn(),
       getParentSpanId: vi.fn(() => parentSpan?.id),
+      findParent: vi.fn(function (this: any, spanType: string) {
+        let current: any = this.parent;
+        while (current) {
+          if (current.type === spanType) return current;
+          current = current.parent;
+        }
+        return undefined;
+      }),
       executeInContext: vi.fn(async (fn: () => Promise<any>) => fn()),
       executeInContextSync: vi.fn((fn: () => any) => fn()),
       get externalTraceId() {
@@ -93,7 +102,9 @@ describe('DurableAgent observability tracing', () => {
     const agentSpans: any[] = [];
     const mod = await import('../../../observability/utils');
     const spy = vi.spyOn(mod, 'getOrCreateSpan').mockImplementation((opts: any) => {
-      const span = createMockSpan(opts.type ?? 'unknown');
+      // Honour tracingContext.currentSpan as the parent so findParent walks resolve.
+      const parent = opts?.tracingContext?.currentSpan;
+      const span = createMockSpan(opts.type ?? 'unknown', parent);
       if (opts.type === 'agent_run') {
         agentSpans.push(span);
       }
@@ -148,6 +159,75 @@ describe('DurableAgent observability tracing', () => {
       expect(agentSpans.length).toBe(1);
       const childSpanTypes = agentSpans[0].createChildSpan.mock.calls.map((call: any[]) => call[0]?.type);
       expect(childSpanTypes).toContain('model_generation');
+
+      cleanup();
+    } finally {
+      spy.mockRestore();
+    }
+  }, 30000);
+
+  it('parents agent-level input processor spans to AGENT_RUN', async () => {
+    const { spy, agentSpans } = await spyOnSpans();
+
+    try {
+      const inputProcessor = {
+        id: 'test-input-processor',
+        processInput: async ({ messageList }: any) => messageList,
+      };
+
+      const baseAgent = new Agent({
+        id: 'trace-agent-input-proc',
+        name: 'Trace Agent (input proc)',
+        instructions: 'You are a test assistant',
+        model: createTextStreamModel('Hello') as LanguageModelV2,
+        inputProcessors: [inputProcessor as any],
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const { output, cleanup } = await durableAgent.stream('Hi');
+      await output.consumeStream();
+
+      expect(agentSpans.length).toBe(1);
+      const inputProcessorSpanCall = agentSpans[0].createChildSpan.mock.calls.find(
+        (call: any[]) => call[0]?.type === 'processor_run' && call[0]?.name === 'input processor: test-input-processor',
+      );
+      expect(inputProcessorSpanCall).toBeDefined();
+
+      cleanup();
+    } finally {
+      spy.mockRestore();
+    }
+  }, 30000);
+
+  it('parents agent-level output processor spans to AGENT_RUN', async () => {
+    const { spy, agentSpans } = await spyOnSpans();
+
+    try {
+      const outputProcessor = {
+        id: 'test-output-processor',
+        processOutputResult: async ({ messageList }: any) => messageList,
+      };
+
+      const baseAgent = new Agent({
+        id: 'trace-agent-output-proc',
+        name: 'Trace Agent (output proc)',
+        instructions: 'You are a test assistant',
+        model: createTextStreamModel('Hello') as LanguageModelV2,
+        outputProcessors: [outputProcessor as any],
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const { output, cleanup } = await durableAgent.stream('Hi');
+      await output.consumeStream();
+
+      expect(agentSpans.length).toBe(1);
+      // The output-processor workflow step's tracingContext walks up to AGENT_RUN
+      // via findParent, so the resulting processor_run span hangs directly off it.
+      const outputProcessorSpanCall = agentSpans[0].createChildSpan.mock.calls.find(
+        (call: any[]) =>
+          call[0]?.type === 'processor_run' && call[0]?.name === 'output processor: test-output-processor',
+      );
+      expect(outputProcessorSpanCall).toBeDefined();
 
       cleanup();
     } finally {

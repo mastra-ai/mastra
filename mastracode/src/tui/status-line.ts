@@ -71,7 +71,7 @@ export function updateStatusLine(state: TUIState): void {
   const SEP = '  '; // double-space separator between parts
 
   // --- Determine if we're showing observer/reflector instead of main mode ---
-  const omStatus = state.harness.session.displayState.get().omProgress.status;
+  const omStatus = state.session.displayState.get().omProgress.status;
   const isJudging = Boolean(state.activeGoalJudge);
   const isObserving = omStatus === 'observing';
   const isReflecting = omStatus === 'reflecting';
@@ -141,9 +141,9 @@ export function updateStatusLine(state: TUIState): void {
       ? state.activeGoalJudge?.modelId
       : showOMMode
         ? isObserving
-          ? state.harness.getObserverModelId()
-          : state.harness.getReflectorModelId()
-        : state.harness.getFullModelId()) ?? '';
+          ? state.session.om.observer.modelId()
+          : state.session.om.reflector.modelId()
+        : state.session.model.get()) ?? '';
   // Rewrite Fireworks AI long paths: fireworks-ai/accounts/fireworks/models/<name> → fireworks/<name>
   let fullModelId = rawModelId.startsWith('fireworks-ai/accounts/fireworks/models/')
     ? 'fireworks/' + rawModelId.slice('fireworks-ai/accounts/fireworks/models/'.length)
@@ -290,7 +290,7 @@ export function updateStatusLine(state: TUIState): void {
     const useBadge = opts.badge === 'short' ? shortModeBadge : modeBadge;
     const useBadgeWidth = opts.badge === 'short' ? shortModeBadgeWidth : modeBadgeWidth;
     // Memory info — animate label text when buffering is active
-    const ds = state.harness.session.displayState.get();
+    const ds = state.session.displayState.get();
     const msgLabelStyler =
       ds.bufferingMessages && state.gradientAnimator?.isRunning()
         ? (label: string) =>
@@ -311,7 +311,7 @@ export function updateStatusLine(state: TUIState): void {
               state.gradientAnimator!.getFadeProgress(),
             )
         : undefined;
-    const omProg = state.harness.session.displayState.get().omProgress;
+    const omProg = state.session.displayState.get().omProgress;
     const obs = isJudging ? '' : formatObservationStatus(omProg, opts.memCompact, msgLabelStyler);
     const ref = isJudging ? '' : formatReflectionStatus(omProg, opts.memCompact, obsLabelStyler);
     if (obs) {
