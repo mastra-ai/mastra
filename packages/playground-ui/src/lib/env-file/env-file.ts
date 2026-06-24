@@ -249,7 +249,7 @@ export async function readEnvFile(
   }
 
   if (text.includes('\0')) {
-    return { ok: false, error: 'File appears to be binary. Please upload a plain-text .env file.' };
+    return { ok: false, error: 'File appears to be binary. Please import a plain-text .env file.' };
   }
 
   const entries = parseEnvFileText(text);

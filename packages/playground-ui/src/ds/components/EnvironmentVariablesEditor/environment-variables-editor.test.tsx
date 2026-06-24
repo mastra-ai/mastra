@@ -152,10 +152,10 @@ describe('EnvironmentVariablesEditor', () => {
     render(<TestEditor onSave={onSave} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Add Variable' }));
-    fireEvent.change(screen.getAllByPlaceholderText('KEY')[1], {
+    fireEvent.change(screen.getAllByPlaceholderText('e.g: OPEN_AI_KEY')[1], {
       target: { value: ' API_KEY ' },
     });
-    fireEvent.change(screen.getAllByPlaceholderText('value')[1], {
+    fireEvent.change(screen.getAllByPlaceholderText('e.g: sk-xxxxxxxx')[1], {
       target: { value: 'secret' },
     });
 
@@ -217,15 +217,15 @@ describe('EnvironmentVariablesEditor', () => {
     expect(screen.getByTestId('env-editor-rows')).toBeDefined();
     expect(screen.getByTestId('env-editor-add')).toBeDefined();
 
-    fireEvent.change(screen.getByPlaceholderText('KEY'), {
+    fireEvent.change(screen.getByPlaceholderText('e.g: OPEN_AI_KEY'), {
       target: { value: 'API_KEY' },
     });
-    fireEvent.change(screen.getByPlaceholderText('value'), {
+    fireEvent.change(screen.getByPlaceholderText('e.g: sk-xxxxxxxx'), {
       target: { value: 'secret' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Add Another' }));
 
-    expect(screen.getAllByPlaceholderText('KEY')).toHaveLength(2);
+    expect(screen.getAllByPlaceholderText('e.g: OPEN_AI_KEY')).toHaveLength(2);
 
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
@@ -254,7 +254,7 @@ describe('EnvironmentVariablesEditor', () => {
     const onSave = vi.fn();
     render(<TestEditor initialRows={[{ key: '', value: '' }]} onSave={onSave} />);
 
-    fireEvent.paste(screen.getByPlaceholderText('KEY'), {
+    fireEvent.paste(screen.getByPlaceholderText('e.g: OPEN_AI_KEY'), {
       clipboardData: { getData: () => 'FOO=bar\nBAZ=qux' },
     });
 
@@ -274,13 +274,13 @@ describe('EnvironmentVariablesEditor', () => {
   it('fills a row from a single uppercase env assignment paste', () => {
     render(<TestEditor initialRows={[{ key: '', value: '' }]} />);
 
-    fireEvent.paste(screen.getByPlaceholderText('KEY'), {
+    fireEvent.paste(screen.getByPlaceholderText('e.g: OPEN_AI_KEY'), {
       clipboardData: { getData: () => 'API_KEY=secret=with=equals' },
     });
 
     expect(screen.getByDisplayValue('API_KEY')).toBeDefined();
     expect(screen.getByDisplayValue('secret=with=equals')).toBeDefined();
-    expect(screen.getAllByPlaceholderText('KEY')).toHaveLength(1);
+    expect(screen.getAllByPlaceholderText('e.g: OPEN_AI_KEY')).toHaveLength(1);
   });
 
   it('does not hijack ordinary single-value pastes that contain equals', () => {
@@ -291,7 +291,7 @@ describe('EnvironmentVariablesEditor', () => {
     });
 
     expect(screen.queryByDisplayValue('token')).toBeNull();
-    expect(screen.getAllByPlaceholderText('KEY')).toHaveLength(1);
+    expect(screen.getAllByPlaceholderText('e.g: OPEN_AI_KEY')).toHaveLength(1);
   });
 
   it('inserts pasted env rows without replacing an existing row', () => {
@@ -312,7 +312,7 @@ describe('EnvironmentVariablesEditor', () => {
     render(<TestEditor initialRows={[{ key: '', value: '' }]} />);
 
     const file = new File(['FOO=bar\nBAZ=qux'], '.env', { type: 'text/plain' });
-    fireEvent.change(screen.getByLabelText('Upload .env file'), {
+    fireEvent.change(screen.getByLabelText('Import .env file'), {
       target: { files: [file] },
     });
 
@@ -322,13 +322,13 @@ describe('EnvironmentVariablesEditor', () => {
       expect(screen.getByDisplayValue('BAZ')).toBeDefined();
       expect(screen.getByDisplayValue('qux')).toBeDefined();
     });
-    expect(screen.getAllByPlaceholderText('KEY')).toHaveLength(2);
+    expect(screen.getAllByPlaceholderText('e.g: OPEN_AI_KEY')).toHaveLength(2);
   });
 
   it('shows upload errors without changing existing rows', async () => {
     render(<TestEditor />);
 
-    fireEvent.change(screen.getByLabelText('Upload .env file'), {
+    fireEvent.change(screen.getByLabelText('Import .env file'), {
       target: { files: [new File([''], '.env', { type: 'text/plain' })] },
     });
 

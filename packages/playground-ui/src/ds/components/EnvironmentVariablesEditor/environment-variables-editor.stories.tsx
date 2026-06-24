@@ -269,7 +269,7 @@ export const Default: Story = {
     docs: {
       description: {
         story:
-          'Editable rows with masked values, duplicate-key validation, upload, add/remove, and save/reset actions.',
+          'Editable rows with masked values, duplicate-key validation, import, add/remove, and save/reset actions.',
       },
     },
   },
@@ -280,7 +280,7 @@ export const Empty: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Starts with one empty row and keeps the upload affordance available.',
+        story: 'Starts with one empty row and keeps the import affordance available.',
       },
     },
   },
@@ -297,7 +297,7 @@ export const BulkPaste: Story = {
   },
   render: () => <DemoEditor initialRows={rowsFromEnvironmentVariables({})} />,
   play: async ({ canvasElement }) => {
-    const keyInput = canvasElement.querySelector<HTMLInputElement>('input[placeholder="KEY"]');
+    const keyInput = canvasElement.querySelector<HTMLInputElement>('input[placeholder="e.g: OPEN_AI_KEY"]');
     if (!keyInput) return;
 
     const clipboardData = new DataTransfer();
@@ -319,7 +319,7 @@ export const InDrawer: Story = {
     docs: {
       description: {
         story:
-          'Composes the editor from nested parts inside a right-side drawer, with upload actions in the drawer header.',
+          'Composes the editor from nested parts inside a right-side drawer, with import actions in the drawer header.',
       },
     },
   },
@@ -359,7 +359,7 @@ export const ReadOnly: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Read-only presentation with uploads, actions, and destructive row controls hidden.',
+        story: 'Read-only presentation with import, actions, and destructive row controls hidden.',
       },
     },
   },

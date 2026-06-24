@@ -2,7 +2,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { useEnvironmentVariablesEditor } from './use-environment-variables-editor';
+import { useCustomEnvironmentVariablesEditor, useEnvironmentVariablesEditor } from './use-environment-variables-editor';
 import type {
   EnvironmentVariableRow,
   EnvironmentVariablesEditorFileUploadEvent,
@@ -25,7 +25,7 @@ describe('useEnvironmentVariablesEditor', () => {
 
     const onRowsChange = vi.fn();
     const { result } = renderHook(() =>
-      useEnvironmentVariablesEditor<ProjectEnvRow>({
+      useCustomEnvironmentVariablesEditor<ProjectEnvRow>({
         initialRows: [
           { id: 'shared:global-token', scope: 'shared', key: 'GLOBAL_TOKEN', value: 'shared-secret' },
           { id: 'draft', scope: 'project', key: '', value: '' },
@@ -117,7 +117,7 @@ describe('useEnvironmentVariablesEditor', () => {
       await result.current.handleFileUpload(fileUploadEvent(new File(['\0'], '.env', { type: 'text/plain' })));
     });
 
-    expect(result.current.uploadError).toBe('File appears to be binary. Please upload a plain-text .env file.');
+    expect(result.current.uploadError).toBe('File appears to be binary. Please import a plain-text .env file.');
     expect(result.current.rows).toEqual([{ key: '', value: '' }]);
 
     await act(async () => {

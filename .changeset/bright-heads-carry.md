@@ -2,7 +2,7 @@
 '@mastra/playground-ui': minor
 ---
 
-Added a reusable environment variables editor with .env upload and bulk paste support.
+Added a reusable environment variables editor with .env import, bulk paste support, and custom-row hook support.
 
 ```tsx
 import {

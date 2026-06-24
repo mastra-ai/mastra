@@ -26,9 +26,6 @@ export interface EnvironmentVariablesEditorRowFactories<TRow extends Environment
   createRow: (entry: EnvironmentVariableEntry) => TRow;
 }
 
-interface ResolvedEnvironmentVariablesEditorOptions<TRow extends EnvironmentVariableRow>
-  extends UseEnvironmentVariablesEditorOptions<TRow>, EnvironmentVariablesEditorRowFactories<TRow> {}
-
 export interface EnvironmentVariablesEditorFileUploadEvent {
   target: {
     files?: FileList | readonly File[] | null;
@@ -58,6 +55,11 @@ export interface EnvironmentVariablesEditorController<TRow extends EnvironmentVa
   toggleValueVisibility: (index: number) => void;
   rowHasDuplicateKey: (index: number) => boolean;
 }
+
+type DefaultEnvironmentVariablesEditorOptions = UseEnvironmentVariablesEditorOptions<EnvironmentVariableRow>;
+
+type CustomEnvironmentVariablesEditorOptions<TRow extends EnvironmentVariableRow> =
+  UseEnvironmentVariablesEditorOptions<TRow> & EnvironmentVariablesEditorRowFactories<TRow>;
 
 function defaultCreateRow(entry: EnvironmentVariableEntry): EnvironmentVariableRow {
   return { key: entry.key, value: entry.value };
@@ -95,27 +97,16 @@ function areRowsEqual(a: readonly EnvironmentVariableEntry[], b: readonly Enviro
 }
 
 export function useEnvironmentVariablesEditor(
-  options?: UseEnvironmentVariablesEditorOptions & Partial<EnvironmentVariablesEditorRowFactories>,
-): EnvironmentVariablesEditorController;
-export function useEnvironmentVariablesEditor<TRow extends EnvironmentVariableRow>(
-  options: UseEnvironmentVariablesEditorOptions<TRow> & EnvironmentVariablesEditorRowFactories<TRow>,
-): EnvironmentVariablesEditorController<TRow>;
-export function useEnvironmentVariablesEditor<TRow extends EnvironmentVariableRow>(
-  options:
-    | (UseEnvironmentVariablesEditorOptions & Partial<EnvironmentVariablesEditorRowFactories>)
-    | (UseEnvironmentVariablesEditorOptions<TRow> & EnvironmentVariablesEditorRowFactories<TRow>) = {},
-) {
-  // Overloads require row factories for custom row shapes; default factories only create base rows.
-  const resolvedOptions = {
+  options: DefaultEnvironmentVariablesEditorOptions = {},
+): EnvironmentVariablesEditorController {
+  return useCustomEnvironmentVariablesEditor({
     ...options,
-    createDefaultRow: options.createDefaultRow ?? createEmptyEnvironmentVariableEntry,
-    createRow: options.createRow ?? defaultCreateRow,
-  } as ResolvedEnvironmentVariablesEditorOptions<TRow>;
-
-  return useEnvironmentVariablesEditorController(resolvedOptions);
+    createDefaultRow: createEmptyEnvironmentVariableEntry,
+    createRow: defaultCreateRow,
+  });
 }
 
-function useEnvironmentVariablesEditorController<TRow extends EnvironmentVariableRow>({
+export function useCustomEnvironmentVariablesEditor<TRow extends EnvironmentVariableRow>({
   initialRows,
   rows: controlledRows,
   onRowsChange,
@@ -124,7 +115,7 @@ function useEnvironmentVariablesEditorController<TRow extends EnvironmentVariabl
   getEditableRows = defaultEditableRows,
   getPreservedRows = defaultPreservedRows,
   maxUploadSize,
-}: ResolvedEnvironmentVariablesEditorOptions<TRow>): EnvironmentVariablesEditorController<TRow> {
+}: CustomEnvironmentVariablesEditorOptions<TRow>): EnvironmentVariablesEditorController<TRow> {
   const initialSourceRows = controlledRows ?? initialRows;
   const nextRowId = useRef(0);
   const fallbackRowIds = useRef<Record<number, string>>({});

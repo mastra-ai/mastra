@@ -140,7 +140,7 @@ ESCAPED="quote \" and slash \\"
 
     await expect(readEnvFile(new File(['\0'], '.env'), { maxSize: 10 })).resolves.toEqual({
       ok: false,
-      error: 'File appears to be binary. Please upload a plain-text .env file.',
+      error: 'File appears to be binary. Please import a plain-text .env file.',
     });
 
     await expect(readEnvFile(new File(['too large'], '.env'), { maxSize: 2 })).resolves.toEqual({

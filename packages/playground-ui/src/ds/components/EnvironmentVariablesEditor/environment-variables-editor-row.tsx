@@ -14,8 +14,8 @@ export function EnvironmentVariablesEditorRow({
   rowErrors,
   keyLabel = 'Key',
   valueLabel = 'Value',
-  keyPlaceholder = 'KEY',
-  valuePlaceholder = 'value',
+  keyPlaceholder = 'e.g: OPEN_AI_KEY',
+  valuePlaceholder = 'e.g: sk-xxxxxxxx',
   duplicateKeyMessage = DUPLICATE_ENVIRONMENT_VARIABLE_MESSAGE,
   className,
   ...props
@@ -34,6 +34,8 @@ export function EnvironmentVariablesEditorRow({
   const valueFieldName = `env-value-${index}`;
   const keyInputId = `input-${keyFieldName}`;
   const valueInputId = `input-${valueFieldName}`;
+  const revealValueLabel = editor.isValueRevealed(index) ? 'Hide value' : 'Show value';
+  const removeRowLabel = `Remove environment variable ${row.key.trim() || index + 1}`;
 
   function handlePaste(text: string) {
     return editor.handlePaste(index, text);
@@ -92,7 +94,8 @@ export function EnvironmentVariablesEditorRow({
                   variant="ghost"
                   size="icon-sm"
                   disabled={isDisabled}
-                  aria-label={editor.isValueRevealed(index) ? 'Hide value' : 'Show value'}
+                  aria-label={revealValueLabel}
+                  tooltip={revealValueLabel}
                   onClick={() => editor.toggleValueVisibility(index)}
                 >
                   {editor.isValueRevealed(index) ? <EyeOffIcon aria-hidden /> : <EyeIcon aria-hidden />}
@@ -111,7 +114,8 @@ export function EnvironmentVariablesEditorRow({
             variant="ghost"
             size="icon-md"
             disabled={disabled}
-            aria-label={`Remove environment variable ${row.key.trim() || index + 1}`}
+            aria-label={removeRowLabel}
+            tooltip="Remove variable"
             onClick={() => editor.removeRow(index)}
           >
             <TrashIcon />

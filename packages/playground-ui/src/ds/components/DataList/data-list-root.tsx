@@ -110,11 +110,11 @@ export function DataListRoot({
   // edge except the top — a top fade would fade the opaque sticky header.
   return (
     <ScrollArea
+      {...props}
       orientation="both"
       mask={{ top: false }}
       viewportRef={scrollRef}
       className={cn('h-full w-full rounded-t-xl', className)}
-      {...props}
     >
       {grid}
     </ScrollArea>

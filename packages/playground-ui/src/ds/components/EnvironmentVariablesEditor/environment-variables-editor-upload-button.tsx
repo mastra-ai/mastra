@@ -5,8 +5,8 @@ import type { EnvironmentVariablesEditorUploadButtonProps } from './environment-
 import { Button } from '@/ds/components/Button';
 
 export function EnvironmentVariablesEditorUploadButton({
-  children = 'Upload .env',
-  inputLabel = 'Upload .env file',
+  children = 'Import .env',
+  inputLabel = 'Import .env file',
   disabled,
   onClick,
   type = 'button',
