@@ -14,5 +14,6 @@ export {
   aiV5UIMessagesToAIV5ModelMessages,
   aiV4CoreMessagesToAIV5ModelMessages,
   systemMessageToAIV4Core,
+  mapToolResultMediaPartsForV6,
 } from './output-converter';
 export { StepContentExtractor } from './step-content';

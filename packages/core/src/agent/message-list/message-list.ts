@@ -21,6 +21,7 @@ import {
   aiV5UIMessagesToAIV5ModelMessages as convertAIV5UIToModelMessages,
   aiV4CoreMessagesToAIV5ModelMessages as convertAIV4CoreToAIV5ModelMessages,
   systemMessageToAIV4Core,
+  mapToolResultMediaPartsForV6,
   StepContentExtractor,
 } from './conversion';
 import { TypeDetector } from './detection/TypeDetector';
@@ -528,13 +529,20 @@ export class MessageList {
           downloadConcurrency?: number;
           downloadRetries?: number;
           supportedUrls?: Record<string, RegExp[]>;
+          /**
+           * Spec version of the model that will consume this prompt. When 'v3'
+           * (AI SDK v6), tool-result `media` parts are translated to the
+           * `image-data`/`file-data` shape v6 providers require. Omitted/'v2'
+           * leaves `media` untouched (v5 providers accept it).
+           */
+          modelSpecificationVersion?: string;
         } = {
           downloadConcurrency: 10,
           downloadRetries: 3,
         },
       ): Promise<LanguageModelV2Prompt> => {
         const promptMessages = this.getMessagesForModelPrompt();
-        const modelMessages = convertAIV5UIToModelMessages(
+        let modelMessages = convertAIV5UIToModelMessages(
           this.toAIV5UIMessages(promptMessages, { transformToolPayloads: false }),
           promptMessages,
           this.filterIncompleteToolCalls,
@@ -575,6 +583,15 @@ export class MessageList {
             }
           }
         }
+
+        // AI SDK v6 (spec 'v3') providers require tool-result media in the
+        // `image-data`/`file-data` shape rather than `media`. Run this after the
+        // modelOutput override above so override-injected media parts are also
+        // translated. v5 ('v2') providers accept `media`, so leave them alone.
+        if (options?.modelSpecificationVersion === 'v3') {
+          modelMessages = mapToolResultMediaPartsForV6(modelMessages);
+        }
+
         const systemMessages = convertAIV4CoreToAIV5ModelMessages(
           [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()],
           `system`,
