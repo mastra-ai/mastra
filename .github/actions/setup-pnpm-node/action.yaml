@@ -45,6 +45,7 @@ runs:
         cache_dependency_path: ${{ inputs.cache-dependency-path || 'pnpm-lock.yaml' }}
 
     - name: Reset corrupt pnpm store cache
+      if: ${{ inputs.package-manager-cache == 'true' }}
       shell: bash
       run: |
         set +e
