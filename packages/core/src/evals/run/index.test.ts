@@ -1388,5 +1388,99 @@ describe('runEvals', () => {
       expect(result.verdict).toBe('failed');
       expect(result.gateResults![0]!.passed).toBe(false);
     });
+
+    it('should support max threshold (score must be at or below max)', async () => {
+      const agent = createMockAgentV2('response');
+      const highScorer = createScorer({
+        id: 'hallucination',
+        description: 'Scores high when hallucinating',
+      }).generateScore(() => 0.9);
+
+      const result = await runEvals({
+        data: [{ input: 'Test' }],
+        scorers: [{ scorer: highScorer, threshold: { max: 0.3 } }],
+        target: agent,
+      });
+
+      expect(result.verdict).toBe('scored');
+      expect(result.thresholdResults).toHaveLength(1);
+      expect(result.thresholdResults![0]!.passed).toBe(false);
+      expect(result.thresholdResults![0]!.averageScore).toBe(0.9);
+    });
+
+    it('should pass max threshold when score is at or below max', async () => {
+      const agent = createMockAgentV2('response');
+      const lowScorer = createScorer({
+        id: 'hallucination',
+        description: 'Scores low when not hallucinating',
+      }).generateScore(() => 0.1);
+
+      const result = await runEvals({
+        data: [{ input: 'Test' }],
+        scorers: [{ scorer: lowScorer, threshold: { max: 0.3 } }],
+        target: agent,
+      });
+
+      expect(result.verdict).toBe('passed');
+      expect(result.thresholdResults![0]!.passed).toBe(true);
+    });
+
+    it('should support { min, max } range threshold', async () => {
+      const agent = createMockAgentV2('response');
+      const midScorer = createScorer({
+        id: 'balanced',
+        description: 'Scores in the middle',
+      }).generateScore(() => 0.5);
+
+      const result = await runEvals({
+        data: [{ input: 'Test' }],
+        scorers: [{ scorer: midScorer, threshold: { min: 0.3, max: 0.7 } }],
+        target: agent,
+      });
+
+      expect(result.verdict).toBe('passed');
+      expect(result.thresholdResults![0]!.passed).toBe(true);
+    });
+
+    it('should fail when score is outside { min, max } range', async () => {
+      const agent = createMockAgentV2('response');
+      const highScorer = createScorer({
+        id: 'out-of-range',
+        description: 'Scores too high',
+      }).generateScore(() => 0.9);
+
+      const result = await runEvals({
+        data: [{ input: 'Test' }],
+        scorers: [{ scorer: highScorer, threshold: { min: 0.3, max: 0.7 } }],
+        target: agent,
+      });
+
+      expect(result.verdict).toBe('scored');
+      expect(result.thresholdResults![0]!.passed).toBe(false);
+    });
+
+    it('should reject invalid { min, max } threshold values', async () => {
+      const agent = createMockAgentV2('response');
+      const scorer = createScorer({
+        id: 'some-scorer',
+        description: 'test',
+      }).generateScore(() => 0.5);
+
+      await expect(
+        runEvals({
+          data: [{ input: 'Test' }],
+          scorers: [{ scorer, threshold: { min: 0.8, max: 0.3 } }],
+          target: agent,
+        }),
+      ).rejects.toThrow(/min.*greater than max/);
+
+      await expect(
+        runEvals({
+          data: [{ input: 'Test' }],
+          scorers: [{ scorer, threshold: { max: 1.5 } }],
+          target: agent,
+        }),
+      ).rejects.toThrow(/between 0 and 1/);
+    });
   });
 });

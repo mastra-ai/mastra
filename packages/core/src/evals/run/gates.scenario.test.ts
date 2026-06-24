@@ -310,6 +310,92 @@ describe('Gates & Verdict — scenario tests via runEvals + AIMock', () => {
     });
   });
 
+  describe('threshold: { min, max } range-based checks', () => {
+    it('passes when score is below max threshold (hallucination use case)', async () => {
+      const agent = textAgent('Low hallucination response.');
+
+      const result = await runEvals({
+        data: [{ input: 'Test' }],
+        scorers: [{ scorer: fixedScorer('hallucination', 0.1), threshold: { max: 0.3 } }],
+        target: agent,
+      });
+
+      expect(result.verdict).toBe('passed');
+      expect(result.thresholdResults).toHaveLength(1);
+      expect(result.thresholdResults![0]!.passed).toBe(true);
+      expect(result.thresholdResults![0]!.averageScore).toBe(0.1);
+      expect(result.thresholdResults![0]!.threshold).toEqual({ max: 0.3 });
+    });
+
+    it('fails when score exceeds max threshold', async () => {
+      const agent = textAgent('High hallucination response.');
+
+      const result = await runEvals({
+        data: [{ input: 'Test' }],
+        scorers: [{ scorer: fixedScorer('hallucination', 0.8), threshold: { max: 0.3 } }],
+        target: agent,
+      });
+
+      expect(result.verdict).toBe('scored');
+      expect(result.thresholdResults![0]!.passed).toBe(false);
+      expect(result.thresholdResults![0]!.averageScore).toBe(0.8);
+    });
+
+    it('passes when score is within { min, max } range', async () => {
+      const agent = textAgent('Balanced response.');
+
+      const result = await runEvals({
+        data: [{ input: 'Test' }],
+        scorers: [{ scorer: fixedScorer('balanced-metric', 0.5), threshold: { min: 0.3, max: 0.7 } }],
+        target: agent,
+      });
+
+      expect(result.verdict).toBe('passed');
+      expect(result.thresholdResults![0]!.passed).toBe(true);
+    });
+
+    it('fails when score is above { min, max } range', async () => {
+      const agent = textAgent('Too high.');
+
+      const result = await runEvals({
+        data: [{ input: 'Test' }],
+        scorers: [{ scorer: fixedScorer('bounded-metric', 0.9), threshold: { min: 0.3, max: 0.7 } }],
+        target: agent,
+      });
+
+      expect(result.verdict).toBe('scored');
+      expect(result.thresholdResults![0]!.passed).toBe(false);
+    });
+
+    it('fails when score is below { min, max } range', async () => {
+      const agent = textAgent('Too low.');
+
+      const result = await runEvals({
+        data: [{ input: 'Test' }],
+        scorers: [{ scorer: fixedScorer('bounded-metric', 0.1), threshold: { min: 0.3, max: 0.7 } }],
+        target: agent,
+      });
+
+      expect(result.verdict).toBe('scored');
+      expect(result.thresholdResults![0]!.passed).toBe(false);
+    });
+
+    it('works with gates + max threshold combined', async () => {
+      const agent = textAgent('Good response with low hallucination.');
+
+      const result = await runEvals({
+        data: [{ input: 'Test' }],
+        scorers: [{ scorer: fixedScorer('hallucination', 0.15), threshold: { max: 0.3 } }],
+        gates: [passingGate],
+        target: agent,
+      });
+
+      expect(result.verdict).toBe('passed');
+      expect(result.gateResults![0]!.passed).toBe(true);
+      expect(result.thresholdResults![0]!.passed).toBe(true);
+    });
+  });
+
   describe('multi-item dataset verdict', () => {
     it('averages gate scores across items for verdict', async () => {
       const agent = textAgent('Consistent response.');

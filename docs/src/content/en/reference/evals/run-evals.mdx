@@ -261,9 +261,9 @@ A scorer entry in the `scorers` array can be either a bare scorer or a scorer wi
   },
   {
     name: 'threshold',
-    type: 'number',
+    type: 'number | { min?: number; max?: number }',
     description:
-      'Score at or above this value passes. Must be between 0 and 1. If the average score across data items is below this threshold, the verdict includes it as a miss.',
+      'A number implies minimum threshold (score at or above passes). Use `{ min, max }` for range-based checks — e.g. `{ max: 0.3 }` for scorers like hallucination where a high score is bad. Both `min` and `max` must be between 0 and 1.',
   },
 ]}
 />
@@ -283,8 +283,9 @@ const result = await runEvals({
   data: [{ input: 'What is the weather in Brooklyn?' }],
   gates: [checks.calledTool('get_weather'), checks.noToolErrors()],
   scorers: [
-    { scorer: faithfulnessScorer, threshold: 0.7 },
-    { scorer: checks.similarity('Sunny, 72F'), threshold: 0.6 },
+    { scorer: faithfulnessScorer, threshold: 0.7 }, // min threshold (number shorthand)
+    { scorer: hallucinationScorer, threshold: { max: 0.3 } }, // max threshold (high = bad)
+    { scorer: toneScorer, threshold: { min: 0.5, max: 0.9 } }, // range threshold
     checks.includes('Brooklyn'), // bare scorer, no threshold
   ],
 })

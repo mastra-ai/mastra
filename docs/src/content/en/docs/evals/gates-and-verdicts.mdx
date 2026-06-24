@@ -77,7 +77,14 @@ Visit [runEvals() reference](/reference/evals/run-evals) for the full parameter 
 
 ## Thresholds
 
-Wrap a scorer in `{ scorer, threshold }` to set a minimum acceptable score. The threshold is compared against the scorer's average score across all data items.
+Wrap a scorer in `{ scorer, threshold }` to set pass/fail bounds. The threshold is compared against the scorer's average score across all data items.
+
+A `threshold` can be:
+
+- **A number** — implies minimum (score at or above passes): `{ scorer, threshold: 0.7 }`
+- **An object with `min` and/or `max`** — for range-based checks: `{ scorer, threshold: { max: 0.3 } }`
+
+Use `max` for scorers where a high score is bad (e.g., hallucination, toxicity). Use `{ min, max }` when the score should fall within a specific band.
 
 ```typescript title="src/evals/threshold-example.ts"
 import { runEvals } from '@mastra/core/evals'
@@ -86,8 +93,9 @@ const result = await runEvals({
   data: [{ input: 'Explain quantum computing' }],
   target: myAgent,
   scorers: [
-    { scorer: faithfulnessScorer, threshold: 0.7 },
-    { scorer: completenessScorer, threshold: 0.5 },
+    { scorer: faithfulnessScorer, threshold: 0.7 }, // min threshold (number shorthand)
+    { scorer: hallucinationScorer, threshold: { max: 0.3 } }, // max threshold — high score = bad
+    { scorer: verbosityScorer, threshold: { min: 0.3, max: 0.8 } }, // range threshold
     toneScorer, // bare scorer, no threshold — tracked only
   ],
 })
@@ -95,7 +103,8 @@ const result = await runEvals({
 // result.thresholdResults:
 // [
 //   { id: 'faithfulness', passed: true, averageScore: 0.85, threshold: 0.7 },
-//   { id: 'completeness', passed: false, averageScore: 0.4, threshold: 0.5 },
+//   { id: 'hallucination', passed: true, averageScore: 0.1, threshold: { max: 0.3 } },
+//   { id: 'verbosity', passed: false, averageScore: 0.9, threshold: { min: 0.3, max: 0.8 } },
 // ]
 ```
 

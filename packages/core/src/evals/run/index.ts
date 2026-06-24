@@ -46,11 +46,14 @@ export type AgentScorerConfig = {
   trajectory?: MastraScorer<any, any, any, any>[];
 };
 
+/** Threshold configuration: a number implies minimum, or an object with min/max bounds. */
+export type ThresholdConfig = number | { min?: number; max?: number };
+
 /** A scorer with an associated pass/fail threshold. */
 export type ScorerWithThreshold = {
   scorer: MastraScorer<any, any, any, any>;
-  /** Score at or above this value passes. Must be between 0 and 1. */
-  threshold: number;
+  /** A number implies minimum threshold. Use { min, max } for range-based checks. */
+  threshold: ThresholdConfig;
 };
 
 /** A scorer entry: either a bare scorer or one with a threshold. */
@@ -76,7 +79,7 @@ type RunEvalsResult = {
   /** Per-gate results (averaged across all data items). */
   gateResults?: GateResult[];
   /** Per-threshold-scorer results (averaged across all data items). */
-  thresholdResults?: Array<{ id: string; passed: boolean; averageScore: number; threshold: number }>;
+  thresholdResults?: Array<{ id: string; passed: boolean; averageScore: number; threshold: ThresholdConfig }>;
 };
 
 // Agent with scorers array
@@ -284,7 +287,7 @@ export async function runEvals(config: {
       for (const [scorerId, threshold] of thresholdMap) {
         const scores = thresholdScoresByScorerID[scorerId]!;
         const averageScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
-        const passed = averageScore >= threshold;
+        const passed = checkThresholdPassed(averageScore, threshold);
         if (!passed) allThresholdsPassed = false;
         result.thresholdResults.push({ id: scorerId, passed, averageScore, threshold });
       }
@@ -303,17 +306,37 @@ export async function runEvals(config: {
   return result;
 }
 
+function checkThresholdPassed(score: number, threshold: ThresholdConfig): boolean {
+  if (typeof threshold === 'number') {
+    return score >= threshold;
+  }
+  if (threshold.min !== undefined && score < threshold.min) return false;
+  if (threshold.max !== undefined && score > threshold.max) return false;
+  return true;
+}
+
 function isScorerWithThreshold(entry: ScorerEntry): entry is ScorerWithThreshold {
   return typeof entry === 'object' && 'scorer' in entry && 'threshold' in entry;
+}
+
+function validateThresholdBound(value: number, label: string, scorerId: string): void {
+  if (!Number.isFinite(value) || value < 0 || value > 1) {
+    throw new MastraError({
+      domain: 'SCORER',
+      id: 'INVALID_SCORER_THRESHOLD',
+      category: 'USER',
+      text: `${label} threshold for scorer "${scorerId}" must be a finite number between 0 and 1, got ${value}`,
+    });
+  }
 }
 
 function normalizeScorerEntries(
   scorers: ScorerEntry[] | MastraScorer<any, any, any, any>[] | WorkflowScorerConfig | AgentScorerConfig,
 ): {
   bareScorers: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig | AgentScorerConfig;
-  thresholdMap: Map<string, number>;
+  thresholdMap: Map<string, ThresholdConfig>;
 } {
-  const thresholdMap = new Map<string, number>();
+  const thresholdMap = new Map<string, ThresholdConfig>();
 
   // Non-array configs (WorkflowScorerConfig / AgentScorerConfig) pass through unchanged
   if (!Array.isArray(scorers)) {
@@ -323,16 +346,27 @@ function normalizeScorerEntries(
   const bareScorers: MastraScorer<any, any, any, any>[] = [];
   for (const entry of scorers) {
     if (isScorerWithThreshold(entry)) {
-      if (!Number.isFinite(entry.threshold) || entry.threshold < 0 || entry.threshold > 1) {
-        throw new MastraError({
-          domain: 'SCORER',
-          id: 'INVALID_SCORER_THRESHOLD',
-          category: 'USER',
-          text: `Threshold for scorer "${entry.scorer.id}" must be a finite number between 0 and 1, got ${entry.threshold}`,
-        });
+      const { threshold } = entry;
+      if (typeof threshold === 'number') {
+        validateThresholdBound(threshold, 'Minimum', entry.scorer.id);
+      } else {
+        if (threshold.min !== undefined) {
+          validateThresholdBound(threshold.min, 'Minimum', entry.scorer.id);
+        }
+        if (threshold.max !== undefined) {
+          validateThresholdBound(threshold.max, 'Maximum', entry.scorer.id);
+        }
+        if (threshold.min !== undefined && threshold.max !== undefined && threshold.min > threshold.max) {
+          throw new MastraError({
+            domain: 'SCORER',
+            id: 'INVALID_SCORER_THRESHOLD',
+            category: 'USER',
+            text: `Threshold for scorer "${entry.scorer.id}" has min (${threshold.min}) greater than max (${threshold.max})`,
+          });
+        }
       }
       bareScorers.push(entry.scorer);
-      thresholdMap.set(entry.scorer.id, entry.threshold);
+      thresholdMap.set(entry.scorer.id, threshold);
     } else {
       bareScorers.push(entry);
     }
