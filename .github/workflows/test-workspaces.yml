@@ -88,10 +88,6 @@ jobs:
       - name: Build packages
         run: pnpm turbo build --filter "@mastra/${{ matrix.package }}"
 
-      - name: Clean stale ${{ matrix.package }} docker resources
-        run: docker compose down -v --remove-orphans || true
-        working-directory: workspaces/${{ matrix.package }}
-
       - name: Run ${{ matrix.package }} integration tests
         run: pnpm test
         working-directory: workspaces/${{ matrix.package }}
