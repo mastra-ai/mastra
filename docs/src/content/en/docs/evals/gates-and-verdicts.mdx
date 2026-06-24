@@ -13,7 +13,7 @@ Gates and verdicts add severity semantics to `runEvals`. Gates are scorers that 
 
 - Enforce hard requirements in CI (e.g., "agent must call the right tool")
 - Track quality metrics with minimum thresholds (e.g., "faithfulness above 0.7")
-- Get a single pass/fail signal from an eval run without writing custom assertion logic
+- Get a single verdict signal (`passed`, `scored`, or `failed`) from an eval run without writing custom assertion logic
 - Separate "must pass" gates from "nice to have" tracked metrics
 
 ## Quickstart

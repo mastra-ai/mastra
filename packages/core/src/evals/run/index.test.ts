@@ -1312,6 +1312,60 @@ describe('runEvals', () => {
       expect(result.scores['threshold-scorer']).toBeDefined();
     });
 
+    it('should convert a throwing gate into score 0 and verdict failed', async () => {
+      const agent = createMockAgentV2('response');
+      const throwingGate = createScorer({
+        id: 'throwing-gate',
+        description: 'Always throws',
+      }).generateScore(() => {
+        throw new Error('Boom');
+      });
+
+      const result = await runEvals({
+        data: [{ input: 'Test' }],
+        scorers: [createMockScorer('basic', 0.8)],
+        gates: [throwingGate],
+        target: agent,
+      });
+
+      expect(result.verdict).toBe('failed');
+      expect(result.gateResults).toHaveLength(1);
+      expect(result.gateResults![0]!.passed).toBe(false);
+      expect(result.gateResults![0]!.score).toBe(0);
+    });
+
+    it('should reject invalid threshold values', async () => {
+      const agent = createMockAgentV2('response');
+      const scorer = createScorer({
+        id: 'some-scorer',
+        description: 'test',
+      }).generateScore(() => 0.8);
+
+      await expect(
+        runEvals({
+          data: [{ input: 'Test' }],
+          scorers: [{ scorer, threshold: 1.5 }],
+          target: agent,
+        }),
+      ).rejects.toThrow(/between 0 and 1/);
+
+      await expect(
+        runEvals({
+          data: [{ input: 'Test' }],
+          scorers: [{ scorer, threshold: -0.1 }],
+          target: agent,
+        }),
+      ).rejects.toThrow(/between 0 and 1/);
+
+      await expect(
+        runEvals({
+          data: [{ input: 'Test' }],
+          scorers: [{ scorer, threshold: NaN }],
+          target: agent,
+        }),
+      ).rejects.toThrow(/between 0 and 1/);
+    });
+
     it('should average gate scores across multiple data items', async () => {
       const agent = createMockAgentV2('response');
       let callCount = 0;

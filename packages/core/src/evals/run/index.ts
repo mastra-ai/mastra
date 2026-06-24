@@ -323,6 +323,14 @@ function normalizeScorerEntries(
   const bareScorers: MastraScorer<any, any, any, any>[] = [];
   for (const entry of scorers) {
     if (isScorerWithThreshold(entry)) {
+      if (!Number.isFinite(entry.threshold) || entry.threshold < 0 || entry.threshold > 1) {
+        throw new MastraError({
+          domain: 'SCORER',
+          id: 'INVALID_SCORER_THRESHOLD',
+          category: 'USER',
+          text: `Threshold for scorer "${entry.scorer.id}" must be a finite number between 0 and 1, got ${entry.threshold}`,
+        });
+      }
       bareScorers.push(entry.scorer);
       thresholdMap.set(entry.scorer.id, entry.threshold);
     } else {
