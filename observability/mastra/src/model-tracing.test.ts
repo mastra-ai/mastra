@@ -1405,7 +1405,7 @@ describe('ModelSpanTracker', () => {
   });
 
   describe('tool-result preview in step input', () => {
-    it('should show tool-result content instead of [tool-result] placeholder', async () => {
+    it('should show modelOutput content when available', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'test-generation',
@@ -1428,7 +1428,10 @@ describe('ModelSpanTracker', () => {
                         type: 'tool-result',
                         toolCallId: 'call_123',
                         toolName: 'readFile',
-                        result: 'File contents here',
+                        result: { rawBase64: 'very-large-base64-string...' },
+                        providerMetadata: {
+                          mastra: { modelOutput: 'Summarized file content' },
+                        },
                       },
                     ],
                   },
@@ -1449,7 +1452,7 @@ describe('ModelSpanTracker', () => {
       const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
       expect(stepSpans).toHaveLength(1);
       expect(stepSpans[0]!.input).toEqual([
-        { role: 'tool', content: '[tool-result: File contents here]' },
+        { role: 'tool', content: '[tool-result: Summarized file content]' },
       ]);
     });
 
