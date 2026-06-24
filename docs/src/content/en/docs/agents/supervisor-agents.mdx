@@ -281,6 +281,21 @@ for await (const chunk of stream.fullStream) {
 }
 ```
 
+## Cancellation
+
+When you pass an `abortSignal` to the supervisor's [`stream()`](/reference/streaming/agents/stream) or [`generate()`](/reference/agents/generate) call, Mastra forwards that same signal to delegated subagents. Calling `AbortController.abort()` cancels in-flight subagent runs at their next step instead of letting them run to completion.
+
+```typescript
+const controller = new AbortController()
+
+const stream = await supervisor.stream('Research AI trends', {
+  abortSignal: controller.signal,
+})
+
+// Cancel the supervisor and any in-flight subagents
+controller.abort()
+```
+
 ## Task completion scoring
 
 Agents don't always produce a complete, correct output on the first try. Task completion scorers can help with that by validating whether the task is complete after each iteration. If validation fails, the supervisor continues iterating. Feedback from failed scorers is included in the conversation context so subagents can see what was missing.
