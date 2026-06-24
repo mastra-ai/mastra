@@ -101,7 +101,10 @@ function summarizePart(part: unknown): string {
         const toolResult = part as { providerMetadata?: Record<string, unknown> };
         const mastraMeta = toolResult.providerMetadata?.mastra as Record<string, unknown> | undefined;
         if (mastraMeta?.modelOutput !== undefined) {
-          const text = typeof mastraMeta.modelOutput === 'string' ? mastraMeta.modelOutput : JSON.stringify(mastraMeta.modelOutput);
+          const text =
+            typeof mastraMeta.modelOutput === 'string'
+              ? mastraMeta.modelOutput
+              : JSON.stringify(mastraMeta.modelOutput);
           return `[tool-result: ${text}]`;
         }
         return '[tool-result]';
