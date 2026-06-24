@@ -1,5 +1,6 @@
-import { Button, Label, cn } from '@mastra/playground-ui';
+import { Button, cn } from '@mastra/playground-ui';
 import type { ButtonProps } from '@mastra/playground-ui';
+import { Label } from '@mastra/playground-ui/components/Label';
 import { Loader2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useCallback, useMemo } from 'react';

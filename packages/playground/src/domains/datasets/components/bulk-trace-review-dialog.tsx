@@ -1,6 +1,8 @@
 'use client';
 
-import { Button, CodeEditor, Label, Txt, toast } from '@mastra/playground-ui';
+import { Button, Txt, toast } from '@mastra/playground-ui';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { Label } from '@mastra/playground-ui/components/Label';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { ChevronLeftIcon, ChevronRightIcon, DatabaseIcon, Loader2Icon, TrashIcon } from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';

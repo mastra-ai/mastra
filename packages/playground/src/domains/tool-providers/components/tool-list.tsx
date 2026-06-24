@@ -1,4 +1,8 @@
-import { Badge, Checkbox, ScrollArea, Searchbar, SearchbarWrapper, Skeleton, Txt, cn } from '@mastra/playground-ui';
+import { ScrollArea, Txt, cn } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { Searchbar, SearchbarWrapper } from '@mastra/playground-ui/components/Searchbar';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { useState } from 'react';
 
 import { useProviderTools } from '../hooks/use-provider-tools';

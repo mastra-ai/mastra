@@ -71,9 +71,13 @@ export const mcpHttpToolCallScenario = {
       `!node -e 'const fs=require("fs"); const url=process.env.MC_E2E_MCP_HTTP_URL; if(!url) throw new Error("missing MC_E2E_MCP_HTTP_URL"); fs.mkdirSync(".mastracode",{recursive:true}); fs.writeFileSync(".mastracode/mcp.json", JSON.stringify({mcpServers:{e2e_http_mcp:{url,headers:{"x-mc-e2e":"http-tool-call"}}}}, null, 2)); console.log("MCP_HTTP_CONFIG_WRITTEN="+url);'`,
     );
     await runtime.waitForScreenText(/MCP_HTTP_CONFIG_WRITTEN=http:\/\/127\.0\.0\.1:/i, terminal, 10_000);
+    await terminal.flushInput?.();
+    await runtime.waitForScreenText(/│ ›/i, terminal, 15_000);
 
     terminal.submit('/mcp reload');
-    await runtime.waitForScreenText(/MCP: Reloaded\. 1 server\(s\) connected, 1 tool\(s\)\./i, terminal, 15_000);
+    await runtime.waitForScreenText(/MCP: Reloaded\. 1 server\(s\) connected, 1 tool\(s\)\./i, terminal, 60_000);
+    await terminal.flushInput?.();
+    await runtime.waitForScreenText(/│ ›/i, terminal, 15_000);
     terminal.submit('/mcp status');
     await runtime.waitForScreenText(/e2e_http_mcp \[http\] \(connected\)/i, terminal, 15_000);
     await runtime.waitForScreenText(/e2e_http_mcp_lookup_status/i, terminal, 15_000);

@@ -4,7 +4,7 @@ import { PickMultiPanel } from './pick-multi-panel';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
 import { Button } from '@/ds/components/Button/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
-import { MultiCombobox } from '@/ds/components/Combobox/multi-combobox';
+import { Combobox } from '@/ds/components/Combobox/combobox';
 import { Input } from '@/ds/components/Input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
 import { cn } from '@/lib/utils';
@@ -299,7 +299,8 @@ export function PropertyFilterCreator({
           )}
 
           {selectedField && selectedField.kind === 'multi-select' && (
-            <MultiCombobox
+            <Combobox
+              multiple
               options={selectedField.options ?? []}
               value={multiValue}
               onValueChange={v => {

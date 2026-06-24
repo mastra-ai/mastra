@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
-import type { AgentSignalInput, Agent } from '@mastra/core/agent';
+import type { AgentSignalInput, Agent, AgentSignalIfIdleOptions } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { Mastra } from '@mastra/core/mastra';
 import type { StorageThreadType } from '@mastra/core/memory';
@@ -269,6 +269,7 @@ type GithubPollingThread = {
   threadId: string;
   resourceId: string;
   agentId?: string;
+  ifIdle?: AgentSignalIfIdleOptions<unknown>;
 };
 
 type GithubPollingState = GithubPollingThread & {
@@ -1290,16 +1291,16 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     return { tools };
   }
 
-  async processOutputStep(args: ProcessOutputStepArgs): Promise<MastraDBMessage[]> {
+  async processOutputStep(args: ProcessOutputStepArgs): Promise<void> {
     const evidence = detectPrWorkEvidence({ text: args.text, toolCalls: args.toolCalls });
-    if (!evidence) return args.messages;
+    if (!evidence) return;
 
     const threadContext = this.#getThreadContext(args);
-    if (!threadContext.threadId || !threadContext.resourceId) return args.messages;
+    if (!threadContext.threadId || !threadContext.resourceId) return;
 
     const { threadStore, loadedThread } = await this.#loadThread(threadContext);
     const githubMetadata = getGithubMetadata(loadedThread.metadata);
-    if (githubMetadata.subscriptionHintShown || githubMetadata.subscriptions.length > 0) return args.messages;
+    if (githubMetadata.subscriptionHintShown || githubMetadata.subscriptions.length > 0) return;
 
     let repository: GithubRepository;
     try {
@@ -1310,7 +1311,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         number: evidence.number,
       });
     } catch {
-      return args.messages;
+      return;
     }
 
     await threadStore.saveThread({
@@ -1338,8 +1339,6 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         },
       },
     });
-
-    return args.messages;
   }
 
   async #resolveThreadStore(): Promise<GithubSignalsThreadStore | undefined> {

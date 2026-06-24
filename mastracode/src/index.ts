@@ -10,11 +10,13 @@ import type {
   HarnessMode,
   HarnessSubagent,
   HarnessRequestContext,
+  Session,
 } from '@mastra/core/harness';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { ProviderConfig } from '@mastra/core/llm';
 import {
   AgentsMDInjector,
+  isBadRequestError,
   PrefillErrorHandler,
   ProviderHistoryCompat,
   StreamErrorRetryProcessor,
@@ -92,6 +94,34 @@ import { createStorage, createVectorStore } from './utils/storage-factory.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 
 const CODE_AGENT_ID = 'code-agent';
+
+// Global retry policy for transient network resets (e.g. provider sockets dropping mid-stream).
+// Applied centrally to every model call via StreamErrorRetryProcessor, independent of model-pack
+// settings, so all modes/subagents benefit from a short wait before retrying an ECONNRESET.
+// Delay uses exponential backoff: initialDelay * 2^retryCount, capped at maxDelay.
+const MASTRACODE_ECONNRESET_MAX_RETRIES = 2;
+const MASTRACODE_ECONNRESET_RETRY_INITIAL_DELAY_MS = 1000;
+const MASTRACODE_ECONNRESET_RETRY_MAX_DELAY_MS = 30000;
+
+const ECONNRESET_MESSAGE_PATTERN = /econnreset|socket hang up/i;
+
+/**
+ * Matcher for transient network-reset failures. Checks the immediate error for
+ * an `ECONNRESET` code or a `socket hang up` message. Cause-chain traversal is
+ * handled by `StreamErrorRetryProcessor.isRetryableStreamError`, which calls
+ * each matcher at every level of the cause chain.
+ */
+function isECONNRESETError(error: unknown): boolean {
+  if (!error) return false;
+
+  const code = typeof error === 'object' && 'code' in error ? (error as { code?: unknown }).code : undefined;
+  if (typeof code === 'string' && code.toUpperCase() === 'ECONNRESET') return true;
+
+  const message = error instanceof Error ? error.message : undefined;
+  if (typeof message === 'string' && ECONNRESET_MESSAGE_PATTERN.test(message)) return true;
+
+  return false;
+}
 
 function applyEffectiveDefaultsToModes(modes: HarnessMode[], effectiveDefaults: Record<string, string>): HarnessMode[] {
   return modes.map(mode => {
@@ -203,6 +233,10 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const cwd = config?.cwd ?? process.cwd();
   const homeDir = config?.homeDir ?? config?.initialState?.homeDir;
   const configDir = config?.configDir ?? DEFAULT_CONFIG_DIR;
+  // The single session for this process, assigned once `createSession()` runs
+  // below. Config callbacks defined before then (e.g. notification stream
+  // options) read it lazily through this holder.
+  let activeSession: Session<MastraCodeState> | undefined;
   if (configDir !== DEFAULT_CONFIG_DIR) {
     validateConfigDirName(configDir);
   }
@@ -413,26 +447,37 @@ export async function createMastraCode(config?: MastraCodeConfig) {
           process.env.GITCRAWL_BIN ??
           process.env.MASTRACODE_GITCRAWL_COMMAND ??
           process.env.GITCRAWL_COMMAND,
-        getNotificationStreamOptions: ({ resourceId, threadId }) => {
+        getNotificationStreamOptions: async ({ resourceId, threadId }) => {
+          // Run the woken notification as the session that owns the target
+          // resource so it uses that session's model/mode/state. Fall back to
+          // the current session only when no session owns the resource yet.
+          const session = (await harness.getSessionByResource(resourceId)) ?? activeSession!;
+          // A long-running system must be able to drive work unattended, so a
+          // target session without an explicit model selection falls back to a
+          // real model rather than failing the run: the current session's live
+          // selection (what the user actually picked), then the mode's default.
+          const modeId = session.mode.get();
+          const defaultModeModelId = harness.listModes().find(mode => mode.id === modeId)?.defaultModelId;
+          const modelId = session.model.get() || activeSession?.model.get() || defaultModeModelId || '';
           const requestContext = new RequestContext();
           const harnessContext: HarnessRequestContext = {
             harnessId: harness.id,
-            state: harness.session.state.get(),
-            getState: () => harness.session.state.get(),
-            setState: updates => harness.session.state.set(updates),
+            state: session.state.get(),
+            getState: () => session.state.get(),
+            setState: updates => session.state.set(updates),
             threadId,
             resourceId,
             session: {
-              modeId: harness.session.mode.get(),
-              modelId: harness.session.model.get(),
+              modeId,
+              modelId,
               state: {
-                get: () => harness.session.state.get(),
-                set: updates => harness.session.state.set(updates),
-                update: updater => harness.session.state.update(updater),
+                get: () => session.state.get(),
+                set: updates => session.state.set(updates),
+                update: updater => session.state.update(updater),
               },
             },
             workspace: harness.getWorkspace(),
-            getSubagentModelId: params => harness.getSubagentModelId(params),
+            getSubagentModelId: params => session.subagents.model.get(params ?? {}),
           };
           requestContext.set('harness', harnessContext);
 
@@ -441,7 +486,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
             requestContext,
             maxSteps: 1000,
             savePerStep: false,
-            requireToolApproval: (harness.session.state.get() as Record<string, unknown>).yolo !== true,
+            requireToolApproval: (session.state.get() as Record<string, unknown>).yolo !== true,
             modelSettings: { temperature: 1 },
           };
         },
@@ -502,7 +547,24 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       }),
       new ProviderHistoryCompat(),
     ],
-    errorProcessors: [new StreamErrorRetryProcessor(), new PrefillErrorHandler(), new ProviderHistoryCompat()],
+    errorProcessors: [
+      new StreamErrorRetryProcessor({
+        matchers: [
+          { match: isBadRequestError, maxRetries: 1, delayMs: 2000 },
+          {
+            match: isECONNRESETError,
+            maxRetries: MASTRACODE_ECONNRESET_MAX_RETRIES,
+            delayMs: ({ retryCount }) =>
+              Math.min(
+                MASTRACODE_ECONNRESET_RETRY_INITIAL_DELAY_MS * Math.pow(2, retryCount),
+                MASTRACODE_ECONNRESET_RETRY_MAX_DELAY_MS,
+              ),
+          },
+        ],
+      }),
+      new PrefillErrorHandler(),
+      new ProviderHistoryCompat(),
+    ],
   });
 
   // const defaultSubAgents: Array<HarnessSubagent> = [];
@@ -706,9 +768,16 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     // , harnessV1
   });
 
+  // Bring up shared harness resources, then mint the single session that all
+  // work in this process runs through. The Harness owns no session of its own.
+  await harness.init();
+  await harness.getMastra()?.startWorkers();
+  const session = await harness.createSession();
+  activeSession = session;
+
   // Sync hookManager session ID on thread changes
   if (hookManager) {
-    harness.subscribe((event: HarnessEvent) => {
+    session.subscribe((event: HarnessEvent) => {
       if (event.type === 'thread_changed') {
         hookManager.setSessionId(event.threadId);
       } else if (event.type === 'thread_created') {
@@ -722,12 +791,12 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       if (!threadId) return;
       githubSignals.stopAllPolling();
       try {
-        const threads = await harness.session.thread.list({ allResources: true });
+        const threads = await session.thread.list({ allResources: true });
         const thread = threads.find((item: { id: string }) => item.id === threadId);
         await githubSignals.startPollingForThread(
           {
             threadId,
-            resourceId: thread?.resourceId ?? harness.session.identity.getResourceId(),
+            resourceId: thread?.resourceId ?? session.identity.getResourceId(),
           },
           { pollImmediately: true },
         );
@@ -736,23 +805,24 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       }
     };
 
-    harness.subscribe((event: HarnessEvent) => {
+    session.subscribe((event: HarnessEvent) => {
       if (event.type === 'thread_changed') void startGithubPollingForCurrentThread(event.threadId);
       else if (event.type === 'thread_created') void startGithubPollingForCurrentThread(event.thread.id);
     });
-    void startGithubPollingForCurrentThread(harness.session.thread.getId());
+    void startGithubPollingForCurrentThread(session.thread.getId());
   }
 
   // Persist MastraCode-owned /om settings per-thread (mastracode-only concern;
   // intentionally not in core's harness loadThreadMetadata).
-  const omThreadStateHarness = harness as unknown as Harness<Record<string, unknown>>;
-  attachOMThreadStatePersistence(omThreadStateHarness);
-  await restoreOMThreadStateForCurrentThread(omThreadStateHarness).catch(() => {
+  const omThreadStateSession = session as unknown as Session<Record<string, unknown>>;
+  attachOMThreadStatePersistence(omThreadStateSession);
+  await restoreOMThreadStateForCurrentThread(omThreadStateSession).catch(() => {
     // Persistence is best-effort; don't crash startup if storage hiccups.
   });
 
   return {
     harness,
+    session,
     mcpManager,
     hookManager,
     signalsPubSub,

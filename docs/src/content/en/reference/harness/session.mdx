@@ -9,7 +9,7 @@ packages:
 
 :::experimental
 
-The `Harness` feature is in alpha stage and subject to breaking changes in minor versions until it graduates from its alpha status.
+The `Harness` feature is in beta stage and subject to breaking changes in minor versions until it graduates from its beta status.
 
 :::
 
@@ -270,7 +270,7 @@ await harness.session.thread.deleteSetting({ key: 'omThreshold' })
 
 ## Mode
 
-`session.mode` owns the active mode selection. Switching modes is performed on the [`Harness`](/reference/harness/harness-class#switchmode-modeid-) because it emits events and rebinds the stream.
+`session.mode` owns the active mode selection.
 
 ### `session.mode.get()`
 
@@ -288,9 +288,17 @@ Return the full `HarnessMode` object for the active mode, resolved against the h
 const mode = harness.session.mode.resolve()
 ```
 
+### `session.mode.switch({ modeId })`
+
+Switch to a different mode. Aborts any in-progress generation, saves the current model to the outgoing mode, loads the incoming mode's model, and emits `mode_changed` and `model_changed` events.
+
+```typescript
+await harness.session.mode.switch({ modeId: 'build' })
+```
+
 ## Model
 
-`session.model` owns the active model selection, including per-mode model memory. Switching models is performed on the [`Harness`](/reference/harness/harness-class#switchmodel-modelid-scope-modeid-).
+`session.model` owns the active model selection, including per-mode model memory.
 
 ### `session.model.get()`
 
@@ -298,6 +306,14 @@ Return the active model ID.
 
 ```typescript
 const modelId = harness.session.model.get()
+```
+
+### `session.model.displayName()`
+
+Return a short display name for the active model: the last segment of the model ID (for example, `claude-sonnet-4` from `anthropic/claude-sonnet-4`). Returns `'unknown'` when no model is selected.
+
+```typescript
+const name = harness.session.model.displayName()
 ```
 
 ### `session.model.hasSelection()`
@@ -308,6 +324,116 @@ Check whether a model is currently selected.
 if (harness.session.model.hasSelection()) {
   // Ready to send messages
 }
+```
+
+### `session.model.switch({ modelId, scope?, modeId? })`
+
+Switch the active model. When `scope` is `'thread'` (the default), the model ID is persisted as the per-mode model so it's restored when switching back. Reports the selection to the harness's `modelUseCountTracker` and emits a `model_changed` event.
+
+```typescript
+// Set for the current session only
+await harness.session.model.switch({
+  modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+  scope: 'global',
+})
+
+// Persist to the current thread (default)
+await harness.session.model.switch({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
+```
+
+## Observational Memory
+
+The observational-memory model selection, grouped by role under `session.om.observer` and `session.om.reflector`. Both roles expose the same methods. Reads return the value from session state when set, falling back to the harness's `omConfig` defaults.
+
+### `session.om.observer.modelId()` / `session.om.reflector.modelId()`
+
+Return the role's model ID, or `undefined` when neither session state nor `omConfig` provides one.
+
+```typescript
+const observer = harness.session.om.observer.modelId()
+const reflector = harness.session.om.reflector.modelId()
+```
+
+### `session.om.observer.threshold()` / `session.om.reflector.threshold()`
+
+Return the role's threshold in tokens (observation threshold for the observer, reflection threshold for the reflector), or `undefined` when unset.
+
+```typescript
+const observationThreshold = harness.session.om.observer.threshold()
+const reflectionThreshold = harness.session.om.reflector.threshold()
+```
+
+### `session.om.observer.switchModel({ modelId })` / `session.om.reflector.switchModel({ modelId })`
+
+Switch the role's model. Persists the setting to thread metadata and emits an `om_model_changed` event.
+
+```typescript
+await harness.session.om.observer.switchModel({ modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__' })
+await harness.session.om.reflector.switchModel({ modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__' })
+```
+
+### `session.om.observer.resolvedModel()` / `session.om.reflector.resolvedModel()`
+
+Resolve the role's model ID to a model instance via the harness's `resolveModel`, or `undefined` when no model ID is set or no resolver is configured.
+
+```typescript
+const observerModel = harness.session.om.observer.resolvedModel()
+```
+
+## Permissions
+
+`session.permissions` owns the persisted tool-approval _policy_ — the per-category and per-tool rules consulted during approval resolution. These are distinct from the in-memory session _grants_ documented under [Methods → Permissions](#permissions); grants reset each session, whereas these rules are persisted in session state.
+
+### `session.permissions.getRules()`
+
+Return the current permission rules, or empty rules (`{ categories: {}, tools: {} }`) when none are set.
+
+```typescript
+const rules = harness.session.permissions.getRules()
+// { categories: { execute: 'ask' }, tools: { dangerous_tool: 'deny' } }
+```
+
+### `session.permissions.setForCategory({ category, policy })`
+
+Set the approval policy (`'allow' | 'ask' | 'deny'`) for a tool category. Resolves once the change is persisted to session state.
+
+```typescript
+await harness.session.permissions.setForCategory({ category: 'execute', policy: 'ask' })
+```
+
+### `session.permissions.setForTool({ toolName, policy })`
+
+Set the approval policy for a specific tool. Per-tool policies take precedence over category policies. Resolves once persisted.
+
+```typescript
+await harness.session.permissions.setForTool({ toolName: 'dangerous_tool', policy: 'deny' })
+```
+
+## Subagents
+
+`session.subagents` owns subagent configuration. It currently exposes the subagent model selection under `session.subagents.model`.
+
+### `session.subagents.model.get({ agentType? })`
+
+Return the subagent model ID, preferring the per-`agentType` value when one is given, then the global subagent model, or `null` when neither is set.
+
+```typescript
+const modelId = harness.session.subagents.model.get({ agentType: 'explore' })
+```
+
+### `session.subagents.model.set({ modelId, agentType? })`
+
+Set the subagent model ID. Pass an `agentType` to set a per-type override, or omit it to set the global default. Persists to thread settings and emits a `subagent_model_changed` event.
+
+```typescript
+// Set the global subagent model
+await harness.session.subagents.model.set({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
+
+// Set a per-type override
+await harness.session.subagents.model.set({
+  modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
+  agentType: 'explore',
+})
 ```
 
 ## Run

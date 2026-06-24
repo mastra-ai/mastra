@@ -1,4 +1,5 @@
-import { Button, Skeleton, cn } from '@mastra/playground-ui';
+import { Button, cn } from '@mastra/playground-ui';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { ExternalLink, Copy } from 'lucide-react';
 import { useCallback } from 'react';
 import { AgentObservationalMemory } from './agent-observational-memory';
@@ -22,7 +23,7 @@ interface AgentMemoryProps {
 
 export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps) {
   const isGatewayMemory = memoryType === 'gateway';
-  const { threadInput: chatInputValue } = useThreadInput();
+  const { threadInput: chatInputValue } = useThreadInput(threadId);
 
   const { paths, navigate } = useLinkComponent();
 

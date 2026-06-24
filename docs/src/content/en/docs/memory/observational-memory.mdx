@@ -226,11 +226,7 @@ The result is a three-tier system:
 1. **Observations**: A log of what the Observer has seen
 1. **Reflections**: Condensed observations when memory becomes too long
 
-### Retrieval mode (experimental)
-
-:::note
-Retrieval mode is experimental. The API may change in future releases.
-:::
+### Retrieval mode
 
 Normal OM compresses messages into observations, which is great for staying on task, but the original wording is gone. Retrieval mode fixes this by keeping each observation group linked to the raw messages that produced it. When the agent needs exact wording, tool output, or chronology that the summary compressed away, it can call a `recall` tool to page through the source messages.
 

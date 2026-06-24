@@ -1,8 +1,14 @@
 'use client';
 
 import type { CompareExperimentsResponse } from '@mastra/client-js';
-import { Button, ButtonsGroup, Chip, Column, MainHeader, Notice, Sections } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { Chip } from '@mastra/playground-ui/components/Chip';
+import { Column } from '@mastra/playground-ui/components/Columns';
+import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PrevNextNav } from '@mastra/playground-ui/components/PrevNextNav';
+import { Sections } from '@mastra/playground-ui/components/Sections';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { FileCodeIcon, FileInputIcon, FileOutputIcon, TargetIcon, XIcon } from 'lucide-react';
 import { ScoreDelta } from './score-delta';
