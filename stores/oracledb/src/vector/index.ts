@@ -142,6 +142,7 @@ export class OracleVector extends MastraVector<OracleVectorFilter> {
       const normalizedFormat = normalizeVectorFormat(vectorFormat ?? this.defaultVectorFormat);
       const normalizedMetric = normalizeMetric(metric ?? defaultMetricForFormat(normalizedFormat));
       const mergedConfig = this.mergeIndexConfig(indexConfig);
+      const builtConfig = buildIndex ? mergedConfig : this.mergeIndexConfig({ type: 'none' });
       validateDimension(dimension);
       validateVectorFormatDimension(normalizedFormat, dimension);
       validateMetricForFormat(normalizedMetric, normalizedFormat);
@@ -157,7 +158,7 @@ export class OracleVector extends MastraVector<OracleVectorFilter> {
             this.assertCompatibleExistingIndex(existing, logicalIndexName, dimension, normalizedMetric, normalizedFormat);
           } else {
             await this.createVectorTable(connection, logicalIndexName, dimension, normalizedFormat);
-            await this.upsertRegistry(connection, logicalIndexName, dimension, normalizedMetric, normalizedFormat, mergedConfig);
+            await this.upsertRegistry(connection, logicalIndexName, dimension, normalizedMetric, normalizedFormat, builtConfig);
           }
 
           await this.createMetadataIndexes(
@@ -192,9 +193,9 @@ export class OracleVector extends MastraVector<OracleVectorFilter> {
                     tableName,
                     dimension,
                     metric: normalizedMetric,
-                    indexType: mergedConfig.type,
+                    indexType: builtConfig.type,
                     vectorFormat: normalizedFormat,
-                    accuracy: mergedConfig.accuracy ?? 95,
+                    accuracy: builtConfig.accuracy ?? 95,
                   };
           this.cacheIndexMetadata(logicalIndexName, {
             ...finalInfo,
@@ -233,15 +234,15 @@ export class OracleVector extends MastraVector<OracleVectorFilter> {
             });
           }
         }
-        await this.upsertRegistry(connection, logicalIndexName, dimension, normalizedMetric, normalizedFormat, mergedConfig);
+        await this.upsertRegistry(connection, logicalIndexName, dimension, normalizedMetric, normalizedFormat, builtConfig);
         this.cacheIndexMetadata(logicalIndexName, {
           indexName: logicalIndexName,
           tableName,
           dimension,
           metric: normalizedMetric,
-          indexType: mergedConfig.type,
+          indexType: builtConfig.type,
           vectorFormat: normalizedFormat,
-          accuracy: mergedConfig.accuracy ?? 95,
+          accuracy: builtConfig.accuracy ?? 95,
           qualifiedTableName: qualifyName(tableName, this.schemaName),
         });
       }));
@@ -255,10 +256,11 @@ export class OracleVector extends MastraVector<OracleVectorFilter> {
     return this.withConnection(async connection => {
       const logicalIndexName = normalizeLogicalIndexName(indexName);
       const indexInfo = await this.getIndexMetadata(connection, logicalIndexName);
-      const mergedConfig = this.mergeIndexConfig(indexConfig ?? {
+      const existingBuiltConfig = indexInfo.indexType === 'none' ? undefined : {
         type: indexInfo.indexType,
         accuracy: indexInfo.accuracy,
-      });
+      };
+      const mergedConfig = this.mergeIndexConfig(indexConfig ?? existingBuiltConfig);
 
       // `none` is a valid exact-search mode, so buildIndex becomes a no-op for those indexes.
       if (mergedConfig.type === 'none') return;
@@ -422,7 +424,7 @@ export class OracleVector extends MastraVector<OracleVectorFilter> {
   }: UpsertVectorParams): Promise<string[]> {
     try {
       if (sparseVectors !== undefined) {
-        throw new Error('OracleVector does not support sparseVectors yet; use dense vectors types');
+        throw new Error('OracleVector does not support sparseVectors yet; use dense vector types');
       }
       validateUpsertInput(STORE_NAME, vectors, metadata, ids);
       validateVectors(vectors);

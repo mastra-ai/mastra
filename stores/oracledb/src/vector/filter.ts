@@ -249,8 +249,12 @@ function buildRegexExpression(path: string, pattern: string, flags: string, coll
 function buildContainsExpression(path: string, value: unknown, collector: BindCollector): string {
   if (Array.isArray(value)) return buildAllExpression(path, value, collector);
   if (typeof value === 'string') {
-    const variable = collector.add(escapeLikePattern(value.toLowerCase()));
-    return `LOWER(${jsonValue(path, '')}) LIKE '%' || :${variable} || '%' ESCAPE '\\'`;
+    const scalarVariable = collector.add(escapeLikePattern(value.toLowerCase()));
+    const arrayVariable = collector.add(value);
+    return `(${[
+      `LOWER(${jsonValue(path, '')}) LIKE '%' || :${scalarVariable} || '%' ESCAPE '\\'`,
+      `JSON_EXISTS(metadata, '${assertJsonPath(path)}[*]?(@ == $${arrayVariable})' PASSING :${arrayVariable} AS "${arrayVariable}")`,
+    ].join(' OR ')})`;
   }
 
   const variable = collector.add(JSON.stringify(value));

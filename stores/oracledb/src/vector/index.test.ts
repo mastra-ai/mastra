@@ -126,6 +126,45 @@ describe('OracleVector vector memory support', () => {
 });
 
 describe('OracleVector hot path SQL shape', () => {
+  it('records no physical vector index when createIndex defers approximate index build', async () => {
+    const execute = vi.fn(async (sql: string) => {
+      if (sql.includes('SELECT') && (sql.includes('FROM "MASTRA_VECTOR_INDEXES"') || sql.includes('FROM all_tables'))) {
+        return { rows: [] };
+      }
+      return { rows: [] };
+    });
+    const commit = vi.fn(async () => undefined);
+    const close = vi.fn(async () => undefined);
+    const vector = new OracleVector({
+      id: 'oracle-vector-deferred-index-shape',
+      pool: {
+        getConnection: vi.fn(async () => ({ execute, commit, close })),
+      } as any,
+    });
+
+    await vector.createIndex({
+      indexName: 'deferred_index',
+      dimension: 3,
+      metric: 'cosine',
+      indexConfig: { type: 'ivf', accuracy: 90, ivf: { neighborPartitions: 1 } },
+      buildIndex: false,
+    });
+
+    const mergeCall = execute.mock.calls.find(call => String(call[0]).includes('MERGE INTO "MASTRA_VECTOR_INDEXES"'));
+    expect(mergeCall?.[1]).toMatchObject({
+      index_name: 'deferred_index',
+      metric: 'cosine',
+      index_type: 'none',
+    });
+    expect(execute.mock.calls.some(call => String(call[0]).includes('CREATE VECTOR INDEX'))).toBe(false);
+
+    await expect(vector.getIndexStatus({ indexName: 'deferred_index' })).resolves.toBe('NONE');
+
+    await vector.query({ indexName: 'deferred_index', queryVector: [1, 0, 0], topK: 1 });
+
+    expect(execute.mock.calls.some(call => String(call[0]).includes('FETCH EXACT FIRST 1 ROWS ONLY'))).toBe(true);
+  });
+
   it('uses cached index metadata for vector queries without live count or outer sort', async () => {
     const execute = vi.fn(async () => ({ rows: [{ id: 'vec-1', score: 1, metadata: {} }] }));
     const close = vi.fn(async () => undefined);

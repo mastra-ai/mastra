@@ -21,6 +21,15 @@ import type { OracleMigration, OracleMigrationRecord, OracleMigrationResult } fr
 import type { OracleStoreConfig } from './types';
 
 const STORE_NAME = 'ORACLEDB';
+const DOMAIN_SCHEMA_VERSIONS: Record<string, number> = {
+  R001_MEMORY_SCHEMA: 1,
+  R002_WORKFLOWS_SCHEMA: 1,
+  R003_OBSERVABILITY_SCHEMA: 1,
+  R004_SCORES_SCHEMA: 1,
+  R005_SCORER_DEFINITIONS_SCHEMA: 1,
+  R006_MCP_CLIENTS_SCHEMA: 1,
+  R007_AGENTS_SCHEMA: 1,
+};
 
 export class OracleStore extends MastraCompositeStore {
   private readonly poolManager: OraclePoolManager;
@@ -56,6 +65,9 @@ export class OracleStore extends MastraCompositeStore {
         messageBatchSize: config.messageBatchSize,
         skipDefaultIndexes: config.skipDefaultIndexes,
         indexes: config.indexes,
+        vectorRegistryTableName: config.vectorRegistryTableName
+          ? normalizeIdentifier(config.vectorRegistryTableName, 'vector registry table name')
+          : undefined,
       };
 
       this.stores = {
@@ -212,9 +224,8 @@ export class OracleStore extends MastraCompositeStore {
     name: string;
     description: string;
     managedTables: readonly string[];
-  }): string | undefined {
+  }): string {
     const indexes = filterIndexesForTables(this.indexes, input.managedTables);
-    if (!this.skipDefaultIndexes && indexes.length === 0) return undefined;
 
     return createHash('sha256')
       .update(
@@ -223,6 +234,8 @@ export class OracleStore extends MastraCompositeStore {
           name: input.name,
           kind: 'repeatable',
           description: input.description,
+          schemaVersion: DOMAIN_SCHEMA_VERSIONS[input.id] ?? 1,
+          managedTables: [...input.managedTables],
           indexConfig: {
             skipDefaultIndexes: this.skipDefaultIndexes === true,
             indexes,

@@ -50,6 +50,27 @@ describe('Oracle schema export', () => {
     expect(ddl).not.toContain('MASTRA_ORACLE_MIGRATIONS');
   });
 
+  it('exports deferred vector index registry rows as exact physical indexes', () => {
+    const ddl = exportSchemas({
+      domains: ['vector'],
+      vector: {
+        indexes: [
+          {
+            indexName: 'deferred_vectors',
+            dimension: 3,
+            indexConfig: { type: 'ivf', accuracy: 90, ivf: { neighborPartitions: 1 } },
+            buildIndex: false,
+          },
+        ],
+      },
+    });
+
+    expect(ddl).toContain("'none' AS index_type");
+    expect(ddl).toContain('95 AS accuracy');
+    expect(ddl).not.toContain('90 AS accuracy');
+    expect(ddl).not.toContain('CREATE VECTOR INDEX');
+  });
+
   it('omits default storage indexes when requested', () => {
     const ddl = exportSchemas({
       domains: ['memory'],
@@ -173,6 +194,21 @@ describe('OracleStore first-PR domains', () => {
       'R006_MCP_CLIENTS_SCHEMA',
       'R007_AGENTS_SCHEMA',
     ]);
+  });
+
+  it('assigns stable checksums to repeatable storage migrations', () => {
+    const store = new OracleStore({
+      id: 'repeatable-checksum-test',
+      pool: {} as any,
+    });
+
+    const migrations = (
+      store as unknown as {
+        storageMigrations: () => Array<{ checksum?: string }>;
+      }
+    ).storageMigrations();
+
+    expect(migrations.every(migration => /^[A-F0-9]{64}$/.test(migration.checksum ?? ''))).toBe(true);
   });
 
   it('rejects invalid message batch sizes at construction time', () => {

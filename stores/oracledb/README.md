@@ -28,8 +28,12 @@ const store = new OracleStore({
   connectString: process.env.ORACLE_DATABASE_CONNECT_STRING,
 });
 
+await store.init();
+const memory = await store.getStore('memory');
+if (!memory) throw new Error('Oracle memory store is not available');
+
 // Create a thread
-await store.saveThread({
+await memory.saveThread({
   thread: {
     id: 'thread-123',
     resourceId: 'resource-456',
@@ -40,7 +44,7 @@ await store.saveThread({
 });
 
 // Add messages to thread
-await store.saveMessages({
+await memory.saveMessages({
   messages: [
     {
       id: 'msg-789',
@@ -54,8 +58,8 @@ await store.saveMessages({
 });
 
 // Query threads and messages
-const savedThread = await store.getThreadById({ threadId: 'thread-123' });
-const { messages } = await store.listMessages({ threadId: 'thread-123' });
+const savedThread = await memory.getThreadById({ threadId: 'thread-123' });
+const { messages } = await memory.listMessages({ threadId: 'thread-123' });
 ```
 
 ### Vector Store
@@ -131,6 +135,7 @@ Both `OracleStore` and `OracleVector` support:
 - `indexes`: Custom Oracle index definitions to create during initialization
 - `disableInit`: Disable automatic schema initialization
 - `migrationTableName`: Custom migration ledger table name
+- `vectorRegistryTableName`: Vector registry table used to clean semantic-recall rows when `OracleVector.registryTableName` is customized
 
 ### Vector Options
 

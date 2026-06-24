@@ -52,7 +52,7 @@ import {
   rows,
 } from '../../../shared/connection';
 import type { ObjectRow } from '../../../shared/connection';
-import { assertJsonPath, indexNameForTable, qualifyName, quoteIdentifier } from '../../../vector/identifiers';
+import { assertJsonPath, indexNameForTable, normalizeIdentifier, qualifyName, quoteIdentifier } from '../../../vector/identifiers';
 import { OracleDB, createOracleIndex, filterIndexesForTables } from '../../db';
 import type { OracleCreateIndexOptions, OracleTxClient } from '../../db';
 import {
@@ -112,6 +112,7 @@ const OM_UPDATED_AT = '"updatedAt"';
 const ORACLE_IN_LIMIT = 900;
 const EMPTY_STRING_SENTINEL = '__MASTRA_ORACLE_EMPTY_STRING__';
 const STRING_SENTINEL_ESCAPE_PREFIX = '__MASTRA_ORACLE_ESCAPED__';
+const DEFAULT_VECTOR_REGISTRY_TABLE = 'MASTRA_VECTOR_INDEXES';
 
 type MessageRow = {
   id: string;
@@ -197,6 +198,7 @@ export class MemoryOracle extends MemoryStorage {
   private readonly messageBatchSize: number;
   private readonly skipDefaultIndexes?: boolean;
   private readonly indexes: OracleCreateIndexOptions[];
+  private readonly vectorRegistryTableName: string;
 
   constructor(config: OracleDomainConfig) {
     super();
@@ -205,6 +207,9 @@ export class MemoryOracle extends MemoryStorage {
     this.messageBatchSize = normalizeBatchSize(config.messageBatchSize, 'messageBatchSize', DEFAULT_MESSAGE_SAVE_BATCH_SIZE);
     this.skipDefaultIndexes = config.skipDefaultIndexes;
     this.indexes = filterIndexesForTables(config.indexes, MemoryOracle.MANAGED_TABLES);
+    this.vectorRegistryTableName = config.vectorRegistryTableName
+      ? normalizeIdentifier(config.vectorRegistryTableName, 'vector registry table name')
+      : DEFAULT_VECTOR_REGISTRY_TABLE;
   }
 
   async init(): Promise<void> {
@@ -486,19 +491,30 @@ export class MemoryOracle extends MemoryStorage {
   async saveMessages({ messages }: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messages.length === 0) return { messages: [] };
 
-    const threadId = messages[0]?.threadId;
-    if (!threadId) {
-      throw this.storageError('SAVE_MESSAGES', 'FAILED', {}, new Error('Thread ID is required'), ErrorCategory.USER);
-    }
-
-    const thread = await this.getThreadById({ threadId });
-    if (!thread) {
-      throw this.storageError('SAVE_MESSAGES', 'FAILED', { threadId }, new Error(`Thread ${threadId} not found`), ErrorCategory.USER);
-    }
+    const threadIds = new Set<string>();
 
     try {
+      for (const message of messages) {
+        if (!message.threadId || !message.resourceId) {
+          throw this.storageError(
+            'SAVE_MESSAGES',
+            'FAILED',
+            { messageId: message.id },
+            new Error('Each message must include threadId and resourceId'),
+            ErrorCategory.USER,
+          );
+        }
+        threadIds.add(message.threadId);
+      }
+
+      for (const threadId of threadIds) {
+        const thread = await this.getThreadById({ threadId });
+        if (!thread) {
+          throw this.storageError('SAVE_MESSAGES', 'FAILED', { threadId }, new Error(`Thread ${threadId} not found`), ErrorCategory.USER);
+        }
+      }
+
       await this.db.tx(async client => {
-        const threadIdsToUpdate = new Set<string>();
         const stringExecuteManyOptions: oracledb.ExecuteManyOptions = {
           bindDefs: {
             id: { type: oracledb.STRING, maxSize: 512 },
@@ -520,19 +536,20 @@ export class MemoryOracle extends MemoryStorage {
         const clobMessageBinds: MessageSaveBind[] = [];
 
         for (const message of messages) {
-          if (!message.threadId || !message.resourceId) {
+          const messageThreadId = message.threadId;
+          const messageResourceId = message.resourceId;
+          if (!messageThreadId || !messageResourceId) {
             throw new Error('Each message must include threadId and resourceId');
           }
-          threadIdsToUpdate.add(message.threadId);
           const content = serializeContent(message.content);
           const bind = {
             id: message.id,
-            threadId: message.threadId,
+            threadId: messageThreadId,
             content,
             role: message.role,
             type: message.type ?? 'v2',
             createdAt: message.createdAt ?? new Date(),
-            resourceId: message.resourceId,
+            resourceId: messageResourceId,
           };
           if (Buffer.byteLength(content, 'utf8') <= MAX_MESSAGE_STRING_BIND_BYTES) {
             stringMessageBinds.push(bind);
@@ -553,7 +570,7 @@ export class MemoryOracle extends MemoryStorage {
         const updatedAt = new Date();
         await client.executeMany(
           `UPDATE ${this.table(TABLE_THREADS)} SET ${THREAD_UPDATED_AT} = :updatedAt WHERE id = :threadId`,
-          Array.from(threadIdsToUpdate, messageThreadId => ({ updatedAt, threadId: messageThreadId })),
+          Array.from(threadIds, messageThreadId => ({ updatedAt, threadId: messageThreadId })),
         );
       });
 
@@ -561,7 +578,7 @@ export class MemoryOracle extends MemoryStorage {
       return { messages: list.get.all.db() };
     } catch (error) {
       if (error instanceof MastraError) throw error;
-      throw this.storageError('SAVE_MESSAGES', 'FAILED', { threadId }, error);
+      throw this.storageError('SAVE_MESSAGES', 'FAILED', { threadIds: Array.from(threadIds).join(',') }, error);
     }
   }
 
@@ -658,6 +675,7 @@ export class MemoryOracle extends MemoryStorage {
           }
 
           await client.none(`DELETE FROM ${this.table(TABLE_MESSAGES)} WHERE id IN (${sql})`, binds);
+          await this.deleteSemanticRecallVectorsByMessageIds(client, chunk);
         }
 
         const updatedAt = new Date();
@@ -1961,21 +1979,24 @@ export class MemoryOracle extends MemoryStorage {
     return rows(result).map(row => this.parseMessage(row as MessageRow));
   }
 
-  private async deleteSemanticRecallVectors(client: OracleTxClient, threadId: string): Promise<void> {
-    let vectorTables: Array<{ tableName: string }>;
+  private async semanticRecallVectorTables(client: OracleTxClient): Promise<Array<{ tableName: string }>> {
     try {
-      vectorTables = await client.manyOrNone<{ tableName: string }>(
+      return await client.manyOrNone<{ tableName: string }>(
         `
         SELECT table_name AS "tableName"
-        FROM ${qualifyName('MASTRA_VECTOR_INDEXES', this.schemaName)}
+        FROM ${qualifyName(this.vectorRegistryTableName, this.schemaName)}
         WHERE LOWER(index_name) = 'memory_messages'
            OR LOWER(index_name) LIKE 'memory_messages\\_%' ESCAPE '\\'
            OR LOWER(index_name) LIKE 'mastra_memory\\_%' ESCAPE '\\'`,
       );
     } catch (error) {
-      if (isOracleErrorCode(error, [-942])) return;
+      if (isOracleErrorCode(error, [-942])) return [];
       throw error;
     }
+  }
+
+  private async deleteSemanticRecallVectors(client: OracleTxClient, threadId: string): Promise<void> {
+    const vectorTables = await this.semanticRecallVectorTables(client);
 
     for (const { tableName } of vectorTables) {
       try {
@@ -1983,6 +2004,25 @@ export class MemoryOracle extends MemoryStorage {
           `DELETE FROM ${qualifyName(tableName, this.schemaName)}
            WHERE JSON_VALUE(metadata, '$.thread_id' RETURNING VARCHAR2(512) NULL ON ERROR) = :threadId`,
           { threadId },
+        );
+      } catch (error) {
+        if (!isOracleErrorCode(error, [-942])) throw error;
+      }
+    }
+  }
+
+  private async deleteSemanticRecallVectorsByMessageIds(client: OracleTxClient, messageIds: readonly string[]): Promise<void> {
+    if (messageIds.length === 0) return;
+
+    const vectorTables = await this.semanticRecallVectorTables(client);
+    const { sql, binds } = inClause('semanticMessageId', messageIds);
+
+    for (const { tableName } of vectorTables) {
+      try {
+        await client.none(
+          `DELETE FROM ${qualifyName(tableName, this.schemaName)}
+           WHERE JSON_VALUE(metadata, '$.message_id' RETURNING VARCHAR2(512) NULL ON ERROR) IN (${sql})`,
+          binds,
         );
       } catch (error) {
         if (!isOracleErrorCode(error, [-942])) throw error;
@@ -2196,7 +2236,7 @@ export class MemoryOracle extends MemoryStorage {
   }
 }
 
-function inClause(prefix: string, values: string[]): { sql: string; binds: Record<string, unknown> } {
+function inClause(prefix: string, values: readonly string[]): { sql: string; binds: Record<string, unknown> } {
   const binds: Record<string, unknown> = {};
   const placeholders = values.map((value, index) => {
     const key = `${prefix}${index}`;

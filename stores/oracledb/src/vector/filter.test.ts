@@ -60,7 +60,18 @@ describe('buildMetadataWhereClause', () => {
 
     expect(filter.sql).toContain('REGEXP_LIKE');
     expect(filter.sql).toContain('LIKE');
-    expect(filter.binds).toEqual({ b0: 'oracle.*database', b1: 'vector\\_search' });
+    expect(filter.sql).toContain("JSON_EXISTS(metadata, '$.text[*]?(@ == $b2)' PASSING :b2 AS \"b2\")");
+    expect(filter.binds).toEqual({ b0: 'oracle.*database', b1: 'vector\\_search', b2: 'Vector_Search' });
+  });
+
+  it('supports string contains against scalar and array metadata', () => {
+    const filter = buildMetadataWhereClause({
+      tags: { $contains: 'premium' },
+    });
+
+    expect(filter.sql).toContain("LOWER(JSON_VALUE(metadata, '$.tags' RETURNING VARCHAR2(4000) NULL ON ERROR)) LIKE '%' || :b0 || '%'");
+    expect(filter.sql).toContain("JSON_EXISTS(metadata, '$.tags[*]?(@ == $b1)' PASSING :b1 AS \"b1\")");
+    expect(filter.binds).toEqual({ b0: 'premium', b1: 'premium' });
   });
 
   it('normalizes boolean binds for VARCHAR2 JSON comparisons', () => {

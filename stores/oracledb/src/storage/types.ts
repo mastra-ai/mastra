@@ -28,6 +28,12 @@ export interface OracleStoreConfig extends OracleConnectionConfig, Pick<MastraCo
    * multiple logical Mastra deployments share the same Oracle schema.
    */
   migrationTableName?: string;
+  /**
+   * OracleVector registry table used to discover semantic-recall vector tables
+   * during message/thread deletion. Set this to the same value as
+   * OracleVector.registryTableName when that option is customized.
+   */
+  vectorRegistryTableName?: string;
 }
 
 // Each storage domain receives the same normalized Oracle runtime context from
@@ -38,6 +44,7 @@ export interface OracleDomainConfig {
   messageBatchSize?: number;
   skipDefaultIndexes?: boolean;
   indexes?: OracleCreateIndexOptions[];
+  vectorRegistryTableName?: string;
 }
 
 export type { OracleCreateIndexOptions, OracleIndexType } from './db';

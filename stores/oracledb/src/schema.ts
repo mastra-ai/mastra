@@ -484,6 +484,8 @@ function vectorIndexStatements(
   validateMetricForFormat(metric, vectorFormat);
   const tableName = tableNameForIndex(indexName, tablePrefix);
   const indexConfig: OracleVectorIndexConfig = { type: 'none', accuracy: 95, ...vectorIndex.indexConfig };
+  const registryIndexConfig: OracleVectorIndexConfig =
+    vectorIndex.buildIndex === false ? { type: 'none', accuracy: 95 } : indexConfig;
   const statements = [
     `CREATE TABLE ${qualifyName(tableName, schemaName)} (
   vector_id VARCHAR2(512) PRIMARY KEY,
@@ -498,9 +500,9 @@ function vectorIndexStatements(
       tableName,
       dimension,
       metric,
-      indexType: indexConfig.type ?? 'none',
+      indexType: registryIndexConfig.type ?? 'none',
       vectorFormat,
-      accuracy: indexConfig.accuracy ?? 95,
+      accuracy: registryIndexConfig.accuracy ?? 95,
       schemaName,
     }),
   ];
