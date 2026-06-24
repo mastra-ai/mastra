@@ -139,7 +139,6 @@ test('takes the condition-selected branch after a HARD reload of the paused :run
   await page.goto(`/workflows/complexWorkflow/graph/${runId}`);
   await runNextStep(page);
   await page.reload();
-  await page.waitForTimeout(1000);
 
   // The engine-selected arm (long-text) must be the one that ran; short-text never ran.
   await expect(stepNode(page, 'long-text')).toHaveAttribute('data-workflow-step-status', 'success', {

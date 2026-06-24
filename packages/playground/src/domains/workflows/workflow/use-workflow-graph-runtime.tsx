@@ -1,3 +1,4 @@
+import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
 import type { Edge, EdgeProps, NodeProps } from '@xyflow/react';
 import { useContext, useMemo } from 'react';
 
@@ -13,22 +14,35 @@ import type { WorkflowBoundaryNode as WorkflowBoundaryNodeType, WorkflowStepNode
 const getScopedStepId = (stepId: string | undefined, workflowName?: string) =>
   stepId && workflowName ? `${workflowName}.${stepId}` : stepId;
 
-export const useWorkflowGraphRuntime = ({ edges, workflowName }: { edges: Edge[]; workflowName?: string }) => {
+export const useWorkflowGraphRuntime = ({
+  edges,
+  workflowName,
+  stepGraph,
+}: {
+  edges: Edge[];
+  workflowName?: string;
+  stepGraph?: SerializedStepFlowEntry[];
+}) => {
   const { steps } = useCurrentRun();
   const workflowRun = useContext(WorkflowRunContext);
-  const workflowSucceeded = workflowRun.result?.status === 'success';
+  // For a nested graph the End edge should light when that nested workflow's own
+  // step succeeds, not when the entire parent run finishes. For the top-level graph
+  // there is no `workflowName`, so fall back to the overall run status.
+  const workflowSucceeded = workflowName
+    ? steps[workflowName]?.status === 'success'
+    : workflowRun.result?.status === 'success';
   const stepsFlow = useMemo(() => buildStepsFlow(edges), [edges]);
   // A conditional resolves to a single arm; the other arms never enter run state
   // (their status stays `undefined`, not `skipped`). To keep their edges neutral
   // we detect bypassed arms from the static graph the same way the step controls do.
   const isArmBypassed = useMemo(() => {
     const stepSuccessors = buildStepSuccessors(stepsFlow);
-    const { conditionalStepIds } = collectGraphStepFlags(workflowRun.workflow?.stepGraph);
+    const { conditionalStepIds } = collectGraphStepFlags(stepGraph ?? workflowRun.workflow?.stepGraph);
     const isStepSuccess = (stepId: string) => steps[getScopedStepId(stepId, workflowName) ?? '']?.status === 'success';
     return (stepId: string | undefined) =>
       Boolean(stepId) &&
       isBranchArmBypassed({ stepId: stepId!, conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess });
-  }, [stepsFlow, workflowRun.workflow?.stepGraph, steps, workflowName]);
+  }, [stepsFlow, stepGraph, workflowRun.workflow?.stepGraph, steps, workflowName]);
   const nodeTypes = useMemo(
     () => ({
       [WORKFLOW_STEP_NODE_TYPE]: (props: NodeProps<WorkflowStepNode>) => (

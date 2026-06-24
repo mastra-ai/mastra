@@ -107,19 +107,26 @@ export function useWaitingStepKey(): string | undefined {
   const isPaused = result?.status === 'paused';
 
   const isStepSuccess = useCallback((stepId: string) => steps?.[stepId]?.status === 'success', [steps]);
+  // A non-truthy conditional arm is rehydrated as 'skipped' and never produces a successor join,
+  // so isBranchArmBypassed can't infer it. Treat both 'success' and 'skipped' as resolved when
+  // deciding which step still needs to run, otherwise the controls re-select the skipped arm.
+  const isStepResolved = useCallback(
+    (stepId: string) => steps?.[stepId]?.status === 'success' || steps?.[stepId]?.status === 'skipped',
+    [steps],
+  );
   const isStepBypassed = useCallback(
     (stepId: string) => isBranchArmBypassed({ stepId, conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess }),
     [conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess],
   );
 
   return useMemo(
-    () => (isPaused ? selectNextStepKey({ stepNodesInOrder, isStepSuccess, isStepBypassed }) : undefined),
-    [isPaused, stepNodesInOrder, isStepSuccess, isStepBypassed],
+    () => (isPaused ? selectNextStepKey({ stepNodesInOrder, isStepSuccess: isStepResolved, isStepBypassed }) : undefined),
+    [isPaused, stepNodesInOrder, isStepResolved, isStepBypassed],
   );
 }
 
 export function useNextPerStep() {
-  const { result, runId, workflowId, workflow, setDebugMode, timeTravelWorkflowStream } =
+  const { result, runId, workflowId, workflow, payload, setDebugMode, timeTravelWorkflowStream } =
     useContext(WorkflowRunContext);
   const requestContext = useMergedRequestContext();
 
@@ -129,6 +136,10 @@ export function useNextPerStep() {
   const steps = result?.steps;
 
   const isStepSuccess = useCallback((stepId: string) => steps?.[stepId]?.status === 'success', [steps]);
+  const isStepResolved = useCallback(
+    (stepId: string) => steps?.[stepId]?.status === 'success' || steps?.[stepId]?.status === 'skipped',
+    [steps],
+  );
   const isStepBypassed = useCallback(
     (stepId: string) => isBranchArmBypassed({ stepId, conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess }),
     [conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess],
@@ -136,14 +147,21 @@ export function useNextPerStep() {
 
   const nextStepKey = useWaitingStepKey();
 
-  const stepPayload = useMemo(
-    () => buildNextStepInput({ nextStepKey, stepsFlow, steps }),
-    [nextStepKey, stepsFlow, steps],
-  );
+  const stepPayload = useMemo(() => {
+    const input = buildNextStepInput({ nextStepKey, stepsFlow, steps });
+    if (input) return input;
+    // A predecessor-less step (the first step of a paused run with no completed steps) has no
+    // upstream output to build from, so buildNextStepInput returns undefined and the run can never
+    // advance. Seed it from the run's own input/payload so the first step becomes runnable.
+    if (nextStepKey && (stepsFlow[nextStepKey]?.length ?? 0) === 0) {
+      return { hasMultiSteps: false, input: result?.input ?? payload };
+    }
+    return undefined;
+  }, [nextStepKey, stepsFlow, steps, result?.input, payload]);
 
   const isLastStep = useMemo(
-    () => isLastRunnableStep({ nextStepKey, stepNodesInOrder, isStepSuccess, isStepBypassed }),
-    [nextStepKey, stepNodesInOrder, isStepSuccess, isStepBypassed],
+    () => isLastRunnableStep({ nextStepKey, stepNodesInOrder, isStepSuccess: isStepResolved, isStepBypassed }),
+    [nextStepKey, stepNodesInOrder, isStepResolved, isStepBypassed],
   );
 
   const canRunNextStep = Boolean(nextStepKey && stepPayload);

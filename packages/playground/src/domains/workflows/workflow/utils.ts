@@ -17,19 +17,25 @@ const getWorkflowConditionNodeId = (conditionId: string) => `condition-node-${co
 const getWorkflowEdgeId = (source: string, target: string, domain = 'step') => `edge-${domain}-${source}-${target}`;
 
 const normalizeDuplicateEdgeIds = (edges: Edge[]): Edge[] => {
-  const seenEdgeIds = new Map<string, number>();
+  const usedEdgeIds = new Set<string>();
 
   return edges.map(edge => {
-    const seenCount = seenEdgeIds.get(edge.id) ?? 0;
-    seenEdgeIds.set(edge.id, seenCount + 1);
-
-    if (seenCount === 0) {
+    if (!usedEdgeIds.has(edge.id)) {
+      usedEdgeIds.add(edge.id);
       return edge;
     }
 
+    let suffix = 1;
+    let nextId = `${edge.id}-${suffix}`;
+    while (usedEdgeIds.has(nextId)) {
+      suffix += 1;
+      nextId = `${edge.id}-${suffix}`;
+    }
+    usedEdgeIds.add(nextId);
+
     return {
       ...edge,
-      id: `${edge.id}-${seenCount}`,
+      id: nextId,
     };
   });
 };
@@ -607,7 +613,10 @@ export const constructNodesAndEdges = ({
       target: nodeId,
       data: {
         boundaryPayload: 'workflow-input',
-        nextStepId: nodes.find(node => node.id === nodeId)?.data.stepId ?? nodeId,
+        nextStepId: (() => {
+          const targetNode = nodes.find(node => node.id === nodeId);
+          return targetNode?.data.stepId ?? targetNode?.data.nextStepId ?? nodeId;
+        })(),
       },
       ...defaultEdgeOptions,
     })),

@@ -21,7 +21,7 @@ export function WorkflowNestedGraph({ stepGraph, open, workflowName }: WorkflowN
   const [isMounted, setIsMounted] = useState(false);
   const [nodes, _, onNodesChange] = useNodesState(initialNodes);
   const [edges] = useEdgesState(initialEdges);
-  const { edgeTypes, nodeTypes, styledEdges } = useWorkflowGraphRuntime({ edges, workflowName });
+  const { edgeTypes, nodeTypes, styledEdges } = useWorkflowGraphRuntime({ edges, workflowName, stepGraph });
 
   useEffect(() => {
     if (open) {

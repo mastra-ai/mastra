@@ -1,5 +1,7 @@
 import type { GetWorkflowResponse, ListWorkflowRunsResponse } from '@mastra/client-js';
-import type { WorkflowRunState, WorkflowRunStatus } from '@mastra/core/workflows';
+
+type WorkflowRunSnapshot = Exclude<ListWorkflowRunsResponse['runs'][number]['snapshot'], string>;
+type WorkflowRunStatus = WorkflowRunSnapshot['status'];
 
 export const WORKFLOW_ID = 'badge-workflow';
 const WORKFLOW_NAME = 'Badge Workflow';
@@ -8,11 +10,11 @@ const WORKFLOW_NAME = 'Badge Workflow';
 export const badgeWorkflow = {
   name: WORKFLOW_NAME,
   stepGraph: [{ type: 'step', step: { id: 'step-a', description: '' } }],
-} as unknown as GetWorkflowResponse;
+} satisfies Pick<GetWorkflowResponse, 'name' | 'stepGraph'>;
 
 const RUN_BASE = new Date(2026, 4, 29, 16, 19, 44);
 
-function snapshot(runId: string, status: WorkflowRunStatus): WorkflowRunState {
+function snapshot(runId: string, status: WorkflowRunStatus): WorkflowRunSnapshot {
   return {
     runId,
     status,
@@ -25,7 +27,7 @@ function snapshot(runId: string, status: WorkflowRunStatus): WorkflowRunState {
     resumeLabels: {},
     waitingPaths: {},
     timestamp: RUN_BASE.getTime(),
-  } as unknown as WorkflowRunState;
+  } satisfies WorkflowRunSnapshot;
 }
 
 export const RUN_ID = 'badge-run-1';

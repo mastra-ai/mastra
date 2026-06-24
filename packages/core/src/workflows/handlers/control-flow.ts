@@ -437,9 +437,9 @@ export async function executeConditional(
       stepResults[armId] = {
         status: 'skipped',
         payload: existing.payload ?? {},
-        startedAt: (existing as any)?.startedAt ?? Date.now(),
+        startedAt: existing.startedAt ?? Date.now(),
         endedAt: Date.now(),
-      } as unknown as StepResult<any, any, any, any>;
+      };
     });
   }
 

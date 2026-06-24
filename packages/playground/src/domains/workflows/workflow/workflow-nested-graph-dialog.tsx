@@ -29,7 +29,7 @@ export function WorkflowNestedGraphDialog({ stepName, fullStep, stepGraph }: Wor
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-4xl w-full z-10 !bg-red-500">
+        <DialogContent className="max-w-4xl w-full z-10">
           <DialogHeader>
             <DialogTitle>{stepName} workflow</DialogTitle>
             <DialogDescription>View the nested workflow graph for this step</DialogDescription>

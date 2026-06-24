@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { GetWorkflowResponse } from '@mastra/client-js';
+import type { GetWorkflowResponse, GetWorkflowRunByIdResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
@@ -19,7 +19,6 @@ import {
   successfulRunState,
   suspendedRunState,
 } from './fixtures/workflow-run-states';
-import type { GetWorkflowRunByIdResponse } from '@mastra/client-js';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';

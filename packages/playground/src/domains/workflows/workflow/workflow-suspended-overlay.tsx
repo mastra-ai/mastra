@@ -24,7 +24,10 @@ export function WorkflowSuspendedOverlay() {
   // surface the steps rather than suppressing them on the stale snapshot.
   const isViewingStoredRun = Boolean(routeRunId);
   const storedRunIsSuspended = runSnapshot?.status === 'suspended';
-  const liveResultIsSuspended = result?.status === 'suspended';
+  // The live `result` may still belong to a previously viewed run while the new route run
+  // hydrates, so only trust the live-suspended fallback when the live run matches the route run.
+  const liveResultMatchesRouteRun = Boolean(routeRunId && runId && routeRunId === runId);
+  const liveResultIsSuspended = liveResultMatchesRouteRun && result?.status === 'suspended';
 
   if (
     isStreamingWorkflow ||
