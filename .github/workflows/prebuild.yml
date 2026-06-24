@@ -83,6 +83,7 @@ jobs:
       test_files: ${{ steps.compute.outputs.test_files }}
       affected_store_tests: ${{ steps.compute.outputs.affected_store_tests }}
       affected_workspace_tests: ${{ steps.compute.outputs.affected_workspace_tests }}
+      affected_memory_tests: ${{ steps.compute.outputs.affected_memory_tests }}
     permissions:
       contents: read
     steps:
@@ -109,6 +110,7 @@ jobs:
             echo "test_files=" >> $GITHUB_OUTPUT
             echo "affected_store_tests=false" >> $GITHUB_OUTPUT
             echo "affected_workspace_tests=false" >> $GITHUB_OUTPUT
+            echo "affected_memory_tests=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
@@ -132,6 +134,9 @@ jobs:
             const affectedWorkspaceTests = (data.affectedTests || []).some(file => file.startsWith('workspaces/'));
             fs.appendFileSync(process.env.GITHUB_OUTPUT, \`affected_workspace_tests=\${affectedWorkspaceTests}\n\`);
 
+            const affectedMemoryTests = (data.affectedTests || []).some(file => file.startsWith('packages/memory/integration-tests/'));
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, \`affected_memory_tests=\${affectedMemoryTests}\n\`);
+
             console.error(\`Affected: \${count}/\${total} tests (\${(ratio * 100).toFixed(1)}%)\`);
 
             if (ratio > 0.5) {
@@ -153,6 +158,7 @@ jobs:
         run: |
           mkdir -p /tmp/affected-outputs
           echo "${{ steps.compute.outputs.affected_workspace_tests }}" > /tmp/affected-outputs/affected_workspace_tests.txt
+          echo "${{ steps.compute.outputs.affected_memory_tests }}" > /tmp/affected-outputs/affected_memory_tests.txt
 
       - name: Upload affected-tests artifact
         if: always()
@@ -343,11 +349,11 @@ jobs:
   memory-check-changes:
     name: Detect memory changes
     if: github.repository == 'mastra-ai/mastra' && needs.changes.outputs.has_code == 'true'
-    needs: changes
+    needs: [changes, affected-tests]
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 10
     outputs:
-      changed: ${{ steps.changes.outputs.changed == 'true' || steps.integration-test-manifest.outputs.changed == 'true' }}
+      memory-changed: ${{ steps.check.outputs.memory-changed }}
     permissions:
       contents: read
     steps:
@@ -355,32 +361,38 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup pnpm and Node.js
-        uses: ./.github/actions/setup-pnpm-node
-        with:
-          install-dependencies: 'false'
-
-      - name: Check for memory package changes using Turborepo
-        id: changes
-        uses: ./.github/actions/turbo-changed
-        with:
-          packages: '@mastra/memory'
-          tasks: 'build,test'
-          base-ref: 'origin/main'
-
-      - name: Check for memory integration test manifest changes
-        id: integration-test-manifest
+      - name: Check for memory changes
+        id: check
         run: |
-          if git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" | grep -qx 'packages/memory/integration-tests/package.json'; then
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=false" >> "$GITHUB_OUTPUT"
+          MEMORY_CHANGED=false
+
+          # Run when the affected-tests graph found memory integration test files impacted
+          if [ "${{ needs.affected-tests.outputs.affected_memory_tests }}" = "true" ]; then
+            MEMORY_CHANGED=true
           fi
+
+          # Direct path fallback for changes not covered by the affected-test graph
+          # (memory package configs, integration test setup/config, CI workflow edits).
+          # Core source changes that affect memory integration tests are already caught
+          # by the affected-tests graph via cross-package alias resolution, so they are
+          # not duplicated here.
+          # Ignore markdown-only changes so docs/changelog-only edits don't trigger.
+          DIRECT=$(git diff --name-only \
+            "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" \
+            | grep -vE '\.md$' \
+            | grep -E '^(packages/memory/|\.github/workflows/prebuild\.yml)' \
+            || true)
+
+          if [ -n "$DIRECT" ]; then
+            MEMORY_CHANGED=true
+          fi
+
+          echo "memory-changed=$MEMORY_CHANGED" >> "$GITHUB_OUTPUT"
 
   memory-test:
     name: Memory Tests
     needs: [memory-check-changes, prebuild]
-    if: always() && github.repository == 'mastra-ai/mastra' && needs.memory-check-changes.outputs.changed == 'true' && needs.prebuild.result == 'success'
+    if: always() && github.repository == 'mastra-ai/mastra' && needs.memory-check-changes.outputs.memory-changed == 'true' && needs.prebuild.result == 'success'
     runs-on: starsling-ubuntu-24.04
     permissions:
       contents: read
