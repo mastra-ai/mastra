@@ -246,6 +246,7 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
       const initial = await workflowsStorage.getWorkflowRunById({ runId, workflowName });
       expect(initial).not.toBeNull();
       const createdAtBefore = new Date(initial!.createdAt).getTime();
+      const updatedAtBefore = new Date(initial!.updatedAt).getTime();
 
       // Wait so a reset createdAt would be visibly different, then re-persist the same run
       // (new snapshot, no createdAt passed) the way a later step does.
@@ -268,7 +269,7 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
       // createdAt must not move on re-persist...
       expect(createdAtAfter).toBe(createdAtBefore);
       // ...while updatedAt advances to reflect the new activity.
-      expect(updatedAtAfter).toBeGreaterThan(createdAtAfter);
+      expect(updatedAtAfter).toBeGreaterThan(updatedAtBefore);
     });
 
     it('should delete a workflow run by ID', async () => {

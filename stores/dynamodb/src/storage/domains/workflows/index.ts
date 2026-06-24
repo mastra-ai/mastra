@@ -329,12 +329,24 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
 
     try {
       const now = new Date();
+      const existingRecord = createdAt
+        ? null
+        : await this.service.entities.workflow_snapshot
+            .get({
+              entity: 'workflow_snapshot',
+              workflow_name: workflowName,
+              run_id: runId,
+            })
+            .go();
+      const createdAtValue =
+        createdAt ?? (existingRecord?.data?.createdAt ? new Date(existingRecord.data.createdAt) : now);
+
       const data: WorkflowSnapshotEntityData = {
         entity: 'workflow_snapshot',
         workflow_name: workflowName,
         run_id: runId,
         snapshot: JSON.stringify(snapshot),
-        createdAt: (createdAt ?? now).toISOString(),
+        createdAt: createdAtValue.toISOString(),
         updatedAt: (updatedAt ?? now).toISOString(),
         resourceId,
         ...getTtlProps('workflow_snapshot', this.ttlConfig),

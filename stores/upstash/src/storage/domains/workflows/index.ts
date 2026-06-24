@@ -18,6 +18,15 @@ import { UpstashDB, resolveUpstashConfig } from '../../db';
 import type { UpstashDomainConfig } from '../../db';
 import { getKey } from '../utils';
 
+type WorkflowRunRecord = {
+  workflow_name: string;
+  run_id: string;
+  snapshot: WorkflowRunState | string;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+  resourceId?: string;
+};
+
 export class WorkflowsUpstash extends WorkflowsStorage {
   private client: Redis;
   #db: UpstashDB;
@@ -55,6 +64,43 @@ export class WorkflowsUpstash extends WorkflowsStorage {
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.deleteData({ tableName: TABLE_WORKFLOW_SNAPSHOT });
+  }
+
+  private async getWorkflowRunRecord({
+    namespace,
+    runId,
+    resourceId,
+    workflowName,
+  }: {
+    namespace: string;
+    runId: string;
+    resourceId?: string;
+    workflowName?: string;
+  }) {
+    if (workflowName) {
+      const keyVariants: Array<Record<string, string>> = [
+        ...(resourceId ? [{ namespace, workflow_name: workflowName, run_id: runId, resourceId }] : []),
+        { namespace, workflow_name: workflowName, run_id: runId },
+      ];
+
+      for (const keys of keyVariants) {
+        const data = await this.#db.get<WorkflowRunRecord>({
+          tableName: TABLE_WORKFLOW_SNAPSHOT,
+          keys,
+        });
+        if (data) return data;
+      }
+    }
+
+    const key = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace, workflow_name: workflowName, run_id: runId }) + '*';
+    const keys = await this.#db.scanKeys(key);
+    const workflows = await Promise.all(
+      keys.map(async key => {
+        return this.client.get<WorkflowRunRecord>(key);
+      }),
+    );
+
+    return workflows.find(w => w?.run_id === runId && w?.workflow_name === workflowName) ?? null;
   }
 
   async updateWorkflowResults({
@@ -298,6 +344,11 @@ export class WorkflowsUpstash extends WorkflowsStorage {
   }): Promise<void> {
     const { namespace = 'workflows', workflowName, runId, resourceId, snapshot, createdAt, updatedAt } = params;
     try {
+      const now = new Date();
+      const existingRun = createdAt
+        ? null
+        : await this.getWorkflowRunRecord({ namespace, runId, resourceId, workflowName });
+
       await this.#db.insert({
         tableName: TABLE_WORKFLOW_SNAPSHOT,
         record: {
@@ -306,8 +357,8 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           run_id: runId,
           resourceId,
           snapshot,
-          createdAt: createdAt ?? new Date(),
-          updatedAt: updatedAt ?? new Date(),
+          createdAt: createdAt ?? existingRun?.createdAt ?? now,
+          updatedAt: updatedAt ?? now,
         },
       });
     } catch (error) {
@@ -372,23 +423,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     workflowName?: string;
   }): Promise<WorkflowRun | null> {
     try {
-      const key =
-        getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowName, run_id: runId }) + '*';
-      const keys = await this.#db.scanKeys(key);
-      const workflows = await Promise.all(
-        keys.map(async key => {
-          const data = await this.client.get<{
-            workflow_name: string;
-            run_id: string;
-            snapshot: WorkflowRunState | string;
-            createdAt: string | Date;
-            updatedAt: string | Date;
-            resourceId: string;
-          }>(key);
-          return data;
-        }),
-      );
-      const data = workflows.find(w => w?.run_id === runId && w?.workflow_name === workflowName) as WorkflowRun | null;
+      const data = await this.getWorkflowRunRecord({ namespace: 'workflows', runId, workflowName });
       if (!data) return null;
       return this.parseWorkflowRun(data);
     } catch (error) {

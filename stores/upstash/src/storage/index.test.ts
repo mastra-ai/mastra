@@ -6,6 +6,7 @@ import {
   createDomainDirectTests,
 } from '@internal/storage-test-utils';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
+import type { WorkflowRunState } from '@mastra/core/workflows';
 import { Redis } from '@upstash/redis';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -48,6 +49,20 @@ const createMessage = (thread: StorageThreadType, overrides: Partial<MastraDBMes
     parts: [{ type: 'text', text: 'Test message' }],
     content: 'Test message',
   },
+});
+
+const createWorkflowSnapshot = (runId: string, status: WorkflowRunState['status']): WorkflowRunState => ({
+  runId,
+  status,
+  value: {},
+  context: {},
+  activePaths: [],
+  suspendedPaths: {},
+  activeStepsPath: {},
+  serializedStepGraph: [],
+  waitingPaths: {},
+  resumeLabels: {},
+  timestamp: Date.now(),
 });
 
 afterEach(() => {
@@ -305,5 +320,40 @@ describe('updateMessages keeps msg-idx index in sync', () => {
     const { messages } = await memoryDomain.listMessages({ threadId: sourceThread.id });
     expect(messages).toHaveLength(1);
     expect(messages[0]!.threadId).toBe(sourceThread.id);
+  });
+});
+
+describe('WorkflowsUpstash.persistWorkflowSnapshot', () => {
+  it('preserves createdAt when re-persisting a resource-scoped workflow run', async () => {
+    const workflowsDomain = new WorkflowsUpstash({ client: createTestClient() });
+    await workflowsDomain.init();
+
+    const workflowName = `workflow-${randomUUID()}`;
+    const runId = `run-${randomUUID()}`;
+    const resourceId = `resource-${randomUUID()}`;
+    const createdAt = new Date('2024-01-15T10:00:00.000Z');
+    const updatedAt = new Date('2024-06-01T12:00:00.000Z');
+
+    await workflowsDomain.persistWorkflowSnapshot({
+      workflowName,
+      runId,
+      resourceId,
+      snapshot: createWorkflowSnapshot(runId, 'running'),
+      createdAt,
+      updatedAt: createdAt,
+    });
+
+    await workflowsDomain.persistWorkflowSnapshot({
+      workflowName,
+      runId,
+      resourceId,
+      snapshot: createWorkflowSnapshot(runId, 'success'),
+      updatedAt,
+    });
+
+    const fetched = await workflowsDomain.getWorkflowRunById({ runId, workflowName });
+    expect(fetched?.createdAt.toISOString()).toBe(createdAt.toISOString());
+    expect(fetched?.updatedAt.toISOString()).toBe(updatedAt.toISOString());
+    expect(fetched?.resourceId).toBe(resourceId);
   });
 });
