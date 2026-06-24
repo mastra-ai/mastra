@@ -344,8 +344,8 @@ export class Harness<TState = {}> {
    * Call {@link init} once before creating sessions so shared storage and
    * workspace are ready.
    *
-   * @param id - Stable session identifier (mirrors `SessionRecord.id`). Required.
-   * @param ownerId - Stable session owner (mirrors `SessionRecord.ownerId`). Required.
+   * @param id - Stable session identifier (mirrors `SessionRecord.id`). Defaults to the harness `id`.
+   * @param ownerId - Stable session owner (mirrors `SessionRecord.ownerId`). Defaults to the harness `id`.
    * @param resourceId - Memory resource to bind this session to. Defaults to the harness `resourceId` or `id`.
    */
   async createSession({
@@ -354,10 +354,12 @@ export class Harness<TState = {}> {
     id,
   }: {
     resourceId?: string;
-    id: string;
-    ownerId: string;
-  }): Promise<Session<TState>> {
+    id?: string;
+    ownerId?: string;
+  } = {}): Promise<Session<TState>> {
     const effectiveResourceId = resourceId ?? this.config.resourceId ?? this.config.id;
+    const effectiveSessionId = id ?? this.config.id;
+    const effectiveOwnerId = ownerId ?? this.config.id;
 
     // Get-or-create: a resourceId maps to exactly one durable session per
     // Harness. Asking for the same resource twice returns the same session, so
@@ -369,7 +371,7 @@ export class Harness<TState = {}> {
       return existing;
     }
 
-    const creation = this.#createSessionForResource(ownerId, id, effectiveResourceId);
+    const creation = this.#createSessionForResource(effectiveOwnerId, effectiveSessionId, effectiveResourceId);
     this.#sessionsByResource.set(effectiveResourceId, creation);
     try {
       return await creation;
