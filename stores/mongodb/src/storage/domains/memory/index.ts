@@ -1130,12 +1130,14 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     try {
-      // First, delete all messages associated with the thread
-      const collectionMessages = await this.getCollection(TABLE_MESSAGES);
-      await collectionMessages.deleteMany({ thread_id: threadId });
-      // Then delete the thread itself
-      const collectionThreads = await this.getCollection(TABLE_THREADS);
-      await collectionThreads.deleteOne({ id: threadId });
+      // Delete messages and the thread atomically when the deployment supports
+      // transactions; otherwise this degrades to sequential best-effort.
+      await this.#connector.withTransaction(async session => {
+        const collectionMessages = await this.getCollection(TABLE_MESSAGES);
+        await collectionMessages.deleteMany({ thread_id: threadId }, { session });
+        const collectionThreads = await this.getCollection(TABLE_THREADS);
+        await collectionThreads.deleteOne({ id: threadId }, { session });
+      });
     } catch (error) {
       throw new MastraError(
         {

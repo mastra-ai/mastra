@@ -1,5 +1,7 @@
-import { describe, expect, test } from 'vitest';
+import { Collection, MongoClient } from 'mongodb';
+import { describe, expect, test, vi } from 'vitest';
 import { MongoDBConnector } from './connectors/MongoDBConnector';
+import { MongoDBStore } from './index';
 
 const STANDALONE_URI = process.env.MONGODB_URL || 'mongodb://localhost:27017';
 const REPLICA_SET_URI =
@@ -57,6 +59,49 @@ describe('Hardening: NODE-7556 — transactions (Tranche B)', () => {
       expect(await col.countDocuments({})).toBe(1);
     } finally {
       await connector.close();
+    }
+  });
+
+  test('B2: deleteThread rolls back the message deletion if the thread deletion fails (replica set)', async () => {
+    const store = new MongoDBStore({ id: 'b2', uri: REPLICA_SET_URI, dbName: DB });
+    await store.init();
+    const memory = await store.getStore('memory');
+
+    const threadId = `thr-b2-${Date.now()}`;
+    const resourceId = `res-b2-${Date.now()}`;
+    await memory?.saveThread({
+      thread: { id: threadId, resourceId, title: 't', metadata: {}, createdAt: new Date(), updatedAt: new Date() },
+    });
+    await memory?.saveMessages({
+      messages: [
+        {
+          id: `m-b2-${Date.now()}`,
+          threadId,
+          resourceId,
+          role: 'user',
+          type: 'v2',
+          content: { format: 2, parts: [{ type: 'text', text: 'hi' }] },
+        } as any,
+      ],
+    });
+
+    // Make the thread deleteOne fail AFTER the messages deleteMany runs inside the transaction.
+    const spy = vi.spyOn(Collection.prototype, 'deleteOne').mockRejectedValueOnce(new Error('thread delete boom'));
+    try {
+      await expect(memory?.deleteThread({ threadId })).rejects.toThrow();
+    } finally {
+      spy.mockRestore();
+    }
+
+    // Transaction aborted, so the messages must still be present.
+    const client = new MongoClient(REPLICA_SET_URI);
+    try {
+      await client.connect();
+      const remaining = await client.db(DB).collection('mastra_messages').countDocuments({ thread_id: threadId });
+      expect(remaining).toBe(1);
+    } finally {
+      await client.close();
+      await store.close();
     }
   });
 });
