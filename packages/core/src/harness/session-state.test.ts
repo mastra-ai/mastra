@@ -13,7 +13,7 @@ async function createSession<TState extends Record<string, unknown>>(
     ...config,
   } as HarnessConfig<TState>);
   await harness.init();
-  const session = await harness.createSession();
+  const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
   return { harness, session };
 }
 

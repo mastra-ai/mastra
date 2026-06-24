@@ -2,8 +2,6 @@ import type { StorageThreadType } from '@mastra/core/memory';
 import { Icon } from '@mastra/playground-ui';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { Plus } from 'lucide-react';
-import { useState } from 'react';
 import {
   ThreadList,
   ThreadListEmpty,
@@ -11,7 +9,9 @@ import {
   ThreadListItems,
   ThreadListNewItem,
   ThreadListSeparator,
-} from '@/components/thread-list';
+} from '@mastra/playground-ui/components/ThreadList';
+import { Plus } from 'lucide-react';
+import { useState } from 'react';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useLinkComponent } from '@/lib/framework';
 
