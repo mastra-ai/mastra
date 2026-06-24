@@ -1,5 +1,15 @@
 # @mastra/deployer
 
+## 1.46.1-alpha.1
+
+### Patch Changes
+
+- Add the experimental Signals observability experience to Studio. Introduces a route-driven enterprise topics/signals trace explorer (topic, subtopic, and trace panels) and a reusable scatter plot chart component in `@mastra/playground-ui`, with the reusable Signals UI and data placed behind the playground-ui EE export boundary. The Signals page is gated behind a server-injected `MASTRA_SIGNALS_UI` runtime flag: the Studio HTML exposes `window.MASTRA_SIGNALS_UI`, which the CLI and deployers populate from the `MASTRA_SIGNALS_UI` env var (default off). When disabled, the Signals sidebar item and `/signals` routes are not registered. ([#18138](https://github.com/mastra-ai/mastra/pull/18138))
+
+- Updated dependencies [[`7f9ae70`](https://github.com/mastra-ai/mastra/commit/7f9ae70826b047e5a66218f9e92f20e54a2d791f), [`1505c07`](https://github.com/mastra-ai/mastra/commit/1505c07603f6346bae12aa82f140e8b88ffea9ab), [`e940f09`](https://github.com/mastra-ai/mastra/commit/e940f099ef5d18b403e6f2b4937e086a4da857b1)]:
+  - @mastra/core@1.46.1-alpha.1
+  - @mastra/server@1.46.1-alpha.1
+
 ## 1.46.1-alpha.0
 
 ### Patch Changes
