@@ -69,6 +69,7 @@ export async function createSharedAgent(
   opts: Pick<
     RunLoopScenarioOptions,
     | 'tools'
+    | 'signals'
     | 'instructions'
     | 'memory'
     | 'workspace'
@@ -97,6 +98,7 @@ export async function createSharedAgent(
 async function buildScenarioAgent({
   llm,
   tools,
+  signals,
   instructions,
   memory,
   workspace,
@@ -115,6 +117,7 @@ async function buildScenarioAgent({
   RunLoopScenarioOptions,
   | 'llm'
   | 'tools'
+  | 'signals'
   | 'instructions'
   | 'memory'
   | 'workspace'
@@ -148,6 +151,7 @@ async function buildScenarioAgent({
     instructions: instructions ?? 'You are a test agent driven by scripted AIMock responses.',
     model: modelConfig,
     ...(tools ? { tools } : {}),
+    ...(signals ? { signals } : {}),
     ...(memory ? { memory } : {}),
     ...(workspace ? { workspace } : {}),
     ...(agents ? { agents } : {}),
@@ -199,6 +203,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     fixtures,
     prompt,
     tools,
+    signals,
     instructions,
     stopWhen,
     maxSteps,
@@ -262,6 +267,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     const built = await buildScenarioAgent({
       llm,
       tools,
+      signals,
       instructions,
       memory,
       workspace,

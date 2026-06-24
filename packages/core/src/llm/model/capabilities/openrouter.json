@@ -165,6 +165,7 @@
     "xiaomi/mimo-v2.5",
     "z-ai/glm-4.5v",
     "z-ai/glm-4.6v",
+    "z-ai/glm-5v-turbo",
     "~anthropic/claude-fable-latest",
     "~anthropic/claude-haiku-latest",
     "~anthropic/claude-opus-latest",

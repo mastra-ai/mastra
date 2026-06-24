@@ -2,7 +2,14 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import type { ButtonHTMLAttributes, ChangeEvent, HTMLAttributes, PropsWithChildren, SelectHTMLAttributes } from 'react';
+import type {
+  ButtonHTMLAttributes,
+  ChangeEvent,
+  HTMLAttributes,
+  PropsWithChildren,
+  ReactNode,
+  SelectHTMLAttributes,
+} from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SaveAsDatasetItemDialog } from '../save-as-dataset-item-dialog';
@@ -77,10 +84,14 @@ afterEach(() => {
   cleanup();
 });
 
-function renderDialog(props: Partial<Parameters<typeof SaveAsDatasetItemDialog>[0]> = {}) {
-  const queryClient = new QueryClient({
+function noRetryClient() {
+  return new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
+}
+
+function renderDialog(props: Partial<Parameters<typeof SaveAsDatasetItemDialog>[0]> = {}) {
+  const queryClient = noRetryClient();
   return render(
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
@@ -94,6 +105,14 @@ function renderDialog(props: Partial<Parameters<typeof SaveAsDatasetItemDialog>[
         />
       </QueryClientProvider>
     </MastraReactProvider>,
+  );
+}
+
+function wrap(children: ReactNode) {
+  return (
+    <MastraReactProvider baseUrl={BASE_URL}>
+      <QueryClientProvider client={noRetryClient()}>{children}</QueryClientProvider>
+    </MastraReactProvider>
   );
 }
 
@@ -112,7 +131,7 @@ describe('SaveAsDatasetItemDialog', () => {
 
       rerender(
         <MastraReactProvider baseUrl={BASE_URL}>
-          <QueryClientProvider client={new QueryClient()}>
+          <QueryClientProvider client={noRetryClient()}>
             <SaveAsDatasetItemDialog
               initialInput={'{"foo":1}'}
               initialGroundTruth={'{"answer":true}'}
@@ -144,7 +163,7 @@ describe('SaveAsDatasetItemDialog', () => {
 
       rerender(
         <MastraReactProvider baseUrl={BASE_URL}>
-          <QueryClientProvider client={new QueryClient()}>
+          <QueryClientProvider client={noRetryClient()}>
             <SaveAsDatasetItemDialog
               initialInput={'{"foo":1}'}
               initialGroundTruth={'{"answer":true}'}
@@ -176,7 +195,7 @@ describe('SaveAsDatasetItemDialog', () => {
 
       rerender(
         <MastraReactProvider baseUrl={BASE_URL}>
-          <QueryClientProvider client={new QueryClient()}>
+          <QueryClientProvider client={noRetryClient()}>
             <SaveAsDatasetItemDialog
               initialInput="{}"
               initialGroundTruth=""
@@ -190,7 +209,7 @@ describe('SaveAsDatasetItemDialog', () => {
 
       rerender(
         <MastraReactProvider baseUrl={BASE_URL}>
-          <QueryClientProvider client={new QueryClient()}>
+          <QueryClientProvider client={noRetryClient()}>
             <SaveAsDatasetItemDialog
               initialInput={'{"next":2}'}
               initialGroundTruth={'{"expected":"next"}'}
@@ -208,6 +227,59 @@ describe('SaveAsDatasetItemDialog', () => {
         expect(getEditors()[1].value).toBe('{"expected":"next"}');
         expect(getEditors()[2].value).toBe('{"steps":["next"]}');
       });
+    });
+  });
+
+  it('renders a Tool Mocks editor and seeds it from initialToolMocks', () => {
+    renderDialog({ initialToolMocks: '[{"toolName":"getWeather","args":{"city":"Seattle"},"output":{"temp":52}}]' });
+
+    expect(screen.getByText('Tool Mocks (JSON, optional)')).not.toBeNull();
+    // Editors: 0=input, 1=groundTruth, 2=trajectory, 3=toolMocks
+    expect(getEditors()[3].value).toBe('[{"toolName":"getWeather","args":{"city":"Seattle"},"output":{"temp":52}}]');
+  });
+
+  it('seeds tool mocks from initialToolMocks when the dialog opens', async () => {
+    const { rerender } = renderDialog({ isOpen: false });
+
+    rerender(
+      wrap(
+        <SaveAsDatasetItemDialog
+          initialInput="{}"
+          initialGroundTruth=""
+          initialToolMocks={'[{"toolName":"search","args":{},"output":"ok"}]'}
+          breadcrumb={<span>Trace</span>}
+          isOpen
+          onClose={vi.fn()}
+        />,
+      ),
+    );
+
+    await waitFor(() => {
+      expect(getEditors()[3].value).toBe('[{"toolName":"search","args":{},"output":"ok"}]');
+    });
+  });
+
+  it('preserves user tool-mock edits across re-renders while the dialog stays open', async () => {
+    const { rerender } = renderDialog({ initialToolMocks: '[{"toolName":"search","args":{},"output":"ok"}]' });
+
+    fireEvent.change(getEditors()[3], { target: { value: 'manual mocks' } });
+
+    // A benign re-render with the same props must not clobber the user's edit.
+    rerender(
+      wrap(
+        <SaveAsDatasetItemDialog
+          initialInput="{}"
+          initialGroundTruth=""
+          initialToolMocks={'[{"toolName":"search","args":{},"output":"ok"}]'}
+          breadcrumb={<span>Trace</span>}
+          isOpen
+          onClose={vi.fn()}
+        />,
+      ),
+    );
+
+    await waitFor(() => {
+      expect(getEditors()[3].value).toBe('manual mocks');
     });
   });
 });

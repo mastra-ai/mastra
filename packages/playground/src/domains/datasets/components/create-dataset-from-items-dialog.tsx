@@ -59,6 +59,9 @@ export function CreateDatasetFromItemsDialog({
           datasetId: dataset.id,
           input: item.input,
           groundTruth: item.groundTruth,
+          expectedTrajectory: item.expectedTrajectory,
+          toolMocks: item.toolMocks,
+          requestContext: item.requestContext,
           metadata: item.metadata as Record<string, unknown> | undefined,
         });
         setProgress(i + 1);

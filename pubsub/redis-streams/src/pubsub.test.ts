@@ -640,4 +640,59 @@ describe('RedisStreamsPubSub', () => {
       expect(await ps.getLeaseOwner(`lease-${randomUUID()}`)).toBeUndefined();
     });
   });
+
+  describe('localOnly publish', () => {
+    it('delivers to subscribers in the same process without round-tripping through Redis', async () => {
+      const ps = createPubSub();
+      const topic = `t-${randomUUID()}`;
+      const a = captureCalls();
+
+      await ps.subscribe(topic, a.cbAutoAck);
+
+      // Payload carries a live class instance — if this hit Redis it would
+      // be JSON-serialized and lose its prototype on the way back.
+      class Holder {
+        constructor(public readonly value: string) {}
+        describe() {
+          return `holder(${this.value})`;
+        }
+      }
+      const holder = new Holder('alpha');
+      await ps.publish(topic, makeEvent({ type: 'local', data: { holder } }), { localOnly: true });
+
+      await waitFor(() => a.calls.length === 1);
+      const delivered = a.calls[0]!.event.data.holder as Holder;
+      expect(delivered).toBe(holder);
+      expect(delivered.describe()).toBe('holder(alpha)');
+    });
+
+    it('does not leak local-only events to other processes', async () => {
+      const psA = createPubSub();
+      const psB = createPubSub();
+      const topic = `t-${randomUUID()}`;
+      const remote = captureCalls();
+
+      await psB.subscribe(topic, remote.cbAutoAck);
+
+      await psA.publish(topic, makeEvent({ type: 'private' }), { localOnly: true });
+
+      // psB shares the Redis stream but should never see a localOnly publish.
+      await new Promise(r => setTimeout(r, 250));
+      expect(remote.calls.length).toBe(0);
+    });
+
+    it('unsubscribe stops local delivery too', async () => {
+      const ps = createPubSub();
+      const topic = `t-${randomUUID()}`;
+      const a = captureCalls();
+
+      await ps.subscribe(topic, a.cbAutoAck);
+      await ps.unsubscribe(topic, a.cbAutoAck);
+
+      await ps.publish(topic, makeEvent(), { localOnly: true });
+
+      await new Promise(r => setTimeout(r, 100));
+      expect(a.calls.length).toBe(0);
+    });
+  });
 });

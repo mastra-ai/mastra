@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "1.15.1-alpha.3",
+  "version": "1.15.2-alpha.0",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -12,7 +12,6 @@
   "exports": {
     ".": "./dist/index.js",
     "./package.json": "./package.json",
-    "./telemetry-loader": "./dist/commands/dev/telemetry-loader.js",
     "./dist/*": [
       "./dist/*",
       "./dist/*.js"
