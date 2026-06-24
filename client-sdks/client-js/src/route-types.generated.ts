@@ -85822,6 +85822,21 @@ export type GetDatasetsDatasetIdItems_Response = {
     input: unknown;
     groundTruth?: unknown | undefined;
     expectedTrajectory?: unknown | undefined;
+    /** Ordered item-level static tool mocks served in place of executing the real tool */
+    toolMocks?:
+      | {
+          /** Name of the tool this mock applies to */
+          toolName: string;
+          /** Arguments to match against the tool call */
+          args: {
+            [key: string]: unknown;
+          };
+          /** Output served to the agent when matched */
+          output: unknown;
+          /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+          matchArgs?: ('strict' | 'ignore') | undefined;
+        }[]
+      | undefined;
     requestContext?:
       | {
           [key: string]: unknown;
@@ -85836,7 +85851,7 @@ export type GetDatasetsDatasetIdItems_Response = {
     source?:
       | {
           /** How this item was created */
-          type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+          type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
           /** Reference identifier (e.g., trace id, csv filename) */
           referenceId?: string | undefined;
         }
@@ -86134,6 +86149,21 @@ export type PostDatasetsDatasetIdItems_Body = {
         | undefined
       )
     | null;
+  /** Ordered item-level static tool mocks served in place of executing the real tool */
+  toolMocks?:
+    | {
+        /** Name of the tool this mock applies to */
+        toolName: string;
+        /** Arguments to match against the tool call */
+        args: {
+          [key: string]: unknown;
+        };
+        /** Output served to the agent when matched */
+        output: unknown;
+        /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+        matchArgs?: ('strict' | 'ignore') | undefined;
+      }[]
+    | undefined;
   /** Request context preset for this item */
   requestContext?:
     | {
@@ -86150,7 +86180,7 @@ export type PostDatasetsDatasetIdItems_Body = {
   source?:
     | {
         /** How this item was created */
-        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
         /** Reference identifier (e.g., trace id, csv filename) */
         referenceId?: string | undefined;
       }
@@ -86164,6 +86194,21 @@ export type PostDatasetsDatasetIdItems_Response = {
   input: unknown;
   groundTruth?: unknown | undefined;
   expectedTrajectory?: unknown | undefined;
+  /** Ordered item-level static tool mocks served in place of executing the real tool */
+  toolMocks?:
+    | {
+        /** Name of the tool this mock applies to */
+        toolName: string;
+        /** Arguments to match against the tool call */
+        args: {
+          [key: string]: unknown;
+        };
+        /** Output served to the agent when matched */
+        output: unknown;
+        /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+        matchArgs?: ('strict' | 'ignore') | undefined;
+      }[]
+    | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -86178,7 +86223,7 @@ export type PostDatasetsDatasetIdItems_Response = {
   source?:
     | {
         /** How this item was created */
-        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
         /** Reference identifier (e.g., trace id, csv filename) */
         referenceId?: string | undefined;
       }
@@ -86468,6 +86513,21 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
           | undefined
         )
       | null;
+    /** Ordered item-level static tool mocks served in place of executing the real tool */
+    toolMocks?:
+      | {
+          /** Name of the tool this mock applies to */
+          toolName: string;
+          /** Arguments to match against the tool call */
+          args: {
+            [key: string]: unknown;
+          };
+          /** Output served to the agent when matched */
+          output: unknown;
+          /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+          matchArgs?: ('strict' | 'ignore') | undefined;
+        }[]
+      | undefined;
     requestContext?:
       | {
           [key: string]: unknown;
@@ -86482,7 +86542,7 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
     source?:
       | {
           /** How this item was created */
-          type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+          type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
           /** Reference identifier (e.g., trace id, csv filename) */
           referenceId?: string | undefined;
         }
@@ -86498,6 +86558,21 @@ export type PostDatasetsDatasetIdItemsBatch_Response = {
     input: unknown;
     groundTruth?: unknown | undefined;
     expectedTrajectory?: unknown | undefined;
+    /** Ordered item-level static tool mocks served in place of executing the real tool */
+    toolMocks?:
+      | {
+          /** Name of the tool this mock applies to */
+          toolName: string;
+          /** Arguments to match against the tool call */
+          args: {
+            [key: string]: unknown;
+          };
+          /** Output served to the agent when matched */
+          output: unknown;
+          /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+          matchArgs?: ('strict' | 'ignore') | undefined;
+        }[]
+      | undefined;
     requestContext?:
       | {
           [key: string]: unknown;
@@ -86512,7 +86587,7 @@ export type PostDatasetsDatasetIdItemsBatch_Response = {
     source?:
       | {
           /** How this item was created */
-          type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+          type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
           /** Reference identifier (e.g., trace id, csv filename) */
           referenceId?: string | undefined;
         }
@@ -86599,6 +86674,21 @@ export type GetDatasetsDatasetIdItemsItemId_Response = {
   input: unknown;
   groundTruth?: unknown | undefined;
   expectedTrajectory?: unknown | undefined;
+  /** Ordered item-level static tool mocks served in place of executing the real tool */
+  toolMocks?:
+    | {
+        /** Name of the tool this mock applies to */
+        toolName: string;
+        /** Arguments to match against the tool call */
+        args: {
+          [key: string]: unknown;
+        };
+        /** Output served to the agent when matched */
+        output: unknown;
+        /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+        matchArgs?: ('strict' | 'ignore') | undefined;
+      }[]
+    | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -86613,7 +86703,7 @@ export type GetDatasetsDatasetIdItemsItemId_Response = {
   source?:
     | {
         /** How this item was created */
-        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
         /** Reference identifier (e.g., trace id, csv filename) */
         referenceId?: string | undefined;
       }
@@ -86904,6 +86994,21 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
         | undefined
       )
     | null;
+  /** Ordered item-level static tool mocks served in place of executing the real tool */
+  toolMocks?:
+    | {
+        /** Name of the tool this mock applies to */
+        toolName: string;
+        /** Arguments to match against the tool call */
+        args: {
+          [key: string]: unknown;
+        };
+        /** Output served to the agent when matched */
+        output: unknown;
+        /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+        matchArgs?: ('strict' | 'ignore') | undefined;
+      }[]
+    | undefined;
   /** Request context preset for this item */
   requestContext?:
     | {
@@ -86920,7 +87025,7 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
   source?:
     | {
         /** How this item was created */
-        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
         /** Reference identifier (e.g., trace id, csv filename) */
         referenceId?: string | undefined;
       }
@@ -86934,6 +87039,21 @@ export type PatchDatasetsDatasetIdItemsItemId_Response = {
   input: unknown;
   groundTruth?: unknown | undefined;
   expectedTrajectory?: unknown | undefined;
+  /** Ordered item-level static tool mocks served in place of executing the real tool */
+  toolMocks?:
+    | {
+        /** Name of the tool this mock applies to */
+        toolName: string;
+        /** Arguments to match against the tool call */
+        args: {
+          [key: string]: unknown;
+        };
+        /** Output served to the agent when matched */
+        output: unknown;
+        /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+        matchArgs?: ('strict' | 'ignore') | undefined;
+      }[]
+    | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -86948,7 +87068,7 @@ export type PatchDatasetsDatasetIdItemsItemId_Response = {
   source?:
     | {
         /** How this item was created */
-        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
         /** Reference identifier (e.g., trace id, csv filename) */
         referenceId?: string | undefined;
       }
@@ -87074,6 +87194,21 @@ export type GetDatasetsDatasetIdItemsItemIdHistory_Response = {
     input: unknown;
     groundTruth?: unknown | undefined;
     expectedTrajectory?: unknown | undefined;
+    /** Ordered item-level static tool mocks served in place of executing the real tool */
+    toolMocks?:
+      | {
+          /** Name of the tool this mock applies to */
+          toolName: string;
+          /** Arguments to match against the tool call */
+          args: {
+            [key: string]: unknown;
+          };
+          /** Output served to the agent when matched */
+          output: unknown;
+          /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+          matchArgs?: ('strict' | 'ignore') | undefined;
+        }[]
+      | undefined;
     metadata?:
       | {
           [key: string]: unknown;
@@ -87122,6 +87257,21 @@ export type GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_Response = {
   input: unknown;
   groundTruth?: unknown | undefined;
   expectedTrajectory?: unknown | undefined;
+  /** Ordered item-level static tool mocks served in place of executing the real tool */
+  toolMocks?:
+    | {
+        /** Name of the tool this mock applies to */
+        toolName: string;
+        /** Arguments to match against the tool call */
+        args: {
+          [key: string]: unknown;
+        };
+        /** Output served to the agent when matched */
+        output: unknown;
+        /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only */
+        matchArgs?: ('strict' | 'ignore') | undefined;
+      }[]
+    | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -87136,7 +87286,7 @@ export type GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_Response = {
   source?:
     | {
         /** How this item was created */
-        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+        type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
         /** Reference identifier (e.g., trace id, csv filename) */
         referenceId?: string | undefined;
       }
@@ -87381,6 +87531,35 @@ export type PostDatasetsDatasetIdExperiments_Response = {
     startedAt: Date;
     completedAt: Date;
     retryCount: number;
+    /** Diagnostic receipt for item-level tool mocks */
+    toolMockReport?:
+      | (
+          | {
+              served: {
+                mockIndex: number;
+                toolName: string;
+                args: unknown;
+              }[];
+              unconsumed: {
+                mockIndex: number;
+                toolName: string;
+                args: unknown;
+              }[];
+              liveCalls: {
+                toolName: string;
+                args: unknown;
+              }[];
+              failure?:
+                | {
+                    code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED';
+                    toolName: string;
+                    args: unknown;
+                  }
+                | undefined;
+            }
+          | undefined
+        )
+      | null;
     scores: {
       scorerId: string;
       scorerName: string;
@@ -87500,6 +87679,35 @@ export type GetDatasetsDatasetIdExperimentsExperimentIdResults_Response = {
     traceId: string | null;
     status?: (('needs-review' | 'reviewed' | 'complete') | null) | undefined;
     tags?: (string[] | null) | undefined;
+    /** Diagnostic receipt for item-level tool mocks */
+    toolMockReport?:
+      | (
+          | {
+              served: {
+                mockIndex: number;
+                toolName: string;
+                args: unknown;
+              }[];
+              unconsumed: {
+                mockIndex: number;
+                toolName: string;
+                args: unknown;
+              }[];
+              liveCalls: {
+                toolName: string;
+                args: unknown;
+              }[];
+              failure?:
+                | {
+                    code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED';
+                    toolName: string;
+                    args: unknown;
+                  }
+                | undefined;
+            }
+          | undefined
+        )
+      | null;
     createdAt: Date;
   }[];
   pagination: {
@@ -87568,6 +87776,35 @@ export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Respons
   traceId: string | null;
   status?: (('needs-review' | 'reviewed' | 'complete') | null) | undefined;
   tags?: (string[] | null) | undefined;
+  /** Diagnostic receipt for item-level tool mocks */
+  toolMockReport?:
+    | (
+        | {
+            served: {
+              mockIndex: number;
+              toolName: string;
+              args: unknown;
+            }[];
+            unconsumed: {
+              mockIndex: number;
+              toolName: string;
+              args: unknown;
+            }[];
+            liveCalls: {
+              toolName: string;
+              args: unknown;
+            }[];
+            failure?:
+              | {
+                  code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED';
+                  toolName: string;
+                  args: unknown;
+                }
+              | undefined;
+          }
+        | undefined
+      )
+    | null;
   createdAt: Date;
 };
 

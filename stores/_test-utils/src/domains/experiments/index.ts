@@ -523,5 +523,178 @@ export function createExperimentsTests({
         expect(list.experiments).toHaveLength(0);
       });
     });
+
+    // ---------------------------------------------------------------------------
+    // Tenancy
+    // ---------------------------------------------------------------------------
+    describe('Tenancy', () => {
+      beforeEach(async () => {
+        await experimentsStorage.dangerouslyClearAll();
+      });
+
+      it('createExperiment persists organizationId and projectId', async () => {
+        const exp = await experimentsStorage.createExperiment({
+          name: 'tenancy-create',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+          organizationId: 'org_a',
+          projectId: 'proj_a',
+        });
+
+        expect(exp.organizationId).toBe('org_a');
+        expect(exp.projectId).toBe('proj_a');
+
+        const reread = await experimentsStorage.getExperimentById({ id: exp.id });
+        expect(reread?.organizationId).toBe('org_a');
+        expect(reread?.projectId).toBe('proj_a');
+      });
+
+      it('createExperiment defaults tenancy fields to null when omitted', async () => {
+        const exp = await experimentsStorage.createExperiment({
+          name: 'tenancy-null',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+        });
+
+        expect(exp.organizationId).toBeNull();
+        expect(exp.projectId).toBeNull();
+      });
+
+      it('listExperiments filters by organizationId and projectId', async () => {
+        await experimentsStorage.createExperiment({
+          name: 'a-1',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+          organizationId: 'org_a',
+          projectId: 'proj_1',
+        });
+        await experimentsStorage.createExperiment({
+          name: 'a-2',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+          organizationId: 'org_a',
+          projectId: 'proj_2',
+        });
+        await experimentsStorage.createExperiment({
+          name: 'b-1',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+          organizationId: 'org_b',
+          projectId: 'proj_1',
+        });
+
+        const byOrg = await experimentsStorage.listExperiments({
+          pagination: { page: 0, perPage: 50 },
+          filters: { organizationId: 'org_a' },
+        });
+        expect(byOrg.experiments.map(e => e.name).sort()).toEqual(['a-1', 'a-2']);
+
+        const byOrgAndProject = await experimentsStorage.listExperiments({
+          pagination: { page: 0, perPage: 50 },
+          filters: { organizationId: 'org_a', projectId: 'proj_1' },
+        });
+        expect(byOrgAndProject.experiments.map(e => e.name)).toEqual(['a-1']);
+      });
+
+      it('addExperimentResult persists tenancy inherited from parent and listExperimentResults filters by it', async () => {
+        // Two experiments under distinct tenancies — results denormalize their
+        // parent's tenancy, mirroring the materializer/runner contract. We do
+        // NOT cross-stamp results from a different tenancy onto the same
+        // experiment: that would violate the parent→child invariant.
+        const expA = await experimentsStorage.createExperiment({
+          name: 'results-tenancy-a',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+          organizationId: 'org_a',
+          projectId: 'proj_a',
+        });
+        const expB = await experimentsStorage.createExperiment({
+          name: 'results-tenancy-b',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+          organizationId: 'org_b',
+          projectId: 'proj_b',
+        });
+
+        await experimentsStorage.addExperimentResult({
+          experimentId: expA.id,
+          itemId: 'item-1',
+          itemDatasetVersion: null,
+          input: { x: 1 },
+          output: { y: 1 },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          organizationId: expA.organizationId,
+          projectId: expA.projectId,
+        });
+        await experimentsStorage.addExperimentResult({
+          experimentId: expB.id,
+          itemId: 'item-2',
+          itemDatasetVersion: null,
+          input: { x: 2 },
+          output: { y: 2 },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          organizationId: expB.organizationId,
+          projectId: expB.projectId,
+        });
+
+        // Filtering expA's results by org_a returns the one inherited result;
+        // filtering by org_b returns nothing because expA's results inherit
+        // expA's tenancy.
+        const expAOrgA = await experimentsStorage.listExperimentResults({
+          experimentId: expA.id,
+          pagination: { page: 0, perPage: 50 },
+          filters: { organizationId: 'org_a' },
+        });
+        expect(expAOrgA.results.map(r => r.itemId)).toEqual(['item-1']);
+        expect(expAOrgA.results[0]!.organizationId).toBe('org_a');
+        expect(expAOrgA.results[0]!.projectId).toBe('proj_a');
+
+        const expAOrgB = await experimentsStorage.listExperimentResults({
+          experimentId: expA.id,
+          pagination: { page: 0, perPage: 50 },
+          filters: { organizationId: 'org_b' },
+        });
+        expect(expAOrgB.results).toEqual([]);
+
+        // Symmetric check for expB filtered by its own project.
+        const expBProjB = await experimentsStorage.listExperimentResults({
+          experimentId: expB.id,
+          pagination: { page: 0, perPage: 50 },
+          filters: { projectId: 'proj_b' },
+        });
+        expect(expBProjB.results.map(r => r.itemId)).toEqual(['item-2']);
+        expect(expBProjB.results[0]!.organizationId).toBe('org_b');
+        expect(expBProjB.results[0]!.projectId).toBe('proj_b');
+      });
+    });
   }); // describeExperiments
 }
