@@ -57,6 +57,7 @@ export * from './ds/components/ThemeProvider';
 export * from './ds/components/ThemeToggle';
 export * from './ds/components/Tooltip';
 export * from './ds/components/Truncate';
+export * from './ds/components/ThreadList';
 
 // DS Components - Migrated Containers
 export * from './ds/components/ButtonsGroup';
@@ -100,6 +101,7 @@ export * from './ds/components/DateTimeRangePicker';
 export * from './ds/components/HorizontalBars';
 export * from './ds/components/MetricsDataTable';
 export * from './ds/components/MetricsLineChart';
+export * from './ds/components/ScatterPlotChart';
 export * from './ds/components/StatusBadge';
 
 // DS Icons
@@ -149,6 +151,7 @@ export * from './domains/metrics';
 export * from './domains/traces';
 export * from './domains/logs';
 export * from './domains/memory';
+export * from './ee';
 
 // DS Types
 export type { LinkComponent, LinkComponentProps } from './ds/types/link-component';

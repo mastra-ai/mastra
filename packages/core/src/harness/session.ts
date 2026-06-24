@@ -84,6 +84,11 @@ const modeModelKey = (modeId: string) => `modeModelId_${modeId}`;
  * updates the current resourceId while the default is retained so the session
  * can return to its own identity.
  *
+ * `id` is the stable identifier for this session (mirrors `SessionRecord.id` in
+ * storage) and `ownerId` is the owner of this session (mirrors
+ * `SessionRecord.ownerId`). Both are stable for the life of the session and do
+ * not change when the resourceId is switched.
+ *
  * The active thread the session is bound to lives on {@link SessionThread}, not
  * here — identity is the stable "who", the thread is the navigational "where".
  */
@@ -92,10 +97,16 @@ export class SessionIdentity {
   #resourceId: string;
   /** The resourceId the session started with, retained across resource switches. */
   readonly #defaultResourceId: string;
+  /** Stable session identifier (mirrors SessionRecord.id in storage). */
+  readonly #id: string;
+  /** Stable session owner (mirrors SessionRecord.ownerId in storage). */
+  readonly #ownerId: string;
 
-  constructor({ resourceId }: { resourceId: string }) {
+  constructor({ resourceId, id, ownerId }: { resourceId: string; id: string; ownerId: string }) {
     this.#resourceId = resourceId;
     this.#defaultResourceId = resourceId;
+    this.#id = id;
+    this.#ownerId = ownerId;
   }
 
   /** The resourceId the session currently reads/writes under. */
@@ -106,6 +117,16 @@ export class SessionIdentity {
   /** The resourceId the session started with. */
   getDefaultResourceId(): string {
     return this.#defaultResourceId;
+  }
+
+  /** The stable session identifier for this session. */
+  getId(): string {
+    return this.#id;
+  }
+
+  /** The stable owner identifier for this session. */
+  getOwnerId(): string {
+    return this.#ownerId;
   }
 
   /** Point the session at a different resourceId (the default is unchanged). */
@@ -2463,8 +2484,18 @@ export class Session<TState = unknown> {
   /** The session-owned Harness state domain. */
   readonly state: HarnessRequestState<TState>;
 
-  constructor({ resourceId, state }: { resourceId: string; state?: SessionStateOptions<TState> }) {
-    this.identity = new SessionIdentity({ resourceId });
+  constructor({
+    resourceId,
+    state,
+    id,
+    ownerId,
+  }: {
+    resourceId: string;
+    state?: SessionStateOptions<TState>;
+    id: string;
+    ownerId: string;
+  }) {
+    this.identity = new SessionIdentity({ resourceId, id, ownerId });
     this.thread = new SessionThread(() => this.identity.getResourceId());
     this.displayState = new SessionDisplayState({
       getTokenUsage: () => this.getTokenUsage(),
