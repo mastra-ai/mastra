@@ -233,6 +233,14 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       }));
     threadExists = true;
     requestContext.set('MastraMemory', { thread: threadObject, resourceId, memoryConfig });
+  } else {
+    // This run has no complete per-request memory context. Clear any
+    // MastraMemory inherited from a caller-provided requestContext (e.g. a
+    // parent agent's context during sub-agent delegation) so processor
+    // resolution can't pick up the working-memory injector from stale/parent
+    // memory — that would both leak prior resource memory into this prompt and
+    // break the "no per-request memory options means no injection" gate.
+    requestContext.delete('MastraMemory');
   }
 
   // Resolve input processors now that the memory context is in place.

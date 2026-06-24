@@ -169,6 +169,42 @@ describe('DurableAgent working memory injection (AIC-4279)', () => {
     expect(systemText).not.toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
   });
 
+  it('(b3) clears inherited MastraMemory so a run without its own memory options does not leak parent working memory', async () => {
+    const parentResourceId = 'wm-parent-resource';
+    // The shared memory holds the parent resource's stored working memory.
+    const memory = await createMemoryWithStoredWorkingMemory(parentResourceId);
+
+    const baseAgent = new Agent({
+      id: 'wm-inherited-ctx-agent',
+      name: 'WM Inherited Ctx Agent',
+      instructions: 'You are a helpful assistant.',
+      model: createTextModel('ok') as LanguageModelV2,
+      memory,
+    });
+
+    // Simulate a caller-provided context (e.g. a parent agent during sub-agent
+    // delegation) that already carries an enabled MastraMemory for the parent
+    // resource.
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', {
+      resourceId: parentResourceId,
+      memoryConfig: { workingMemory: { enabled: true, scope: 'resource' } },
+    });
+
+    // This run provides NO per-request memory options, so it must not inherit
+    // the parent's working memory.
+    const result = await prepareForDurableExecution({
+      agent: baseAgent,
+      messages: 'Hello',
+      requestContext,
+    });
+
+    const systemText = result.messageList.getAllSystemMessages().map(m => JSON.stringify(m.content)).join('\n');
+
+    expect(systemText).not.toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
+    expect(systemText).not.toContain(STORED_WORKING_MEMORY);
+  });
+
   it('resolves the working-memory processor only once the memory context is seeded (root-cause check)', async () => {
     const resourceId = 'wm-resource-resolve';
     const memory = await createMemoryWithStoredWorkingMemory(resourceId);
