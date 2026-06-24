@@ -63,7 +63,7 @@ describe('SignalDetailsPage', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Chart' }));
 
     expect(screen.queryByRole('complementary', { name: 'Trace details' })).toBeNull();
-    expect(screen.getByLabelText('Chart facet filters')).not.toBeNull();
+    expect(screen.getByLabelText('Chart cluster filters')).not.toBeNull();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Trace list' }));
 

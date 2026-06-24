@@ -1,6 +1,6 @@
 import type { TopicTraceSummary } from '../topics';
 
-export type SignalFacet = {
+export type SignalCluster = {
   id: string;
   name: string;
   description: string;
@@ -11,5 +11,5 @@ export type Signal = {
   id: string;
   name: string;
   description: string;
-  facets: SignalFacet[];
+  clusters: SignalCluster[];
 };

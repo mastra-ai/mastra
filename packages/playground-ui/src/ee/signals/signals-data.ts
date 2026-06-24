@@ -5,7 +5,7 @@ export const signals: Signal[] = [
     id: 'tasks',
     name: 'Tasks',
     description: 'Operational work patterns inferred from agent traces and user requests.',
-    facets: [
+    clusters: [
       {
         id: 'refunds',
         name: 'Refunds',
@@ -94,7 +94,7 @@ export const signals: Signal[] = [
     id: 'sentiment',
     name: 'Sentiment',
     description: 'Conversation tone and confidence shifts that affect user outcomes.',
-    facets: [
+    clusters: [
       {
         id: 'negative-feedback',
         name: 'Negative feedback',
@@ -149,7 +149,7 @@ export const signals: Signal[] = [
     id: 'issue',
     name: 'Issue',
     description: 'Recurring issue families found across support, research, and workflow traces.',
-    facets: [
+    clusters: [
       {
         id: 'revenue-analysis',
         name: 'Revenue analysis',
@@ -172,7 +172,7 @@ export const signals: Signal[] = [
     id: 'severity',
     name: 'Severity',
     description: 'Risk and urgency bands inferred from trace paths and intervention needs.',
-    facets: [
+    clusters: [
       {
         id: 'urgent-escalations',
         name: 'Urgent escalations',

@@ -5,10 +5,10 @@ import { Button } from '../../../ds/components/Button';
 import { stringToColor } from '../../../lib/colors';
 import { TopicsLayout } from '../../topics';
 import { signals } from '../signals-data';
-import type { Signal, SignalFacet } from '../types';
+import type { Signal, SignalCluster } from '../types';
 
-interface SignalFacetCardProps {
-  facet: SignalFacet;
+interface SignalClusterCardProps {
+  cluster: SignalCluster;
   totalTraceCount: number;
 }
 
@@ -18,21 +18,21 @@ const getTraceShare = (traceCount: number, totalTraceCount: number) => {
   return Math.round((traceCount / totalTraceCount) * 100);
 };
 
-export function SignalFacetCard({ facet, totalTraceCount }: SignalFacetCardProps) {
-  const traceCount = facet.traceSummaries.length;
+export function SignalClusterCard({ cluster, totalTraceCount }: SignalClusterCardProps) {
+  const traceCount = cluster.traceSummaries.length;
   const traceShare = getTraceShare(traceCount, totalTraceCount);
   const traceLabel = traceCount === 1 ? 'trace' : 'traces';
-  const facetColor = stringToColor(facet.name);
+  const clusterColor = stringToColor(cluster.name);
 
   return (
     <article className="rounded-2xl border border-border1/70 bg-surface2 p-5 shadow-sm">
       <div className="flex h-full min-w-0 flex-col">
         <div className="flex min-w-0 items-start gap-2">
-          <span className="mt-2 h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: facetColor }} />
+          <span className="mt-2 h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: clusterColor }} />
 
           <div>
-            <h3 className="text-md font-semibold text-neutral6">{facet.name}</h3>
-            <p className="line-clamp-2 text-sm text-neutral3">{facet.description}</p>
+            <h3 className="text-md font-semibold text-neutral6">{cluster.name}</h3>
+            <p className="line-clamp-2 text-sm text-neutral3">{cluster.description}</p>
           </div>
         </div>
 
@@ -48,12 +48,12 @@ export function SignalFacetCard({ facet, totalTraceCount }: SignalFacetCardProps
             <div
               className="h-3 overflow-hidden rounded-full bg-surface4"
               role="progressbar"
-              aria-label={`${facet.name} trace share`}
+              aria-label={`${cluster.name} trace share`}
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={traceShare}
             >
-              <div className="h-full rounded-full" style={{ width: `${traceShare}%`, backgroundColor: facetColor }} />
+              <div className="h-full rounded-full" style={{ width: `${traceShare}%`, backgroundColor: clusterColor }} />
             </div>
             <p className="text-right text-ui-md font-semibold text-neutral6">{traceShare}%</p>
           </div>
@@ -70,8 +70,8 @@ interface SignalSectionProps {
 
 export function SignalSection({ signal, onSeeDetails }: SignalSectionProps) {
   const totalTraceCount = useMemo(
-    () => signal.facets.reduce((total, facet) => total + facet.traceSummaries.length, 0),
-    [signal.facets],
+    () => signal.clusters.reduce((total, cluster) => total + cluster.traceSummaries.length, 0),
+    [signal.clusters],
   );
 
   return (
@@ -81,7 +81,7 @@ export function SignalSection({ signal, onSeeDetails }: SignalSectionProps) {
           <div className="flex items-center gap-3">
             <h2 className="text-ui-2xl font-semibold text-neutral6">{signal.name}</h2>
             <Badge variant="default">
-              {signal.facets.length} {signal.facets.length === 1 ? 'facet' : 'facets'}
+              {signal.clusters.length} {signal.clusters.length === 1 ? 'cluster' : 'clusters'}
             </Badge>
           </div>
           <p className="text-ui-lg text-neutral3">{signal.description}</p>
@@ -99,8 +99,8 @@ export function SignalSection({ signal, onSeeDetails }: SignalSectionProps) {
         </Button>
       </header>
       <div className="grid gap-6 md:grid-cols-2">
-        {signal.facets.map(facet => (
-          <SignalFacetCard key={facet.id} facet={facet} totalTraceCount={totalTraceCount} />
+        {signal.clusters.map(cluster => (
+          <SignalClusterCard key={cluster.id} cluster={cluster} totalTraceCount={totalTraceCount} />
         ))}
       </div>
     </section>
