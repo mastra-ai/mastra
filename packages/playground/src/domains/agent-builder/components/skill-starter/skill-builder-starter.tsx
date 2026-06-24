@@ -1,4 +1,5 @@
-import { Button, Spinner, toast } from '@mastra/playground-ui';
+import { Button, toast } from '@mastra/playground-ui';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { ArrowUpIcon, BookOpen, FileText, GraduationCap, Wrench } from 'lucide-react';
 import { nanoid } from 'nanoid';

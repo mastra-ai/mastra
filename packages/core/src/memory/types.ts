@@ -852,7 +852,7 @@ export interface ObservationalMemoryOptions {
   temporalMarkers?: boolean;
 
   /**
-   * **Experimental.** Enable retrieval-mode observation groups as durable pointers
+   * Enable retrieval-mode observation groups as durable pointers
    * to raw message history. When enabled, observation groups keep `_range`
    * metadata visible in context and a `recall` tool is registered so the actor
    * can inspect raw messages behind a stored observation summary.
@@ -865,7 +865,6 @@ export interface ObservationalMemoryOptions {
    * `scope` defaults to `'resource'` (cross-thread browsing, thread listing, and search).
    * Set to `'thread'` to restrict to the current thread only.
    *
-   * @experimental
    * @default false
    */
   retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
@@ -1305,8 +1304,7 @@ export type SerializedObservationalMemoryConfig = {
   temporalMarkers?: boolean;
 
   /**
-   * **Experimental.** Enable retrieval-mode observation groups as durable pointers to raw message history.
-   * @experimental
+   * Enable retrieval-mode observation groups as durable pointers to raw message history.
    */
   retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
 

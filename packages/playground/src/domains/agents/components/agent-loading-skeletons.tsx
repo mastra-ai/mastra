@@ -1,4 +1,4 @@
-import { Skeleton } from '@mastra/playground-ui';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import type { ReactNode } from 'react';
 import { AgentLayout } from './agent-layout';
 import { SidebarPanel } from './sidebar-panel';

@@ -1,5 +1,6 @@
 import type { WorkflowRunStatus } from '@mastra/core/workflows';
-import { Icon, Spinner, Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui';
+import { Icon, Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Check, CirclePause, CircleSlash, Clock, X } from 'lucide-react';
 
 export interface WorkflowRunStatusIconProps {

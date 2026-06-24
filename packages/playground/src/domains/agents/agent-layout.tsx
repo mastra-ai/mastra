@@ -1,5 +1,5 @@
 import { coreFeatures } from '@mastra/core/features';
-import { MainContentLayout } from '@mastra/playground-ui';
+import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { useParams, useLocation } from 'react-router';
 import { AgentPageTabs } from '@/domains/agents/components/agent-page-tabs';
 import type { AgentPageTab } from '@/domains/agents/components/agent-page-tabs';
