@@ -4,7 +4,7 @@
 Mastra Engineering
 January 2026
 
-This catalog is an index for React performance and quality guidance used by agents and LLMs. It contains 16 rules across 8 categories, prioritized by impact. The canonical guidance — detailed explanations, incorrect vs. correct examples, review smells, and impact metrics — lives in `references/rules/*.md`.
+This catalog is an index for React performance and quality guidance used by agents and LLMs. It contains 17 rules across 8 categories, prioritized by impact. The canonical guidance — detailed explanations, incorrect vs. correct examples, review smells, and impact metrics — lives in `references/rules/*.md`.
 
 ## How to Use This Catalog
 
@@ -89,6 +89,7 @@ This catalog is an index for React performance and quality guidance used by agen
 | --------------------------------- | ----------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------- |
 | `structure-single-responsibility` | One Component or Hook = One Responsibility = One File | MEDIUM-HIGH | Split domain components and hooks so each file owns one responsibility.              | `references/rules/structure-single-responsibility.md` |
 | `structure-component-naming`      | JSX-Returning Helpers Must Be Components              | MEDIUM      | Name reusable JSX-returning helpers as PascalCase components and call them with JSX. | `references/rules/structure-component-naming.md`      |
+| `structure-derive-dont-duplicate` | Derive Props and Params, Don't Pass Duplicates       | MEDIUM      | Compute a value from a param/prop already in scope instead of accepting it as a separate arg. | `references/rules/structure-derive-dont-duplicate.md` |
 
 ### 8. Testing
 
