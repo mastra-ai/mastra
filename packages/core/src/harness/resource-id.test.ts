@@ -47,7 +47,7 @@ describe('Harness resource ID', () => {
 
     it('still returns the original default after setResourceId is called', async () => {
       const { harness, session } = await createSession({ resourceId: 'original' });
-      harness.setResourceId(session, { resourceId: 'changed' });
+      await harness.setResourceId(session, { resourceId: 'changed' });
       expect(session.identity.getResourceId()).toBe('changed');
       expect(session.identity.getDefaultResourceId()).toBe('original');
     });
@@ -82,7 +82,7 @@ describe('Harness resource ID', () => {
         sessionId: 'stable-session-id',
         ownerId: 'machine-owner',
       });
-      harness.setResourceId(session, { resourceId: 'changed' });
+      await harness.setResourceId(session, { resourceId: 'changed' });
       expect(session.identity.getResourceId()).toBe('changed');
       expect(session.identity.getDefaultResourceId()).toBe('original');
       expect(session.identity.getId()).toBe('stable-session-id');
@@ -114,10 +114,10 @@ describe('Harness resource ID', () => {
       // Create threads under different resource IDs
       await session.thread.create({ title: 'thread-1' });
 
-      harness.setResourceId(session, { resourceId: 'user-2' });
+      await harness.setResourceId(session, { resourceId: 'user-2' });
       await session.thread.create({ title: 'thread-2' });
 
-      harness.setResourceId(session, { resourceId: 'user-3' });
+      await harness.setResourceId(session, { resourceId: 'user-3' });
       await session.thread.create({ title: 'thread-3' });
 
       const ids = await harness.getKnownResourceIds(session);
