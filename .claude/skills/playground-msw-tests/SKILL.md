@@ -47,7 +47,8 @@ contract.
   cache, gating and transport bugs.
 - ❌ Inline TypeScript types in tests (`type AgentLite = { id: string }`) —
   these drift silently from the real SDK.
-- ❌ `as any` / `as unknown as ListAgentsResponse` on fixture data.
+- ❌ `as any` / `as unknown as ListAgentsResponse` on fixture data, MSW
+  responses, request payloads, hook inputs, or component event inputs.
 - ❌ Returning bespoke shapes from MSW handlers that don't match the real
   `@mastra/client-js` response. If a field is optional, include it as optional
   in the fixture, don't omit the type.
@@ -58,6 +59,9 @@ contract.
 - ✅ Type every fixture with a response type re-exported from `@mastra/client-js`
   (e.g. `ListStoredAgentsResponse`, `GetAgentResponse`, `BuilderSettingsResponse`,
   `GetToolResponse`, `GetWorkflowResponse`, `ListStoredSkillsResponse`).
+- ✅ Use typed builders or named helpers for test data and test events. If jsdom
+  lacks a concrete browser primitive, keep the adapter small and typed to the
+  public hook/component boundary so call sites stay cast-free.
 - ✅ Register MSW handlers per test with `server.use(...)` so handlers reset
   between tests via the global `afterEach`.
 - ✅ Render through `MastraReactProvider` + `QueryClientProvider` + `MemoryRouter`
@@ -139,7 +143,9 @@ export const oneDraftAgent: ListStoredAgentsResponse = {
 ```
 
 **If a required field on the SDK response type is missing from your fixture,
-that's a real test failure — fix the fixture, never `as any` it.**
+that's a real test failure — fix the fixture, never `as any` it.** The same
+applies to hook inputs, component events, and request payloads: type the helper
+at the real boundary instead of casting the test into compiling.
 
 ## Existing Infrastructure to Reuse
 
@@ -236,8 +242,9 @@ through their real implementations against MSW.
 
 Before considering a test done:
 
-- [ ] All fixtures import a type from `@mastra/client-js` and have no `as any`
-      / `as unknown as` casts.
+- [ ] Fixtures, MSW payloads, request payloads, hook inputs, and event helpers
+      are typed at the real boundary and have no `as any` / `as unknown as`
+      casts.
 - [ ] No `vi.mock` of `@/domains/.../hooks/*`, `@/domains/.../services/*`,
       `@mastra/client-js`, or `@mastra/react`.
 - [ ] `pnpm --filter ./packages/playground typecheck` passes — proves fixtures

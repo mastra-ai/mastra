@@ -838,6 +838,8 @@ describe('AgentEditPage', () => {
 
 **BDD structure:** outer `describe` = the unit under test; inner `describe('when <context>')` = one precondition (input shape, RBAC capability, feature flag, loading/error/empty/success), each set up with a real MSW fixture; `it('<outcome>')` = one Then (split multi-assert cases). Keep single-context units flat. Fixtures live in a nearby `__tests__/fixtures/` folder, typed from `@mastra/client-js` — no `as any`, no `as unknown as`.
 
+Do not cast test data, MSW responses, request payloads, hook inputs, or component event inputs to force compatibility. Use production response/input types, typed builders, or named helpers. If jsdom lacks a concrete browser primitive, keep the adapter small and typed to the public hook/component boundary so call sites stay cast-free.
+
 When removing a mock surfaces a real product gap, fix the test/fixture or file the gap — never re-mock to hide it. MSW runs with `onUnhandledRequest: 'error'`, so unstubbed requests fail loudly.
 
 ---
