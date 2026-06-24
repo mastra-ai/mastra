@@ -1,4 +1,8 @@
-import { Badge, Button, Input, Label, ScrollArea, Spinner, Txt, Icon, toast, cn } from '@mastra/playground-ui';
+import { Button, ScrollArea, Txt, Icon, toast, cn } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { useMastraClient } from '@mastra/react';
 import { ArrowLeft, Play, Save, Plus, Trash2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';

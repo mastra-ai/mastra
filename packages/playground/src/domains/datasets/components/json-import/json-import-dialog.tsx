@@ -2,7 +2,6 @@
 
 import {
   Button,
-  Spinner,
   toast,
   Dialog,
   DialogContent,
@@ -12,6 +11,7 @@ import {
   DialogBody,
   DialogFooter,
 } from '@mastra/playground-ui';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useCallback, useState } from 'react';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import { useJSONParser } from '../../hooks/use-json-parser';

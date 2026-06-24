@@ -1,4 +1,5 @@
-import { CodeEditor, Txt, CheckIcon, CrossIcon, Icon } from '@mastra/playground-ui';
+import { Txt, CheckIcon, CrossIcon, Icon } from '@mastra/playground-ui';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import {
   CirclePause,
   HourglassIcon,

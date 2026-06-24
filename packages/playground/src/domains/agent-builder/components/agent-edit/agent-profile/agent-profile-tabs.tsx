@@ -1,5 +1,5 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui';
+import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import type { CSSProperties } from 'react';
 import { useAgentColor } from '../../../contexts/agent-color-context';
 import { useBuilderPaneGates } from '../../../hooks/use-builder-pane-gates';
