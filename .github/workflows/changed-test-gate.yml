@@ -89,6 +89,24 @@ jobs:
         with:
           node-version: 22.13.0
 
+      - name: Reset corrupt pnpm store cache
+        if: ${{ steps.changed_tests.outputs.has_tests == 'true' }}
+        shell: bash
+        run: |
+          set +e
+          store_path=$(pnpm store path --silent)
+          pnpm store status >/tmp/pnpm-store-status.log 2>&1
+          status=$?
+          set -e
+
+          if [ "$status" -ne 0 ] && grep -q "database disk image is malformed" /tmp/pnpm-store-status.log; then
+            echo "Detected corrupt pnpm store cache at $store_path; removing restored store."
+            rm -rf "$store_path"
+          elif [ "$status" -ne 0 ]; then
+            cat /tmp/pnpm-store-status.log
+            exit "$status"
+          fi
+
       - name: Install dependencies
         if: ${{ steps.changed_tests.outputs.has_tests == 'true' }}
         run: pnpm install --frozen-lockfile
