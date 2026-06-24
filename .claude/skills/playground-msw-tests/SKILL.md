@@ -65,9 +65,6 @@ contract.
 - ✅ Use direct imports and inferred types from real SDK, hook, component, DOM,
   or Testing Library APIs for MSW payloads, request payloads, hook inputs, and
   component events.
-- ✅ If jsdom lacks a concrete browser primitive, add the smallest adapter or
-  polyfill at the DOM boundary only. Keep call sites typed by the API the real
-  hook/component already consumes.
 - ✅ Register MSW handlers per test with `server.use(...)` so handlers reset
   between tests via the global `afterEach`.
 - ✅ Render through `MastraReactProvider` + `QueryClientProvider` + `MemoryRouter`
