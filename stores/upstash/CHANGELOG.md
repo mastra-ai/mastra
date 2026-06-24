@@ -1,5 +1,13 @@
 # @mastra/upstash
 
+## 1.2.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`7f9ae70`](https://github.com/mastra-ai/mastra/commit/7f9ae70826b047e5a66218f9e92f20e54a2d791f), [`bf026c5`](https://github.com/mastra-ai/mastra/commit/bf026c5b641019c97facfe5924d14dd363866cb0), [`1505c07`](https://github.com/mastra-ai/mastra/commit/1505c07603f6346bae12aa82f140e8b88ffea9ab), [`e940f09`](https://github.com/mastra-ai/mastra/commit/e940f099ef5d18b403e6f2b4937e086a4da857b1)]:
+  - @mastra/core@1.46.1-alpha.1
+  - @mastra/redis@1.2.1-alpha.0
+
 ## 1.2.0
 
 ### Minor Changes
