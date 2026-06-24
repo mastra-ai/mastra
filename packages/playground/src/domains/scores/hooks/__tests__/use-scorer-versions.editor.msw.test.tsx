@@ -23,8 +23,6 @@ import {
   scorerVersionCompare,
 } from './fixtures/editor-scorers';
 
-
-
 describe('when Studio users publish scorer versions', () => {
   it('loads, reads, and compares scorer versions with literal compare route preserved', async () => {
     const version = makeScorerVersion();
@@ -36,7 +34,9 @@ describe('when Studio users publish scorer versions', () => {
         listUrl = new URL(request.url);
         return HttpResponse.json(makeScorerVersionsList([version]));
       }),
-      http.get(`${TEST_BASE_URL}/api/stored/scorers/${SCORER_ID}/versions/${SCORER_VERSION_ID}`, () => HttpResponse.json(version)),
+      http.get(`${TEST_BASE_URL}/api/stored/scorers/${SCORER_ID}/versions/${SCORER_VERSION_ID}`, () =>
+        HttpResponse.json(version),
+      ),
       http.get(`${TEST_BASE_URL}/api/stored/scorers/${SCORER_ID}/versions/compare`, ({ request }) => {
         compareUrl = new URL(request.url);
         return HttpResponse.json(scorerVersionCompare);
@@ -52,9 +52,16 @@ describe('when Studio users publish scorer versions', () => {
         }),
       { wrapper },
     );
-    const detail = renderHook(() => useScorerVersion({ scorerId: SCORER_ID, versionId: SCORER_VERSION_ID }), { wrapper });
+    const detail = renderHook(() => useScorerVersion({ scorerId: SCORER_ID, versionId: SCORER_VERSION_ID }), {
+      wrapper,
+    });
     const compare = renderHook(
-      () => useCompareScorerVersions({ scorerId: SCORER_ID, fromVersionId: SCORER_VERSION_ID, toVersionId: 'scorer-version-2' }),
+      () =>
+        useCompareScorerVersions({
+          scorerId: SCORER_ID,
+          fromVersionId: SCORER_VERSION_ID,
+          toVersionId: 'scorer-version-2',
+        }),
       { wrapper },
     );
 

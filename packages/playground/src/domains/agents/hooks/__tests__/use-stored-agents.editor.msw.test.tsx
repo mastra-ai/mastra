@@ -9,10 +9,14 @@ import { makeWrapper, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render'
 
 const AGENT_ID = 'agent-1';
 
-
 describe('when Studio users manage stored agent editor records', () => {
   it('lists only favorited agents through the real client-js query contract', async () => {
-    const starred = makeStoredAgent({ id: AGENT_ID, name: 'Starred editor agent', isFavorited: true, favoriteCount: 3 });
+    const starred = makeStoredAgent({
+      id: AGENT_ID,
+      name: 'Starred editor agent',
+      isFavorited: true,
+      favoriteCount: 3,
+    });
     const onList = vi.fn<(url: URL) => void>();
     server.use(
       http.get(`${TEST_BASE_URL}/api/stored/agents`, ({ request }) => {
@@ -25,10 +29,9 @@ describe('when Studio users manage stored agent editor records', () => {
     );
 
     const { wrapper } = makeWrapper({ router: true });
-    const { result } = renderHook(
-      () => useStoredAgents({ favoritedOnly: true, pinFavoritedFor: 'admin-user' }),
-      { wrapper },
-    );
+    const { result } = renderHook(() => useStoredAgents({ favoritedOnly: true, pinFavoritedFor: 'admin-user' }), {
+      wrapper,
+    });
 
     await waitFor(() => expect(result.current.data?.agents[0]?.id).toBe(AGENT_ID));
 
@@ -147,7 +150,9 @@ describe('when Studio users manage stored agent editor records', () => {
       workflows: { supportWorkflow: { description: 'Escalate complex support cases' } },
       agents: { escalationAgent: { description: 'Hand off urgent requests' } },
       scorers: { helpfulness: { description: 'Judge helpfulness', sampling: { type: 'ratio', rate: 0.25 } } },
-      skills: { refundPolicy: { description: 'Use refund policy', instructions: 'Follow policy exactly.', strategy: 'latest' } },
+      skills: {
+        refundPolicy: { description: 'Use refund policy', instructions: 'Follow policy exactly.', strategy: 'latest' },
+      },
       memory: { vector: false, options: { lastMessages: 10 } },
       workspace: { type: 'id', workspaceId: 'support-workspace' },
       browser: { type: 'inline', config: { provider: 'chromium', headless: true } },
@@ -185,7 +190,13 @@ describe('when Studio users manage stored agent editor records', () => {
         workflows: { supportWorkflow: { description: 'Escalate complex support cases' } },
         agents: { escalationAgent: { description: 'Hand off urgent requests' } },
         scorers: { helpfulness: { description: 'Judge helpfulness', sampling: { type: 'ratio', rate: 0.25 } } },
-        skills: { refundPolicy: { description: 'Use refund policy', instructions: 'Follow policy exactly.', strategy: 'latest' } },
+        skills: {
+          refundPolicy: {
+            description: 'Use refund policy',
+            instructions: 'Follow policy exactly.',
+            strategy: 'latest',
+          },
+        },
         memory: { vector: false, options: { lastMessages: 10 } },
         workspace: { type: 'id', workspaceId: 'support-workspace' },
         browser: { type: 'inline', config: { provider: 'chromium', headless: true } },
@@ -210,7 +221,9 @@ describe('when Studio users manage stored agent editor records', () => {
       workflows: { supportWorkflow: { description: 'Escalate complex support cases' } },
       agents: { escalationAgent: { description: 'Hand off urgent requests' } },
       scorers: { helpfulness: { description: 'Judge helpfulness', sampling: { type: 'ratio', rate: 0.25 } } },
-      skills: { refundPolicy: { description: 'Use refund policy', instructions: 'Follow policy exactly.', strategy: 'latest' } },
+      skills: {
+        refundPolicy: { description: 'Use refund policy', instructions: 'Follow policy exactly.', strategy: 'latest' },
+      },
       memory: { vector: false, options: { lastMessages: 10 } },
       workspace: { type: 'id', workspaceId: 'support-workspace' },
       browser: { type: 'inline', config: { provider: 'chromium', headless: true } },

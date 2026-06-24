@@ -3,12 +3,15 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { useToggleStoredAgentFavorite } from '../use-stored-agent-favorite';
-import { favoritedAgent, makeStoredAgent, makeStoredAgentsList } from '../../../agents/hooks/__tests__/fixtures/editor-agents';
+import {
+  favoritedAgent,
+  makeStoredAgent,
+  makeStoredAgentsList,
+} from '../../../agents/hooks/__tests__/fixtures/editor-agents';
 import { server } from '@/test/msw-server';
 import { makeWrapper, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
 
 const AGENT_ID = 'favorite-agent';
-
 
 describe('when Studio users favorite stored agents', () => {
   it('optimistically favorites stored-agent detail and list caches through the real favorite endpoint', async () => {
@@ -31,7 +34,10 @@ describe('when Studio users favorite stored agents', () => {
     await waitForMutationsIdle(queryClient);
 
     const detail = queryClient.getQueryData<ReturnType<typeof makeStoredAgent>>(['stored-agent', AGENT_ID]);
-    const list = queryClient.getQueryData<ReturnType<typeof makeStoredAgentsList>>(['stored-agents', { favoritedOnly: false }]);
+    const list = queryClient.getQueryData<ReturnType<typeof makeStoredAgentsList>>([
+      'stored-agents',
+      { favoritedOnly: false },
+    ]);
     expect(detail?.isFavorited).toBe(true);
     expect(detail?.favoriteCount).toBe(2);
     expect(list?.agents[0]?.isFavorited).toBe(true);
@@ -56,7 +62,10 @@ describe('when Studio users favorite stored agents', () => {
     await waitForMutationsIdle(queryClient);
 
     const detail = queryClient.getQueryData<ReturnType<typeof makeStoredAgent>>(['stored-agent', AGENT_ID]);
-    const list = queryClient.getQueryData<ReturnType<typeof makeStoredAgentsList>>(['stored-agents', { favoritedOnly: false }]);
+    const list = queryClient.getQueryData<ReturnType<typeof makeStoredAgentsList>>([
+      'stored-agents',
+      { favoritedOnly: false },
+    ]);
     expect(detail?.isFavorited).toBe(false);
     expect(detail?.favoriteCount).toBe(1);
     expect(list?.agents[0]?.isFavorited).toBe(false);

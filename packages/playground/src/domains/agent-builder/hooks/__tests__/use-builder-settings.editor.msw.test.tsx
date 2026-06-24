@@ -12,8 +12,6 @@ import {
 } from '../use-builder-settings';
 import { builderSettingsWithPolicy, disabledBuilderSettings } from './fixtures/editor-builder-settings';
 
-
-
 describe('when Studio resolves Agent Builder settings', () => {
   it('uses server-resolved feature gates, model policy, picker allowlists, and warnings', async () => {
     server.use(

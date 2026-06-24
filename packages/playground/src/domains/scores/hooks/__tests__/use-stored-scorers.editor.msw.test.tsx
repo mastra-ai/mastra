@@ -7,8 +7,6 @@ import { makeWrapper, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render'
 import { useStoredScorer, useStoredScorerMutations } from '../use-stored-scorers';
 import { SCORER_ID, makeStoredScorer, makeStoredScorersList } from './fixtures/editor-scorers';
 
-
-
 describe('when Studio users manage scorers', () => {
   it('reads scorer details with status params preserved', async () => {
     const scorer = makeStoredScorer({ status: 'published' });

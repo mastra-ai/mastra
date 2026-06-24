@@ -9,7 +9,6 @@ import { makeStoredSkill } from './fixtures/stored-skills';
 
 const SKILL_ID = 'skill-1';
 
-
 describe('when Studio users favorite stored skills', () => {
   it('optimistically favorites stored-skill detail and list caches through the real favorite endpoint', async () => {
     server.use(
@@ -35,7 +34,10 @@ describe('when Studio users favorite stored skills', () => {
     await waitForMutationsIdle(queryClient);
 
     const detail = queryClient.getQueryData<ReturnType<typeof makeStoredSkill>>(['stored-skill', SKILL_ID]);
-    const list = queryClient.getQueryData<{ skills: Array<ReturnType<typeof makeStoredSkill>> }>(['stored-skills', { page: 1 }]);
+    const list = queryClient.getQueryData<{ skills: Array<ReturnType<typeof makeStoredSkill>> }>([
+      'stored-skills',
+      { page: 1 },
+    ]);
     expect(detail?.isFavorited).toBe(true);
     expect(detail?.favoriteCount).toBe(2);
     expect(list?.skills[0]?.isFavorited).toBe(true);

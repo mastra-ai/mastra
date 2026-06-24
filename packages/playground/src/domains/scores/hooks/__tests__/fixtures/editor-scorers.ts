@@ -75,7 +75,11 @@ export const deletedScorerVersion: DeleteScorerVersionResponse = {
 
 export const scorerVersionCompare: CompareScorerVersionsResponse = {
   fromVersion: makeScorerVersion(),
-  toVersion: makeScorerVersion({ id: 'scorer-version-2', versionNumber: 2, instructions: 'Score for quality and safety.' }),
+  toVersion: makeScorerVersion({
+    id: 'scorer-version-2',
+    versionNumber: 2,
+    instructions: 'Score for quality and safety.',
+  }),
   diffs: [
     {
       field: 'instructions',

@@ -8,8 +8,6 @@ import { useMCPServerToolsById } from '../use-mcp-server-tools-by-id';
 import { useMCPServers } from '../use-mcp-servers';
 import { mcpServersResponse, mcpToolsResponse } from './fixtures/editor-mcps';
 
-
-
 describe('when Studio users browse runtime MCP servers', () => {
   it('lists runtime MCP servers and loads their tools through real client-js routes', async () => {
     let serversUrl: URL | undefined;

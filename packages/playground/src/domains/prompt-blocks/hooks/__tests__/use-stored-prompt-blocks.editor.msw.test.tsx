@@ -4,10 +4,12 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '@/test/msw-server';
 import { makeWrapper, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
-import { useStoredPromptBlock, useStoredPromptBlockMutations, useStoredPromptBlocks } from '../use-stored-prompt-blocks';
+import {
+  useStoredPromptBlock,
+  useStoredPromptBlockMutations,
+  useStoredPromptBlocks,
+} from '../use-stored-prompt-blocks';
 import { PROMPT_BLOCK_ID, makeStoredPromptBlock, makeStoredPromptBlocksList } from './fixtures/editor-prompt-blocks';
-
-
 
 describe('when Studio users manage prompt blocks', () => {
   it('lists and reads prompt blocks with status and pagination params preserved', async () => {
@@ -76,18 +78,32 @@ describe('when Studio users manage prompt blocks', () => {
     const { queryClient, wrapper } = makeWrapper();
     queryClient.setQueryData(['stored-prompt-blocks'], makeStoredPromptBlocksList([created]));
     queryClient.setQueryData(['stored-prompt-block', PROMPT_BLOCK_ID, 'draft', undefined], created);
-    queryClient.setQueryData(['prompt-block-versions', PROMPT_BLOCK_ID], { versions: [], total: 0, page: 1, perPage: 50, hasMore: false });
+    queryClient.setQueryData(['prompt-block-versions', PROMPT_BLOCK_ID], {
+      versions: [],
+      total: 0,
+      page: 1,
+      perPage: 50,
+      hasMore: false,
+    });
 
     const { result } = renderHook(() => useStoredPromptBlockMutations(PROMPT_BLOCK_ID), { wrapper });
 
-    await result.current.createStoredPromptBlock.mutateAsync({ name: 'Created prompt block', content: 'Hello {{name}}' });
+    await result.current.createStoredPromptBlock.mutateAsync({
+      name: 'Created prompt block',
+      content: 'Hello {{name}}',
+    });
     await result.current.updateStoredPromptBlock.mutateAsync({ content: 'Updated {{topic}}' });
     await result.current.deleteStoredPromptBlock.mutateAsync();
     await waitForMutationsIdle(queryClient);
 
     await waitFor(() => expect(queryClient.getQueryState(['stored-prompt-blocks'])?.isInvalidated).toBe(true));
-    expect(queryClient.getQueriesData({ queryKey: ['stored-prompt-block', PROMPT_BLOCK_ID] }).length).toBeGreaterThan(0);
+    expect(queryClient.getQueriesData({ queryKey: ['stored-prompt-block', PROMPT_BLOCK_ID] }).length).toBeGreaterThan(
+      0,
+    );
     expect(queryClient.getQueryState(['prompt-block-versions', PROMPT_BLOCK_ID])?.isInvalidated).toBe(true);
-    expect(seenBodies).toEqual([{ name: 'Created prompt block', content: 'Hello {{name}}' }, { content: 'Updated {{topic}}' }]);
+    expect(seenBodies).toEqual([
+      { name: 'Created prompt block', content: 'Hello {{name}}' },
+      { content: 'Updated {{topic}}' },
+    ]);
   });
 });

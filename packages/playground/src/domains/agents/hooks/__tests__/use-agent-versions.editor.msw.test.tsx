@@ -25,11 +25,20 @@ const AGENT_ID = 'agent-1';
 const VERSION_1 = 'version-1';
 const VERSION_2 = 'version-2';
 
-
 describe('when Studio users publish and compare stored agent versions', () => {
   it('loads, reads, and compares stored-agent versions with route ordering query params intact', async () => {
-    const versionOne = makeAgentVersion({ id: VERSION_1, agentId: AGENT_ID, versionNumber: 1, instructions: 'Version one' });
-    const versionTwo = makeAgentVersion({ id: VERSION_2, agentId: AGENT_ID, versionNumber: 2, instructions: 'Version two' });
+    const versionOne = makeAgentVersion({
+      id: VERSION_1,
+      agentId: AGENT_ID,
+      versionNumber: 1,
+      instructions: 'Version one',
+    });
+    const versionTwo = makeAgentVersion({
+      id: VERSION_2,
+      agentId: AGENT_ID,
+      versionNumber: 2,
+      instructions: 'Version two',
+    });
     const onList = vi.fn<(url: URL) => void>();
     const onCompare = vi.fn<(url: URL) => void>();
 
@@ -41,13 +50,19 @@ describe('when Studio users publish and compare stored agent versions', () => {
         expect(url.searchParams.get('orderBy[direction]')).toBe('DESC');
         return HttpResponse.json(makeAgentVersionsList([versionTwo, versionOne]));
       }),
-      http.get(`${TEST_BASE_URL}/api/stored/agents/${AGENT_ID}/versions/${VERSION_1}`, () => HttpResponse.json(versionOne)),
+      http.get(`${TEST_BASE_URL}/api/stored/agents/${AGENT_ID}/versions/${VERSION_1}`, () =>
+        HttpResponse.json(versionOne),
+      ),
       http.get(`${TEST_BASE_URL}/api/stored/agents/${AGENT_ID}/versions/compare`, ({ request }) => {
         const url = new URL(request.url);
         onCompare(url);
         expect(url.searchParams.get('from')).toBe(VERSION_1);
         expect(url.searchParams.get('to')).toBe(VERSION_2);
-        return HttpResponse.json({ fromVersion: versionOne, toVersion: versionTwo, diffs: [{ field: 'instructions', previousValue: 'Version one', currentValue: 'Version two' }] });
+        return HttpResponse.json({
+          fromVersion: versionOne,
+          toVersion: versionTwo,
+          diffs: [{ field: 'instructions', previousValue: 'Version one', currentValue: 'Version two' }],
+        });
       }),
     );
 
@@ -71,7 +86,12 @@ describe('when Studio users publish and compare stored agent versions', () => {
   });
 
   it('creates, activates, restores, and deletes versions while invalidating editor runtime caches', async () => {
-    const restored = makeAgentVersion({ id: 'version-3', agentId: AGENT_ID, versionNumber: 3, instructions: 'Restored v1' });
+    const restored = makeAgentVersion({
+      id: 'version-3',
+      agentId: AGENT_ID,
+      versionNumber: 3,
+      instructions: 'Restored v1',
+    });
     let createBody: Record<string, unknown> | null = null;
     const onActivate = vi.fn<() => void>();
     const onRestore = vi.fn<() => void>();
@@ -97,7 +117,10 @@ describe('when Studio users publish and compare stored agent versions', () => {
     );
 
     const { queryClient, wrapper } = makeWrapper({ router: true });
-    queryClient.setQueryData(['agent-versions', AGENT_ID], makeAgentVersionsList([makeAgentVersion({ id: VERSION_1 })]));
+    queryClient.setQueryData(
+      ['agent-versions', AGENT_ID],
+      makeAgentVersionsList([makeAgentVersion({ id: VERSION_1 })]),
+    );
     queryClient.setQueryData(['agent', AGENT_ID], makeStoredAgent({ id: AGENT_ID, activeVersionId: VERSION_1 }));
 
     const createHook = renderHook(() => useCreateAgentVersion({ agentId: AGENT_ID }), { wrapper });

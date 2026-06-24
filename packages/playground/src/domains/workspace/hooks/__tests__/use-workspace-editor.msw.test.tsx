@@ -94,10 +94,9 @@ describe('when Studio users manage editor workspaces', () => {
       type: 'file',
     });
 
-    const files = renderHook(
-      () => useWorkspaceFiles('/skills', { workspaceId: WORKSPACE_ID, recursive: true }),
-      { wrapper },
-    );
+    const files = renderHook(() => useWorkspaceFiles('/skills', { workspaceId: WORKSPACE_ID, recursive: true }), {
+      wrapper,
+    });
     const writer = renderHook(() => useWriteWorkspaceFile(), { wrapper });
 
     await waitFor(() => expect(files.result.current.data?.entries[0]?.name).toBe('refund-policy'));
@@ -121,11 +120,12 @@ describe('when Studio users manage editor workspaces', () => {
       encoding: 'utf-8',
       recursive: true,
     });
-    expect(queryClient.getQueryState(['workspace', 'files', '/skills/refund-policy', undefined, WORKSPACE_ID])?.isInvalidated).toBe(
-      true,
-    );
-    expect(queryClient.getQueryState(['workspace', 'file', '/skills/refund-policy/SKILL.md', WORKSPACE_ID])?.isInvalidated).toBe(
-      true,
-    );
+    expect(
+      queryClient.getQueryState(['workspace', 'files', '/skills/refund-policy', undefined, WORKSPACE_ID])
+        ?.isInvalidated,
+    ).toBe(true);
+    expect(
+      queryClient.getQueryState(['workspace', 'file', '/skills/refund-policy/SKILL.md', WORKSPACE_ID])?.isInvalidated,
+    ).toBe(true);
   });
 });

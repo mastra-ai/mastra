@@ -80,7 +80,9 @@ describe('editor e2e scenario: scorer runtime resolution', () => {
     const result = await scorer!.run({
       runId: 'scenario-run',
       input: [{ id: 'input-1', role: 'user', content: 'What is TypeScript?', createdAt: new Date() }],
-      output: [{ id: 'output-1', role: 'assistant', content: 'TypeScript is typed JavaScript.', createdAt: new Date() }],
+      output: [
+        { id: 'output-1', role: 'assistant', content: 'TypeScript is typed JavaScript.', createdAt: new Date() },
+      ],
     } as never);
 
     // ASSERT
