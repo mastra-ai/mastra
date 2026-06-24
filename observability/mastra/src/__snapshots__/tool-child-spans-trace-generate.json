@@ -383,7 +383,7 @@
                   },
                   {
                     "role": "tool",
-                    "content": "[tool: childSpanTool]"
+                    "content": "[tool-result: {\"type\":\"json\",\"value\":{\"output\":\"Tool processed: test-data\"}}]"
                   }
                 ],
                 "output": {

@@ -445,6 +445,48 @@ describe('ModelSpanTracker', () => {
       expect(span.metadata).toMatchObject({ toolCallId, toolName, providerExecuted: true });
       expect(span.output).toEqual(result);
     });
+
+    it('should use toModelOutput value for locally executed tools when available', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const toolCallId = 'call_model_output123';
+      const toolName = 'fileTool';
+      const modelOutput = 'Summarized file content (base64 stripped)';
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        {
+          type: 'tool-result',
+          payload: {
+            toolCallId,
+            toolName,
+            result: { rawBase64: 'very-large-base64-string...' },
+            providerMetadata: {
+              mastra: { modelOutput },
+            },
+          },
+        },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+
+      modelSpan.end();
+
+      const toolResultSpans = testExporter.getSpansByName("chunk: 'tool-result'");
+      expect(toolResultSpans).toHaveLength(1);
+
+      const span = toolResultSpans[0]!;
+      expect(span.metadata).toMatchObject({ toolCallId, toolName });
+      expect(span.output).toBe(modelOutput);
+    });
+
   });
 
   describe('multiple concurrent tool calls', () => {
@@ -1359,6 +1401,103 @@ describe('ModelSpanTracker', () => {
       // Should NOT contain tool definitions or fallback keys summary
       expect(stepSpans[0]!.input).not.toHaveProperty('tools');
       expect(Array.isArray(stepSpans[0]!.input)).toBe(true);
+    });
+  });
+
+  describe('tool-result preview in step input', () => {
+    it('should show tool-result content instead of [tool-result] placeholder', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        {
+          type: 'step-start',
+          payload: {
+            messageId: 'msg-1',
+            request: {
+              body: JSON.stringify({
+                messages: [
+                  {
+                    role: 'tool',
+                    content: [
+                      {
+                        type: 'tool-result',
+                        toolCallId: 'call_123',
+                        toolName: 'readFile',
+                        result: 'File contents here',
+                      },
+                    ],
+                  },
+                ],
+              }),
+            },
+          },
+        },
+        { type: 'text-delta', payload: { text: 'Got it.' } },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      expect(stepSpans[0]!.input).toEqual([
+        { role: 'tool', content: '[tool-result: File contents here]' },
+      ]);
+    });
+
+    it('should fall back to [tool-result] when result is absent', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        {
+          type: 'step-start',
+          payload: {
+            messageId: 'msg-1',
+            request: {
+              body: JSON.stringify({
+                messages: [
+                  {
+                    role: 'tool',
+                    content: [
+                      {
+                        type: 'tool-result',
+                        toolCallId: 'call_456',
+                        toolName: 'someTool',
+                      },
+                    ],
+                  },
+                ],
+              }),
+            },
+          },
+        },
+        { type: 'text-delta', payload: { text: 'Ok.' } },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      expect(stepSpans[0]!.input).toEqual([
+        { role: 'tool', content: '[tool-result]' },
+      ]);
     });
   });
 

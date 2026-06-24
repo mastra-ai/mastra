@@ -379,7 +379,7 @@
                   },
                   {
                     "role": "tool",
-                    "content": "[tool: calculator]"
+                    "content": "[tool-result: {\"type\":\"json\",\"value\":{\"result\":8}}]"
                   }
                 ],
                 "output": {

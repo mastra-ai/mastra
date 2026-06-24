@@ -361,7 +361,7 @@
                   },
                   {
                     "role": "tool",
-                    "content": "[tool: metadataTool]"
+                    "content": "[tool-result: {\"type\":\"json\",\"value\":{\"output\":\"Processed: some data\"}}]"
                   }
                 ],
                 "output": {
