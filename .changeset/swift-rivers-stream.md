@@ -14,4 +14,4 @@ MastraCode now configures Stagehand with proper AI SDK provider options (`baseUR
 
 The shared OAuth-bearer-refresh logic is extracted into a `getCodexBearer` helper used by both the main agent fetch and the Stagehand fetch.
 
-`observe`, `act`, and `extract` now work end-to-end against Codex OAuth using the `__GATEWAY_OPENAI_MODEL_MINI__` Codex-compatible model, with no `OPENAI_API_KEY` required.
+`observe`, `act`, and `extract` now work end-to-end against Codex OAuth using a Codex-compatible OpenAI model, with no `OPENAI_API_KEY` required.

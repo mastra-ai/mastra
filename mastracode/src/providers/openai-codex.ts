@@ -324,9 +324,7 @@ async function aggregateCodexStream(response: Response): Promise<string> {
       }
       case 'response.error':
       case 'error': {
-        throw new Error(
-          `Codex stream error: ${JSON.stringify(payload.error ?? payload)}`,
-        );
+        throw new Error(`Codex stream error: ${JSON.stringify(payload.error ?? payload)}`);
       }
       default:
         // Ignore reasoning / unknown events
@@ -335,8 +333,9 @@ async function aggregateCodexStream(response: Response): Promise<string> {
   };
 
   // SSE parser: events separated by blank line; lines like "event: x" / "data: y"
+  // Normalize CRLF→LF so \r\n\r\n event boundaries parse correctly (SSE spec allows CRLF).
   const processChunk = (chunk: string) => {
-    buffer += chunk;
+    buffer += chunk.replace(/\r\n/g, '\n');
     let sepIdx: number;
     while ((sepIdx = buffer.indexOf('\n\n')) !== -1) {
       const raw = buffer.slice(0, sepIdx);
@@ -357,13 +356,17 @@ async function aggregateCodexStream(response: Response): Promise<string> {
     }
   };
 
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    processChunk(decoder.decode(value, { stream: true }));
+  try {
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      processChunk(decoder.decode(value, { stream: true }));
+    }
+    processChunk(decoder.decode());
+  } finally {
+    reader.releaseLock();
   }
-  processChunk(decoder.decode());
 
   // Stitch accumulated text deltas back into their items
   const base = finalResponse ?? createdResponse ?? { output: [] };
@@ -383,7 +386,7 @@ async function aggregateCodexStream(response: Response): Promise<string> {
       return item;
     });
 
-  base.output = finalItems.length > 0 ? finalItems : base.output ?? [];
+  base.output = finalItems.length > 0 ? finalItems : (base.output ?? []);
 
   return JSON.stringify(base);
 }
