@@ -25,7 +25,7 @@ export function MainSidebarNavHeader({
   const ctx = useMaybeSidebar();
   const state: SidebarState = stateProp ?? ctx?.state ?? 'default';
   const isMobile = ctx?.isMobile ?? false;
-  const Link: LinkComponent | 'a' = LinkProp ?? ctx?.LinkComponent ?? 'a';
+  const Link: LinkComponent = LinkProp ?? ctx?.LinkComponent ?? 'a';
   const showTitle = state === 'default' && !isMobile;
 
   return (

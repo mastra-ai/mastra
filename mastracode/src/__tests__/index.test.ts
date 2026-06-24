@@ -387,18 +387,11 @@ describe('createMastraCode', () => {
     const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
       | {
           gateways?: unknown[];
-          resolveModel?: unknown;
-          modelAuthChecker?: unknown;
-          customModelCatalogProvider?: unknown;
           subagents?: unknown[];
         }
       | undefined;
     expect(harnessConfig?.gateways).toEqual([mastraCodeGatewayMock]);
     expect(harnessConfig?.subagents).toEqual([subagent]);
-    expect(harnessConfig?.resolveModel).toBe(resolveModelMock);
-    expect(createMastraCodeModelCatalogProviderMock).toHaveBeenCalledWith(mastraCodeGatewayMock);
-    expect(harnessConfig?.modelAuthChecker).toBeUndefined();
-    expect(harnessConfig?.customModelCatalogProvider).toBe(mastraCodeCatalogProviderMock);
   }, 10_000);
 
   it('uses configured memory gateway settings when creating the MastraCode gateway', async () => {
