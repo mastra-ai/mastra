@@ -69,7 +69,7 @@ const cloneThreadBodySchema = z.object({
   title: z.string().optional(),
 });
 const listMessagesQuerySchema = z.object({ limit: z.coerce.number().optional() });
-const listThreadsQuerySchema = z.object({ limit: z.coerce.number().optional() });
+const listThreadsQuerySchema = z.object({ limit: z.coerce.number().optional(), projectPath: z.string().optional() });
 const followUpBodySchema = z.object({ message: z.string() });
 
 const sendNotificationBodySchema = z.object({
@@ -94,12 +94,40 @@ const createSessionResponseSchema = z.object({
   threadId: z.string().optional(),
 });
 const ackResponseSchema = z.object({ ok: z.boolean() });
+/**
+ * Status-line relevant slice of the session's observational-memory progress.
+ * Mirrors the TUI status line: `msg pending/threshold ↓removal` (the active
+ * message window before an observation fires) and `mem observed/reflection
+ * ↓savings` (accumulated observations before a reflection fires).
+ */
+const omProgressSummarySchema = z.object({
+  status: z.string(),
+  pendingTokens: z.number(),
+  threshold: z.number(),
+  thresholdPercent: z.number(),
+  observationTokens: z.number(),
+  reflectionThreshold: z.number(),
+  reflectionThresholdPercent: z.number(),
+  /** Tokens the next observation will remove from the message window. */
+  projectedMessageRemoval: z.number(),
+  /** Tokens the next reflection is projected to save. */
+  projectedReflectionSavings: z.number(),
+});
+const sessionSettingsSchema = z.object({
+  yolo: z.boolean(),
+  thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh']),
+  notifications: z.enum(['off', 'bell', 'system', 'both']),
+  smartEditing: z.boolean(),
+});
 const sessionStateResponseSchema = z.object({
   harnessId: z.string(),
   resourceId: z.string(),
   threadId: z.string().optional(),
   modeId: z.string(),
   modelId: z.string(),
+  omProgress: omProgressSummarySchema.optional(),
+  tokenUsage: z.record(z.string(), z.unknown()).optional(),
+  settings: sessionSettingsSchema.optional(),
 });
 const listModesResponseSchema = z.object({
   modes: z.array(z.object({ id: z.string(), name: z.string().optional() })),
@@ -110,6 +138,7 @@ const listThreadsResponseSchema = z.object({
       id: z.string(),
       title: z.string().optional(),
       updatedAt: z.string().optional(),
+      projectPath: z.string().optional(),
     }),
   ),
 });
@@ -258,7 +287,10 @@ export const STREAM_HARNESS_SESSION_ROUTE = createRoute({
         }
       };
 
-      return new ReadableStream<string>({
+      // The stream yields raw event objects plus `:`-prefixed SSE comments
+      // (heartbeats); the server adapter frames events and passes comments
+      // through verbatim.
+      return new ReadableStream<unknown>({
         start(controller) {
           const scheduleHeartbeat = () => {
             if (cleanedUp) return;
@@ -279,7 +311,10 @@ export const STREAM_HARNESS_SESSION_ROUTE = createRoute({
           unsubscribe = session.subscribe(event => {
             if (cleanedUp) return;
             try {
-              controller.enqueue(`data: ${JSON.stringify(event)}\n\n`);
+              // Enqueue the raw event object. The server adapter is responsible
+              // for SSE framing (`data: <json>\n\n`); enqueuing a pre-framed
+              // string here would double-encode it.
+              controller.enqueue(event);
               scheduleHeartbeat();
             } catch {
               cleanup();
@@ -512,12 +547,37 @@ export const GET_HARNESS_SESSION_STATE_ROUTE = createRoute({
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
       const session = await getSession(harness, resourceId);
+      const ds = session.displayState.get();
+      const om = ds.omProgress;
+      const reflectionSavings =
+        om.buffered.reflection.inputObservationTokens - om.buffered.reflection.observationTokens;
+      const st = session.state.get() as Record<string, unknown>;
+      const oneOf = <T extends string>(value: unknown, allowed: readonly T[], fallback: T): T =>
+        allowed.includes(value as T) ? (value as T) : fallback;
       return {
         harnessId,
         resourceId,
         threadId: session.thread.getId() ?? undefined,
         modeId: session.mode.get(),
         modelId: session.model.get(),
+        omProgress: {
+          status: om.status,
+          pendingTokens: om.pendingTokens,
+          threshold: om.threshold,
+          thresholdPercent: om.thresholdPercent,
+          observationTokens: om.observationTokens,
+          reflectionThreshold: om.reflectionThreshold,
+          reflectionThresholdPercent: om.reflectionThresholdPercent,
+          projectedMessageRemoval: om.buffered.observations.projectedMessageRemoval,
+          projectedReflectionSavings: reflectionSavings > 0 ? reflectionSavings : 0,
+        },
+        tokenUsage: ds.tokenUsage as unknown as Record<string, unknown>,
+        settings: {
+          yolo: st.yolo === true,
+          thinkingLevel: oneOf(st.thinkingLevel, ['off', 'low', 'medium', 'high', 'xhigh'] as const, 'off'),
+          notifications: oneOf(st.notifications, ['off', 'bell', 'system', 'both'] as const, 'off'),
+          smartEditing: st.smartEditing !== false,
+        },
       };
     } catch (error) {
       return handleError(error, 'error reading harness session state');
@@ -561,19 +621,28 @@ export const LIST_HARNESS_THREADS_ROUTE = createRoute({
   tags: ['Harness'],
   requiresAuth: true,
   requiresPermission: 'harness:read',
-  handler: async ({ mastra, harnessId, resourceId, limit }) => {
+  handler: async ({ mastra, harnessId, resourceId, limit, projectPath }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
       const session = await getSession(harness, resourceId);
       const threads = await session.thread.list();
+      // A single resourceId can be shared across git worktrees of the same repo
+      // (the id is derived from the git URL). When a projectPath is supplied,
+      // scope to threads tagged for that working directory and drop untagged
+      // ones, so worktree A never shows worktree B's threads. Mirrors the TUI's
+      // worktree-strict selection (PR #18332).
+      const scoped = projectPath
+        ? threads.filter(t => (t.metadata as Record<string, unknown> | undefined)?.projectPath === projectPath)
+        : threads;
       const toTime = (t: { updatedAt?: Date; createdAt?: Date }) => (t.updatedAt ?? t.createdAt)?.getTime() ?? 0;
-      const sorted = [...threads].sort((a, b) => toTime(b) - toTime(a));
+      const sorted = [...scoped].sort((a, b) => toTime(b) - toTime(a));
       const max = Number(limit);
       const limited = Number.isFinite(max) && max > 0 ? sorted.slice(0, max) : sorted;
       return {
         threads: limited.map(t => ({
           id: t.id,
           title: t.title,
+          projectPath: (t.metadata as Record<string, unknown> | undefined)?.projectPath as string | undefined,
           updatedAt: t.updatedAt instanceof Date ? t.updatedAt.toISOString() : undefined,
         })),
       };

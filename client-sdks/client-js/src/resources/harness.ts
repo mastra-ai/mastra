@@ -45,6 +45,25 @@ export interface HarnessMessage {
  * narrowing on `event.type` gives you the right payload fields. This mirrors the
  * subset of the harness event stream a web client typically renders.
  */
+/**
+ * Status-line relevant slice of observational-memory progress, mirroring the
+ * TUI status line. `msg` reads `pendingTokens/threshold ↓projectedMessageRemoval`
+ * (the active message window before an observation fires); `mem` reads
+ * `observationTokens/reflectionThreshold ↓projectedReflectionSavings`
+ * (accumulated observations before a reflection fires).
+ */
+export interface HarnessOMProgress {
+  status: string;
+  pendingTokens: number;
+  threshold: number;
+  thresholdPercent: number;
+  observationTokens: number;
+  reflectionThreshold: number;
+  reflectionThresholdPercent: number;
+  projectedMessageRemoval: number;
+  projectedReflectionSavings: number;
+}
+
 export type KnownHarnessEvent =
   | { type: 'agent_start' }
   | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' | 'suspended' }
@@ -96,6 +115,18 @@ export type KnownHarnessEvent =
     }
   // Usage tracking.
   | { type: 'usage_update'; usage: unknown }
+  // Canonical display-state snapshot, emitted after every other event. Carries
+  // the status-line figures (OM progress + cumulative token usage). Maps/Dates
+  // in the full display state don't survive JSON, so only plain fields are typed.
+  | {
+      type: 'display_state_changed';
+      displayState: {
+        isRunning?: boolean;
+        omProgress?: HarnessOMProgress;
+        tokenUsage?: Record<string, unknown>;
+        [key: string]: unknown;
+      };
+    }
   // Goals.
   | {
       type: 'goal_evaluation';
@@ -150,12 +181,30 @@ export interface CreateHarnessSessionResponse {
   threadId?: string;
 }
 
+/** Agent behavior settings, mirroring the TUI's `/settings` toggles. */
+export interface HarnessSessionSettings {
+  /** Auto-approve all tool calls (no per-tool prompt). */
+  yolo: boolean;
+  /** Extended-thinking budget. */
+  thinkingLevel: 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+  /** How completion/notification alerts are delivered. */
+  notifications: 'off' | 'bell' | 'system' | 'both';
+  /** Use AST-aware smart editing when available. */
+  smartEditing: boolean;
+}
+
 export interface HarnessSessionState {
   harnessId: string;
   resourceId: string;
   threadId?: string;
   modeId: string;
   modelId: string;
+  /** OM progress snapshot for the status line (initial hydration). */
+  omProgress?: HarnessOMProgress;
+  /** Cumulative token usage for the current thread. */
+  tokenUsage?: Record<string, unknown>;
+  /** Agent behavior settings (yolo, thinking, notifications, smart editing). */
+  settings?: HarnessSessionSettings;
 }
 
 export interface HarnessModeInfo {
@@ -397,8 +446,18 @@ export class HarnessSession extends BaseResource {
   }
 
   /** List the threads for this session's resource, most-recently-updated first. Pass `limit` for just the newest N. */
-  async listThreads(limit?: number): Promise<HarnessThreadInfo[]> {
-    const query = limit != null ? `?limit=${limit}` : '';
+  /**
+   * List the session's threads, newest first. Pass `limit` to cap the count
+   * (e.g. for a sidebar) and `projectPath` to scope to threads tagged for a
+   * specific working directory — necessary when one resourceId is shared across
+   * git worktrees of the same repo.
+   */
+  async listThreads(options?: number | { limit?: number; projectPath?: string }): Promise<HarnessThreadInfo[]> {
+    const opts = typeof options === 'number' ? { limit: options } : (options ?? {});
+    const params = new URLSearchParams();
+    if (opts.limit != null) params.set('limit', String(opts.limit));
+    if (opts.projectPath) params.set('projectPath', opts.projectPath);
+    const query = params.toString() ? `?${params.toString()}` : '';
     const body = await this.request<{ threads: HarnessThreadInfo[] }>(`${this.base()}/threads${query}`);
     return body.threads;
   }

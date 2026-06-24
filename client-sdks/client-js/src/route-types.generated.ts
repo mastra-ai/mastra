@@ -90317,6 +90317,32 @@ export type GetHarnessHarnessIdSessionsResourceId_Response = {
   threadId?: string | undefined;
   modeId: string;
   modelId: string;
+  omProgress?:
+    | {
+        status: string;
+        pendingTokens: number;
+        threshold: number;
+        thresholdPercent: number;
+        observationTokens: number;
+        reflectionThreshold: number;
+        reflectionThresholdPercent: number;
+        projectedMessageRemoval: number;
+        projectedReflectionSavings: number;
+      }
+    | undefined;
+  tokenUsage?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  settings?:
+    | {
+        yolo: boolean;
+        thinkingLevel: 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+        notifications: 'off' | 'bell' | 'system' | 'both';
+        smartEditing: boolean;
+      }
+    | undefined;
 };
 
 export type GetHarnessHarnessIdSessionsResourceId_Request = Simplify<
@@ -90346,6 +90372,7 @@ export type GetHarnessHarnessIdSessionsResourceIdThreads_PathParams = {
 
 export type GetHarnessHarnessIdSessionsResourceIdThreads_QueryParams = {
   limit?: number | undefined;
+  projectPath?: string | undefined;
 };
 
 export type GetHarnessHarnessIdSessionsResourceIdThreads_Response = {
@@ -90353,6 +90380,7 @@ export type GetHarnessHarnessIdSessionsResourceIdThreads_Response = {
     id: string;
     title?: string | undefined;
     updatedAt?: string | undefined;
+    projectPath?: string | undefined;
   }[];
 };
 

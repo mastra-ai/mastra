@@ -123,7 +123,7 @@ describe('harness routes', () => {
         harnessId: 'code',
         resourceId: 'user-1',
         abortSignal: new AbortController().signal,
-      } as any)) as ReadableStream<string>;
+      } as any)) as ReadableStream<unknown>;
 
       const reader = stream.getReader();
 
@@ -134,16 +134,18 @@ describe('harness routes', () => {
       // Any emit fans out a synthetic display_state_changed to subscribers.
       session.emit({ type: 'agent_start' } as any);
 
-      // The first non-heartbeat chunk should be our event as an SSE data frame.
-      let received = '';
-      for (let i = 0; i < 5 && !received.includes('data:'); i++) {
+      // The route enqueues raw event objects (the server adapter is responsible
+      // for SSE framing). Read past any `:`-prefixed heartbeat comments until we
+      // see our event object.
+      let received: any;
+      for (let i = 0; i < 5 && received === undefined; i++) {
         const { value } = await reader.read();
-        if (value) received += value;
+        if (value && typeof value === 'object') received = value;
       }
       await reader.cancel();
 
-      expect(received).toContain('data:');
-      expect(received).toContain('agent_start');
+      expect(received).toBeDefined();
+      expect(received.type).toBe('agent_start');
     });
   });
 
@@ -225,6 +227,46 @@ describe('harness routes', () => {
       );
       const times = res.threads.map(t => Date.parse(t.updatedAt!));
       expect(times[0]).toBeGreaterThanOrEqual(times[1]!);
+    });
+
+    it('scopes the result to `projectPath` so worktrees sharing a resourceId stay isolated', async () => {
+      // One resourceId can be shared across git worktrees of the same repo (the
+      // id derives from the git URL). Threads are auto-tagged with the working
+      // directory via session state, and the list must filter on it.
+      await CREATE_HARNESS_SESSION_ROUTE.handler({ mastra, harnessId: 'code', resourceId: 'user-wt' } as any);
+      const session = await mastra.getHarness('code')!.createSession({ resourceId: 'user-wt' });
+
+      await session.state.set({ projectPath: '/repo/worktree-a' } as any);
+      await session.thread.create({ title: 'a1' });
+      await session.thread.create({ title: 'a2' });
+      await session.state.set({ projectPath: '/repo/worktree-b' } as any);
+      await session.thread.create({ title: 'b1' });
+
+      const onlyA = (await LIST_HARNESS_THREADS_ROUTE.handler({
+        mastra,
+        harnessId: 'code',
+        resourceId: 'user-wt',
+        projectPath: '/repo/worktree-a',
+      } as any)) as { threads: { title?: string; projectPath?: string }[] };
+      expect(onlyA.threads.map(t => t.title).sort()).toEqual(['a1', 'a2']);
+      expect(onlyA.threads.every(t => t.projectPath === '/repo/worktree-a')).toBe(true);
+
+      const onlyB = (await LIST_HARNESS_THREADS_ROUTE.handler({
+        mastra,
+        harnessId: 'code',
+        resourceId: 'user-wt',
+        projectPath: '/repo/worktree-b',
+      } as any)) as { threads: { title?: string }[] };
+      expect(onlyB.threads.map(t => t.title)).toEqual(['b1']);
+
+      // Without a projectPath, every thread for the resource is returned
+      // (including the untagged auto-created startup thread).
+      const all = (await LIST_HARNESS_THREADS_ROUTE.handler({
+        mastra,
+        harnessId: 'code',
+        resourceId: 'user-wt',
+      } as any)) as { threads: unknown[] };
+      expect(all.threads.length).toBeGreaterThanOrEqual(3);
     });
   });
 
