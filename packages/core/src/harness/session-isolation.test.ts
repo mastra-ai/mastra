@@ -216,6 +216,48 @@ describe('Harness session — cross-resource thread ownership', () => {
     await expect(b.thread.clone({ sourceThreadId: aThreadId })).rejects.toThrow(`Thread not found: ${aThreadId}`);
   });
 
+  it('only migrates a cross-resource thread when the detected resource and project path still match', async () => {
+    const storage = new InMemoryStore();
+    const projectPath = '/tmp/mastra-project';
+    const oldHarness = createHarness(storage, { resourceId: 'old-resource', initialState: { projectPath } });
+    await oldHarness.init();
+    const oldSession = await oldHarness.createSession();
+    const oldThreadId = oldSession.thread.requireId();
+
+    const currentHarness = createHarness(storage, { resourceId: 'current-resource', initialState: { projectPath } });
+    await currentHarness.init();
+    const currentSession = await currentHarness.createSession();
+
+    await expect(
+      currentSession.thread.migrateToCurrentResource({
+        threadId: oldThreadId,
+        expectedResourceId: 'another-resource',
+        expectedProjectPath: projectPath,
+      }),
+    ).rejects.toThrow(`Thread not found: ${oldThreadId}`);
+
+    await expect(
+      currentSession.thread.migrateToCurrentResource({
+        threadId: oldThreadId,
+        expectedResourceId: 'old-resource',
+        expectedProjectPath: '/tmp/other-project',
+      }),
+    ).rejects.toThrow(`Thread not found: ${oldThreadId}`);
+
+    await expect(
+      currentSession.thread.migrateToCurrentResource({
+        threadId: oldThreadId,
+        expectedResourceId: 'old-resource',
+        expectedProjectPath: projectPath,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(await storage.stores.memory.getThreadById({ threadId: oldThreadId })).toMatchObject({
+      id: oldThreadId,
+      resourceId: 'current-resource',
+    });
+  });
+
   it('still allows the owning resource to switch, list, and delete its own thread', async () => {
     const harness = createHarness(new InMemoryStore());
     await harness.init();

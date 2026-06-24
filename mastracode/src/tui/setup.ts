@@ -625,7 +625,11 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
       });
 
       if (answer === 'Migrate and resume') {
-        await state.session.thread.migrateToCurrentResource({ threadId: thread.id });
+        await state.session.thread.migrateToCurrentResource({
+          threadId: thread.id,
+          expectedResourceId: thread.resourceId,
+          expectedProjectPath: currentPath,
+        });
         await state.session.thread.switch({ threadId: thread.id });
         return;
       }

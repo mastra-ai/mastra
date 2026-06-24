@@ -338,10 +338,23 @@ export class SessionThread {
   }
 
   /** Move a stored thread and its existing messages to this session's resource. */
-  async migrateToCurrentResource({ threadId }: { threadId: string }): Promise<void> {
+  async migrateToCurrentResource({
+    threadId,
+    expectedResourceId,
+    expectedProjectPath,
+  }: {
+    threadId: string;
+    expectedResourceId: string;
+    expectedProjectPath: string;
+  }): Promise<void> {
     if (!this.#store?.hasStorage()) return;
     const thread = await this.#store.getById({ threadId });
-    if (!thread) {
+    if (
+      !thread ||
+      thread.resourceId !== expectedResourceId ||
+      thread.metadata?.projectPath !== expectedProjectPath ||
+      expectedResourceId === this.#getResourceId()
+    ) {
       throw new Error(`Thread not found: ${threadId}`);
     }
     const resourceId = this.#getResourceId();
