@@ -64,12 +64,19 @@ export async function savePlanSnapshot(opts: {
 }): Promise<string> {
   const { title, plan, projectPath } = opts;
   const plansDir = opts.plansDir ?? getLocalPlansDir(projectPath);
+  const baseDir = path.resolve(plansDir);
 
-  await fs.mkdir(plansDir, { recursive: true });
+  await fs.mkdir(baseDir, { recursive: true });
 
   const filename = `${slugify(title)}.md`;
+  const target = path.resolve(baseDir, filename);
+  const rel = path.relative(baseDir, target);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    throw new Error(`Invalid plan title: ${title}`);
+  }
+
   const content = `# ${title}\n\n${plan}\n`;
-  await fs.writeFile(path.join(plansDir, filename), content, 'utf-8');
+  await fs.writeFile(target, content, 'utf-8');
   return filename;
 }
 
