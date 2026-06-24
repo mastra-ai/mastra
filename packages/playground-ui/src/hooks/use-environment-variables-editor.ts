@@ -16,12 +16,18 @@ export interface UseEnvironmentVariablesEditorOptions<TRow extends EnvironmentVa
   initialRows?: readonly TRow[];
   rows?: readonly TRow[];
   onRowsChange?: (rows: TRow[]) => void;
-  createDefaultRow?: () => TRow;
-  createRow?: (entry: EnvironmentVariableEntry) => TRow;
   getEditableRows?: (rows: readonly TRow[]) => readonly TRow[];
   getPreservedRows?: (rows: readonly TRow[]) => readonly TRow[];
   maxUploadSize?: number;
 }
+
+export interface EnvironmentVariablesEditorRowFactories<TRow extends EnvironmentVariableRow = EnvironmentVariableRow> {
+  createDefaultRow: () => TRow;
+  createRow: (entry: EnvironmentVariableEntry) => TRow;
+}
+
+interface ResolvedEnvironmentVariablesEditorOptions<TRow extends EnvironmentVariableRow>
+  extends UseEnvironmentVariablesEditorOptions<TRow>, EnvironmentVariablesEditorRowFactories<TRow> {}
 
 export interface EnvironmentVariablesEditorFileUploadEvent {
   target: {
@@ -61,8 +67,8 @@ function defaultEditableRows<TRow extends EnvironmentVariableRow>(rows: readonly
   return rows;
 }
 
-function defaultPreservedRows<TRow extends EnvironmentVariableRow>() {
-  return [] as TRow[];
+function defaultPreservedRows() {
+  return [];
 }
 
 function normalizeRows<TRow extends EnvironmentVariableRow>(
@@ -88,16 +94,37 @@ function areRowsEqual(a: readonly EnvironmentVariableEntry[], b: readonly Enviro
   return true;
 }
 
-export function useEnvironmentVariablesEditor<TRow extends EnvironmentVariableRow = EnvironmentVariableRow>({
+export function useEnvironmentVariablesEditor(
+  options?: UseEnvironmentVariablesEditorOptions & Partial<EnvironmentVariablesEditorRowFactories>,
+): EnvironmentVariablesEditorController;
+export function useEnvironmentVariablesEditor<TRow extends EnvironmentVariableRow>(
+  options: UseEnvironmentVariablesEditorOptions<TRow> & EnvironmentVariablesEditorRowFactories<TRow>,
+): EnvironmentVariablesEditorController<TRow>;
+export function useEnvironmentVariablesEditor<TRow extends EnvironmentVariableRow>(
+  options:
+    | (UseEnvironmentVariablesEditorOptions & Partial<EnvironmentVariablesEditorRowFactories>)
+    | (UseEnvironmentVariablesEditorOptions<TRow> & EnvironmentVariablesEditorRowFactories<TRow>) = {},
+) {
+  // Overloads require row factories for custom row shapes; default factories only create base rows.
+  const resolvedOptions = {
+    ...options,
+    createDefaultRow: options.createDefaultRow ?? createEmptyEnvironmentVariableEntry,
+    createRow: options.createRow ?? defaultCreateRow,
+  } as ResolvedEnvironmentVariablesEditorOptions<TRow>;
+
+  return useEnvironmentVariablesEditorController(resolvedOptions);
+}
+
+function useEnvironmentVariablesEditorController<TRow extends EnvironmentVariableRow>({
   initialRows,
   rows: controlledRows,
   onRowsChange,
-  createDefaultRow = createEmptyEnvironmentVariableEntry as () => TRow,
-  createRow = defaultCreateRow as (entry: EnvironmentVariableEntry) => TRow,
+  createDefaultRow,
+  createRow,
   getEditableRows = defaultEditableRows,
   getPreservedRows = defaultPreservedRows,
   maxUploadSize,
-}: UseEnvironmentVariablesEditorOptions<TRow> = {}): EnvironmentVariablesEditorController<TRow> {
+}: ResolvedEnvironmentVariablesEditorOptions<TRow>): EnvironmentVariablesEditorController<TRow> {
   const initialSourceRows = controlledRows ?? initialRows;
   const nextRowId = useRef(0);
   const fallbackRowIds = useRef<Record<number, string>>({});
@@ -181,16 +208,16 @@ export function useEnvironmentVariablesEditor<TRow extends EnvironmentVariableRo
 
     if (hasOnlyEmptyRow(currentEditableRows)) {
       const preserved = preservedRows(rows);
-      return commitRows([...preserved, ...newRows] as TRow[], [...rowIds.slice(0, preserved.length), ...newRowIds]);
+      return commitRows([...preserved, ...newRows], [...rowIds.slice(0, preserved.length), ...newRowIds]);
     }
 
     if (typeof targetIndex !== 'number') {
-      return commitRows([...rows, ...newRows] as TRow[], [...rowIds, ...newRowIds]);
+      return commitRows([...rows, ...newRows], [...rowIds, ...newRowIds]);
     }
 
     const targetRow = rows[targetIndex];
     if (!targetRow) {
-      return commitRows([...rows, ...newRows] as TRow[], [...rowIds, ...newRowIds]);
+      return commitRows([...rows, ...newRows], [...rowIds, ...newRowIds]);
     }
 
     const targetIsEmpty = !targetRow.key.trim() && !targetRow.value;
@@ -198,7 +225,7 @@ export function useEnvironmentVariablesEditor<TRow extends EnvironmentVariableRo
     const after = rows.slice(targetIndex + 1);
     const beforeIds = rowIds.slice(0, targetIndex + (targetIsEmpty ? 0 : 1));
     const afterIds = rowIds.slice(targetIndex + 1);
-    return commitRows([...before, ...newRows, ...after] as TRow[], [...beforeIds, ...newRowIds, ...afterIds]);
+    return commitRows([...before, ...newRows, ...after], [...beforeIds, ...newRowIds, ...afterIds]);
   }
 
   function handlePaste(index: number, text: string) {

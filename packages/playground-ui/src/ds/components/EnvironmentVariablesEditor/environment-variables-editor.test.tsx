@@ -13,6 +13,22 @@ afterEach(() => {
   Reflect.deleteProperty(document, 'execCommand');
 });
 
+function getInputByDisplayValue(value: string) {
+  const input = screen.getByDisplayValue(value);
+  if (!(input instanceof HTMLInputElement)) {
+    throw new Error(`Expected display value "${value}" to resolve to an input element.`);
+  }
+  return input;
+}
+
+function getButton(name: string) {
+  const button = screen.getByRole('button', { name });
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error(`Expected button "${name}" to resolve to a button element.`);
+  }
+  return button;
+}
+
 function TestEditor({
   initialRows = [{ key: 'PUBLIC_URL', value: 'https://example.com' }],
   onSave = vi.fn(),
@@ -105,13 +121,30 @@ describe('EnvironmentVariablesEditor', () => {
       />,
     );
 
-    expect((screen.getByDisplayValue('https://example.com') as HTMLInputElement).type).toBe('password');
-    expect((screen.getByDisplayValue('secret') as HTMLInputElement).type).toBe('password');
+    expect(getInputByDisplayValue('https://example.com').type).toBe('password');
+    expect(getInputByDisplayValue('secret').type).toBe('password');
 
     fireEvent.click(screen.getAllByRole('button', { name: 'Show value' })[0]);
 
-    expect((screen.getByDisplayValue('https://example.com') as HTMLInputElement).type).toBe('text');
-    expect((screen.getByDisplayValue('secret') as HTMLInputElement).type).toBe('password');
+    expect(getInputByDisplayValue('https://example.com').type).toBe('text');
+    expect(getInputByDisplayValue('secret').type).toBe('password');
+  });
+
+  it('associates each row label with its input', () => {
+    render(
+      <TestEditor
+        initialRows={[
+          { key: 'PUBLIC_URL', value: 'https://example.com' },
+          { key: 'API_KEY', value: 'secret' },
+        ]}
+      />,
+    );
+
+    expect(screen.getAllByLabelText('Key').map(input => input.id)).toEqual(['input-env-key-0', 'input-env-key-1']);
+    expect(screen.getAllByLabelText('Value').map(input => input.id)).toEqual([
+      'input-env-value-0',
+      'input-env-value-1',
+    ]);
   });
 
   it('adds rows and submits trimmed environment variables', () => {
@@ -151,7 +184,7 @@ describe('EnvironmentVariablesEditor', () => {
     });
 
     expect(screen.getAllByText('Environment variable keys must be unique').length).toBeGreaterThan(0);
-    expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(getButton('Save').disabled).toBe(true);
     expect(onSave).not.toHaveBeenCalled();
   });
 
@@ -165,13 +198,13 @@ describe('EnvironmentVariablesEditor', () => {
   it('keeps controlled rows clean until they change', () => {
     render(<ControlledTestEditor initialRows={[{ key: 'PUBLIC_URL', value: 'https://example.com' }]} />);
 
-    expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(getButton('Save').disabled).toBe(true);
 
     fireEvent.change(screen.getByDisplayValue('PUBLIC_URL'), {
       target: { value: 'NEXT_PUBLIC_URL' },
     });
 
-    expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(getButton('Save').disabled).toBe(false);
   });
 
   it('composes nested editor parts from root context', () => {

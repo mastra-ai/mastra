@@ -30,6 +30,10 @@ export function EnvironmentVariablesEditorRow({
   const resolvedRowErrors = rowErrors ?? contextRowErrors;
   const keyError = resolvedRowErrors?.[index]?.key ?? (editor.rowHasDuplicateKey(index) ? duplicateKeyMessage : null);
   const valueError = resolvedRowErrors?.[index]?.value;
+  const keyFieldName = `env-key-${index}`;
+  const valueFieldName = `env-value-${index}`;
+  const keyInputId = `input-${keyFieldName}`;
+  const valueInputId = `input-${valueFieldName}`;
 
   function handlePaste(text: string) {
     return editor.handlePaste(index, text);
@@ -40,10 +44,10 @@ export function EnvironmentVariablesEditorRow({
       <div className="flex-1">
         <FieldBlock.Layout>
           <FieldBlock.Column>
-            <FieldBlock.Label name={`env-key-${index}`}>{keyLabel}</FieldBlock.Label>
+            <FieldBlock.Label name={keyFieldName}>{keyLabel}</FieldBlock.Label>
             <InputGroup className="w-full">
               <InputGroupInput
-                id={`input-env-key-${index}`}
+                id={keyInputId}
                 placeholder={keyPlaceholder}
                 className="font-mono"
                 value={row.key}
@@ -65,10 +69,10 @@ export function EnvironmentVariablesEditorRow({
       <div className="flex-1">
         <FieldBlock.Layout>
           <FieldBlock.Column>
-            <FieldBlock.Label name={`env-value-${index}`}>{valueLabel}</FieldBlock.Label>
+            <FieldBlock.Label name={valueFieldName}>{valueLabel}</FieldBlock.Label>
             <InputGroup className="w-full">
               <InputGroupInput
-                id={`input-env-value-${index}`}
+                id={valueInputId}
                 placeholder={valuePlaceholder}
                 className="font-mono"
                 type={editor.isValueRevealed(index) ? 'text' : 'password'}
