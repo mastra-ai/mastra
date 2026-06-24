@@ -79,7 +79,8 @@ export const mastra = new Mastra({
   {
     name: 'hostedDomain',
     type: 'string',
-    description: 'Hosted-domain login hint passed to Google as `hd`. This is a hint only and is not used for authorization.',
+    description:
+      'Hosted-domain login hint passed to Google as `hd`. This is a hint only and is not used for authorization.',
     isOptional: true,
     defaultValue: 'process.env.GOOGLE_HOSTED_DOMAIN or the single allowed domain',
   },
@@ -131,7 +132,8 @@ export const mastra = new Mastra({
     isOptional: true,
     defaultValue: "'google'",
   },
-]}/>
+]}
+/>
 
 ## `MastraRBACGoogle` constructor parameters
 
@@ -235,7 +237,8 @@ export const mastra = new Mastra({
       },
     ],
   },
-]}/>
+]}
+/>
 
 ## Methods
 
@@ -325,7 +328,8 @@ Returns: `Promise<boolean>`
     description: 'Optional pre-resolved Google Workspace group role IDs.',
     isOptional: true,
   },
-]}/>
+]}
+/>
 
 ## Additional configuration
 
