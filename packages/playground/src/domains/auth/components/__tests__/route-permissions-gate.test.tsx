@@ -23,7 +23,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const BASE_URL = 'http://localhost:4111';
 
-vi.mock('@mastra/playground-ui', () => ({
+vi.mock('@mastra/playground-ui/components/Spinner', () => ({
   Spinner: () => <div data-testid="gate-spinner" />,
 }));
 

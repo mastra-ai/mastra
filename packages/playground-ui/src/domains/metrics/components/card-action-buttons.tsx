@@ -1,5 +1,5 @@
 import { EyeIcon, LogsIcon } from 'lucide-react';
-import { Button } from '../../../ds/components/Button';
+import { Button } from '../../../ds/components/Button/Button';
 import type { LinkComponent } from '../../../ds/types/link-component';
 
 type CardActionButtonProps = {

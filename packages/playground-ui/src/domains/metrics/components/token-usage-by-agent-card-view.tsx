@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { HorizontalBars } from '../../../ds/components/HorizontalBars';
-import { MetricsCard } from '../../../ds/components/MetricsCard';
-import { Tab, TabContent, TabList, Tabs } from '../../../ds/components/Tabs';
+import { HorizontalBars } from '../../../ds/components/HorizontalBars/horizontal-bars';
+import { MetricsCard } from '../../../ds/components/MetricsCard/metrics-card';
+import { TabContent } from '../../../ds/components/Tabs/tabs-content';
+import { TabList } from '../../../ds/components/Tabs/tabs-list';
+import { Tabs } from '../../../ds/components/Tabs/tabs-root';
+import { Tab } from '../../../ds/components/Tabs/tabs-tab';
 import type { LinkComponent } from '../../../ds/types/link-component';
 import type { TokenUsageByAgentRow } from '../hooks/use-token-usage-by-agent-metrics';
 import { CHART_COLORS, formatCompact, formatCost } from './metrics-utils';

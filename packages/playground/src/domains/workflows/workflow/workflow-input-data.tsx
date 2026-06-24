@@ -1,6 +1,5 @@
 import {
   Button,
-  CodeEditor,
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -13,6 +12,7 @@ import {
   Txt,
   cn,
 } from '@mastra/playground-ui';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { ChevronRight, Loader2, Play } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';

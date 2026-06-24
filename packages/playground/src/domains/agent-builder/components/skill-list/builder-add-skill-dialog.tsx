@@ -7,11 +7,11 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  Input,
   ScrollArea,
   SkillIcon,
   cn,
 } from '@mastra/playground-ui';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Check, Download, ExternalLink, Github, Loader2, Package, Search } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
