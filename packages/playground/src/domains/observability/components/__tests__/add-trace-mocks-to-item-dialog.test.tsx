@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { Children, isValidElement } from 'react';
-import type { PropsWithChildren } from 'react';
+import type { ChangeEvent, PropsWithChildren } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AddTraceMocksToItemDialog } from '../add-trace-mocks-to-item-dialog';
@@ -41,9 +41,6 @@ vi.mock('@mastra/playground-ui', async importOriginal => {
 
   return {
     ...actual,
-    CodeEditor: ({ value, onChange }: { value?: string; onChange?: (v: string) => void }) => (
-      <textarea data-testid="code-editor" value={value ?? ''} onChange={e => onChange?.(e.target.value)} />
-    ),
     // Render a native <select> seeded from SelectItem options so tests can choose by value.
     Select: ({ value, onValueChange, disabled, children }: SelectStubProps) => (
       <select
@@ -62,6 +59,16 @@ vi.mock('@mastra/playground-ui', async importOriginal => {
     SelectItem,
   };
 });
+
+vi.mock('@uiw/react-codemirror', () => ({
+  default: ({ value, onChange }: { value?: string; onChange?: (value: string) => void }) => (
+    <textarea
+      data-testid="code-editor"
+      value={value ?? ''}
+      onChange={(event: ChangeEvent<HTMLTextAreaElement>) => onChange?.(event.target.value)}
+    />
+  ),
+}));
 
 vi.mock('@mastra/playground-ui/components/SideDialog', () => ({
   SideDialog: Object.assign(

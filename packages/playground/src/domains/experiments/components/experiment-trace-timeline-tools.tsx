@@ -1,5 +1,6 @@
 import type { LightSpanRecord } from '@mastra/core/storage';
-import { Button, ButtonsGroup, Icon } from '@mastra/playground-ui';
+import { Button, Icon } from '@mastra/playground-ui';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { SearchFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { XIcon, CircleDashedIcon } from 'lucide-react';
 import { Fragment, useEffect, useState } from 'react';

@@ -1,5 +1,6 @@
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import { Skeleton, Txt } from '@mastra/playground-ui';
+import { Txt } from '@mastra/playground-ui';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { useParams } from 'react-router';
 import { WorkflowHeader } from './workflow-header';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';

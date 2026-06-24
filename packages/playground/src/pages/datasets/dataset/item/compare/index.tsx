@@ -1,23 +1,22 @@
 import type { DatasetItem } from '@mastra/client-js';
 import {
   Button,
-  ButtonsGroup,
-  MainContentContent,
-  MainContentLayout,
-  PermissionDenied,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-  SessionExpired,
-  TextAndIcon,
   is401UnauthorizedError,
   is403ForbiddenError,
 } from '@mastra/playground-ui';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { CodeDiff } from '@mastra/playground-ui/components/CodeDiff';
 import { Column, Columns } from '@mastra/playground-ui/components/Columns';
+import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { ArrowLeft, GitCompareIcon, History, DiffIcon, ColumnsIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router';

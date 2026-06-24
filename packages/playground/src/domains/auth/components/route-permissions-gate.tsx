@@ -1,5 +1,6 @@
-import { Spinner, Button } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 
 import { usePermissionPatterns } from '../hooks/use-permission-patterns';
 import { ALL_SIDEBAR_PERMISSIONS } from '../route-permissions';
