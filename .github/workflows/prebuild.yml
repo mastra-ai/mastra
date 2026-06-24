@@ -81,6 +81,7 @@ jobs:
     outputs:
       run_full: ${{ steps.compute.outputs.run_full }}
       test_files: ${{ steps.compute.outputs.test_files }}
+      affected_store_tests: ${{ steps.compute.outputs.affected_store_tests }}
     permissions:
       contents: read
     steps:
@@ -105,6 +106,7 @@ jobs:
             echo "No src/ changes detected — running full suite."
             echo "run_full=true" >> $GITHUB_OUTPUT
             echo "test_files=" >> $GITHUB_OUTPUT
+            echo "affected_store_tests=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
@@ -121,6 +123,9 @@ jobs:
             const count = data.count || 0;
             const total = data.testFiles || 1;
             const ratio = count / total;
+
+            const affectedStoreTests = (data.affectedTests || []).some(file => file.startsWith('stores/'));
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, \`affected_store_tests=\${affectedStoreTests}\n\`);
 
             console.error(\`Affected: \${count}/\${total} tests (\${(ratio * 100).toFixed(1)}%)\`);
 
@@ -204,11 +209,11 @@ jobs:
   combined-stores-check-changes:
     name: Detect stores changes
     if: github.repository == 'mastra-ai/mastra' && needs.changes.outputs.has_code == 'true'
-    needs: changes
+    needs: [changes, affected-tests]
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 10
     outputs:
-      stores-changed: ${{ steps.filter.outputs.stores }}
+      stores-changed: ${{ steps.check.outputs.stores-changed }}
     permissions:
       contents: read
     steps:
@@ -217,16 +222,29 @@ jobs:
           fetch-depth: 0
 
       - name: Check for stores changes
-        uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          base: ${{ github.event.pull_request.base.ref }}
-          ref: ${{ github.event.pull_request.head.sha }}
-          filters: |
-            stores:
-              - 'stores/**'
-              - 'packages/core/**'
-              - '.github/workflows/test-combined-stores.yml'
+        id: check
+        run: |
+          STORES_CHANGED=false
+
+          # Run when the affected-tests graph found store test files impacted
+          if [ "${{ needs.affected-tests.outputs.affected_store_tests }}" = "true" ]; then
+            STORES_CHANGED=true
+          fi
+
+          # Direct path fallback for changes not covered by the affected-test graph
+          # (store packages/configs, core storage+vector interfaces, CI workflow edits).
+          # Ignore markdown-only changes so docs/changelog-only edits don't trigger.
+          DIRECT=$(git diff --name-only \
+            "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" \
+            | grep -vE '\.md$' \
+            | grep -E '^(stores/|packages/core/src/storage/|packages/core/src/vector/|\.github/workflows/test-combined-stores\.yml|\.github/workflows/prebuild\.yml)' \
+            || true)
+
+          if [ -n "$DIRECT" ]; then
+            STORES_CHANGED=true
+          fi
+
+          echo "stores-changed=$STORES_CHANGED" >> "$GITHUB_OUTPUT"
 
   combined-stores-tests:
     name: Combined Store Tests
