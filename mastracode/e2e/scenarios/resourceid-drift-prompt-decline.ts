@@ -74,7 +74,10 @@ export const resourceidDriftPromptDeclineScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Pending new thread: yes/i, terminal, 5_000);
     runtime.printScreen('after declining migration', terminal);
 
-    const oldThreadResourceId = queryValue(scenarioDbPath, `select resourceId from mastra_threads where id = ${quoteSql(THREAD_ID)};`);
+    const oldThreadResourceId = queryValue(
+      scenarioDbPath,
+      `select resourceId from mastra_threads where id = ${quoteSql(THREAD_ID)};`,
+    );
     if (oldThreadResourceId !== OLD_RESOURCE_ID) {
       throw new Error(`Expected old thread to remain on ${OLD_RESOURCE_ID}, got ${oldThreadResourceId}`);
     }

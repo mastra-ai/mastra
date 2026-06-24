@@ -589,8 +589,8 @@ export class Harness<TState = {}> {
    */
   private createThreadDataStore(session: Session<TState>): ThreadDataStore {
     return {
-      listThreads: ({ resourceId, includeForkedSubagents }) =>
-        this.queryThreads({ resourceId, includeForkedSubagents }),
+      listThreads: ({ resourceId, includeForkedSubagents, metadata }) =>
+        this.queryThreads({ resourceId, includeForkedSubagents, metadata }),
       getById: ({ threadId }) => this.queryThreadById({ threadId }),
       listMessages: ({ threadId, limit }) => this.queryThreadMessages({ threadId, limit }),
       firstUserMessages: ({ threadIds }) => this.queryFirstUserMessages({ threadIds }),
@@ -763,16 +763,24 @@ export class Harness<TState = {}> {
   private async queryThreads({
     resourceId,
     includeForkedSubagents,
+    metadata,
   }: {
     resourceId?: string;
     includeForkedSubagents?: boolean;
+    metadata?: Record<string, unknown>;
   }): Promise<HarnessThread[]> {
     if (!this.#resolveStorage()) {
       return [];
     }
 
     const memoryStorage = await this.getMemoryStorage();
-    const filter: { resourceId?: string } | undefined = resourceId === undefined ? undefined : { resourceId };
+    const filter =
+      resourceId === undefined && metadata === undefined
+        ? undefined
+        : {
+            ...(resourceId === undefined ? {} : { resourceId }),
+            ...(metadata === undefined ? {} : { metadata }),
+          };
 
     const result = await memoryStorage.listThreads({ filter, perPage: false });
 

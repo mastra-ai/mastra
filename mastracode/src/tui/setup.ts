@@ -598,10 +598,12 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
   }
 
   if (threads.length === 0) {
-    const driftCandidates = (await state.session.thread.list({ allResources: true })).filter(t => {
-      const threadPath = t.metadata?.projectPath as string | undefined;
-      return !!threadPath && threadPath === currentPath && t.resourceId !== currentResourceId;
-    });
+    const driftCandidates = (
+      await state.session.thread.list({
+        allResources: true,
+        metadata: { projectPath: currentPath },
+      })
+    ).filter(t => t.resourceId !== currentResourceId);
     const [thread] = [...driftCandidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 
     if (thread) {
@@ -616,10 +618,7 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
           '',
           'Migrate this thread to the current resource and resume it?',
         ].join('\n'),
-        options: [
-          { label: 'Migrate and resume' },
-          { label: 'Start fresh' },
-        ],
+        options: [{ label: 'Migrate and resume' }, { label: 'Start fresh' }],
         selectedOptionLabel: 'Migrate and resume',
         allowCustomResponse: false,
         overlay: { widthPercent: 80, maxHeight: '70%' },

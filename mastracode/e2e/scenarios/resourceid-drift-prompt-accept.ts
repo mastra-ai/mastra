@@ -81,7 +81,10 @@ export const resourceidDriftPromptAcceptScenario: McE2eScenario = {
     await runtime.waitForScreenText(new RegExp(TITLE, 'i'), terminal, 10_000);
     runtime.printScreen('after accepting migration', terminal);
 
-    const threadResourceId = queryValue(scenarioDbPath, `select resourceId from mastra_threads where id = ${quoteSql(THREAD_ID)};`);
+    const threadResourceId = queryValue(
+      scenarioDbPath,
+      `select resourceId from mastra_threads where id = ${quoteSql(THREAD_ID)};`,
+    );
     if (threadResourceId !== currentResourceId) {
       throw new Error(`Expected thread resourceId ${currentResourceId}, got ${threadResourceId}`);
     }

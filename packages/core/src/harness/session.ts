@@ -127,7 +127,11 @@ export class SessionIdentity {
  */
 export interface ThreadDataStore {
   /** List threads for a resource (or all resources), already mapped + filtered of forked subagents unless asked. */
-  listThreads(input: { resourceId?: string; includeForkedSubagents?: boolean }): Promise<HarnessThread[]>;
+  listThreads(input: {
+    resourceId?: string;
+    includeForkedSubagents?: boolean;
+    metadata?: Record<string, unknown>;
+  }): Promise<HarnessThread[]>;
   /** Fetch a single thread by id, or null when it doesn't exist. */
   getById(input: { threadId: string }): Promise<HarnessThread | null>;
   /** List messages for a thread, newest-`limit` (returned oldest-first) or all. */
@@ -310,7 +314,11 @@ export class SessionThread {
   // ---------------------------------------------------------------------------
 
   /** List this session's threads (its own resource by default, or all resources). */
-  async list(options?: { allResources?: boolean; includeForkedSubagents?: boolean }): Promise<HarnessThread[]> {
+  async list(options?: {
+    allResources?: boolean;
+    includeForkedSubagents?: boolean;
+    metadata?: Record<string, unknown>;
+  }): Promise<HarnessThread[]> {
     if (!this.#store) {
       return [];
     }
@@ -318,6 +326,7 @@ export class SessionThread {
     const threads = await this.#store.listThreads({
       resourceId,
       includeForkedSubagents: options?.includeForkedSubagents,
+      metadata: options?.metadata,
     });
     return threads;
   }
