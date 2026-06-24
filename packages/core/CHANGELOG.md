@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.46.0-alpha.5
+
+### Patch Changes
+
+- Exported isBadRequestError matcher for detecting transient HTTP 400 errors that can be retried ([#18384](https://github.com/mastra-ai/mastra/pull/18384))
+
 ## 1.46.0-alpha.4
 
 ### Minor Changes
