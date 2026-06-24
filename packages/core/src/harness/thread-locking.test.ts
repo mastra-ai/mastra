@@ -30,7 +30,7 @@ describe('Harness thread locking', () => {
     release = vi.fn();
     harness = createHarness({ acquire, release });
     await harness.init();
-    session = await harness.createSession();
+    session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     // createSession() acquires a lock for its auto-created starter thread.
     // Reset the spies so each test observes only its own lock activity.
     acquire.mockClear();
@@ -201,7 +201,7 @@ describe('Harness thread locking', () => {
       // First session creates a thread for resource "user-1".
       const harnessA = freshHarness(store);
       await harnessA.init();
-      const sessionA = await harnessA.createSession({ resourceId: 'user-1' });
+      const sessionA = await harnessA.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-1' });
       const existing = sessionA.thread.getId();
       expect(existing).toBeDefined();
 
@@ -211,7 +211,7 @@ describe('Harness thread locking', () => {
       // A second session for the same resourceId should resume that thread.
       const harnessB = freshHarness(store);
       await harnessB.init();
-      const sessionB = await harnessB.createSession({ resourceId: 'user-1' });
+      const sessionB = await harnessB.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-1' });
 
       expect(sessionB.thread.getId()).toBe(existing);
       expect(acquire).toHaveBeenCalledWith(existing);
@@ -222,7 +222,7 @@ describe('Harness thread locking', () => {
 
       const harnessA = freshHarness(store);
       await harnessA.init();
-      const sessionA = await harnessA.createSession({ resourceId: 'user-1' });
+      const sessionA = await harnessA.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-1' });
       const existing = sessionA.thread.getId();
 
       acquire.mockClear();
@@ -230,7 +230,7 @@ describe('Harness thread locking', () => {
       // A session for a different resourceId must not resume user-1's thread.
       const harnessB = freshHarness(store);
       await harnessB.init();
-      const sessionB = await harnessB.createSession({ resourceId: 'user-2' });
+      const sessionB = await harnessB.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-2' });
 
       expect(sessionB.thread.getId()).not.toBe(existing);
       expect(acquire).toHaveBeenCalledWith(sessionB.thread.getId());
@@ -242,7 +242,7 @@ describe('Harness thread locking', () => {
       await harness.init();
 
       acquire.mockClear();
-      const newSession = await harness.createSession();
+      const newSession = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
       expect(acquire).toHaveBeenCalledWith(newSession.thread.getId());
     });
   });
@@ -304,7 +304,7 @@ describe('Harness thread locking', () => {
     it('works normally without locking', async () => {
       const unlocked = createHarness(); // no threadLock
       await unlocked.init();
-      const unlockedSession = await unlocked.createSession();
+      const unlockedSession = await unlocked.createSession({ id: 'unlocked-session', ownerId: 'test-owner' });
 
       const threadA = await unlockedSession.thread.create({ title: 'test' });
       await unlockedSession.thread.create({ title: 'test2' });
