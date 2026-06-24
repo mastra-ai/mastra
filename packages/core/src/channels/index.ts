@@ -1,4 +1,13 @@
 export { AgentChannels } from './agent-channels';
+export { HarnessChannels } from './harness-channels';
+export type {
+  HarnessAckContext,
+  HarnessAcknowledgeConfig,
+  HarnessChannelConfig,
+  ResolveHarnessResourceId,
+} from './harness-channels';
+export { createHarnessRenderState, handleHarnessEvent } from './harness-event-renderer';
+export type { HarnessRenderDeps, HarnessRenderState } from './harness-event-renderer';
 export { ChatChannelProcessor } from './processor';
 export { MastraStateAdapter } from './state-adapter';
 export { defaultTypingStatus } from './typing-status';

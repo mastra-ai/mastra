@@ -1457,6 +1457,19 @@ export class Mastra<
       for (const [key, harness] of Object.entries(config.harnesses)) {
         this.#harnesses[key] = harness;
         harness.__registerMastra(this);
+
+        // Register channel webhook routes for harnesses that configured `channels`,
+        // mirroring the agent channel wiring in `addAgent`.
+        const harnessChannels = harness.getChannels();
+        if (harnessChannels) {
+          const channelRoutes = harnessChannels.getWebhookRoutes();
+          if (channelRoutes.length > 0) {
+            this.#server = {
+              ...this.#server,
+              apiRoutes: [...(this.#server?.apiRoutes ?? []), ...channelRoutes],
+            };
+          }
+        }
       }
     }
 
@@ -1480,6 +1493,22 @@ export class Mastra<
             } catch (err) {
               console.error(`[Mastra] Failed to initialize channel "${key}":`, err);
             }
+          }
+        }
+      });
+    }
+
+    // Initialize harness channels (Session-backed) the same way as agent channels.
+    if (config?.harnesses) {
+      void Promise.resolve().then(async () => {
+        for (const [key, harness] of Object.entries(config.harnesses ?? {})) {
+          const harnessChannels = harness.getChannels();
+          if (!harnessChannels) continue;
+          harnessChannels.__setLogger(this.getLogger());
+          try {
+            await harnessChannels.initialize(this);
+          } catch (err) {
+            console.error(`[Mastra] Failed to initialize harness channels "${key}":`, err);
           }
         }
       });

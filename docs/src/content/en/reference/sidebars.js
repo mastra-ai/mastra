@@ -317,6 +317,12 @@ const sidebars = {
           label: 'Session Class',
           customProps: { tags: ['beta'] },
         },
+        {
+          type: 'doc',
+          id: 'harness/harness-channels',
+          label: 'HarnessChannels Class',
+          customProps: { tags: ['beta'] },
+        },
       ],
     },
     {

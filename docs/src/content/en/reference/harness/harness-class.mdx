@@ -224,6 +224,13 @@ await harness.sendMessage({ content: 'Hello!' })
     isOptional: true,
   },
   {
+    name: 'channels',
+    type: 'HarnessChannelConfig | HarnessChannels',
+    description:
+      'Chat channel configuration that connects this Harness to messaging platforms such as Slack. Accepts the channel config directly (the Harness injects itself) or a pre-built `HarnessChannels`. When the Harness is registered on a `Mastra` instance, its channel webhook routes are registered automatically. See [HarnessChannels](/reference/harness/harness-channels).',
+    isOptional: true,
+  },
+  {
     name: 'subagents',
     type: 'HarnessSubagent[]',
     description:
@@ -485,6 +492,14 @@ Return the internal `Mastra` instance, or `undefined` before `init()`. Useful fo
 
 ```typescript
 const mastra = harness.getMastra()
+```
+
+#### `getChannels()`
+
+Return the [`HarnessChannels`](/reference/harness/harness-channels) instance that connects this Harness to messaging platforms, or `undefined` when no `channels` were configured.
+
+```typescript
+const channels = harness.getChannels()
 ```
 
 ### Modes

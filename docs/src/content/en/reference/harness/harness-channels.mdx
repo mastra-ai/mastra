@@ -1,0 +1,276 @@
+---
+title: "Reference: HarnessChannels class | Harness"
+description: "API reference for the HarnessChannels class, which connects a Harness-backed bot to messaging platforms like Slack."
+packages:
+  - "@mastra/core"
+---
+
+# HarnessChannels class
+
+:::experimental
+
+The `Harness` feature is in beta stage and subject to breaking changes in minor versions until it graduates from its beta status.
+
+:::
+
+The `HarnessChannels` class connects a [`Harness`](/reference/harness/harness-class) to messaging platforms. It routes inbound platform messages into a [`Session`](/reference/harness/session) and renders the session's event stream back to the thread.
+
+This is the Harness counterpart to [agent channels](/reference/agents/channels). Use `HarnessChannels` when a bot is backed by a `Harness`; use the `channels` property on the `Agent` constructor when a bot is backed by a single agent.
+
+For each chat thread, `HarnessChannels` resolves a Harness `resourceId` and gets the matching `Session`. A `resourceId` maps to exactly one durable session per Harness, and each session owns its own thread — so one chat thread maps to one session.
+
+## Session model
+
+The thread-to-session mapping is automatic and gives a Devin-style experience on Slack:
+
+- **@mention the bot in a channel** starts a **new session**. The bot's reply opens a Slack thread.
+- **Replying inside that thread** continues the **same session**, so the bot keeps its context across the back-and-forth.
+- **@mentioning the bot again** elsewhere starts a **fresh session**.
+
+This works because the Slack adapter keys each thread by its root timestamp, and `HarnessChannels` derives one stable `resourceId` per thread. You don't configure any of this — it's the default behavior. The optional [`acknowledge`](#acknowledgments) affordances only add a visible signal when a new session starts; they never change which session a message routes to.
+
+## Usage example
+
+The recommended way to enable channels is the `channels` property on the [`Harness`](/reference/harness/harness-class) constructor. The Harness builds the `HarnessChannels` for you and binds itself. When the Harness is registered on a `Mastra` instance, its channel webhook routes are registered and the channels are initialized automatically — no manual `initialize()` call:
+
+```typescript title="src/mastra/index.ts"
+import { Harness } from '@mastra/core/harness'
+import { Mastra } from '@mastra/core'
+import { SlackAdapter } from '@mastra/slack'
+
+const harness = new Harness({
+  id: 'support',
+  modes,
+  channels: {
+    adapters: {
+      slack: new SlackAdapter({
+        botToken: process.env.SLACK_BOT_TOKEN!,
+        signingSecret: process.env.SLACK_SIGNING_SECRET!,
+      }),
+    },
+  },
+})
+
+export const mastra = new Mastra({ harnesses: { support: harness } })
+```
+
+Access the instance later with `harness.getChannels()`.
+
+### Standalone usage
+
+For advanced setups that manage the channel lifecycle manually, construct `HarnessChannels` directly. Pass the `Harness` and one or more platform adapters, then initialize against your `Mastra` instance:
+
+```typescript title="src/mastra/channels.ts"
+import { HarnessChannels } from '@mastra/core/channels'
+import { SlackAdapter } from '@mastra/slack'
+
+const channels = new HarnessChannels({
+  harness,
+  adapters: {
+    slack: new SlackAdapter({
+      botToken: process.env.SLACK_BOT_TOKEN!,
+      signingSecret: process.env.SLACK_SIGNING_SECRET!,
+    }),
+  },
+})
+
+await channels.initialize(mastra)
+```
+
+When a user sends a message, the bot:
+
+- Streams the assistant reply, editing a single message in place as it grows.
+- Renders each tool call as a card that updates to a result or error.
+- Posts Approve/Deny buttons when a tool needs approval, resuming the run on the click.
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'harness',
+    type: 'Harness',
+    isOptional: true,
+    description:
+      'The Harness whose sessions back this bot. Omit when configuring `channels` on the Harness — it injects itself. Set this only for standalone usage.',
+  },
+  {
+    name: 'adapters',
+    type: 'Record<string, ChannelAdapterConfig | Adapter>',
+    description:
+      'Platform adapters keyed by name (for example `slack`). Each value is an adapter or an adapter with per-platform options such as `toolDisplay` and `formatError`.',
+  },
+  {
+    name: 'resolveResourceId',
+    type: 'ResolveHarnessResourceId',
+    isOptional: true,
+    defaultValue: '${platform}:${thread.id}',
+    description:
+      'Resolve the Harness resourceId (which selects the Session) for a chat thread. Return a stable id so a conversation always resumes the same session.',
+  },
+  {
+    name: 'acknowledge',
+    type: 'HarnessAcknowledgeConfig',
+    isOptional: true,
+    description:
+      'Opt-in affordances that signal a new session has started — a reaction on the triggering message and/or a message posted into the thread. Off by default; fires only on the first message of a session, never on continuations. See Acknowledgments below.',
+  },
+  {
+    name: 'handlers',
+    type: 'ChannelHandlers',
+    isOptional: true,
+    description: 'Override the built-in handlers for direct messages, mentions, and subscribed messages.',
+  },
+  {
+    name: 'state',
+    type: 'StateAdapter',
+    isOptional: true,
+    description:
+      'State adapter for deduplication, locking, and subscriptions. Defaults to a Mastra-storage-backed adapter.',
+  },
+  {
+    name: 'userName',
+    type: 'string',
+    isOptional: true,
+    defaultValue: 'Mastra',
+    description: "The bot's display name.",
+  },
+  {
+    name: 'inlineMedia',
+    type: 'string[] | ((mimeType: string) => boolean)',
+    isOptional: true,
+    description:
+      'Which attachment media types to send inline to the model. Other types are described as text metadata.',
+  },
+  {
+    name: 'inlineLinks',
+    type: 'InlineLinkEntry[]',
+    isOptional: true,
+    description: 'Promote URLs found in message text to file parts so the model can process linked media.',
+  },
+  {
+    name: 'chatOptions',
+    type: 'ChatConfig',
+    isOptional: true,
+    description: 'Additional options passed directly to the underlying Chat SDK.',
+  },
+]}
+/>
+
+## Methods
+
+### Lifecycle
+
+#### `initialize(mastra)`
+
+Initializes the underlying Chat SDK, registers message and action handlers, and starts listeners. Idempotent — calling it again returns the same initialization.
+
+```typescript
+await channels.initialize(mastra)
+```
+
+#### `close()`
+
+Tears down all open session subscriptions. Call this when retiring the bot or replacing the instance.
+
+```typescript
+channels.close()
+```
+
+### Adapters
+
+#### `hasAdapter(platform)`
+
+Returns `true` when an adapter is registered for the given platform name.
+
+```typescript
+if (channels.hasAdapter('slack')) {
+  // ...
+}
+```
+
+#### `getWebhookRoutes()`
+
+Returns the API routes that receive webhook events from each adapter, one POST route per adapter at `/api/harnesses/{harnessId}/channels/{platform}/webhook`. When the Harness is registered on a `Mastra` instance, these routes are added to the server automatically.
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'adapters',
+    type: 'Record<string, Adapter>',
+    description: 'The registered platform adapters keyed by name.',
+  },
+  {
+    name: 'sdk',
+    type: 'Chat | null',
+    description: 'The underlying Chat SDK instance. Available after `initialize()`.',
+  },
+  {
+    name: 'channelConfig',
+    type: 'HarnessChannelConfig',
+    description: 'The original configuration passed to the constructor.',
+  },
+]}
+/>
+
+## Acknowledgments
+
+By default the first visible sign of work is the streamed reply, which can lag behind the user's message. The optional `acknowledge` config makes the bot respond instantly when a **new** session starts:
+
+```typescript
+const harness = new Harness({
+  id: 'support',
+  modes,
+  channels: {
+    adapters: {
+      slack: createSlackAdapter({
+        /* ... */
+      }),
+    },
+    acknowledge: {
+      reaction: 'eyes',
+      sessionStartMessage: '🧵 Started a new session.',
+    },
+  },
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'reaction',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Emoji name (for example `eyes`) added to the triggering message when a new session is created. Requires an adapter that supports reactions (Slack does); silently skipped otherwise. Best-effort — a failure never blocks the message.',
+  },
+  {
+    name: 'sessionStartMessage',
+    type: 'string | ((ctx: HarnessAckContext) => string | undefined)',
+    isOptional: true,
+    description:
+      'Text posted into the thread when a new session starts. Pass a function to compute it per message; return `undefined` to post nothing. The context includes `platform`, `thread`, `message`, and `resourceId`.',
+  },
+]}
+/>
+
+Both fire only on the **first** message of a session — replies within an existing thread stay quiet, so continuations are not re-acknowledged. Acknowledgments are best-effort and isolated: a failure is logged but never drops or delays the user's message.
+
+## How events render
+
+`HarnessChannels` renders the [`Session`](/reference/harness/session) event stream to the platform. The table below summarizes the v1 mapping:
+
+| Event | Rendered as |
+| - | - |
+| `message_start` / `message_update` / `message_end` | One assistant message, posted once and edited in place as text streams |
+| `tool_start` | A "running" card |
+| `tool_end` | The card edited to a result or error |
+| `tool_approval_required` | An Approve/Deny prompt; the click resumes the run |
+| `error` | An error message |
+| `info` | A plain message |
+
+Other events (subagents, observational memory, tasks, usage, and mode, model, thread, or workspace lifecycle) are ignored in v1, along with any unknown event types.
+
+When the platform cannot render approval buttons (for example, plain-text tool display), the session auto-approves so a run never stalls waiting for input the bot cannot request.

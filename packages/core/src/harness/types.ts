@@ -1,6 +1,7 @@
 import type { Agent } from '../agent';
 import type { AgentInstructions, ToolsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
+import type { HarnessChannels, HarnessChannelConfig } from '../channels/harness-channels';
 import type { PubSub } from '../events/pubsub';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import type { MastraModelConfig } from '../llm/model/shared.types';
@@ -253,6 +254,32 @@ export interface HarnessConfig<TState = {}> {
    * Propagated to mode agents that don't have their own browser configured.
    */
   browser?: DynamicArgument<MastraBrowser | undefined>;
+
+  /**
+   * Chat channel configuration. Connects this Harness to messaging platforms
+   * (Slack, etc.): inbound messages are routed into a {@link Session} and the
+   * session's events are rendered back to the thread. When the Harness is
+   * hosted on a Mastra server, its channel webhook routes are registered
+   * automatically.
+   *
+   * Accepts the channel config directly (the Harness injects itself) or a
+   * pre-built `HarnessChannels` instance.
+   *
+   * @example
+   * ```ts
+   * import { Harness } from '@mastra/core/harness';
+   * import { SlackAdapter } from '@mastra/slack';
+   *
+   * const harness = new Harness({
+   *   id: 'support',
+   *   modes,
+   *   channels: {
+   *     adapters: { slack: new SlackAdapter({ ... }) },
+   *   },
+   * });
+   * ```
+   */
+  channels?: HarnessChannels | Omit<HarnessChannelConfig, 'harness'>;
 
   /**
    * Periodic heartbeat handlers started during `init()`.

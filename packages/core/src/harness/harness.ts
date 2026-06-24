@@ -5,6 +5,7 @@ import type { MastraDBMessage } from '../agent/message-list/state/types';
 import { mastraDBMessageToSignal } from '../agent/signals';
 import type { AgentInstructions, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
+import { HarnessChannels } from '../channels/harness-channels';
 import { getErrorFromUnknown } from '../error';
 import { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
@@ -215,6 +216,7 @@ export class Harness<TState = {}> {
    */
   #externalMastra: Mastra | undefined = undefined;
   #legacyAgentMode: Record<string, Agent<any, any, any, any>> = {};
+  #channels: HarnessChannels | undefined = undefined;
 
   constructor(config: HarnessConfig<TState>) {
     validateModes(config.modes);
@@ -222,6 +224,12 @@ export class Harness<TState = {}> {
     this.id = config.id;
     this.config = config;
     this.#instructions = config.instructions;
+
+    if (config.channels) {
+      this.#channels =
+        config.channels instanceof HarnessChannels ? config.channels : new HarnessChannels({ ...config.channels });
+      this.#channels.__setHarness(this);
+    }
 
     const defaultMode = config.defaultModeId
       ? config.modes.find(mode => mode.id === config.defaultModeId)
@@ -429,6 +437,14 @@ export class Harness<TState = {}> {
    */
   getMastra(): Mastra | undefined {
     return this.#externalMastra ?? this.#internalMastra;
+  }
+
+  /**
+   * The {@link HarnessChannels} instance that connects this Harness to messaging
+   * platforms, or `undefined` when no `channels` were configured.
+   */
+  getChannels(): HarnessChannels | undefined {
+    return this.#channels;
   }
 
   /**
