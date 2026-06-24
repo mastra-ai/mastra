@@ -1,5 +1,4 @@
 import {
-  DateTimeRangePicker,
   LogDetailsView,
   LogsErrorContent,
   LogsLayout,
@@ -7,7 +6,6 @@ import {
   LogsToolbar,
   NoLogsInfo,
   PageLayout,
-  PropertyFilterCreator,
   SpanDetailsView,
   TraceDetailsView,
   buildLogsListFilters,
@@ -24,6 +22,8 @@ import {
   useTags,
   useTraceLightSpans,
 } from '@mastra/playground-ui';
+import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
+import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
 import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 

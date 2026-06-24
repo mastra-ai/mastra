@@ -56,6 +56,8 @@ const SECTIONS: SectionConfig[] = [
 const IGNORED_PATTERNS = [
   /\/_template\.mdx$/, // Template files for authors
   /\/_partial-.*\.mdx$/, // Partial MDX files that are imported into other docs
+  // Temp ignore for mastra-platform docs that are in the process of moving out of the docs
+  /\/mastra-platform\/.*/,
 ]
 
 function extractDocIds(items: SidebarItem[]): Set<string> {

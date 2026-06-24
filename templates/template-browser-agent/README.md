@@ -12,13 +12,13 @@ This demo runs in Mastra Studio, but you can connect this agent to your React, N
 
 - A [Mastra Gateway API key](https://mastra.ai/docs/models/gateways/mastra).
 - A [Turso](https://turso.tech) database URL + auth token (or swap to `:memory:` for ephemeral local runs).
-- Playwright Chromium is installed by the `playwright-chromium` package during dependency install. Linux server images also need Chromium system libraries available in the runtime image, or you can set `BROWSER_CDP_URL` for a hosted Chrome/Browserbase/Browserless instance.
+- Playwright Chromium is installed by the `playwright-chromium` package during dependency install. On Linux root runtimes, the template runs `playwright install-deps chromium` before the first local browser launch. You can set `BROWSER_CDP_URL` for a hosted Chrome/Browserbase/Browserless instance instead.
 
 ## Quickstart 🚀
 
 1. **Add your API keys**
    - Copy `.env.example` to `.env` and fill it in. Set `BROWSER_HEADLESS=false` if you want to watch the agent click around locally.
-   - For server deployments, either use an image that already includes Playwright's Chromium system dependencies or set `BROWSER_CDP_URL` to a hosted browser endpoint.
+   - For server deployments, leave `BROWSER_SKIP_INSTALL_DEPS=false` so Linux Chromium system dependencies are installed before first browser use, or set `BROWSER_CDP_URL` to a hosted browser endpoint.
 2. **Start the dev server**
    - Run `npm run dev` and open [localhost:4111](http://localhost:4111).
 
@@ -43,7 +43,7 @@ export const browserAgent = new Agent({
 });
 ```
 
-Passing `browser` to the agent automatically registers the full browser toolset (`browser_goto`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_scroll`, `browser_screenshot`, etc.) on the agent. For hosted environments that do not include local Chromium dependencies, set `BROWSER_CDP_URL` to connect to a remote browser instead.
+Passing `browser` to the agent automatically registers the full browser toolset (`browser_goto`, `browser_snapshot`, `browser_click`, `browser_type`, `browser_scroll`, `browser_screenshot`, etc.) on the agent. The template installs Playwright's Linux system dependencies before first local browser launch when running as root; set `BROWSER_CDP_URL` to connect to a remote browser instead.
 
 ## Making it yours
 

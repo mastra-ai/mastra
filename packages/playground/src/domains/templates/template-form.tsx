@@ -1,4 +1,5 @@
-import { Button, SelectFieldBlock, TextFieldBlock, Spinner, cn } from '@mastra/playground-ui';
+import { Button, Spinner, cn } from '@mastra/playground-ui';
+import { SelectFieldBlock, TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { ArrowRightIcon, PackageOpenIcon } from 'lucide-react';
 import { Fragment } from 'react';
 import { AgentMetadataModelSwitcher } from '../agents/components/agent-metadata/agent-metadata-model-switcher';

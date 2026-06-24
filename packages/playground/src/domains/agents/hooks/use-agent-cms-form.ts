@@ -69,7 +69,9 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
   // `=== true`-only checks made an editor-unset code agent send an empty instructions array and
   // drop tool edits on save, wiping changes the server would have kept.
   const ownsInstructions =
-    !isCodeAgentOverride || editorConfig === undefined || (editorConfig !== false && editorConfig?.instructions === true);
+    !isCodeAgentOverride ||
+    editorConfig === undefined ||
+    (editorConfig !== false && editorConfig?.instructions === true);
   const ownsTools =
     !isCodeAgentOverride || editorConfig === undefined || (editorConfig !== false && editorConfig?.tools === true);
   const ownsToolDescriptions =

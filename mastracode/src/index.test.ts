@@ -23,7 +23,18 @@ vi.mock('@mastra/core/harness', () => ({
       }
     }
 
-    subscribe() {}
+    async init() {}
+
+    getMastra() {
+      return undefined;
+    }
+
+    async createSession() {
+      return {
+        subscribe() {},
+        thread: { getId: () => undefined },
+      };
+    }
   },
   taskWriteTool: {},
   taskCheckTool: {},
@@ -31,6 +42,11 @@ vi.mock('@mastra/core/harness', () => ({
 
 vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {},
+  isBadRequestError: (error: unknown) =>
+    typeof error === 'object' &&
+    error !== null &&
+    'statusCode' in error &&
+    (error as { statusCode?: unknown }).statusCode === 400,
   PrefillErrorHandler: class {},
   ProviderHistoryCompat: class {},
   StreamErrorRetryProcessor: class {},
@@ -56,7 +72,7 @@ vi.mock('./agents/subagents/execute.js', () => ({ executeSubagent: {} }));
 vi.mock('./agents/subagents/explore.js', () => ({ exploreSubagent: {} }));
 vi.mock('./agents/subagents/plan.js', () => ({ planSubagent: {} }));
 vi.mock('./agents/tools.js', () => ({ createDynamicTools: vi.fn(), createToolHooks: vi.fn() }));
-vi.mock('./agents/workspace.js', () => ({ getDynamicWorkspace: vi.fn() }));
+vi.mock('./agents/workspace.js', () => ({ getDynamicWorkspace: vi.fn(), getGoalJudgeTools: vi.fn() }));
 
 vi.mock('./auth/storage.js', () => ({
   AuthStorage: class {

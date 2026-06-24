@@ -197,3 +197,87 @@ describe('MySQLStore configuration', () => {
     await store.close();
   });
 });
+
+describe('MySQLStore tool mocks rejection', () => {
+  beforeEach(() => {
+    poolInstances.length = 0;
+    const maybeMock = createPool as unknown as { mockClear?: () => void };
+    maybeMock.mockClear?.();
+  });
+
+  const newStore = () => new MySQLStore({ host: 'localhost', user: 'user', password: 'pw', database: 'db' });
+
+  it('rejects _doAddItem carrying tool mocks before touching the DB', async () => {
+    const store = newStore();
+    const datasets = (await store.getStore('datasets')) as any;
+    const { pool } = poolInstances[poolInstances.length - 1];
+
+    await expect(
+      datasets._doAddItem({
+        datasetId: 'd1',
+        input: { q: 'hi' },
+        toolMocks: [{ toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 52 } }],
+      }),
+    ).rejects.toThrow(/Tool mocks are not supported on the MySQL storage adapter/);
+
+    // Guard runs before any connection is acquired.
+    expect(pool.getConnection).not.toHaveBeenCalled();
+
+    await store.close();
+  });
+
+  it('rejects _doUpdateItem and _doBatchInsertItems carrying tool mocks', async () => {
+    const store = newStore();
+    const datasets = (await store.getStore('datasets')) as any;
+
+    await expect(
+      datasets._doUpdateItem({
+        id: 'i1',
+        datasetId: 'd1',
+        toolMocks: [{ toolName: 't', args: { a: 1 }, output: 'x' }],
+      }),
+    ).rejects.toThrow(/Tool mocks are not supported on the MySQL storage adapter/);
+
+    await expect(
+      datasets._doBatchInsertItems({
+        datasetId: 'd1',
+        items: [{ input: 'ok' }, { input: 'bad', toolMocks: [{ toolName: 't', args: {}, output: 1 }] }],
+      }),
+    ).rejects.toThrow(/Tool mocks are not supported on the MySQL storage adapter/);
+
+    await store.close();
+  });
+
+  it('rejects addExperimentResult carrying a tool mock report', async () => {
+    const store = newStore();
+    const experiments = (await store.getStore('experiments')) as any;
+
+    await expect(
+      experiments.addExperimentResult({
+        experimentId: 'e1',
+        itemId: 'i1',
+        toolMockReport: { served: [], unconsumed: [], liveCalls: [] },
+      }),
+    ).rejects.toThrow(/Tool mock reports are not supported on the MySQL storage adapter/);
+
+    await store.close();
+  });
+
+  it('does not reject mock-free dataset items at the guard', async () => {
+    const store = newStore();
+    const datasets = (await store.getStore('datasets')) as any;
+
+    // No toolMocks → guard passes; the call proceeds to DB access (stubbed),
+    // so it must NOT throw the tool-mock error. (It may reject later for other
+    // reasons in the stubbed DB, which is fine — we only assert the guard.)
+    let guardError: unknown;
+    try {
+      await datasets._doAddItem({ datasetId: 'd1', input: { q: 'hi' } });
+    } catch (err) {
+      guardError = err;
+    }
+    expect(String(guardError ?? '')).not.toMatch(/Tool mocks are not supported/);
+
+    await store.close();
+  });
+});

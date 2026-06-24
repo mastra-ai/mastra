@@ -109,36 +109,56 @@ vi.mock('@mastra/core/harness', () => ({
     constructor(config: unknown) {
       harnessConstructorMock(config);
     }
-    subscribe(eventHandler: unknown) {
-      harnessSubscribeMock(eventHandler);
+    async init() {}
+    getMastra() {
+      return undefined;
     }
-    getCurrentThreadId() {
-      return harnessGetCurrentThreadIdMock();
-    }
-    getResourceId() {
-      return 'project-resource';
+    async createSession() {
+      return {
+        subscribe: (eventHandler: unknown) => harnessSubscribeMock(eventHandler),
+        identity: {
+          getResourceId: () => 'project-resource',
+        },
+        thread: {
+          getId: () => harnessGetCurrentThreadIdMock(),
+          list: (options: unknown) => harnessListThreadsMock(options),
+          setSetting: (setting: unknown) => harnessSetThreadSettingMock(setting),
+        },
+        mode: { get: () => 'build' },
+        model: { get: () => 'anthropic/claude-opus-4-6' },
+        state: {
+          get: () => harnessStateMock,
+          set: (state: unknown) => harnessSetStateMock(state),
+          update: async (updater: any) => {
+            const result = await updater(harnessStateMock);
+            if (result?.updates) harnessSetStateMock(result.updates);
+            return result?.result;
+          },
+        },
+      };
     }
     getState() {
       return harnessStateMock;
     }
-    listThreads(options: unknown) {
-      return harnessListThreadsMock(options);
-    }
     setState(state: unknown) {
       return harnessSetStateMock(state);
-    }
-    setThreadSetting(setting: unknown) {
-      return harnessSetThreadSettingMock(setting);
     }
   },
   taskWriteTool: {},
   taskCheckTool: {},
 }));
 
+const streamErrorRetryProcessorConstructorMock = vi.fn();
+
 vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {
     readonly id = 'agents-md-injector';
   },
+  isBadRequestError: (error: unknown) =>
+    typeof error === 'object' &&
+    error !== null &&
+    'statusCode' in error &&
+    (error as { statusCode?: unknown }).statusCode === 400,
   PrefillErrorHandler: class {
     readonly id = 'prefill-error-handler';
   },
@@ -147,6 +167,9 @@ vi.mock('@mastra/core/processors', () => ({
   },
   StreamErrorRetryProcessor: class {
     readonly id = 'stream-error-retry-processor';
+    constructor(options?: unknown) {
+      streamErrorRetryProcessorConstructorMock(options);
+    }
   },
 }));
 
@@ -187,6 +210,7 @@ vi.mock('../agents/tools.js', () => ({
 
 vi.mock('../agents/workspace.js', () => ({
   getDynamicWorkspace: getDynamicWorkspaceMock,
+  getGoalJudgeTools: vi.fn(),
 }));
 
 vi.mock('../auth/storage.js', () => ({
@@ -336,6 +360,7 @@ describe('createMastraCode', () => {
     loadSettingsMock.mockReturnValue(createMockSettings());
     agentConstructorMock.mockReset();
     harnessConstructorMock.mockReset();
+    streamErrorRetryProcessorConstructorMock.mockReset();
     getAvailableModePacksMock.mockClear();
     getAvailableOmPacksMock.mockClear();
     for (const key of Object.keys(providerRegistryMock)) {
@@ -443,7 +468,7 @@ describe('createMastraCode', () => {
     expect(getDynamicMemoryMock).not.toHaveBeenCalled();
     expect(getStorageConfigMock).toHaveBeenCalledWith(projectPath, expect.anything(), '.acme-code');
     expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined);
-    expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code');
+    expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code', undefined);
   });
 
   it('passes custom workspace config through to Harness without using the default factory', async () => {
@@ -555,7 +580,7 @@ describe('createMastraCode', () => {
     expect(getResourceIdOverrideMock).toHaveBeenCalledWith(projectPath, '.acme-code');
     expect(getStorageConfigMock).toHaveBeenCalledWith(projectPath, expect.anything(), '.acme-code');
     expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined);
-    expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code');
+    expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code', undefined);
     const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
       | { initialState?: Record<string, unknown> }
       | undefined;
@@ -701,6 +726,39 @@ describe('createMastraCode', () => {
       'prefill-error-handler',
       'provider-history-compat',
     ]);
+  });
+
+  it('configures a single StreamErrorRetryProcessor with per-matcher policies', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(streamErrorRetryProcessorConstructorMock).toHaveBeenCalledTimes(1);
+    const options = streamErrorRetryProcessorConstructorMock.mock.calls[0]?.[0] as
+      | { matchers?: Array<{ match?: unknown; maxRetries?: number; delayMs?: unknown }> }
+      | undefined;
+    expect(options?.matchers).toHaveLength(2);
+
+    // First matcher: Bad Request (400) with maxRetries 1 and 2s delay.
+    const badRequestPolicy = options!.matchers![0]!;
+    expect(typeof badRequestPolicy.match).toBe('function');
+    expect(badRequestPolicy.maxRetries).toBe(1);
+    expect(badRequestPolicy.delayMs).toBe(2000);
+
+    // Second matcher: ECONNRESET with maxRetries 2 and exponential backoff.
+    const econnresetPolicy = options!.matchers![1] as {
+      match?: unknown;
+      maxRetries?: number;
+      delayMs?: (args: { retryCount: number }) => number;
+    };
+    expect(typeof econnresetPolicy.match).toBe('function');
+    expect(econnresetPolicy.maxRetries).toBe(2);
+    expect(typeof econnresetPolicy.delayMs).toBe('function');
+    expect(econnresetPolicy.delayMs!({ retryCount: 0 })).toBe(1000);
+    expect(econnresetPolicy.delayMs!({ retryCount: 1 })).toBe(2000);
+    expect(econnresetPolicy.delayMs!({ retryCount: 2 })).toBe(4000);
+    // High retry counts are capped at the max delay (30000ms).
+    expect(econnresetPolicy.delayMs!({ retryCount: 10 })).toBe(30000);
   });
 
   it('configures ProviderHistoryCompat for prompt and API error compatibility', async () => {

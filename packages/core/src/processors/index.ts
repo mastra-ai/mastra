@@ -829,13 +829,18 @@ export * from './processors';
 export { PrefillErrorHandler } from './prefill-error-handler';
 export { ProviderHistoryCompat, anthropicToolIdFormat, cerebrasStripReasoningContent } from './provider-history-compat';
 export {
+  isBadRequestError,
   isRetryableOpenAIResponsesStreamError,
   StreamErrorRetryProcessor,
+  type StreamErrorRetryDelayMs,
   type StreamErrorRetryMatcher,
+  type StreamErrorRetryMatcherConfig,
+  type StreamErrorRetryMatcherEntry,
   type StreamErrorRetryProcessorOptions,
 } from './stream-error-retry-processor';
 export type { CompatRule } from './provider-history-compat';
-export { ProcessorState, ProcessorRunner, createProcessorSendSignal } from './runner';
+export { ProcessorState, ProcessorRunner } from './runner';
+export { createProcessorSendSignal } from './send-signal';
 export * from './memory';
 export type { TripWireOptions } from '../agent/trip-wire';
 export {
