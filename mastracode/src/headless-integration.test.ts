@@ -5,13 +5,20 @@ import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import { Harness } from '@mastra/core/harness';
 import type { HarnessEvent } from '@mastra/core/harness';
+import type {
+  GatewayAuthRequest,
+  GatewayAuthResult,
+  GatewayLanguageModel,
+  MastraModelGatewayInterface,
+  ProviderConfig,
+} from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { AgentsMDInjector } from '@mastra/core/processors';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import z from 'zod';
 
 import { runHeadless } from './headless.js';
@@ -99,6 +106,12 @@ afterEach(() => {
   for (const storePath of tempStorePaths.splice(0)) {
     rmSync(storePath, { force: true, recursive: true });
   }
+});
+
+// Prevent default gateways (models.dev, netlify) from hitting the network
+// during model-catalog tests. Errors are caught by GatewayManager.listProviders.
+beforeEach(() => {
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network disabled in tests')));
 });
 
 async function waitFor(condition: () => boolean, timeoutMs = 5_000): Promise<void> {
@@ -486,6 +499,44 @@ describe('headless mode — event-driven auto-resolution', () => {
   });
 });
 
+function createFakeGatewayFromModels(
+  customModels: { id: string; provider: string; modelName: string; hasApiKey: boolean; apiKeyEnvVar?: string }[],
+): MastraModelGatewayInterface {
+  // Group models by provider for fetchProviders
+  const providers: Record<string, ProviderConfig> = {};
+  for (const m of customModels) {
+    if (!providers[m.provider]) {
+      providers[m.provider] = {
+        name: m.provider,
+        models: [],
+        apiKeyEnvVar: m.apiKeyEnvVar ?? `${m.provider.toUpperCase().replace(/-/g, '_')}_API_KEY`,
+        gateway: 'models.dev',
+      };
+    }
+    providers[m.provider]!.models!.push(m.modelName);
+  }
+
+  // Build a lookup from routerId → hasApiKey for resolveAuth
+  const authMap = new Map(customModels.map(m => [m.id, m.hasApiKey]));
+
+  return {
+    id: 'models.dev',
+    name: 'Test models.dev Gateway',
+    fetchProviders: async () => providers,
+    buildUrl: () => 'https://example.com/v1',
+    getApiKey: async () => {
+      throw new Error('no api key');
+    },
+    resolveAuth: (request: GatewayAuthRequest): GatewayAuthResult | undefined => {
+      if (authMap.get(request.routerId)) {
+        return { apiKey: 'test-key', source: 'gateway' };
+      }
+      return undefined;
+    },
+    resolveLanguageModel: () => ({}) as GatewayLanguageModel,
+  };
+}
+
 function createHarnessWithModels(opts: {
   doStream: () => Promise<{ stream: ReadableStream }>;
   customModels?: { id: string; provider: string; modelName: string; hasApiKey: boolean; apiKeyEnvVar?: string }[];
@@ -528,11 +579,7 @@ function createHarnessWithModels(opts: {
       },
     ],
     initialState: { yolo: true } as any,
-    customModelCatalogProvider: () =>
-      (opts.customModels ?? []).map(m => ({
-        ...m,
-        useCount: 0,
-      })),
+    gateways: [createFakeGatewayFromModels(opts.customModels ?? [])],
   });
   (harness as any).getAgentForMode = () => registeredAgent;
 
