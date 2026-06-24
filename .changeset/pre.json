@@ -161,9 +161,20 @@
     "@mastra/vercel": "1.1.1"
   },
   "changesets": [
+    "cuddly-teams-stay",
     "fancy-planets-train",
     "gentle-falcons-push",
+    "gentle-logs-pause",
     "green-birds-knock",
-    "serialize-evented-wflows-followup"
+    "mastracode-session-identity",
+    "mcp-header-env-expansion",
+    "otel-bridge-custom-providers",
+    "redis-list-op-aliases",
+    "serialize-evented-wflows-followup",
+    "soft-signals-move",
+    "soft-walls-think",
+    "stable-session-id-owner",
+    "voyage-context-4-embedding",
+    "yellow-taxes-begin"
   ]
 }

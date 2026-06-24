@@ -9,6 +9,8 @@ import type {
   ToolsetsInput,
 } from '../agent/types';
 import { getErrorFromUnknown } from '../error';
+import type { MastraModelGatewayInterface } from '../llm/model/gateways';
+import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraModelConfig } from '../llm/model/shared.types';
 import type { SendNotificationSignalInput } from '../notifications';
 import type { TracingContext, TracingOptions } from '../observability';
@@ -1533,7 +1535,7 @@ class SessionOMRole {
   #setState: ((updates: Record<string, unknown>) => void) | undefined;
   #setSetting: ((args: { key: string; value: unknown }) => Promise<void>) | undefined;
   #omConfig: HarnessOMConfig | undefined;
-  #resolveModel: ((modelId: string) => MastraModelConfig) | undefined;
+  #gateways: MastraModelGatewayInterface[] | undefined;
 
   constructor(config: SessionOMRoleConfig, bus: SessionBus) {
     this.#config = config;
@@ -1546,13 +1548,13 @@ class SessionOMRole {
     setState: (updates: Record<string, unknown>) => void;
     setSetting: (args: { key: string; value: unknown }) => Promise<void>;
     omConfig?: HarnessOMConfig;
-    resolveModel?: (modelId: string) => MastraModelConfig;
+    gateways?: MastraModelGatewayInterface[];
   }): void {
     this.#getState = wiring.getState;
     this.#setState = wiring.setState;
     this.#setSetting = wiring.setSetting;
     this.#omConfig = wiring.omConfig;
-    this.#resolveModel = wiring.resolveModel;
+    this.#gateways = wiring.gateways;
   }
 
   /** This role's model id from session state, falling back to `omConfig`. */
@@ -1567,11 +1569,16 @@ class SessionOMRole {
     return (typeof fromState === 'number' ? fromState : undefined) ?? this.#config.defaultThreshold(this.#omConfig);
   }
 
-  /** Resolve this role's model id to a model instance, or undefined when unset. */
+  /**
+   * Resolve this role's model id to a model instance via the configured
+   * gateways, or undefined when unset. The bare model id string is routed
+   * through {@link ModelRouterLanguageModel}, which selects the matching
+   * gateway (or the built-in defaults) and resolves provider auth.
+   */
   resolvedModel(): MastraModelConfig | undefined {
     const modelId = this.modelId();
-    if (!modelId || !this.#resolveModel) return undefined;
-    return this.#resolveModel(modelId);
+    if (!modelId) return undefined;
+    return new ModelRouterLanguageModel(modelId as `${string}/${string}`, this.#gateways);
   }
 
   /** Switch this role's model: update session state, persist, and emit. */
@@ -1626,7 +1633,7 @@ class SessionOM {
     setState: (updates: Record<string, unknown>) => void;
     setSetting: (args: { key: string; value: unknown }) => Promise<void>;
     omConfig?: HarnessOMConfig;
-    resolveModel?: (modelId: string) => MastraModelConfig;
+    gateways?: MastraModelGatewayInterface[];
   }): void {
     this.observer.setWiring(options);
     this.reflector.setWiring(options);
