@@ -810,6 +810,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'evals/gates-and-verdicts',
+          label: 'Gates and Verdicts',
+        },
+        {
+          type: 'doc',
           id: 'evals/custom-scorers',
           label: 'Custom Scorers',
         },
