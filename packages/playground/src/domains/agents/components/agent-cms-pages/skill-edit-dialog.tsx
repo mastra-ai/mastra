@@ -16,7 +16,7 @@ import {
   extractSkillInstructions,
   updateNodeContent,
   updateRootFolderName,
-} from './skill-file-tree';
+} from './skill-file-tree-utils';
 import { SkillFolder } from './skill-folder';
 import { SkillSimpleForm } from './skill-simple-form';
 import { AgentColorProvider } from '@/domains/agent-builder/contexts/agent-color-context';

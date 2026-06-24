@@ -200,6 +200,7 @@ export function GenerateReviewDialog({
   const [generatedItems, setGeneratedItems] = useState<GeneratedItem[]>(initialItems);
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set(initialItems.map((_, i) => i)));
   const [expandedIndices, setExpandedIndices] = useState<Set<number>>(new Set([0]));
+  const generatedItemCount = generatedItems.length;
 
   const { batchInsertItems } = useDatasetMutations();
 
@@ -252,12 +253,12 @@ export function GenerateReviewDialog({
   }, []);
 
   const toggleAll = useCallback(() => {
-    if (selectedIndices.size === generatedItems.length) {
+    if (selectedIndices.size === generatedItemCount) {
       setSelectedIndices(new Set());
     } else {
-      setSelectedIndices(new Set(generatedItems.map((_, i) => i)));
+      setSelectedIndices(new Set(Array.from({ length: generatedItemCount }, (_, i) => i)));
     }
-  }, [selectedIndices.size, generatedItems.length]);
+  }, [selectedIndices.size, generatedItemCount]);
 
   const handleRemoveItem = useCallback((index: number) => {
     setGeneratedItems(prev => prev.filter((_, i) => i !== index));

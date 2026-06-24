@@ -14,7 +14,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useMastraClient } from '@mastra/react';
 import { DatabaseIcon, Save } from 'lucide-react';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 
 import { useDatasetSaveContext } from '../context/dataset-save-context';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
@@ -47,7 +47,7 @@ function DatasetSaveDialog({
 
   const { data, isLoading: isDatasetsLoading } = useDatasets();
   const { addItem } = useDatasetMutations();
-  const datasets = data?.datasets ?? [];
+  const datasets = useMemo(() => data?.datasets ?? [], [data?.datasets]);
 
   const handleSubmit = useCallback(async () => {
     if (!selectedDatasetId) {

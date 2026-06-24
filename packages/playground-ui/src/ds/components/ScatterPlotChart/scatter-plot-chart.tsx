@@ -1,5 +1,10 @@
 import { CartesianGrid, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from 'recharts';
 import { ScatterPlotChartTooltip } from './scatter-plot-chart-tooltip';
+import {
+  formatScatterPlotAxisTick,
+  getScatterPlotClickedPoint,
+  getScatterPlotPointColor,
+} from './scatter-plot-chart-utils';
 import { Colors } from '@/ds/tokens';
 import { cn } from '@/lib/utils';
 
@@ -28,19 +33,6 @@ export type ScatterPlotChartProps = {
   onPointClick?: ScatterPlotChartPointClickHandler;
   className?: string;
 };
-
-export function getScatterPlotPointColor(point: Record<string, unknown>, colorKey?: string) {
-  const color = colorKey ? point[colorKey] : undefined;
-  return typeof color === 'string' && color.length > 0 ? color : Colors.accent3;
-}
-
-export function getScatterPlotClickedPoint(payload: unknown) {
-  return (payload as { payload?: Record<string, unknown> } | undefined)?.payload;
-}
-
-export function formatScatterPlotAxisTick(value: unknown, formatter?: ScatterPlotChartFormatter) {
-  return (formatter?.(value, {}) ?? String(value)).replace(/\s+/g, '\u00A0');
-}
 
 export function ScatterPlotChart({
   data,
