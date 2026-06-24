@@ -97,8 +97,33 @@ function summarizePart(part: unknown): string {
         return '[reasoning]';
       case 'tool-call':
         return `[tool: ${formatPreviewLabel((part as { toolName?: unknown }).toolName, 'unknown')}]`;
-      case 'tool-result':
+      case 'tool-result': {
+        // Prefer the toModelOutput-transformed value (AI SDK v5: `output`,
+        // AI SDK v4 array: `content[].text`, raw fallback: `result`).
+        // Only fall back to the static placeholder when no content is found,
+        // so tools that define toModelOutput are visible in telemetry previews.
+        const p = part as {
+          output?: unknown;
+          content?: unknown;
+          result?: unknown;
+        };
+        if (p.output != null) {
+          return summarizeMessageContent(p.output) || '[tool-result]';
+        }
+        if (Array.isArray(p.content) && p.content.length > 0) {
+          return p.content
+            .map((c: unknown) => summarizePart(c))
+            .filter(Boolean)
+            .join('') || '[tool-result]';
+        }
+        if (typeof p.content === 'string' && p.content.length > 0) {
+          return p.content;
+        }
+        if (p.result != null) {
+          return summarizeMessageContent(p.result) || '[tool-result]';
+        }
         return '[tool-result]';
+      }
       default:
         return `[${part.type}]`;
     }
@@ -951,7 +976,13 @@ export class ModelSpanTracker {
               if (providerExecuted !== undefined) metadata.providerExecuted = providerExecuted;
               if (providerMetadata !== undefined) metadata.providerMetadata = providerMetadata;
 
-              this.#createEventSpan(chunk.type, providerExecuted ? result : undefined, { metadata });
+              // For locally-executed tools, prefer the toModelOutput-transformed value stored at
+              // providerMetadata.mastra.modelOutput (set by llm-mapping-step). Fall back to the
+              // raw result so the span always carries the actual value sent to the model.
+              // For provider-executed tools the result comes directly from the model stream.
+              const modelOutput = (providerMetadata as any)?.mastra?.modelOutput;
+              const spanOutput = providerExecuted ? result : (modelOutput ?? result);
+              this.#createEventSpan(chunk.type, spanOutput, { metadata });
               break;
             }
 

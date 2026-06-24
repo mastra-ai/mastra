@@ -156,8 +156,8 @@ describe('ModelSpanTracker', () => {
       expect(span.isEvent).toBe(true);
       // toolCallId and toolName are in metadata (tool-result specific fields)
       expect(span.metadata).toMatchObject({ toolCallId, toolName });
-      // output is omitted; TOOL_CALL captures the full result payload
-      expect(span.output).toBeUndefined();
+      // output now reflects the actual value sent to the model (raw result when no toModelOutput)
+      expect(span.output).toEqual({ text: 'Hello world!' });
     });
 
     it('should pass through tool-output chunks without creating spans', async () => {
@@ -289,8 +289,8 @@ describe('ModelSpanTracker', () => {
       expect(span.isEvent).toBe(true);
       // toolCallId and toolName are in metadata
       expect(span.metadata).toMatchObject({ toolCallId, toolName });
-      // output is omitted; TOOL_CALL captures the full result payload
-      expect(span.output).toBeUndefined();
+      // output now reflects the actual value sent to the model (raw result when no toModelOutput)
+      expect(span.output).toEqual({ output: 'Workflow result', status: 'success' });
     });
   });
 
@@ -356,8 +356,8 @@ describe('ModelSpanTracker', () => {
       expect(span.isEvent).toBe(true);
       // toolCallId and toolName are in metadata
       expect(span.metadata).toMatchObject({ toolCallId, toolName });
-      // output is omitted; TOOL_CALL captures the full result payload
-      expect(span.output).toBeUndefined();
+      // output now reflects the actual value sent to the model (raw result when no toModelOutput)
+      expect(span.output).toEqual({ text: 'Streamed content' });
     });
   });
 
@@ -397,12 +397,12 @@ describe('ModelSpanTracker', () => {
       expect(toolResultSpans).toHaveLength(1);
 
       const span = toolResultSpans[0]!;
-      // args should not be in metadata and output is omitted entirely
+      // args should not be in metadata
       expect(span.metadata).not.toHaveProperty('args');
       // toolCallId and toolName should be in metadata
       expect(span.metadata).toMatchObject({ toolCallId, toolName });
-      // output is omitted; TOOL_CALL captures the full result payload
-      expect(span.output).toBeUndefined();
+      // output now reflects the actual value sent to the model (raw result when no toModelOutput)
+      expect(span.output).toEqual({ output: 'tool result' });
     });
 
     it('should keep tool-result output for provider-executed tools', async () => {
@@ -529,15 +529,16 @@ describe('ModelSpanTracker', () => {
         toolCallId: 'call_agent1',
         toolName: 'agent-first',
       });
-      // output is omitted; TOOL_CALL captures the full result payload
-      expect(agent1Span!.output).toBeUndefined();
+      // output now reflects the actual value sent to the model (raw result when no
+      // toModelOutput is defined, or providerMetadata.mastra.modelOutput when it is).
+      expect(agent1Span!.output).toEqual({ text: 'Agent1: Hello' });
 
       expect(agent2Span).toBeDefined();
       expect(agent2Span!.metadata).toMatchObject({
         toolCallId: 'call_agent2',
         toolName: 'agent-second',
       });
-      expect(agent2Span!.output).toBeUndefined();
+      expect(agent2Span!.output).toEqual({ text: 'Agent2: World' });
     });
   });
 
