@@ -6,7 +6,6 @@ import {
   DialogTitle,
   DialogBody,
   ScrollArea,
-  Spinner,
   Txt,
   Icon,
   toast,
@@ -15,6 +14,7 @@ import {
 import { Chip } from '@mastra/playground-ui/components/Chip';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { useQueryClient } from '@tanstack/react-query';
 import { Play, Sparkles, Clock, ChevronRight, ChevronDown, Pencil, Save, X, Trash2 } from 'lucide-react';

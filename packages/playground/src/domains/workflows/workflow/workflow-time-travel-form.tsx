@@ -1,6 +1,5 @@
 import { jsonLanguage } from '@codemirror/lang-json';
 import {
-  useCodemirrorTheme,
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -14,6 +13,7 @@ import {
   isValidJson,
   cn,
 } from '@mastra/playground-ui';
+import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import CodeMirror from '@uiw/react-codemirror';
