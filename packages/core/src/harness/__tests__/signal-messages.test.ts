@@ -32,10 +32,11 @@ describe('Harness signal messages', () => {
       modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
     });
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const threadId = session.thread.getId()!;
     const subscription = createSubscription(() => activeRunId);
 
+    session.run.ensureAbortController();
     session.run.setRunId({ runId: 'run-1' });
     session.stream.attach({ subscription: subscription as any, key: `agent-1:resource-1:${threadId}` });
     agent.subscribeToThread.mockClear();
@@ -70,10 +71,11 @@ describe('Harness signal messages', () => {
       modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
     });
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const threadId = session.thread.getId()!;
     const subscription = createSubscription(() => activeRunId);
 
+    session.run.ensureAbortController();
     session.run.setRunId({ runId: 'run-1' });
     session.stream.attach({ subscription: subscription as any, key: `agent-1:resource-1:${threadId}` });
     const approval = session.approval.arm({ toolName: 'request_access' });
@@ -104,7 +106,7 @@ describe('Harness signal messages', () => {
       modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
     });
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     await expect(session.sendMessage({ content: 'hello' })).rejects.toThrow('signal failed before stream started');
   });

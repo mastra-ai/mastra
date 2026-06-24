@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { hostname } from 'node:os';
 import path from 'node:path';
 
 import { Agent } from '@mastra/core/agent';
@@ -16,6 +18,7 @@ import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { ProviderConfig } from '@mastra/core/llm';
 import {
   AgentsMDInjector,
+  isBadRequestError,
   PrefillErrorHandler,
   ProviderHistoryCompat,
   StreamErrorRetryProcessor,
@@ -37,13 +40,7 @@ import {
 
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
-import {
-  createMastraCodeGateway,
-  createMastraCodeModelCatalogProvider,
-  getDynamicModel,
-  getGoalJudgeModel,
-  resolveModel,
-} from './agents/model.js';
+import { createMastraCodeGateway, getDynamicModel, getGoalJudgeModel, resolveModel } from './agents/model.js';
 import { buildMode } from './agents/modes/build.js';
 import { fastMode } from './agents/modes/explore.js';
 import { planMode } from './agents/modes/plan.js';
@@ -93,6 +90,39 @@ import { createStorage, createVectorStore } from './utils/storage-factory.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 
 const CODE_AGENT_ID = 'code-agent';
+
+// Global retry policy for transient network resets (e.g. provider sockets dropping mid-stream).
+// Applied centrally to every model call via StreamErrorRetryProcessor, independent of model-pack
+// settings, so all modes/subagents benefit from a short wait before retrying an ECONNRESET.
+// Delay uses exponential backoff: initialDelay * 2^retryCount, capped at maxDelay.
+const MASTRACODE_ECONNRESET_MAX_RETRIES = 2;
+const MASTRACODE_ECONNRESET_RETRY_INITIAL_DELAY_MS = 1000;
+const MASTRACODE_ECONNRESET_RETRY_MAX_DELAY_MS = 30000;
+
+const ECONNRESET_MESSAGE_PATTERN = /econnreset|socket hang up/i;
+
+/**
+ * Matcher for transient network-reset failures. Checks the immediate error for
+ * an `ECONNRESET` code or a `socket hang up` message. Cause-chain traversal is
+ * handled by `StreamErrorRetryProcessor.isRetryableStreamError`, which calls
+ * each matcher at every level of the cause chain.
+ */
+function isECONNRESETError(error: unknown): boolean {
+  if (!error) return false;
+
+  const code = typeof error === 'object' && 'code' in error ? (error as { code?: unknown }).code : undefined;
+  if (typeof code === 'string' && code.toUpperCase() === 'ECONNRESET') return true;
+
+  const message = error instanceof Error ? error.message : undefined;
+  if (typeof message === 'string' && ECONNRESET_MESSAGE_PATTERN.test(message)) return true;
+
+  return false;
+}
+
+/** Short deterministic hash (sha256, first 12 hex chars) matching project.ts shortHash style. */
+function shortHash(input: string): string {
+  return createHash('sha256').update(input).digest('hex').slice(0, 12);
+}
 
 function applyEffectiveDefaultsToModes(modes: HarnessMode[], effectiveDefaults: Record<string, string>): HarnessMode[] {
   return modes.map(mode => {
@@ -280,6 +310,12 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     project.resourceIdOverride = true;
   }
 
+  // Stable session id unique to this project/resource, and a machine-bound owner
+  // id. resourceId encodes root path + git identity and honors overrides, so it
+  // is the right input for scoping the session to the cwd/project.
+  const sessionId = `mastracode-session-${shortHash(project.resourceId)}`;
+  const ownerId = `mastracode-${shortHash(`${hostname()}\0${project.rootPath}`)}`;
+
   const configuredPubSub = config?.pubsub;
   const useUnixSocketPubSub =
     (config?.unixSocketPubSub ?? globalSettings.signals?.unixSocketPubSub ?? false) && process.platform !== 'win32';
@@ -439,6 +475,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
             threadId,
             resourceId,
             session: {
+              id: session.identity.getId(),
+              ownerId: session.identity.getOwnerId(),
               modeId,
               modelId,
               state: {
@@ -518,7 +556,24 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       }),
       new ProviderHistoryCompat(),
     ],
-    errorProcessors: [new StreamErrorRetryProcessor(), new PrefillErrorHandler(), new ProviderHistoryCompat()],
+    errorProcessors: [
+      new StreamErrorRetryProcessor({
+        matchers: [
+          { match: isBadRequestError, maxRetries: 1, delayMs: 2000 },
+          {
+            match: isECONNRESETError,
+            maxRetries: MASTRACODE_ECONNRESET_MAX_RETRIES,
+            delayMs: ({ retryCount }) =>
+              Math.min(
+                MASTRACODE_ECONNRESET_RETRY_INITIAL_DELAY_MS * Math.pow(2, retryCount),
+                MASTRACODE_ECONNRESET_RETRY_MAX_DELAY_MS,
+              ),
+          },
+        ],
+      }),
+      new PrefillErrorHandler(),
+      new ProviderHistoryCompat(),
+    ],
   });
 
   // const defaultSubAgents: Array<HarnessSubagent> = [];
@@ -663,16 +718,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     }
   }
 
-  // const { threads } = (await (
-  //   await storage.getStore('memory')
-  // )?.listThreads({
-  //   perPage: false,
-  //   filter: {
-  //     resourceId: project.resourceId,
-  //   },
-  // })) ?? { threads: [] as StorageThreadType[] };
-  // const ownerId = `mastracode-${hash(`${hostname()}\0${project.rootPath}`)}`;
-
   const typedStateSchema = stateSchema as PublicSchema<MastraCodeState>;
   const harness: Harness<MastraCodeState> = new Harness<MastraCodeState>({
     id: 'mastra-code',
@@ -685,6 +730,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     agent: codeAgent,
     subagents: config?.subagents ?? [],
     gateways: [mastraCodeGateway],
+    workspace: config?.workspace ?? (args => getDynamicWorkspace(args)),
+    browser: config?.browser,
     toolCategoryResolver: getToolCategory,
     initialState: {
       projectPath: project.rootPath,
@@ -697,12 +744,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       // with MCP/hooks/storage which were already initialized with this value.
       configDir,
     },
-    workspace: config?.workspace ?? (args => getDynamicWorkspace(args)),
-    browser: config?.browser,
     modes,
     heartbeatHandlers,
-    resolveModel,
-    customModelCatalogProvider: createMastraCodeModelCatalogProvider(mastraCodeGateway),
     modelUseCountProvider: () => loadSettings().modelUseCounts,
     modelUseCountTracker: modelId => {
       try {
@@ -726,7 +769,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   // work in this process runs through. The Harness owns no session of its own.
   await harness.init();
   await harness.getMastra()?.startWorkers();
-  const session = await harness.createSession();
+  const session = await harness.createSession({ id: sessionId, ownerId });
   activeSession = session;
 
   // Sync hookManager session ID on thread changes

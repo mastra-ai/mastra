@@ -61,6 +61,6 @@ export async function createTestSession<TState = {}>(
 ): Promise<{ harness: Harness<TState>; session: Session<TState> }> {
   const harness = createTestHarness<TState>(config);
   await harness.init();
-  const session = await harness.createSession();
+  const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
   return { harness, session };
 }

@@ -51,7 +51,7 @@ describe('Harness.getObservationalMemoryRecord', () => {
     storage = new InMemoryStore();
     harness = createHarness(storage);
     await harness.init();
-    session = await harness.createSession();
+    session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
   });
 
   it('returns null when no thread is selected', async () => {

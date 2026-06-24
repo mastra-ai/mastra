@@ -2,12 +2,12 @@ import type { GetAgentResponse } from '@mastra/client-js';
 import {
   DataList as EntityList,
   DataListSkeleton as EntityListSkeleton,
-  TextAndIcon,
   WorkflowIcon,
   AgentIcon,
   ToolsIcon,
   truncateString,
 } from '@mastra/playground-ui';
+import { TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { useMemo } from 'react';
 import { extractPrompt } from '../../utils/extractPrompt';
 import { ProviderLogo } from '../agent-metadata/provider-logo';

@@ -9,6 +9,8 @@ import type {
   ToolsetsInput,
 } from '../agent/types';
 import { getErrorFromUnknown } from '../error';
+import type { MastraModelGatewayInterface } from '../llm/model/gateways';
+import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraModelConfig } from '../llm/model/shared.types';
 import type { SendNotificationSignalInput } from '../notifications';
 import type { TracingContext, TracingOptions } from '../observability';
@@ -84,6 +86,11 @@ const modeModelKey = (modeId: string) => `modeModelId_${modeId}`;
  * updates the current resourceId while the default is retained so the session
  * can return to its own identity.
  *
+ * `id` is the stable identifier for this session (mirrors `SessionRecord.id` in
+ * storage) and `ownerId` is the owner of this session (mirrors
+ * `SessionRecord.ownerId`). Both are stable for the life of the session and do
+ * not change when the resourceId is switched.
+ *
  * The active thread the session is bound to lives on {@link SessionThread}, not
  * here — identity is the stable "who", the thread is the navigational "where".
  */
@@ -92,10 +99,16 @@ export class SessionIdentity {
   #resourceId: string;
   /** The resourceId the session started with, retained across resource switches. */
   readonly #defaultResourceId: string;
+  /** Stable session identifier (mirrors SessionRecord.id in storage). */
+  readonly #id: string;
+  /** Stable session owner (mirrors SessionRecord.ownerId in storage). */
+  readonly #ownerId: string;
 
-  constructor({ resourceId }: { resourceId: string }) {
+  constructor({ resourceId, id, ownerId }: { resourceId: string; id: string; ownerId: string }) {
     this.#resourceId = resourceId;
     this.#defaultResourceId = resourceId;
+    this.#id = id;
+    this.#ownerId = ownerId;
   }
 
   /** The resourceId the session currently reads/writes under. */
@@ -106,6 +119,16 @@ export class SessionIdentity {
   /** The resourceId the session started with. */
   getDefaultResourceId(): string {
     return this.#defaultResourceId;
+  }
+
+  /** The stable session identifier for this session. */
+  getId(): string {
+    return this.#id;
+  }
+
+  /** The stable owner identifier for this session. */
+  getOwnerId(): string {
+    return this.#ownerId;
   }
 
   /** Point the session at a different resourceId (the default is unchanged). */
@@ -803,6 +826,29 @@ export class SessionStream {
   #subscription: AgentThreadSubscription<any> | null = null;
   /** Dedup key (`agentId:resourceId:threadId`) for the open subscription, or null. */
   #key: string | null = null;
+  readonly #teardownWaiters = new Set<() => void>();
+
+  #notifyTeardown(): void {
+    const waiters = [...this.#teardownWaiters];
+    this.#teardownWaiters.clear();
+    for (const waiter of waiters) waiter();
+  }
+
+  waitForTeardown(signal: AbortSignal): Promise<void> {
+    return new Promise(resolve => {
+      const done = () => {
+        signal.removeEventListener('abort', abort);
+        resolve();
+      };
+      const abort = () => {
+        this.#teardownWaiters.delete(done);
+        resolve();
+      };
+      if (signal.aborted) return resolve();
+      this.#teardownWaiters.add(done);
+      signal.addEventListener('abort', abort, { once: true });
+    });
+  }
 
   /** Build the dedup key identifying a subscription to `threadId` for `agent`. */
   static keyFor({ agent, resourceId, threadId }: { agent: Agent; resourceId: string; threadId: string }): string {
@@ -852,6 +898,7 @@ export class SessionStream {
     this.#subscription?.unsubscribe();
     this.#subscription = null;
     this.#key = null;
+    this.#notifyTeardown();
   }
 
   /** Fully tear down the live subscription: abort, unsubscribe, and clear. */
@@ -860,6 +907,7 @@ export class SessionStream {
     this.#subscription?.unsubscribe();
     this.#subscription = null;
     this.#key = null;
+    this.#notifyTeardown();
   }
 }
 
@@ -1120,6 +1168,29 @@ export class SessionRun {
   #abortController: AbortController | null = null;
   /** Whether an abort has been requested for the current run. */
   #abortRequested = false;
+  readonly #teardownWaiters = new Set<() => void>();
+
+  #notifyTeardown(): void {
+    const waiters = [...this.#teardownWaiters];
+    this.#teardownWaiters.clear();
+    for (const waiter of waiters) waiter();
+  }
+
+  waitForTeardown(signal: AbortSignal): Promise<void> {
+    return new Promise(resolve => {
+      const done = () => {
+        signal.removeEventListener('abort', abort);
+        resolve();
+      };
+      const abort = () => {
+        this.#teardownWaiters.delete(done);
+        resolve();
+      };
+      if (signal.aborted) return resolve();
+      this.#teardownWaiters.add(done);
+      signal.addEventListener('abort', abort, { once: true });
+    });
+  }
 
   /** The current run id (null when idle). */
   getRunId(): string | null {
@@ -1150,6 +1221,7 @@ export class SessionRun {
     this.#traceId = null;
     this.#abortController = null;
     this.#abortRequested = false;
+    this.#notifyTeardown();
   }
 
   /** Bump and return the operation counter at the start of a new operation. */
@@ -1463,7 +1535,7 @@ class SessionOMRole {
   #setState: ((updates: Record<string, unknown>) => void) | undefined;
   #setSetting: ((args: { key: string; value: unknown }) => Promise<void>) | undefined;
   #omConfig: HarnessOMConfig | undefined;
-  #resolveModel: ((modelId: string) => MastraModelConfig) | undefined;
+  #gateways: MastraModelGatewayInterface[] | undefined;
 
   constructor(config: SessionOMRoleConfig, bus: SessionBus) {
     this.#config = config;
@@ -1476,13 +1548,13 @@ class SessionOMRole {
     setState: (updates: Record<string, unknown>) => void;
     setSetting: (args: { key: string; value: unknown }) => Promise<void>;
     omConfig?: HarnessOMConfig;
-    resolveModel?: (modelId: string) => MastraModelConfig;
+    gateways?: MastraModelGatewayInterface[];
   }): void {
     this.#getState = wiring.getState;
     this.#setState = wiring.setState;
     this.#setSetting = wiring.setSetting;
     this.#omConfig = wiring.omConfig;
-    this.#resolveModel = wiring.resolveModel;
+    this.#gateways = wiring.gateways;
   }
 
   /** This role's model id from session state, falling back to `omConfig`. */
@@ -1497,11 +1569,16 @@ class SessionOMRole {
     return (typeof fromState === 'number' ? fromState : undefined) ?? this.#config.defaultThreshold(this.#omConfig);
   }
 
-  /** Resolve this role's model id to a model instance, or undefined when unset. */
+  /**
+   * Resolve this role's model id to a model instance via the configured
+   * gateways, or undefined when unset. The bare model id string is routed
+   * through {@link ModelRouterLanguageModel}, which selects the matching
+   * gateway (or the built-in defaults) and resolves provider auth.
+   */
   resolvedModel(): MastraModelConfig | undefined {
     const modelId = this.modelId();
-    if (!modelId || !this.#resolveModel) return undefined;
-    return this.#resolveModel(modelId);
+    if (!modelId) return undefined;
+    return new ModelRouterLanguageModel(modelId as `${string}/${string}`, this.#gateways);
   }
 
   /** Switch this role's model: update session state, persist, and emit. */
@@ -1556,7 +1633,7 @@ class SessionOM {
     setState: (updates: Record<string, unknown>) => void;
     setSetting: (args: { key: string; value: unknown }) => Promise<void>;
     omConfig?: HarnessOMConfig;
-    resolveModel?: (modelId: string) => MastraModelConfig;
+    gateways?: MastraModelGatewayInterface[];
   }): void {
     this.observer.setWiring(options);
     this.reflector.setWiring(options);
@@ -2414,8 +2491,18 @@ export class Session<TState = unknown> {
   /** The session-owned Harness state domain. */
   readonly state: HarnessRequestState<TState>;
 
-  constructor({ resourceId, state }: { resourceId: string; state?: SessionStateOptions<TState> }) {
-    this.identity = new SessionIdentity({ resourceId });
+  constructor({
+    resourceId,
+    state,
+    id,
+    ownerId,
+  }: {
+    resourceId: string;
+    state?: SessionStateOptions<TState>;
+    id: string;
+    ownerId: string;
+  }) {
+    this.identity = new SessionIdentity({ resourceId, id, ownerId });
     this.thread = new SessionThread(() => this.identity.getResourceId());
     this.displayState = new SessionDisplayState({
       getTokenUsage: () => this.getTokenUsage(),
@@ -2693,9 +2780,30 @@ export class Session<TState = unknown> {
    * to avoid the new signal being queued onto the dying run, which would then
    * be drained with the previous run's already-aborted abortSignal.
    */
-  private async waitForStreamIdle(): Promise<void> {
-    while (this.stream.isActive() || this.run.getRunId() !== null) {
-      await new Promise(resolve => setTimeout(resolve, 0));
+  private async waitForStreamIdle(timeoutMs = 1_000): Promise<void> {
+    if (!this.stream.isActive() && this.run.getRunId() === null) return;
+
+    let lifecycleWait: AbortController | undefined;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<'timeout'>(resolve => {
+      timeout = setTimeout(() => resolve('timeout'), timeoutMs);
+    });
+
+    try {
+      while (this.stream.isActive() || this.run.getRunId() !== null) {
+        lifecycleWait = new AbortController();
+        const result = await Promise.race([
+          this.stream.waitForTeardown(lifecycleWait.signal),
+          this.run.waitForTeardown(lifecycleWait.signal),
+          timeoutPromise,
+        ]);
+        lifecycleWait.abort();
+        lifecycleWait = undefined;
+        if (result === 'timeout') return;
+      }
+    } finally {
+      lifecycleWait?.abort();
+      if (timeout) clearTimeout(timeout);
     }
   }
 
@@ -2731,6 +2839,16 @@ export class Session<TState = unknown> {
     const ifIdle = 'content' in input ? input.ifIdle : undefined;
     const submittedRunId = this.run.getRunId();
     const submittedActiveRunId = this.stream.activeRunId();
+    // After `abort()` the AbortController is cleared immediately but the run id
+    // and active-run id linger until `run.reset()` runs (after `agent_end`).
+    // Without this guard, a signal sent right after an interrupt is dispatched
+    // onto the dying run and lost — the follow-up message never gets a response.
+    const submittedIsRunning = this.run.isRunning();
+    // An abort was requested but the previous run hasn't finished tearing down
+    // yet (the flag stays set until `run.reset()` after `agent_end`). This is
+    // the post-interrupt window where a fresh signal must wait for the dying
+    // run to fully idle before starting a new run.
+    const submittedAbortRequested = this.run.isAbortRequested();
     const signal = createSignal(
       'content' in input ? { type: 'user', tagName: 'user', contents: input.content } : input,
     );
@@ -2744,7 +2862,7 @@ export class Session<TState = unknown> {
       const agent = this.machinery.getAgent();
       await this.thread.ensureSubscription(threadId);
 
-      if (submittedRunId && submittedActiveRunId) {
+      if (submittedRunId && submittedActiveRunId && submittedIsRunning) {
         this.approval.respond({
           decision: 'decline',
           declineContext: {
@@ -2759,6 +2877,18 @@ export class Session<TState = unknown> {
           ifIdle,
         });
         return { accepted: true as const, runId: await settleRunId(result) };
+      }
+
+      // Post-abort lingering state: the AbortController was cleared (so
+      // `submittedIsRunning` is false) but the previous run is still finalizing
+      // — its run id / active-run id linger until `run.reset()` runs after
+      // `agent_end`. Dispatching a fresh signal now would let the agent queue it
+      // onto the dying run instead of starting a new run, and the follow-up
+      // would never get a response. Wait for the stream to fully idle first.
+      // Only do this in the post-abort window (an abort was requested but the
+      // run hasn't reset yet) so normal idle signals aren't delayed.
+      if (submittedAbortRequested && (submittedRunId || submittedActiveRunId)) {
+        await this.waitForStreamIdle();
       }
 
       const streamOptions = await this.machinery.buildStreamOptions({
