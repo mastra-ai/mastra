@@ -299,7 +299,7 @@ export class Harness<TState = {}> {
       setState: updates => void session.state.set(updates as Partial<TState>),
       setSetting: ({ key, value }) => session.thread.setSetting({ key, value }),
     });
-    session.thread.connect(this.createThreadDataStore(session), session as Session);
+    session.thread.connect(this.createThreadDataStore(), session as Session);
     session.setMachinery({
       getAgent: () => this.getCurrentAgent(session),
       subscribeToThread: ({ resourceId, threadId }) =>
@@ -610,7 +610,7 @@ export class Harness<TState = {}> {
    * through. The Session owns the thread-domain logic; this adapter just maps
    * raw storage rows to Harness types — it does not call back into Session.
    */
-  private createThreadDataStore(session: Session<TState>): ThreadDataStore {
+  private createThreadDataStore(): ThreadDataStore {
     return {
       listThreads: ({ resourceId, includeForkedSubagents, metadata }) =>
         this.queryThreads({ resourceId, includeForkedSubagents, metadata }),
@@ -623,10 +623,8 @@ export class Harness<TState = {}> {
       hasStorage: () => !!this.#resolveStorage(),
       saveThread: ({ thread }) => this.persistThreadRow(thread),
       deleteThread: ({ threadId }) => this.deleteThreadRow(threadId),
-      cloneThread: ({ sourceThreadId, resourceId, title }) =>
-        this.cloneThreadRow(session, { sourceThreadId, resourceId, title }),
-      migrateThreadMessagesResourceId: ({ threadId, resourceId, pageSize }) =>
-        this.migrateThreadMessagesResourceId({ threadId, resourceId, pageSize }),
+      cloneThread: ({ sourceThreadId, resourceId, title, metadata }) =>
+        this.cloneThreadRow({ sourceThreadId, resourceId, title, metadata }),
       acquireLock: threadId => this.config.threadLock?.acquire(threadId) ?? Promise.resolve(),
       releaseLock: threadId => this.config.threadLock?.release(threadId) ?? Promise.resolve(),
       getModeIds: () => this.config.modes.map(m => m.id),
@@ -657,23 +655,19 @@ export class Harness<TState = {}> {
   }
 
   /** Clone a thread (and messages) via the host's memory (gateway primitive for the Session thread domain). */
-  private async cloneThreadRow(
-    session: Session<TState>,
-    {
-      sourceThreadId,
-      resourceId,
-      title,
-    }: {
-      sourceThreadId: string;
-      resourceId: string;
-      title?: string;
-    },
-  ): Promise<HarnessThread> {
-    if (!this.config.memory) {
-      throw new Error('Memory is not configured on this Harness');
-    }
-    const memory = await this.resolveMemory(session);
-    const result = await memory.cloneThread({ sourceThreadId, resourceId, title });
+  private async cloneThreadRow({
+    sourceThreadId,
+    resourceId,
+    title,
+    metadata,
+  }: {
+    sourceThreadId: string;
+    resourceId: string;
+    title?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<HarnessThread> {
+    const memoryStorage = await this.getMemoryStorage();
+    const result = await memoryStorage.cloneThread({ sourceThreadId, resourceId, title, metadata });
     return {
       id: result.thread.id,
       resourceId: result.thread.resourceId,
@@ -682,33 +676,6 @@ export class Harness<TState = {}> {
       updatedAt: result.thread.updatedAt,
       metadata: result.thread.metadata,
     };
-  }
-
-  private async migrateThreadMessagesResourceId({
-    threadId,
-    resourceId,
-    pageSize = 100,
-  }: {
-    threadId: string;
-    resourceId: string;
-    pageSize?: number;
-  }): Promise<void> {
-    if (!this.#resolveStorage()) return;
-    const memoryStorage = await this.getMemoryStorage();
-    let page = 0;
-
-    while (true) {
-      const result = await memoryStorage.listMessages({
-        threadId,
-        page,
-        perPage: pageSize,
-        orderBy: { field: 'createdAt', direction: 'ASC' },
-      });
-      if (result.messages.length === 0) return;
-      await memoryStorage.saveMessages({ messages: result.messages.map(message => ({ ...message, resourceId })) });
-      if (result.messages.length < pageSize) return;
-      page += 1;
-    }
   }
 
   private async readThreadMetadataValue({ threadId, key }: { threadId: string; key: string }): Promise<unknown> {

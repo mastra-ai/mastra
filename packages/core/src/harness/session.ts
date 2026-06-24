@@ -174,9 +174,12 @@ export interface ThreadDataStore {
   /** Delete a thread row by id. No-op when storage is unavailable. */
   deleteThread(input: { threadId: string }): Promise<void>;
   /** Clone a thread (and its messages) via the host's memory, returning the new thread. */
-  cloneThread(input: { sourceThreadId: string; resourceId: string; title?: string }): Promise<HarnessThread>;
-  /** Move every message for a thread to a resource, in bounded batches. */
-  migrateThreadMessagesResourceId(input: { threadId: string; resourceId: string; pageSize?: number }): Promise<void>;
+  cloneThread(input: {
+    sourceThreadId: string;
+    resourceId: string;
+    title?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<HarnessThread>;
   /** Acquire the host thread lock for a thread id. No-op when no lock is configured. */
   acquireLock(threadId: string): Promise<void>;
   /** Release the host thread lock for a thread id. No-op when no lock is configured. */
@@ -360,8 +363,8 @@ export class SessionThread {
     return this.#store.getById({ threadId });
   }
 
-  /** Move a stored thread and its existing messages to this session's resource. */
-  async migrateToCurrentResource({
+  /** Clone a detected cross-resource project thread into this session's resource. */
+  async cloneToCurrentResource({
     threadId,
     expectedResourceId,
     expectedProjectPath,
@@ -369,8 +372,10 @@ export class SessionThread {
     threadId: string;
     expectedResourceId: string;
     expectedProjectPath: string;
-  }): Promise<void> {
-    if (!this.#store?.hasStorage()) return;
+  }): Promise<HarnessThread> {
+    if (!this.#store?.hasStorage()) {
+      throw new Error('Memory is not configured on this Harness');
+    }
     const thread = await this.#store.getById({ threadId });
     if (
       !thread ||
@@ -380,9 +385,12 @@ export class SessionThread {
     ) {
       throw new Error(`Thread not found: ${threadId}`);
     }
-    const resourceId = this.#getResourceId();
-    await this.#store.saveThread({ thread: { ...thread, resourceId, updatedAt: new Date() } });
-    await this.#store.migrateThreadMessagesResourceId({ threadId, resourceId });
+    return this.#cloneThread({
+      sourceThreadId: thread.id,
+      resourceId: this.#getResourceId(),
+      title: thread.title,
+      metadata: thread.metadata,
+    });
   }
 
   /**
@@ -615,25 +623,39 @@ export class SessionThread {
     title?: string;
     resourceId?: string;
   } = {}): Promise<HarnessThread> {
-    const session = this.#owner;
-    const store = this.#store;
     const sourceId = sourceThreadId ?? this.#threadId;
     if (!sourceId) {
       throw new Error('No source thread to clone');
     }
     // Only allow cloning from a source thread this session owns.
-    if (store?.hasStorage()) {
+    if (this.#store?.hasStorage()) {
       await this.#requireOwnedThread({ threadId: sourceId });
     }
+    return this.#cloneThread({
+      sourceThreadId: sourceId,
+      resourceId: resourceId ?? this.#owner.identity.getResourceId(),
+      title,
+    });
+  }
+
+  async #cloneThread({
+    sourceThreadId,
+    resourceId,
+    title,
+    metadata,
+  }: {
+    sourceThreadId: string;
+    resourceId: string;
+    title?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<HarnessThread> {
+    const session = this.#owner;
+    const store = this.#store;
     if (!store) {
       throw new Error('Memory is not configured on this Harness');
     }
 
-    const clonedThread = await store.cloneThread({
-      sourceThreadId: sourceId,
-      resourceId: resourceId ?? session.identity.getResourceId(),
-      title,
-    });
+    const clonedThread = await store.cloneThread({ sourceThreadId, resourceId, title, metadata });
 
     // Acquire lock on new thread before releasing old one
     const oldThreadId = this.#threadId;

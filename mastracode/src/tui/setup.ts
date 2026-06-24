@@ -12,10 +12,12 @@ import { ThreadLockError } from '../utils/thread-lock.js';
 import { isUserInvocable } from './commands/skill-filters.js';
 import { renderBanner } from './components/banner.js';
 import { IdleCounterComponent } from './components/idle-counter.js';
+import { SimpleProgressComponent } from './components/simple-progress.js';
 import { TaskProgressComponent } from './components/task-progress.js';
 import { showError, showInfo } from './display.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
 import { askModalQuestion } from './modal-question.js';
+import { showModalOverlay } from './overlay.js';
 import type { TUIState } from './state.js';
 import { updateStatusLine } from './status-line.js';
 import { theme } from './theme.js';
@@ -616,21 +618,33 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
           `Old resource: ${thread.resourceId}`,
           `Current resource: ${currentResourceId}`,
           '',
-          'Migrate this thread to the current resource and resume it?',
+          'Clone this thread into the current resource and resume the clone?',
         ].join('\n'),
-        options: [{ label: 'Migrate and resume' }, { label: 'Start fresh' }],
-        selectedOptionLabel: 'Migrate and resume',
+        options: [{ label: 'Clone and resume' }, { label: 'Start fresh' }],
+        selectedOptionLabel: 'Clone and resume',
         allowCustomResponse: false,
         overlay: { widthPercent: 80, maxHeight: '70%' },
       });
 
-      if (answer === 'Migrate and resume') {
-        await state.session.thread.migrateToCurrentResource({
-          threadId: thread.id,
-          expectedResourceId: thread.resourceId,
-          expectedProjectPath: currentPath,
-        });
-        await state.session.thread.switch({ threadId: thread.id });
+      if (answer === 'Clone and resume') {
+        const progress = new SimpleProgressComponent({ showElapsed: false, showPercentage: false });
+        progress.start('Cloning thread into the current resource...');
+        showModalOverlay(state.ui, progress, { widthPercent: 70, maxHeight: '40%', minHeightPercent: 0.35 });
+        state.ui.requestRender();
+
+        try {
+          await new Promise(resolve => setTimeout(resolve, 50));
+          progress.updateStatus('Loading cloned thread...');
+          state.ui.requestRender();
+          await state.session.thread.cloneToCurrentResource({
+            threadId: thread.id,
+            expectedResourceId: thread.resourceId,
+            expectedProjectPath: currentPath,
+          });
+        } finally {
+          state.ui.hideOverlay();
+          state.ui.requestRender();
+        }
         return;
       }
     }

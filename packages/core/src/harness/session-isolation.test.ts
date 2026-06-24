@@ -216,7 +216,7 @@ describe('Harness session — cross-resource thread ownership', () => {
     await expect(b.thread.clone({ sourceThreadId: aThreadId })).rejects.toThrow(`Thread not found: ${aThreadId}`);
   });
 
-  it('only migrates a cross-resource thread when the detected resource and project path still match', async () => {
+  it('only clones a cross-resource thread when the detected resource and project path still match', async () => {
     const storage = new InMemoryStore();
     const projectPath = '/tmp/mastra-project';
     const oldHarness = createHarness(storage, { resourceId: 'old-resource', initialState: { projectPath } });
@@ -229,7 +229,7 @@ describe('Harness session — cross-resource thread ownership', () => {
     const currentSession = await currentHarness.createSession();
 
     await expect(
-      currentSession.thread.migrateToCurrentResource({
+      currentSession.thread.cloneToCurrentResource({
         threadId: oldThreadId,
         expectedResourceId: 'another-resource',
         expectedProjectPath: projectPath,
@@ -237,25 +237,28 @@ describe('Harness session — cross-resource thread ownership', () => {
     ).rejects.toThrow(`Thread not found: ${oldThreadId}`);
 
     await expect(
-      currentSession.thread.migrateToCurrentResource({
+      currentSession.thread.cloneToCurrentResource({
         threadId: oldThreadId,
         expectedResourceId: 'old-resource',
         expectedProjectPath: '/tmp/other-project',
       }),
     ).rejects.toThrow(`Thread not found: ${oldThreadId}`);
 
-    await expect(
-      currentSession.thread.migrateToCurrentResource({
-        threadId: oldThreadId,
-        expectedResourceId: 'old-resource',
-        expectedProjectPath: projectPath,
-      }),
-    ).resolves.toBeUndefined();
+    const clonedThread = await currentSession.thread.cloneToCurrentResource({
+      threadId: oldThreadId,
+      expectedResourceId: 'old-resource',
+      expectedProjectPath: projectPath,
+    });
 
     expect(await storage.stores.memory.getThreadById({ threadId: oldThreadId })).toMatchObject({
       id: oldThreadId,
-      resourceId: 'current-resource',
+      resourceId: 'old-resource',
     });
+    expect(clonedThread).toMatchObject({
+      resourceId: 'current-resource',
+      metadata: { projectPath },
+    });
+    expect(clonedThread.id).not.toBe(oldThreadId);
   });
 
   it('still allows the owning resource to switch, list, and delete its own thread', async () => {

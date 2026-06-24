@@ -59,8 +59,8 @@ function queryValue(dbPath: string, sql: string): string {
 
 export const resourceidDriftPromptAcceptScenario: McE2eScenario = {
   name: 'resourceid-drift-prompt-accept',
-  description: 'Prompts before migrating an old-resource thread and resumes it when accepted.',
-  testName: 'accepts resource drift migration prompt and resumes migrated thread',
+  description: 'Prompts before cloning an old-resource thread and resumes the clone when accepted.',
+  testName: 'accepts resource drift clone prompt and resumes cloned thread',
   prepare({ dbPath, projectDir }) {
     scenarioDbPath = dbPath;
     seedProject(projectDir);
@@ -71,30 +71,50 @@ export const resourceidDriftPromptAcceptScenario: McE2eScenario = {
     runtime.startLiveOutput(terminal);
 
     await runtime.waitForScreenText(/This directory is tagged on a different resource/i, terminal, 15_000);
-    await runtime.waitForScreenText(/Migrate and resume/i, terminal, 5_000);
+    await runtime.waitForScreenText(/Clone and resume/i, terminal, 5_000);
     runtime.printScreen('resource drift prompt', terminal);
 
     terminal.write('\r');
+    await runtime.waitForScreenText(
+      /Cloning thread into the current resource|Loading cloned thread/i,
+      terminal,
+      10_000,
+    );
     await runtime.waitForScreenText(/Project:/i, terminal, 10_000);
 
-    terminal.submit('/thread');
-    await runtime.waitForScreenText(new RegExp(TITLE, 'i'), terminal, 10_000);
-    runtime.printScreen('after accepting migration', terminal);
+    await runtime.waitForScreenText(/Ready from old resource/i, terminal, 10_000);
+    runtime.printScreen('after accepting clone', terminal);
 
-    const threadResourceId = queryValue(
+    const oldThreadResourceId = queryValue(
       scenarioDbPath,
       `select resourceId from mastra_threads where id = ${quoteSql(THREAD_ID)};`,
     );
-    if (threadResourceId !== currentResourceId) {
-      throw new Error(`Expected thread resourceId ${currentResourceId}, got ${threadResourceId}`);
+    if (oldThreadResourceId !== OLD_RESOURCE_ID) {
+      throw new Error(`Expected old thread to remain on ${OLD_RESOURCE_ID}, got ${oldThreadResourceId}`);
     }
 
-    const messageResourceIds = queryValue(
+    const clonedThreadId = queryValue(
+      scenarioDbPath,
+      `select id from mastra_threads where resourceId = ${quoteSql(currentResourceId)} and title = ${quoteSql(TITLE)} and id != ${quoteSql(THREAD_ID)};`,
+    );
+    if (!clonedThreadId) {
+      throw new Error(`Expected cloned thread on ${currentResourceId}`);
+    }
+
+    const oldMessageResourceIds = queryValue(
       scenarioDbPath,
       `select group_concat(distinct resourceId) from mastra_messages where thread_id = ${quoteSql(THREAD_ID)};`,
     );
-    if (messageResourceIds !== currentResourceId) {
-      throw new Error(`Expected migrated message resourceIds ${currentResourceId}, got ${messageResourceIds}`);
+    if (oldMessageResourceIds !== OLD_RESOURCE_ID) {
+      throw new Error(`Expected old messages to remain on ${OLD_RESOURCE_ID}, got ${oldMessageResourceIds}`);
+    }
+
+    const clonedMessageResourceIds = queryValue(
+      scenarioDbPath,
+      `select group_concat(distinct resourceId) from mastra_messages where thread_id = ${quoteSql(clonedThreadId)};`,
+    );
+    if (clonedMessageResourceIds !== currentResourceId) {
+      throw new Error(`Expected cloned message resourceIds ${currentResourceId}, got ${clonedMessageResourceIds}`);
     }
 
     terminal.keyCtrlC();

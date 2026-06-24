@@ -51,8 +51,8 @@ function queryValue(dbPath: string, sql: string): string {
 
 export const resourceidDriftPromptDeclineScenario: McE2eScenario = {
   name: 'resourceid-drift-prompt-decline',
-  description: 'Prompts before migrating an old-resource thread and starts fresh when declined.',
-  testName: 'declines resource drift migration prompt and leaves old thread untouched',
+  description: 'Prompts before cloning an old-resource thread and starts fresh when declined.',
+  testName: 'declines resource drift clone prompt and leaves old thread untouched',
   prepare({ dbPath, projectDir }) {
     scenarioDbPath = dbPath;
     seedProject(projectDir);
@@ -72,7 +72,7 @@ export const resourceidDriftPromptDeclineScenario: McE2eScenario = {
     terminal.submit('/thread');
     await runtime.waitForScreenText(/Title: \(untitled\)/i, terminal, 10_000);
     await runtime.waitForScreenText(/Pending new thread: yes/i, terminal, 5_000);
-    runtime.printScreen('after declining migration', terminal);
+    runtime.printScreen('after declining clone', terminal);
 
     const oldThreadResourceId = queryValue(
       scenarioDbPath,
