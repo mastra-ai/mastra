@@ -669,12 +669,16 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const allThreadIds = new Set(messages.map(m => m.threadId!));
       const now = new Date();
 
-      await Promise.all([
-        collection.bulkWrite(messagesToInsert),
-        ...Array.from(allThreadIds).map(tid =>
-          threadsCollection.updateOne({ id: tid }, { $set: { updatedAt: now } }),
-        ),
-      ]);
+      // Write messages and refresh each touched thread's updatedAt atomically when
+      // supported. Operations are sequential because a transaction session is not
+      // concurrency-safe; on a standalone server this degrades to the same sequential
+      // best-effort behavior.
+      await this.#connector.withTransaction(async session => {
+        await collection.bulkWrite(messagesToInsert, { session });
+        for (const tid of allThreadIds) {
+          await threadsCollection.updateOne({ id: tid }, { $set: { updatedAt: now } }, { session });
+        }
+      });
 
       const list = new MessageList().add(messages as (MastraMessageV1 | MastraDBMessage)[], 'memory');
       return { messages: list.get.all.db() };

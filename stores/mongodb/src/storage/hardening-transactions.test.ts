@@ -104,4 +104,51 @@ describe('Hardening: NODE-7556 — transactions (Tranche B)', () => {
       await store.close();
     }
   });
+
+  test('B3: saveMessages rolls back the message write if the thread updatedAt update fails (replica set)', async () => {
+    const store = new MongoDBStore({ id: 'b3', uri: REPLICA_SET_URI, dbName: DB });
+    await store.init();
+    const memory = await store.getStore('memory');
+
+    const threadId = `thr-b3-${Date.now()}`;
+    const resourceId = `res-b3-${Date.now()}`;
+    await memory?.saveThread({
+      thread: { id: threadId, resourceId, title: 't', metadata: {}, createdAt: new Date(), updatedAt: new Date() },
+    });
+
+    const messageId = `m-b3-${Date.now()}`;
+    // Throw on the next updateOne (the thread updatedAt write inside saveMessages).
+    // bulkWrite is a different method, so the message insert itself is not stubbed.
+    const spy = vi.spyOn(Collection.prototype, 'updateOne').mockRejectedValueOnce(new Error('updatedAt boom'));
+    try {
+      await expect(
+        memory?.saveMessages({
+          messages: [
+            {
+              id: messageId,
+              threadId,
+              resourceId,
+              role: 'user',
+              type: 'v2',
+              content: { format: 2, parts: [{ type: 'text', text: 'hi' }] },
+            } as any,
+          ],
+        }),
+      ).rejects.toThrow();
+      // The failure must come from the thread updatedAt updateOne (called once), not anything else.
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
+
+    const client = new MongoClient(REPLICA_SET_URI);
+    try {
+      await client.connect();
+      const saved = await client.db(DB).collection('mastra_messages').countDocuments({ id: messageId });
+      expect(saved).toBe(0); // message write rolled back
+    } finally {
+      await client.close();
+      await store.close();
+    }
+  });
 });
