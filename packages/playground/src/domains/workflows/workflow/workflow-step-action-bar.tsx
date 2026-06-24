@@ -1,13 +1,13 @@
 import type { WorkflowRunStatus } from '@mastra/core/workflows';
+import { Button } from '@mastra/playground-ui';
 import {
-  Button,
   Dialog,
   DialogContent,
   DialogTitle,
   DialogHeader,
   DialogDescription,
   DialogBody,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Dialog';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import {
   AlertCircleIcon,

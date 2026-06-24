@@ -90,6 +90,8 @@ describe('AgentEditPage', () => {
 
 Fixtures live in a nearby `__tests__/fixtures/` folder, typed with response types re-exported from `@mastra/client-js`. No bespoke inline types, no `as any`, no `as unknown as`.
 
+Do not cast test data, MSW responses, request payloads, hook inputs, or component event inputs to force compatibility. Use direct imports and inferred production boundary types from real SDK, hook, component, DOM, or Testing Library APIs. Keep the real hook/component import in the test, and keep fixtures typed with response types re-exported from `@mastra/client-js`.
+
 When removing a mock surfaces a real product gap (an endpoint with no handler, a gating branch that was never exercised), fix the test/fixture or file the gap — never re-mock to paper over it. MSW runs with `onUnhandledRequest: 'error'`, so an unstubbed request fails loudly on purpose.
 
 ### Wrap mutation calls in `act`

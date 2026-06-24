@@ -1,5 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
+import { observationalMemoryQueryKey, memoryThreadMessagesQueryKey, memoryStatusQueryKey } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useRef } from 'react';
@@ -87,6 +88,8 @@ interface UseChatSendHandlerArgs {
   refreshObservationalMemory: (operationType?: string) => void;
   handleActivation: (data: any) => void;
   resetObservationalMemoryStreamState: () => void;
+  /** Signal the memory timeline panel to refetch (mirrors left OM sidebar freshness). */
+  signalTimelineRefresh: () => void;
 }
 
 const buildRequestContext = (deps: SendDeps) => {
@@ -131,6 +134,7 @@ export const useChatSendHandler = ({
   refreshObservationalMemory,
   handleActivation,
   resetObservationalMemoryStreamState,
+  signalTimelineRefresh,
 }: UseChatSendHandlerArgs) => {
   const baseClient = useMastraClient();
   const queryClient = useQueryClient();
@@ -158,6 +162,26 @@ export const useChatSendHandler = ({
     tracingOptions,
   };
 
+  // Force an immediate refetch of the memory timeline panel (playground-ui
+  // ['memory', ...] keys), scoped to the given thread, so the panel shows live
+  // data right away. Runs on every chat completion regardless of whether
+  // observational memory is enabled, so the thread messages and memory status
+  // shown in the panel are never stale after a stream finishes.
+  const refreshTimelinePanel = useCallback(
+    (currentThreadId?: string) => {
+      if (!currentThreadId) return;
+      void queryClient.refetchQueries({ queryKey: observationalMemoryQueryKey(agentId, currentThreadId) });
+      void queryClient.refetchQueries({ queryKey: memoryThreadMessagesQueryKey(currentThreadId) });
+      void queryClient.refetchQueries({ queryKey: memoryStatusQueryKey(agentId, currentThreadId) });
+      // Also poke the timeline panel directly. The panel resolves its own thread id
+      // from the route, so it stays correct even for brand-new threads where
+      // `deps.threadId` is still undefined at send time and the keyed refetch above
+      // cannot target the real thread yet.
+      signalTimelineRefresh();
+    },
+    [agentId, queryClient, signalTimelineRefresh],
+  );
+
   const completeObservationalMemoryBuffering = useCallback(
     (currentThreadId?: string) => {
       if (!currentThreadId || !sendDepsRef.current.isOMEnabled) return;
@@ -167,10 +191,13 @@ export const useChatSendHandler = ({
           setMessages(prev => injectBufferingEnds(prev, result?.record));
           void queryClient.invalidateQueries({ queryKey: ['observational-memory', agentId] });
           void queryClient.invalidateQueries({ queryKey: ['memory-status', agentId] });
+          // Refetch the panel again once buffering completes, so any records that
+          // only landed after awaitBufferStatus resolved are reflected immediately.
+          refreshTimelinePanel(currentThreadId);
         })
         .catch(() => {});
     },
-    [agentId, baseClient, queryClient, setMessages],
+    [agentId, baseClient, queryClient, refreshTimelinePanel, setMessages],
   );
 
   const handleHandledChunk = useCallback(
@@ -241,6 +268,7 @@ export const useChatSendHandler = ({
             tracingOptions: deps.tracingOptions,
           });
           await refreshThreadList?.();
+          refreshTimelinePanel(deps.threadId);
           return;
         } else {
           await sendMessage({
@@ -266,6 +294,7 @@ export const useChatSendHandler = ({
             signal: controller.signal,
           });
 
+          refreshTimelinePanel(deps.threadId);
           completeObservationalMemoryBuffering(deps.threadId);
           return;
         }
@@ -273,6 +302,7 @@ export const useChatSendHandler = ({
         setTimeout(() => {
           void refreshThreadList?.();
         }, 500);
+        refreshTimelinePanel(deps.threadId);
         completeObservationalMemoryBuffering(deps.threadId);
       } catch (error: any) {
         console.error('Error occurred in ChatProvider', error);
@@ -290,6 +320,7 @@ export const useChatSendHandler = ({
       handleHandledChunk,
       isRunningStream,
       refreshThreadList,
+      refreshTimelinePanel,
       refreshWorkingMemory,
       resetObservationalMemoryStreamState,
       sendMessage,

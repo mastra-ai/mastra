@@ -1,5 +1,6 @@
-import { Button, DialogBody, Icon, Txt, toast } from '@mastra/playground-ui';
+import { Button, Icon, Txt, toast } from '@mastra/playground-ui';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { DialogBody } from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { ChevronLeft, Link2 } from 'lucide-react';

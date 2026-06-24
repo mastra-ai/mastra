@@ -1,5 +1,6 @@
+import { Button } from '@mastra/playground-ui';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import {
-  Button,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -7,8 +8,7 @@ import {
   DialogDescription,
   DialogBody,
   DialogFooter,
-} from '@mastra/playground-ui';
-import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+} from '@mastra/playground-ui/components/Dialog';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';

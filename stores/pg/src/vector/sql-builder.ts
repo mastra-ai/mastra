@@ -51,8 +51,14 @@ const createNumericOperator = (symbol: string) => {
 
     // Use numeric comparison for numbers, text comparison for strings/dates
     if (isNumeric) {
+      // JSONB metadata is schemaless, so a candidate row may hold a non-numeric
+      // value at this path (e.g. { price: 'N/A' }). Casting the column to ::numeric
+      // unconditionally makes Postgres raise 22P02 and fail the ENTIRE query instead
+      // of that row simply not matching. Guard the cast with jsonb_typeof so only
+      // number-typed rows are compared and everything else is excluded, mirroring the
+      // $size/$in pattern already used in this file and MongoDB-style range semantics.
       return {
-        sql: `(metadata#>>'{${jsonPathKey}}')::numeric ${symbol} $${paramIndex}::numeric`,
+        sql: `(CASE WHEN jsonb_typeof(metadata#>'{${jsonPathKey}}') = 'number' THEN (metadata#>>'{${jsonPathKey}}')::numeric ${symbol} $${paramIndex}::numeric ELSE FALSE END)`,
         needsValue: true,
       };
     } else {
@@ -101,7 +107,11 @@ function buildElemMatchConditions(value: any, paramIndex: number): { sql: string
     }
     const result = operatorFn(paramKey, nextParamIndex, paramValue);
 
-    const sql = result.sql.replaceAll('metadata#>>', 'elem#>>');
+    // Rewrite every column reference to the per-element alias. Order matters:
+    // replace the longer `metadata#>>` token before `metadata#>` so the latter
+    // doesn't partially match the former (e.g. the jsonb_typeof guard emitted by
+    // the numeric operators uses the single-arrow `metadata#>` form).
+    const sql = result.sql.replaceAll('metadata#>>', 'elem#>>').replaceAll('metadata#>', 'elem#>');
     conditions.push(sql);
     if (result.needsValue) {
       values.push(paramValue);
