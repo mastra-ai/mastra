@@ -1,4 +1,4 @@
-import { Badge } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
 import { useAgentVersions } from '../hooks/use-agent-versions';

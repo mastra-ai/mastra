@@ -28,7 +28,7 @@ jobs:
       - name: Check for code changes
         id: filter
         run: |
-          CHANGED=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} \
+          CHANGED=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} \
             | grep -vE '^(docs/|examples/|\.changeset/|explorations/)' || true)
           if [ -n "$CHANGED" ]; then
             echo "has_code=true" >> $GITHUB_OUTPUT
@@ -96,8 +96,7 @@ jobs:
         id: compute
         run: |
           CHANGED=$(git diff --name-only \
-            "${{ github.event.pull_request.base.sha }}" \
-            "${{ github.event.pull_request.head.sha }}" \
+            "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" \
             | grep -E '/src/.*\.(ts|tsx)$' \
             | grep -vE '__fixtures__|/fixtures/' \
             || true)

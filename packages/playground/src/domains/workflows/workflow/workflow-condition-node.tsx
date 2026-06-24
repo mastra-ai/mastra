@@ -1,5 +1,4 @@
 import {
-  Badge,
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -14,6 +13,7 @@ import {
   DialogDescription,
   DialogBody,
 } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
 import { ChevronDown } from 'lucide-react';

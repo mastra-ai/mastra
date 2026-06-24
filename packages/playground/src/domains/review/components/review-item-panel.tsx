@@ -1,5 +1,7 @@
-import { Badge, Button, ButtonsGroup, Txt, Icon } from '@mastra/playground-ui';
+import { Button, Txt, Icon } from '@mastra/playground-ui';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';

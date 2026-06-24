@@ -1,6 +1,5 @@
 import {
   Button,
-  CodeEditor,
   Txt,
   Dialog,
   DialogContent,
@@ -9,6 +8,7 @@ import {
   DialogTitle,
   DialogBody,
 } from '@mastra/playground-ui';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Share2 } from 'lucide-react';
 import { useState } from 'react';
 

@@ -669,10 +669,10 @@ describe('renderExistingMessages task tools', () => {
     expect(listActiveMessages).toHaveBeenCalledWith({ limit: 200 });
     expect(updateTasks).toHaveBeenCalledWith(expectedTasks);
     expect(setState).toHaveBeenCalledWith({ tasks: expectedTasks });
-    expect(visibleChildren(state)).toHaveLength(39);
+    expect(visibleChildren(state)).toHaveLength(40);
   });
 
-  it('renders no inline receipt when replaying repeated complete patches that finish the list', async () => {
+  it('renders inline receipts when replaying repeated complete patches that finish the list', async () => {
     const messages: HarnessMessage[] = [
       {
         id: 'assistant-1',
@@ -748,12 +748,14 @@ describe('renderExistingMessages task tools', () => {
 
     await renderExistingMessages(state);
 
-    // A fully-completed list leaves no inline receipt in the transcript.
-    expect(visibleChildren(state)).toHaveLength(0);
+    const rendered = visibleChildren(state).map(component => component.render(100).join('\n'));
+    expect(rendered).toHaveLength(3);
+    expect(rendered.join('\n')).toContain('Write tests');
+    expect(rendered.join('\n')).toContain('Tasks');
     expect(state.allToolComponents.map(component => (component as any).toolName)).toEqual([]);
   });
 
-  it('renders no inline receipt when replaying repeated completed task writes', async () => {
+  it('renders completed task receipts when replaying repeated completed task writes', async () => {
     const completedTasks = [{ id: 'tests', content: 'Write tests', status: 'completed', activeForm: 'Writing tests' }];
     const messages: HarnessMessage[] = [
       {
@@ -806,8 +808,9 @@ describe('renderExistingMessages task tools', () => {
 
     await renderExistingMessages(state);
 
-    // A fully-completed list leaves no inline receipt in the transcript.
-    expect(visibleChildren(state)).toHaveLength(0);
+    const rendered = visibleChildren(state).map(component => component.render(100).join('\n'));
+    expect(rendered).toHaveLength(2);
+    expect(rendered.join('\n')).toContain('Write tests');
     expect(state.allToolComponents.map(component => (component as any).toolName)).toEqual([]);
   });
 

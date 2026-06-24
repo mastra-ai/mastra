@@ -104,6 +104,11 @@ const sidebars = {
           label: 'Tools',
         },
         {
+          type: 'doc',
+          id: 'agents/skills',
+          label: 'Skills',
+        },
+        {
           type: 'html',
           value: '<a class="menu__link" href="/docs/memory/overview"><span>Memory</span></a>',
         },
@@ -789,6 +794,11 @@ const sidebars = {
           type: 'doc',
           id: 'evals/built-in-scorers',
           label: 'Built-in Scorers',
+        },
+        {
+          type: 'doc',
+          id: 'evals/quick-checks',
+          label: 'Quick Checks',
         },
         {
           type: 'doc',
