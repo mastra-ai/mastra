@@ -1047,6 +1047,10 @@ export interface HarnessRequestState<TState = unknown> {
 }
 
 export interface HarnessRequestSession<TState = unknown> {
+  /** Stable session identifier (mirrors SessionRecord.id in storage). */
+  id: string;
+  /** Stable session owner (mirrors SessionRecord.ownerId in storage). */
+  ownerId: string;
   /** Currently-selected mode ID */
   modeId: string;
   /** Currently-selected model ID ('' when none selected yet) */

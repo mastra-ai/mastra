@@ -18,7 +18,7 @@ async function createSession(onModelUse?: (modelId: string) => void) {
     modelUseCountTracker: onModelUse,
   });
   await harness.init();
-  const session = await harness.createSession();
+  const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
   return { session };
 }
 

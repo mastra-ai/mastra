@@ -45,7 +45,7 @@ The session is organized into sub-objects, each owning one domain of per-convers
   {
     name: 'identity',
     type: 'SessionIdentity',
-    description: 'Resource identity for the conversation. See identity methods below.',
+    description: 'Stable session, owner, and resource identity for the conversation. See identity methods below.',
   },
   {
     name: 'thread',
@@ -174,7 +174,23 @@ const usage = harness.session.getTokenUsage()
 
 ## Identity
 
-`session.identity` owns the resource ID for the conversation.
+`session.identity` owns the stable identifiers for the conversation: the resource ID, a session `id`, and an `ownerId`. The `id` and `ownerId` are stable for the life of the session and do not change when the resource ID is switched. They mirror the `id` and `ownerId` fields on `SessionRecord` in storage.
+
+### `session.identity.getId()`
+
+Return the stable session identifier.
+
+```typescript
+const sessionId = harness.session.identity.getId()
+```
+
+### `session.identity.getOwnerId()`
+
+Return the stable owner identifier for the session.
+
+```typescript
+const ownerId = harness.session.identity.getOwnerId()
+```
 
 ### `session.identity.getResourceId()`
 
@@ -192,7 +208,7 @@ Return the resource ID the session was created with.
 const defaultResourceId = harness.session.identity.getDefaultResourceId()
 ```
 
-To change the resource ID, use [`harness.setResourceId()`](/reference/harness/harness-class#setresourceid-resourceid-), which also tears down the active thread.
+To change the resource ID, use [`harness.setResourceId()`](/reference/harness/harness-class#setresourceid-resourceid-), which also tears down the active thread. The session `id` and `ownerId` are not affected by resource switches.
 
 ## Thread
 

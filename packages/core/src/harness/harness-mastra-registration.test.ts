@@ -80,7 +80,7 @@ describe('Harness ↔ Mastra registration', () => {
     new Mastra({ harnesses: { code: harness }, storage: parentStore });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const thread = await session.thread.create();
 
     // The thread was persisted through the parent Mastra's store, not the
@@ -95,7 +95,7 @@ describe('Harness ↔ Mastra registration', () => {
     const harness = createTestHarness({ storage: ownStore });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const thread = await session.thread.create();
 
     const memory = await ownStore.getStore('memory');

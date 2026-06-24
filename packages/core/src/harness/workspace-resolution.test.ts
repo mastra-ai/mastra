@@ -59,7 +59,7 @@ describe('Harness workspace — static instance', () => {
       workspace: ws,
     });
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const resolved = await harness.resolveWorkspace({ session });
     expect(resolved).toBe(ws);
@@ -97,7 +97,7 @@ describe('Harness workspace — dynamic factory', () => {
   });
 
   it('resolveWorkspace() invokes the factory and caches the result', async () => {
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     // createSession resolves the workspace once; the explicit resolve below
     // should hit the cache rather than re-invoking the factory.
     workspaceFn.mockClear();
@@ -111,7 +111,7 @@ describe('Harness workspace — dynamic factory', () => {
   });
 
   it('resolveWorkspace() returns cached workspace without re-invoking factory', async () => {
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     workspaceFn.mockClear();
 
     await harness.resolveWorkspace({ session });
@@ -131,7 +131,7 @@ describe('Harness workspace — dynamic factory', () => {
       workspace: nullFactory,
     });
     await h.init();
-    const session = await h.createSession();
+    const session = await h.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const resolved = await h.resolveWorkspace({ session });
     expect(resolved).toBeUndefined();
@@ -153,7 +153,7 @@ describe('Harness workspace — none configured', () => {
       modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
     });
     await harness.init();
-    session = await harness.createSession();
+    session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
   });
 
   it('getWorkspace() returns undefined', () => {
@@ -189,7 +189,7 @@ describe('buildRequestContext caches dynamic workspace', () => {
     expect(harness.getWorkspace()).toBeUndefined();
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     // Trigger buildRequestContext indirectly via resolveWorkspace
     await harness.resolveWorkspace({ session });
 
