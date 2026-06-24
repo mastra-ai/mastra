@@ -1,6 +1,8 @@
 'use client';
 
-import { Button, CodeEditor, Label } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { Label } from '@mastra/playground-ui/components/Label';
 import { Pencil } from 'lucide-react';
 
 /** Schema validation error from API */

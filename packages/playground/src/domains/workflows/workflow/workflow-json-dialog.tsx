@@ -1,12 +1,5 @@
-import {
-  Button,
-  CodeEditor,
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@mastra/playground-ui';
+import { Button, Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Braces } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
 import { useState } from 'react';

@@ -1,7 +1,8 @@
 'use client';
 
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
-import { Button, ButtonsGroup, DataList, TraceIcon } from '@mastra/playground-ui';
+import { Button, DataList, TraceIcon } from '@mastra/playground-ui';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { Notice } from '@mastra/playground-ui/components/Notice';

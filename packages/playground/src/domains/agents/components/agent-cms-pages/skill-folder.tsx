@@ -1,4 +1,5 @@
-import { CodeEditor, Txt } from '@mastra/playground-ui';
+import { Txt } from '@mastra/playground-ui';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { useState, useCallback, useMemo } from 'react';
 
