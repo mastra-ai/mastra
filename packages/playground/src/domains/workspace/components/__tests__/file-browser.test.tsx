@@ -2,8 +2,8 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { FileBrowser } from '../file-browser';
 import type { FileEntry } from '../../types';
+import { FileBrowser } from '../file-browser';
 
 afterEach(() => {
   cleanup();
@@ -105,16 +105,19 @@ describe('FileBrowser', () => {
     expect(getTreeItemById('src').dataset.workspaceTreeLocation).toBeUndefined();
   });
 
-  it('colors skill folder and file icons with the accent color', () => {
-    renderFileBrowser();
+  it('reserves the accent skill icon for skill roots, not the whole .agents/skills subtree', () => {
+    renderFileBrowser({ skillPaths: new Set(['.agents/skills/code-review']) });
 
-    const skillFolderIcon = getTreeItemById('.agents/skills').querySelector('svg[class*="lucide-folder"]');
-    const skillFileIcon = getTreeItemById('.agents/skills/code-review/SKILL.md').querySelector('svg[class*="lucide-file"]');
-    const regularFolderIcon = getTreeItemById('src').querySelector('svg[class*="lucide-folder"]');
+    // The skill root folder carries the accent skill icon.
+    const skillRootTrigger = getTreeItemById('.agents/skills/code-review').querySelector('[data-tree-folder-trigger]');
+    expect(skillRootTrigger?.querySelector('svg[class*="text-accent1"]')).not.toBeNull();
 
-    expect(skillFolderIcon?.getAttribute('class')).toContain('text-accent1');
-    expect(skillFileIcon?.getAttribute('class')).toContain('text-accent1');
-    expect(regularFolderIcon?.getAttribute('class')).not.toContain('text-accent1');
+    // Container folders and files inside the skill are NOT accent-colored (no spray).
+    const containerTrigger = getTreeItemById('.agents/skills').querySelector('[data-tree-folder-trigger]');
+    expect(containerTrigger?.querySelector('svg[class*="text-accent1"]')).toBeNull();
+    expect(
+      getTreeItemById('.agents/skills/code-review/SKILL.md').querySelector('svg[class*="text-accent1"]'),
+    ).toBeNull();
   });
 
   it('creates a folder at the workspace root from the header action', () => {
@@ -128,6 +131,56 @@ describe('FileBrowser', () => {
     fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
 
     expect(onCreateDirectory).toHaveBeenCalledWith('packages');
+  });
+
+  it('shows an add-skill action in the header only when onAddSkill is provided', () => {
+    const { rerender } = render(
+      <FileBrowser entries={recursiveEntries} currentPath="." isLoading={false} onNavigate={() => {}} />,
+    );
+    expect(screen.queryByRole('button', { name: /add skill/i })).toBeNull();
+
+    const onAddSkill = vi.fn();
+    rerender(
+      <FileBrowser
+        entries={recursiveEntries}
+        currentPath="."
+        isLoading={false}
+        onNavigate={() => {}}
+        onAddSkill={onAddSkill}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /add skill/i }));
+    expect(onAddSkill).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a search toggle in the header that reflects the active state', () => {
+    const onToggleSearch = vi.fn();
+    const { rerender } = render(
+      <FileBrowser
+        entries={recursiveEntries}
+        currentPath="."
+        isLoading={false}
+        onNavigate={() => {}}
+        onToggleSearch={onToggleSearch}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /search workspace/i }));
+    expect(onToggleSearch).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <FileBrowser
+        entries={recursiveEntries}
+        currentPath="."
+        isLoading={false}
+        onNavigate={() => {}}
+        onToggleSearch={onToggleSearch}
+        isSearchActive
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: /close search/i })).not.toBeNull();
   });
 
   it('lazily loads folder children on expand and keeps folders collapsed by default', () => {
@@ -153,7 +206,9 @@ describe('FileBrowser', () => {
     renderFileBrowser({ onCreateDirectory });
 
     expect(screen.queryByRole('button', { name: /^create directory$/i })).toBeNull();
-    fireEvent.click(within(getTreeItemById('src/components')).getByRole('button', { name: /create folder in components/i }));
+    fireEvent.click(
+      within(getTreeItemById('src/components')).getByRole('button', { name: /create folder in components/i }),
+    );
 
     fireEvent.change(screen.getByLabelText('Folder name'), { target: { value: 'docs' } });
     fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
@@ -169,6 +224,27 @@ describe('FileBrowser', () => {
 
     expect(screen.getByText(/Are you sure you want to delete "src\/components\/Button\.tsx"\?/i)).not.toBeNull();
     expect(onNavigate).not.toHaveBeenCalled();
+    expect(onFileSelect).not.toHaveBeenCalled();
+  });
+
+  it('marks the selected path as selected in the tree', () => {
+    renderFileBrowser({ selectedPath: 'README.md' });
+
+    expect(getTreeItemById('README.md').getAttribute('aria-selected')).toBe('true');
+    expect(getTreeItemById('src').getAttribute('aria-selected')).toBeNull();
+  });
+
+  it('expands a skill folder on click without selecting a file (rich view lives on SKILL.md)', () => {
+    const { onFileSelect } = renderFileBrowser({
+      skillPaths: new Set(['.agents/skills/code-review']),
+    });
+
+    const skillFolder = getTreeItemById('.agents/skills/code-review');
+    expect(skillFolder.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(within(skillFolder).getByRole('button', { name: /code-review/i }));
+
+    // Collapses like any folder; selecting the skill itself is not a thing.
+    expect(skillFolder.getAttribute('aria-expanded')).toBe('false');
     expect(onFileSelect).not.toHaveBeenCalled();
   });
 

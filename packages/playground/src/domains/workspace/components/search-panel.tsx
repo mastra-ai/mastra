@@ -1,7 +1,44 @@
-import { Button, Input, SkillIcon } from '@mastra/playground-ui';
-import { Search, Loader2, Sparkles, FileText, Zap, FolderOpen } from 'lucide-react';
+import { Searchbar, SkillIcon } from '@mastra/playground-ui';
+import { Loader2, FileText, FolderOpen } from 'lucide-react';
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import type { SearchResult, SearchResponse, SkillSearchResult } from '../types';
+
+// Hardcoded query params so the UI stays a simple search box (no per-query knobs).
+const SEARCH_TOP_K = 20;
+const SEARCH_INCLUDE_REFERENCES = true;
+
+/**
+ * Wrap every case-insensitive occurrence of `query` in the text with an accent
+ * highlight (reference `<mark>`), so results read like VS Code's search view.
+ */
+function highlightQuery(text: string, query: string): ReactNode {
+  const needle = query.trim();
+  if (!needle) return text;
+
+  const lowerText = text.toLowerCase();
+  const lowerNeedle = needle.toLowerCase();
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  let key = 0;
+
+  while (cursor < text.length) {
+    const matchIndex = lowerText.indexOf(lowerNeedle, cursor);
+    if (matchIndex === -1) {
+      parts.push(text.slice(cursor));
+      break;
+    }
+    if (matchIndex > cursor) parts.push(text.slice(cursor, matchIndex));
+    parts.push(
+      <mark key={key++} className="rounded-sm bg-accent1/15 px-0.5 text-accent1">
+        {text.slice(matchIndex, matchIndex + needle.length)}
+      </mark>,
+    );
+    cursor = matchIndex + needle.length;
+  }
+
+  return parts;
+}
 
 // =============================================================================
 // Workspace File Search Panel
@@ -18,23 +55,11 @@ export interface SearchWorkspacePanelProps {
 
 type SearchMode = 'vector' | 'bm25' | 'hybrid';
 
-const modeConfig: Record<SearchMode, { label: string; icon: React.ReactNode; color: string }> = {
-  bm25: {
-    label: 'Keyword',
-    icon: <FileText className="h-3.5 w-3.5" />,
-    color: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
-  },
-  vector: {
-    label: 'Semantic',
-    icon: <Sparkles className="h-3.5 w-3.5" />,
-    color: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
-  },
-  hybrid: {
-    label: 'Hybrid',
-    icon: <Zap className="h-3.5 w-3.5" />,
-    color: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
-  },
-};
+function getDefaultSearchMode(canBM25: boolean, canVector: boolean): SearchMode {
+  if (canBM25 && canVector) return 'hybrid';
+  if (canVector) return 'vector';
+  return 'bm25';
+}
 
 function getWorkspaceSearchResultFileId(result: SearchResult): string {
   return result.id.replace(/#chunk-\d+$/, '');
@@ -48,114 +73,40 @@ export function SearchWorkspacePanel({
   canVector,
   onViewResult,
 }: SearchWorkspacePanelProps) {
-  const [query, setQuery] = useState('');
-  const [topK, setTopK] = useState(5);
+  const mode = getDefaultSearchMode(canBM25, canVector);
 
-  const getDefaultMode = (): SearchMode => {
-    if (canBM25 && canVector) return 'hybrid';
-    if (canBM25) return 'bm25';
-    if (canVector) return 'vector';
-    return 'bm25';
+  const handleSearch = (value: string) => {
+    const query = value.trim();
+    if (!query) return;
+    onSearch({ query, topK: SEARCH_TOP_K, mode });
   };
-
-  const [mode, setMode] = useState<SearchMode>(getDefaultMode());
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!query.trim()) return;
-    onSearch({ query: query.trim(), topK, mode });
-  };
-
-  const availableModes = [
-    ...(canBM25 ? (['bm25'] as const) : []),
-    ...(canVector ? (['vector'] as const) : []),
-    ...(canBM25 && canVector ? (['hybrid'] as const) : []),
-  ];
 
   return (
-    <div className="rounded-lg bg-surface4">
-      {/* Search Form */}
-      <form onSubmit={handleSearch} className="p-4">
-        <div className="flex gap-3 items-center">
-          {/* Query Input */}
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral3" />
-            <Input
-              value={query}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
-              placeholder="Search workspace files..."
-              variant="outline"
-              className="pl-9 h-10"
-            />
-          </div>
-
-          {/* Top K */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-neutral4">Top</span>
-            <Input
-              type="number"
-              min={1}
-              max={50}
-              value={topK}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTopK(parseInt(e.target.value) || 5)}
-              className="w-14 h-10 text-center bg-surface2 border-border1"
-              title="Number of results"
-            />
-          </div>
-
-          {/* Search Button */}
-          <Button type="submit" disabled={isSearching || !query.trim()} size="lg" className="h-10 px-4">
-            {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
-          </Button>
+    <div className="space-y-3">
+      <div className="flex items-center gap-3">
+        <div className="flex-1">
+          <Searchbar onSearch={handleSearch} label="Search workspace files" placeholder="Search workspace files..." />
         </div>
-
-        {/* Mode Selection */}
-        {availableModes.length > 0 && (
-          <div className="flex gap-2 mt-3">
-            {availableModes.map(m => {
-              const config = modeConfig[m];
-              const isActive = mode === m;
-              return (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setMode(m)}
-                  className={`
-                    inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium border transition-colors
-                    ${isActive ? config.color : 'bg-surface2 text-neutral4 border-transparent hover:bg-surface3'}
-                  `}
-                >
-                  {config.icon}
-                  {config.label}
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </form>
+        {isSearching && <Loader2 className="h-4 w-4 animate-spin text-neutral4 shrink-0" />}
+      </div>
 
       {/* Results */}
       {searchResults && (
-        <div className="border-t border-border1">
-          <div className="px-4 py-2 flex items-center justify-between text-xs">
-            <span className="text-neutral4">
-              {searchResults.results.length} result{searchResults.results.length !== 1 ? 's' : ''} for "
-              <span className="text-neutral6">{searchResults.query}</span>"
-            </span>
-            <span className={`px-1.5 py-0.5 rounded ${modeConfig[searchResults.mode].color}`}>
-              {modeConfig[searchResults.mode].label}
-            </span>
+        <div>
+          <div className="py-2 text-xs text-neutral4">
+            {searchResults.results.length} result{searchResults.results.length !== 1 ? 's' : ''} for "
+            <span className="text-neutral6">{searchResults.query}</span>"
           </div>
 
           {searchResults.results.length === 0 ? (
             <div className="px-4 py-8 text-center text-neutral4 text-sm">No results found. Try a different query.</div>
           ) : (
-            <ul className="max-h-[320px] overflow-auto">
+            <ul className="overflow-hidden rounded-lg border border-border1 bg-surface4">
               {searchResults.results.map((result, index) => (
                 <WorkspaceSearchResultItem
                   key={`${result.id}-${index}`}
                   result={result}
-                  rank={index + 1}
+                  query={searchResults.query}
                   onClick={() => onViewResult?.(getWorkspaceSearchResultFileId(result))}
                 />
               ))}
@@ -169,36 +120,29 @@ export function SearchWorkspacePanel({
 
 interface WorkspaceSearchResultItemProps {
   result: SearchResult;
-  rank: number;
+  query: string;
   onClick?: () => void;
 }
 
-function WorkspaceSearchResultItem({ result, rank, onClick }: WorkspaceSearchResultItemProps) {
-  const scorePercent = Math.min(100, Math.max(0, result.score * 100));
+function WorkspaceSearchResultItem({ result, query, onClick }: WorkspaceSearchResultItemProps) {
   const fileId = getWorkspaceSearchResultFileId(result);
+  const fileName = fileId.split('/').pop() || fileId;
+  const directory = fileId.slice(0, fileId.length - fileName.length).replace(/\/$/, '');
 
   return (
     <li className="border-t border-border1 first:border-t-0">
-      <button onClick={onClick} className="w-full px-4 py-3 text-left hover:bg-surface5 transition-colors flex gap-3">
-        <span className="text-xs text-neutral3 tabular-nums w-4 shrink-0">{rank}</span>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <FolderOpen className="h-3.5 w-3.5 text-neutral4 shrink-0" />
-            <span className="font-mono text-sm text-neutral6 truncate">{fileId}</span>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <div className="w-12 h-1 rounded-full bg-surface2 overflow-hidden">
-                <div className="h-full rounded-full bg-accent1" style={{ width: `${scorePercent}%` }} />
-              </div>
-              <span className="text-ui-xs text-neutral3 tabular-nums">{result.score.toFixed(2)}</span>
-            </div>
-          </div>
-          <p className="text-xs text-neutral4 line-clamp-2">{result.content}</p>
+      <button onClick={onClick} className="w-full px-3 py-2.5 text-left transition-colors hover:bg-surface5">
+        <div className="flex items-baseline gap-2">
+          <FolderOpen className="h-3.5 w-3.5 shrink-0 translate-y-0.5 text-neutral4" />
+          <span className="truncate font-mono text-sm text-neutral6">{fileName}</span>
+          {directory && <span className="truncate text-xs text-neutral3">{directory}</span>}
           {result.lineRange && (
-            <p className="text-xs text-neutral3 mt-1">
-              Lines {result.lineRange.start}–{result.lineRange.end}
-            </p>
+            <span className="ml-auto shrink-0 text-xs text-neutral3 tabular-nums">
+              L{result.lineRange.start}–{result.lineRange.end}
+            </span>
           )}
         </div>
+        <p className="mt-1 line-clamp-2 pl-5 text-sm text-neutral4">{highlightQuery(result.content, query)}</p>
       </button>
     </li>
   );
@@ -216,62 +160,24 @@ export interface SearchSkillsPanelProps {
 }
 
 export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClick }: SearchSkillsPanelProps) {
-  const [query, setQuery] = useState('');
-  const [topK, setTopK] = useState(5);
-  const [includeReferences, setIncludeReferences] = useState(true);
+  // Track the last submitted query so result snippets can highlight matches.
+  const [submittedQuery, setSubmittedQuery] = useState('');
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!query.trim()) return;
-    onSearch({ query: query.trim(), topK, includeReferences });
+  const handleSearch = (value: string) => {
+    const query = value.trim();
+    if (!query) return;
+    setSubmittedQuery(query);
+    onSearch({ query, topK: SEARCH_TOP_K, includeReferences: SEARCH_INCLUDE_REFERENCES });
   };
 
   return (
-    <div className="space-y-4">
-      {/* Search Form */}
-      <form onSubmit={handleSearch} className="space-y-3">
-        <div className="flex gap-2">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral3" />
-            <input
-              type="text"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              placeholder="Search across skills..."
-              className="w-full pl-10 pr-4 py-2 rounded-lg bg-surface3 border border-border1 text-sm text-neutral6 placeholder:text-neutral3 focus:outline-hidden focus:ring-2 focus:ring-accent1"
-            />
-          </div>
-          <Button type="submit" disabled={!query.trim() || isSearching}>
-            {isSearching ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Search'}
-          </Button>
+    <div className="space-y-3">
+      <div className="flex items-center gap-3">
+        <div className="flex-1">
+          <Searchbar onSearch={handleSearch} label="Search across skills" placeholder="Search across skills..." />
         </div>
-
-        <div className="flex items-center gap-4 text-sm">
-          <label className="flex items-center gap-2 text-neutral4">
-            <span>Results:</span>
-            <select
-              value={topK}
-              onChange={e => setTopK(Number(e.target.value))}
-              className="px-2 py-1 rounded bg-surface3 border border-border1 text-neutral5"
-            >
-              <option value={3}>3</option>
-              <option value={5}>5</option>
-              <option value={10}>10</option>
-              <option value={20}>20</option>
-            </select>
-          </label>
-
-          <label className="flex items-center gap-2 text-neutral4 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={includeReferences}
-              onChange={e => setIncludeReferences(e.target.checked)}
-              className="rounded border-border1 bg-surface3"
-            />
-            <span>Include references</span>
-          </label>
-        </div>
-      </form>
+        {isSearching && <Loader2 className="h-4 w-4 animate-spin text-neutral4 shrink-0" />}
+      </div>
 
       {/* Results */}
       {results.length > 0 && (
@@ -284,6 +190,7 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
               <SkillSearchResultCard
                 key={`${result.skillName}-${result.source}-${index}`}
                 result={result}
+                query={submittedQuery}
                 onClick={() => onResultClick?.(result)}
               />
             ))}
@@ -294,8 +201,17 @@ export function SearchSkillsPanel({ onSearch, results, isSearching, onResultClic
   );
 }
 
-function SkillSearchResultCard({ result, onClick }: { result: SkillSearchResult; onClick?: () => void }) {
+function SkillSearchResultCard({
+  result,
+  query,
+  onClick,
+}: {
+  result: SkillSearchResult;
+  query: string;
+  onClick?: () => void;
+}) {
   const isReference = result.source !== 'SKILL.md';
+  const snippet = result.content.slice(0, 300);
 
   return (
     <button
@@ -307,24 +223,23 @@ function SkillSearchResultCard({ result, onClick }: { result: SkillSearchResult;
           {isReference ? (
             <FileText className="h-3.5 w-3.5 text-neutral4" />
           ) : (
-            <SkillIcon className="h-3.5 w-3.5 text-neutral4" />
+            <SkillIcon className="h-3.5 w-3.5 text-accent1" />
           )}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <span className="font-medium text-neutral6">{result.skillName}</span>
             <span className="text-xs text-neutral3">{result.source}</span>
-            <span className="ml-auto text-xs text-neutral3">Score: {result.score.toFixed(3)}</span>
+            {result.lineRange && (
+              <span className="ml-auto shrink-0 text-xs text-neutral3 tabular-nums">
+                L{result.lineRange.start}–{result.lineRange.end}
+              </span>
+            )}
           </div>
           <p className="text-sm text-neutral4 line-clamp-3 whitespace-pre-wrap">
-            {result.content.slice(0, 300)}
+            {highlightQuery(snippet, query)}
             {result.content.length > 300 && '...'}
           </p>
-          {result.lineRange && (
-            <p className="text-xs text-neutral3 mt-2">
-              Lines {result.lineRange.start}–{result.lineRange.end}
-            </p>
-          )}
         </div>
       </div>
     </button>

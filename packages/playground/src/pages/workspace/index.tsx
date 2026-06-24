@@ -5,7 +5,6 @@ import {
   CollapsiblePanel,
   ErrorState,
   NoDataPageLayout,
-  PageHeader,
   PageLayout,
   PanelSeparator,
   PermissionDenied,
@@ -16,15 +15,12 @@ import {
   is403ForbiddenError,
   toast,
 } from '@mastra/playground-ui';
-import { FileText, Wand2, Search } from 'lucide-react';
+import { FileText, Wand2, Search, X } from 'lucide-react';
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { useSearchParams, useParams, useNavigate } from 'react-router';
 import { Group, Panel, useDefaultLayout } from 'react-resizable-panels';
+import { useSearchParams, useParams, useNavigate } from 'react-router';
 import { isWorkspaceNotSupportedError } from '@/domains/workspace/compatibility';
-import { navCrumb } from '@/lib/nav';
-import { RouteHeaderCrumbs } from '@/lib/route-header';
-import type { CrumbDef } from '@/lib/route-header';
-import { AddSkillDialog, FileBrowser, FileViewer, SkillsTable } from '@/domains/workspace/components';
+import { AddSkillDialog, FileBrowser, FileViewer, SkillDetail, SkillsTable } from '@/domains/workspace/components';
 import { NoWorkspacesInfo } from '@/domains/workspace/components/no-workspaces-info';
 import { SearchWorkspacePanel, SearchSkillsPanel } from '@/domains/workspace/components/search-panel';
 import { WorkspaceNotConfigured } from '@/domains/workspace/components/workspace-not-configured';
@@ -39,13 +35,34 @@ import {
   useCreateWorkspaceDirectory,
   useDeleteWorkspaceFile,
 } from '@/domains/workspace/hooks/use-workspace';
-import { useWorkspaceSkills, useSearchWorkspaceSkills } from '@/domains/workspace/hooks/use-workspace-skills';
-import type { WorkspaceItem } from '@/domains/workspace/types';
+import {
+  useWorkspaceSkill,
+  useWorkspaceSkills,
+  useSearchWorkspaceSkills,
+} from '@/domains/workspace/hooks/use-workspace-skills';
+import type { SkillMetadata, WorkspaceItem } from '@/domains/workspace/types';
+import { useLinkComponent } from '@/lib/framework';
+import { navCrumb } from '@/lib/nav';
+import type { CrumbDef } from '@/lib/route-header';
+import { RouteHeaderCrumbs } from '@/lib/route-header';
+
+/**
+ * Resolve a skill search result to the actual file path inside the workspace.
+ * `skillPath` is the skill directory and `source` is the matched file relative
+ * to it (e.g. `SKILL.md` or `references/foo.md`), so the file viewer needs both
+ * joined together. Opening the bare directory path would render a blank page.
+ */
+function skillResultFilePath(skillPath: string, source: string): string {
+  const dir = skillPath.replace(/\/+$/, '');
+  const file = source.replace(/^\/+/, '');
+  return file ? `${dir}/${file}` : dir;
+}
 
 export default function Workspace() {
   const { workspaceId: workspaceIdFromPath } = useParams<{ workspaceId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { paths, Link } = useLinkComponent();
   const [showSearch, setShowSearch] = useState(false);
   const [showAddSkillDialog, setShowAddSkillDialog] = useState(false);
   const [removingSkillName, setRemovingSkillName] = useState<string | null>(null);
@@ -53,7 +70,8 @@ export default function Workspace() {
   // Track if we installed a skill that wasn't discovered (client-side only, resets on refresh)
   const [hasUndiscoveredInstall, setHasUndiscoveredInstall] = useState(false);
 
-  // Get state from URL query params
+  // Get state from URL query params. A skill's SKILL.md opens the rich skill
+  // view; every other file opens in the plain viewer. Skill folders just expand.
   const fileFromUrl = searchParams.get('file');
 
   // List of all workspaces (global + agent workspaces) - used for workspace metadata lookup
@@ -81,7 +99,6 @@ export default function Workspace() {
 
   // Check if 403 forbidden (permission denied)
   const isPermissionDenied = is403ForbiddenError(workspacesError) || is403ForbiddenError(workspaceInfoError);
-
 
   // Check if workspaces are not supported (501 error from server)
   const isWorkspaceNotSupported =
@@ -132,10 +149,45 @@ export default function Workspace() {
   // Use URL-derived values
   const selectedFile = fileFromUrl;
 
-  // Selected file content - pass workspaceId
+  // Skills - pass workspaceId to get skills from the selected workspace.
+  const {
+    data: skillsData,
+    isLoading: isLoadingSkills,
+    refetch: refetchSkills,
+  } = useWorkspaceSkills({ workspaceId: effectiveWorkspaceId });
+  const skills = skillsData?.skills ?? [];
+  const isSkillsConfigured = skillsData?.isSkillsConfigured ?? false;
+
+  // Map skill directory paths → metadata so the tree can mark skill folders and
+  // the editor pane can render a skill's SKILL.md as the rich skill view.
+  const skillByPath = useMemo(() => {
+    const map = new Map<string, SkillMetadata>();
+    for (const skill of skillsData?.skills ?? []) {
+      if (skill.path) map.set(skill.path.replace(/\/+$/, ''), skill);
+    }
+    return map;
+  }, [skillsData?.skills]);
+  const skillPaths = useMemo(() => new Set(skillByPath.keys()), [skillByPath]);
+
+  // Opening a skill's SKILL.md shows the rich skill view; any other file opens
+  // in the plain viewer.
+  const selectedSkill = useMemo(() => {
+    if (!selectedFile) return undefined;
+    const dir = selectedFile.replace(/\/+$/, '').replace(/\/SKILL\.md$/i, '');
+    return dir !== selectedFile.replace(/\/+$/, '') ? skillByPath.get(dir) : undefined;
+  }, [selectedFile, skillByPath]);
+
+  // Selected file content - plain files only; a skill's SKILL.md uses the skill view.
   const { data: fileContent, isLoading: isLoadingFileContent } = useWorkspaceFile(selectedFile ?? '', {
-    enabled: !!selectedFile,
+    enabled: !!selectedFile && !selectedSkill,
     workspaceId: effectiveWorkspaceId,
+  });
+
+  // Full skill details, fetched only when a skill's SKILL.md is open.
+  const { data: skillDetail, isLoading: isLoadingSkillDetail } = useWorkspaceSkill(selectedSkill?.name ?? '', {
+    enabled: !!selectedSkill,
+    workspaceId: effectiveWorkspaceId,
+    path: selectedSkill?.path,
   });
 
   // Full file tree, loaded eagerly with a single recursive listing.
@@ -154,10 +206,7 @@ export default function Workspace() {
 
   const handleCreateDirectory = useCallback(
     (path: string) => {
-      createDirectory.mutate(
-        { path, workspaceId: effectiveWorkspaceId },
-        { onSuccess: () => void refetchFiles() },
-      );
+      createDirectory.mutate({ path, workspaceId: effectiveWorkspaceId }, { onSuccess: () => void refetchFiles() });
     },
     [createDirectory, effectiveWorkspaceId, refetchFiles],
   );
@@ -171,13 +220,6 @@ export default function Workspace() {
     },
     [deleteFile, effectiveWorkspaceId, refetchFiles],
   );
-
-  // Skills - pass workspaceId to get skills from the selected workspace
-  const {
-    data: skillsData,
-    isLoading: isLoadingSkills,
-    refetch: refetchSkills,
-  } = useWorkspaceSkills({ workspaceId: effectiveWorkspaceId });
 
   // Skills.sh hooks
   const installSkill = useInstallSkill();
@@ -309,13 +351,11 @@ export default function Workspace() {
     [effectiveWorkspaceId, removeSkill, refetchSkills],
   );
 
-  const skills = skillsData?.skills ?? [];
-  const isSkillsConfigured = skillsData?.isSkillsConfigured ?? false;
-
   // Whether any search functionality is actually available
   const canSearchFiles = hasFilesystem && (canBM25 || canVector);
   const canSearchSkills = hasSkills && isSkillsConfigured && skills.length > 0;
   const hasSearchCapability = canSearchFiles || canSearchSkills;
+  const isSearchActive = showSearch && hasSearchCapability && Boolean(effectiveWorkspaceId);
 
   // Show loading while fetching workspace list
   if (isLoadingWorkspaces) {
@@ -382,93 +422,104 @@ export default function Workspace() {
     );
   }
 
-  return (
-    <PageLayout width="wide" height="full">
-      {workspaceCrumbs && <RouteHeaderCrumbs crumbs={workspaceCrumbs} />}
-      <PageLayout.TopArea>
-        <PageLayout.Row className="items-center justify-between gap-4">
-          <PageHeader className="min-w-0">
-            <PageHeader.Title>{selectedWorkspace?.name ?? 'Workspace'}</PageHeader.Title>
-            {selectedWorkspace?.source === 'agent' && selectedWorkspace.agentName && (
-              <Badge icon={<AgentIcon />} className="mt-1">
-                {selectedWorkspace.agentName}
-              </Badge>
-            )}
-          </PageHeader>
-          <div className="flex shrink-0 items-center gap-2">
-            {canManageSkills && (
-              <Button onClick={() => setShowAddSkillDialog(true)} aria-label="Add skill">
-                <Wand2 />
-                Add skill
-              </Button>
-            )}
-            {hasSearchCapability && (
-              <Button onClick={() => setShowSearch(!showSearch)} tooltip="Search workspace" aria-label="Search workspace">
-                <Search />
-              </Button>
-            )}
-          </div>
-        </PageLayout.Row>
-      </PageLayout.TopArea>
-
-      <PageLayout.MainArea className="grid min-h-0 content-start gap-6">
-        {/* Search Panel - keyed on workspace so hooks reset on switch */}
-        {showSearch && hasSearchCapability && effectiveWorkspaceId && (
-          <WorkspaceSearchPanel
-            key={effectiveWorkspaceId}
-            workspaceId={effectiveWorkspaceId}
-            canSearchFiles={canSearchFiles}
-            canSearchSkills={canSearchSkills}
-            canBM25={canBM25}
-            canVector={canVector}
-            showInitWarning={!isLoadingInfo && workspaceInfo?.status !== 'ready'}
-            onViewFileResult={id => {
-              updateSearchParams({ file: id });
-            }}
-            onViewSkillResult={(skillName, skillPath) => {
-              if (effectiveWorkspaceId) {
-                void navigate(
-                  `/workspaces/${effectiveWorkspaceId}/skills/${encodeURIComponent(skillName)}?path=${encodeURIComponent(skillPath)}`,
-                );
-              }
-            }}
-          />
+  // Attached entity (e.g. the owning agent) shown at the bottom of the sidebar,
+  // linking back to the entity itself.
+  const attachedEntity =
+    selectedWorkspace?.source === 'agent' && selectedWorkspace.agentName ? (
+      <div className="border-t border-border1 p-3">
+        {selectedWorkspace.agentId ? (
+          <Link href={paths.agentLink(selectedWorkspace.agentId)} className="inline-block">
+            <Badge icon={<AgentIcon />}>{selectedWorkspace.agentName}</Badge>
+          </Link>
+        ) : (
+          <Badge icon={<AgentIcon />}>{selectedWorkspace.agentName}</Badge>
         )}
+      </div>
+    ) : null;
 
+  return (
+    <PageLayout width="wide" height="full" className="p-0">
+      {workspaceCrumbs && <RouteHeaderCrumbs crumbs={workspaceCrumbs} />}
+      {/* RouteHeaderCrumbs renders into the shell header (no inline DOM), so the
+          page's only grid child must occupy the `1fr` row to fill the viewport.
+          The framed box (rounded border, like other studio pages) bounds the IDE
+          split to the content-box height; panes scroll internally, never the page. */}
+      <PageLayout.MainArea className="row-start-2 flex min-h-0 flex-col gap-6">
         {hasFilesystem && (
-          <div className="h-full min-h-[700px] overflow-hidden rounded-lg border border-border1 bg-surface2">
-            <Group
-              className="h-full min-h-0 w-full min-w-0"
-              defaultLayout={defaultFilesLayout}
-              onLayoutChange={onFilesLayoutChange}
+          <Group
+            className="min-h-0 w-full min-w-0 flex-1"
+            defaultLayout={defaultFilesLayout}
+            onLayoutChange={onFilesLayoutChange}
+          >
+            {/* Left rail — swaps between the file tree and the search view, VS Code style. */}
+            <CollapsiblePanel
+              direction="left"
+              id="workspace-file-tree"
+              minSize={200}
+              maxSize="50%"
+              defaultSize={320}
+              collapsedSize={60}
+              collapsible={true}
+              className="flex min-w-0 flex-col overflow-hidden border-r border-surface5 bg-surface1"
             >
-              <CollapsiblePanel
-                direction="left"
-                id="workspace-file-tree"
-                minSize={200}
-                maxSize="50%"
-                defaultSize={300}
-                collapsedSize={60}
-                collapsible={true}
-                className="min-w-0 overflow-auto border-r border-border1"
-              >
-                <FileBrowser
-                  entries={filesData?.entries ?? []}
-                  currentPath="."
-                  isLoading={isLoadingFiles}
-                  error={filesError instanceof Error ? filesError : null}
-                  onNavigate={() => undefined}
-                  onFileSelect={setSelectedFile}
-                  onRefresh={() => void refetchFiles()}
-                  onCreateDirectory={isReadOnly ? undefined : handleCreateDirectory}
-                  onDelete={isReadOnly ? undefined : handleDeleteFile}
-                  isCreatingDirectory={createDirectory.isPending}
-                  isDeleting={deleteFile.isPending}
-                />
-              </CollapsiblePanel>
-              <PanelSeparator />
-              <Panel id="workspace-file-preview" className="min-w-0 overflow-hidden">
-                {selectedFile ? (
+              <div className="min-h-0 flex-1 overflow-auto">
+                {isSearchActive ? (
+                  <WorkspaceSearchView
+                    key={effectiveWorkspaceId}
+                    workspaceId={effectiveWorkspaceId!}
+                    canSearchFiles={canSearchFiles}
+                    canSearchSkills={canSearchSkills}
+                    canBM25={canBM25}
+                    canVector={canVector}
+                    showInitWarning={!isLoadingInfo && workspaceInfo?.status !== 'ready'}
+                    onClose={() => setShowSearch(false)}
+                    onViewFileResult={id => {
+                      updateSearchParams({ file: id });
+                    }}
+                    onViewSkillResult={(_skillName, skillPath, source) => {
+                      updateSearchParams({ file: skillResultFilePath(skillPath, source) });
+                    }}
+                  />
+                ) : (
+                  <FileBrowser
+                    entries={filesData?.entries ?? []}
+                    currentPath="."
+                    isLoading={isLoadingFiles}
+                    error={filesError instanceof Error ? filesError : null}
+                    onNavigate={() => undefined}
+                    onFileSelect={setSelectedFile}
+                    selectedPath={selectedFile ?? undefined}
+                    skillPaths={skillPaths}
+                    onRefresh={() => void refetchFiles()}
+                    onCreateDirectory={isReadOnly ? undefined : handleCreateDirectory}
+                    onDelete={isReadOnly ? undefined : handleDeleteFile}
+                    onAddSkill={canManageSkills ? () => setShowAddSkillDialog(true) : undefined}
+                    onToggleSearch={hasSearchCapability ? () => setShowSearch(true) : undefined}
+                    isCreatingDirectory={createDirectory.isPending}
+                    isDeleting={deleteFile.isPending}
+                  />
+                )}
+              </div>
+              {attachedEntity}
+            </CollapsiblePanel>
+            <PanelSeparator />
+            {/* Right pane — rich skill view (a skill's SKILL.md), file viewer, or empty. */}
+            <Panel id="workspace-file-preview" className="flex min-w-0 flex-col overflow-hidden bg-surface1">
+              <div className="min-h-0 min-w-0 flex-1 overflow-auto">
+                {selectedSkill ? (
+                  isLoadingSkillDetail || !skillDetail ? (
+                    <div className="flex h-full items-center justify-center">
+                      <Spinner />
+                    </div>
+                  ) : (
+                    <div className="w-full min-w-0 max-w-4xl px-8 py-8">
+                      <SkillDetail
+                        skill={skillDetail}
+                        onReferenceClick={ref => setSelectedFile(skillResultFilePath(selectedSkill.path, ref))}
+                      />
+                    </div>
+                  )
+                ) : selectedFile ? (
                   <FileViewer
                     path={selectedFile}
                     content={fileContent?.content ?? ''}
@@ -480,24 +531,64 @@ export default function Workspace() {
                     Select a file to preview its contents
                   </div>
                 )}
-              </Panel>
-            </Group>
+              </div>
+            </Panel>
+          </Group>
+        )}
+
+        {!hasFilesystem && hasSkills && isSearchActive && (
+          <div className="min-h-0 flex-1 overflow-auto">
+            <WorkspaceSearchView
+              key={effectiveWorkspaceId}
+              workspaceId={effectiveWorkspaceId!}
+              canSearchFiles={canSearchFiles}
+              canSearchSkills={canSearchSkills}
+              canBM25={canBM25}
+              canVector={canVector}
+              showInitWarning={!isLoadingInfo && workspaceInfo?.status !== 'ready'}
+              onViewFileResult={id => {
+                updateSearchParams({ file: id });
+                setShowSearch(false);
+              }}
+              onViewSkillResult={(skillName, skillPath) => {
+                if (effectiveWorkspaceId) {
+                  void navigate(
+                    `/workspaces/${effectiveWorkspaceId}/skills/${encodeURIComponent(skillName)}?path=${encodeURIComponent(skillPath)}`,
+                  );
+                }
+              }}
+              onClose={() => setShowSearch(false)}
+            />
           </div>
         )}
 
-        {!hasFilesystem && hasSkills && (
-          <SkillsTable
-            skills={skills}
-            isLoading={isLoadingSkills}
-            isSkillsConfigured={isSkillsConfigured}
-            hasUndiscoveredAgentSkills={hasUndiscoveredInstall}
-            basePath={effectiveWorkspaceId ? `/workspaces/${effectiveWorkspaceId}/skills` : '/workspaces'}
-            onAddSkill={canManageSkills ? () => setShowAddSkillDialog(true) : undefined}
-            onUpdateSkill={canManageSkills ? handleUpdateSkill : undefined}
-            onRemoveSkill={canManageSkills ? handleRemoveSkill : undefined}
-            updatingSkillName={updatingSkillName ?? undefined}
-            removingSkillName={removingSkillName ?? undefined}
-          />
+        {!hasFilesystem && hasSkills && !isSearchActive && (
+          <>
+            {hasSearchCapability && (
+              <div className="flex items-center justify-end gap-2">
+                <Button
+                  onClick={() => setShowSearch(!showSearch)}
+                  aria-label="Search workspace"
+                  aria-pressed={showSearch}
+                >
+                  <Search />
+                  Search
+                </Button>
+              </div>
+            )}
+            <SkillsTable
+              skills={skills}
+              isLoading={isLoadingSkills}
+              isSkillsConfigured={isSkillsConfigured}
+              hasUndiscoveredAgentSkills={hasUndiscoveredInstall}
+              basePath={effectiveWorkspaceId ? `/workspaces/${effectiveWorkspaceId}/skills` : '/workspaces'}
+              onAddSkill={canManageSkills ? () => setShowAddSkillDialog(true) : undefined}
+              onUpdateSkill={canManageSkills ? handleUpdateSkill : undefined}
+              onRemoveSkill={canManageSkills ? handleRemoveSkill : undefined}
+              updatingSkillName={updatingSkillName ?? undefined}
+              removingSkillName={removingSkillName ?? undefined}
+            />
+          </>
         )}
 
         {!hasFilesystem && !hasSkills && !isLoadingInfo && (
@@ -529,7 +620,7 @@ export default function Workspace() {
   );
 }
 
-function WorkspaceSearchPanel({
+function WorkspaceSearchView({
   workspaceId,
   canSearchFiles,
   canSearchSkills,
@@ -538,6 +629,7 @@ function WorkspaceSearchPanel({
   showInitWarning,
   onViewFileResult,
   onViewSkillResult,
+  onClose,
 }: {
   workspaceId: string;
   canSearchFiles: boolean;
@@ -546,57 +638,73 @@ function WorkspaceSearchPanel({
   canVector: boolean;
   showInitWarning: boolean;
   onViewFileResult: (id: string) => void;
-  onViewSkillResult: (skillName: string, skillPath: string) => void;
+  onViewSkillResult: (skillName: string, skillPath: string, source: string) => void;
+  onClose?: () => void;
 }) {
   const searchWorkspace = useSearchWorkspace();
   const searchSkills = useSearchWorkspaceSkills();
 
   return (
-    <div className="border border-border1 rounded-lg p-4 bg-surface2 space-y-4">
-      {canSearchFiles && (
-        <div>
-          <h3 className="text-sm font-medium text-neutral5 mb-3 flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            Search Indexed Files
-          </h3>
-          {showInitWarning && (
-            <p className="text-xs text-amber-400 mb-3">
-              File search requires <code className="text-amber-300">workspace.init()</code> to index files from your
-              configured <code className="text-amber-300">autoIndexPaths</code>.
-            </p>
-          )}
-          <SearchWorkspacePanel
-            onSearch={params => searchWorkspace.mutate({ ...params, workspaceId })}
-            isSearching={searchWorkspace.isPending}
-            searchResults={
-              searchWorkspace.data
-                ? {
-                    ...searchWorkspace.data,
-                    results: searchWorkspace.data.results.filter(r => !r.id.startsWith('skill:')),
-                  }
-                : undefined
-            }
-            canBM25={canBM25}
-            canVector={canVector}
-            onViewResult={onViewFileResult}
-          />
+    <div className="flex h-full min-w-0 flex-col">
+      {/* Header — mirrors the file tree header so the rail swap feels seamless. */}
+      <div className="flex h-12 shrink-0 items-center justify-between border-b border-border1 bg-surface3 px-4">
+        <div className="flex items-center gap-2 text-sm font-medium text-neutral6">
+          <Search className="h-4 w-4 text-neutral4" />
+          <span>Search</span>
         </div>
-      )}
+        {onClose && (
+          <Button variant="ghost" size="icon-md" onClick={onClose} tooltip="Close search" aria-label="Close search">
+            <X className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
 
-      {canSearchSkills && (
-        <div>
-          <h3 className="text-sm font-medium text-neutral5 mb-3 flex items-center gap-2">
-            <Wand2 className="h-4 w-4" />
-            Search Skills
-          </h3>
-          <SearchSkillsPanel
-            onSearch={params => searchSkills.mutate({ ...params, workspaceId })}
-            results={searchSkills.data?.results ?? []}
-            isSearching={searchSkills.isPending}
-            onResultClick={result => onViewSkillResult(result.skillName, result.skillPath)}
-          />
-        </div>
-      )}
+      <div className="min-h-0 flex-1 space-y-4 overflow-auto p-4">
+        {canSearchFiles && (
+          <div>
+            <h3 className="text-sm font-medium text-neutral5 mb-3 flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Search Indexed Files
+            </h3>
+            {showInitWarning && (
+              <p className="text-xs text-amber-400 mb-3">
+                File search requires <code className="text-amber-300">workspace.init()</code> to index files from your
+                configured <code className="text-amber-300">autoIndexPaths</code>.
+              </p>
+            )}
+            <SearchWorkspacePanel
+              onSearch={params => searchWorkspace.mutate({ ...params, workspaceId })}
+              isSearching={searchWorkspace.isPending}
+              searchResults={
+                searchWorkspace.data
+                  ? {
+                      ...searchWorkspace.data,
+                      results: searchWorkspace.data.results.filter(r => !r.id.startsWith('skill:')),
+                    }
+                  : undefined
+              }
+              canBM25={canBM25}
+              canVector={canVector}
+              onViewResult={onViewFileResult}
+            />
+          </div>
+        )}
+
+        {canSearchSkills && (
+          <div>
+            <h3 className="text-sm font-medium text-neutral5 mb-3 flex items-center gap-2">
+              <Wand2 className="h-4 w-4" />
+              Search Skills
+            </h3>
+            <SearchSkillsPanel
+              onSearch={params => searchSkills.mutate({ ...params, workspaceId })}
+              results={searchSkills.data?.results ?? []}
+              isSearching={searchSkills.isPending}
+              onResultClick={result => onViewSkillResult(result.skillName, result.skillPath, result.source)}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
