@@ -67,6 +67,36 @@ describe('DataListRoot', () => {
       expect(scrollRef.current).not.toBe(grid);
       expect(scrollRef.current?.contains(grid)).toBe(true);
     });
+
+    it('allows callers to disable the left mask while keeping the right overflow mask', () => {
+      const scrollRef = createRef<HTMLDivElement>();
+      render(
+        <DataList columns="1fr 1fr" mask={{ left: false }} scrollRef={scrollRef}>
+          <Header />
+        </DataList>,
+      );
+
+      expect(scrollRef.current?.className).not.toContain('mask-l-from');
+      expect(scrollRef.current?.className).toContain('mask-r-from');
+      expect(scrollRef.current?.className).not.toContain('mask-t-from');
+    });
+
+    it('lets max-height classes constrain the scrollable viewport', () => {
+      const scrollRef = createRef<HTMLDivElement>();
+      render(
+        <DataList columns="1fr 1fr" className="max-h-80" scrollRef={scrollRef}>
+          <Header />
+          {Array.from({ length: 20 }, (_, index) => (
+            <DataList.RowStatic key={index}>
+              <DataList.Cell>row {index + 1}</DataList.Cell>
+              <DataList.Cell>value {index + 1}</DataList.Cell>
+            </DataList.RowStatic>
+          ))}
+        </DataList>,
+      );
+
+      expect(scrollRef.current?.className).toContain('max-h-[inherit]');
+    });
   });
 
   describe('striped variant — ScrollArea (overlay scrollbar + horizontal mask)', () => {

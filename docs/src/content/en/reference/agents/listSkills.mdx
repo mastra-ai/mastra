@@ -1,0 +1,80 @@
+---
+title: "Reference: .listSkills() | Agents"
+description: "API reference for the Agent .listSkills() method, which returns metadata for all configured skills."
+packages:
+  - "@mastra/core"
+---
+
+# `.listSkills()`
+
+Returns metadata for all skills available to the agent, including both agent-level and workspace skills.
+
+## Usage example
+
+```typescript title="src/routes/skills.ts"
+import { agent } from '../mastra/agents'
+
+const skills = await agent.listSkills()
+
+for (const skill of skills) {
+  console.log(`${skill.name}: ${skill.description}`)
+}
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'object',
+    isOptional: true,
+    description: 'Options for skill resolution.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'requestContext',
+            type: 'RequestContext',
+            isOptional: true,
+            description: 'Request context passed to dynamic skill resolvers.',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Return value
+
+Returns `Promise<SkillMetadata[]>`.
+
+Each entry contains the metadata for a discovered skill:
+
+```typescript
+interface SkillMetadata {
+  name: string
+  description: string
+  path: string
+  source: { type: string; projectPath: string }
+  references: string[]
+  scripts: string[]
+  assets: string[]
+  license?: string
+  compatibility?: string[]
+  'user-invocable'?: boolean
+  metadata?: Record<string, unknown>
+}
+```
+
+## Merging behavior
+
+When both agent-level skills and workspace skills are configured, `.listSkills()` returns the merged set. Agent-level skills take precedence on name conflicts — if both define a skill named `code-review`, only the agent-level version appears in the result.
+
+## Related
+
+- [Agent skills](/docs/agents/skills)
+- [`.getSkill()` reference](/reference/agents/getSkill)
+- [`createSkill()` reference](/reference/agents/createSkill)

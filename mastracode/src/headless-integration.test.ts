@@ -5,13 +5,20 @@ import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import { Harness } from '@mastra/core/harness';
 import type { HarnessEvent } from '@mastra/core/harness';
+import type {
+  GatewayAuthRequest,
+  GatewayAuthResult,
+  GatewayLanguageModel,
+  MastraModelGatewayInterface,
+  ProviderConfig,
+} from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { AgentsMDInjector } from '@mastra/core/processors';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import z from 'zod';
 
 import { runHeadless } from './headless.js';
@@ -99,6 +106,12 @@ afterEach(() => {
   for (const storePath of tempStorePaths.splice(0)) {
     rmSync(storePath, { force: true, recursive: true });
   }
+});
+
+// Prevent default gateways (models.dev, netlify) from hitting the network
+// during model-catalog tests. Errors are caught by GatewayManager.listProviders.
+beforeEach(() => {
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network disabled in tests')));
 });
 
 async function waitFor(condition: () => boolean, timeoutMs = 5_000): Promise<void> {
@@ -198,7 +211,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: HarnessEvent[] = [];
     session.subscribe(event => {
@@ -239,7 +252,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: HarnessEvent[] = [];
     session.subscribe(event => {
@@ -287,7 +300,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: HarnessEvent[] = [];
     session.subscribe(event => {
@@ -331,7 +344,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: HarnessEvent[] = [];
     session.subscribe(event => {
@@ -373,7 +386,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: HarnessEvent[] = [];
     session.subscribe(event => {
@@ -443,7 +456,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: HarnessEvent[] = [];
     session.subscribe(event => {
@@ -485,6 +498,44 @@ describe('headless mode — event-driven auto-resolution', () => {
     ).toBe(true);
   });
 });
+
+function createFakeGatewayFromModels(
+  customModels: { id: string; provider: string; modelName: string; hasApiKey: boolean; apiKeyEnvVar?: string }[],
+): MastraModelGatewayInterface {
+  // Group models by provider for fetchProviders
+  const providers: Record<string, ProviderConfig> = {};
+  for (const m of customModels) {
+    if (!providers[m.provider]) {
+      providers[m.provider] = {
+        name: m.provider,
+        models: [],
+        apiKeyEnvVar: m.apiKeyEnvVar ?? `${m.provider.toUpperCase().replace(/-/g, '_')}_API_KEY`,
+        gateway: 'models.dev',
+      };
+    }
+    providers[m.provider]!.models!.push(m.modelName);
+  }
+
+  // Build a lookup from routerId → hasApiKey for resolveAuth
+  const authMap = new Map(customModels.map(m => [m.id, m.hasApiKey]));
+
+  return {
+    id: 'models.dev',
+    name: 'Test models.dev Gateway',
+    fetchProviders: async () => providers,
+    buildUrl: () => 'https://example.com/v1',
+    getApiKey: async () => {
+      throw new Error('no api key');
+    },
+    resolveAuth: (request: GatewayAuthRequest): GatewayAuthResult | undefined => {
+      if (authMap.get(request.routerId)) {
+        return { apiKey: 'test-key', source: 'gateway' };
+      }
+      return undefined;
+    },
+    resolveLanguageModel: () => ({}) as GatewayLanguageModel,
+  };
+}
 
 function createHarnessWithModels(opts: {
   doStream: () => Promise<{ stream: ReadableStream }>;
@@ -528,11 +579,7 @@ function createHarnessWithModels(opts: {
       },
     ],
     initialState: { yolo: true } as any,
-    customModelCatalogProvider: () =>
-      (opts.customModels ?? []).map(m => ({
-        ...m,
-        useCount: 0,
-      })),
+    gateways: [createFakeGatewayFromModels(opts.customModels ?? [])],
   });
   (harness as any).getAgentForMode = () => registeredAgent;
 
@@ -546,7 +593,7 @@ describe('headless mode — --output-format contracts', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const {
       result: exitCode,
@@ -573,7 +620,7 @@ describe('headless mode — --output-format contracts', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const {
       result: exitCode,
@@ -611,7 +658,7 @@ describe('headless mode — --output-format contracts', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const {
       result: exitCode,
@@ -730,7 +777,7 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: HarnessEvent[] = [];
     session.subscribe(event => events.push(event));
@@ -761,7 +808,7 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -803,7 +850,7 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -837,7 +884,7 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const writeSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
 
@@ -876,7 +923,7 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const writeSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
 
@@ -909,7 +956,7 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -942,7 +989,7 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const writeSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
 
@@ -970,7 +1017,7 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: HarnessEvent[] = [];
     session.subscribe(event => events.push(event));
@@ -996,7 +1043,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: HarnessEvent[] = [];
     session.subscribe(event => events.push(event));
@@ -1027,7 +1074,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const exitCode = await runHeadless(
       harness,
@@ -1054,7 +1101,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -1098,7 +1145,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -1133,7 +1180,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -1169,7 +1216,7 @@ describe('headless mode — thread control', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const thread = await session.thread.create({ title: 'target-thread' });
     const updatedAtBefore = thread.updatedAt.getTime();
 
@@ -1201,7 +1248,7 @@ describe('headless mode — thread control', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const thread = await session.thread.create({ title: 'my-feature' });
     const updatedAtBefore = thread.updatedAt.getTime();
 
@@ -1233,7 +1280,7 @@ describe('headless mode — thread control', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const exitCode = await runHeadless(harness, session, {
       prompt: 'Hello',
@@ -1252,7 +1299,7 @@ describe('headless mode — thread control', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     await session.thread.create({ title: 'original-title' });
 
     const exitCode = await runHeadless(harness, session, {
@@ -1276,7 +1323,7 @@ describe('headless mode — thread control', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     harness.setResourceId(session, { resourceId: 'resource-a' });
     const alphaOlderThread = await session.thread.create({ title: 'older-alpha' });
     harness.setResourceId(session, { resourceId: 'resource-b' });
@@ -1354,7 +1401,7 @@ describe('headless mode — thread control', () => {
     (harness as any).getAgentForMode = () => registeredAgent;
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const sourceThread = await session.thread.create({ title: 'source-thread' });
 
     const events: any[] = [];

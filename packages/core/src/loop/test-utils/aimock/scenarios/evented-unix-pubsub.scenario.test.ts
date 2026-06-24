@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { tmpdir } from 'node:os';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -24,13 +24,23 @@ import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 describe('AIMock loop scenario: evented + UnixSocketPubSub', () => {
   const getMock = useLoopScenarioAimock();
   const pubsubs: UnixSocketPubSub[] = [];
+  const socketDirs: string[] = [];
 
   afterEach(async () => {
     await Promise.allSettled(pubsubs.splice(0).map(p => p.close()));
+    for (const dir of socketDirs.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('round-trips a tool result containing Date/Map/Error across the evented pubsub', async () => {
-    const socketPath = join(tmpdir(), `aimock-evented-${randomUUID()}.sock`);
+    // Keep this path short. macOS caps `sun_path` at 104 bytes — the default
+    // `os.tmpdir()` on macOS (`/var/folders/...`) already burns ~50 chars
+    // before we add a UUID + suffix, so we anchor under `/tmp` and trim the
+    // UUID to make the test portable on every host.
+    const socketDir = mkdtempSync('/tmp/aim-');
+    socketDirs.push(socketDir);
+    const socketPath = join(socketDir, `${randomUUID().slice(0, 8)}.sock`);
     const pubsub = new UnixSocketPubSub(socketPath);
     pubsubs.push(pubsub);
 

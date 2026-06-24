@@ -35,8 +35,25 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import Avatar exports from @mastra/playground-ui/components/Avatar.',
   },
   {
+    importNames: ['Badge', 'BadgeProps'],
+    message: 'Import Badge exports from @mastra/playground-ui/components/Badge.',
+  },
+  {
     importNames: ['Breadcrumb', 'BreadcrumbProps', 'Crumb', 'CrumbProps'],
     message: 'Import Breadcrumb exports from @mastra/playground-ui/components/Breadcrumb.',
+  },
+  {
+    importNames: [
+      'ButtonsGroup',
+      'ButtonsGroupProps',
+      'ButtonsGroupSeparator',
+      'ButtonsGroupSeparatorProps',
+      'ButtonsGroupSpacing',
+      'ButtonsGroupText',
+      'ButtonsGroupTextProps',
+      'buttonsGroupVariants',
+    ],
+    message: 'Import ButtonsGroup exports from @mastra/playground-ui/components/ButtonsGroup.',
   },
   {
     importNames: [
@@ -84,6 +101,22 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
   {
     importNames: ['CodeBlock', 'CodeBlockOption', 'CodeBlockOverflow', 'CodeBlockProps', 'CodeBlockSelector'],
     message: 'Import CodeBlock exports from @mastra/playground-ui/components/CodeBlock.',
+  },
+  {
+    importNames: [
+      'CodeEditor',
+      'CodeEditorProps',
+      'CodeEditorLanguage',
+      'useCodemirrorTheme',
+      'codeLanguages',
+      'highlight',
+      'variableHighlight',
+      'VARIABLE_PATTERN',
+      'createVariableAutocomplete',
+      'flattenSchemaToVariables',
+      'VariableCompletion',
+    ],
+    message: 'Import CodeEditor exports from @mastra/playground-ui/components/CodeEditor.',
   },
   {
     importNames: ['CodeDiff', 'CodeDiffProps'],
@@ -148,6 +181,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import EntityHeader exports from @mastra/playground-ui/components/EntityHeader.',
   },
   {
+    importNames: ['EmptyState', 'EmptyStateProps'],
+    message: 'Import EmptyState exports from @mastra/playground-ui/components/EmptyState.',
+  },
+  {
     importNames: ['Entry', 'EntryProps'],
     message: 'Import Entry exports from @mastra/playground-ui/components/Entry.',
   },
@@ -181,8 +218,16 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import HorizontalBars from @mastra/playground-ui/components/HorizontalBars.',
   },
   {
+    importNames: ['Input', 'InputProps'],
+    message: 'Import Input exports from @mastra/playground-ui/components/Input.',
+  },
+  {
     importNames: ['Kbd', 'KbdProps'],
     message: 'Import Kbd exports from @mastra/playground-ui/components/Kbd.',
+  },
+  {
+    importNames: ['Label'],
+    message: 'Import Label from @mastra/playground-ui/components/Label.',
   },
   {
     importNames: [
@@ -293,6 +338,16 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
   },
   {
     importNames: [
+      'MainContentLayout',
+      'MainContentContent',
+      'MainContentContentProps',
+      'GetMainContentContentClassNameArgs',
+      'getMainContentContentClassName',
+    ],
+    message: 'Import MainContent exports from @mastra/playground-ui/components/MainContent.',
+  },
+  {
+    importNames: [
       'MainSidebar',
       'MainSidebarProvider',
       'SidebarState',
@@ -311,10 +366,6 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
   {
     importNames: ['MarkdownRenderer', 'MarkdownRendererProps'],
     message: 'Import MarkdownRenderer exports from @mastra/playground-ui/components/MarkdownRenderer.',
-  },
-  {
-    importNames: ['MetricsDataTable'],
-    message: 'Import MetricsDataTable from @mastra/playground-ui/components/MetricsDataTable.',
   },
   {
     importNames: ['MetricsFlexGrid'],
@@ -343,6 +394,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
   {
     importNames: ['PendingIndicator', 'PendingIndicatorProps'],
     message: 'Import PendingIndicator exports from @mastra/playground-ui/components/PendingIndicator.',
+  },
+  {
+    importNames: ['PermissionDenied', 'PermissionDeniedProps'],
+    message: 'Import PermissionDenied exports from @mastra/playground-ui/components/PermissionDenied.',
   },
   {
     importNames: [
@@ -397,8 +452,20 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import Sections exports from @mastra/playground-ui/components/Sections.',
   },
   {
+    importNames: ['SessionExpired', 'SessionExpiredProps'],
+    message: 'Import SessionExpired exports from @mastra/playground-ui/components/SessionExpired.',
+  },
+  {
     importNames: ['Slider', 'SliderProps'],
     message: 'Import Slider exports from @mastra/playground-ui/components/Slider.',
+  },
+  {
+    importNames: ['Skeleton'],
+    message: 'Import Skeleton from @mastra/playground-ui/components/Skeleton.',
+  },
+  {
+    importNames: ['Spinner', 'SpinnerProps', 'SpinnerSize', 'SpinnerVariant'],
+    message: 'Import Spinner exports from @mastra/playground-ui/components/Spinner.',
   },
   {
     importNames: ['StatusBadge', 'StatusBadgeProps'],
@@ -458,6 +525,23 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
       'UseTableKeyboardNavigationReturn',
     ],
     message: 'Import Table exports from @mastra/playground-ui/components/Table.',
+  },
+  {
+    importNames: [
+      'Tabs',
+      'TabsRootProps',
+      'TabList',
+      'TabListProps',
+      'Tab',
+      'TabProps',
+      'TabContent',
+      'TabContentProps',
+    ],
+    message: 'Import Tabs exports from @mastra/playground-ui/components/Tabs.',
+  },
+  {
+    importNames: ['TextAndIcon', 'TextAndIconProps', 'getShortId'],
+    message: 'Import Text exports from @mastra/playground-ui/components/Text.',
   },
   {
     importNames: ['Truncate', 'TruncateProps'],

@@ -1,7 +1,7 @@
 import { javascript } from '@codemirror/lang-javascript';
 import { jsonLanguage } from '@codemirror/lang-json';
 import { EditorView } from '@codemirror/view';
-import { useCodemirrorTheme } from '@mastra/playground-ui';
+import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import CodeMirror from '@uiw/react-codemirror';
 

@@ -41,7 +41,7 @@ vi.mock('react-router', async importOriginal => {
   };
 });
 
-vi.mock('@mastra/playground-ui', () => ({
+vi.mock('@mastra/playground-ui/components/Spinner', () => ({
   Spinner: () => <div data-testid="route-guard-spinner" />,
 }));
 

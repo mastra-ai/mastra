@@ -1,6 +1,5 @@
 import {
   Button,
-  CodeEditor,
   Txt,
   Dialog,
   DialogContent,
@@ -10,6 +9,7 @@ import {
   DialogBody,
   toSigFigs,
 } from '@mastra/playground-ui';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Loader2Icon, Share2 } from 'lucide-react';
 import { useState } from 'react';
 import { useTimeDiff } from '../../hooks/use-time-diff';
