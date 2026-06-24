@@ -1,0 +1,116 @@
+---
+title: "Multi-turn evals | Evals"
+description: "Evaluate agent behavior across multi-turn conversations by sending sequential inputs on a shared thread."
+packages:
+  - "@mastra/core"
+---
+
+# Multi-turn evals
+
+Multi-turn evals test agent behavior across a conversation. Instead of a single `input`, you provide an `inputs` array. Each entry is sent sequentially to the agent on the same thread, and scorers see the accumulated output from all turns.
+
+## When to use multi-turn evals
+
+- The agent uses memory and must recall context from earlier turns
+- The agent handles follow-up questions that depend on prior responses
+- You need to verify tool-call sequences across a conversation
+- The agent runs a multi-step workflow (search, confirm, execute)
+
+## Quickstart
+
+```typescript title="src/evals/conversation-eval.ts"
+import { runEvals } from '@mastra/core/evals'
+import { checks } from '@mastra/evals/checks'
+import { weatherAgent } from '../agents'
+
+const result = await runEvals({
+  data: [
+    {
+      input: '',
+      inputs: [
+        'What is the weather in Brooklyn?',
+        'What about tomorrow?',
+        'Compare the two forecasts.',
+      ],
+    },
+  ],
+  target: weatherAgent,
+  scorers: [checks.calledTool('get_weather', { times: 2 }), checks.includes('Brooklyn')],
+})
+```
+
+Each turn runs `agent.generate()` with the same thread ID, so the agent sees the full conversation history. Scorers receive the accumulated output messages from all turns.
+
+## How it works
+
+When a data item has an `inputs` array, `runEvals`:
+
+1. Creates a fresh thread (unique `threadId`) for the conversation
+1. Sends each input sequentially via `agent.generate()` on that thread
+1. Accumulates all output messages across turns
+1. Passes the full accumulated output to scorers for evaluation
+
+Scorers see the complete conversation output, not just the last turn. The first input is used as the `run.input` context for scorers that inspect it.
+
+## Combining with gates and thresholds
+
+Multi-turn data items work with [gates and verdicts](/docs/evals/gates-and-verdicts):
+
+```typescript title="src/evals/memory-eval.ts"
+import { runEvals } from '@mastra/core/evals'
+import { checks } from '@mastra/evals/checks'
+import { faithfulnessScorer } from '../scorers'
+
+const result = await runEvals({
+  data: [
+    {
+      input: '',
+      inputs: ['My favorite city is Brooklyn.', 'What is the weather in my favorite city?'],
+    },
+  ],
+  target: weatherAgent,
+  gates: [checks.calledTool('get_weather')],
+  scorers: [{ scorer: faithfulnessScorer, threshold: 0.7 }],
+})
+
+result.verdict // 'passed' | 'scored' | 'failed'
+```
+
+## Mixing single-turn and multi-turn
+
+A single `runEvals` call can include both single-turn and multi-turn data items:
+
+```typescript title="src/evals/mixed-eval.ts"
+const result = await runEvals({
+  data: [
+    { input: 'What is the weather in Brooklyn?' },
+    {
+      input: '',
+      inputs: ['My favorite city is Brooklyn.', 'What is the weather in my favorite city?'],
+    },
+  ],
+  target: weatherAgent,
+  scorers: [checks.includes('Brooklyn')],
+})
+```
+
+Single-turn items use `input` as usual. Multi-turn items use `inputs` and ignore `input` (set it to an empty string).
+
+## Validation
+
+`runEvals` throws a `MastraError` if `inputs` is present but empty:
+
+```typescript
+// Throws: 'inputs' must be a non-empty array
+await runEvals({
+  data: [{ input: '', inputs: [] }],
+  target: myAgent,
+  scorers: [myScorer],
+})
+```
+
+## Related
+
+- [`runEvals()` reference](/reference/evals/run-evals): Full API for `runEvals` parameters and returns
+- [Gates and verdicts](/docs/evals/gates-and-verdicts): Enforce hard requirements and quality thresholds
+- [Quick Checks](/docs/evals/quick-checks): Zero-LLM composable micro-scorers

@@ -36,6 +36,28 @@ console.log(`Average scores:`, result.scores)
 console.log(`Processed ${result.summary.totalItems} items`)
 ```
 
+### Multi-turn evaluation
+
+```typescript
+import { runEvals } from '@mastra/core/evals'
+import { checks } from '@mastra/evals/checks'
+
+const result = await runEvals({
+  target: weatherAgent,
+  data: [
+    {
+      input: '',
+      inputs: [
+        'What is the weather in Brooklyn?',
+        'What about tomorrow?',
+        'Compare the two forecasts.',
+      ],
+    },
+  ],
+  scorers: [checks.calledTool('get_weather', { times: 2 }), checks.includes('Brooklyn')],
+})
+```
+
 ### With gates and thresholds
 
 ```typescript
@@ -118,6 +140,13 @@ result.thresholdResults // [{ id, passed, averageScore, threshold }]
     type: 'string | string[] | CoreMessage[] | any',
     description: 'Input data for the target. For agents: messages or strings. For workflows: workflow input data.',
     isOptional: false,
+  },
+  {
+    name: 'inputs',
+    type: 'string[]',
+    description:
+      'Multi-turn inputs. Each entry is sent sequentially to the agent on the same thread. Scorers see the accumulated output from all turns. Only supported for Agent targets.',
+    isOptional: true,
   },
   {
     name: 'groundTruth',
@@ -462,8 +491,31 @@ const result = await runEvals({
 })
 ```
 
+### Multi-turn conversation evaluation
+
+Use `inputs` to send sequential turns on a shared thread. Scorers see the accumulated output from all turns:
+
+```typescript
+const result = await runEvals({
+  target: chatAgent,
+  data: [
+    {
+      input: '',
+      inputs: ['My favorite city is Brooklyn.', 'What is the weather in my favorite city?'],
+    },
+  ],
+  gates: [checks.calledTool('get_weather')],
+  scorers: [{ scorer: faithfulnessScorer, threshold: 0.7 }],
+})
+
+// result.verdict: 'passed' | 'scored' | 'failed'
+```
+
+Each turn runs `agent.generate()` with the same `threadId`, so the agent sees the full conversation history. Mix single-turn (`input`) and multi-turn (`inputs`) items in the same `data` array.
+
 ## Related
 
+- [Multi-turn evals](/docs/evals/multi-turn): Conceptual guide to multi-turn evaluation
 - [Gates and Verdicts](/docs/evals/gates-and-verdicts): Conceptual guide to severity semantics
 - [Quick Checks](/reference/evals/checks): Zero-LLM composable micro-scorers
 - [createScorer()](/reference/evals/create-scorer): Create custom scorers for experiments
