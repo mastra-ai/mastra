@@ -470,6 +470,7 @@ export async function createHonoServer(
       const experimentalUI = process.env.MASTRA_EXPERIMENTAL_UI === 'true' ? 'true' : 'false';
       const templatesEnabled = process.env.MASTRA_TEMPLATES === 'true' ? 'true' : 'false';
       const agentSignals = process.env.MASTRA_AGENT_SIGNALS === 'false' ? 'false' : 'true';
+      const signalsUI = process.env.MASTRA_SIGNALS_UI === 'true' ? 'true' : 'false';
       const requestContextPresets = process.env.MASTRA_REQUEST_CONTEXT_PRESETS || '';
 
       // Helper function to escape JSON for embedding in HTML/JavaScript
@@ -501,6 +502,7 @@ export async function createHonoServer(
         requestContextPresets: `'${escapeForHtml(requestContextPresets)}'`,
         experimentalUI: `'${experimentalUI}'`,
         agentSignals: `'${agentSignals}'`,
+        signalsUI: `'${signalsUI}'`,
         autoDetectUrl: `'${autoDetectUrl}'`,
       });
 
@@ -607,6 +609,11 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
   } else {
     await workerLifecycle.startEventEngine();
   }
+
+  // Fire-and-forget anonymous token usage telemetry (respects MASTRA_TELEMETRY_DISABLED).
+  // Dynamic import keeps compatibility with older @mastra/core versions without the
+  // `@mastra/core/telemetry` entry point.
+  void import('@mastra/core/telemetry').then(({ syncUsageTelemetry }) => syncUsageTelemetry(mastra)).catch(() => {});
 
   // Graceful shutdown so storage backends release resources (e.g. DuckDB's
   // native file lock) before the process exits. On `mastra dev` hot reloads

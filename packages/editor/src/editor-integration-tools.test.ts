@@ -16,7 +16,6 @@ import type { ToolAction } from '@mastra/core/tools';
 import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { LibSQLStore } from '@mastra/libsql';
 import { MastraEditor } from './index';
-import { ComposioToolProvider } from './providers/composio';
 import { ArcadeToolProvider } from './providers/arcade';
 
 /**
@@ -497,12 +496,13 @@ describe('Integration Tools (tool providers)', () => {
     });
   });
 
-  describe.skipIf(!process.env.COMPOSIO_API_KEY)(
+  describe.skipIf(!process.env.COMPOSIO_API_KEY || process.env.CI === 'true')(
     'ComposioToolProvider e2e (real API, requires COMPOSIO_API_KEY)',
     () => {
-      let composioProvider: ComposioToolProvider;
+      let composioProvider: ToolProvider;
 
-      beforeEach(() => {
+      beforeEach(async () => {
+        const { ComposioToolProvider } = await import('./providers/composio');
         composioProvider = new ComposioToolProvider({ apiKey: process.env.COMPOSIO_API_KEY! });
       });
 

@@ -1,14 +1,10 @@
-import { useMessage } from '@assistant-ui/react';
 import {
   Button,
-  CodeEditor,
-  Label,
   Select,
   SelectTrigger,
   SelectValue,
   SelectContent,
   SelectItem,
-  Spinner,
   Icon,
   toast,
   Dialog,
@@ -19,6 +15,9 @@ import {
   DialogBody,
   DialogFooter,
 } from '@mastra/playground-ui';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useMastraClient } from '@mastra/react';
 import { DatabaseIcon, Save } from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';
@@ -26,14 +25,6 @@ import { useState, useCallback, useEffect } from 'react';
 import { useDatasetSaveContext } from '../context/dataset-save-context';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
-
-/** Extract text content from a thread message's content parts */
-function extractTextFromParts(content: readonly { type: string; text?: string }[]): string {
-  return content
-    .filter(part => part.type === 'text' && part.text)
-    .map(part => part.text!)
-    .join('\n');
-}
 
 function DatasetSaveDialog({
   open,
@@ -184,23 +175,26 @@ function DatasetSaveDialog({
  * Dataset save action button shown on user messages in test chat mode.
  * Saves the individual message text as a dataset item.
  */
-export function DatasetSaveAction() {
-  const ctx = useDatasetSaveContext();
-  if (!ctx?.enabled) return null;
-  return <DatasetSaveActionInner />;
+export interface DatasetSaveActionProps {
+  /** Text of the message this action saves to a dataset. */
+  messageText: string;
 }
 
-function DatasetSaveActionInner() {
+export function DatasetSaveAction({ messageText }: DatasetSaveActionProps) {
   const ctx = useDatasetSaveContext();
-  const message = useMessage();
+  if (!ctx?.enabled) return null;
+  return <DatasetSaveActionInner messageText={messageText} />;
+}
+
+function DatasetSaveActionInner({ messageText }: DatasetSaveActionProps) {
+  const ctx = useDatasetSaveContext();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [input, setInput] = useState('');
 
   const handleClick = useCallback(() => {
-    const text = extractTextFromParts(message.content as readonly { type: string; text?: string }[]);
-    setInput(JSON.stringify(text, null, 2));
+    setInput(JSON.stringify(messageText, null, 2));
     setDialogOpen(true);
-  }, [message.content]);
+  }, [messageText]);
 
   return (
     <>

@@ -430,7 +430,7 @@ const response = await agent.generate('Help me organize my day', {
             type: 'AbortSignal',
             isOptional: true,
             description:
-              "Signal object that allows you to abort the agent's execution. When the signal is aborted, all ongoing operations will be terminated.",
+              "Signal object that allows you to abort the agent's execution. When the signal is aborted, all ongoing operations will be terminated, including any in-flight subagent runs the agent delegated to.",
           },
           {
             name: 'prepareStep',
@@ -761,6 +761,13 @@ const response = await agent.generate('Help me organize my day', {
             type: 'ToolsInput',
             isOptional: true,
             description: 'Client-side tools available during execution.',
+          },
+          {
+            name: 'hooks',
+            type: 'ToolHooks',
+            isOptional: true,
+            description:
+              'Per-execution hooks that run before and after tool calls. Overrides matching agent-level hooks for this execution. `beforeToolCall` can return `{ proceed: false, output }` to skip the tool call.',
           },
           {
             name: 'savePerStep',

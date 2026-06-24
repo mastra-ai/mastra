@@ -7,7 +7,7 @@ vi.mock('../tools/index.js', () => ({
   requestSandboxAccessTool: { description: 'request sandbox access' },
 }));
 
-import { createDynamicTools } from './tools.js';
+import { createDynamicTools, createToolHooks } from './tools.js';
 
 function createRequestContext(state: Record<string, unknown>, modeId: string = 'build') {
   return {
@@ -15,7 +15,7 @@ function createRequestContext(state: Record<string, unknown>, modeId: string = '
       if (key !== 'harness') return undefined;
       return {
         modeId,
-        getState: () => state,
+        session: { state: { get: () => state } },
       };
     },
   } as any;
@@ -41,42 +41,26 @@ describe('createDynamicTools', () => {
     });
     expect(allowedTools.custom_tool).toBeDefined();
   });
+});
 
-  it('runs pre/post hooks around tool execution', async () => {
-    const execute = vi.fn(async () => ({ ok: true }));
+describe('createToolHooks', () => {
+  it('maps PreToolUse and PostToolUse hook manager calls to agent tool hooks', async () => {
     const hookManager = {
       runPreToolUse: vi.fn(async () => ({ allowed: true, results: [], warnings: [] })),
       runPostToolUse: vi.fn(async () => ({ allowed: true, results: [], warnings: [] })),
     };
-
-    const getDynamicTools = createDynamicTools(
-      undefined,
-      {
-        custom_tool: {
-          description: 'custom',
-          execute,
-        },
-      },
-      hookManager as any,
-    );
-
-    const tools = getDynamicTools({
-      requestContext: createRequestContext({
-        projectPath: process.cwd(),
-      }),
-    });
-
+    const hooks = createToolHooks(hookManager as any)!;
     const input = { foo: 'bar' };
-    const output = await tools.custom_tool.execute(input, {});
+    const output = { ok: true };
 
-    expect(output).toEqual({ ok: true });
-    expect(execute).toHaveBeenCalledWith(input, {});
+    await hooks.beforeToolCall?.({ toolName: 'custom_tool', input, context: {} });
+    await hooks.afterToolCall?.({ toolName: 'custom_tool', input, context: {}, output });
+
     expect(hookManager.runPreToolUse).toHaveBeenCalledWith('custom_tool', input);
-    expect(hookManager.runPostToolUse).toHaveBeenCalledWith('custom_tool', input, { ok: true }, false);
+    expect(hookManager.runPostToolUse).toHaveBeenCalledWith('custom_tool', input, output, false);
   });
 
   it('blocks tool execution when PreToolUse denies access', async () => {
-    const execute = vi.fn(async () => ({ ok: true }));
     const hookManager = {
       runPreToolUse: vi.fn(async () => ({
         allowed: false,
@@ -86,57 +70,29 @@ describe('createDynamicTools', () => {
       })),
       runPostToolUse: vi.fn(async () => ({ allowed: true, results: [], warnings: [] })),
     };
+    const hooks = createToolHooks(hookManager as any)!;
 
-    const getDynamicTools = createDynamicTools(
-      undefined,
-      {
-        custom_tool: {
-          description: 'custom',
-          execute,
-        },
-      },
-      hookManager as any,
-    );
-
-    const tools = getDynamicTools({
-      requestContext: createRequestContext({
-        projectPath: process.cwd(),
-      }),
-    });
-
-    const result = await tools.custom_tool.execute({ foo: 'bar' }, {});
-    expect(result).toEqual({ error: 'blocked by policy' });
-    expect(execute).not.toHaveBeenCalled();
+    const result = await hooks.beforeToolCall?.({ toolName: 'custom_tool', input: { foo: 'bar' }, context: {} });
+    expect(result).toEqual({ proceed: false, output: { error: 'blocked by policy' } });
     expect(hookManager.runPostToolUse).not.toHaveBeenCalled();
   });
 
-  it('still runs PostToolUse when tool execution throws', async () => {
-    const execute = vi.fn(async () => {
-      throw new Error('boom');
-    });
+  it('records errors in PostToolUse hook calls', async () => {
     const hookManager = {
       runPreToolUse: vi.fn(async () => ({ allowed: true, results: [], warnings: [] })),
       runPostToolUse: vi.fn(async () => ({ allowed: true, results: [], warnings: [] })),
     };
+    const hooks = createToolHooks(hookManager as any)!;
+    const input = { foo: 'bar' };
 
-    const getDynamicTools = createDynamicTools(
-      undefined,
-      {
-        custom_tool: {
-          description: 'custom',
-          execute,
-        },
-      },
-      hookManager as any,
-    );
-
-    const tools = getDynamicTools({
-      requestContext: createRequestContext({
-        projectPath: process.cwd(),
-      }),
+    await hooks.afterToolCall?.({
+      toolName: 'custom_tool',
+      input,
+      context: {},
+      output: undefined,
+      error: new Error('boom'),
     });
 
-    await expect(tools.custom_tool.execute({ foo: 'bar' }, {})).rejects.toThrow('boom');
-    expect(hookManager.runPostToolUse).toHaveBeenCalledWith('custom_tool', { foo: 'bar' }, { error: 'boom' }, true);
+    expect(hookManager.runPostToolUse).toHaveBeenCalledWith('custom_tool', input, { error: 'boom' }, true);
   });
 });

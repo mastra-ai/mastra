@@ -95,7 +95,7 @@ async function assertToolStream(page: Page) {
   await expect(page.getByTestId('thread-wrapper').getByText(expectedTextResult)).toBeVisible({ timeout: 20000 });
 
   await page.getByRole('button', { name: `weatherInfo` }).click();
-  await expect(page.getByTestId('tool-args')).toContainText('{  "location": "paris"}');
+  await expect(page.getByTestId('tool-args')).toContainText('"location": "paris"');
 
   await expect(page.getByTestId('tool-result')).toContainText(`"temperature":`);
   await expect(page.getByTestId('tool-result')).toContainText(`"feelsLike":`);
@@ -120,6 +120,15 @@ test('workflow stream', async () => {
     timeout: 20000,
   });
 
+  // Node 9 is the last step. While streaming, it transitions from "idle" to
+  // "running" to "success". Depending on machine speed it may already be in
+  // "success" by the time we assert, so accept either transient state — what
+  // we care about is that it left "idle".
+  await expect(page.locator('[data-workflow-node]').nth(9)).toHaveAttribute(
+    'data-workflow-step-status',
+    /^(running|success)$/,
+  );
+
   // Workflow checks
   await expect(page.locator('[data-workflow-node]').nth(0)).toHaveAttribute('data-workflow-step-status', 'success');
   await expect(page.locator('[data-workflow-node]').nth(1)).toHaveAttribute('data-workflow-step-status', 'success');
@@ -131,7 +140,6 @@ test('workflow stream', async () => {
   await expect(page.locator('[data-workflow-node]').nth(7)).toHaveAttribute('data-workflow-step-status', 'success');
   await expect(page.locator('[data-workflow-node]').nth(7)).toHaveAttribute('data-workflow-step-status', 'success');
   await expect(page.locator('[data-workflow-node]').nth(8)).toHaveAttribute('data-workflow-step-status', 'success');
-  await expect(page.locator('[data-workflow-node]').nth(9)).toHaveAttribute('data-workflow-step-status', 'running');
 
   // Text delta result
   await expect(

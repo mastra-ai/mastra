@@ -1,3 +1,4 @@
+import type { ActorSignal } from '../auth/ee';
 import { MastraBase } from '../base';
 import type { RequestContext } from '../di';
 import type { PubSub } from '../events/pubsub';
@@ -167,6 +168,7 @@ export abstract class ExecutionEngine extends MastraBase {
     };
     pubsub: PubSub;
     requestContext: RequestContext;
+    actor?: ActorSignal;
     workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
     retryConfig?: {
       attempts?: number;

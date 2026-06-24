@@ -37,6 +37,38 @@ The processor checks the error and its cause chain for:
 
 When the error is retryable, the processor returns `{ retry: true }`. It doesn't mutate messages.
 
+When `delayMs` is set, the processor waits before signaling a retry. This is useful for transient network errors like `ECONNRESET` where immediately retrying is likely to fail again. The delay can be a fixed number of milliseconds or a function evaluated with the error args (for example, to implement exponential backoff).
+
+## Delaying retries
+
+Use `delayMs` with a custom matcher to retry transient network resets with a wait:
+
+```typescript title="src/mastra/agents/resilient-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { StreamErrorRetryProcessor } from '@mastra/core/processors'
+
+const isECONNRESET = (error: unknown) => {
+  if (!error || typeof error !== 'object') return false
+  const code = (error as { code?: unknown }).code
+  if (typeof code === 'string' && code.toUpperCase() === 'ECONNRESET') return true
+  const message = error instanceof Error ? error.message : undefined
+  return typeof message === 'string' && /econnreset|socket hang up/i.test(message)
+}
+
+export const agent = new Agent({
+  name: 'resilient-agent',
+  instructions: 'You are a helpful assistant.',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
+  errorProcessors: [
+    new StreamErrorRetryProcessor({
+      maxRetries: 2,
+      delayMs: ({ retryCount }) => Math.min(1000 * 2 ** retryCount, 30000),
+      matchers: [isECONNRESET],
+    }),
+  ],
+})
+```
+
 ## Default OpenAI Responses matcher
 
 `isRetryableOpenAIResponsesStreamError` matches OpenAI Responses stream error chunks with `type: 'error'` or `type: 'response.failed'`. It retries known transient OpenAI error codes and, as a fallback, errors with explicit retry guidance such as `You can retry your request`.
@@ -66,6 +98,14 @@ When the error is retryable, the processor returns `{ retry: true }`. It doesn't
         description: 'Additional functions that identify provider-specific retryable stream errors.',
         isOptional: true,
         defaultValue: '[]',
+      },
+      {
+        name: 'delayMs',
+        type: 'number | ((args: ProcessAPIErrorArgs) => number | Promise<number>)',
+        description:
+          'Delay in milliseconds to wait before signaling a retry. Accepts a fixed number or a function evaluated with the current error args (for example, for exponential backoff). Negative or non-finite values are clamped to 0.',
+        isOptional: true,
+        defaultValue: '0',
       },
     ],
   },

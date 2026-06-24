@@ -257,7 +257,7 @@ const agent = new Agent({
 })
 ```
 
-When `forwardInstructions` is omitted (the default), instructions are still cached and can be inspected via [`getServerInstructions()`](#getserverinstructions), but are not added to any agent's system prompt.
+When `forwardInstructions` is omitted (the default), instructions are still cached and can be inspected via [`getServerInstructions()`](#getserverinstructions), but aren't added to any agent's system prompt.
 
 > **Security note:** server instructions are forwarded verbatim (subject only to length truncation) into the agent's system prompt. A malicious or compromised MCP server can use them to inject instructions the agent will treat as trusted system guidance. Only enable `forwardInstructions` for servers you trust, and prefer reviewing instructions with `getServerInstructions()` before forwarding instructions from third-party servers.
 
@@ -270,6 +270,17 @@ Intended to be passed onto an Agent definition.
 
 ```ts
 new Agent({ id: 'agent', tools: await mcp.listTools() })
+```
+
+### `listToolsWithErrors()`
+
+Retrieves all tools from all configured servers, with tool names namespaced by their server name. Also returns per-server errors for servers that failed to connect or list tools.
+
+```typescript
+const { tools, errors } = await mcp.listToolsWithErrors()
+
+new Agent({ id: 'agent', tools })
+console.log(errors)
 ```
 
 ### `listToolsets()`
@@ -285,7 +296,7 @@ const res = await agent.stream(prompt, {
 
 ### `getServerInstructions()`
 
-Returns the instructions currently known for each configured MCP server. Servers that have not connected yet, or do not advertise instructions, return `undefined`.
+Returns the instructions currently known for each configured MCP server. Servers that haven't connected yet, or don't advertise instructions, return `undefined`.
 
 ```typescript prettier:false
 getServerInstructions(): Record<string, string | undefined>
@@ -1170,9 +1181,9 @@ await agent.generate('Hello!', {
 
 ## Handling auth failures inside custom fetch
 
-A custom `fetch` should not `throw` when authentication is unavailable. The Streamable HTTP transport in the MCP SDK opens a long-lived `GET /mcp` "standalone listener" stream in the background to receive server-pushed notifications. Errors on that stream are retried with exponential backoff, and a thrown `fetch` or a cleanly-closed stream can produce an indefinite reconnect loop at roughly one attempt per second.
+A custom `fetch` shouldn't `throw` when authentication is unavailable. The Streamable HTTP transport in the MCP SDK opens a long-lived `GET /mcp` "standalone listener" stream in the background to receive server-pushed notifications. Errors on that stream are retried with exponential backoff, and a thrown `fetch` or a cleanly-closed stream can produce an indefinite reconnect loop at roughly one attempt per second.
 
-Return a synthetic `Response` instead. The [MCP Streamable HTTP specification](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports) defines `405 Method Not Allowed` as the signal a server returns when it does not offer the GET SSE stream, and the SDK honors it as a terminal status that stops the listener cleanly. Use this to disable the listener when your server does not push notifications.
+Return a synthetic `Response` instead. The [MCP Streamable HTTP specification](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports) defines `405 Method Not Allowed` as the signal a server returns when it doesn't offer the GET SSE stream, and the SDK honors it as a terminal status that stops the listener cleanly. Use this to disable the listener when your server doesn't push notifications.
 
 The following pattern waits for an auth token on POST requests, attaches it to outgoing headers, and short-circuits the GET listener with a synthetic 405:
 
@@ -1213,7 +1224,7 @@ const mcpClient = new MCPClient({
 })
 ```
 
-Return `405` for the GET listener only when your server does not push notifications back to the client. If your server uses the standalone GET stream, attach the auth token on `GET` requests as well and let the request through.
+Return `405` for the GET listener only when your server doesn't push notifications back to the client. If your server uses the standalone GET stream, attach the auth token on `GET` requests as well and let the request through.
 
 ## Using SSE request headers
 

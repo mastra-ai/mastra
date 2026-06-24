@@ -1,14 +1,9 @@
 import { EntityType } from '@mastra/core/observability';
 import {
   Button,
-  DateTimeRangePicker,
-  Label,
   NoTracesInfo,
-  Notice,
   PageLayout,
-  PropertyFilterCreator,
   SpanDataPanelView,
-  Switch,
   TraceDataPanelView,
   TracesErrorContent,
   TracesLayout,
@@ -31,9 +26,15 @@ import {
   useTraces,
 } from '@mastra/playground-ui';
 import type { SpanTab } from '@mastra/playground-ui';
+import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
+import { Switch } from '@mastra/playground-ui/components/Switch';
 import { CircleSlash2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
+import { AddTraceMocksToItemDialog } from '@/domains/observability/components/add-trace-mocks-to-item-dialog';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
 import { useScorers } from '@/domains/scores';
 import { useTraceSpanScores } from '@/domains/scores/hooks/use-trace-span-scores';
@@ -92,6 +93,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     traceId: string;
     rootSpanId: string | undefined;
   } | null>(null);
+  const [addMocksTarget, setAddMocksTarget] = useState<{ traceId: string } | null>(null);
 
   // Reset pagination whenever the selected trace or span changes — otherwise a page index from a
   // previous span could be reused against a span that has fewer (or no) scores.
@@ -246,9 +248,20 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       ? lightSpans?.find(s => s.spanId === anchorSpanId)
       : lightSpans?.find(s => s.parentSpanId == null);
     if (!anchorSpan) return;
-    url.handleSpanChange(anchorSpan.spanId);
-    url.handleSpanTabChange('scoring');
+    // Select span + switch to scoring in ONE URL update. Two separate calls race (each reads the
+    // same pre-update searchParams snapshot, last write wins) and the tab switch was lost on the
+    // first click.
+    url.handleSpanChangeWithTab(anchorSpan.spanId, 'scoring');
   }, [lightSpans, anchorSpanId, url]);
+
+  // Tool mocks only make sense for agent runs — gate the "Add tool mocks to item" action
+  // on the displayed root/anchor span being an agent.
+  const isAgentTrace = useMemo(() => {
+    const rootSpan = anchorSpanId
+      ? lightSpans?.find(s => s.spanId === anchorSpanId)
+      : lightSpans?.find(s => s.parentSpanId == null);
+    return rootSpan?.entityType === EntityType.AGENT;
+  }, [lightSpans, anchorSpanId]);
 
   const filtersApplied =
     !!url.selectedEntityOption ||
@@ -427,6 +440,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               onSpanSelect={id => url.handleSpanChange(id ?? null)}
               onEvaluateTrace={handleEvaluateTrace}
               onSaveAsDatasetItem={args => setDatasetDialogTarget(args)}
+              onAddTraceMocksToItem={isAgentTrace ? args => setAddMocksTarget(args) : undefined}
               initialSpanId={url.spanIdParam}
               onPrevious={handlePreviousTrace}
               onNext={handleNextTrace}
@@ -497,6 +511,12 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         traceId={datasetDialogTarget?.traceId}
         isOpen={!!datasetDialogTarget}
         onClose={() => setDatasetDialogTarget(null)}
+      />
+
+      <AddTraceMocksToItemDialog
+        traceId={addMocksTarget?.traceId}
+        isOpen={!!addMocksTarget}
+        onClose={() => setAddMocksTarget(null)}
       />
     </PageLayout>
   );

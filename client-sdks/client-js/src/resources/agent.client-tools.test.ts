@@ -142,6 +142,63 @@ describe('Agent client-side tools', () => {
     expect(recursiveMessagesJson).toContain(traceparent);
   });
 
+  it('stream: applies client tool toModelOutput and sends it as tool-result providerOptions in the recursive call', async () => {
+    const toolCallId = 'call_1';
+
+    const firstCycle = [
+      { type: 'step-start', payload: { messageId: 'm1' } },
+      {
+        type: 'tool-call',
+        payload: { toolCallId, toolName: 'screenshotTool', args: { url: 'https://example.com' } },
+      },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 2 } } },
+    ];
+
+    const secondCycle = [
+      { type: 'step-start', payload: { messageId: 'm2' } },
+      { type: 'text-delta', payload: { text: 'Tool handled' } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 3 } } },
+    ];
+
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse(firstCycle))
+      .mockResolvedValueOnce(sseResponse(secondCycle));
+
+    const screenshotTool = createTool({
+      id: 'screenshotTool',
+      description: 'Take a screenshot',
+      inputSchema: z.object({ url: z.string() }),
+      execute: async () => ({ ok: true, _b64: 'base64imagedata' }),
+      toModelOutput: output => ({
+        type: 'content',
+        value: [{ type: 'media', data: (output as { _b64: string })._b64, mediaType: 'image/jpeg' }],
+      }),
+    });
+
+    const resp = await agent.stream('screenshot?', { clientTools: { screenshotTool } });
+    await resp.processDataStream({ onChunk: async () => {} });
+
+    const secondCallBody = JSON.parse((global.fetch as any).mock.calls[1][1].body);
+    const toolResultPart = secondCallBody.messages
+      .flatMap((m: any) => (Array.isArray(m.content) ? m.content : []))
+      .find((p: any) => p.type === 'tool-result' && p.toolCallId === toolCallId);
+
+    expect(toolResultPart).toBeDefined();
+    expect(toolResultPart.input).toEqual({ url: 'https://example.com' });
+    expect(toolResultPart.result).toEqual({ ok: true, _b64: 'base64imagedata' });
+    // Transformed output travels via providerOptions on the tool-result.
+    expect(toolResultPart.providerOptions).toEqual({
+      mastra: {
+        modelOutput: {
+          type: 'content',
+          value: [{ type: 'media', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+        },
+      },
+    });
+  });
+
   it('stream: preserves client observability from streaming tool input without a final tool-call chunk', async () => {
     const toolCallId = 'call_1';
 
@@ -711,6 +768,140 @@ describe('Agent client-side tools', () => {
         ]),
       }),
     );
+  });
+
+  it('generate: applies client tool toModelOutput and sends it as providerOptions.mastra.modelOutput', async () => {
+    const toolCallId = 'call_1';
+    const firstResponse = {
+      finishReason: 'tool-calls',
+      toolCalls: [
+        {
+          payload: {
+            toolCallId,
+            toolName: 'screenshotTool',
+            args: { url: 'https://example.com' },
+          },
+        },
+      ],
+      response: {
+        messages: [
+          {
+            role: 'assistant',
+            content: [
+              {
+                type: 'tool-call',
+                toolCallId,
+                toolName: 'screenshotTool',
+                args: { url: 'https://example.com' },
+              },
+            ],
+          },
+        ],
+      },
+      usage: { totalTokens: 2 },
+    };
+    const secondResponse = {
+      finishReason: 'stop',
+      response: { messages: [{ role: 'assistant', content: 'Here is the screenshot' }] },
+      usage: { totalTokens: 3 },
+    };
+
+    (global.fetch as any)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(firstResponse), { status: 200, headers: { 'content-type': 'application/json' } }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(secondResponse), { status: 200, headers: { 'content-type': 'application/json' } }),
+      );
+
+    const screenshotTool = createTool({
+      id: 'screenshotTool',
+      description: 'Take a screenshot',
+      inputSchema: z.object({ url: z.string() }),
+      execute: async () => ({ ok: true, _b64: 'base64imagedata' }),
+      toModelOutput: output => ({
+        type: 'content',
+        value: [
+          { type: 'text', text: 'Here is the current screenshot.' },
+          { type: 'media', data: (output as { _b64: string })._b64, mediaType: 'image/jpeg' },
+        ],
+      }),
+    });
+
+    const result = await agent.generate('Take a screenshot', { clientTools: { screenshotTool } });
+
+    expect(result.finishReason).toBe('stop');
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+
+    const secondCallBody = JSON.parse((global.fetch as any).mock.calls[1][1].body);
+    expect(secondCallBody.messages).toContainEqual(
+      expect.objectContaining({
+        role: 'tool',
+        content: expect.arrayContaining([
+          expect.objectContaining({
+            type: 'tool-result',
+            toolCallId,
+            toolName: 'screenshotTool',
+            // Raw result is preserved for storage/app logic
+            result: { ok: true, _b64: 'base64imagedata' },
+            // Transformed output travels via providerOptions
+            providerOptions: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [
+                    { type: 'text', text: 'Here is the current screenshot.' },
+                    { type: 'media', data: 'base64imagedata', mediaType: 'image/jpeg' },
+                  ],
+                },
+              },
+            },
+          }),
+        ]),
+      }),
+    );
+  });
+
+  it('generate: does not attach providerOptions when the client tool has no toModelOutput', async () => {
+    const toolCallId = 'call_1';
+    const firstResponse = {
+      finishReason: 'tool-calls',
+      toolCalls: [{ payload: { toolCallId, toolName: 'weatherTool', args: { location: 'NYC' } } }],
+      response: {
+        messages: [
+          {
+            role: 'assistant',
+            content: [{ type: 'tool-call', toolCallId, toolName: 'weatherTool', args: { location: 'NYC' } }],
+          },
+        ],
+      },
+      usage: { totalTokens: 2 },
+    };
+    const secondResponse = {
+      finishReason: 'stop',
+      response: { messages: [{ role: 'assistant', content: 'Done' }] },
+      usage: { totalTokens: 3 },
+    };
+
+    (global.fetch as any)
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(firstResponse), { status: 200, headers: { 'content-type': 'application/json' } }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(secondResponse), { status: 200, headers: { 'content-type': 'application/json' } }),
+      );
+
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Get weather',
+      inputSchema: z.object({ location: z.string() }),
+      execute: async () => ({ ok: true }),
+    });
+
+    await agent.generate('What is the weather?', { clientTools: { weatherTool } });
+
+    const secondCallBody = JSON.parse((global.fetch as any).mock.calls[1][1].body);
+    expect(JSON.stringify(secondCallBody.messages)).not.toContain('modelOutput');
   });
 
   it('generate: does not attach client observability metadata without a carrier', async () => {

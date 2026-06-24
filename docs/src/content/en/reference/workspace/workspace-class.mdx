@@ -176,6 +176,12 @@ const workspace = new Workspace({
             isOptional: true,
             defaultValue: '2000',
           },
+          {
+            name: 'hooks',
+            type: 'WorkspaceToolHooks',
+            description: 'Hooks that run before and after every enabled workspace tool call. See Tool hooks below.',
+            isOptional: true,
+          },
         ],
       },
     ],
@@ -239,6 +245,49 @@ const workspace = new Workspace({
 ```
 
 Tool names must be unique across all workspace tools. Setting a custom name that conflicts with another tool's default or custom name throws an error.
+
+### Tool hooks
+
+Set `tools.hooks` to run logic before and after every enabled workspace tool call. Hooks run after name remapping, so the context includes both the exposed `toolName` and the original `workspaceToolName`.
+
+```typescript {6-14}
+import { Workspace } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  id: 'my-workspace',
+  tools: {
+    hooks: {
+      beforeToolCall: ({ toolName, workspaceToolName, input }) => {
+        console.log(`Running ${toolName} (${workspaceToolName})`, input)
+      },
+      afterToolCall: ({ toolName, output, error }) => {
+        console.log(`Finished ${toolName}`, { output, error })
+      },
+    },
+  },
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'beforeToolCall',
+    type: '(context: WorkspaceToolHookContext) => void | WorkspaceToolBeforeHookResult | Promise<void | WorkspaceToolBeforeHookResult>',
+    isOptional: true,
+    description:
+      'Runs before a workspace tool executes. Receives `{ toolName, workspaceToolName, input, context }`. Return `{ proceed: false, output }` to skip the tool call and use `output` as its result.',
+  },
+  {
+    name: 'afterToolCall',
+    type: '(context: WorkspaceToolAfterHookContext) => void | Promise<void>',
+    isOptional: true,
+    description:
+      'Runs after a workspace tool executes. Receives `{ toolName, workspaceToolName, input, context, output, error }`. `output` is undefined when the tool throws, and `error` is set instead.',
+  },
+]}
+/>
+
+If the owning agent also defines [tool hooks](/reference/agents/agent#tool-hooks), workspace hooks run inside the agent hook wrapper: agent `beforeToolCall` runs first, then workspace `beforeToolCall`, then the tool, then workspace `afterToolCall`, then agent `afterToolCall`.
 
 ## Properties
 
@@ -325,6 +374,12 @@ Destroy the workspace and clean up resources.
 ```typescript
 await workspace.destroy()
 ```
+
+`destroy()` closes workspace-owned resources in order: language servers, browsers, sandbox providers, and filesystem providers. It also clears cached sandbox references.
+
+Call `destroy()` when your application is done with a workspace. `mastra.shutdown()` calls it for registered workspaces during shutdown. To remove a workspace from the Mastra registry, use [`mastra.removeWorkspace()`](/reference/core/removeWorkspace).
+
+`LocalFilesystem.destroy()` doesn't delete files on disk. Resolver-backed filesystem and sandbox providers are owned by your application and must be cleaned up by your application.
 
 ### Search operations
 
@@ -569,9 +624,9 @@ const sandbox = await workspace.resolveSandbox({ requestContext: ctx })
 
 Clear resolver-backed sandboxes cached by `sandboxCacheKey`. Pass a cache key to clear one entry, or omit it to clear all keyed sandbox entries.
 
-This method does not clear the per-`RequestContext` weak cache. Those entries are garbage-collection managed.
+This method doesn't clear the per-`RequestContext` weak cache. Those entries are garbage-collection managed.
 
-The workspace does not own resolver-returned sandboxes. This method only drops workspace references. Destroy the sandbox in your own lifecycle code.
+The workspace doesn't own resolver-returned sandboxes. This method only drops workspace references. Destroy the sandbox in your own lifecycle code.
 
 ```typescript
 workspace.clearSandboxCache('thread-123')
@@ -661,7 +716,7 @@ Added when a sandbox is configured:
 | `mastra_workspace_get_process_output` | Get stdout, stderr, and status of a background process by PID. Accepts `tail` to limit output lines and `wait: true` to block until exit. Only available when the sandbox has a process manager. |
 | `mastra_workspace_kill_process` | Kill a background process by PID. Returns the last 50 lines of output. Only available when the sandbox has a process manager. |
 
-With a static sandbox, capability checks (`executeCommand`, `processes`) decide which tool variants are exposed. With a [dynamic sandbox](/docs/workspace/sandbox#dynamic-sandbox), all sandbox tools are registered and the runtime throws a clear error if the resolved sandbox does not implement a requested capability.
+With a static sandbox, capability checks (`executeCommand`, `processes`) decide which tool variants are exposed. With a [dynamic sandbox](/docs/workspace/sandbox#dynamic-sandbox), all sandbox tools are registered and the runtime throws a clear error if the resolved sandbox doesn't implement a requested capability.
 
 The `execute_command` tool accepts a `backgroundProcesses` option for lifecycle callbacks on background processes:
 

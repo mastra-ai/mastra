@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
+import { createWorkflow } from '../create';
 import type { StreamEvent } from '../types';
-import { createStep, createWorkflow } from '../workflow';
+import { createStep } from '../workflow';
 
 describe('Parallel Steps with Writer', () => {
   it('should handle writer.custom in parallel steps without locking', async () => {

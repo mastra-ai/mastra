@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { renderHook } from '@testing-library/react';
 import React from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
@@ -49,33 +48,21 @@ describe('useSetAgentInstructionsTool', () => {
     expect(form().getValues('instructions')).toBe('');
   });
 
-  it('passes through instructions at or below the hard cap unchanged', async () => {
+  it('rejects overly long instructions without exposing the hard limit in the message', async () => {
     const { tool, form } = renderTool();
-    const body = 'a'.repeat(MAX_GENERATED_INSTRUCTIONS_CHARS);
-    const result: any = await tool.execute!({ instructions: body } as any);
-    expect(form().getValues('instructions')).toBe(body);
-    expect(result.success).toBe(true);
-    expect(result.rejected).toBe(false);
-    expect(result.finalLength).toBe(MAX_GENERATED_INSTRUCTIONS_CHARS);
-  });
-
-  it('rejects instructions past the hard cap without persisting (and leaves existing value intact)', async () => {
-    const { tool, form } = renderTool();
-    // Seed an already-valid instructions value so we can prove rejection does
-    // not clobber existing content (the "nothing is persisted" contract).
     const seeded = 'Existing valid instructions.';
     form().setValue('instructions', seeded);
 
     const body = 'a'.repeat(MAX_GENERATED_INSTRUCTIONS_CHARS + 500);
     const result: any = await tool.execute!({ instructions: body } as any);
-    // The seeded value survives — over-limit calls write nothing.
+
     expect(form().getValues('instructions')).toBe(seeded);
     expect(result.success).toBe(false);
     expect(result.rejected).toBe(true);
     expect(result.currentLength).toBe(MAX_GENERATED_INSTRUCTIONS_CHARS + 500);
     expect(result.limit).toBe(MAX_GENERATED_INSTRUCTIONS_CHARS);
-    // Tool result message tells the LLM exactly what to do.
-    expect(result.message).toMatch(/REJECTED/);
-    expect(result.message).toMatch(/whole section/i);
+    expect(result.message).toMatch(/too long/i);
+    expect(result.message).toMatch(/1,200–2,000 characters/i);
+    expect(result.message).not.toContain(String(MAX_GENERATED_INSTRUCTIONS_CHARS));
   });
 });

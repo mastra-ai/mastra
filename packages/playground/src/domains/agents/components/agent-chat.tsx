@@ -2,9 +2,9 @@ import { useEffect, useRef } from 'react';
 import { useAgentSettings } from '../context/agent-context';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
+import { ChatProvider } from '@/lib/ai-ui/chat/chat-provider';
 import { Thread } from '@/lib/ai-ui/thread';
 
-import { MastraRuntimeProvider } from '@/services/mastra-runtime-provider';
 import type { ChatProps } from '@/types';
 
 export const AgentChat = ({
@@ -15,15 +15,18 @@ export const AgentChat = ({
   refreshThreadList,
   modelVersion,
   agentVersionId,
+  supportsMemory,
   modelList,
   messageId,
   isNewThread,
   hideModelSwitcher,
+  runOptionsSlot,
 }: Omit<ChatProps, 'initialMessages'> & {
   memory?: boolean;
   messageId?: string;
   isNewThread?: boolean;
   hideModelSwitcher?: boolean;
+  runOptionsSlot?: React.ReactNode;
 }) => {
   const { settings } = useAgentSettings();
   const requestContext = useMergedRequestContext();
@@ -62,11 +65,12 @@ export const AgentChat = ({
   const messages = data?.messages ?? emptyMessagesRef.current.messages;
 
   return (
-    <MastraRuntimeProvider
+    <ChatProvider
       agentId={agentId}
       agentName={agentName}
       modelVersion={modelVersion}
       agentVersionId={agentVersionId}
+      supportsMemory={supportsMemory}
       threadId={threadId}
       initialMessages={messages}
       refreshThreadList={refreshThreadList}
@@ -75,12 +79,12 @@ export const AgentChat = ({
     >
       <Thread
         agentName={agentName ?? ''}
-        hasMemory={memory}
         agentId={agentId}
         threadId={threadId}
         hasModelList={Boolean(modelList)}
         hideModelSwitcher={hideModelSwitcher}
+        runOptionsSlot={runOptionsSlot}
       />
-    </MastraRuntimeProvider>
+    </ChatProvider>
   );
 };

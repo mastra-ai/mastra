@@ -1,27 +1,23 @@
 import type { DatasetRecord } from '@mastra/client-js';
 import {
-  Badge,
   Button,
-  Column,
-  Columns,
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogBody,
-  EmptyState,
   DataList,
   DataListSkeleton,
-  Searchbar,
-  Spinner,
-  StatusBadge,
-  Tabs,
-  TabContent,
-  TabList,
-  Tab,
   Txt,
   toast,
 } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Column, Columns } from '@mastra/playground-ui/components/Columns';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Searchbar } from '@mastra/playground-ui/components/Searchbar';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
+import { Tabs, TabContent, TabList, Tab } from '@mastra/playground-ui/components/Tabs';
 import { Database, GaugeIcon, FlaskConical, ChevronLeft, Plus, Paperclip } from 'lucide-react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useWatch } from 'react-hook-form';
@@ -81,6 +77,11 @@ function formatDate(dateStr: string | Date | undefined | null): string {
   if (!dateStr) return '—';
   const d = typeof dateStr === 'string' ? new Date(dateStr) : dateStr;
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function getExperimentStartedAtTime(startedAt: AgentExperiment['startedAt']): number {
+  if (!startedAt) return 0;
+  return startedAt instanceof Date ? startedAt.getTime() : new Date(startedAt).getTime();
 }
 
 const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'error' | 'neutral'> = {
@@ -174,7 +175,8 @@ export function AgentPlaygroundEvaluate({
   });
 
   const datasetExperimentMap = (experiments || []).reduce<Record<string, AgentExperiment>>((acc, exp) => {
-    if (!acc[exp.datasetId] || new Date(exp.startedAt) > new Date(acc[exp.datasetId]!.startedAt)) {
+    const current = acc[exp.datasetId];
+    if (!current || getExperimentStartedAtTime(exp.startedAt) > getExperimentStartedAtTime(current.startedAt)) {
       acc[exp.datasetId] = exp;
     }
     return acc;
@@ -312,8 +314,8 @@ export function AgentPlaygroundEvaluate({
 
   const filteredExperiments = useMemo(() => {
     const exps = [...(experiments || [])].sort((a, b) => {
-      const da = a.startedAt ? new Date(a.startedAt as string).getTime() : 0;
-      const db = b.startedAt ? new Date(b.startedAt as string).getTime() : 0;
+      const da = getExperimentStartedAtTime(a.startedAt);
+      const db = getExperimentStartedAtTime(b.startedAt);
       return db - da;
     });
     if (!experimentsSearch) return exps;
@@ -706,7 +708,12 @@ export function AgentPlaygroundEvaluate({
     return (
       <>
         {/* Create Dataset Dialog */}
-        <CreateDatasetDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} targetIds={[agentId]} />
+        <CreateDatasetDialog
+          open={showCreateDialog}
+          onOpenChange={setShowCreateDialog}
+          targetType="agent"
+          targetIds={[agentId]}
+        />
 
         {/* Generate Config Dialog */}
         {generateDatasetId && (
@@ -748,6 +755,8 @@ export function AgentPlaygroundEvaluate({
                       try {
                         await updateDataset.mutateAsync({
                           datasetId: ds.id,
+                          // Classify legacy/untyped datasets without overwriting existing target types.
+                          targetType: ds.targetType ?? 'agent',
                           targetIds: [...parseIdList(ds.targetIds), agentId],
                         });
                         toast.success(`Dataset "${ds.name}" attached`);

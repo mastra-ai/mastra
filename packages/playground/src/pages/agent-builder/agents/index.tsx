@@ -1,17 +1,11 @@
 import type { ListStoredAgentsParams } from '@mastra/client-js';
-import {
-  AgentIcon,
-  Button,
-  EmptyState,
-  ErrorState,
-  ListSearch,
-  PageHeader,
-  PageLayout,
-  PermissionDenied,
-  SessionExpired,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
+import { AgentIcon, Button, PageLayout, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { PlusIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -19,6 +13,7 @@ import {
   AgentBuilderList,
   AgentBuilderListSkeleton,
 } from '@/domains/agent-builder/components/agent-list/agent-builder-list';
+import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
 import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
 import { useStoredAgents } from '@/domains/agents/hooks/use-stored-agents';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
@@ -28,6 +23,11 @@ export default function AgentBuilderAgentsPage() {
   const { data: currentUser, isLoading: isCurrentUserLoading } = useCurrentUser();
   const { canWrite, canUseFavorites } = useBuilderAgentAccess();
   const [search, setSearch] = useState('');
+  // Prefetch and seed the ['builder-available-models'] cache (return value
+  // ignored) from the agent list — the entry point users pass through before
+  // creating/opening an agent — so the model picker is already warm by the time
+  // the create/edit page mounts instead of paying the cold gateway fetch then.
+  useAgentBuilderAllowedModels({ enabled: canWrite });
   const { Link: FrameworkLink } = useLinkComponent();
 
   const listParams = useMemo<ListStoredAgentsParams>(() => {

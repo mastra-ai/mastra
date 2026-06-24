@@ -1,5 +1,7 @@
-import { AgentIcon, LogoWithoutText, MainSidebar, cn, useMainSidebar } from '@mastra/playground-ui';
-import type { NavLink } from '@mastra/playground-ui';
+import { AgentIcon, cn } from '@mastra/playground-ui';
+import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
+import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import type { NavLink } from '@mastra/playground-ui/components/MainSidebar';
 import { Blocks, LibraryIcon, ServerCogIcon, StarIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLocation } from 'react-router';
@@ -101,7 +103,7 @@ export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSideb
                   className="flex items-center gap-2 rounded-sm hover:opacity-80 min-w-0"
                 >
                   <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-                  <span className="font-serif text-sm whitespace-nowrap truncate">Mastra Studio</span>
+                  <span className="font-display text-sm whitespace-nowrap truncate">Mastra Studio</span>
                 </Link>
                 {!isMobile && <MainSidebar.Trigger />}
               </span>
@@ -115,7 +117,7 @@ export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSideb
                 className="flex items-center gap-2 rounded-sm hover:opacity-80 min-w-0"
               >
                 <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-                <span className="font-serif text-sm whitespace-nowrap truncate">Mastra Studio</span>
+                <span className="font-display text-sm whitespace-nowrap truncate">Mastra Studio</span>
               </Link>
               {!isMobile && <MainSidebar.Trigger />}
             </span>

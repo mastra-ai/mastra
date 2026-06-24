@@ -1,16 +1,8 @@
 'use client';
 
-import {
-  Button,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogBody,
-  Input,
-  Label,
-  toast,
-} from '@mastra/playground-ui';
+import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, toast } from '@mastra/playground-ui';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Label } from '@mastra/playground-ui/components/Label';
 import { useMastraClient } from '@mastra/react';
 import { useState, useEffect } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
@@ -21,6 +13,7 @@ export interface DuplicateDatasetDialogProps {
   sourceDatasetId: string;
   sourceDatasetName: string;
   sourceDatasetDescription?: string;
+  sourceDatasetTargetType?: string | null;
   onSuccess?: (datasetId: string) => void;
 }
 
@@ -30,6 +23,7 @@ export function DuplicateDatasetDialog({
   sourceDatasetId,
   sourceDatasetName,
   sourceDatasetDescription,
+  sourceDatasetTargetType,
   onSuccess,
 }: DuplicateDatasetDialogProps) {
   const [name, setName] = useState('');
@@ -97,6 +91,7 @@ export function DuplicateDatasetDialog({
       const dataset = await createDataset.mutateAsync({
         name: name.trim(),
         description: description.trim() || undefined,
+        targetType: sourceDatasetTargetType ?? undefined,
       });
 
       // Copy items to new dataset

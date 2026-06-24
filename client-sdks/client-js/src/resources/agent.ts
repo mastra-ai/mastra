@@ -10,7 +10,7 @@ import type {
 } from '@ai-sdk/ui-utils';
 import { v4 as uuid } from '@lukeed/uuid';
 import type { AgentExecutionOptionsBase, SerializableStructuredOutputOptions } from '@mastra/core/agent';
-import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { AIV5Type, MessageListInput } from '@mastra/core/agent/message-list';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -53,6 +53,7 @@ import type {
 } from '../types';
 
 import { parseClientRequestContext, requestContextQueryString, toQueryParams } from '../utils';
+import { getClientToolModelOutput } from '../utils/client-tool-model-output';
 import { processClientTools } from '../utils/process-client-tools';
 import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
@@ -237,6 +238,8 @@ async function executeToolCallAndRespond<OUTPUT>({
           },
         });
 
+        const modelOutput = await getClientToolModelOutput(clientTool, result);
+
         // Build the tool-result content block. If we have observability
         // data (carrier + buffered spans/logs), attach it directly on
         // the result so it travels with the specific tool call it
@@ -246,6 +249,9 @@ async function executeToolCallAndRespond<OUTPUT>({
           toolCallId: toolCall.payload.toolCallId,
           toolName: toolCall.payload.toolName,
           result,
+          // Carry the client-side toModelOutput result so the server uses it
+          // when building the model prompt, while result keeps the raw value.
+          ...(modelOutput != null ? { providerOptions: { mastra: { modelOutput } } } : {}),
         };
 
         if (observability) {
@@ -709,12 +715,13 @@ export class Agent extends BaseResource {
           const processedClientTools = processClientTools(activeClientTools);
           const processedRequestContext = parseClientRequestContext(activeRequestContext);
 
-          const toolResultMessages: CoreMessage[] = [];
+          const toolResultMessages: AIV5Type.ModelMessage[] = [];
           for (const toolCall of pendingToolCalls) {
             const clientTool = activeClientTools[toolCall.toolName] as Tool | undefined;
             if (!clientTool || typeof clientTool.execute !== 'function') continue;
 
             let result: unknown;
+            let modelOutput: unknown;
             let observability: ClientToolObservabilityEnvelope | undefined;
             try {
               const execution = await executeClientToolWithObservability({
@@ -737,20 +744,29 @@ export class Agent extends BaseResource {
               });
               result = execution.result;
               observability = execution.observability;
+              try {
+                modelOutput = await getClientToolModelOutput(clientTool, result);
+              } catch {
+                // A failing toModelOutput shouldn't discard a successful tool
+                // execution; continue with the raw result only.
+                modelOutput = undefined;
+              }
             } catch (error) {
               result = { error: String(error) };
+              modelOutput = undefined;
             }
 
-            const toolResultContent: Record<string, unknown> = {
+            const toolResultContent = {
               type: 'tool-result',
               toolCallId: toolCall.toolCallId,
               toolName: toolCall.toolName,
+              args: toolCall.args,
               result,
+              ...(observability ? { __mastraObservability: observability } : {}),
+            } satisfies Extract<CoreMessage, { role: 'tool' }>['content'][number] & {
+              args?: unknown;
+              __mastraObservability?: ClientToolObservabilityEnvelope;
             };
-
-            if (observability) {
-              toolResultContent.__mastraObservability = observability;
-            }
 
             await onChunk({
               type: 'tool-result',
@@ -758,16 +774,52 @@ export class Agent extends BaseResource {
               payload: toolResultContent,
             } as never);
 
+            const continuationToolCall = {
+              type: 'tool-call',
+              toolCallId: toolCall.toolCallId,
+              toolName: toolCall.toolName,
+              input: toolCall.args,
+            } satisfies AIV5Type.ToolCallPart;
+            const continuationToolResult = {
+              type: 'tool-result',
+              toolCallId: toolCall.toolCallId,
+              toolName: toolCall.toolName,
+              output: { type: 'json', value: result as JSONValue },
+              // Carry the client-side toModelOutput result so the server uses it
+              // when building the model prompt, while output keeps the raw result.
+              ...(modelOutput != null
+                ? { providerOptions: { mastra: { modelOutput: modelOutput as JSONValue } } }
+                : {}),
+              ...(observability ? { __mastraObservability: observability } : {}),
+            } satisfies AIV5Type.ToolResultPart & { __mastraObservability?: ClientToolObservabilityEnvelope };
+
             toolResultMessages.push({
-              role: 'tool',
-              content: [toolResultContent],
-            } as unknown as CoreMessage);
+              role: 'assistant',
+              content: [continuationToolCall, continuationToolResult],
+            });
           }
 
           if (toolResultMessages.length === 0) {
             agent.deleteSignalRuntimeOptions(runId);
             return;
           }
+
+          const continuationStreamOptions = {
+            ...activeRuntimeOptions,
+            requestContext: processedRequestContext,
+            memory: threadId ? { thread: threadId, resource: resourceId } : undefined,
+            clientTools: processedClientTools,
+          } as StreamParamsBaseWithoutMessages<any>;
+
+          agent.setSignalRuntimeOptions({
+            resourceId,
+            threadId,
+            streamOptions: continuationStreamOptions,
+          });
+
+          const continuationMessages = (
+            threadId ? toolResultMessages : [...(finishPayload.payload?.messages?.nonUser ?? []), ...toolResultMessages]
+          ) as MessageListInput;
 
           try {
             await agent.sendToolApproval({
@@ -776,17 +828,11 @@ export class Agent extends BaseResource {
               toolCallId: pendingToolCalls[0]!.toolCallId,
               approved: true,
               requestContext: processedRequestContext,
-              messages: (threadId
-                ? toolResultMessages
-                : [...(finishPayload.payload?.messages?.nonUser ?? []), ...toolResultMessages]) as MessageListInput,
-              streamOptions: {
-                ...activeRuntimeOptions,
-                requestContext: processedRequestContext,
-                memory: threadId ? { thread: threadId, resource: resourceId } : undefined,
-                clientTools: processedClientTools,
-              } as StreamParamsBaseWithoutMessages<any>,
+              messages: continuationMessages,
+              streamOptions: continuationStreamOptions,
             });
           } catch (error) {
+            agent.deleteLatestSignalRuntimeOptions({ resourceId, threadId });
             console.error('Error running client-tool continuation:', error);
           } finally {
             agent.deleteSignalRuntimeOptions(runId);
@@ -2089,6 +2135,7 @@ export class Agent extends BaseResource {
                 // a terminal chunk for client-executed tools.
                 const runId: string = streamRunId ?? toolCall.toolCallId;
                 let result: unknown;
+                let modelOutput: unknown;
                 let observability: ClientToolObservabilityEnvelope | undefined;
                 let synthetic:
                   | {
@@ -2135,6 +2182,8 @@ export class Agent extends BaseResource {
                       },
                     },
                   }));
+
+                  modelOutput = await getClientToolModelOutput(clientTool, result);
 
                   synthetic = {
                     type: 'tool-result',
@@ -2206,6 +2255,9 @@ export class Agent extends BaseResource {
                       toolName: toolCall.toolName,
                       input: toolCall.args,
                       result,
+                      ...(modelOutput != null
+                        ? { providerOptions: { mastra: { modelOutput: modelOutput as JSONValue } } }
+                        : {}),
                       ...(observability ? { __mastraObservability: observability } : {}),
                     },
                   ],

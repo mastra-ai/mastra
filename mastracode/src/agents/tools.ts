@@ -10,14 +10,15 @@ import type {
 } from '@mastra/core/notifications';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
+import type { ToolHooks } from '@mastra/core/tools';
 import type { HookManager } from '../hooks';
 import type { McpManager } from '../mcp';
-import type { MastraCodeState } from '../schema';
+import type { MastraCodeComposedState } from '../schema';
 import { MC_TOOLS } from '../tool-names.js';
 import { createWebSearchTool, createWebExtractTool, hasTavilyKey, requestSandboxAccessTool } from '../tools';
 
 /** Minimal shape for tools passed to createDynamicTools. */
-type ToolLike = {
+export type ToolLike = {
   execute?: (...args: any[]) => Promise<unknown> | unknown;
 } & Record<string, any>;
 
@@ -59,35 +60,30 @@ class LazyNotificationsStorage extends NotificationsStorage {
   }
 }
 
-function wrapToolWithHooks(toolName: string, tool: ToolLike, hookManager?: HookManager): ToolLike {
-  if (!hookManager || typeof tool?.execute !== 'function') {
-    return tool;
-  }
+export function createToolHooks(hookManager?: HookManager): ToolHooks | undefined {
+  if (!hookManager) return undefined;
 
   return {
-    ...tool,
-    async execute(input: unknown, toolContext: unknown) {
+    beforeToolCall: async ({ toolName, input }) => {
       const preResult = await hookManager.runPreToolUse(toolName, input);
       if (!preResult.allowed) {
         return {
-          error: preResult.blockReason ?? `Blocked by PreToolUse hook for tool "${toolName}"`,
+          proceed: false as const,
+          output: {
+            error: preResult.blockReason ?? `Blocked by PreToolUse hook for tool "${toolName}"`,
+          },
         };
       }
-
-      let output: unknown;
-      let toolError = false;
-      try {
-        output = await tool.execute?.(input, toolContext);
-        return output;
-      } catch (error) {
-        toolError = true;
-        output = {
-          error: error instanceof Error ? error.message : String(error),
-        };
-        throw error;
-      } finally {
-        await hookManager.runPostToolUse(toolName, input, output, toolError).catch(() => undefined);
-      }
+    },
+    afterToolCall: async ({ toolName, input, output, error }) => {
+      await hookManager
+        .runPostToolUse(
+          toolName,
+          input,
+          error ? { error: error instanceof Error ? error.message : String(error) } : output,
+          Boolean(error),
+        )
+        .catch(() => undefined);
     },
   };
 }
@@ -95,15 +91,14 @@ function wrapToolWithHooks(toolName: string, tool: ToolLike, hookManager?: HookM
 export function createDynamicTools(
   mcpManager?: McpManager,
   extraTools?: Record<string, ToolLike> | ((ctx: { requestContext: RequestContext }) => Record<string, ToolLike>),
-  hookManager?: HookManager,
   disabledTools?: string[],
   storage?: MastraCompositeStore,
 ) {
   return function getDynamicTools({ requestContext }: { requestContext: RequestContext }) {
-    const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
-    const state = ctx?.getState();
+    const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeComposedState> | undefined;
+    const state = ctx?.session.state.get();
 
-    const modelId = state?.currentModelId;
+    const modelId = ctx?.session?.modelId;
     const isAnthropicModel = modelId?.startsWith('anthropic/');
     const isOpenAIModel = modelId?.startsWith('openai/');
 
@@ -160,10 +155,6 @@ export function createDynamicTools(
           delete tools[name];
         }
       }
-    }
-
-    for (const [toolName, tool] of Object.entries(tools)) {
-      tools[toolName] = wrapToolWithHooks(toolName, tool, hookManager);
     }
 
     return tools;

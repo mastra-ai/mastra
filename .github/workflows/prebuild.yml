@@ -21,14 +21,14 @@ jobs:
       has_code: ${{ steps.filter.outputs.has_code }}
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
 
       - name: Check for code changes
         id: filter
         run: |
-          CHANGED=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} \
+          CHANGED=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }} \
             | grep -vE '^(docs/|examples/|\.changeset/|explorations/)' || true)
           if [ -n "$CHANGED" ]; then
             echo "has_code=true" >> $GITHUB_OUTPUT
@@ -52,7 +52,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 2
@@ -72,9 +72,75 @@ jobs:
       - name: Build
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*" build
 
+  affected-tests:
+    name: Detect affected tests
+    needs: changes
+    if: github.repository == 'mastra-ai/mastra' && needs.changes.outputs.has_code == 'true'
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      run_full: ${{ steps.compute.outputs.run_full }}
+      test_files: ${{ steps.compute.outputs.test_files }}
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Compute affected test files
+        id: compute
+        run: |
+          CHANGED=$(git diff --name-only \
+            "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" \
+            | grep -E '/src/.*\.(ts|tsx)$' \
+            | grep -vE '__fixtures__|/fixtures/' \
+            || true)
+
+          if [ -z "$CHANGED" ]; then
+            echo "No src/ changes detected — running full suite."
+            echo "run_full=true" >> $GITHUB_OUTPUT
+            echo "test_files=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Changed source files:"
+          echo "$CHANGED"
+
+          # Run affected-tests tool
+          echo "$CHANGED" | xargs node scripts/affected-tests.mjs --json > /tmp/affected.json
+
+          # Parse results and apply threshold
+          node -e "
+            const fs = require('fs');
+            const data = JSON.parse(fs.readFileSync('/tmp/affected.json', 'utf-8'));
+            const count = data.count || 0;
+            const total = data.testFiles || 1;
+            const ratio = count / total;
+
+            console.error(\`Affected: \${count}/\${total} tests (\${(ratio * 100).toFixed(1)}%)\`);
+
+            if (ratio > 0.5) {
+              console.error('Above 50% threshold — running full suite.');
+              fs.appendFileSync(process.env.GITHUB_OUTPUT, 'run_full=true\n');
+              fs.appendFileSync(process.env.GITHUB_OUTPUT, 'test_files=\n');
+            } else {
+              console.error(\`Running \${count} affected tests.\`);
+              fs.appendFileSync(process.env.GITHUB_OUTPUT, 'run_full=false\n');
+              // Write multiline output using heredoc syntax
+              fs.appendFileSync(process.env.GITHUB_OUTPUT, 'test_files<<AFFECTED_EOF\n');
+              fs.appendFileSync(process.env.GITHUB_OUTPUT, data.affectedTests.join('\n') + '\n');
+              fs.appendFileSync(process.env.GITHUB_OUTPUT, 'AFFECTED_EOF\n');
+            }
+          "
+
   test-suite:
     name: Unit and E2E Tests
-    needs: [changes, prebuild]
+    needs: [changes, prebuild, affected-tests]
     if: always() && github.repository == 'mastra-ai/mastra' && needs.changes.result == 'success' && (needs.changes.outputs.has_code != 'true' || needs.prebuild.result == 'success')
     uses: ./.github/workflows/test-suite.yml
     permissions:
@@ -84,6 +150,8 @@ jobs:
       head_sha: ${{ github.event.pull_request.head.sha }}
       base_ref: ${{ github.event.pull_request.base.ref }}
       has_code: ${{ needs.changes.outputs.has_code }}
+      test_files: ${{ needs.affected-tests.outputs.test_files }}
+      run_full: ${{ needs.affected-tests.outputs.run_full }}
     secrets:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -99,7 +167,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
 
@@ -144,7 +212,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
 
@@ -202,7 +270,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           fetch-depth: 0
 
@@ -262,7 +330,7 @@ jobs:
       TURBO_CACHE: remote:r
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 

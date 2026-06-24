@@ -1,8 +1,10 @@
-import { useAuiState } from '@assistant-ui/react';
-import { Badge, Button, CodeEditor, Icon, cn } from '@mastra/playground-ui';
+import { Button, Icon, cn } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { ChevronUpIcon, CopyIcon, CheckIcon, FolderTree, HardDrive } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
-import { useCopyToClipboard } from '../../hooks/use-copy-to-clipboard';
+import type { DataMessagePart } from '../tool-card';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
@@ -43,6 +45,7 @@ export interface FileTreeBadgeProps extends Omit<ToolApprovalButtonsProps, 'tool
   result: any;
   metadata?: MessageMetadata;
   toolCalled?: boolean;
+  dataParts?: ReadonlyArray<DataMessagePart>;
 }
 
 export const FileTreeBadge = ({
@@ -53,10 +56,11 @@ export const FileTreeBadge = ({
   toolApprovalMetadata,
   isNetwork,
   toolCalled: toolCalledProp,
+  dataParts,
 }: FileTreeBadgeProps) => {
   // Expand by default when approval is required (so buttons are visible)
   const [isCollapsed, setIsCollapsed] = useState(!toolApprovalMetadata);
-  const { isCopied, copyToClipboard } = useCopyToClipboard();
+  const { isCopied, copyToClipboard } = useCopyToClipboard({ copiedDuration: 1500, showToast: false });
 
   // Sync collapsed state when toolApprovalMetadata changes (like BadgeWrapper does)
   useEffect(() => {
@@ -109,13 +113,11 @@ export const FileTreeBadge = ({
   const toolCalled = toolCalledProp ?? hasResult;
 
   // Extract filesystem metadata from message data parts (via writer.custom), scoped to this tool call
-  const message = useAuiState(s => s.message);
   const workspaceMetadata = useMemo(() => {
-    const content = message.content as ReadonlyArray<{ type: string; name?: string; data?: any }>;
-    return content.find(
+    return (dataParts ?? []).find(
       part => part.type === 'data' && part.name === 'workspace-metadata' && part.data?.toolCallId === toolCallId,
     );
-  }, [message.content, toolCallId]);
+  }, [dataParts, toolCallId]);
 
   const wsMeta = workspaceMetadata?.data as WorkspaceMetadata | undefined;
 

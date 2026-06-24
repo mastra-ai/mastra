@@ -1,26 +1,25 @@
 import {
   Button,
-  Checkbox,
   Dialog,
   DialogBody,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  Entry,
-  Label,
   Popover,
   PopoverContent,
   PopoverTrigger,
-  RadioGroup,
-  RadioGroupItem,
-  Skeleton,
-  Slider,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
   Txt,
   cn,
 } from '@mastra/playground-ui';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { Entry } from '@mastra/playground-ui/components/Entry';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Slider } from '@mastra/playground-ui/components/Slider';
 import { Info, Sliders } from 'lucide-react';
 import { useState } from 'react';
 
@@ -79,6 +78,45 @@ const NetworkRadio = ({ hasMemory, hasSubAgents, disabled }: NetworkRadioProps) 
   );
 };
 
+interface StreamSubscriptionRadioProps {
+  supported: boolean;
+  disabled: boolean;
+}
+
+const StreamSubscriptionRadio = ({ supported, disabled }: StreamSubscriptionRadioProps) => {
+  const itemDisabled = disabled || !supported;
+
+  const radio = (
+    <div className="flex items-center gap-2">
+      <RadioGroupItem
+        value="streamSubscription"
+        id="streamSubscription"
+        className="text-neutral6"
+        disabled={itemDisabled}
+      />
+      <Label
+        className={cn('text-neutral6 text-ui-md', !supported && 'text-neutral3! cursor-not-allowed')}
+        htmlFor="streamSubscription"
+      >
+        Stream subscription (default)
+      </Label>
+    </div>
+  );
+
+  if (supported) {
+    return radio;
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{radio}</TooltipTrigger>
+      <TooltipContent>
+        <p>Stream subscription is not supported for this agent.</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+};
+
 export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) => {
   const { data: agent, isLoading } = useAgent(agentId);
   const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
@@ -104,6 +142,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
   const hasSubAgents = Boolean(agent && Object.keys(agent.agents || {}).length > 0);
   const modelVersion = agent?.modelVersion;
   const isSupportedModel = modelVersion === 'v2' || modelVersion === 'v3';
+  const supportsThreadSubscription = agent?.supportsMemory !== false;
 
   let radioValue: string | undefined;
 
@@ -113,7 +152,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
         radioValue = 'network';
       } else if (settings?.modelSettings?.chatWithGenerate) {
         radioValue = 'generate';
-      } else if (settings?.modelSettings?.chatWithLegacyStream) {
+      } else if (settings?.modelSettings?.chatWithLegacyStream || !supportsThreadSubscription) {
         radioValue = 'stream';
       } else {
         radioValue = 'streamSubscription';
@@ -154,7 +193,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
             <Sliders className="h-5 w-5 text-neutral3 hover:text-neutral6" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="end" className="w-80 p-4">
+        <PopoverContent align="start" className="w-80 p-4">
           {isLoading || isMemoryLoading ? (
             <Skeleton className="h-40 w-full" data-testid="composer-model-settings-skeleton" />
           ) : (
@@ -218,17 +257,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                     </div>
                   )}
                   {isSupportedModel && (
-                    <div className="flex items-center gap-2">
-                      <RadioGroupItem
-                        value="streamSubscription"
-                        id="streamSubscription"
-                        className="text-neutral6"
-                        disabled={!canEditSettings}
-                      />
-                      <Label className="text-neutral6 text-ui-md" htmlFor="streamSubscription">
-                        Stream subscription (default)
-                      </Label>
-                    </div>
+                    <StreamSubscriptionRadio supported={supportsThreadSubscription} disabled={!canEditSettings} />
                   )}
                   {isSupportedModel && (
                     <div className="flex items-center gap-2">

@@ -7,7 +7,17 @@ import { DuckDBStore } from '@mastra/duckdb';
 import { Observability, MastraStorageExporter, SensitiveDataFilter } from '@mastra/observability';
 import { SlackProvider } from '@mastra/slack';
 
-import { mastraAuth, rbacProvider, fgaProvider } from './auth';
+import {
+  mastraAuth,
+  rbacProvider,
+  fgaProvider,
+  studioAuth,
+  studioRbac,
+  studioFga,
+  serverAuth,
+  serverRbac,
+  serverFga,
+} from './auth';
 
 import {
   agentThatHarassesYou,
@@ -23,6 +33,8 @@ import {
   requestContextDemoAgent,
   mcpAppsAgent,
   slackDemoAgent,
+  billingAgent,
+  balanceAgent,
 } from './agents/index';
 import { MCPClient } from '@mastra/mcp';
 import { myMcpServer, myMcpServerTwo, mcpAppsServer } from './mcp/server';
@@ -58,6 +70,7 @@ const externalMcpClient = new MCPClient({
   },
 });
 import { lessComplexWorkflow, myWorkflow } from './workflows';
+import { refundWorkflow } from './workflows/refund-workflow';
 import { heartbeatWorkflow, multiCadenceWorkflow } from './workflows/scheduled';
 import {
   chefModelV2Agent,
@@ -88,6 +101,7 @@ import {
 } from './processors/index';
 import { gatewayAgent } from './agents/gateway';
 import { codeModeAgent } from './agents/code-mode-agent';
+import { clinicDirectAgent, clinicSpecialistAgent, clinicSupervisorAgent } from './agents/clinic-context-agents';
 
 const libsqlStore = new LibSQLStore({
   id: 'mastra-storage',
@@ -113,6 +127,8 @@ export const mastra = new Mastra({
     codeOverrideDescriptionsOnlyAgent,
     dynamicAgent,
     dynamicToolsAgent,
+    billingAgent,
+    balanceAgent,
     agentThatHarassesYou,
     evalAgent,
     schemaValidatedAgent,
@@ -132,6 +148,9 @@ export const mastra = new Mastra({
     cryptoResearchAgent,
     slackDemoAgent,
     codeModeAgent,
+    clinicDirectAgent,
+    clinicSpecialistAgent,
+    clinicSupervisorAgent,
   },
   processors: {
     moderationProcessor,
@@ -158,6 +177,7 @@ export const mastra = new Mastra({
     findUserWorkflow,
     heartbeatWorkflow,
     multiCadenceWorkflow,
+    refundWorkflow,
   },
   bundler: {
     sourcemap: true,
@@ -174,10 +194,18 @@ export const mastra = new Mastra({
     }),
   },
   server: {
-    auth: mastraAuth,
-    rbac: rbacProvider,
-    fga: fgaProvider,
+    // Use dual auth providers if available, otherwise fall back to single auth
+    auth: serverAuth ?? mastraAuth,
+    rbac: serverRbac ?? rbacProvider,
+    fga: serverFga ?? fgaProvider,
   },
+  studio: studioAuth
+    ? {
+        auth: studioAuth,
+        rbac: studioRbac,
+        fga: studioFga,
+      }
+    : undefined,
   backgroundTasks: {
     enabled: true,
     globalConcurrency: 10,

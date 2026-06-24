@@ -1,6 +1,6 @@
-// @vitest-environment jsdom
 import type { BuilderSettingsResponse } from '@mastra/client-js';
-import { MainSidebarProvider, TooltipProvider } from '@mastra/playground-ui';
+import { TooltipProvider } from '@mastra/playground-ui';
+import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
@@ -83,8 +83,11 @@ const builderEnabledWithoutAgent: BuilderSettingsResponse = {
   features: {},
 };
 
-function authHandler(capabilities: AuthCapabilities) {
-  return http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(capabilities));
+function authHandler(capabilities: AuthCapabilities, opts?: { gate?: Promise<void> }) {
+  return http.get(`${BASE_URL}/api/auth/capabilities`, async () => {
+    if (opts?.gate) await opts.gate;
+    return HttpResponse.json(capabilities);
+  });
 }
 
 function builderHandler(settings: BuilderSettingsResponse) {
@@ -296,5 +299,56 @@ describe('AppSidebar — Agent Builder admin link', () => {
 
     const link = await screen.findByRole('link', { name: /agent builder/i });
     expect(link.getAttribute('href')).toBe('/agent-builder');
+  });
+});
+
+describe('AppSidebar — RBAC link gating while permission data loads', () => {
+  const wildcardCapabilities = {
+    enabled: true,
+    login: { type: 'credentials' as const },
+    user: { id: 'superuser-1', email: 'superuser@example.com' },
+    capabilities: { user: true, session: true, sso: false, rbac: true, acl: false },
+    access: { roles: ['superuser'], permissions: ['*'] },
+  } satisfies AuthCapabilities;
+
+  it('hides permission-gated links until the user permissions finish loading, then reveals them', async () => {
+    // Gate the capabilities response so the permissions query stays in its
+    // loading state. While loading, no permission-gated link should render —
+    // being permissive here would briefly leak unauthorized routes. Permission
+    // patterns are loaded once by RoutePermissionsGate before the sidebar
+    // renders, so the sidebar's only loading signal is the user's permissions.
+    let resolveCapabilities: () => void = () => {};
+    const capabilitiesGate = new Promise<void>(resolve => {
+      resolveCapabilities = resolve;
+    });
+
+    server.use(
+      authHandler(wildcardCapabilities, { gate: capabilitiesGate }),
+      builderHandler(builderDisabled),
+      systemPackagesHandler(),
+    );
+
+    renderSidebar();
+
+    // The Agents link requires `agents:read`; the wildcard user clears it, but
+    // it must stay hidden while the user's permissions are still loading.
+    await waitFor(() => {
+      expect(screen.queryByRole('link', { name: /agents/i })).toBeNull();
+    });
+
+    resolveCapabilities();
+
+    // Once permissions resolve, the gated link is allowed to appear.
+    const agentsLink = await screen.findByRole('link', { name: /agents/i });
+    expect(agentsLink.getAttribute('href')).toBe('/agents');
+  });
+
+  it('shows permission-gated links the user is allowed once permissions are loaded', async () => {
+    server.use(authHandler(wildcardCapabilities), builderHandler(builderDisabled), systemPackagesHandler());
+
+    renderSidebar();
+
+    const agentsLink = await screen.findByRole('link', { name: /agents/i });
+    expect(agentsLink.getAttribute('href')).toBe('/agents');
   });
 });

@@ -3,6 +3,7 @@ import type { MastraScorer } from '../../evals/base';
 import type { Mastra } from '../../mastra';
 import type { VersionOverrides } from '../../mastra/types';
 import type { TargetType, ExperimentStatus } from '../../storage/types';
+import type { ItemToolMock, ToolMockReport } from './tool-mocks';
 
 /**
  * A single data item for inline experiment data.
@@ -17,6 +18,8 @@ export interface DataItem<I = unknown, E = unknown> {
   groundTruth?: E;
   /** Additional metadata */
   metadata?: Record<string, unknown>;
+  /** Per-item request context merged over the global request context (item takes precedence) */
+  requestContext?: Record<string, unknown>;
   /**
    * Resume data for suspended workflow steps, keyed by step ID.
    * When a workflow suspends during experiment execution, the executor
@@ -39,6 +42,12 @@ export interface DataItem<I = unknown, E = unknown> {
    * ```
    */
   resumeData?: unknown;
+  /**
+   * Item-level static tool mocks (agent targets only).
+   * When provided, the agent serves the mocked output in place of executing the
+   * real tool; calling a mocked tool with non-matching args fails the item.
+   */
+  toolMocks?: ItemToolMock[];
 }
 
 /**
@@ -133,6 +142,8 @@ export interface ItemResult {
   completedAt: Date;
   /** Number of retry attempts */
   retryCount: number;
+  /** Diagnostic receipt for item-level tool mocks (agent targets only) */
+  toolMockReport?: ToolMockReport;
 }
 
 /**

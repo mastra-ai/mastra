@@ -87,6 +87,14 @@ export const myAgent = new Agent({
 })
 ```
 
+## Lifecycle and cleanup
+
+Mastra registers global and agent workspaces so they can be listed and retrieved at runtime. When you call `mastra.shutdown()`, Mastra destroys registered workspaces that it owns. This closes workspace resources such as language servers, browsers, sandbox processes, and filesystem provider handles.
+
+For manual cleanup, use [`mastra.removeWorkspace()`](/reference/core/removeWorkspace). Pass `{ destroy: true }` when the workspace should be destroyed before it's removed from the registry.
+
+Static providers are owned by the workspace. Resolver-backed providers are owned by your application because the workspace creates them at request time. See [dynamic sandbox lifecycle ownership](/docs/workspace/sandbox#lifecycle-ownership) for the resolver cleanup model.
+
 ## Configuration patterns
 
 Workspaces support several configuration patterns depending on what capabilities your agent needs. The two main building blocks are `filesystem` (file tools) and `sandbox` (command execution), with `mounts` as the way to bridge cloud storage into sandboxes.
@@ -277,7 +285,7 @@ const workspace = new Workspace({
 })
 ```
 
-Functions for `enabled` receive `{ requestContext, workspace }`. Functions for `requireApproval` and `requireReadBeforeWrite` also receive `args` since they are evaluated when the tool is called.
+Functions for `enabled` receive `{ requestContext, workspace }`. Functions for `requireApproval` and `requireReadBeforeWrite` also receive `args` since they're evaluated when the tool is called.
 
 ### Tool name remapping
 
@@ -301,6 +309,32 @@ const workspace = new Workspace({
 ```
 
 The agent sees `view`, `search_content`, `find_files`, `execute_command`, and `lsp_inspect` instead of the default `mastra_workspace_*` names. Tool names must be unique — duplicate names or conflicts with other default names throw an error.
+
+### Tool hooks
+
+Set `tools.hooks` to run logic before and after every enabled workspace tool call. Hooks run after name remapping, so the hook context includes both the exposed `toolName` and the original `workspaceToolName`:
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  tools: {
+    hooks: {
+      beforeToolCall: ({ toolName, workspaceToolName, input }) => {
+        console.log(`Running ${toolName} (${workspaceToolName})`, input)
+      },
+      afterToolCall: ({ toolName, output, error }) => {
+        console.log(`Finished ${toolName}`, { output, error })
+      },
+    },
+  },
+})
+```
+
+Return `{ proceed: false, output }` from `beforeToolCall` to skip the tool call and use `output` as its result.
+
+If the owning agent also defines [tool hooks](/docs/agents/using-tools#run-logic-around-tool-calls), workspace hooks run inside the agent hook wrapper: agent `beforeToolCall` first, then workspace `beforeToolCall`, then the tool, then workspace `afterToolCall`, then agent `afterToolCall`.
 
 ## LSP inspection
 

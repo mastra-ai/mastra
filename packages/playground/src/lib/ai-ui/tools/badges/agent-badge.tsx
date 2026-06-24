@@ -1,7 +1,8 @@
-import { CodeEditor, AgentIcon } from '@mastra/playground-ui';
+import { AgentIcon } from '@mastra/playground-ui';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import React from 'react';
 import Markdown from 'react-markdown';
-import { ToolFallback } from '../tool-fallback';
+import { ToolCard } from '../tool-card';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import { BadgeWrapper } from './badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
@@ -123,16 +124,12 @@ export const AgentBadge = ({
 
         return (
           <React.Fragment key={index}>
-            <ToolFallback
+            <ToolCard
               toolName={message.toolName}
-              argsText={typeof message.args === 'string' ? message.args : JSON.stringify(message.args)}
-              result={result}
-              args={message.args}
-              status={{ type: 'complete' }}
-              type="tool-call"
+              input={message.args}
+              output={result}
+              state="output-available"
               toolCallId={message.toolCallId}
-              addResult={() => {}}
-              resume={() => {}}
               metadata={{
                 mode: 'stream',
                 requireApprovalMetadata: parentRequireApprovalMetadata,

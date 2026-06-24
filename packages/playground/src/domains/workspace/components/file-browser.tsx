@@ -1,7 +1,5 @@
 import {
-  AlertDialog,
   Button,
-  CopyButton,
   Tooltip,
   TooltipTrigger,
   TooltipContent,
@@ -10,6 +8,8 @@ import {
   AzureIcon,
   GoogleIcon,
 } from '@mastra/playground-ui';
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import {
   File,
   Folder,
@@ -511,7 +511,7 @@ function HighlightedCode({ content, language }: { content: string; language: str
       }}
       codeTagProps={{
         style: {
-          fontFamily: 'var(--geist-mono), ui-monospace, monospace',
+          fontFamily: 'var(--font-mono)',
         },
       }}
     >

@@ -277,6 +277,12 @@ Returns `{ accepted: true, runId: string }`.
     description: 'Controls what happens when the target thread is active. Defaults to `deliver`.',
   },
   {
+    name: 'ifActive.attributes',
+    type: 'Record<string, string | number | boolean>',
+    isOptional: true,
+    description: 'Attributes merged into the signal when Mastra accepts it while the target thread is active.',
+  },
+  {
     name: 'ifIdle.behavior',
     type: "'wake' | 'persist' | 'discard'",
     isOptional: true,
@@ -287,6 +293,12 @@ Returns `{ accepted: true, runId: string }`.
     type: "Omit<AgentExecutionOptions, 'messages'>",
     isOptional: true,
     description: 'Options for the stream that starts when `ifIdle.behavior` is `wake`.',
+  },
+  {
+    name: 'ifIdle.attributes',
+    type: 'Record<string, string | number | boolean>',
+    isOptional: true,
+    description: 'Attributes merged into the signal when Mastra accepts it while the target thread is idle.',
   },
 ]}
 />
@@ -574,6 +586,26 @@ response.processDataStream({
       )
     }
   },
+})
+```
+
+### Shape client tool output for the model
+
+Client tools support `toModelOutput` to control what the model receives, including multimodal content such as images. Because client tools execute locally, the mapping also runs on the client after `execute` completes. The transformed output is sent back to the server alongside the raw result, so the raw result stays available for storage and application logic.
+
+```typescript
+const screenshotTool = createTool({
+  id: 'takeScreenshot',
+  description: 'Takes a screenshot of the current page',
+  inputSchema: z.object({}),
+  execute: async () => {
+    const base64 = await captureScreenshot()
+    return { ok: true, data: base64 }
+  },
+  toModelOutput: output => ({
+    type: 'content',
+    value: [{ type: 'media', data: output.data, mediaType: 'image/jpeg' }],
+  }),
 })
 ```
 

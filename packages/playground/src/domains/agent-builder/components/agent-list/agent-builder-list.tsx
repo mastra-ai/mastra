@@ -1,9 +1,12 @@
 import type { StoredAgentResponse } from '@mastra/client-js';
-import { Avatar, EmptyState, Icon, Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui';
+import { Icon, Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui';
+import { Avatar } from '@mastra/playground-ui/components/Avatar';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { LockIcon, SearchIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { FavoriteButton } from './favorite-button';
 import { useLinkComponent } from '@/lib/framework';
+import { cn } from '@/lib/utils';
 
 export type AgentBuilderListProps = {
   agents: StoredAgentResponse[];
@@ -24,6 +27,28 @@ function getAvatarUrl(agent: StoredAgentResponse): string | undefined {
   }
 
   return undefined;
+}
+
+function getAuthorLabel(agent: StoredAgentResponse): string | undefined {
+  if (agent.author) {
+    return agent.author.name || agent.author.email || agent.author.id;
+  }
+  if (agent.authorId) return agent.authorId;
+  return undefined;
+}
+
+function AuthorBadge({ agent, className }: { agent: StoredAgentResponse; className?: string }) {
+  const label = getAuthorLabel(agent);
+  if (!label) return null;
+
+  const avatarUrl = agent.author?.avatarUrl;
+
+  return (
+    <div className={cn('flex items-center gap-1.5 min-w-0', className)} data-testid="agent-builder-row-author">
+      <Avatar name={label} src={avatarUrl} size="sm" />
+      <span className="text-ui-xs text-neutral3 truncate">{label}</span>
+    </div>
+  );
 }
 
 function PrivateVisibilityIcon() {
@@ -83,7 +108,7 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
             className="px-6 py-5 flex items-start gap-4 hover:bg-surface3 transition-colors md:items-center"
             data-testid={rowTestId}
           >
-            <Avatar name={agent.name ?? ''} src={avatar} />
+            <Avatar name={agent.name ?? ''} src={avatar} size="lg" />
 
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 min-w-0">
@@ -93,6 +118,7 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-ui-sm text-neutral3 line-clamp-1">{agent.description || 'No description'}</span>
               </div>
+              <AuthorBadge agent={agent} className="mt-2 md:hidden" />
               {showFavorites && (
                 <div className="mt-2 md:hidden">
                   <FavoriteButton
@@ -104,6 +130,7 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
                 </div>
               )}
             </div>
+            <AuthorBadge agent={agent} className="shrink-0 hidden md:flex max-w-[12rem]" />
             {showFavorites && (
               <FavoriteButton
                 agentId={agent.id}

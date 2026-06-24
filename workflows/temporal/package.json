@@ -1,6 +1,6 @@
 {
   "name": "@mastra/temporal",
-  "version": "0.1.12",
+  "version": "0.2.2-alpha.0",
   "description": "Mastra Temporal workflows integration - run Mastra workflows on the Temporal durable execution platform",
   "type": "module",
   "main": "dist/index.js",
@@ -56,12 +56,12 @@
     "@babel/parser": "^7.29.7",
     "@babel/types": "^7.29.7",
     "@mastra/deployer": "workspace:*",
-    "@temporalio/activity": "^1.11.7",
-    "@temporalio/client": "^1.11.7",
-    "@temporalio/plugin": "^1.16.1",
-    "@temporalio/worker": "^1.11.7",
-    "@temporalio/workflow": "^1.11.7",
-    "rollup": "^4.60.2"
+    "@temporalio/activity": "^1.17.2",
+    "@temporalio/client": "^1.17.2",
+    "@temporalio/plugin": "^1.17.2",
+    "@temporalio/worker": "^1.17.2",
+    "@temporalio/workflow": "^1.17.2",
+    "rollup": "^4.61.1"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.34.0-0 <2.0.0-0",
@@ -73,7 +73,7 @@
     "@internal/workflow-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/babel__generator": "^7.6.8",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.21",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",

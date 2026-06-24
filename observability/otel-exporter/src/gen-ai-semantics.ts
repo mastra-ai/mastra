@@ -15,6 +15,7 @@ import type {
   AnyExportedSpan,
   MCPToolCallAttributes,
   ModelGenerationAttributes,
+  RagEmbeddingAttributes,
   ToolCallAttributes,
   UsageStats,
 } from '@mastra/core/observability';
@@ -109,6 +110,21 @@ export function formatUsageMetrics(usage?: UsageStats): OtelUsageMetrics {
   return metrics;
 }
 
+function addModelRequestAttributes(
+  attributes: Attributes,
+  attrs: Pick<ModelGenerationAttributes | RagEmbeddingAttributes, 'model' | 'provider' | 'usage'>,
+): void {
+  if (attrs.model) {
+    attributes[ATTR_GEN_AI_REQUEST_MODEL] = attrs.model;
+  }
+
+  if (attrs.provider) {
+    attributes[ATTR_GEN_AI_PROVIDER_NAME] = normalizeProvider(attrs.provider);
+  }
+
+  Object.assign(attributes, formatUsageMetrics(attrs.usage));
+}
+
 /**
  * Get the operation name based on span type for gen_ai.operation.name
  */
@@ -116,6 +132,8 @@ function getOperationName(span: AnyExportedSpan): string {
   switch (span.type) {
     case SpanType.MODEL_GENERATION:
       return 'chat';
+    case SpanType.RAG_EMBEDDING:
+      return 'embeddings';
     case SpanType.TOOL_CALL:
     case SpanType.MCP_TOOL_CALL:
       return 'execute_tool';
@@ -138,6 +156,10 @@ function getSpanIdentifier(span: AnyExportedSpan): string | undefined {
   switch (span.type) {
     case SpanType.MODEL_GENERATION: {
       const attrs = span.attributes as ModelGenerationAttributes;
+      return attrs?.model;
+    }
+    case SpanType.RAG_EMBEDDING: {
+      const attrs = span.attributes as RagEmbeddingAttributes;
       return attrs?.model;
     }
 
@@ -207,14 +229,7 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
   if (span.type === SpanType.MODEL_GENERATION && span.attributes) {
     const modelAttrs = span.attributes as ModelGenerationAttributes;
 
-    // Model and provider
-    if (modelAttrs.model) {
-      attributes[ATTR_GEN_AI_REQUEST_MODEL] = modelAttrs.model;
-    }
-
-    if (modelAttrs.provider) {
-      attributes[ATTR_GEN_AI_PROVIDER_NAME] = normalizeProvider(modelAttrs.provider);
-    }
+    addModelRequestAttributes(attributes, modelAttrs);
 
     // Agent context - allows correlating model generation with the agent that invoked it
     if (span.entityId) {
@@ -224,9 +239,6 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
     if (span.entityName) {
       attributes[ATTR_GEN_AI_AGENT_NAME] = span.entityName;
     }
-
-    // Token usage - use OTEL standard naming + OpenInference conventions
-    Object.assign(attributes, formatUsageMetrics(modelAttrs.usage));
 
     // Parameters using OTEL conventions
     if (modelAttrs.parameters) {
@@ -278,6 +290,23 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
     }
     if (modelAttrs.serverPort !== undefined) {
       attributes[ATTR_SERVER_PORT] = modelAttrs.serverPort;
+    }
+  }
+
+  if (span.type === SpanType.RAG_EMBEDDING && span.attributes) {
+    const embeddingAttrs = span.attributes as RagEmbeddingAttributes;
+
+    addModelRequestAttributes(attributes, embeddingAttrs);
+
+    if (embeddingAttrs.mode) {
+      attributes[`mastra.${spanType}.mode`] = embeddingAttrs.mode;
+    }
+    if (embeddingAttrs.dimensions !== undefined) {
+      attributes['gen_ai.embeddings.dimension.count'] = embeddingAttrs.dimensions;
+      attributes[`mastra.${spanType}.dimensions`] = embeddingAttrs.dimensions;
+    }
+    if (embeddingAttrs.inputCount !== undefined) {
+      attributes[`mastra.${spanType}.input_count`] = embeddingAttrs.inputCount;
     }
   }
 
@@ -342,6 +371,11 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
     if (span.errorInfo.category) {
       attributes['error.category'] = span.errorInfo.category;
     }
+  }
+
+  const threadId = span.metadata?.threadId;
+  if (typeof threadId === 'string' && threadId.length > 0) {
+    attributes[ATTR_GEN_AI_CONVERSATION_ID] = threadId;
   }
 
   return attributes;

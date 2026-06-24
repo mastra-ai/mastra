@@ -1,5 +1,7 @@
-import { Button, Icon } from '@mastra/playground-ui';
-import { Loader2 } from 'lucide-react';
+import { Button, Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle, Icon } from '@mastra/playground-ui';
+import { FormInput, Loader2, Play } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { useState } from 'react';
 import type { ZodSchema } from 'zod';
 
 import { WorkflowInputData } from './workflow-input-data';
@@ -10,7 +12,14 @@ export interface WorkflowTriggerFormProps {
   onExecute: (data: any) => void;
   defaultValues?: any;
   isViewingRun?: boolean;
+  isReadOnly?: boolean;
+  disableSubmit?: boolean;
   isProcessorWorkflow?: boolean;
+  submitActions?: ReactNode;
+  leftActions?: ReactNode;
+  heading?: string;
+  headingSlot?: ReactNode;
+  collapsible?: boolean;
 }
 
 export function WorkflowTriggerForm({
@@ -19,8 +28,60 @@ export function WorkflowTriggerForm({
   onExecute,
   defaultValues,
   isViewingRun,
+  isReadOnly,
+  disableSubmit,
   isProcessorWorkflow,
+  submitActions,
+  leftActions,
+  heading,
+  headingSlot,
+  collapsible,
 }: WorkflowTriggerFormProps) {
+  const [isInputDialogOpen, setIsInputDialogOpen] = useState(false);
+
+  if (zodSchema && isViewingRun) {
+    return (
+      <div>
+        {headingSlot && <div className="pb-3">{headingSlot}</div>}
+        <div className="flex flex-col gap-1 px-5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start"
+            onClick={() => setIsInputDialogOpen(true)}
+          >
+            <FormInput className="shrink-0 text-neutral3" />
+            <span className="truncate">Run input</span>
+          </Button>
+        </div>
+        <Dialog open={isInputDialogOpen} onOpenChange={setIsInputDialogOpen}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Workflow input</DialogTitle>
+            </DialogHeader>
+            <DialogBody className="max-h-[90vh]">
+              <WorkflowInputData
+                schema={zodSchema}
+                defaultValues={defaultValues}
+                isSubmitLoading={isStreaming}
+                submitButtonLabel="Run"
+                onSubmit={onExecute}
+                withoutSubmit
+                isReadOnly
+                disableSubmit={disableSubmit}
+                isProcessorWorkflow={isProcessorWorkflow}
+                collapsible={false}
+                hideHeading
+                hideInputTypeLabel
+              />
+            </DialogBody>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }
+
   if (zodSchema) {
     return (
       <WorkflowInputData
@@ -28,9 +89,22 @@ export function WorkflowTriggerForm({
         defaultValues={defaultValues}
         isSubmitLoading={isStreaming}
         submitButtonLabel="Run"
+        submitButtonVariant="primary"
+        submitButtonIcon={
+          <Icon>
+            <Play />
+          </Icon>
+        }
         onSubmit={onExecute}
         withoutSubmit={isViewingRun}
+        isReadOnly={isReadOnly}
+        disableSubmit={disableSubmit}
         isProcessorWorkflow={isProcessorWorkflow}
+        submitActions={submitActions}
+        leftActions={leftActions}
+        heading={heading}
+        headingSlot={headingSlot}
+        collapsible={collapsible}
       />
     );
   }
@@ -40,14 +114,23 @@ export function WorkflowTriggerForm({
   }
 
   return (
-    <Button className="w-full" variant="default" disabled={isStreaming} onClick={() => onExecute(null)}>
-      {isStreaming ? (
-        <Icon>
-          <Loader2 className="animate-spin" />
-        </Icon>
-      ) : (
-        'Trigger'
-      )}
-    </Button>
+    <div className="flex items-center justify-between gap-1">
+      {leftActions ?? <div />}
+      <div className="flex items-center gap-1">
+        {submitActions}
+        <Button variant="primary" disabled={isStreaming || disableSubmit} onClick={() => onExecute(null)}>
+          {isStreaming ? (
+            <Icon>
+              <Loader2 className="animate-spin" />
+            </Icon>
+          ) : (
+            <Icon>
+              <Play />
+            </Icon>
+          )}
+          Run
+        </Button>
+      </div>
+    </div>
   );
 }

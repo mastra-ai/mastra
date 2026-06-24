@@ -1,6 +1,10 @@
 import type { ScoreRowData } from '@mastra/core/evals';
-import type { SideDialogRootProps } from '@mastra/playground-ui';
-import { Button, KeyValueList, SideDialog, TextAndIcon, getShortId, Icon, Sections } from '@mastra/playground-ui';
+import { Button, Icon } from '@mastra/playground-ui';
+import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
+import { Sections } from '@mastra/playground-ui/components/Sections';
+import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
+import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
+import { TextAndIcon, getShortId } from '@mastra/playground-ui/components/Text';
 import { format } from 'date-fns/format';
 import {
   HashIcon,
@@ -96,7 +100,7 @@ export function ScoreDialog({
           </TextAndIcon>
           |
           <SideDialog.Nav onNext={onNext} onPrevious={onPrevious} />
-          <Button size="default" className="ml-auto mr-8" disabled={!score} onClick={() => setDatasetDialogOpen(true)}>
+          <Button size="lg" className="ml-auto mr-8" disabled={!score} onClick={() => setDatasetDialogOpen(true)}>
             <Icon>
               <SaveIcon />
             </Icon>

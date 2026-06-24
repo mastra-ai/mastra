@@ -1,22 +1,15 @@
 'use client';
 
-import {
-  Button,
-  CodeEditor,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogBody,
-  Label,
-  toast,
-} from '@mastra/playground-ui';
+import type { DatasetItemToolMock } from '@mastra/client-js';
+import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, toast } from '@mastra/playground-ui';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { Label } from '@mastra/playground-ui/components/Label';
 import { useState } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 
 /** Schema validation error from API */
 interface SchemaValidationError {
-  field: 'input' | 'groundTruth';
+  field: 'input' | 'groundTruth' | 'toolMocks';
   errors: Array<{ path: string; message: string }>;
 }
 
@@ -69,6 +62,8 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
   const [input, setInput] = useState('{}');
   const [groundTruth, setGroundTruth] = useState('');
   const [expectedTrajectory, setExpectedTrajectory] = useState('');
+  const [toolMocks, setToolMocks] = useState('');
+  const [requestContext, setRequestContext] = useState('');
   const [validationErrors, setValidationErrors] = useState<SchemaValidationError | null>(null);
   const { addItem } = useDatasetMutations();
 
@@ -105,12 +100,41 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
       }
     }
 
+    // Parse toolMocks if provided — must be a JSON array.
+    let parsedToolMocks: DatasetItemToolMock[] | undefined;
+    if (toolMocks.trim()) {
+      try {
+        const parsed = JSON.parse(toolMocks);
+        if (!Array.isArray(parsed)) {
+          toast.error('Tool Mocks must be a JSON array');
+          return;
+        }
+        parsedToolMocks = parsed as DatasetItemToolMock[];
+      } catch {
+        toast.error('Tool Mocks must be valid JSON');
+        return;
+      }
+    }
+
+    // Parse requestContext if provided
+    let parsedRequestContext: Record<string, unknown> | undefined;
+    if (requestContext.trim()) {
+      try {
+        parsedRequestContext = JSON.parse(requestContext);
+      } catch {
+        toast.error('Request Context must be valid JSON');
+        return;
+      }
+    }
+
     try {
       await addItem.mutateAsync({
         datasetId,
         input: parsedInput,
         groundTruth: parsedGroundTruth,
         expectedTrajectory: parsedTrajectory,
+        toolMocks: parsedToolMocks,
+        requestContext: parsedRequestContext,
       });
 
       toast.success('Item added successfully');
@@ -120,6 +144,8 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
       setInput('{}');
       setGroundTruth('');
       setExpectedTrajectory('');
+      setToolMocks('');
+      setRequestContext('');
       onOpenChange(false);
 
       onSuccess?.();
@@ -150,10 +176,20 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
     }
   };
 
+  // Clear validation errors when toolMocks changes
+  const handleToolMocksChange = (value: string) => {
+    setToolMocks(value);
+    if (validationErrors?.field === 'toolMocks') {
+      setValidationErrors(null);
+    }
+  };
+
   const handleCancel = () => {
     setInput('{}');
     setGroundTruth('');
     setExpectedTrajectory('');
+    setToolMocks('');
+    setRequestContext('');
     setValidationErrors(null);
     onOpenChange(false);
   };
@@ -192,6 +228,29 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
               <CodeEditor
                 value={expectedTrajectory}
                 onChange={setExpectedTrajectory}
+                showCopyButton={false}
+                className="min-h-[80px]"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="item-tool-mocks">Tool Mocks (JSON array, optional)</Label>
+              <CodeEditor
+                value={toolMocks}
+                onChange={handleToolMocksChange}
+                showCopyButton={false}
+                className="min-h-[80px]"
+              />
+              {validationErrors?.field === 'toolMocks' && (
+                <ValidationErrors field="toolMocks" errors={validationErrors.errors} />
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="item-request-context">Request Context (JSON, optional)</Label>
+              <CodeEditor
+                value={requestContext}
+                onChange={setRequestContext}
                 showCopyButton={false}
                 className="min-h-[80px]"
               />

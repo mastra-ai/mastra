@@ -1,9 +1,17 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import type { MastraStorage, DatasetsStorage, DatasetRecord, DatasetItem } from '@mastra/core/storage';
+import type { TestCapabilities } from '../../factory';
 
-export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
+export function createDatasetsTests({
+  storage,
+  capabilities = {},
+}: {
+  storage: MastraStorage;
+  capabilities?: TestCapabilities;
+}) {
   // Skip tests if storage doesn't have datasets domain
   const describeDatasets = storage.stores?.datasets ? describe : describe.skip;
+  const supportsToolMocks = capabilities.toolMocks !== false;
 
   let datasetsStorage: DatasetsStorage;
 
@@ -116,6 +124,48 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
 
         const notFound = await datasetsStorage.getItemById({ id: 'nonexistent' });
         expect(notFound).toBeNull();
+      });
+
+      const toolMocksFixture = [
+        { toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 52 } },
+        { toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 48 } },
+        {
+          toolName: 'agent-balanceAgent',
+          args: { prompt: 'lookup YJ' },
+          output: { text: 'YJ: $100' },
+          matchArgs: 'ignore' as const,
+        },
+      ];
+
+      (supportsToolMocks ? it : it.skip)('toolMocks round-trip through add, get, and SCD-2 update', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'item-tool-mocks' });
+        const toolMocks = toolMocksFixture;
+
+        const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'hi' }, toolMocks });
+        expect(item.toolMocks).toEqual(toolMocks);
+
+        const fetched = await datasetsStorage.getItemById({ id: item.id });
+        expect(fetched!.toolMocks).toEqual(toolMocks);
+
+        // Updating an unrelated field must preserve toolMocks through versioning.
+        const updated = await datasetsStorage.updateItem({ id: item.id, datasetId: ds.id, input: { q: 'hi2' } });
+        expect(updated.datasetVersion).toBe(2);
+        expect(updated.toolMocks).toEqual(toolMocks);
+
+        // Explicitly replacing toolMocks updates them.
+        const replaced = await datasetsStorage.updateItem({
+          id: item.id,
+          datasetId: ds.id,
+          toolMocks: [{ toolName: 'other', args: {}, output: 1 }],
+        });
+        expect(replaced.toolMocks).toEqual([{ toolName: 'other', args: {}, output: 1 }]);
+      });
+
+      (supportsToolMocks ? it.skip : it)('rejects toolMocks when the adapter does not support them', async () => {
+        const ds = await datasetsStorage.createDataset({ name: 'item-tool-mocks-reject' });
+        await expect(
+          datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'hi' }, toolMocks: toolMocksFixture }),
+        ).rejects.toThrow();
       });
 
       it('updateItem creates new version row', async () => {
@@ -246,6 +296,95 @@ export function createDatasetsTests({ storage }: { storage: MastraStorage }) {
         const tombstone = history.find(h => h.isDeleted);
         expect(tombstone).toBeDefined();
         expect(tombstone!.validTo).toBeNull(); // tombstone is the "current" version
+      });
+
+      it('deleteItem tombstone inherits tenancy from parent dataset', async () => {
+        const ds = await datasetsStorage.createDataset({
+          name: 'scd2-delete-tenancy',
+          organizationId: 'org_delete',
+          projectId: 'proj_delete',
+        });
+        const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'bye' } });
+
+        await datasetsStorage.deleteItem({ id: item.id, datasetId: ds.id });
+
+        const history = await datasetsStorage.getItemHistory(item.id);
+        const tombstone = history.find(h => h.isDeleted);
+        expect(tombstone).toBeDefined();
+        expect(tombstone!.organizationId).toBe('org_delete');
+        expect(tombstone!.projectId).toBe('proj_delete');
+      });
+
+      it('batchDeleteItems tombstones inherit tenancy from parent dataset', async () => {
+        const ds = await datasetsStorage.createDataset({
+          name: 'scd2-batch-delete-tenancy',
+          organizationId: 'org_batch',
+          projectId: 'proj_batch',
+        });
+        const items = await datasetsStorage.batchInsertItems({
+          datasetId: ds.id,
+          items: [{ input: { q: 'a' } }, { input: { q: 'b' } }],
+        });
+
+        await datasetsStorage.batchDeleteItems({
+          datasetId: ds.id,
+          itemIds: items.map(i => i.id),
+        });
+
+        for (const item of items) {
+          const history = await datasetsStorage.getItemHistory(item.id);
+          const tombstone = history.find(h => h.isDeleted);
+          expect(tombstone).toBeDefined();
+          expect(tombstone!.organizationId).toBe('org_batch');
+          expect(tombstone!.projectId).toBe('proj_batch');
+        }
+      });
+
+      it('addItem inherits tenancy from parent dataset onto the live row', async () => {
+        const ds = await datasetsStorage.createDataset({
+          name: 'scd2-add-tenancy',
+          organizationId: 'org_add',
+          projectId: 'proj_add',
+        });
+        const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'hello' } });
+
+        expect(item.organizationId).toBe('org_add');
+        expect(item.projectId).toBe('proj_add');
+
+        // Also assert via listItems so we exercise the persisted row mapper, not just the returned value
+        const listed = await datasetsStorage.listItems({
+          datasetId: ds.id,
+          pagination: { page: 0, perPage: 10 },
+        });
+        const persisted = listed.items.find(i => i.id === item.id);
+        expect(persisted).toBeDefined();
+        expect(persisted!.organizationId).toBe('org_add');
+        expect(persisted!.projectId).toBe('proj_add');
+      });
+
+      it('updateItem re-inherits tenancy from parent dataset onto the new live row', async () => {
+        const ds = await datasetsStorage.createDataset({
+          name: 'scd2-update-tenancy',
+          organizationId: 'org_update',
+          projectId: 'proj_update',
+        });
+        const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'v1' } });
+
+        const updated = await datasetsStorage.updateItem({
+          id: item.id,
+          datasetId: ds.id,
+          input: { q: 'v2' },
+        });
+
+        expect(updated.organizationId).toBe('org_update');
+        expect(updated.projectId).toBe('proj_update');
+
+        // History should include the new live row carrying tenancy
+        const history = await datasetsStorage.getItemHistory(item.id);
+        const live = history.find(h => h.validTo === null && !h.isDeleted);
+        expect(live).toBeDefined();
+        expect(live!.organizationId).toBe('org_update');
+        expect(live!.projectId).toBe('proj_update');
       });
     });
 

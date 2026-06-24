@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { TooltipProvider } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -122,6 +121,20 @@ describe('ComposerModelSettings', () => {
     expect(stored.modelSettings.chatWithLegacyStream).toBe(true);
     expect(stored.modelSettings.chatWithGenerate).toBe(false);
     expect(stored.modelSettings.chatWithNetwork).toBe(false);
+  });
+
+  it('falls back to stream and disables stream subscription for agents without memory support', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () => HttpResponse.json({ ...v2Agent, supportsMemory: false })),
+      http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json(memoryDisabled)),
+      http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false })),
+    );
+
+    renderSettings();
+    await openPopover();
+
+    expect((document.getElementById('stream') as HTMLInputElement | null)?.checked).toBe(true);
+    expect((document.getElementById('streamSubscription') as HTMLInputElement | null)?.disabled).toBe(true);
   });
 
   it('keeps the popover open when the Advanced Settings dialog is dismissed via its built-in close button', async () => {

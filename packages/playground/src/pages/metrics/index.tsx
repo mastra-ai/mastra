@@ -1,17 +1,10 @@
-import type { DatePreset, DateRange, PropertyFilterToken } from '@mastra/playground-ui';
+import type { DatePreset, DateRange } from '@mastra/playground-ui';
 import {
-  Notice,
   Button,
   DateRangeSelector,
-  EmptyState,
-  ErrorState,
-  MetricsFlexGrid,
   MetricsProvider,
   NoDataPageLayout,
   PageLayout,
-  PermissionDenied,
-  PropertyFilterCreator,
-  SessionExpired,
   applyMetricsPropertyFilterTokens,
   clearSavedMetricsFilters,
   createMetricsPropertyFilterFields,
@@ -30,6 +23,14 @@ import {
   useServiceNames,
   useTags,
 } from '@mastra/playground-ui';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { MetricsFlexGrid } from '@mastra/playground-ui/components/MetricsFlexGrid';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
+import type { PropertyFilterToken } from '@mastra/playground-ui/components/PropertyFilter';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
@@ -46,6 +47,7 @@ import {
 import { MetricsToolbar } from '@/domains/metrics/components/metrics-toolbar';
 import { ModelUsageCostCard } from '@/domains/metrics/components/model-usage-cost-card';
 import { TokenUsageByAgentCard } from '@/domains/metrics/components/token-usage-by-agent-card';
+import { TokenUsageTimelineCard } from '@/domains/metrics/components/token-usage-timeline-card';
 import { TracesVolumeCard } from '@/domains/metrics/components/traces-volume-card';
 
 const ANALYTICS_OBSERVABILITY_TYPES = new Set([
@@ -353,6 +355,7 @@ function MetricsContent() {
           <MetricsFlexGrid>
             <ModelUsageCostCard />
             <TokenUsageByAgentCard />
+            <TokenUsageTimelineCard />
             <MemoryCard />
             <TracesVolumeCard />
             <LatencyCard />

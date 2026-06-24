@@ -1,5 +1,6 @@
 import type { GetScorerResponse } from '@mastra/client-js';
-import { Chip, DataList as EntityList, DataListSkeleton as EntityListSkeleton, AgentIcon } from '@mastra/playground-ui';
+import { DataList as EntityList, DataListSkeleton as EntityListSkeleton, AgentIcon } from '@mastra/playground-ui';
+import { Chip } from '@mastra/playground-ui/components/Chip';
 import { WorkflowIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLinkComponent } from '@/lib/framework';
@@ -11,7 +12,7 @@ export interface ScorersListProps {
   sourceFilter?: string;
 }
 
-const COLUMNS = 'auto 1fr auto auto auto';
+const COLUMNS = 'minmax(0,1fr) minmax(0,1.5fr) auto auto auto';
 
 export function ScorersList({ scorers, isLoading, search = '', sourceFilter = 'all' }: ScorersListProps) {
   const { paths, Link } = useLinkComponent();
@@ -42,7 +43,7 @@ export function ScorersList({ scorers, isLoading, search = '', sourceFilter = 'a
   }
 
   return (
-    <EntityList columns={COLUMNS}>
+    <EntityList columns={COLUMNS} variant="striped">
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Description</EntityList.TopCell>
@@ -71,10 +72,10 @@ export function ScorersList({ scorers, isLoading, search = '', sourceFilter = 'a
         return (
           <EntityList.RowLink key={scorer.id} to={paths.scorerLink(scorer.id)} LinkComponent={Link}>
             <EntityList.NameCell>
-              <span className="flex items-center gap-1.5">
-                {name}
+              <span className="flex min-w-0 max-w-full items-center gap-1.5">
+                <span className="min-w-0 truncate">{name}</span>
                 {isTrajectory && (
-                  <Chip size="small" color="purple">
+                  <Chip size="small" color="purple" className="shrink-0">
                     trajectory
                   </Chip>
                 )}
