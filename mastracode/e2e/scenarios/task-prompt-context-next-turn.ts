@@ -5,7 +5,6 @@ export const taskPromptContextNextTurnScenario: McE2eScenario = {
   name: 'task-prompt-context-next-turn',
   description: 'Verify live task state is injected into the next user turn system prompt.',
   testName: 'includes current task list in next-turn prompt context after task_write',
-  skipReason: 'current main task-state request shape no longer matches the AIMock prompt-context fixture',
   useOpenAIModel: true,
   aimockFixture: 'task-prompt-context-next-turn.json',
   async run({ terminal, runtime }) {
@@ -28,11 +27,10 @@ export const taskPromptContextNextTurnScenario: McE2eScenario = {
       throw new Error(`Expected task prompt-context scenario to make 3 AIMock requests, received ${requests.length}`);
     }
     const finalRequest = JSON.stringify(requests[2]);
-    for (const needle of [
-      '<current-task-list>',
-      '{id: prompt-context-e2e}',
-      'Verify current task list prompt context',
-    ]) {
+    if (!finalRequest.includes('<current-task-list') && !finalRequest.includes('<task-list-update')) {
+      throw new Error('Expected final AIMock request to include task state signal context');
+    }
+    for (const needle of ['prompt-context-e2e', 'Verify current task list prompt context']) {
       if (!finalRequest.includes(needle)) {
         throw new Error(`Expected final AIMock request to include ${needle}`);
       }

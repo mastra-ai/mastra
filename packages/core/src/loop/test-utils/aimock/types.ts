@@ -89,6 +89,8 @@ export interface RunLoopScenarioOptions {
   };
   /** Tools available to the loop. Tool ids must match the scripted tool-call names. */
   tools?: ToolsInput;
+  /** Signal providers registered on the Agent constructor. */
+  signals?: AgentConfig['signals'];
   /**
    * System instructions for the agent. May be a static string or a
    * `DynamicArgument` function `({ requestContext }) => string` to exercise

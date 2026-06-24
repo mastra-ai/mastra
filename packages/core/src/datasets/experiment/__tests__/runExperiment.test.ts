@@ -818,4 +818,68 @@ describe('runExperiment', () => {
       expect(result.experiments.length).toBe(0);
     });
   });
+
+  describe('tenancy hydration', () => {
+    it('hydrates organizationId and projectId from the parent dataset onto experiment + results', async () => {
+      // Create a tenancy-scoped dataset with items
+      const tenantDs = await datasetsStorage.createDataset({
+        name: 'Tenant Dataset',
+        organizationId: 'org_tenant',
+        projectId: 'proj_tenant',
+      });
+      await datasetsStorage.addItem({
+        datasetId: tenantDs.id,
+        input: { prompt: 'A' },
+        groundTruth: { text: 'a' },
+      });
+      await datasetsStorage.addItem({
+        datasetId: tenantDs.id,
+        input: { prompt: 'B' },
+        groundTruth: { text: 'b' },
+      });
+
+      const result = await runExperiment(mastra, {
+        datasetId: tenantDs.id,
+        targetType: 'agent',
+        targetId: 'test-agent',
+      });
+
+      const storedRun = await experimentsStorage.getExperimentById({ id: result.experimentId });
+      expect(storedRun?.organizationId).toBe('org_tenant');
+      expect(storedRun?.projectId).toBe('proj_tenant');
+
+      const persisted = await experimentsStorage.listExperimentResults({
+        experimentId: result.experimentId,
+        pagination: { page: 0, perPage: 50 },
+      });
+      expect(persisted.results).toHaveLength(2);
+      for (const r of persisted.results) {
+        expect(r.organizationId).toBe('org_tenant');
+        expect(r.projectId).toBe('proj_tenant');
+      }
+    });
+
+    it('defaults tenancy to null when the parent dataset has no tenancy bucket', async () => {
+      // The default test dataset (set up in beforeEach) has no tenancy
+      const result = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+      });
+
+      const storedRun = await experimentsStorage.getExperimentById({ id: result.experimentId });
+      expect(storedRun?.organizationId).toBeNull();
+      expect(storedRun?.projectId).toBeNull();
+
+      const persisted = await experimentsStorage.listExperimentResults({
+        experimentId: result.experimentId,
+        pagination: { page: 0, perPage: 50 },
+      });
+      expect(persisted.results.length).toBeGreaterThan(0);
+      for (const r of persisted.results) {
+        expect(r.organizationId).toBeNull();
+        expect(r.projectId).toBeNull();
+      }
+    });
+  });
 });

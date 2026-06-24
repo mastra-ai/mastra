@@ -2771,6 +2771,15 @@ export class Mastra<
         // time — never parse it back out of the composite key, since callers
         // can pass runIds that contain ':'.
         this.#releaseRunScope(entry.runId);
+        // Surface the eviction so operators can investigate long-suspended
+        // runs that never resumed. The refcounted lifecycle in
+        // `__createRunScope`/`__releaseRunScope` covers the happy path; this
+        // branch only fires when a registration was abandoned past the TTL.
+        this.#logger.warn('Evicted stale run-scoped workflow after TTL expired', {
+          runId: entry.runId,
+          ageMs: now - entry.registeredAt,
+          ttlMs: Mastra.INTERNAL_WORKFLOW_TTL_MS,
+        });
       }
     }
   }
