@@ -917,6 +917,10 @@ export interface StorageScorerDefinitionType {
   activeVersionId?: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /** Organization identifier for multi-tenant scoping */
+  organizationId?: string;
+  /** Project identifier for multi-tenant scoping */
+  projectId?: string;
   /** Additional metadata for the scorer */
   metadata?: Record<string, unknown>;
   createdAt: Date;
@@ -942,6 +946,10 @@ export type StorageCreateScorerDefinitionInput = {
   id: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /** Organization identifier for multi-tenant scoping */
+  organizationId?: string;
+  /** Project identifier for multi-tenant scoping */
+  projectId?: string;
   /** Additional metadata for the scorer */
   metadata?: Record<string, unknown>;
 } & StorageScorerDefinitionSnapshotType;
@@ -978,6 +986,14 @@ export type StorageListScorerDefinitionsInput = {
    * Filter scorers by author identifier.
    */
   authorId?: string;
+  /**
+   * Filter scorers by organization identifier (multi-tenant scoping).
+   */
+  organizationId?: string;
+  /**
+   * Filter scorers by project identifier (multi-tenant scoping).
+   */
+  projectId?: string;
   /**
    * Filter scorers by metadata key-value pairs.
    * All specified key-value pairs must match (AND logic).
