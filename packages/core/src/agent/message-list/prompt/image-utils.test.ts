@@ -230,8 +230,8 @@ describe('isValidUrl', () => {
     expect(isValidUrl('iVBORw0KGgo=')).toBe(false);
   });
 
-  it('returns false for a data URI', () => {
-    expect(isValidUrl('data:image/png;base64,abc')).toBe(false);
+  it('returns true for a data URI', () => {
+    expect(isValidUrl('data:image/png;base64,abc')).toBe(true);
   });
 });
 
