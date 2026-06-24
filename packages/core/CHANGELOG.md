@@ -1,5 +1,52 @@
 # @mastra/core
 
+## 1.46.1-alpha.1
+
+### Patch Changes
+
+- Forward the parent `abortSignal` to delegated subagents so that aborting a supervisor's `stream()` or `generate()` call cancels in-flight subagents instead of letting them run to completion. ([#17561](https://github.com/mastra-ai/mastra/pull/17561))
+
+  Previously, calling `AbortController.abort()` on a supervisor only stopped the supervisor itself: each delegated subagent kept looping and calling its own tools and the LLM for several seconds after the abort, because the delegation tool dropped the parent's `abortSignal`. The signal is now propagated to every delegation path (`stream`, `generate`, `resumeStream`, `resumeGenerate`, and the legacy variants).
+
+  ```typescript
+  const controller = new AbortController();
+
+  const stream = await supervisor.stream('Research AI trends', {
+    abortSignal: controller.signal,
+  });
+
+  // Now also cancels any in-flight subagents, not just the supervisor
+  controller.abort();
+  ```
+
+  Fixes #14820.
+
+- Added stable session `id` and `ownerId` to Harness sessions. `SessionIdentity` now exposes `getId()` and `getOwnerId()`, and `harness.createSession()` accepts `id` and `ownerId` to set them. These identifiers are stable for the life of the session — they do not change when the resource ID is switched — and are surfaced in the harness request context session snapshot. ([#18372](https://github.com/mastra-ai/mastra/pull/18372))
+
+  **Breaking change:** `id` and `ownerId` are now **required** on both `harness.createSession()` and the `Session`/`SessionIdentity` constructors. There are no defaults.
+
+  ```typescript
+  // Before
+  const session = new Session({ resourceId: 'my-resource' });
+  const session = await harness.createSession();
+
+  // After
+  const session = new Session({
+    resourceId: 'my-resource',
+    id: 'my-session-id',
+    ownerId: 'my-owner-id',
+  });
+  const session = await harness.createSession({
+    id: 'my-session-id',
+    ownerId: 'my-owner-id',
+  });
+
+  session.identity.getId(); // 'my-session-id'
+  session.identity.getOwnerId(); // 'my-owner-id'
+  ```
+
+- Removed experimental flag from retrieval-mode observational memory. The retrieval API is now stable. ([#18324](https://github.com/mastra-ai/mastra/pull/18324))
+
 ## 1.46.1-alpha.0
 
 ### Patch Changes
