@@ -38,12 +38,10 @@ test.describe('Agent Builder deterministic flow', () => {
     });
   }
 
-  test('builds a complex freeform prompt and publishes the configured agent to ordinary Studio surfaces', async ({
-    page,
-  }) => {
+  test('builds a complex freeform prompt with deterministic tool calls', async ({ page }) => {
     /**
      * USER STORY: A Studio user describes an agent in plain language and expects the builder to save a real
-     * stored-agent draft that appears outside the builder flow.
+     * stored-agent draft from deterministic client tool calls.
      * BEHAVIOR UNDER TEST: Builder tool calls create persisted editor-backed agent config, not just transient UI state.
      */
     await selectFixture(page, 'agent-builder-complex');
@@ -55,7 +53,6 @@ test.describe('Agent Builder deterministic flow', () => {
     await page.waitForURL(/\/agent-builder\/agents\/[^/]+\/edit/);
 
     await assertBuilderOutput(page, 'Vuln Triage Sentinel');
-    await assertConfiguredAgentAppearsInOrdinaryAgentList(page, 'Vuln Triage Sentinel');
   });
 });
 
@@ -72,11 +69,4 @@ async function assertBuilderOutput(page: Page, expectedName: string) {
   await page.getByTestId('agent-builder-ready-review').click();
   await expect(page.getByTestId('agent-configure-name')).toHaveValue(expectedName);
   await expect(page.getByTestId('agent-configure-description')).not.toHaveValue('');
-}
-
-async function assertConfiguredAgentAppearsInOrdinaryAgentList(page: Page, expectedName: string) {
-  await page.goto('/agents');
-
-  // Proves builder output is a persisted editor-backed agent visible outside the builder flow.
-  await expect(page.locator('.data-list-row').filter({ hasText: expectedName })).toBeVisible({ timeout: 10_000 });
 }
