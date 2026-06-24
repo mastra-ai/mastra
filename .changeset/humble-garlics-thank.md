@@ -4,7 +4,7 @@
 
 Added sticky row headers to DataList.
 
-Use `sticky="start"` on the leading `DataList.TopCell` and `DataList.RowHeaderCell` for the matching row cells:
+Use `sticky="start"` on the leading `DataList.TopCell` and render matching row cells with `DataList.RowHeaderCell`:
 
 ```tsx
 <DataList columns="auto auto auto" variant="lined">
@@ -14,7 +14,7 @@ Use `sticky="start"` on the leading `DataList.TopCell` and `DataList.RowHeaderCe
     <DataList.TopCell>Output</DataList.TopCell>
   </DataList.Top>
   <DataList.RowStatic>
-    <DataList.RowHeaderCell>__GATEWAY_OPENAI_MODEL_BASE__</DataList.RowHeaderCell>
+    <DataList.RowHeaderCell>Model A</DataList.RowHeaderCell>
     <DataList.Cell>1,200</DataList.Cell>
     <DataList.Cell>800</DataList.Cell>
   </DataList.RowStatic>

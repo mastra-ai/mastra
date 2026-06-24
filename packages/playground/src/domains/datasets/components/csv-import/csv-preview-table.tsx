@@ -38,7 +38,7 @@ export function CSVPreviewTable({ headers, data, maxRows = 5 }: CSVPreviewTableP
         >
           <DataList.Top>
             {headers.map((header: string, index: number) => (
-              <DataList.TopCell key={header} sticky={index === 0 ? 'start' : undefined}>
+              <DataList.TopCell key={`${index}-${header}`} sticky={index === 0 ? 'start' : undefined}>
                 {header}
               </DataList.TopCell>
             ))}
@@ -51,14 +51,18 @@ export function CSVPreviewTable({ headers, data, maxRows = 5 }: CSVPreviewTableP
 
                   if (index === 0) {
                     return (
-                      <DataList.RowHeaderCell key={header} height="compact" className="max-w-[14rem] text-ui-sm">
+                      <DataList.RowHeaderCell
+                        key={`${index}-${header}`}
+                        height="compact"
+                        className="max-w-[14rem] text-ui-sm"
+                      >
                         {value}
                       </DataList.RowHeaderCell>
                     );
                   }
 
                   return (
-                    <DataList.Cell key={header} height="compact" className="max-w-[12rem] text-ui-sm">
+                    <DataList.Cell key={`${index}-${header}`} height="compact" className="max-w-[12rem] text-ui-sm">
                       <span className="block truncate">{value}</span>
                     </DataList.Cell>
                   );
