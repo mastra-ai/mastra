@@ -201,6 +201,16 @@ interface SlackProviderConfigBase extends SlackAdapterChannelConfigBase {
   baseUrl?: string;
 
   /**
+   * Override the Slack Web API base URL used for OAuth token exchange and app
+   * manifest calls. Defaults to `https://slack.com/api`.
+   *
+   * Primarily intended for tests that point the provider at a local Slack API
+   * emulator. Forwarded to the underlying `SlackAdapter` so message posting
+   * targets the same endpoint.
+   */
+  apiUrl?: string;
+
+  /**
    * Custom storage for installations.
    * Defaults to using Mastra's ChannelsStorage from the global storage.
    * Throws if no persistent storage is available.
