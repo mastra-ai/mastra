@@ -46,6 +46,17 @@ function formatPreviewLabel(label: unknown, fallback: string): string {
   return typeof label === 'string' && label.length > 0 ? label : fallback;
 }
 
+function formatToolResultPreviewValue(value: unknown): string {
+  if (typeof value === 'string') return value;
+
+  if (value && typeof value === 'object' && 'type' in value && (value as { type?: unknown }).type === 'text') {
+    const textValue = (value as { value?: unknown }).value;
+    if (typeof textValue === 'string') return textValue;
+  }
+
+  return JSON.stringify(value);
+}
+
 function summarizePart(part: unknown): string {
   if (typeof part === 'string') {
     return part;
@@ -98,14 +109,15 @@ function summarizePart(part: unknown): string {
       case 'tool-call':
         return `[tool: ${formatPreviewLabel((part as { toolName?: unknown }).toolName, 'unknown')}]`;
       case 'tool-result': {
-        const toolResult = part as { providerMetadata?: Record<string, unknown> };
-        const mastraMeta = toolResult.providerMetadata?.mastra as Record<string, unknown> | undefined;
+        const toolResult = part as {
+          providerMetadata?: Record<string, unknown>;
+          providerOptions?: Record<string, unknown>;
+        };
+        const mastraMeta = (toolResult.providerMetadata?.mastra ?? toolResult.providerOptions?.mastra) as
+          | Record<string, unknown>
+          | undefined;
         if (mastraMeta?.modelOutput !== undefined) {
-          const text =
-            typeof mastraMeta.modelOutput === 'string'
-              ? mastraMeta.modelOutput
-              : JSON.stringify(mastraMeta.modelOutput);
-          return `[tool-result: ${text}]`;
+          return `[tool-result: ${formatToolResultPreviewValue(mastraMeta.modelOutput)}]`;
         }
         return '[tool-result]';
       }

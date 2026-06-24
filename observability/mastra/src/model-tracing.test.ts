@@ -1404,6 +1404,52 @@ describe('ModelSpanTracker', () => {
   });
 
   describe('tool-result preview in step input', () => {
+    it('should show transformed tool-result providerOptions from final inputMessages', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1', request: {} } },
+        {
+          type: 'step-start',
+          payload: {
+            messageId: 'msg-1',
+            request: {},
+            inputMessages: [
+              {
+                role: 'tool',
+                content: [
+                  {
+                    type: 'tool-result',
+                    toolCallId: 'call_123',
+                    toolName: 'readFile',
+                    output: { type: 'text', value: 'Summarized file content' },
+                    providerOptions: {
+                      mastra: { modelOutput: { type: 'text', value: 'Summarized file content' } },
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      expect(stepSpans[0]!.input).toEqual([{ role: 'tool', content: '[tool-result: Summarized file content]' }]);
+    });
+
     it('should show modelOutput content when available', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
@@ -1486,6 +1532,92 @@ describe('ModelSpanTracker', () => {
           },
         },
         { type: 'text-delta', payload: { text: 'Done.' } },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      expect(stepSpans[0]!.input).toEqual([{ role: 'tool', content: '[tool-result]' }]);
+    });
+
+    it('should not expose raw result from final inputMessages when transformed output is absent', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1', request: {} } },
+        {
+          type: 'step-start',
+          payload: {
+            messageId: 'msg-1',
+            request: {},
+            inputMessages: [
+              {
+                role: 'tool',
+                content: [
+                  {
+                    type: 'tool-result',
+                    toolCallId: 'call_789',
+                    toolName: 'readFile',
+                    result: { rawBase64: 'sensitive-data-here' },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
+      ];
+
+      const stream = createMockStream(chunks);
+      const wrappedStream = tracker.wrapStream(stream);
+      await consumeStream(wrappedStream);
+      modelSpan.end();
+
+      const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpans).toHaveLength(1);
+      expect(stepSpans[0]!.input).toEqual([{ role: 'tool', content: '[tool-result]' }]);
+    });
+
+    it('should not expose unmarked output from final inputMessages', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1', request: {} } },
+        {
+          type: 'step-start',
+          payload: {
+            messageId: 'msg-1',
+            request: {},
+            inputMessages: [
+              {
+                role: 'tool',
+                content: [
+                  {
+                    type: 'tool-result',
+                    toolCallId: 'call_789',
+                    toolName: 'readFile',
+                    output: { type: 'json', value: { rawBase64: 'sensitive-data-here' } },
+                  },
+                ],
+              },
+            ],
+          },
+        },
         { type: 'step-finish', payload: { output: {}, stepResult: { reason: 'stop' }, metadata: {} } },
       ];
 
