@@ -1,18 +1,18 @@
 import {
-  Badge,
   Button,
-  Checkbox,
-  Chip,
   Collapsible,
   CollapsibleTrigger,
   CollapsibleContent,
-  CopyButton,
   ScrollArea,
-  Spinner,
   Txt,
   Icon,
   cn,
 } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { Chip } from '@mastra/playground-ui/components/Chip';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import {

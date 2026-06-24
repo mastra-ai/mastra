@@ -256,7 +256,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
       // Map final state to output format, run output processors, persist memory, emit finish
       .map(
         async params => {
-          const { inputData, mastra, requestContext } = params;
+          const { inputData, mastra, requestContext, tracingContext } = params;
           const state = inputData as IterationState;
           const initData = params.getInitData() as DurableAgenticWorkflowInput;
 
@@ -282,7 +282,14 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
               });
               const outputMessageList = new MessageList();
               outputMessageList.deserialize(state.messageListState);
-              await runner.runOutputProcessors(outputMessageList, {} as any, requestContext ?? new RequestContext(), 0);
+              // Forward the step's tracingContext so processor_run spans parent
+              // to the AGENT_RUN ancestor via ProcessorRunner's findParent walk.
+              await runner.runOutputProcessors(
+                outputMessageList,
+                createObservabilityContext(tracingContext),
+                requestContext ?? new RequestContext(),
+                0,
+              );
             } catch (error) {
               logger?.warn?.(`[DurableAgent] Error running output processors: ${error}`);
             }

@@ -1,8 +1,8 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
 /**
  * Regression class: request-level toolsets.
@@ -13,7 +13,7 @@ import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
  * to tool resolution don't accidentally drop request-level tools or break the
  * override semantics when a toolset tool has the same name as an agent tool.
  */
-describe('AIMock loop scenario: toolsets override', () => {
+describeForAllEngines('AIMock loop scenario: toolsets override', engine => {
   const getMock = useLoopScenarioAimock();
 
   it('makes toolset tools available to the model alongside agent-level tools', async () => {
@@ -34,6 +34,7 @@ describe('AIMock loop scenario: toolsets override', () => {
     });
 
     const { requests, output } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Call the toolset tool.',
       tools: { default_tool: defaultTool },
@@ -90,6 +91,7 @@ describe('AIMock loop scenario: toolsets override', () => {
     });
 
     const { output, requests } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Call the shared tool.',
       tools: { shared_tool: agentVersion },

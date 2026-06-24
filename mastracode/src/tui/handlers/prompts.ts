@@ -282,26 +282,6 @@ export async function handlePlanApproval(
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
         await approvePlan(ctx, toolCallId, title, plan);
-
-        // Fire a structured system-reminder signal to wake the freshly
-        // switched-to default-mode agent. The signal echoes back as a
-        // `system_reminder` content part and renders through the same
-        // path as any other reminder — no legacy XML regex, no companion
-        // `addUserMessage` call, so the reminder shows up exactly once.
-        //
-        // `approvePlan` (via `respondToToolSuspension` → `switchMode`) waits
-        // for the aborted plan-mode run to fully idle before returning, so
-        // this signal always starts a fresh build-mode run instead of
-        // queuing onto the dying one.
-        try {
-          await state.session.sendSignal({
-            type: 'system-reminder',
-            contents: 'The user has approved the plan, begin executing.',
-          }).accepted;
-        } catch (err) {
-          ctx.showError(`Failed to start build agent: ${err instanceof Error ? err.message : String(err)}`);
-        }
-
         resolve();
       },
       onGoal: async () => {

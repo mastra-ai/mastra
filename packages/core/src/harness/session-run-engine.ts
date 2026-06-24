@@ -314,7 +314,7 @@ export class SessionRunEngine {
           break;
         }
 
-        const approvalPromise = this.#session.approval.arm({ toolName });
+        const approvalPromise = this.#session.approval.arm({ toolName, toolCallId });
         this.#session.emit({ type: 'tool_approval_required', toolCallId, toolName, args: toolArgs });
 
         const approval = await approvalPromise;
@@ -329,6 +329,7 @@ export class SessionRunEngine {
           await this.#session.declineToolCall({
             toolCallId,
             requestContext: approval.requestContext ?? requestContext,
+            declineContext: approval.declineContext,
           });
         }
         break;
@@ -776,18 +777,12 @@ export class SessionRunEngine {
   async processSubscribedThreadStream(subscription: AgentThreadSubscription<any>): Promise<void> {
     const requestContext = await this.#machinery.buildRequestContext();
     let currentRun: StreamState | undefined;
-    let lastFinishedRunId: string | null = null;
 
     try {
       for await (const chunk of subscription.stream) {
         if (!this.#session.stream.isCurrent({ subscription })) {
           subscription.unsubscribe();
           break;
-        }
-
-        const chunkRunId = 'runId' in chunk ? chunk.runId : null;
-        if (lastFinishedRunId && chunkRunId === lastFinishedRunId) {
-          continue;
         }
 
         if (!currentRun) {
@@ -812,7 +807,6 @@ export class SessionRunEngine {
             chunk.type === 'abort' ||
             chunk.type === 'tool-call-suspended'
           ) {
-            const finishedRunId: string | null = chunkRunId ?? this.#session.run.getRunId();
             const suspended =
               chunk.type === 'tool-call-suspended' ||
               (streamResult ?? this.finishStreamState(currentRun)).suspended ||
@@ -837,8 +831,17 @@ export class SessionRunEngine {
               error: isError,
               aborted,
             });
-            lastFinishedRunId = finishedRunId;
             currentRun = undefined;
+            if (aborted) {
+              // The abort chunk terminates this consumer loop, so the live
+              // subscription is no longer being drained. Detach it so the next
+              // signal (e.g. a follow-up message sent right after Ctrl+C)
+              // re-subscribes and starts a fresh consumer — otherwise the new
+              // run's chunks would never be processed and the follow-up would
+              // get no response.
+              this.#session.stream.detach();
+              break;
+            }
           }
         } catch (error) {
           await this.handleSubscribedStreamError(error);
