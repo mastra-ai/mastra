@@ -1,17 +1,19 @@
 // @vitest-environment jsdom
 import { act, renderHook } from '@testing-library/react';
-import type { ChangeEvent } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { useEnvironmentVariablesEditor } from './use-environment-variables-editor';
-import type { EnvironmentVariableRow } from './use-environment-variables-editor';
+import type {
+  EnvironmentVariableRow,
+  EnvironmentVariablesEditorFileUploadEvent,
+} from './use-environment-variables-editor';
 
-function fileUploadEvent(file: File) {
+function fileUploadEvent(file: File): EnvironmentVariablesEditorFileUploadEvent {
   return {
     target: {
       files: [file],
     },
-  } as unknown as ChangeEvent<HTMLInputElement>;
+  };
 }
 
 describe('useEnvironmentVariablesEditor', () => {

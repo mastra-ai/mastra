@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import type { ChangeEvent, RefObject } from 'react';
+import type { RefObject } from 'react';
 
 import {
   collectEnvironmentVariables,
@@ -23,6 +23,12 @@ export interface UseEnvironmentVariablesEditorOptions<TRow extends EnvironmentVa
   maxUploadSize?: number;
 }
 
+export interface EnvironmentVariablesEditorFileUploadEvent {
+  target: {
+    files?: FileList | readonly File[] | null;
+  };
+}
+
 export interface EnvironmentVariablesEditorController<TRow extends EnvironmentVariableRow = EnvironmentVariableRow> {
   rows: readonly TRow[];
   uploadError: string | null;
@@ -38,7 +44,7 @@ export interface EnvironmentVariablesEditorController<TRow extends EnvironmentVa
   removeRow: (index: number) => TRow[];
   getRowsForSubmit: () => TRow[];
   getEnvironmentVariablesForSubmit: () => Record<string, string>;
-  handleFileUpload: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
+  handleFileUpload: (event: EnvironmentVariablesEditorFileUploadEvent) => Promise<void>;
   handlePaste: (index: number, text: string) => boolean;
   clearUploadError: () => void;
   getRowId: (index: number) => string;
@@ -205,7 +211,7 @@ export function useEnvironmentVariablesEditor<TRow extends EnvironmentVariableRo
     return true;
   }
 
-  async function handleFileUpload(event: ChangeEvent<HTMLInputElement>) {
+  async function handleFileUpload(event: EnvironmentVariablesEditorFileUploadEvent) {
     setUploadError(null);
     const file = event.target.files?.[0];
     if (!file) return;
