@@ -46,17 +46,11 @@ import { faithfulnessScorer } from './scorers'
 const result = await runEvals({
   target: myAgent,
   data: [{ input: 'What is the weather in Brooklyn?' }],
-  gates: [
-    checks.calledTool('get_weather'),
-    checks.noToolErrors(),
-  ],
-  scorers: [
-    { scorer: faithfulnessScorer, threshold: 0.7 },
-    checks.includes('Brooklyn'),
-  ],
+  gates: [checks.calledTool('get_weather'), checks.noToolErrors()],
+  scorers: [{ scorer: faithfulnessScorer, threshold: 0.7 }, checks.includes('Brooklyn')],
 })
 
-result.verdict    // 'passed' | 'scored' | 'failed'
+result.verdict // 'passed' | 'scored' | 'failed'
 result.gateResults // [{ id, passed, score }]
 result.thresholdResults // [{ id, passed, averageScore, threshold }]
 ```
@@ -268,7 +262,8 @@ A scorer entry in the `scorers` array can be either a bare scorer or a scorer wi
   {
     name: 'threshold',
     type: 'number',
-    description: 'Score at or above this value passes. Must be between 0 and 1. If the average score across data items is below this threshold, the verdict includes it as a miss.',
+    description:
+      'Score at or above this value passes. Must be between 0 and 1. If the average score across data items is below this threshold, the verdict includes it as a miss.',
   },
 ]}
 />
@@ -286,10 +281,7 @@ import { checks } from '@mastra/evals/checks'
 const result = await runEvals({
   target: weatherAgent,
   data: [{ input: 'What is the weather in Brooklyn?' }],
-  gates: [
-    checks.calledTool('get_weather'),
-    checks.noToolErrors(),
-  ],
+  gates: [checks.calledTool('get_weather'), checks.noToolErrors()],
   scorers: [
     { scorer: faithfulnessScorer, threshold: 0.7 },
     { scorer: checks.similarity('Sunny, 72F'), threshold: 0.6 },
@@ -298,9 +290,15 @@ const result = await runEvals({
 })
 
 if (result.verdict === 'failed') {
-  console.log('Gate failures:', result.gateResults?.filter(g => !g.passed))
+  console.log(
+    'Gate failures:',
+    result.gateResults?.filter(g => !g.passed),
+  )
 } else if (result.verdict === 'scored') {
-  console.log('Threshold misses:', result.thresholdResults?.filter(t => !t.passed))
+  console.log(
+    'Threshold misses:',
+    result.thresholdResults?.filter(t => !t.passed),
+  )
 }
 ```
 

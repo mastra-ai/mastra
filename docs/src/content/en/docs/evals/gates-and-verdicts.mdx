@@ -29,10 +29,7 @@ const result = await runEvals({
   target: weatherAgent,
 
   // Gates: must all score 1.0 or the run fails
-  gates: [
-    checks.calledTool('get_weather'),
-    checks.noToolErrors(),
-  ],
+  gates: [checks.calledTool('get_weather'), checks.noToolErrors()],
 
   // Scorers: tracked with optional thresholds
   scorers: [
@@ -120,12 +117,18 @@ const result = await runEvals({
 })
 
 if (result.verdict === 'failed') {
-  console.error('Gate failures:', result.gateResults?.filter(g => !g.passed))
+  console.error(
+    'Gate failures:',
+    result.gateResults?.filter(g => !g.passed),
+  )
   process.exit(1)
 }
 
 if (result.verdict === 'scored') {
-  console.warn('Threshold misses:', result.thresholdResults?.filter(t => !t.passed))
+  console.warn(
+    'Threshold misses:',
+    result.thresholdResults?.filter(t => !t.passed),
+  )
 }
 ```
 
