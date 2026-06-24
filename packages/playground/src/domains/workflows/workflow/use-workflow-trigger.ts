@@ -120,7 +120,8 @@ export function useWaitingStepKey(): string | undefined {
   );
 
   return useMemo(
-    () => (isPaused ? selectNextStepKey({ stepNodesInOrder, isStepSuccess: isStepResolved, isStepBypassed }) : undefined),
+    () =>
+      isPaused ? selectNextStepKey({ stepNodesInOrder, isStepSuccess: isStepResolved, isStepBypassed }) : undefined,
     [isPaused, stepNodesInOrder, isStepResolved, isStepBypassed],
   );
 }
