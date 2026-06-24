@@ -15,6 +15,7 @@ import { IdleCounterComponent } from './components/idle-counter.js';
 import { TaskProgressComponent } from './components/task-progress.js';
 import { showError, showInfo } from './display.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
+import { askModalQuestion } from './modal-question.js';
 import type { TUIState } from './state.js';
 import { updateStatusLine } from './status-line.js';
 import { theme } from './theme.js';
@@ -576,28 +577,61 @@ export function updateTerminalTitle(state: TUIState): void {
 
 export async function promptForThreadSelection(state: TUIState): Promise<void> {
   const currentPath = state.projectInfo.rootPath;
-
-  // If the harness already bound a thread tagged with the current projectPath
-  // (e.g. via cross-resource recovery), respect that selection instead of
-  // re-querying — the harness considers threads across all resourceIds, while
-  // session.thread.list() is scoped to only the current resourceId.
-  const currentThreadId = state.session.thread.getId();
-  if (currentThreadId) {
-    const projectPath = await state.session.thread.getSetting({ key: 'projectPath' });
-    if (projectPath === currentPath) {
-      return;
-    }
-  }
+  const currentResourceId = state.session.identity.getResourceId();
 
   const allThreads = await state.session.thread.list();
+  const activeThreadId = state.session.thread.getId();
 
   // Filter to threads explicitly tagged for the current working directory.
-  const threads = allThreads.filter(t => {
+  const taggedThreads = allThreads.filter(t => {
     const threadPath = t.metadata?.projectPath as string | undefined;
     return !!threadPath && threadPath === currentPath;
   });
+  const threads: typeof taggedThreads = [];
+  for (const thread of taggedThreads) {
+    const isActiveBlankThread = thread.id === activeThreadId && !thread.title;
+    if (isActiveBlankThread) {
+      const messages = await state.session.thread.listMessages({ threadId: thread.id, limit: 1 });
+      if (messages.length === 0) continue;
+    }
+    threads.push(thread);
+  }
 
   if (threads.length === 0) {
+    const driftCandidates = (await state.session.thread.list({ allResources: true })).filter(t => {
+      const threadPath = t.metadata?.projectPath as string | undefined;
+      return !!threadPath && threadPath === currentPath && t.resourceId !== currentResourceId;
+    });
+    const [thread] = [...driftCandidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+
+    if (thread) {
+      const answer = await askModalQuestion(state.ui, {
+        question: [
+          'This directory is tagged on a different resource.',
+          '',
+          `Project: ${currentPath}`,
+          `Thread: ${thread.title || thread.id}`,
+          `Old resource: ${thread.resourceId}`,
+          `Current resource: ${currentResourceId}`,
+          '',
+          'Migrate this thread to the current resource and resume it?',
+        ].join('\n'),
+        options: [
+          { label: 'Migrate and resume' },
+          { label: 'Start fresh' },
+        ],
+        selectedOptionLabel: 'Migrate and resume',
+        allowCustomResponse: false,
+        overlay: { widthPercent: 80, maxHeight: '70%' },
+      });
+
+      if (answer === 'Migrate and resume') {
+        await state.session.thread.migrateToCurrentResource({ threadId: thread.id });
+        await state.session.thread.switch({ threadId: thread.id });
+        return;
+      }
+    }
+
     // No existing threads for this path - defer creation until first message
     state.pendingNewThread = true;
     return;
@@ -606,28 +640,7 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
   // Sort by most recent
   const sortedThreads = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 
-  // If there's only one thread, auto-resume it directly
-  if (sortedThreads.length === 1) {
-    const thread = sortedThreads[0]!;
-    try {
-      await state.session.thread.switch({ threadId: thread.id });
-      if (!thread.metadata?.projectPath) {
-        await state.session.thread.setSetting({ key: 'projectPath', value: currentPath });
-      }
-      return;
-    } catch (error) {
-      if (error instanceof ThreadLockError) {
-        // Thread is locked by another process — silently start a new thread.
-        // The lock prompt only appears when the user intentionally picks a
-        // locked thread from the /threads selector.
-        state.pendingNewThread = true;
-        return;
-      }
-      throw error;
-    }
-  }
-
-  // Multiple threads — try each in order until one is unlocked
+  // Try each in order until one is unlocked
   for (const thread of sortedThreads) {
     try {
       await state.session.thread.switch({ threadId: thread.id });

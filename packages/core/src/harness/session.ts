@@ -148,6 +148,8 @@ export interface ThreadDataStore {
   deleteThread(input: { threadId: string }): Promise<void>;
   /** Clone a thread (and its messages) via the host's memory, returning the new thread. */
   cloneThread(input: { sourceThreadId: string; resourceId: string; title?: string }): Promise<HarnessThread>;
+  /** Move every message for a thread to a resource, in bounded batches. */
+  migrateThreadMessagesResourceId(input: { threadId: string; resourceId: string; pageSize?: number }): Promise<void>;
   /** Acquire the host thread lock for a thread id. No-op when no lock is configured. */
   acquireLock(threadId: string): Promise<void>;
   /** Release the host thread lock for a thread id. No-op when no lock is configured. */
@@ -324,6 +326,18 @@ export class SessionThread {
   async getById({ threadId }: { threadId: string }): Promise<HarnessThread | null> {
     if (!this.#store) return null;
     return this.#store.getById({ threadId });
+  }
+
+  /** Move a stored thread and its existing messages to this session's resource. */
+  async migrateToCurrentResource({ threadId }: { threadId: string }): Promise<void> {
+    if (!this.#store?.hasStorage()) return;
+    const thread = await this.#store.getById({ threadId });
+    if (!thread) {
+      throw new Error(`Thread not found: ${threadId}`);
+    }
+    const resourceId = this.#getResourceId();
+    await this.#store.saveThread({ thread: { ...thread, resourceId, updatedAt: new Date() } });
+    await this.#store.migrateThreadMessagesResourceId({ threadId, resourceId });
   }
 
   /**

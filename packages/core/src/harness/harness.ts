@@ -602,6 +602,8 @@ export class Harness<TState = {}> {
       deleteThread: ({ threadId }) => this.deleteThreadRow(threadId),
       cloneThread: ({ sourceThreadId, resourceId, title }) =>
         this.cloneThreadRow(session, { sourceThreadId, resourceId, title }),
+      migrateThreadMessagesResourceId: ({ threadId, resourceId, pageSize }) =>
+        this.migrateThreadMessagesResourceId({ threadId, resourceId, pageSize }),
       acquireLock: threadId => this.config.threadLock?.acquire(threadId) ?? Promise.resolve(),
       releaseLock: threadId => this.config.threadLock?.release(threadId) ?? Promise.resolve(),
       getModeIds: () => this.config.modes.map(m => m.id),
@@ -657,6 +659,33 @@ export class Harness<TState = {}> {
       updatedAt: result.thread.updatedAt,
       metadata: result.thread.metadata,
     };
+  }
+
+  private async migrateThreadMessagesResourceId({
+    threadId,
+    resourceId,
+    pageSize = 100,
+  }: {
+    threadId: string;
+    resourceId: string;
+    pageSize?: number;
+  }): Promise<void> {
+    if (!this.#resolveStorage()) return;
+    const memoryStorage = await this.getMemoryStorage();
+    let page = 0;
+
+    while (true) {
+      const result = await memoryStorage.listMessages({
+        threadId,
+        page,
+        perPage: pageSize,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      });
+      if (result.messages.length === 0) return;
+      await memoryStorage.saveMessages({ messages: result.messages.map(message => ({ ...message, resourceId })) });
+      if (result.messages.length < pageSize) return;
+      page += 1;
+    }
   }
 
   private async readThreadMetadataValue({ threadId, key }: { threadId: string; key: string }): Promise<unknown> {

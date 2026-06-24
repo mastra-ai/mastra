@@ -82,6 +82,8 @@ import { reportIssueCommandScenario } from './report-issue-command.js';
 import { requestAccessModalScenario } from './request-access-modal.js';
 import { resourceidDriftAutoResumeScenario } from './resourceid-drift-auto-resume.js';
 import { resourceidDriftCrossResourceMergeScenario } from './resourceid-drift-cross-resource-merge.js';
+import { resourceidDriftPromptAcceptScenario } from './resourceid-drift-prompt-accept.js';
+import { resourceidDriftPromptDeclineScenario } from './resourceid-drift-prompt-decline.js';
 import { settingsApiKeysNavigationScenario } from './settings-api-keys-navigation.js';
 import { settingsStartupModelRestoreScenario } from './settings-startup-model-restore.js';
 import { setupCompletionPersistenceScenario } from './setup-completion-persistence.js';
@@ -255,6 +257,8 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'workspace-tool-output-rendering': workspaceToolOutputRenderingScenario,
   'resourceid-drift-auto-resume': resourceidDriftAutoResumeScenario,
   'resourceid-drift-cross-resource-merge': resourceidDriftCrossResourceMergeScenario,
+  'resourceid-drift-prompt-accept': resourceidDriftPromptAcceptScenario,
+  'resourceid-drift-prompt-decline': resourceidDriftPromptDeclineScenario,
   'worktree-cross-thread-resume': worktreeCrossThreadResumeScenario,
   'worktree-thread-scoping': worktreeThreadScopingScenario,
 };

@@ -130,7 +130,9 @@ export type ScenarioName =
   | 'worktree-cross-thread-resume'
   | 'worktree-thread-scoping'
   | 'resourceid-drift-auto-resume'
-  | 'resourceid-drift-cross-resource-merge';
+  | 'resourceid-drift-cross-resource-merge'
+  | 'resourceid-drift-prompt-accept'
+  | 'resourceid-drift-prompt-decline';
 
 export type McE2eTerminal = {
   getByText: (text: string | RegExp, options?: { full?: boolean; strict?: boolean }) => any;
