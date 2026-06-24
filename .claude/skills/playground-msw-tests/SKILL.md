@@ -45,6 +45,9 @@ contract.
 
 - ❌ `vi.mock('@/domains/.../hooks/use-agents')` — mocking our own hooks hides
   cache, gating and transport bugs.
+- ❌ Implementation-mirror tests — do not duplicate source class strings,
+  branch logic, generated shapes, or calculations without asserting a real
+  behavior or regression.
 - ❌ Inline TypeScript types in tests (`type AgentLite = { id: string }`) —
   these drift silently from the real SDK.
 - ❌ `as any` / `as unknown as ListAgentsResponse` on fixture data, MSW
