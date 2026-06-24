@@ -232,12 +232,14 @@ jobs:
           fi
 
           # Direct path fallback for changes not covered by the affected-test graph
-          # (store packages/configs, core storage+vector interfaces, CI workflow edits).
+          # (store packages/configs, CI workflow edits). Core storage/vector source
+          # changes are already caught by the affected-tests graph via cross-package
+          # alias resolution, so they are not duplicated here.
           # Ignore markdown-only changes so docs/changelog-only edits don't trigger.
           DIRECT=$(git diff --name-only \
             "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" \
             | grep -vE '\.md$' \
-            | grep -E '^(stores/|packages/core/src/storage/|packages/core/src/vector/|\.github/workflows/test-combined-stores\.yml|\.github/workflows/prebuild\.yml)' \
+            | grep -E '^(stores/|\.github/workflows/test-combined-stores\.yml|\.github/workflows/prebuild\.yml)' \
             || true)
 
           if [ -n "$DIRECT" ]; then
