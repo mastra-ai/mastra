@@ -239,6 +239,7 @@ const sidebars = {
         { type: 'doc', id: 'evals/mastra-scorer', label: 'MastraScorer' },
         { type: 'doc', id: 'evals/run-evals', label: 'runEvals()' },
         { type: 'doc', id: 'evals/scorer-utils', label: 'Scorer Utils' },
+        { type: 'doc', id: 'evals/checks', label: 'Quick Checks' },
         {
           type: 'category',
           label: 'Built-in scorers',

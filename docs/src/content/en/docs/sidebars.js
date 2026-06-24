@@ -797,6 +797,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'evals/quick-checks',
+          label: 'Quick Checks',
+        },
+        {
+          type: 'doc',
           id: 'evals/custom-scorers',
           label: 'Custom Scorers',
         },
