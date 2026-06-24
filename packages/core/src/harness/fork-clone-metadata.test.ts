@@ -76,7 +76,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     // Invoke the private buildToolsets to trigger createSubagentTool with the
     // wired-in cloneThreadForFork callback.
@@ -139,7 +139,7 @@ describe('Harness fork clone metadata wiring', () => {
       ],
     });
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const toolsets = (await (harness as any).buildToolsets(session, new RequestContext())) as {
       harnessBuiltIn?: Record<string, unknown>;
@@ -183,7 +183,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     await (harness as any).buildToolsets(session, new RequestContext());
 
@@ -233,7 +233,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     // All modes should return the same agent instance — no forking
     const buildAgent = harness.getCurrentAgent(session);
@@ -281,7 +281,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     // Switch modes multiple times
     harness.getCurrentAgent(session);
@@ -328,7 +328,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const resolve = (harness as any).resolveCurrentModeInstructions;
 
@@ -374,7 +374,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const buildToolsets = (harness as any).buildToolsets;
 
@@ -434,7 +434,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     // Signal provider should always point at baseAgent, regardless of mode
     expect(signalProvider.getConnectedAgent()).toBe(baseAgent);
@@ -486,7 +486,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     // Deprecated mode.agent path — each mode gets its own agent
     const currentBuild = harness.getCurrentAgent(session);
@@ -546,7 +546,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
-    await harness.createSession();
+    await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     // After init, signal provider's connected agent (the base agent) should have memory
     const connectedAgent = signalProvider.getConnectedAgent()!;

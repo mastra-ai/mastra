@@ -26,8 +26,8 @@ async function createSession(opts?: {
   });
   await harness.init();
   const session = await harness.createSession({
-    ...(opts?.sessionId ? { id: opts.sessionId } : {}),
-    ...(opts?.ownerId ? { ownerId: opts.ownerId } : {}),
+    id: opts?.sessionId ?? 'test-session-id',
+    ownerId: opts?.ownerId ?? 'test-owner',
     ...(opts?.resourceId ? { resourceId: opts.resourceId } : {}),
   });
   return { harness, session };
@@ -54,20 +54,14 @@ describe('Harness resource ID', () => {
   });
 
   describe('stable session identity (id / ownerId)', () => {
-    it('defaults id to the effective resourceId when no config is provided', async () => {
-      const { session } = await createSession({ resourceId: 'custom-resource' });
-      expect(session.identity.getId()).toBe('custom-resource');
-    });
-
-    it('defaults id and ownerId to the harness id when no resourceId is configured', async () => {
-      const { session } = await createSession();
-      expect(session.identity.getId()).toBe('test-harness');
-      expect(session.identity.getOwnerId()).toBe('test-harness');
-    });
-
-    it('defaults ownerId to the harness id even when a resourceId is configured', async () => {
-      const { session } = await createSession({ resourceId: 'custom-resource' });
-      expect(session.identity.getOwnerId()).toBe('test-harness');
+    it('uses the explicitly provided id and ownerId', async () => {
+      const { session } = await createSession({
+        resourceId: 'custom-resource',
+        sessionId: 'explicit-id',
+        ownerId: 'explicit-owner',
+      });
+      expect(session.identity.getId()).toBe('explicit-id');
+      expect(session.identity.getOwnerId()).toBe('explicit-owner');
     });
 
     it('flows configured sessionId and ownerId into the session identity', async () => {

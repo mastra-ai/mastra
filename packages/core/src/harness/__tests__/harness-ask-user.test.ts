@@ -87,7 +87,7 @@ async function buildHarness(id: string, input: string) {
   });
 
   await harness.init();
-  const session = await harness.createSession();
+  const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
   await session.thread.create();
   return { harness, session, registeredAgent };
 }
@@ -321,7 +321,7 @@ describe('Harness: ask_user native suspension', () => {
       initialState: { yolo: true } as any,
     });
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     await session.thread.create();
 
     const events: any[] = [];

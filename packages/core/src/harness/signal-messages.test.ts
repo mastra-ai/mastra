@@ -51,7 +51,7 @@ async function createHarness(
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
   });
   await harness.init();
-  const session = await harness.createSession();
+  const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
   return { harness, session };
 }
 
@@ -736,7 +736,7 @@ describe('Harness signal messages', () => {
       initialState: { yolo: true } as any,
     });
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const events: HarnessEvent[] = [];
     session.subscribe(event => {
       events.push(event);

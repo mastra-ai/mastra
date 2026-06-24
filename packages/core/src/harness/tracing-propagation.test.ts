@@ -58,7 +58,7 @@ describe('Harness tracing propagation', () => {
     });
 
     await harness.init();
-    session = await harness.createSession();
+    session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
   });
 
   it('should forward tracingContext to agent.stream() when provided', async () => {
