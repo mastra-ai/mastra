@@ -890,6 +890,32 @@ export class MessageList {
     return messages.map(message => this.transformMessageForTranscript(message));
   }
 
+  /**
+   * Re-marks a set of messages as unsaved so they will be included in the next flush.
+   * Used by SaveQueueManager to restore messages when a storage write fails, preventing
+   * permanent data loss from transient backend errors.
+   *
+   * Each message is matched against the internal messages list by ID and re-added to the
+   * appropriate unsaved set (user or response) based on how it was originally tracked.
+   * Messages not found in the internal list (e.g. already evicted) are silently skipped.
+   */
+  public restoreUnsavedMessages(messages: MastraDBMessage[]): void {
+    const byId = new Map(this.messages.map(m => [m.id, m]));
+    for (const msg of messages) {
+      const original = byId.get(msg.id);
+      if (!original) continue;
+      // Re-add to whichever unsaved set is appropriate.  At the time of restore
+      // both sets are already clear (drainUnsavedMessages cleared them), so we
+      // use the persisted sets — which are never cleared — to infer the original
+      // source classification.
+      if (this.stateManager.getUserMessagesPersisted().has(original)) {
+        this.newUserMessages.add(original);
+      } else if (this.stateManager.getResponseMessagesPersisted().has(original)) {
+        this.newResponseMessages.add(original);
+      }
+    }
+  }
+
   private transformToolStateDataForTranscript(data: unknown, phase: 'approval' | 'suspend'): unknown {
     if (!data || typeof data !== 'object') {
       return data;
