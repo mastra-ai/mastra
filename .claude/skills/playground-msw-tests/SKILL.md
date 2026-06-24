@@ -62,9 +62,12 @@ contract.
 - ✅ Type every fixture with a response type re-exported from `@mastra/client-js`
   (e.g. `ListStoredAgentsResponse`, `GetAgentResponse`, `BuilderSettingsResponse`,
   `GetToolResponse`, `GetWorkflowResponse`, `ListStoredSkillsResponse`).
-- ✅ Use typed builders or named helpers for test data and test events. If jsdom
-  lacks a concrete browser primitive, keep the adapter small and typed to the
-  public hook/component boundary so call sites stay cast-free.
+- ✅ Use typed builders or named helpers for test data and test events, typed
+  from real imports, production input types, or inferred hook/component
+  signatures. Keep the real hook/component import in the test.
+- ✅ If jsdom lacks a concrete browser primitive, keep the adapter small and
+  typed to the DOM or public hook/component boundary so call sites stay
+  cast-free.
 - ✅ Register MSW handlers per test with `server.use(...)` so handlers reset
   between tests via the global `afterEach`.
 - ✅ Render through `MastraReactProvider` + `QueryClientProvider` + `MemoryRouter`
@@ -245,8 +248,9 @@ through their real implementations against MSW.
 
 Before considering a test done:
 
-- [ ] Fixtures, MSW payloads, request payloads, hook inputs, and event helpers
-      are typed at the real boundary and have no `as any` / `as unknown as`
+- [ ] All fixtures import a response type from `@mastra/client-js`; MSW payloads,
+      request payloads, hook inputs, and event helpers use real imported,
+      production, or inferred boundary types; no `as any` / `as unknown as`
       casts.
 - [ ] No `vi.mock` of `@/domains/.../hooks/*`, `@/domains/.../services/*`,
       `@mastra/client-js`, or `@mastra/react`.
