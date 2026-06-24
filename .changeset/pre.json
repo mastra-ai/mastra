@@ -160,5 +160,10 @@
     "@mastra/s3": "0.6.0",
     "@mastra/vercel": "1.1.1"
   },
-  "changesets": []
+  "changesets": [
+    "fancy-planets-train",
+    "gentle-falcons-push",
+    "green-birds-knock",
+    "serialize-evented-wflows-followup"
+  ]
 }
