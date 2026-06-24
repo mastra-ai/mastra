@@ -22,6 +22,9 @@ export interface RedisServerCacheOptions {
     pattern: string,
     count: number,
   ) => Promise<[string | number, string[]]>;
+  getListLength?: (client: RedisClient, key: string) => Promise<number>;
+  pushToList?: (client: RedisClient, key: string, value: unknown) => Promise<number>;
+  getListRange?: (client: RedisClient, key: string, start: number, stop: number) => Promise<unknown[]>;
 }
 
 const defaultSetWithExpiry = (client: RedisClient, key: string, value: unknown, seconds: number): Promise<unknown> => {
@@ -37,6 +40,23 @@ const defaultScanKeys = (
   return client.scan(cursor, 'MATCH', pattern, 'COUNT', count);
 };
 
+const defaultGetListLength = (client: RedisClient, key: string): Promise<number> => {
+  return client.llen(key);
+};
+
+const defaultPushToList = (client: RedisClient, key: string, value: unknown): Promise<number> => {
+  return client.rpush(key, value);
+};
+
+const defaultGetListRange = (
+  client: RedisClient,
+  key: string,
+  start: number,
+  stop: number,
+): Promise<unknown[]> => {
+  return client.lrange(key, start, stop);
+};
+
 export class RedisServerCache extends MastraServerCache {
   private client: RedisClient;
   private keyPrefix: string;
@@ -48,6 +68,9 @@ export class RedisServerCache extends MastraServerCache {
     pattern: string,
     count: number,
   ) => Promise<[string | number, string[]]>;
+  private getListLength: (client: RedisClient, key: string) => Promise<number>;
+  private pushToList: (client: RedisClient, key: string, value: unknown) => Promise<number>;
+  private getListRange: (client: RedisClient, key: string, start: number, stop: number) => Promise<unknown[]>;
 
   constructor(config: { client: RedisClient }, options: RedisServerCacheOptions = {}) {
     super({ name: 'RedisServerCache' });
@@ -57,6 +80,9 @@ export class RedisServerCache extends MastraServerCache {
     this.ttlSeconds = options.ttlSeconds ?? 300;
     this.setWithExpiry = options.setWithExpiry ?? defaultSetWithExpiry;
     this.scanKeys = options.scanKeys ?? defaultScanKeys;
+    this.getListLength = options.getListLength ?? defaultGetListLength;
+    this.pushToList = options.pushToList ?? defaultPushToList;
+    this.getListRange = options.getListRange ?? defaultGetListRange;
   }
 
   private getKey(key: string): string {
@@ -101,13 +127,13 @@ export class RedisServerCache extends MastraServerCache {
 
   async listLength(key: string): Promise<number> {
     const fullKey = this.getKey(key);
-    return this.client.llen(fullKey);
+    return this.getListLength(this.client, fullKey);
   }
 
   async listPush(key: string, value: unknown): Promise<void> {
     const fullKey = this.getKey(key);
     const serialized = this.serialize(value);
-    await this.client.rpush(fullKey, serialized);
+    await this.pushToList(this.client, fullKey, serialized);
 
     if (this.ttlSeconds > 0) {
       await this.client.expire(fullKey, this.ttlSeconds);
@@ -116,7 +142,7 @@ export class RedisServerCache extends MastraServerCache {
 
   async listFromTo(key: string, from: number, to: number = -1): Promise<unknown[]> {
     const fullKey = this.getKey(key);
-    const values = await this.client.lrange(fullKey, from, to);
+    const values = await this.getListRange(this.client, fullKey, from, to);
     return values.map(v => this.deserialize(v));
   }
 
@@ -152,8 +178,21 @@ export const upstashPreset: Pick<RedisServerCacheOptions, 'setWithExpiry' | 'sca
     client.scan(cursor, { match: pattern, count } as any) as Promise<[string | number, string[]]>,
 };
 
-export const nodeRedisPreset: Pick<RedisServerCacheOptions, 'setWithExpiry' | 'scanKeys'> = {
+// node-redis v4+ exposes Redis multi-word commands as camelCase only
+// (lLen / rPush / lRange), not as lowercase aliases. The defaults in this
+// module use ioredis-style lowercase, so node-redis users need adapters that
+// forward to the camelCase methods. Single-word commands (set, scan, del,
+// expire, incr, get) work in lowercase under node-redis and don't need
+// adapters; the existing setWithExpiry / scanKeys adapters only exist to
+// reshape arguments, not to alias method names.
+export const nodeRedisPreset: Pick<
+  RedisServerCacheOptions,
+  'setWithExpiry' | 'scanKeys' | 'getListLength' | 'pushToList' | 'getListRange'
+> = {
   setWithExpiry: (client, key, value, seconds) => client.set(key, value, { EX: seconds } as any),
   scanKeys: (client, cursor, pattern, count) =>
     client.scan(cursor, { MATCH: pattern, COUNT: count } as any) as Promise<[string | number, string[]]>,
+  getListLength: (client, key) => (client as any).lLen(key),
+  pushToList: (client, key, value) => (client as any).rPush(key, value),
+  getListRange: (client, key, start, stop) => (client as any).lRange(key, start, stop),
 };

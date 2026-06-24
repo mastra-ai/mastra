@@ -1,9 +1,11 @@
 'use client';
 
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
-import { Button, ButtonsGroup, DataList, Notice, TraceIcon } from '@mastra/playground-ui';
+import { Button, DataList, TraceIcon } from '@mastra/playground-ui';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { format } from 'date-fns/format';
 import {
   ChevronsDownUpIcon,
@@ -16,6 +18,7 @@ import {
   TargetIcon,
 } from 'lucide-react';
 import { useState } from 'react';
+import { ToolMockReportSection } from './tool-mock-report-section';
 
 export type ExperimentResultPanelProps = {
   result: DatasetExperimentResult;
@@ -134,6 +137,8 @@ export function ExperimentResultPanel({
                 ))}
               </DataList>
             )}
+
+            {result.toolMockReport && <ToolMockReportSection report={result.toolMockReport} />}
 
             {(result.status || tags.length > 0 || canFlag) && (
               <div className="grid gap-2">

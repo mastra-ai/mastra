@@ -1,9 +1,13 @@
 import type { DatasetItem } from '@mastra/client-js';
-import { AlertDialog, Button, CodeEditor, Label, TextAndIcon, getShortId, Icon, toast } from '@mastra/playground-ui';
+import { Button, Icon, toast } from '@mastra/playground-ui';
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
+import { Label } from '@mastra/playground-ui/components/Label';
 import { Sections } from '@mastra/playground-ui/components/Sections';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
+import { TextAndIcon, getShortId } from '@mastra/playground-ui/components/Text';
 import { format } from 'date-fns/format';
 import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon, RouteIcon, BracesIcon, Pencil, Trash2 } from 'lucide-react';
 import { useState, useEffect } from 'react';

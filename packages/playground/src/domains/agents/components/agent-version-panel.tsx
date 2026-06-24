@@ -1,4 +1,5 @@
-import { Badge, ScrollArea, Txt, cn } from '@mastra/playground-ui';
+import { ScrollArea, Txt, cn } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { useAgentVersions } from '../hooks/use-agent-versions';
 
 function formatTimestamp(isoString: string): string {

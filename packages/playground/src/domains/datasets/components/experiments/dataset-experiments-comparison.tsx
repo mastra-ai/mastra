@@ -1,16 +1,9 @@
-import {
-  Button,
-  Chip,
-  ChipsGroup,
-  Columns,
-  Notice,
-  Spinner,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-  cn,
-} from '@mastra/playground-ui';
+import { Button, Tooltip, TooltipContent, TooltipTrigger, cn } from '@mastra/playground-ui';
+import { Chip, ChipsGroup } from '@mastra/playground-ui/components/Chip';
+import { Columns } from '@mastra/playground-ui/components/Columns';
 import { ItemList } from '@mastra/playground-ui/components/ItemList';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useState, useMemo } from 'react';
 import { useCompareExperiments } from '../../hooks/use-compare-experiments';
 import { useDatasetExperiment } from '../../hooks/use-dataset-experiments';

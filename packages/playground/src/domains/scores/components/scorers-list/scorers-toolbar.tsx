@@ -1,12 +1,5 @@
-import {
-  Button,
-  ButtonsGroup,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@mastra/playground-ui';
+import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import {
   InputGroup,
   InputGroupAddon,

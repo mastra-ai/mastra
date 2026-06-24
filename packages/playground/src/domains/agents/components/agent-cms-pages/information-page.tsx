@@ -1,4 +1,8 @@
-import { Input, Label, ScrollArea, SectionRoot, SubSectionRoot, Textarea } from '@mastra/playground-ui';
+import { ScrollArea } from '@mastra/playground-ui';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { SectionRoot, SubSectionRoot } from '@mastra/playground-ui/components/Section';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Controller } from 'react-hook-form';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';

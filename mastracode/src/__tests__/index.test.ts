@@ -148,10 +148,17 @@ vi.mock('@mastra/core/harness', () => ({
   taskCheckTool: {},
 }));
 
+const streamErrorRetryProcessorConstructorMock = vi.fn();
+
 vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {
     readonly id = 'agents-md-injector';
   },
+  isBadRequestError: (error: unknown) =>
+    typeof error === 'object' &&
+    error !== null &&
+    'statusCode' in error &&
+    (error as { statusCode?: unknown }).statusCode === 400,
   PrefillErrorHandler: class {
     readonly id = 'prefill-error-handler';
   },
@@ -160,6 +167,9 @@ vi.mock('@mastra/core/processors', () => ({
   },
   StreamErrorRetryProcessor: class {
     readonly id = 'stream-error-retry-processor';
+    constructor(options?: unknown) {
+      streamErrorRetryProcessorConstructorMock(options);
+    }
   },
 }));
 
@@ -350,6 +360,7 @@ describe('createMastraCode', () => {
     loadSettingsMock.mockReturnValue(createMockSettings());
     agentConstructorMock.mockReset();
     harnessConstructorMock.mockReset();
+    streamErrorRetryProcessorConstructorMock.mockReset();
     getAvailableModePacksMock.mockClear();
     getAvailableOmPacksMock.mockClear();
     for (const key of Object.keys(providerRegistryMock)) {
@@ -715,6 +726,39 @@ describe('createMastraCode', () => {
       'prefill-error-handler',
       'provider-history-compat',
     ]);
+  });
+
+  it('configures a single StreamErrorRetryProcessor with per-matcher policies', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(streamErrorRetryProcessorConstructorMock).toHaveBeenCalledTimes(1);
+    const options = streamErrorRetryProcessorConstructorMock.mock.calls[0]?.[0] as
+      | { matchers?: Array<{ match?: unknown; maxRetries?: number; delayMs?: unknown }> }
+      | undefined;
+    expect(options?.matchers).toHaveLength(2);
+
+    // First matcher: Bad Request (400) with maxRetries 1 and 2s delay.
+    const badRequestPolicy = options!.matchers![0]!;
+    expect(typeof badRequestPolicy.match).toBe('function');
+    expect(badRequestPolicy.maxRetries).toBe(1);
+    expect(badRequestPolicy.delayMs).toBe(2000);
+
+    // Second matcher: ECONNRESET with maxRetries 2 and exponential backoff.
+    const econnresetPolicy = options!.matchers![1] as {
+      match?: unknown;
+      maxRetries?: number;
+      delayMs?: (args: { retryCount: number }) => number;
+    };
+    expect(typeof econnresetPolicy.match).toBe('function');
+    expect(econnresetPolicy.maxRetries).toBe(2);
+    expect(typeof econnresetPolicy.delayMs).toBe('function');
+    expect(econnresetPolicy.delayMs!({ retryCount: 0 })).toBe(1000);
+    expect(econnresetPolicy.delayMs!({ retryCount: 1 })).toBe(2000);
+    expect(econnresetPolicy.delayMs!({ retryCount: 2 })).toBe(4000);
+    // High retry counts are capped at the max delay (30000ms).
+    expect(econnresetPolicy.delayMs!({ retryCount: 10 })).toBe(30000);
   });
 
   it('configures ProviderHistoryCompat for prompt and API error compatibility', async () => {

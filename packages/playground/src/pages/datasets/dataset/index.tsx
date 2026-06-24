@@ -1,12 +1,6 @@
 import {
   Button,
-  ButtonsGroup,
-  DropdownMenu,
-  EmptyState,
-  ErrorState,
   PageLayout,
-  PermissionDenied,
-  SessionExpired,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -14,7 +8,13 @@ import {
   is403ForbiddenError,
   is404NotFoundError,
 } from '@mastra/playground-ui';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { format } from 'date-fns/format';
 import { ArrowLeft, Copy, DatabaseIcon, MoreVertical, Pencil, Play, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';

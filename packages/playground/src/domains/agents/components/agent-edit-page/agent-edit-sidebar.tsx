@@ -1,22 +1,12 @@
-import {
-  Button,
-  Input,
-  JSONSchemaForm,
-  jsonSchemaToFields,
-  Label,
-  ScrollArea,
-  Spinner,
-  Tabs,
-  TabList,
-  Tab,
-  TabContent,
-  Textarea,
-  Icon,
-  AgentIcon,
-  ToolsIcon,
-  VariablesIcon,
-} from '@mastra/playground-ui';
-import type { JsonSchema, SchemaField } from '@mastra/playground-ui';
+import { Button, ScrollArea, Icon, AgentIcon, ToolsIcon, VariablesIcon } from '@mastra/playground-ui';
+import type { JsonSchema } from '@mastra/playground-ui';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { JSONSchemaForm, jsonSchemaToFields } from '@mastra/playground-ui/components/JSONSchemaForm';
+import type { SchemaField } from '@mastra/playground-ui/components/JSONSchemaForm';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Tabs, TabList, Tab, TabContent } from '@mastra/playground-ui/components/Tabs';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Check, PlusIcon } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import type { RefObject } from 'react';

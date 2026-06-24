@@ -36,6 +36,7 @@ describe('Harness signal messages', () => {
     const threadId = session.thread.getId()!;
     const subscription = createSubscription(() => activeRunId);
 
+    session.run.ensureAbortController();
     session.run.setRunId({ runId: 'run-1' });
     session.stream.attach({ subscription: subscription as any, key: `agent-1:resource-1:${threadId}` });
     agent.subscribeToThread.mockClear();
@@ -74,6 +75,7 @@ describe('Harness signal messages', () => {
     const threadId = session.thread.getId()!;
     const subscription = createSubscription(() => activeRunId);
 
+    session.run.ensureAbortController();
     session.run.setRunId({ runId: 'run-1' });
     session.stream.attach({ subscription: subscription as any, key: `agent-1:resource-1:${threadId}` });
     const approval = session.approval.arm({ toolName: 'request_access' });

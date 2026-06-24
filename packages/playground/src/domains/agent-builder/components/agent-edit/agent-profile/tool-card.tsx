@@ -1,4 +1,5 @@
-import { Badge, Txt } from '@mastra/playground-ui';
+import { Txt } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import type { AgentTool } from '../../../types/agent-tool';
 import { AgentSelectableCard } from '../agent-selectable-card';
 

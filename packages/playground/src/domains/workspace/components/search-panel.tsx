@@ -1,4 +1,5 @@
-import { Button, Input, SkillIcon } from '@mastra/playground-ui';
+import { Button, SkillIcon } from '@mastra/playground-ui';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { Search, Loader2, Sparkles, FileText, Zap, FolderOpen } from 'lucide-react';
 import { useState } from 'react';
 import type { SearchResult, SearchResponse, SkillSearchResult } from '../types';
