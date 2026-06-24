@@ -384,10 +384,6 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import MarkdownRenderer exports from @mastra/playground-ui/components/MarkdownRenderer.',
   },
   {
-    importNames: ['MetricsDataTable'],
-    message: 'Import MetricsDataTable from @mastra/playground-ui/components/MetricsDataTable.',
-  },
-  {
     importNames: ['MetricsFlexGrid'],
     message: 'Import MetricsFlexGrid from @mastra/playground-ui/components/MetricsFlexGrid.',
   },

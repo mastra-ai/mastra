@@ -26,8 +26,8 @@ describe('Harness.createSession — cross-session isolation', () => {
     const harness = createHarness(new InMemoryStore());
     await harness.init();
 
-    const a = await harness.createSession({ resourceId: 'user-a' });
-    const b = await harness.createSession({ resourceId: 'user-b' });
+    const a = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
+    const b = await harness.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
 
     expect(a.thread.getId()).toBeDefined();
     expect(b.thread.getId()).toBeDefined();
@@ -38,8 +38,8 @@ describe('Harness.createSession — cross-session isolation', () => {
     const harness = createHarness(new InMemoryStore());
     await harness.init();
 
-    const a = await harness.createSession({ resourceId: 'user-a' });
-    const b = await harness.createSession({ resourceId: 'user-b' });
+    const a = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
+    const b = await harness.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
 
     expect(a.mode.get()).toBe('build');
     expect(b.mode.get()).toBe('build');
@@ -55,8 +55,8 @@ describe('Harness.createSession — cross-session isolation', () => {
     const harness = createHarness(new InMemoryStore());
     await harness.init();
 
-    const a = await harness.createSession({ resourceId: 'user-a' });
-    const b = await harness.createSession({ resourceId: 'user-b' });
+    const a = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
+    const b = await harness.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
 
     await a.model.switch({ modelId: 'cerebras/zai-glm-4.7' });
 
@@ -80,8 +80,8 @@ describe('Harness.createSession — cross-session isolation', () => {
     });
     await harness.init();
 
-    const a = await harness.createSession({ resourceId: 'user-a' });
-    const b = await harness.createSession({ resourceId: 'user-b' });
+    const a = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
+    const b = await harness.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
 
     await a.state.set({ counter: 5 });
 
@@ -93,8 +93,8 @@ describe('Harness.createSession — cross-session isolation', () => {
     const harness = createHarness(new InMemoryStore());
     await harness.init();
 
-    const a = await harness.createSession({ resourceId: 'user-a' });
-    const b = await harness.createSession({ resourceId: 'user-b' });
+    const a = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
+    const b = await harness.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
 
     const aEvents: HarnessEvent[] = [];
     const bEvents: HarnessEvent[] = [];
@@ -194,8 +194,8 @@ describe('Harness session registry', () => {
     const harness = createHarness(new InMemoryStore());
     await harness.init();
 
-    const a = await harness.createSession({ resourceId: 'user-a' });
-    const b = await harness.createSession({ resourceId: 'user-b' });
+    const a = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
+    const b = await harness.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
 
     expect(await harness.getSessionByResource('user-a')).toBe(a);
     expect(await harness.getSessionByResource('user-b')).toBe(b);
@@ -206,8 +206,8 @@ describe('Harness session registry', () => {
     const harness = createHarness(new InMemoryStore());
     await harness.init();
 
-    const first = await harness.createSession({ resourceId: 'user-a' });
-    const second = await harness.createSession({ resourceId: 'user-a' });
+    const first = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
+    const second = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
 
     expect(second).toBe(first);
   });
@@ -216,7 +216,7 @@ describe('Harness session registry', () => {
     const harness = createHarness(new InMemoryStore());
     await harness.init();
 
-    const a = await harness.createSession({ resourceId: 'user-a' });
+    const a = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
     harness.setResourceId(a, { resourceId: 'user-a-renamed' });
 
     expect(await harness.getSessionByResource('user-a-renamed')).toBe(a);
