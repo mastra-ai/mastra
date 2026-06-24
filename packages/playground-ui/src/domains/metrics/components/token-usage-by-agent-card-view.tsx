@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import type { ElementType, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { HorizontalBars } from '../../../ds/components/HorizontalBars';
 import { MetricsCard } from '../../../ds/components/MetricsCard';
 import { Tab, TabContent, TabList, Tabs } from '../../../ds/components/Tabs';
+import type { LinkComponent } from '../../../ds/types/link-component';
 import type { TokenUsageByAgentRow } from '../hooks/use-token-usage-by-agent-metrics';
 import { CHART_COLORS, formatCompact, formatCost } from './metrics-utils';
 
@@ -15,7 +16,7 @@ export interface TokenUsageByAgentCardViewProps {
   /** Optional slot for top-bar action buttons. */
   actions?: ReactNode;
   /** Override how drilldown links are rendered. Defaults to `<a>`. */
-  LinkComponent?: ElementType;
+  LinkComponent?: LinkComponent;
 }
 
 type TokenUsageTab = 'tokens' | 'cost';

@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import type { ElementType, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { HorizontalBars } from '../../../ds/components/HorizontalBars';
 import { MetricsCard } from '../../../ds/components/MetricsCard';
 import { Tab, TabContent, TabList, Tabs } from '../../../ds/components/Tabs';
+import type { LinkComponent } from '../../../ds/types/link-component';
 import type { VolumeRow } from '../hooks/use-trace-volume-metrics';
 import { CHART_COLORS, formatCompact } from './metrics-utils';
 
@@ -17,7 +18,7 @@ function VolumeBars({
   data: VolumeRow[];
   rowHrefs?: (row: VolumeRow) => string | undefined;
   errorHrefs?: (row: VolumeRow) => string | undefined;
-  LinkComponent?: ElementType;
+  LinkComponent?: LinkComponent;
 }) {
   return (
     <HorizontalBars
@@ -67,7 +68,7 @@ export interface TracesVolumeCardViewProps {
    */
   actions?: ReactNode | ((tab: VolumeTab) => ReactNode);
   /** Override how drilldown links are rendered (e.g. router-aware adapter). Defaults to `<a>`. */
-  LinkComponent?: ElementType;
+  LinkComponent?: LinkComponent;
 }
 
 export function TracesVolumeCardView({

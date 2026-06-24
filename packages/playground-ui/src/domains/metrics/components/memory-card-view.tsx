@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import type { ElementType, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { DataList } from '../../../ds/components/DataList/data-list';
 import { MetricsCard } from '../../../ds/components/MetricsCard/metrics-card';
 import { TabContent } from '../../../ds/components/Tabs/tabs-content';
 import { TabList } from '../../../ds/components/Tabs/tabs-list';
 import { Tabs } from '../../../ds/components/Tabs/tabs-root';
 import { Tab } from '../../../ds/components/Tabs/tabs-tab';
-import type { LinkComponent as DataListLinkComponent } from '../../../ds/types/link-component';
+import type { LinkComponent } from '../../../ds/types/link-component';
 import type { ActiveThreadRow } from '../hooks/use-top-active-threads-metrics';
 import type { ResourceThreadsRow } from '../hooks/use-top-resources-by-threads-metrics';
 import { formatCompact, formatCost, METRICS_DATA_LIST_PROPS } from './metrics-utils';
@@ -31,7 +31,7 @@ export interface MemoryCardViewProps {
   /** Optional slot for top-bar action buttons. Function form receives the active tab. */
   actions?: ReactNode | ((tab: MemoryTab) => ReactNode);
   /** Override how drilldown links are rendered. Defaults to `<a>`. */
-  LinkComponent?: ElementType;
+  LinkComponent?: LinkComponent;
 }
 
 function isMemoryTab(value: string): value is MemoryTab {
@@ -57,7 +57,6 @@ export function MemoryCardView({
   LinkComponent,
 }: MemoryCardViewProps) {
   const [activeTab, setActiveTab] = useState<MemoryTab>('threads');
-  const RowLinkComponent = (LinkComponent ?? 'a') as DataListLinkComponent;
 
   const threadRows: ThreadTableRow[] = threads.data?.map(r => ({ ...r, key: r.threadId })) ?? [];
   const resourceRows: ResourceTableRow[] = resources.data?.map(r => ({ ...r, key: r.resourceId })) ?? [];
@@ -128,7 +127,7 @@ export function MemoryCardView({
                     );
 
                     return href ? (
-                      <DataList.RowLink key={row.key} to={href} LinkComponent={RowLinkComponent}>
+                      <DataList.RowLink key={row.key} to={href} LinkComponent={LinkComponent}>
                         {rowCells}
                       </DataList.RowLink>
                     ) : (
@@ -165,7 +164,7 @@ export function MemoryCardView({
                     );
 
                     return href ? (
-                      <DataList.RowLink key={row.key} to={href} LinkComponent={RowLinkComponent}>
+                      <DataList.RowLink key={row.key} to={href} LinkComponent={LinkComponent}>
                         {rowCells}
                       </DataList.RowLink>
                     ) : (

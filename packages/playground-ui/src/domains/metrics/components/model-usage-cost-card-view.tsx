@@ -1,7 +1,7 @@
-import type { ElementType, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { DataList } from '../../../ds/components/DataList/data-list';
 import { MetricsCard } from '../../../ds/components/MetricsCard/metrics-card';
-import type { LinkComponent as DataListLinkComponent } from '../../../ds/types/link-component';
+import type { LinkComponent } from '../../../ds/types/link-component';
 import type { ModelUsageRow } from '../hooks/use-model-usage-cost-metrics';
 import { formatCost, METRICS_DATA_LIST_PROPS } from './metrics-utils';
 
@@ -14,7 +14,7 @@ export interface ModelUsageCostCardViewProps {
   /** Optional slot for top-bar action buttons. */
   actions?: ReactNode;
   /** Override how drilldown links are rendered. Defaults to `<a>`. */
-  LinkComponent?: ElementType;
+  LinkComponent?: LinkComponent;
 }
 
 export function ModelUsageCostCardView({
@@ -26,7 +26,6 @@ export function ModelUsageCostCardView({
   LinkComponent,
 }: ModelUsageCostCardViewProps) {
   const hasData = !!rows && rows.length > 0;
-  const RowLinkComponent = (LinkComponent ?? 'a') as DataListLinkComponent;
 
   return (
     <MetricsCard>
@@ -89,7 +88,7 @@ export function ModelUsageCostCardView({
                 );
 
                 return href ? (
-                  <DataList.RowLink key={row.model} to={href} LinkComponent={RowLinkComponent}>
+                  <DataList.RowLink key={row.model} to={href} LinkComponent={LinkComponent}>
                     {rowCells}
                   </DataList.RowLink>
                 ) : (
