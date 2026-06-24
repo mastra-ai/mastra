@@ -210,7 +210,7 @@ export async function runEvals(config: {
               targetSpanId: targetResult.spanId,
             });
             gateScoresByGateId[gate.id]!.push(gateScore.score as number);
-          } catch (error) {
+          } catch {
             // Gate failure = score 0
             gateScoresByGateId[gate.id]!.push(0);
           }
