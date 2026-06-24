@@ -75,6 +75,11 @@ vi.mock('@mastra/core/agent', () => ({
 }));
 
 vi.mock('@mastra/core/processors', () => ({
+  isBadRequestError: (error: unknown) =>
+    typeof error === 'object' &&
+    error !== null &&
+    'statusCode' in error &&
+    (error as { statusCode?: unknown }).statusCode === 400,
   PrefillErrorHandler: class {},
   ProviderHistoryCompat: class {},
   StreamErrorRetryProcessor: class {},
