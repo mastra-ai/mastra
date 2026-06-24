@@ -1931,7 +1931,7 @@ describe('MessageList V5 Support', () => {
       list.add(continuationMessage, 'input');
 
       // v6 (spec 'v3') providers only accept image-data/file-data, not media.
-      const prompt = await list.get.all.aiV5.llmPrompt({ modelSpecificationVersion: 'v3' });
+      const prompt = await list.get.all.aiV6.llmPrompt();
       const toolRole = prompt.find(m => m.role === 'tool');
       const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
       expect(toolResultPart.output).toEqual({
@@ -1973,7 +1973,7 @@ describe('MessageList V5 Support', () => {
 
       list.add(continuationMessage, 'input');
 
-      const prompt = await list.get.all.aiV5.llmPrompt({ modelSpecificationVersion: 'v3' });
+      const prompt = await list.get.all.aiV6.llmPrompt();
       const toolRole = prompt.find(m => m.role === 'tool');
       const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
       expect(toolResultPart.output).toEqual({

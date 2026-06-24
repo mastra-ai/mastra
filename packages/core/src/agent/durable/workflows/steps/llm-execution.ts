@@ -295,9 +295,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             }
 
             // Get messages for LLM (using async llmPrompt for proper format conversion)
-            const inputMessages = (await messageList.get.all.aiV5.llmPrompt({
-              modelSpecificationVersion: currentModel.specificationVersion,
-            })) as LanguageModelV2Prompt;
+            const llmPromptForModel =
+              currentModel.specificationVersion === 'v3'
+                ? messageList.get.all.aiV6.llmPrompt
+                : messageList.get.all.aiV5.llmPrompt;
+            const inputMessages = (await llmPromptForModel()) as LanguageModelV2Prompt;
 
             // Enable defer mode - step-finish won't auto-close the step span
             // This allows us to export the step span and close it later after tool execution
