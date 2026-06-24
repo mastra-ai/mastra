@@ -1,6 +1,6 @@
 ---
 '@mastra/playground-ui': patch
-'@mastra/playground': patch
+'@internal/playground': patch
 ---
 
 Move the Memory Studio (timeline, flamegraph, and observational-memory detail) into the agent chat view as an opt-in panel.
