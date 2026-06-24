@@ -6,9 +6,23 @@ export type StreamErrorRetryMatcher = (error: unknown) => boolean;
 
 export type StreamErrorRetryDelayMs = number | ((args: ProcessAPIErrorArgs) => number | Promise<number>);
 
+/**
+ * A matcher with its own retry policy. When this matcher is the first to match
+ * an error, its `maxRetries` and `delayMs` override the processor-level defaults.
+ * Omitted fields fall back to the processor-level values.
+ */
+export type StreamErrorRetryMatcherConfig = {
+  match: StreamErrorRetryMatcher;
+  maxRetries?: number;
+  delayMs?: StreamErrorRetryDelayMs;
+};
+
+/** A matcher entry: either a plain predicate or a config object with per-matcher policy. */
+export type StreamErrorRetryMatcherEntry = StreamErrorRetryMatcher | StreamErrorRetryMatcherConfig;
+
 export type StreamErrorRetryProcessorOptions = {
   maxRetries?: number;
-  matchers?: StreamErrorRetryMatcher[];
+  matchers?: StreamErrorRetryMatcherEntry[];
   /**
    * Optional delay (ms) to wait before signaling a retry. Accepts a number or an
    * async function evaluated with the current error args. Negative/non-finite
@@ -93,6 +107,19 @@ export function isRetryableOpenAIResponsesStreamError(error: unknown): boolean {
   return hasRetryableOpenAIErrorCode(payload) || hasExplicitRetryMessage(payload);
 }
 
+/**
+ * Matcher for transient HTTP 400 (Bad Request) failures. Providers like OpenAI
+ * occasionally return 400 during service degradation that succeeds on retry.
+ * Recommended with `maxRetries: 1` since a 400 could also be genuinely invalid.
+ */
+export function isBadRequestError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  if ('statusCode' in error && (error as { statusCode?: unknown }).statusCode === 400) return true;
+
+  return false;
+}
+
 function isRetryableProviderMetadata(error: unknown): boolean {
   const retryable = APICallError.isInstance(error)
     ? error.isRetryable
@@ -103,27 +130,39 @@ function isRetryableProviderMetadata(error: unknown): boolean {
   return retryable === true;
 }
 
-function isRetryableStreamError(error: unknown, matchers: StreamErrorRetryMatcher[]): boolean {
+type MatchedPolicy = { maxRetries?: number; delayMs?: StreamErrorRetryDelayMs };
+
+function normalizeEntry(entry: StreamErrorRetryMatcherEntry): StreamErrorRetryMatcherConfig {
+  return typeof entry === 'function' ? { match: entry } : entry;
+}
+
+/**
+ * Walk the error cause chain and return the policy of the first matching
+ * entry, or `undefined` when no matcher fires. Provider `isRetryable`
+ * metadata is checked first (returns an empty policy so processor-level
+ * defaults apply). Among user-supplied matchers, first-match wins.
+ */
+function findMatchingPolicy(error: unknown, entries: StreamErrorRetryMatcherConfig[]): MatchedPolicy | undefined {
   const visited = new WeakSet<object>();
 
-  function visit(candidate: unknown): boolean {
+  function visit(candidate: unknown): MatchedPolicy | undefined {
     if (isRecord(candidate)) {
-      if (visited.has(candidate)) {
-        return false;
-      }
+      if (visited.has(candidate)) return undefined;
       visited.add(candidate);
     }
 
     if (isRetryableProviderMetadata(candidate)) {
-      return true;
+      return {};
     }
 
-    if (matchers.some(matcher => matcher(candidate))) {
-      return true;
+    for (const entry of entries) {
+      if (entry.match(candidate)) {
+        return { maxRetries: entry.maxRetries, delayMs: entry.delayMs };
+      }
     }
 
     const cause = getObjectCause(candidate);
-    return cause !== undefined && visit(cause);
+    return cause !== undefined ? visit(cause) : undefined;
   }
 
   return visit(error);
@@ -134,22 +173,28 @@ export class StreamErrorRetryProcessor implements Processor<'stream-error-retry-
   readonly name = 'Stream Error Retry Processor';
 
   readonly #maxRetries: number;
-  readonly #matchers: StreamErrorRetryMatcher[];
+  readonly #entries: StreamErrorRetryMatcherConfig[];
   readonly #delayMs: StreamErrorRetryDelayMs | undefined;
 
   constructor(options: StreamErrorRetryProcessorOptions = {}) {
     this.#maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
-    this.#matchers = [...DEFAULT_MATCHERS, ...(options.matchers ?? [])];
+    const defaultEntries: StreamErrorRetryMatcherConfig[] = DEFAULT_MATCHERS.map(m => ({ match: m }));
+    this.#entries = [...defaultEntries, ...(options.matchers ?? []).map(normalizeEntry)];
     this.#delayMs = options.delayMs;
   }
 
   async processAPIError(args: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {
     const { error, retryCount, abortSignal } = args;
-    if (retryCount >= this.#maxRetries) return;
-    if (!isRetryableStreamError(error, this.#matchers)) return;
 
-    if (this.#delayMs !== undefined) {
-      await waitDelay(this.#delayMs, args, abortSignal);
+    const policy = findMatchingPolicy(error, this.#entries);
+    if (!policy) return;
+
+    const effectiveMaxRetries = policy.maxRetries ?? this.#maxRetries;
+    if (retryCount >= effectiveMaxRetries) return;
+
+    const effectiveDelay = policy.delayMs ?? this.#delayMs;
+    if (effectiveDelay !== undefined) {
+      await waitDelay(effectiveDelay, args, abortSignal);
     }
 
     return { retry: true };

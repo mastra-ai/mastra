@@ -147,8 +147,15 @@ function decodeRegExpEnvelope(v: unknown): RegExp {
   if (!/^[dgimsuvy]*$/.test(flags)) return /(?:)/;
   if (new Set(flags).size !== flags.length) return /(?:)/;
   try {
-    // lgtm[js/regex-injection] -- payload is narrowed (length cap, flag whitelist,
-    // try/catch); see helper docstring for why escaping `source` would be wrong.
+    // lgtm[js/regex-injection] -- safe because of three structural gates that
+    // run before this line: (1) `isEnvelope` rejects payloads whose `source`
+    // exceeds `MAX_REGEXP_SOURCE_LENGTH` and whose `flags` fall outside the
+    // spec flag whitelist `[dgimsuvy]` (no duplicates); (2) the local checks
+    // above re-narrow `source`/`flags` so the constructor input is bounded at
+    // this single call site; (3) this `try/catch` swallows any constructor
+    // failure and returns the empty regex. Do NOT "fix" this by escaping
+    // `source` — see the helper docstring above for why that would break the
+    // round-trip contract.
     return new RegExp(candidate.source, flags);
   } catch {
     return /(?:)/;

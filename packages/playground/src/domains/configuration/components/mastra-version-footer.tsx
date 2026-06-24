@@ -1,5 +1,4 @@
 import {
-  Spinner,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -15,6 +14,7 @@ import {
 } from '@mastra/playground-ui';
 import { CodeBlock } from '@mastra/playground-ui/components/CodeBlock';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { MoveRight, ExternalLink, Info } from 'lucide-react';
 import { useState } from 'react';
 import { useMastraPackages } from '../hooks/use-mastra-packages';

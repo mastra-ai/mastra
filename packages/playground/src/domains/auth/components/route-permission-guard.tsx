@@ -1,4 +1,4 @@
-import { Spinner } from '@mastra/playground-ui';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Navigate, useLocation } from 'react-router';
 
 import { usePermissions } from '../hooks/use-permissions';

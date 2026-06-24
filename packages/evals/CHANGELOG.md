@@ -1,5 +1,34 @@
 # @mastra/evals
 
+## 1.5.0-alpha.0
+
+### Minor Changes
+
+- Added `checks`, a new namespace of micro-scorers for common eval assertions. ([#18392](https://github.com/mastra-ai/mastra/pull/18392))
+
+  **What changed**
+  - Added text checks: `includes`, `excludes`, `equals`, `matches`, and `similarity`.
+  - Added tool checks: `calledTool`, `didNotCall`, `toolOrder`, `maxToolCalls`, `usedNoTools`, and `noToolErrors`.
+  - You can now import checks from `@mastra/evals/checks`.
+
+  **Example**
+
+  ```ts
+  import { checks } from '@mastra/evals/checks';
+
+  const scorers = [
+    checks.includes('sunny'),
+    checks.calledTool('get_weather'),
+    checks.toolOrder(['search', 'summarize']),
+    checks.noToolErrors(),
+  ];
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`7f9ae70`](https://github.com/mastra-ai/mastra/commit/7f9ae70826b047e5a66218f9e92f20e54a2d791f), [`1505c07`](https://github.com/mastra-ai/mastra/commit/1505c07603f6346bae12aa82f140e8b88ffea9ab), [`e940f09`](https://github.com/mastra-ai/mastra/commit/e940f099ef5d18b403e6f2b4937e086a4da857b1)]:
+  - @mastra/core@1.46.1-alpha.1
+
 ## 1.4.0
 
 ### Minor Changes

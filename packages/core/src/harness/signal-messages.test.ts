@@ -51,7 +51,7 @@ async function createHarness(
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
   });
   await harness.init();
-  const session = await harness.createSession();
+  const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
   return { harness, session };
 }
 
@@ -511,6 +511,55 @@ describe('Harness signal messages', () => {
     );
   });
 
+  it('waits for post-abort stream teardown before starting the follow-up run', async () => {
+    const storage = new InMemoryStore();
+    const agent = new Agent({
+      id: 'abort-idle-wait-agent',
+      name: 'abort-idle-wait-agent',
+      instructions: 'You are a test agent.',
+      model: createTextStreamModel('World'),
+    });
+    const { harness, session } = await createHarness(storage, agent);
+    let activeRunId: string | null = 'run-1';
+    vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
+      stream: (async function* () {})(),
+      unsubscribe: vi.fn(),
+      abort: vi.fn(),
+      activeRunId: () => activeRunId,
+    });
+    const thread = await session.thread.create();
+
+    session.run.ensureAbortController();
+    session.run.setRunId({ runId: 'run-1' });
+    session.abort();
+
+    const buildToolsets = vi.spyOn(harness as any, 'buildToolsets');
+    const sendSignal = vi.spyOn(agent, 'sendSignal').mockReturnValue({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'new-run-id' }),
+      signal: createSignal({ type: 'user-message', contents: 'follow-up after abort' }),
+    });
+
+    const signal = session.sendSignal({ content: 'follow-up after abort' });
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(buildToolsets).not.toHaveBeenCalled();
+    expect(sendSignal).not.toHaveBeenCalled();
+
+    activeRunId = null;
+    session.run.reset();
+
+    await expect(signal.accepted).resolves.toEqual({ accepted: true, runId: undefined });
+    expect(buildToolsets).toHaveBeenCalledTimes(1);
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ contents: 'follow-up after abort' }),
+      expect.objectContaining({
+        resourceId: thread.resourceId,
+        threadId: thread.id,
+        ifIdle: expect.objectContaining({ streamOptions: expect.any(Object) }),
+      }),
+    );
+  });
+
   it('tracks queued follow-ups in display state while running', async () => {
     const storage = new InMemoryStore();
     const { session } = await createHarness(storage);
@@ -793,7 +842,7 @@ describe('Harness signal messages', () => {
       initialState: { yolo: true } as any,
     });
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const events: HarnessEvent[] = [];
     session.subscribe(event => {
       events.push(event);

@@ -62,7 +62,7 @@ async function buildHarness(id: string, stream: () => ReadableStream) {
   });
 
   await harness.init();
-  const session = await harness.createSession();
+  const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
   await session.thread.create();
   return { harness, session };
 }

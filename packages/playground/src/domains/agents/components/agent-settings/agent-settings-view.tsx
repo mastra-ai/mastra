@@ -1,4 +1,5 @@
-import { Icon, ScrollArea, Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui';
+import { Icon, ScrollArea } from '@mastra/playground-ui';
+import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Brain, Radio, Settings2 } from 'lucide-react';
 import { useSearchParams } from 'react-router';
 
