@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import type { Agent, AgentExecutionOptions, AiMessageType, UIMessageWithMetadata } from '../../agent';
 import { isSupportedLanguageModel } from '../../agent';
@@ -22,11 +22,7 @@ type WorkflowRunOptions = WorkflowRunStartOptions & {
 type AgentInputType = string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
 
 type RunEvalsDataItem<TTarget = unknown> = {
-  input: TTarget extends Workflow<any, any>
-    ? any
-    : TTarget extends Agent
-      ? AgentInputType
-      : unknown;
+  input: TTarget extends Workflow<any, any> ? any : TTarget extends Agent ? AgentInputType : unknown;
   /**
    * Multi-turn inputs. When provided, each entry is sent sequentially to the agent
    * on the same thread. Scorers see the accumulated output from all turns.
@@ -647,7 +643,9 @@ async function executeAgentMultiTurn(
 
       // Accumulate output from scoringData if available, else from the result
       if (result.scoringData?.output) {
-        allOutputMessages.push(...(Array.isArray(result.scoringData.output) ? result.scoringData.output : [result.scoringData.output]));
+        allOutputMessages.push(
+          ...(Array.isArray(result.scoringData.output) ? result.scoringData.output : [result.scoringData.output]),
+        );
       }
     }
   } else {
@@ -663,7 +661,9 @@ async function executeAgentMultiTurn(
       lastResult = result;
 
       if (result.scoringData?.output) {
-        allOutputMessages.push(...(Array.isArray(result.scoringData.output) ? result.scoringData.output : [result.scoringData.output]));
+        allOutputMessages.push(
+          ...(Array.isArray(result.scoringData.output) ? result.scoringData.output : [result.scoringData.output]),
+        );
       }
     }
   }
