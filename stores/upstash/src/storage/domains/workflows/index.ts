@@ -92,7 +92,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       }
     }
 
-    const key = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace, workflow_name: workflowName, run_id: runId }) + '*';
+    const key = `${getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace })}:*run_id:${runId}*`;
     const keys = await this.#db.scanKeys(key);
     const workflows = await Promise.all(
       keys.map(async key => {
@@ -100,7 +100,14 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       }),
     );
 
-    return workflows.find(w => w?.run_id === runId && w?.workflow_name === workflowName) ?? null;
+    return (
+      workflows.find(
+        w =>
+          w?.run_id === runId &&
+          (!workflowName || w.workflow_name === workflowName) &&
+          (!resourceId || w.resourceId === resourceId),
+      ) ?? null
+    );
   }
 
   async updateWorkflowResults({
@@ -345,22 +352,39 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     const { namespace = 'workflows', workflowName, runId, resourceId, snapshot, createdAt, updatedAt } = params;
     try {
       const now = new Date();
-      const existingRun = createdAt
-        ? null
-        : await this.getWorkflowRunRecord({ namespace, runId, resourceId, workflowName });
-
-      await this.#db.insert({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        record: {
-          namespace,
-          workflow_name: workflowName,
-          run_id: runId,
-          resourceId,
-          snapshot,
-          createdAt: createdAt ?? existingRun?.createdAt ?? now,
-          updatedAt: updatedAt ?? now,
-        },
+      const key = getKey(TABLE_WORKFLOW_SNAPSHOT, {
+        namespace,
+        workflow_name: workflowName,
+        run_id: runId,
+        ...(resourceId ? { resourceId } : {}),
       });
+
+      const record = {
+        namespace,
+        workflow_name: workflowName,
+        run_id: runId,
+        resourceId,
+        snapshot,
+        createdAt: (createdAt ?? now).toISOString(),
+        updatedAt: (updatedAt ?? now).toISOString(),
+      };
+
+      await (this.client as any).eval(
+        `
+        local existing = redis.call("GET", KEYS[1])
+        local next = cjson.decode(ARGV[1])
+        if existing then
+          local current = cjson.decode(existing)
+          if current["createdAt"] then
+            next["createdAt"] = current["createdAt"]
+          end
+        end
+        redis.call("SET", KEYS[1], cjson.encode(next))
+        return 1
+        `,
+        [key],
+        [JSON.stringify(record)],
+      );
     } catch (error) {
       throw new MastraError(
         {
@@ -486,25 +510,9 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         );
       }
 
-      // Get all workflow keys
-      let pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows' }) + ':*';
-      if (workflowName && resourceId) {
-        pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, {
-          namespace: 'workflows',
-          workflow_name: workflowName,
-          run_id: '*',
-          resourceId,
-        });
-      } else if (workflowName) {
-        pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowName }) + ':*';
-      } else if (resourceId) {
-        pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, {
-          namespace: 'workflows',
-          workflow_name: '*',
-          run_id: '*',
-          resourceId,
-        });
-      }
+      // Get workflow keys, then filter returned records. Resource-scoped keys include
+      // resourceId after run_id, so broad namespace scanning avoids missing those variants.
+      const pattern = `${getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows' })}:*`;
       const keys = await this.#db.scanKeys(pattern);
 
       // Check if we have any keys before using pipeline
@@ -526,6 +534,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         )
         // Only filter by workflowName if it was specifically requested
         .filter(record => !workflowName || record.workflow_name === workflowName)
+        .filter(record => !resourceId || record.resourceId === resourceId)
         .map(w => this.parseWorkflowRun(w!))
         .filter(w => {
           if (fromDate && w.createdAt < fromDate) return false;

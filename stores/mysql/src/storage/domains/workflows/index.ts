@@ -301,17 +301,6 @@ export class WorkflowsMySQL extends WorkflowsStorage {
         return;
       }
 
-      const [existingRows] = await this.pool.execute<RowDataPacket[]>(
-        `SELECT 1 FROM ${tableName}
-         WHERE ${quoteIdentifier('workflow_name', 'column name')} = ? AND ${quoteIdentifier('run_id', 'column name')} = ?
-         LIMIT 1`,
-        [workflowName, runId],
-      );
-
-      if (existingRows.length > 0) {
-        return;
-      }
-
       await this.pool.execute(
         `INSERT INTO ${tableName} (${quoteIdentifier('workflow_name', 'column name')}, ${quoteIdentifier('run_id', 'column name')}, ${quoteIdentifier('resourceId', 'column name')}, ${quoteIdentifier('snapshot', 'column name')}, ${quoteIdentifier('createdAt', 'column name')}, ${quoteIdentifier('updatedAt', 'column name')})
          VALUES (?, ?, ?, ?, ?, ?)
