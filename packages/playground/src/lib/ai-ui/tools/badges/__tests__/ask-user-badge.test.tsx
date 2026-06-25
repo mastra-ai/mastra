@@ -122,7 +122,7 @@ describe('AskUserBadge', () => {
 
       const sendButton = within(badge())
         .getAllByRole('button')
-        .find(button => button.getAttribute('disabled') === null && !within(button).queryByText('Question for you'));
+        .find(button => button.getAttribute('disabled') === null);
       fireEvent.click(sendButton!);
 
       expect(approveToolcall).toHaveBeenCalledWith('call-3', 'Grace');
@@ -197,21 +197,27 @@ describe('AskUserBadge', () => {
     });
   });
 
-  describe('when the badge header is clicked', () => {
-    const suspendPayload: AskUserSuspendPayload = { question: 'Pick a fruit' };
+  describe('when the question is answered', () => {
+    it('shows the Answered status pill', () => {
+      renderBadge({
+        toolCallId: 'call-7',
+        suspendPayload: { question: 'Pick a fruit', options: [{ label: 'Apple' }] },
+        result: { content: 'User answered: Apple', isError: false },
+      });
 
-    it('collapses the content and expands it again on a second click', () => {
-      renderBadge({ toolCallId: 'call-7', suspendPayload, result: undefined });
+      expect(within(badge()).queryByText('Answered')).not.toBeNull();
+    });
+  });
 
-      expect(screen.queryByText('Pick a fruit')).not.toBeNull();
+  describe('when the question is unanswered', () => {
+    it('does not show the Answered status pill', () => {
+      renderBadge({
+        toolCallId: 'call-8',
+        suspendPayload: { question: 'Pick a fruit', options: [{ label: 'Apple' }] },
+        result: undefined,
+      });
 
-      const header = within(badge()).getByRole('button', { name: /question for you/i });
-
-      fireEvent.click(header);
-      expect(screen.queryByText('Pick a fruit')).toBeNull();
-
-      fireEvent.click(header);
-      expect(screen.queryByText('Pick a fruit')).not.toBeNull();
+      expect(within(badge()).queryByText('Answered')).toBeNull();
     });
   });
 });

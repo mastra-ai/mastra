@@ -1,4 +1,5 @@
-import { Button, Icon } from '@mastra/playground-ui';
+import { Icon } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Loader2, PlayIcon, StepForwardIcon } from 'lucide-react';
 import { useContext } from 'react';
 
