@@ -1,5 +1,6 @@
-import { ScrollArea, Txt, Icon, cn } from '@mastra/playground-ui';
+import { Txt, Icon, cn } from '@mastra/playground-ui';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { FileJson, FormInput } from 'lucide-react';
 import { useMemo, useState } from 'react';

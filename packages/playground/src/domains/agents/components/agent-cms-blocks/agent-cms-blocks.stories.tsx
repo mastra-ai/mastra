@@ -1,4 +1,5 @@
-import { TooltipProvider, complexSchema } from '@mastra/playground-ui';
+import { complexSchema } from '@mastra/playground-ui';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 

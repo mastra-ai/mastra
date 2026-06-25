@@ -1,4 +1,5 @@
-import { ScrollArea, Txt, cn } from '@mastra/playground-ui';
+import { Txt, cn } from '@mastra/playground-ui';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Check } from 'lucide-react';
 import { useMemo } from 'react';
 

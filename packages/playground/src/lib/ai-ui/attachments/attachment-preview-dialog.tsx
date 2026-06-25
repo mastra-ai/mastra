@@ -1,4 +1,11 @@
-import { Dialog, DialogTitle, DialogContent, DialogHeader, DialogDescription, DialogBody } from '@mastra/playground-ui';
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogHeader,
+  DialogDescription,
+  DialogBody,
+} from '@mastra/playground-ui/components/Dialog';
 import { File as FileIcon, FileAudio, FileText, FileVideo } from 'lucide-react';
 import { useState } from 'react';
 

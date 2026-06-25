@@ -1,13 +1,13 @@
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
+import { Button } from '@mastra/playground-ui';
 import {
-  Button,
   Dialog,
   DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Dialog';
 import { ReactFlowProvider } from '@xyflow/react';
 import { useState } from 'react';
 

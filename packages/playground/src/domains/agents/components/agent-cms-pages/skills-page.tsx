@@ -1,6 +1,8 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { Button, Entity, EntityContent, EntityName, EntityDescription, ScrollArea } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Entity, EntityContent, EntityName, EntityDescription } from '@mastra/playground-ui/components/Entity';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Searchbar } from '@mastra/playground-ui/components/Searchbar';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Plus, Drill } from 'lucide-react';

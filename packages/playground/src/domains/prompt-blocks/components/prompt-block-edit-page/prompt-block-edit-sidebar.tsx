@@ -1,9 +1,10 @@
-import { Button, ScrollArea, Txt } from '@mastra/playground-ui';
+import { Button, Txt } from '@mastra/playground-ui';
 import type { JsonSchema } from '@mastra/playground-ui';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { JSONSchemaForm, jsonSchemaToFields } from '@mastra/playground-ui/components/JSONSchemaForm';
 import type { SchemaField } from '@mastra/playground-ui/components/JSONSchemaForm';
 import { Label } from '@mastra/playground-ui/components/Label';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Check, Plus, PlusIcon, Save } from 'lucide-react';

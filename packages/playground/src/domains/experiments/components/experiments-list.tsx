@@ -1,6 +1,9 @@
 import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
-import { DataList as EntityList, DataListSkeleton as EntityListSkeleton } from '@mastra/playground-ui';
 import { Chip } from '@mastra/playground-ui/components/Chip';
+import {
+  DataList as EntityList,
+  DataListSkeleton as EntityListSkeleton,
+} from '@mastra/playground-ui/components/DataList';
 import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
 import { useMemo } from 'react';
 import { useLinkComponent } from '@/lib/framework';

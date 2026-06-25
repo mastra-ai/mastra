@@ -1,5 +1,7 @@
-import { Button, DataList, DataListSkeleton, NoDataPageLayout, PageLayout, Txt, toast } from '@mastra/playground-ui';
+import { Button, Txt, toast } from '@mastra/playground-ui';
+import { DataList, DataListSkeleton } from '@mastra/playground-ui/components/DataList';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
 import { useMemo, useState } from 'react';
 import {

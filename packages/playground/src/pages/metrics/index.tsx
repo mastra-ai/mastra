@@ -3,8 +3,6 @@ import {
   Button,
   DateRangeSelector,
   MetricsProvider,
-  NoDataPageLayout,
-  PageLayout,
   applyMetricsPropertyFilterTokens,
   clearSavedMetricsFilters,
   createMetricsPropertyFilterFields,
@@ -27,6 +25,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { MetricsFlexGrid } from '@mastra/playground-ui/components/MetricsFlexGrid';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
 import type { PropertyFilterToken } from '@mastra/playground-ui/components/PropertyFilter';

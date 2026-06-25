@@ -71,6 +71,7 @@ import { persistentGoalJudgeDecisionScenario } from './persistent-goal-judge-dec
 import { persistentGoalReloadScenario } from './persistent-goal-reload.js';
 import { planApprovalGoalHandoffScenario } from './plan-approval-goal-handoff.js';
 import { planApprovalHandoffScenario } from './plan-approval-handoff.js';
+import { planApprovalRequestChangesScenario } from './plan-approval-request-changes.js';
 import { processShortcutsScenario } from './process-shortcuts.js';
 import { promptContextInstructionsScenario } from './prompt-context-instructions.js';
 import { promptQueueInterleaveScenario } from './prompt-queue-interleave.js';
@@ -80,6 +81,8 @@ import { quietSettingsScenario } from './quiet-settings.js';
 import { quietToolHistoryParityScenario } from './quiet-tool-history-parity.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
 import { requestAccessModalScenario } from './request-access-modal.js';
+import { resourceidDriftPromptAcceptScenario } from './resourceid-drift-prompt-accept.js';
+import { resourceidDriftPromptDeclineScenario } from './resourceid-drift-prompt-decline.js';
 import { settingsApiKeysNavigationScenario } from './settings-api-keys-navigation.js';
 import { settingsStartupModelRestoreScenario } from './settings-startup-model-restore.js';
 import { setupCompletionPersistenceScenario } from './setup-completion-persistence.js';
@@ -122,6 +125,8 @@ import { workspaceCommandsScenario } from './workspace-commands.js';
 import { workspacePlanModeToolsScenario } from './workspace-plan-mode-tools.js';
 import { workspaceToolNamesScenario } from './workspace-tool-names.js';
 import { workspaceToolOutputRenderingScenario } from './workspace-tool-output-rendering.js';
+import { worktreeCrossThreadResumeScenario } from './worktree-cross-thread-resume.js';
+import { worktreeThreadScopingScenario } from './worktree-thread-scoping.js';
 
 export type { McE2eScenario, McE2eScenarioRuntime, ScenarioName } from './types.js';
 
@@ -201,6 +206,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'persistent-goal-reload': persistentGoalReloadScenario,
   'plan-approval-goal-handoff': planApprovalGoalHandoffScenario,
   'plan-approval-handoff': planApprovalHandoffScenario,
+  'plan-approval-request-changes': planApprovalRequestChangesScenario,
   'process-shortcuts': processShortcutsScenario,
   'provider-history-compat': providerHistoryCompatScenario,
   'provider-history-rejection-retry': providerHistoryRejectionRetryScenario,
@@ -249,6 +255,10 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'workspace-plan-mode-tools': workspacePlanModeToolsScenario,
   'workspace-tool-names': workspaceToolNamesScenario,
   'workspace-tool-output-rendering': workspaceToolOutputRenderingScenario,
+  'resourceid-drift-prompt-accept': resourceidDriftPromptAcceptScenario,
+  'resourceid-drift-prompt-decline': resourceidDriftPromptDeclineScenario,
+  'worktree-cross-thread-resume': worktreeCrossThreadResumeScenario,
+  'worktree-thread-scoping': worktreeThreadScopingScenario,
 };
 
 export function getScenario(name: ScenarioName): McE2eScenario {

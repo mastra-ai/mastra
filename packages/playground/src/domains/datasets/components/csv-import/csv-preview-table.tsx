@@ -1,6 +1,6 @@
 'use client';
 
-import { DataList } from '@mastra/playground-ui';
+import { DataList } from '@mastra/playground-ui/components/DataList';
 
 export interface CSVPreviewTableProps {
   headers: string[];
