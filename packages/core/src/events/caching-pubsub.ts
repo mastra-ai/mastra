@@ -85,6 +85,23 @@ export class CachingPubSub extends PubSub {
   }
 
   /**
+   * Stable key used to deduplicate an event across the cache-replay and
+   * live-delivery paths.
+   *
+   * We cannot dedup on `event.id`: `CachingPubSub.publish` assigns the id and
+   * caches the event with it, but inner PubSub implementations
+   * (EventEmitterPubSub, UnixSocketPubSub, …) regenerate `id` inside their own
+   * `publish`, so the cached copy and the live copy of the SAME publish carry
+   * different ids. The sequential `index` is assigned here and is preserved by
+   * every inner implementation, so it matches across both paths. Events without
+   * an index are never cached (see `publish`), so they can't be replay/live
+   * duplicated — falling back to `id` for them is safe.
+   */
+  private dedupKey(event: Event): string {
+    return event.index !== undefined ? `i:${event.index}` : `id:${event.id}`;
+  }
+
+  /**
    * Get the cache key for a topic's event list
    */
   private getCacheKey(topic: string): string {
@@ -174,8 +191,9 @@ export class CachingPubSub extends PubSub {
     // After replay completes, seen is nulled out and the wrapper becomes a passthrough.
     const wrappedCb: EventCallback = (event, ack) => {
       if (seen) {
-        if (!seen.has(event.id)) {
-          seen.add(event.id);
+        const key = this.dedupKey(event);
+        if (!seen.has(key)) {
+          seen.add(key);
           cb(event, ack);
         }
       } else {
@@ -190,8 +208,9 @@ export class CachingPubSub extends PubSub {
     // 2. Fetch and replay cached history
     const history = await this.getHistory(topic);
     for (const event of history) {
-      if (!seen!.has(event.id)) {
-        seen!.add(event.id);
+      const key = this.dedupKey(event);
+      if (!seen!.has(key)) {
+        seen!.add(key);
         cb(event);
       }
     }
@@ -217,8 +236,9 @@ export class CachingPubSub extends PubSub {
     // After replay completes, seen is nulled out and the wrapper becomes a passthrough.
     const wrappedCb: EventCallback = (event, ack) => {
       if (seen) {
-        if (!seen.has(event.id)) {
-          seen.add(event.id);
+        const key = this.dedupKey(event);
+        if (!seen.has(key)) {
+          seen.add(key);
           cb(event, ack);
         }
       } else {
@@ -233,8 +253,9 @@ export class CachingPubSub extends PubSub {
     // 2. Fetch and replay cached history FROM the specified index
     const history = await this.getHistory(topic, offset);
     for (const event of history) {
-      if (!seen!.has(event.id)) {
-        seen!.add(event.id);
+      const key = this.dedupKey(event);
+      if (!seen!.has(key)) {
+        seen!.add(key);
         cb(event);
       }
     }

@@ -1,5 +1,27 @@
 # @mastra/ai-sdk
 
+## 1.6.0-alpha.0
+
+### Minor Changes
+
+- Added `workflowSnapshotToStream` utility to convert a `WorkflowState` (as returned by `getWorkflowRunById`) into an AI SDK-compatible stream. This lets you display historical workflow runs using the same `useChat`-powered UI components used for live workflow streams. ([#18453](https://github.com/mastra-ai/mastra/pull/18453))
+
+  **Example usage:**
+
+  ```ts
+  import { workflowSnapshotToStream } from '@mastra/ai-sdk';
+  import { createUIMessageStreamResponse } from 'ai';
+
+  const workflowRun = await mastra.getWorkflow('myWorkflow').getWorkflowRunById(runId);
+  const stream = workflowSnapshotToStream(workflowRun);
+  return createUIMessageStreamResponse({ stream });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`bf3fe49`](https://github.com/mastra-ai/mastra/commit/bf3fe49f9467dbbdb8f9eaf74e0f7971ffb19559), [`24ceaea`](https://github.com/mastra-ai/mastra/commit/24ceaea0bdd8609cabbab764380608ca6621a194), [`6ccf67b`](https://github.com/mastra-ai/mastra/commit/6ccf67bf075753754927a57bc2e1734ba2c820c5), [`825d8de`](https://github.com/mastra-ai/mastra/commit/825d8def9fa64c2bcc3d8dd6b49e09342c3ac5c7), [`ffa09e7`](https://github.com/mastra-ai/mastra/commit/ffa09e772a5c92270eabe2090fc42d45bd8ec4b7), [`461a7c5`](https://github.com/mastra-ai/mastra/commit/461a7c501449295287f4f0ee4b0b42344f39fcf8), [`4211472`](https://github.com/mastra-ai/mastra/commit/4211472a5a2bd319c60cd2e42d9109c3eef7ac1c), [`9e45902`](https://github.com/mastra-ai/mastra/commit/9e4590208e745055cecca202e2db0e5c65e17d3c), [`5c0df77`](https://github.com/mastra-ai/mastra/commit/5c0df776c40efa420f8c07a2f3ee66010296618e)]:
+  - @mastra/core@1.47.0-alpha.3
+
 ## 1.5.1
 
 ### Patch Changes

@@ -1,8 +1,10 @@
-import { Icon, RuleBuilder, countLeafRules, cn } from '@mastra/playground-ui';
+import { RuleBuilder, countLeafRules } from '@mastra/playground-ui';
 import type { JsonSchema, RuleGroup } from '@mastra/playground-ui';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronRight, Ruler, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 

@@ -1,6 +1,6 @@
-import { toast } from '@mastra/playground-ui';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useDisconnectChannel } from '@/domains/agents/hooks/use-channels';
 import type { ChannelPlatformInfo } from '@/domains/agents/hooks/use-channels';
 
