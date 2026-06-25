@@ -182,4 +182,27 @@ describe('Agent heartbeats — scheduler integration', () => {
 
     await mastra.shutdown();
   });
+
+  it('does not inject heartbeat/scheduler workers when workers are explicitly disabled', async () => {
+    const agent = makeAgent('beat-no-workers');
+    const storage = new MockStore();
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      agents: { 'beat-no-workers': agent },
+      notifications: { dispatch: { enabled: false } },
+      // The user opted out of all event processing in this instance.
+      // A separate standalone worker is expected to run the scheduler.
+      workers: false,
+    });
+
+    await mastra.startWorkers();
+    // create() still persists the heartbeat row so a standalone worker
+    // can pick it up, but it must not lazily resurrect the scheduler here.
+    await mastra.heartbeats.create({ cron: '* * * * * *', prompt: 'ping', agentId: agent.id });
+
+    expect(mastra.scheduler).toBeUndefined();
+
+    await mastra.shutdown();
+  });
 });

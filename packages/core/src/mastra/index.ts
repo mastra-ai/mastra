@@ -649,6 +649,13 @@ export class Mastra<
   #workers: MastraWorker[] = [];
   #workerFilter?: Set<string>;
   /**
+   * Set when the user (or `MASTRA_WORKERS=false`) explicitly disabled all event
+   * processing in this instance via `workers: false`. Gates lazy scheduler /
+   * heartbeat worker injection so runtime triggers (e.g. `heartbeats.create()`)
+   * don't resurrect workers the user opted out of.
+   */
+  #workersDisabled = false;
+  /**
    * Tracks whether `startWorkers()` has already run. Used to decide whether
    * lazy scheduler injection (e.g. from `mastra.heartbeats.create()` after boot)
    * needs to also `init`/`start` the worker, or whether the normal
@@ -1208,7 +1215,10 @@ export class Mastra<
 
     if (workersOption === false) {
       // Explicitly disabled — no event processing in this instance.
-      // PubSub still exists for publishing events.
+      // PubSub still exists for publishing events. Record the opt-out so
+      // runtime triggers (e.g. heartbeats.create()) don't lazily inject
+      // scheduler / heartbeat workers behind the user's back.
+      this.#workersDisabled = true;
     } else if (Array.isArray(workersOption)) {
       this.#workers = workersOption;
       for (const w of this.#workers) {
@@ -1636,6 +1646,12 @@ export class Mastra<
   }
 
   #shouldEnableScheduler(): boolean {
+    // Honour an explicit `workers: false` opt-out — the user disabled all
+    // event processing in this instance, so never auto-inject scheduler /
+    // heartbeat workers (even when scheduler.enabled is true or a heartbeat
+    // is created at runtime). Standalone workers are expected to run the
+    // scheduler separately.
+    if (this.#workersDisabled) return false;
     if (this.#schedulerConfig?.enabled === false) return false;
     if (this.#schedulerConfig?.enabled === true) return true;
     return this.#hasScheduledWorkflow || this.#schedulerRequested;
