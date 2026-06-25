@@ -465,7 +465,9 @@ export class HarnessSession extends BaseResource {
    * repo (e.g. `{ tags: { projectPath } }` so each worktree sees only its own
    * threads). Passing a bare number is shorthand for `{ limit }`.
    */
-  async listThreads(options?: number | { limit?: number; tags?: Record<string, string> }): Promise<HarnessThreadInfo[]> {
+  async listThreads(
+    options?: number | { limit?: number; tags?: Record<string, string> },
+  ): Promise<HarnessThreadInfo[]> {
     const opts = typeof options === 'number' ? { limit: options } : (options ?? {});
     const params = new URLSearchParams();
     if (opts.limit != null) params.set('limit', String(opts.limit));
