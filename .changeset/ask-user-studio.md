@@ -1,5 +1,4 @@
 ---
-'@mastra/playground': patch
 '@mastra/server': patch
 '@mastra/core': patch
 '@mastra/client-js': patch
