@@ -994,4 +994,60 @@ describe('MastraModelOutput', () => {
       expect(onError).not.toHaveBeenCalled();
     });
   });
+
+  describe('consumeStream completion sharing', () => {
+    it('resolves every caller only after the stream actually finishes', async () => {
+      const runId = 'test-run';
+
+      // A stream we hold open until release() is called, so we can assert that
+      // no consumeStream() caller resolves before the stream is truly done.
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      const stream = new ReadableStream<ChunkType>({
+        async pull(controller) {
+          controller.enqueue(createStepFinishChunk(runId));
+          await gate;
+          controller.enqueue(createFinishChunk(runId));
+          controller.close();
+        },
+      });
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      let firstResolved = false;
+      let lateResolved = false;
+
+      // First caller starts the drain.
+      const first = output.consumeStream().then(() => {
+        firstResolved = true;
+      });
+
+      // Let the drain begin and buffer the first chunk while the gate is closed.
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // A caller that arrives AFTER consumption already started must still wait
+      // for the stream to finish (this is the early-return bug Fix 2 closed).
+      const late = output.consumeStream().then(() => {
+        lateResolved = true;
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+      expect(firstResolved).toBe(false);
+      expect(lateResolved).toBe(false);
+
+      release();
+      await Promise.all([first, late]);
+
+      expect(firstResolved).toBe(true);
+      expect(lateResolved).toBe(true);
+    });
+  });
 });
