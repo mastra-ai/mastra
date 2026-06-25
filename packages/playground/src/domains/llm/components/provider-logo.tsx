@@ -1,4 +1,4 @@
-import { Icon } from '@mastra/playground-ui';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useState } from 'react';
 import type { CSSProperties } from 'react';

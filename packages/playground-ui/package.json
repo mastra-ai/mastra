@@ -59,6 +59,12 @@
         "default": "./dist/hooks/*.es.js"
       }
     },
+    "./icons/*": {
+      "import": {
+        "types": "./dist/icons/*.d.ts",
+        "default": "./dist/icons/*.es.js"
+      }
+    },
     "./components/*": {
       "import": {
         "types": "./dist/components/*.d.ts",

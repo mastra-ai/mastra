@@ -1,10 +1,10 @@
-import { AgentIcon } from '@mastra/playground-ui';
 import type { RuleGroup } from '@mastra/playground-ui';
 import { EntityName, EntityDescription, EntityContent, Entity } from '@mastra/playground-ui/components/Entity';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Searchbar } from '@mastra/playground-ui/components/Searchbar';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { Switch } from '@mastra/playground-ui/components/Switch';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';

@@ -55,6 +55,10 @@ vi.mock('@mastra/playground-ui', () => {
   };
 });
 
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
+
 vi.mock('@mastra/playground-ui/components/SideDialog', () => ({
   SideDialog: Object.assign(
     ({ isOpen, children }: PropsWithChildren<{ isOpen: boolean }>) => (isOpen ? <div>{children}</div> : null),
