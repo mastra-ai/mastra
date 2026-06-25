@@ -1,16 +1,13 @@
 import type { BuilderRegistrySkillSummary } from '@mastra/client-js';
+import { Button, ScrollArea, SkillIcon, cn } from '@mastra/playground-ui';
 import {
-  Button,
   Dialog,
   DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  ScrollArea,
-  SkillIcon,
-  cn,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Check, Download, ExternalLink, Github, Loader2, Package, Search } from 'lucide-react';

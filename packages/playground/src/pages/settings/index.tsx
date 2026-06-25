@@ -1,5 +1,6 @@
-import { PageLayout, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui';
+import { PageLayout } from '@mastra/playground-ui';
 import { SectionCard } from '@mastra/playground-ui/components/SectionCard';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
 import type { Theme } from '@mastra/playground-ui/components/ThemeProvider';

@@ -1,12 +1,12 @@
+import { Button } from '@mastra/playground-ui';
 import {
-  Button,
   Dialog,
   DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Dialog';
 import { useState } from 'react';
 
 import { CodeDialogContent } from './workflow-code-dialog-content';

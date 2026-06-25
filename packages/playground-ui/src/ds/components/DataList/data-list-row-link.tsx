@@ -10,7 +10,7 @@ export type DataListRowLinkProps = DataListRowSharedProps & {
   to: string;
   className?: string;
   style?: CSSProperties;
-  LinkComponent: LinkComponent;
+  LinkComponent?: LinkComponent;
 };
 
 export function DataListRowLink({
@@ -18,7 +18,7 @@ export function DataListRowLink({
   to,
   className,
   style,
-  LinkComponent: Link,
+  LinkComponent: Link = 'a',
   flushLeft,
   flushRight,
   colStart,

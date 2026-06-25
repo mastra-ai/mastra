@@ -1,4 +1,5 @@
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, Txt, Icon } from '@mastra/playground-ui';
+import { Txt, Icon } from '@mastra/playground-ui';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { InfoIcon } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
 

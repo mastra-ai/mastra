@@ -1,15 +1,12 @@
+import { Button, ScrollArea, SkillIcon, cn } from '@mastra/playground-ui';
 import {
-  Button,
-  ScrollArea,
-  SkillIcon,
-  cn,
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
   DialogBody,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Search, Download, ExternalLink, Loader2, Package, Github, Check, Folder } from 'lucide-react';

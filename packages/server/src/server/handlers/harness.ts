@@ -30,7 +30,7 @@ function getHarnessOrThrow(
 
 async function getSession(harness: Harness<any>, resourceId: string): Promise<Session<any>> {
   await harness.init();
-  return harness.createSession({ resourceId });
+  return harness.createSession({ resourceId, id: resourceId, ownerId: harness.id });
 }
 
 // ---------------------------------------------------------------------------

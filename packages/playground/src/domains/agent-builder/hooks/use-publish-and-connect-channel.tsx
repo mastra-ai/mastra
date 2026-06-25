@@ -1,13 +1,12 @@
+import { Button, toast } from '@mastra/playground-ui';
 import {
-  Button,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  toast,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Dialog';
 import { useCallback, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useFormContext } from 'react-hook-form';

@@ -1,20 +1,12 @@
 import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-  Txt,
-  Icon,
-  cn,
-} from '@mastra/playground-ui';
+import { Txt, Icon, cn } from '@mastra/playground-ui';
 import type { JsonSchema } from '@mastra/playground-ui';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { ContentBlock } from '@mastra/playground-ui/components/ContentBlocks';
+import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { GripVertical, X, ExternalLink, ChevronDown, AlertTriangle } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
@@ -241,8 +233,8 @@ const RefBlockContent = ({
                   <AlertTriangle />
                 </Icon>
                 <Txt variant="ui-xs">
-                  This prompt block is an unpublished draft. The agent skips it at runtime until the block is
-                  published, so this content will not be part of the agent's instructions yet.
+                  This prompt block is an unpublished draft. The agent skips it at runtime until the block is published,
+                  so this content will not be part of the agent's instructions yet.
                 </Txt>
               </div>
             )}
