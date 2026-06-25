@@ -4599,11 +4599,21 @@ export class Mastra<
    * user-defined event listeners.
    */
   public async startWorkers(name?: string): Promise<void> {
+    // Initialize storage before any read so adapters that open/create their
+    // stores in init() are ready. The scheduler warm-up tick also persists a
+    // workflow snapshot on start(), which can race a lazy init() that creates
+    // `mastra_workflow_snapshot` ("no such table" on SQL stores, see #17905).
+    // init() is idempotent and a no-op when disabled.
+    if (this.#storage) {
+      await this.#storage.init();
+    }
+
     // Flip the scheduler-requested flag if any heartbeat schedule rows
     // exist in storage from a previous boot. Without this, a process
     // that boots with only DB-side heartbeats (no in-code declarative
     // schedules and no imperative `heartbeats.create()` calls yet) would
-    // skip injecting the scheduler + heartbeat workers entirely.
+    // skip injecting the scheduler + heartbeat workers entirely. This reads
+    // the schedules store, so it must run after storage.init() above.
     if (!name) {
       await this.#detectExistingHeartbeats();
     }
@@ -4649,17 +4659,6 @@ export class Mastra<
       }
     } else {
       targets = this.#workers;
-    }
-
-    // Ensure storage is fully initialized before any worker starts. The
-    // scheduler worker runs an immediate warm-up tick on start(), which can
-    // dispatch an internal scheduled workflow (e.g. the notification
-    // dispatcher) and persist a workflow snapshot. Without awaiting init here,
-    // that write can race the lazy storage.init() that creates
-    // `mastra_workflow_snapshot`, producing "no such table" errors on SQL
-    // stores (see #17905). init() is idempotent and a no-op when disabled.
-    if (this.#storage) {
-      await this.#storage.init();
     }
 
     for (const worker of targets) {
