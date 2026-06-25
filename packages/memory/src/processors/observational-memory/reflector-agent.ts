@@ -38,7 +38,7 @@ export interface ReflectorResult extends BaseReflectorResult {
  * @param instruction - Optional custom instructions to append to the prompt
  */
 export function buildReflectorSystemPrompt(instruction?: string, extractors: readonly Extractor<any>[] = []): string {
-  const outputFormat = buildObserverOutputFormat(false, extractors);
+  const outputFormat = buildObserverOutputFormat(extractors);
   return `You are the memory consciousness of an AI assistant. Your memory observation reflections will be the ONLY information the assistant has about past interactions with this user.
 
 The following instructions were given to another part of your psyche (the observer) to create memories.
@@ -265,11 +265,11 @@ ${guidance}`;
 
   const extractorSections = buildExtractorOutputSections(extractors);
   if (extractorSections) {
-    prompt += `\n\n## Extractor Output\n\nAlso output these extractor sections after <observations>:\n\n${extractorSections}`;
+    prompt += `\n\n## Additional Output Sections\n\n${extractorSections}`;
   }
 
   if (skipContinuationHints) {
-    prompt += `\n\nIMPORTANT: Do NOT include <current-task> or <suggested-response> sections in your output. Only output <observations>${extractorSections ? ' and the configured extractor sections' : ''}.`;
+    prompt += `\n\nOutput <observations> every time.`;
   }
 
   return prompt;

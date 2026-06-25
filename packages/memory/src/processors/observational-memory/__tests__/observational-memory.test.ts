@@ -4,9 +4,15 @@ import { coreFeatures } from '@mastra/core/features';
 import { MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { z } from 'zod';
 
 import { injectAnchorIds, parseAnchorId, stripEphemeralAnchorIds } from '../anchor-ids';
 import { BufferingCoordinator } from '../buffering-coordinator';
+import {
+  createCurrentTaskExtractor,
+  createSuggestedResponseExtractor,
+  createThreadTitleExtractor,
+} from '../built-in-extractors';
 import { OBSERVATIONAL_MEMORY_DEFAULTS } from '../constants';
 import { Extractor } from '../extractor';
 import {
@@ -2718,7 +2724,7 @@ describe('Observer Agent Helpers', () => {
       }
     });
 
-    it('should inject thread title instructions into the observer request when enabled', async () => {
+    it('should keep skip-continuation task guidance separate from resolved output sections', async () => {
       let capturedPrompt: any;
 
       const observer = new ObserverRunner({
@@ -2728,6 +2734,12 @@ describe('Observer Agent Helpers', () => {
           bufferTokens: false,
           previousObserverTokens: 1000,
           threadTitle: true,
+          extractors: [
+            createCurrentTaskExtractor(),
+            createSuggestedResponseExtractor(),
+            createThreadTitleExtractor(),
+            new Extractor({ name: 'User info', instructions: 'Extract user information.' }),
+          ],
         } as any,
         observedMessageIds: new Set(),
         resolveModel: () => ({ model: 'test-model' as any }),
@@ -2750,13 +2762,31 @@ describe('Observer Agent Helpers', () => {
 
       await observer.call(undefined, [createTestMessage('Need a better title', 'user')], undefined, {
         priorThreadTitle: 'Old thread title',
+        skipContinuationHints: true,
       });
 
       expect(Array.isArray(capturedPrompt)).toBe(true);
       expect(capturedPrompt).toHaveLength(2);
       expect(capturedPrompt[0]).toMatchObject({ role: 'user' });
-      expect(capturedPrompt[0].content).toContain('Also output a <thread-title>');
+      const systemPrompt = buildObserverSystemPrompt(false, undefined, true, [
+        createCurrentTaskExtractor(),
+        createSuggestedResponseExtractor(),
+        createThreadTitleExtractor(),
+        new Extractor({ name: 'User info', instructions: 'Extract user information.' }),
+      ]);
+
+      expect(capturedPrompt[0].content).not.toContain('Also output a <thread-title>');
       expect(capturedPrompt[0].content).toContain('- prior thread-title: Old thread title');
+      expect(systemPrompt).toContain('<current-task>');
+      expect(systemPrompt).toContain('<suggested-response>');
+      expect(systemPrompt).toContain('<thread-title>');
+      expect(systemPrompt).toContain('<user-info>');
+      expect(capturedPrompt[0].content).toContain('Output <observations> every time.');
+      expect(capturedPrompt[0].content).not.toContain(
+        'If the observations include information relevant to <thread-title>',
+      );
+      expect(capturedPrompt[0].content).not.toContain('Only output <observations> and <thread-title>');
+      expect(capturedPrompt[0].content).not.toContain('Do NOT include <current-task> or <suggested-response>');
       expect(capturedPrompt[0].content).toContain(
         'Use the prior current-task, suggested-response, and thread-title as continuity hints',
       );
@@ -2968,6 +2998,30 @@ Here's the implementation...
       expect(result.currentTask).toBe('Working on implementation');
       expect(result.observations).not.toContain('Working on implementation');
       expect(result.observations).not.toContain('<current-task>');
+    });
+
+    it('should parse thread title and custom inline extractor sections together', () => {
+      const userInfo = new Extractor({ name: 'User info', instructions: 'Extract user information.' });
+      const output = `
+<observations>
+- 🔴 User Tyler introduced himself.
+</observations>
+
+<thread-title>
+Tyler introduction
+</thread-title>
+
+<user-info>
+name: Tyler
+</user-info>
+      `;
+
+      const result = parseObserverOutput(output, [userInfo]);
+
+      expect(result.threadTitle).toBe('Tyler introduction');
+      expect(result.extractedValues).toEqual({ 'user-info': 'name: Tyler' });
+      expect(result.observations).toContain('User Tyler introduced himself');
+      expect(result.observations).not.toContain('<user-info>');
     });
 
     it('should handle output without continuation hint', () => {
@@ -5192,8 +5246,8 @@ describe('Scenario: Information should be preserved through observation cycle', 
     expect(systemPrompt).not.toContain('<thread-title>');
   });
 
-  it('observer system prompt should include thread title instructions when enabled', () => {
-    const systemPrompt = buildObserverSystemPrompt(false, undefined, true);
+  it('observer system prompt should include thread title instructions from the extractor list', () => {
+    const systemPrompt = buildObserverSystemPrompt(false, undefined, true, [createThreadTitleExtractor()]);
 
     expect(systemPrompt).toContain('<thread-title>');
     expect(systemPrompt).toContain('A short, noun-phrase title for this conversation');
@@ -6074,7 +6128,7 @@ describe('Resource Scope Observation Flow', () => {
         bufferTokens: false,
         previousObserverTokens: 1000,
         observeAttachments: 'auto',
-        extractors: [new Extractor({ name: 'Priority', instructions: 'Extract priority.' })],
+        extractors: [new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() })],
       } as any,
       observedMessageIds: new Set(),
       resolveModel: () => ({ model: model as any }),
@@ -10493,12 +10547,12 @@ describe('Full Async Buffering Flow', () => {
     expect(observerCalls.length).toBeGreaterThan(0);
 
     // The mock captures `input: JSON.stringify(prompt).slice(0, 200)`.
-    // buildObserverPrompt appends "Do NOT include <current-task> or <suggested-response>"
-    // when skipContinuationHints is true. Since the mock only captures 200 chars
-    // of the serialized prompt, we can't reliably check the end of the prompt here.
-    // The important thing: the observer was called (buffering happened), and the
-    // skipContinuationHints logic is unit-tested in buildObserverPrompt's own tests.
-    // For this integration test, we verify the async buffering path was exercised.
+    // buildObserverPrompt appends skipContinuationHints guidance near the end of the prompt.
+    // Since the mock only captures 200 chars of the serialized prompt, we can't reliably
+    // check the end of the prompt here. The important thing: the observer was called
+    // (buffering happened), and the skipContinuationHints logic is unit-tested in
+    // buildObserverPrompt's own tests. For this integration test, we verify the async
+    // buffering path was exercised.
     const lastCall = observerCalls[observerCalls.length - 1];
     expect(lastCall).toBeDefined();
     expect(lastCall.input.length).toBeGreaterThan(0);

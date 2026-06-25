@@ -35,7 +35,6 @@ export { Extractor } from './extractor';
 export type {
   ExtractorConfig,
   ExtractorInjectionBehaviour,
-  ExtractorMode,
   ExtractorOnExtractedContext,
   ExtractorSource,
 } from './extractor';

@@ -299,10 +299,7 @@ Prefer concrete resolved outcomes over abstract workflow status so the assistant
  */
 export const OBSERVER_OUTPUT_FORMAT_BASE = buildObserverOutputFormat();
 
-export function buildObserverOutputFormat(
-  includeThreadTitle: boolean = false,
-  extractors: readonly Extractor<any>[] = [],
-): string {
+export function buildObserverOutputFormat(extractors: readonly Extractor<any>[] = []): string {
   const extractorSections = buildExtractorOutputSections(extractors);
   const legacyContinuationSections =
     extractors.length === 0
@@ -320,18 +317,6 @@ Hint for the agent's immediate next message. Examples:
 - Call the view tool on src/example.ts to continue debugging.
 </suggested-response>`
       : '';
-  const threadTitleSection =
-    includeThreadTitle && !extractors.some(extractor => extractor.slug === 'thread-title')
-      ? `
-<thread-title>
-A short, noun-phrase title for this conversation (2-5 words). Examples:
-- "Auth bug fix" — not "Fixing the auth bug"
-- "Dark mode toggle" — not "User wants dark mode toggle added"
-- "Deployment pipeline setup" — not "Setting up deployment pipeline for project"
-Only update when the topic meaningfully changes.
-</thread-title>`
-      : '';
-
   return `Use priority levels:
 - 🔴 High: explicit user facts, preferences, unresolved goals, critical context
 - 🟡 Medium: project details, learned information, tool results
@@ -357,7 +342,7 @@ Date: Dec 5, 2025
 * 🔴 (09:15) Continued work on feature X
 </observations>
 
-${extractorSections || legacyContinuationSections}${threadTitleSection}`;
+${extractorSections || legacyContinuationSections}`;
 }
 
 /**
@@ -393,7 +378,7 @@ export function buildObserverSystemPrompt(
   includeThreadTitle: boolean = false,
   extractors: readonly Extractor<any>[] = [],
 ): string {
-  const outputFormat = buildObserverOutputFormat(includeThreadTitle, extractors);
+  const outputFormat = buildObserverOutputFormat(extractors);
   const multiThreadTitleInstruction = includeThreadTitle
     ? ` Each thread's observations, current-task, suggested-response, and thread-title should be nested inside a <thread id="..."> block within <observations>.`
     : ` Each thread's observations, current-task, and suggested-response should be nested inside a <thread id="..."> block within <observations>.`;
@@ -1420,13 +1405,8 @@ export function buildObserverTaskPrompt(
   prompt += `## Your Task\n\n`;
   prompt += `Extract new observations from the message history above. Do not repeat observations that are already in the previous observations. Add your new observations in the format specified in your instructions.`;
 
-  // Add thread title guidance (independent of continuation hints)
-  if (options?.includeThreadTitle) {
-    prompt += `\n\nAlso output a <thread-title> — a short noun-phrase label for this conversation (2-5 words). Write it like a file name or PR title: "Auth bug fix", "Memory config refactor", "RAG pipeline setup". Avoid verbs/sentences ("Fixing the auth bug"), filler ("Working on stuff"), and generic labels ("Code review"). Only change it from the prior title if the topic meaningfully shifted.`;
-  }
-
   if (options?.skipContinuationHints) {
-    prompt += `\n\nIMPORTANT: Do NOT include <current-task> or <suggested-response> sections in your output. Only output <observations>${options?.includeThreadTitle ? ' and <thread-title>' : ''}.`;
+    prompt += `\n\nOutput <observations> every time.`;
   }
 
   return prompt;

@@ -18,13 +18,23 @@ import {
 } from '../extractor';
 
 describe('Extractor', () => {
-  it('creates a structured carry-forward extractor by default', () => {
+  it('creates an inline string carry-forward extractor when no schema is provided', () => {
     const extractor = new Extractor({ name: 'Project Status', instructions: 'Extract the project status.' });
 
     expect(extractor.slug).toBe('project-status');
-    expect(extractor.mode).toBe('structured');
+    expect(extractor.mode).toBe('inline');
     expect(extractor.injectionBehaviour).toBe('carry-forward');
     expect(extractor.schema.parse('active')).toBe('active');
+  });
+
+  it('creates a structured carry-forward extractor when a schema is provided', () => {
+    const extractor = new Extractor({
+      name: 'Project Status',
+      instructions: 'Extract the project status.',
+      schema: z.object({ status: z.string() }),
+    });
+
+    expect(extractor.mode).toBe('structured');
   });
 
   it('rejects empty, duplicate, and reserved slugs', () => {
@@ -37,30 +47,37 @@ describe('Extractor', () => {
     expect(() => validateExtractorList([first, second])).toThrow(/Duplicate extractor slug "priority"/);
   });
 
-  it('parses combined inline JSON extractor values through Zod schemas', () => {
-    const mood = new Extractor({ name: 'Mood', instructions: 'Extract mood.', mode: 'inline' });
-    const details = new Extractor({
-      name: 'Details',
-      instructions: 'Extract details.',
-      mode: 'inline',
-      schema: z.object({ level: z.number(), tags: z.array(z.string()) }),
-    });
+  it('parses combined inline JSON string extractor values', () => {
+    const mood = new Extractor({ name: 'Mood', instructions: 'Extract mood.' });
+    const details = new Extractor({ name: 'Details', instructions: 'Extract details.' });
 
     const parsed = parseExtractedValues(
-      `<extracted-values>\n{"mood":"focused","details":{"level":2,"tags":["memory","om"]}}\n</extracted-values>`,
+      `<extracted-values>\n{"mood":"focused","details":"memory and om"}\n</extracted-values>`,
       [mood, details],
     );
 
     expect(parsed.values).toEqual({
       mood: 'focused',
-      details: { level: 2, tags: ['memory', 'om'] },
+      details: 'memory and om',
     });
     expect(parsed.failures).toEqual([]);
   });
 
-  it('reports schema failures without dropping valid combined inline extractor values', () => {
-    const valid = new Extractor({ name: 'Valid', instructions: 'Extract valid.', mode: 'inline' });
-    const count = new Extractor({ name: 'Count', instructions: 'Extract count.', mode: 'inline', schema: z.number() });
+  it('parses legacy per-extractor XML tags for schema-less inline values', () => {
+    const userInfo = new Extractor({ name: 'User info', instructions: 'Extract user details.' });
+
+    const parsed = parseExtractedValues(
+      '<observations>User shared their name.</observations>\n<user-info>name: Tyler</user-info>',
+      [userInfo],
+    );
+
+    expect(parsed.values).toEqual({ 'user-info': 'name: Tyler' });
+    expect(parsed.failures).toEqual([]);
+  });
+
+  it('ignores structured extractors when parsing inline extracted values', () => {
+    const valid = new Extractor({ name: 'Valid', instructions: 'Extract valid.' });
+    const count = new Extractor({ name: 'Count', instructions: 'Extract count.', schema: z.number() });
 
     const parsed = parseExtractedValues(
       '<extracted-values>\n{"valid":"ok","count":"not-a-number"}\n</extracted-values>',
@@ -68,17 +85,15 @@ describe('Extractor', () => {
     );
 
     expect(parsed.values).toEqual({ valid: 'ok' });
-    expect(parsed.failures).toHaveLength(1);
-    expect(parsed.failures[0]?.slug).toBe('count');
-    expect(parsed.failures[0]?.error).toMatch(/expected number/);
+    expect(parsed.failures).toEqual([]);
   });
 
-  it('strips combined inline extractor sections before observation parsing', () => {
-    const status = new Extractor({ name: 'Status', instructions: 'Extract status.', mode: 'inline' });
+  it('strips inline extractor sections before observation parsing', () => {
+    const status = new Extractor({ name: 'Status', instructions: 'Extract status.' });
 
     expect(
       stripExtractorSections(
-        '<observations>Keep me</observations>\n<extracted-values>\n{"status":"done"}\n</extracted-values>',
+        '<observations>Keep me</observations>\n<extracted-values>\n{"status":"done"}\n</extracted-values>\n<status>done</status>',
         [status],
       ),
     ).toBe('<observations>Keep me</observations>\n');
@@ -91,34 +106,29 @@ describe('Extractor', () => {
     expect(() => parseExtractorValue(score, 'seven')).toThrow(/did not match/);
   });
 
-  it('builds one combined inline output section with schema guidance', () => {
+  it('builds per-extractor inline output sections for schema-less string extractors', () => {
     const location = new Extractor({
       name: 'Weather Locations',
       instructions: 'Extract requested weather locations.',
-      mode: 'inline',
       schema: z.array(z.string()),
     });
-    const mood = new Extractor({ name: 'Mood', instructions: 'Extract mood.', mode: 'inline' });
+    const mood = new Extractor({ name: 'Mood', instructions: 'Extract mood.' });
 
     const section = buildExtractorOutputSections([location, mood]);
 
-    expect(section).toContain('Extract these values into a single JSON object keyed by extractor slug:');
-    expect(section).toContain('- weather-locations (Weather Locations): Extract requested weather locations.');
-    expect(section).toContain('- mood (Mood): Extract mood.');
-    expect(section).toContain('"weather-locations"');
-    expect(section).toContain('"type": "array"');
-    expect(section).toContain('"type": "string"');
-    expect(section).toContain(
-      '<extracted-values>\nWrite only the extracted values JSON object here.\n</extracted-values>',
-    );
+    expect(section).toContain('Additional optional XML sections:');
+    expect(section).toContain('If the observations include information relevant to any of these tags');
     expect(section).not.toContain('<weather-locations>');
+    expect(section).toContain('<mood>');
+    expect(section).toContain('Extract mood.');
+    expect(section).toContain('Include this section when the observations contain relevant information for <mood>.');
+    expect(section).not.toContain('<extracted-values>');
   });
 
   it('ignores copied combined inline output placeholders', () => {
     const location = new Extractor({
       name: 'Weather Locations',
       instructions: 'Extract requested weather locations.',
-      mode: 'inline',
     });
 
     const parsed = parseExtractedValues(

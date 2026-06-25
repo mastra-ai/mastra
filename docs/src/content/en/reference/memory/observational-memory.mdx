@@ -138,7 +138,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             name: 'extract',
             type: 'Extractor<any>[]',
             description:
-              'Custom values to extract after observation. Inline extractors are requested in the Observer output. Structured extractors run as a follow-up structured output call and are stored in thread OM metadata.',
+              'Custom values to extract after observation. Schema-less extractors are requested inline in the Observer output. Schema-backed extractors run as a follow-up structured output call and are stored in thread OM metadata.',
             isOptional: true,
           },
           {
@@ -278,7 +278,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             name: 'extract',
             type: 'Extractor<any>[]',
             description:
-              'Custom values to extract after reflection. Inline extractors are requested in the Reflector output. Structured extractors run as a follow-up structured output call and are stored in thread OM metadata.',
+              'Custom values to extract after reflection. Schema-less extractors are requested inline in the Reflector output. Schema-backed extractors run as a follow-up structured output call and are stored in thread OM metadata.',
             isOptional: true,
           },
           {
@@ -417,16 +417,8 @@ const memory = new Memory({
     name: 'schema',
     type: 'ZodType<T>',
     description:
-      'Optional Zod schema for validation. Structured extractors use the schema in a structured output call. Inline extractors parse the XML value as JSON when possible, then validate it against the schema.',
+      'Optional Zod schema for structured extraction. When provided, OM runs a follow-up structured output call after the main OM operation. When omitted, the extractor is an inline string extractor emitted in the Observer or Reflector response.',
     isOptional: true,
-  },
-  {
-    name: 'mode',
-    type: "'inline' | 'structured'",
-    description:
-      '`inline` asks the Observer or Reflector to emit an XML tag in the main response. `structured` runs a follow-up structured output call after the main OM operation. Custom extractors default to `structured`.',
-    isOptional: true,
-    defaultValue: "'structured'",
   },
   {
     name: 'injectionBehaviour',
@@ -452,7 +444,8 @@ const memory = new Memory({
 - Built-in extractor values are also mirrored to the compatibility metadata fields `currentTask`, `suggestedResponse`, and `threadTitle`.
 - `thread-title` updates the thread title only when `observation.threadTitle` is enabled.
 - `observation.extract` runs during observation. `reflection.extract` runs during reflection.
-- Structured extractors add a follow-up model call. The call uses temporary in-memory history with the Observer or Reflector output as the previous assistant message so providers that support prompt caching can reuse the shared prompt prefix.
+- Schema-backed extractors add a follow-up model call. The call uses the same temporary in-memory Observer or Reflector thread so providers that support prompt caching can reuse the shared prompt prefix.
+- Schema-less extractors are inline string extractors emitted directly in the Observer or Reflector output.
 - Extraction failures are reported in OM marker data and do not discard other successful extracted values.
 
 ## Examples

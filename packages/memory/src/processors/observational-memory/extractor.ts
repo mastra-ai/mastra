@@ -1,9 +1,8 @@
 import type { ProcessorContext } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
-import { isStandardSchemaWithJSON, standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
 import { z } from 'zod';
 
-export type ExtractorMode = 'inline' | 'structured';
+type ExtractorMode = 'inline' | 'structured';
 export type ExtractorInjectionBehaviour = 'carry-forward' | 'none';
 export type ExtractorSource = 'observer' | 'reflector';
 
@@ -24,10 +23,8 @@ export interface ExtractorConfig<T = unknown> {
   name: string;
   /** Instructions describing what this extractor should return. */
   instructions: string;
-  /** Zod schema used to validate the extracted value. Defaults to `z.string()`. */
+  /** Zod schema used for structured extraction. Omit to extract an inline string value from the observer/reflector output. */
   schema?: z.ZodType<T>;
-  /** Inline extractors are emitted as XML in the observer/reflector output. Structured extractors run in a follow-up structured-output call. */
-  mode?: ExtractorMode;
   /** Whether the previous value should be shown to the extractor prompt. */
   injectionBehaviour?: ExtractorInjectionBehaviour;
   /** Optional lifecycle hook invoked after a value is parsed and before it is persisted. */
@@ -110,7 +107,7 @@ export class Extractor<T = unknown> {
     this.slug = slug;
     this.instructions = instructions;
     this.schema = (config.schema ?? z.string()) as z.ZodType<T>;
-    this.mode = config.mode ?? 'structured';
+    this.mode = internal || !config.schema ? 'inline' : 'structured';
     this.injectionBehaviour = config.injectionBehaviour ?? 'carry-forward';
     this.onExtracted = config.onExtracted;
     this.internal = internal;
@@ -186,7 +183,7 @@ export interface ParsedExtractedValues {
 
 function parseExtractedValuesObject(raw: string): Record<string, unknown> | undefined {
   const trimmed = raw.trim();
-  if (!trimmed || trimmed === 'Write only the extracted values JSON object here.') {
+  if (!trimmed || trimmed.startsWith('Write only the extracted values JSON object here.')) {
     return undefined;
   }
 
@@ -231,23 +228,36 @@ export function parseExtractedValues(output: string, extractors: readonly Extrac
     }
   }
 
+  for (const extractor of inlineExtractors) {
+    if (Object.prototype.hasOwnProperty.call(values, extractor.slug)) {
+      continue;
+    }
+    const tagRegex = new RegExp(`<${extractor.slug}>([\\s\\S]*?)<\\/${extractor.slug}>`, 'gi');
+    const tagMatch = [...output.matchAll(tagRegex)].at(-1);
+    const rawValue = tagMatch?.[1]?.trim();
+    if (!rawValue) {
+      continue;
+    }
+    try {
+      values[extractor.slug] = parseExtractorValue(extractor, rawValue);
+    } catch (error) {
+      failures.push({ slug: extractor.slug, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
   return { values, failures };
 }
 
-export function stripExtractorSections(output: string, _extractors: readonly Extractor<any>[]): string {
-  return output.replace(
+export function stripExtractorSections(output: string, extractors: readonly Extractor<any>[]): string {
+  const inlineExtractors = extractors.filter(extractor => extractor.mode === 'inline');
+  let stripped = output.replace(
     new RegExp(`[ \\t]*<${EXTRACTED_VALUES_TAG}>[\\s\\S]*?<\\/${EXTRACTED_VALUES_TAG}>\\s*`, 'gi'),
     '',
   );
-}
-
-function buildInlineExtractorJsonSchema(extractor: Extractor<any>) {
-  const standardSchema = isStandardSchemaWithJSON(extractor.schema)
-    ? extractor.schema
-    : toStandardSchema(extractor.schema);
-  const jsonSchema = standardSchemaToJSONSchema(standardSchema, { io: 'output' });
-  delete jsonSchema.$schema;
-  return jsonSchema;
+  for (const extractor of inlineExtractors) {
+    stripped = stripped.replace(new RegExp(`[ \\t]*<${extractor.slug}>[\\s\\S]*?<\\/${extractor.slug}>\\s*`, 'gi'), '');
+  }
+  return stripped;
 }
 
 export function buildExtractorOutputSections(extractors: readonly Extractor<any>[]): string {
@@ -256,18 +266,16 @@ export function buildExtractorOutputSections(extractors: readonly Extractor<any>
     return '';
   }
 
-  const schema = {
-    type: 'object',
-    additionalProperties: false,
-    properties: Object.fromEntries(
-      inlineExtractors.map(extractor => [extractor.slug, buildInlineExtractorJsonSchema(extractor)]),
-    ),
-  };
-  const instructions = inlineExtractors
-    .map(extractor => `- ${extractor.slug} (${extractor.name}): ${extractor.instructions}`)
-    .join('\n');
+  const sections = inlineExtractors
+    .map(
+      extractor => `<${extractor.slug}>
+${extractor.instructions}
+Include this section when the observations contain relevant information for <${extractor.slug}>. Write only that information inside the tag.
+</${extractor.slug}>`,
+    )
+    .join('\n\n');
 
-  return `Extract these values into a single JSON object keyed by extractor slug:\n${instructions}\n\nThe JSON object must match this JSON Schema. Omit a property when there is no value to extract.\n${JSON.stringify(schema, null, 2)}\n<${EXTRACTED_VALUES_TAG}>\nWrite only the extracted values JSON object here.\n</${EXTRACTED_VALUES_TAG}>`;
+  return `Additional optional XML sections:\nIf the observations include information relevant to any of these tags, output that tag after <observations> and include the relevant information.\n${sections}`;
 }
 
 function renderPriorValue(value: unknown): string {

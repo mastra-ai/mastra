@@ -279,6 +279,52 @@ describe('observe()', () => {
       expect(result.record.lastObservedAt).toBeDefined();
     });
 
+    it('should persist schema-less inline extracted values and call hooks', async () => {
+      const onExtracted = vi.fn();
+      const userInfo = new Extractor({
+        name: 'User info',
+        instructions: 'Information about the user: name/location/work/etc',
+        injectionBehaviour: 'none',
+        onExtracted,
+      });
+      const extractOm = createOM(storage, {
+        observationExtract: [userInfo],
+        observerModel: createMockObserverModel(
+          `<observations>
+* 🔴 User said their name is Tyler.
+</observations>
+<user-info>
+name: Tyler
+</user-info>`,
+        ),
+      });
+
+      await storage.saveThread({
+        thread: {
+          id: threadId,
+          resourceId: 'observe-resource',
+          title: 'Observe thread',
+          metadata: {},
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+      const messages = createBulkMessages(10, threadId);
+      await storage.saveMessages({ messages });
+      const result = await extractOm.observe({ threadId });
+
+      expect(result.observed).toBe(true);
+      expect(onExtracted).toHaveBeenCalledWith(
+        expect.objectContaining({
+          source: 'observer',
+          threadId,
+          current: 'name: Tyler',
+        }),
+      );
+      const thread = await storage.getThreadById({ threadId });
+      expect(getThreadOMMetadata(thread?.metadata)?.extracted).toMatchObject({ 'user-info': 'name: Tyler' });
+    });
+
     it('should skip when messages are below threshold', async () => {
       const messages = [createTestMessage('short')];
       const result = await om.observe({ threadId, messages });
@@ -1376,7 +1422,6 @@ describe('reflect()', () => {
     const priority = new Extractor({
       name: 'Priority',
       instructions: 'Extract the current priority.',
-      mode: 'inline',
     });
     const reflectOm = createOM(storage, {
       reflectionExtract: [priority],
@@ -1384,9 +1429,9 @@ describe('reflect()', () => {
         `<observations>
 * Condensed: User discussed priority.
 </observations>
-<priority>
-high
-</priority>`,
+<extracted-values>
+{"priority":"high"}
+</extracted-values>`,
       ),
     });
 
