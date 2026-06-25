@@ -170,7 +170,7 @@ describe('WorkflowDebugStepControls', () => {
     const payload = timeTravelWorkflowStream.mock.calls[0][0];
     expect(payload.step).toBe('mapping_join');
     // Only the taken arm's output is forwarded as the join context.
-    expect(payload.context).toEqual({ 'short-text': { output: { text: 'AS' } } });
+    expect(payload.context).toEqual({ 'short-text': { status: 'success', output: { text: 'AS' } } });
     // A normal advance re-pauses, so per-step is explicitly enabled regardless of the
     // in-memory debug flag (which is false when landing on a paused run's :runId page).
     expect(payload.perStep).toBe(true);

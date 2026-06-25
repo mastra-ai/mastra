@@ -1,4 +1,4 @@
-import type { GetWorkflowResponse } from '@mastra/client-js';
+import type { GetWorkflowResponse, TimeTravelParams } from '@mastra/client-js';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { useCallback, useContext, useMemo } from 'react';
 import { parse } from 'superjson';
@@ -73,9 +73,12 @@ export function useWorkflowSchemas(workflow?: GetWorkflowResponse) {
 function useWorkflowStepGraphInfo(stepGraph: GetWorkflowResponse['stepGraph'] | undefined) {
   return useMemo(() => {
     const { nodes, edges } = constructNodesAndEdges({ stepGraph });
-    const stepNodesInOrder = nodes
-      .filter(node => node.type === WORKFLOW_STEP_NODE_TYPE && node.data?.nodeRole !== 'condition' && node.data?.stepId)
-      .map(node => node.data.stepId as string);
+    const stepNodesInOrder = nodes.flatMap(node => {
+      if (node.type !== WORKFLOW_STEP_NODE_TYPE || node.data.nodeRole === 'condition' || !node.data.stepId) {
+        return [];
+      }
+      return [node.data.stepId];
+    });
 
     const stepsFlow = buildStepsFlow(edges);
     const stepSuccessors = buildStepSuccessors(stepsFlow);
@@ -204,12 +207,12 @@ export function useNextPerStep() {
         perStep: !runToFinish,
         ...(stepPayload.hasMultiSteps
           ? {
-              context: Object.keys(stepPayload.input).reduce(
+              context: Object.keys(stepPayload.input).reduce<NonNullable<TimeTravelParams['context']>>(
                 (acc, stepId) => {
-                  acc[stepId] = { output: stepPayload.input[stepId] };
+                  acc[stepId] = { status: 'success', output: stepPayload.input[stepId] };
                   return acc;
                 },
-                {} as Record<string, any>,
+                {},
               ),
             }
           : {}),

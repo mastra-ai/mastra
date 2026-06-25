@@ -8,6 +8,7 @@ import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
 import { useWorkflowGraphRuntime } from './use-workflow-graph-runtime';
 import { useSuspendedStepKey, useWaitingStepKey } from './use-workflow-trigger';
 import { constructNodesAndEdges, findFocusNode } from './utils';
+import type { WorkflowGraphEdge, WorkflowGraphNode } from './utils';
 import { ZoomSlider } from './zoom-slider';
 
 export interface WorkflowGraphInnerProps {
@@ -18,8 +19,8 @@ export interface WorkflowGraphInnerProps {
 
 export function WorkflowGraphInner({ workflow }: WorkflowGraphInnerProps) {
   const { nodes: initialNodes, edges: initialEdges } = constructNodesAndEdges(workflow);
-  const [nodes, _, onNodesChange] = useNodesState(initialNodes);
-  const [edges] = useEdgesState(initialEdges);
+  const [nodes, _, onNodesChange] = useNodesState<WorkflowGraphNode>(initialNodes);
+  const [edges] = useEdgesState<WorkflowGraphEdge>(initialEdges);
   const { edgeTypes, nodeTypes, styledEdges } = useWorkflowGraphRuntime({ edges });
 
   const graphRef = useRef<HTMLDivElement>(null);
