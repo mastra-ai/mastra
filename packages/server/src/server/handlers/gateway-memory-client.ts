@@ -23,6 +23,22 @@ interface GatewayMessage {
   createdAt: string;
 }
 
+interface GatewayBufferedObservationChunk {
+  id?: string;
+  cycleId: string;
+  observations: string;
+  tokenCount: number;
+  messageIds?: string[];
+  messageTokens: number;
+  lastObservedAt?: string | null;
+  createdAt?: string | null;
+  suggestedContinuation?: string;
+  currentTask?: string;
+  threadTitle?: string;
+  extractedValues?: Record<string, unknown>;
+  extractionFailures?: Array<{ slug: string; error: string }>;
+}
+
 interface GatewayOMRecord {
   id: string;
   scope: string;
@@ -42,7 +58,7 @@ interface GatewayOMRecord {
   isBufferingObservation: boolean;
   isBufferingReflection: boolean;
   config?: Record<string, unknown>;
-  bufferedObservationChunks?: unknown[];
+  bufferedObservationChunks?: GatewayBufferedObservationChunk[];
   bufferedReflection?: string | null;
   bufferedReflectionTokens?: number | null;
   bufferedReflectionInputTokens?: number | null;
@@ -261,7 +277,11 @@ export function toLocalOMRecord(gr: GatewayOMRecord) {
     isBufferingObservation: gr.isBufferingObservation,
     isBufferingReflection: gr.isBufferingReflection,
     config: gr.config ?? {},
-    bufferedObservationChunks: gr.bufferedObservationChunks ?? [],
+    bufferedObservationChunks: gr.bufferedObservationChunks?.map(chunk => ({
+      ...chunk,
+      lastObservedAt: chunk.lastObservedAt ? new Date(chunk.lastObservedAt) : undefined,
+      createdAt: chunk.createdAt ? new Date(chunk.createdAt) : undefined,
+    })),
     bufferedReflection: gr.bufferedReflection ?? undefined,
     bufferedReflectionTokens: gr.bufferedReflectionTokens ?? undefined,
     bufferedReflectionInputTokens: gr.bufferedReflectionInputTokens ?? undefined,

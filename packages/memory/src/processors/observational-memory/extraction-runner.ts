@@ -80,7 +80,7 @@ async function generateStructuredExtraction(opts: {
 export async function extractStructuredValues(opts: {
   agent: Agent<any, any, any, any>;
   source: ExtractorSource;
-  extractors: readonly Extractor<any>[];
+  extractors?: readonly Extractor<any>[];
   sourceMessages: CoreMessageV4[];
   sourceOutput: string;
   observations?: string;
@@ -89,7 +89,7 @@ export async function extractStructuredValues(opts: {
   observabilityContext?: ObservabilityContext;
   abortSignal?: AbortSignal;
 }): Promise<StructuredExtractionResult> {
-  const structuredExtractors = opts.extractors.filter(extractor => extractor.mode === 'structured');
+  const structuredExtractors = (opts.extractors ?? []).filter(extractor => extractor.mode === 'structured');
   if (structuredExtractors.length === 0) {
     return { values: {}, failures: [] };
   }

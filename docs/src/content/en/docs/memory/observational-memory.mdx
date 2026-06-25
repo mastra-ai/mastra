@@ -219,7 +219,7 @@ export const agent = new Agent({
 })
 ```
 
-Custom extractors default to `mode: 'structured'`. This runs a follow-up structured output call after the Observer or Reflector finishes. Use `mode: 'inline'` for short scalar values that should be emitted directly in the Observer or Reflector response.
+Custom extractors default to `mode: 'structured'`. This runs a follow-up structured output call after the Observer or Reflector finishes. The follow-up call adds model latency and usage, but it uses temporary in-memory history with the Observer or Reflector output as the previous assistant message so providers that support prompt caching can reuse the shared prompt prefix. Use `mode: 'inline'` for short scalar values that should be emitted directly in the Observer or Reflector response.
 
 ```typescript title="src/mastra/agents/agent.ts"
 new Extractor({

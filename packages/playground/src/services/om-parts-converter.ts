@@ -47,14 +47,76 @@ const indexOmPartsByCycleId = (parts: MastraDBMessage['content']['parts'], targe
  * This gives each per-message converter the full picture of a cycle's state
  * (e.g., buffering-start on message A, activation on message B).
  */
-export const buildGlobalOmPartsByCycleId = (messages: MastraDBMessage[]) => {
+export type OmTerminalExtractionCache = Map<
+  string,
+  Partial<
+    Record<
+      'end' | 'failed' | 'bufferingEnd' | 'bufferingFailed',
+      { extractedValues?: Record<string, unknown>; extractionFailures?: Array<{ slug: string; error: string }> }
+    >
+  >
+>;
+
+const hasExtractionData = (data: any) => data?.extractedValues || data?.extractionFailures;
+
+const mergeCachedExtractionData = (part: OmIndexablePart | undefined, cachedData: any) => {
+  if (!part?.data || !cachedData) return part;
+  if (hasExtractionData(part.data)) return part;
+
+  return {
+    ...part,
+    data: {
+      ...part.data,
+      ...(cachedData.extractedValues ? { extractedValues: cachedData.extractedValues } : {}),
+      ...(cachedData.extractionFailures ? { extractionFailures: cachedData.extractionFailures } : {}),
+    },
+  } as OmIndexablePart;
+};
+
+export const retainOmTerminalExtractionData = (
+  globalOmParts: Map<string, OmCycleParts>,
+  cache: OmTerminalExtractionCache,
+) => {
+  for (const [cycleId, cycle] of globalOmParts) {
+    const cached = cache.get(cycleId);
+    if (cached) {
+      cycle.end = mergeCachedExtractionData(cycle.end, cached.end) as typeof cycle.end;
+      cycle.failed = mergeCachedExtractionData(cycle.failed, cached.failed) as typeof cycle.failed;
+      cycle.bufferingEnd = mergeCachedExtractionData(
+        cycle.bufferingEnd,
+        cached.bufferingEnd,
+      ) as typeof cycle.bufferingEnd;
+      cycle.bufferingFailed = mergeCachedExtractionData(
+        cycle.bufferingFailed,
+        cached.bufferingFailed,
+      ) as typeof cycle.bufferingFailed;
+    }
+
+    const nextCached = { ...(cached ?? {}) };
+    if (hasExtractionData(cycle.end?.data)) nextCached.end = cycle.end?.data as any;
+    if (hasExtractionData(cycle.failed?.data)) nextCached.failed = cycle.failed?.data as any;
+    if (hasExtractionData(cycle.bufferingEnd?.data)) nextCached.bufferingEnd = cycle.bufferingEnd?.data as any;
+    if (hasExtractionData(cycle.bufferingFailed?.data)) nextCached.bufferingFailed = cycle.bufferingFailed?.data as any;
+
+    if (Object.keys(nextCached).length > 0) {
+      cache.set(cycleId, nextCached);
+    }
+  }
+
+  return globalOmParts;
+};
+
+export const buildGlobalOmPartsByCycleId = (
+  messages: MastraDBMessage[],
+  extractionCache?: OmTerminalExtractionCache,
+) => {
   const map = new Map<string, OmCycleParts>();
   for (const msg of messages) {
     const parts = msg?.content?.parts;
     if (!Array.isArray(parts)) continue;
     indexOmPartsByCycleId(parts, map);
   }
-  return map;
+  return extractionCache ? retainOmTerminalExtractionData(map, extractionCache) : map;
 };
 
 /**
@@ -352,6 +414,8 @@ export const injectBufferingEnds = (messages: MastraDBMessage[], record?: any): 
             endData.tokensBuffered = chunk.messageTokens;
             endData.bufferedTokens = chunk.tokenCount;
             endData.observations = chunk.observations;
+            endData.extractedValues = chunk.extractedValues;
+            endData.extractionFailures = chunk.extractionFailures;
           }
         } else if (opType === 'reflection' && record) {
           endData.tokensBuffered = record.bufferedReflectionInputTokens;

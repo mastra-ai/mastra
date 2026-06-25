@@ -19,6 +19,7 @@ import {
   markOmMarkersAsDisconnected,
   scanOmInitialState,
 } from '@/services/om-parts-converter';
+import type { OmTerminalExtractionCache } from '@/services/om-parts-converter';
 import { ToolCallProvider } from '@/services/tool-call-provider';
 import type { ChatProps } from '@/types';
 
@@ -264,7 +265,11 @@ export function ChatProvider({
   // Build a global OM cycle index then convert OM parts to dynamic-tool form so
   // OM badges render. Strip transient error messages from `messages` (the same
   // errors live in `streamErrors`, which survives the post-stream refresh).
-  const globalOmParts = useMemo(() => buildGlobalOmPartsByCycleId(messages), [messages]);
+  const omTerminalExtractionCacheRef = useRef<OmTerminalExtractionCache>(new Map());
+  const globalOmParts = useMemo(
+    () => buildGlobalOmPartsByCycleId(messages, omTerminalExtractionCacheRef.current),
+    [messages],
+  );
 
   const renderMessages = useMemo<MastraDBMessage[]>(
     () =>

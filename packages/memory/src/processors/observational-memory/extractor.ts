@@ -1,5 +1,6 @@
 import type { ProcessorContext } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
+import { isStandardSchemaWithJSON, standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
 import { z } from 'zod';
 
 export type ExtractorMode = 'inline' | 'structured';
@@ -35,9 +36,12 @@ export interface ExtractorConfig<T = unknown> {
 
 const BUILT_IN_SLUGS = new Set(['current-task', 'suggested-response', 'thread-title']);
 
+const EXTRACTED_VALUES_TAG = 'extracted-values';
+
 const RESERVED_XML_TAGS = new Set([
   'observations',
   'observation',
+  EXTRACTED_VALUES_TAG,
   'thread',
   'message',
   'messages',
@@ -129,10 +133,6 @@ export function validateExtractorList(extractors: readonly Extractor<any>[]): Ex
   return [...extractors];
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 function isJsonLike(value: string): boolean {
   return /^(?:[\[{"-]|\d|true\b|false\b|null\b)/.test(value.trim());
 }
@@ -184,43 +184,70 @@ export interface ParsedExtractedValues {
   failures: Array<{ slug: string; error: string }>;
 }
 
+function parseExtractedValuesObject(raw: string): Record<string, unknown> | undefined {
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed === 'Write only the extracted values JSON object here.') {
+    return undefined;
+  }
+
+  const parsed = JSON.parse(trimmed) as unknown;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`${EXTRACTED_VALUES_TAG} must contain a JSON object.`);
+  }
+  return parsed as Record<string, unknown>;
+}
+
 export function parseExtractedValues(output: string, extractors: readonly Extractor<any>[]): ParsedExtractedValues {
   const values: Record<string, unknown> = {};
   const failures: Array<{ slug: string; error: string }> = [];
+  const inlineExtractors = extractors.filter(extractor => extractor.mode === 'inline');
 
-  for (const extractor of extractors) {
-    const tag = escapeRegExp(extractor.slug);
-    const regex = new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, 'gi');
-    const matches = [...output.matchAll(regex)];
-    if (matches.length === 0) {
-      continue;
-    }
-
-    const raw = matches
-      .map(match => match[1]?.trim() ?? '')
-      .filter(Boolean)
-      .join('\n');
-    if (!raw) {
-      continue;
-    }
-
+  const regex = new RegExp(`<${EXTRACTED_VALUES_TAG}>([\\s\\S]*?)<\\/${EXTRACTED_VALUES_TAG}>`, 'gi');
+  const matches = [...output.matchAll(regex)];
+  for (const match of matches) {
     try {
-      values[extractor.slug] = parseExtractorValue(extractor as Extractor<unknown>, raw);
+      const extractedValues = parseExtractedValuesObject(match[1] ?? '');
+      if (!extractedValues) {
+        continue;
+      }
+
+      for (const extractor of inlineExtractors) {
+        if (!Object.prototype.hasOwnProperty.call(extractedValues, extractor.slug)) {
+          continue;
+        }
+        const rawValue = extractedValues[extractor.slug];
+        if (rawValue === undefined || rawValue === null || rawValue === '') {
+          continue;
+        }
+        const parsed = extractor.schema.safeParse(rawValue);
+        if (parsed.success) {
+          values[extractor.slug] = parsed.data;
+        } else {
+          failures.push({ slug: extractor.slug, error: parsed.error.message });
+        }
+      }
     } catch (error) {
-      failures.push({ slug: extractor.slug, error: error instanceof Error ? error.message : String(error) });
+      failures.push({ slug: EXTRACTED_VALUES_TAG, error: error instanceof Error ? error.message : String(error) });
     }
   }
 
   return { values, failures };
 }
 
-export function stripExtractorSections(output: string, extractors: readonly Extractor<any>[]): string {
-  let stripped = output;
-  for (const extractor of extractors) {
-    const tag = escapeRegExp(extractor.slug);
-    stripped = stripped.replace(new RegExp(`[ \\t]*<${tag}>[\\s\\S]*?<\\/${tag}>\\s*`, 'gi'), '');
-  }
-  return stripped;
+export function stripExtractorSections(output: string, _extractors: readonly Extractor<any>[]): string {
+  return output.replace(
+    new RegExp(`[ \\t]*<${EXTRACTED_VALUES_TAG}>[\\s\\S]*?<\\/${EXTRACTED_VALUES_TAG}>\\s*`, 'gi'),
+    '',
+  );
+}
+
+function buildInlineExtractorJsonSchema(extractor: Extractor<any>) {
+  const standardSchema = isStandardSchemaWithJSON(extractor.schema)
+    ? extractor.schema
+    : toStandardSchema(extractor.schema);
+  const jsonSchema = standardSchemaToJSONSchema(standardSchema, { io: 'output' });
+  delete jsonSchema.$schema;
+  return jsonSchema;
 }
 
 export function buildExtractorOutputSections(extractors: readonly Extractor<any>[]): string {
@@ -229,9 +256,18 @@ export function buildExtractorOutputSections(extractors: readonly Extractor<any>
     return '';
   }
 
-  return inlineExtractors
-    .map(extractor => `<${extractor.slug}>\n${extractor.instructions}\n</${extractor.slug}>`)
-    .join('\n\n');
+  const schema = {
+    type: 'object',
+    additionalProperties: false,
+    properties: Object.fromEntries(
+      inlineExtractors.map(extractor => [extractor.slug, buildInlineExtractorJsonSchema(extractor)]),
+    ),
+  };
+  const instructions = inlineExtractors
+    .map(extractor => `- ${extractor.slug} (${extractor.name}): ${extractor.instructions}`)
+    .join('\n');
+
+  return `Extract these values into a single JSON object keyed by extractor slug:\n${instructions}\n\nThe JSON object must match this JSON Schema. Omit a property when there is no value to extract.\n${JSON.stringify(schema, null, 2)}\n<${EXTRACTED_VALUES_TAG}>\nWrite only the extracted values JSON object here.\n</${EXTRACTED_VALUES_TAG}>`;
 }
 
 function renderPriorValue(value: unknown): string {

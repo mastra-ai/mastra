@@ -11640,6 +11640,32 @@ export type GetMemoryObservationalMemory_Response = {
     threadId: string | null;
     activeObservations: string;
     bufferedObservations?: string | undefined;
+    bufferedObservationChunks?:
+      | {
+          id?: string | undefined;
+          cycleId: string;
+          observations: string;
+          tokenCount: number;
+          messageIds?: string[] | undefined;
+          messageTokens: number;
+          lastObservedAt?: Date | undefined;
+          createdAt?: Date | undefined;
+          suggestedContinuation?: string | undefined;
+          currentTask?: string | undefined;
+          threadTitle?: string | undefined;
+          extractedValues?:
+            | {
+                [key: string]: unknown;
+              }
+            | undefined;
+          extractionFailures?:
+            | {
+                slug: string;
+                error: string;
+              }[]
+            | undefined;
+        }[]
+      | undefined;
     bufferedReflection?: string | undefined;
     originType: 'initial' | 'observation' | 'reflection';
     generationCount: number;
@@ -11668,6 +11694,32 @@ export type GetMemoryObservationalMemory_Response = {
         threadId: string | null;
         activeObservations: string;
         bufferedObservations?: string | undefined;
+        bufferedObservationChunks?:
+          | {
+              id?: string | undefined;
+              cycleId: string;
+              observations: string;
+              tokenCount: number;
+              messageIds?: string[] | undefined;
+              messageTokens: number;
+              lastObservedAt?: Date | undefined;
+              createdAt?: Date | undefined;
+              suggestedContinuation?: string | undefined;
+              currentTask?: string | undefined;
+              threadTitle?: string | undefined;
+              extractedValues?:
+                | {
+                    [key: string]: unknown;
+                  }
+                | undefined;
+              extractionFailures?:
+                | {
+                    slug: string;
+                    error: string;
+                  }[]
+                | undefined;
+            }[]
+          | undefined;
         bufferedReflection?: string | undefined;
         originType: 'initial' | 'observation' | 'reflection';
         generationCount: number;
@@ -11727,6 +11779,32 @@ export type PostMemoryObservationalMemoryBufferStatus_Response = {
     threadId: string | null;
     activeObservations: string;
     bufferedObservations?: string | undefined;
+    bufferedObservationChunks?:
+      | {
+          id?: string | undefined;
+          cycleId: string;
+          observations: string;
+          tokenCount: number;
+          messageIds?: string[] | undefined;
+          messageTokens: number;
+          lastObservedAt?: Date | undefined;
+          createdAt?: Date | undefined;
+          suggestedContinuation?: string | undefined;
+          currentTask?: string | undefined;
+          threadTitle?: string | undefined;
+          extractedValues?:
+            | {
+                [key: string]: unknown;
+              }
+            | undefined;
+          extractionFailures?:
+            | {
+                slug: string;
+                error: string;
+              }[]
+            | undefined;
+        }[]
+      | undefined;
     bufferedReflection?: string | undefined;
     originType: 'initial' | 'observation' | 'reflection';
     generationCount: number;
