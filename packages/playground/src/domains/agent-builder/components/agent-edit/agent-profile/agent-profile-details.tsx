@@ -1,4 +1,4 @@
-import { cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { useFormContext, useWatch } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 

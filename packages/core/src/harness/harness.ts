@@ -352,10 +352,20 @@ export class Harness<TState = {}> {
     resourceId,
     ownerId,
     id,
+    tags,
   }: {
     resourceId?: string;
     id?: string;
     ownerId?: string;
+    /**
+     * Arbitrary string tags that scope this session. Each tag is seeded into the
+     * session's state and used to filter initial thread selection: a thread is a
+     * resume candidate only when its metadata matches every provided tag. This
+     * lets worktrees sharing a resourceId each resume their own thread (via a
+     * `projectPath` tag) and leaves room for future scoping dimensions without
+     * changing the API. Falls back to `initialState` when omitted.
+     */
+    tags?: Record<string, string>;
   } = {}): Promise<Session<TState>> {
     const effectiveResourceId = resourceId ?? this.config.resourceId ?? this.config.id;
     const effectiveSessionId = id ?? this.config.id;
@@ -371,7 +381,7 @@ export class Harness<TState = {}> {
       return existing;
     }
 
-    const creation = this.#createSessionForResource(effectiveOwnerId, effectiveSessionId, effectiveResourceId);
+    const creation = this.#createSessionForResource(effectiveOwnerId, effectiveSessionId, effectiveResourceId, tags);
     this.#sessionsByResource.set(effectiveResourceId, creation);
     try {
       return await creation;
@@ -384,14 +394,29 @@ export class Harness<TState = {}> {
     }
   }
 
-  async #createSessionForResource(ownerId: string, id: string, effectiveResourceId: string): Promise<Session<TState>> {
+  async #createSessionForResource(
+    ownerId: string,
+    id: string,
+    effectiveResourceId: string,
+    tags?: Record<string, string>,
+  ): Promise<Session<TState>> {
+    // Seed the session's tags into its state so thread tagging + the workspace
+    // factory resolve against this session's scope (e.g. its `projectPath`), not
+    // the harness-global default (which, on a multi-session server, may point at
+    // a different repo).
+    const initialState =
+      tags && Object.keys(tags).length > 0
+        ? ({ ...(this.config.initialState as Record<string, unknown>), ...tags } as TState)
+        : this.config.initialState;
+
     const session = this.#wireSession(
       new Session({
         resourceId: effectiveResourceId,
         id,
         ownerId,
+        tags,
         state: {
-          initialState: this.config.initialState,
+          initialState,
           stateSchema: this.config.stateSchema,
         },
       }),
@@ -411,20 +436,34 @@ export class Harness<TState = {}> {
       session.emit({ type: 'workspace_error', error: this.workspaceError });
     }
 
-    // Bring the session online with a current thread. The selection strategy is
-    // projectPath-aware so worktrees sharing a resourceId each resume their own
-    // thread without claiming threads owned by another resource.
-    const projectPath = (this.config.initialState as any)?.projectPath as string | undefined;
+    // Bring the session online with a current thread. Selection is tag-aware so
+    // worktrees sharing a resourceId each resume their own thread without
+    // claiming threads owned by another scope. A thread is a candidate only when
+    // its metadata matches every provided tag; with no tags every thread
+    // qualifies. Tags default to the harness-global state when omitted.
+    const selectionTags: Record<string, string> = {};
+    if (tags && Object.keys(tags).length > 0) {
+      Object.assign(selectionTags, tags);
+    } else {
+      const projectPath = (this.config.initialState as any)?.projectPath as string | undefined;
+      if (projectPath) selectionTags.projectPath = projectPath;
+    }
+    const tagEntries = Object.entries(selectionTags);
 
     const threads = await session.thread.list();
-    const candidates = projectPath ? threads.filter(t => (t.metadata as any)?.projectPath === projectPath) : threads;
+    const candidates =
+      tagEntries.length > 0
+        ? threads.filter(t => {
+            const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
+            return tagEntries.every(([key, value]) => metadata[key] === value);
+          })
+        : threads;
 
     // Resume the most recent same-resource candidate, or create a new thread.
     if (candidates.length === 0) {
       await session.thread.create();
     } else {
       const mostRecent = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
-
       await this.config.threadLock?.acquire(mostRecent.id);
       session.thread.set({ threadId: mostRecent.id });
       await session.thread.loadMetadata();
@@ -1236,6 +1275,60 @@ export class Harness<TState = {}> {
   // Message Handling
   // ===========================================================================
 
+  /**
+   * Resolve the `activeTools` allowlist for the current mode's run.
+   *
+   * Returns `undefined` when the mode has no `availableTools` configured
+   * (no restriction — all tools visible). When the mode declares
+   * `availableTools`, returns that list filtered to remove tools whose
+   * permission category is denied.
+   *
+   * Per-tool `deny` is already handled by `buildToolsets` (denied tools are
+   * deleted from the toolsets), so those tools won't exist at execution time
+   * regardless of whether they appear in the allowlist.
+   *
+   * The returned list uses the same exposed tool names the execution pipeline
+   * checks against (e.g. `view`, `write_file`, `ask_user`), which matches the
+   * names workspace tools are renamed to via `TOOL_NAME_OVERRIDES`.
+   */
+  private resolveModeActiveTools(session: Session<TState>): string[] | undefined {
+    const currentMode = session.mode.resolve();
+    const availableTools = currentMode?.availableTools;
+    if (!availableTools) {
+      return undefined;
+    }
+    if (availableTools.length === 0) {
+      return [];
+    }
+
+    const permissionRules = session.permissions.getRules();
+    const deniedTools = new Set(
+      Object.entries(permissionRules.tools)
+        .filter(([, policy]) => policy === 'deny')
+        .map(([tool]) => tool),
+    );
+    const deniedCategories = new Set(
+      Object.entries(permissionRules.categories)
+        .filter(([, policy]) => policy === 'deny')
+        .map(([cat]) => cat),
+    );
+
+    if (deniedTools.size === 0 && deniedCategories.size === 0) {
+      return availableTools;
+    }
+
+    return availableTools.filter(toolName => {
+      // Per-tool deny always wins — even over the mode allowlist.
+      if (deniedTools.has(toolName)) {
+        return false;
+      }
+      // Category deny: tools with no category (null — always-allowed tools
+      // like ask_user) are not subject to category deny.
+      const category = this.getToolCategory({ toolName });
+      return !category || !deniedCategories.has(category);
+    });
+  }
+
   private async buildAgentMessageStreamOptions({
     session,
     requestContext: requestContextInput,
@@ -1282,6 +1375,15 @@ export class Harness<TState = {}> {
       ...(callTimeInstructions && { instructions: callTimeInstructions }),
     };
     streamOptions.toolsets = await this.buildToolsets(session, requestContext);
+
+    // Apply mode-level tool visibility via `activeTools` — the same mechanism
+    // the execution pipeline already enforces at tool-call time.  Only set
+    // when the helper returns a concrete list so modes without
+    // `availableTools` keep unrestricted behaviour.
+    const activeTools = this.resolveModeActiveTools(session);
+    if (activeTools !== undefined) {
+      streamOptions.activeTools = activeTools;
+    }
 
     return streamOptions;
   }

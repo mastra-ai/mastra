@@ -732,6 +732,15 @@ export class Agent<
   }
 
   /**
+   * Returns the agent-level tool payload transform policy, if any.
+   * Used by durable execution to mirror the non-durable layer's
+   * per-call → agent → mastra merge order.
+   */
+  getToolPayloadTransform(): ToolPayloadTransformPolicy | undefined {
+    return this.#toolPayloadTransform;
+  }
+
+  /**
    * Returns the agent's native goal configuration, if any. Read by the loop's
    * goal step to resolve effective settings (judge model, max runs, prompt).
    * @internal

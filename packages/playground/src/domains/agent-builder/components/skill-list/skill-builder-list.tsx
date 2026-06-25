@@ -1,7 +1,7 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { Icon } from '@mastra/playground-ui';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { CopyIcon, DownloadIcon, LockIcon, SearchIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { SkillFavoriteButton } from './skill-favorite-button';

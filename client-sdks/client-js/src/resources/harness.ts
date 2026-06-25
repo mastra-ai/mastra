@@ -41,6 +41,25 @@ export interface HarnessMessage {
 }
 
 /**
+ * Status-line relevant slice of observational-memory progress, mirroring the
+ * TUI status line. `msg` reads `pendingTokens/threshold ↓projectedMessageRemoval`
+ * (the active message window before an observation fires); `mem` reads
+ * `observationTokens/reflectionThreshold ↓projectedReflectionSavings`
+ * (accumulated observations before a reflection fires).
+ */
+export interface HarnessOMProgress {
+  status: string;
+  pendingTokens: number;
+  threshold: number;
+  thresholdPercent: number;
+  observationTokens: number;
+  reflectionThreshold: number;
+  reflectionThresholdPercent: number;
+  projectedMessageRemoval: number;
+  projectedReflectionSavings: number;
+}
+
+/**
  * Harness events the SDK types explicitly. This is a discriminated union, so
  * narrowing on `event.type` gives you the right payload fields. This mirrors the
  * subset of the harness event stream a web client typically renders.
@@ -96,6 +115,18 @@ export type KnownHarnessEvent =
     }
   // Usage tracking.
   | { type: 'usage_update'; usage: unknown }
+  // Canonical display-state snapshot, emitted after every other event. Carries
+  // the status-line figures (OM progress + cumulative token usage). Maps/Dates
+  // in the full display state don't survive JSON, so only plain fields are typed.
+  | {
+      type: 'display_state_changed';
+      displayState: {
+        isRunning?: boolean;
+        omProgress?: HarnessOMProgress;
+        tokenUsage?: Record<string, unknown>;
+        [key: string]: unknown;
+      };
+    }
   // Goals.
   | {
       type: 'goal_evaluation';
@@ -150,12 +181,30 @@ export interface CreateHarnessSessionResponse {
   threadId?: string;
 }
 
+/** Agent behavior settings, mirroring the TUI's `/settings` toggles. */
+export interface HarnessSessionSettings {
+  /** Auto-approve all tool calls (no per-tool prompt). */
+  yolo: boolean;
+  /** Extended-thinking budget. */
+  thinkingLevel: 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+  /** How completion/notification alerts are delivered. */
+  notifications: 'off' | 'bell' | 'system' | 'both';
+  /** Use AST-aware smart editing when available. */
+  smartEditing: boolean;
+}
+
 export interface HarnessSessionState {
   harnessId: string;
   resourceId: string;
   threadId?: string;
   modeId: string;
   modelId: string;
+  /** OM progress snapshot for the status line (initial hydration). */
+  omProgress?: HarnessOMProgress;
+  /** Cumulative token usage for the current thread. */
+  tokenUsage?: Record<string, unknown>;
+  /** Agent behavior settings (yolo, thinking, notifications, smart editing). */
+  settings?: HarnessSessionSettings;
 }
 
 export interface HarnessModeInfo {
@@ -169,6 +218,12 @@ export interface HarnessThreadInfo {
   resourceId?: string;
   createdAt?: string;
   updatedAt?: string;
+  /**
+   * The session scoping tags this thread was stamped with at creation (e.g.
+   * `{ projectPath }`). Present on `listThreads()` results; used to tell which
+   * worktree/scope a thread belongs to when a resourceId is shared.
+   */
+  tags?: Record<string, string>;
 }
 
 export interface HarnessAvailableModel {
@@ -276,11 +331,17 @@ export class HarnessSession extends BaseResource {
     return `/harness/${encodeURIComponent(this.harnessId)}/sessions/${encodeURIComponent(this.resourceId)}`;
   }
 
-  /** Create or resume this session. */
-  create(): Promise<CreateHarnessSessionResponse> {
+  /**
+   * Create or resume this session. Pass `tags` to scope initial thread
+   * selection — a thread is a resume candidate only when its metadata matches
+   * every tag. Required when sessions share a resourceId (e.g. git worktrees
+   * using a `{ projectPath }` tag) so each resumes its own thread instead of the
+   * most recent thread across the whole resource.
+   */
+  create(options?: { tags?: Record<string, string> }): Promise<CreateHarnessSessionResponse> {
     return this.request(`/harness/${encodeURIComponent(this.harnessId)}/sessions`, {
       method: 'POST',
-      body: { resourceId: this.resourceId },
+      body: { resourceId: this.resourceId, tags: options?.tags },
     });
   }
 
@@ -397,8 +458,21 @@ export class HarnessSession extends BaseResource {
   }
 
   /** List the threads for this session's resource, most-recently-updated first. Pass `limit` for just the newest N. */
-  async listThreads(limit?: number): Promise<HarnessThreadInfo[]> {
-    const query = limit != null ? `?limit=${limit}` : '';
+  /**
+   * List the session's threads, newest first. Pass `limit` to cap the count
+   * (e.g. for a sidebar) and `tags` to scope to threads matching every tag —
+   * necessary when one resourceId is shared across git worktrees of the same
+   * repo (e.g. `{ tags: { projectPath } }` so each worktree sees only its own
+   * threads). Passing a bare number is shorthand for `{ limit }`.
+   */
+  async listThreads(
+    options?: number | { limit?: number; tags?: Record<string, string> },
+  ): Promise<HarnessThreadInfo[]> {
+    const opts = typeof options === 'number' ? { limit: options } : (options ?? {});
+    const params = new URLSearchParams();
+    if (opts.limit != null) params.set('limit', String(opts.limit));
+    if (opts.tags && Object.keys(opts.tags).length > 0) params.set('tags', JSON.stringify(opts.tags));
+    const query = params.toString() ? `?${params.toString()}` : '';
     const body = await this.request<{ threads: HarnessThreadInfo[] }>(`${this.base()}/threads${query}`);
     return body.threads;
   }
