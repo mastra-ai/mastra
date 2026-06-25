@@ -90129,7 +90129,8 @@ export type GetHeartbeats_Response = {
             | 'pending'
             | 'canceled'
             | 'bailed'
-            | 'paused';
+            | 'paused'
+            | 'skipped';
           startedAt?: number | undefined;
           completedAt?: number | undefined;
           durationMs?: number | undefined;
@@ -90202,7 +90203,8 @@ export type GetHeartbeatsHeartbeatId_Response = {
           | 'pending'
           | 'canceled'
           | 'bailed'
-          | 'paused';
+          | 'paused'
+          | 'skipped';
         startedAt?: number | undefined;
         completedAt?: number | undefined;
         durationMs?: number | undefined;
@@ -90286,7 +90288,8 @@ export type PostHeartbeats_Response = {
           | 'pending'
           | 'canceled'
           | 'bailed'
-          | 'paused';
+          | 'paused'
+          | 'skipped';
         startedAt?: number | undefined;
         completedAt?: number | undefined;
         durationMs?: number | undefined;
@@ -90375,7 +90378,8 @@ export type PatchHeartbeatsHeartbeatId_Response = {
           | 'pending'
           | 'canceled'
           | 'bailed'
-          | 'paused';
+          | 'paused'
+          | 'skipped';
         startedAt?: number | undefined;
         completedAt?: number | undefined;
         durationMs?: number | undefined;
@@ -90473,7 +90477,8 @@ export type PostHeartbeatsHeartbeatIdPause_Response = {
           | 'pending'
           | 'canceled'
           | 'bailed'
-          | 'paused';
+          | 'paused'
+          | 'skipped';
         startedAt?: number | undefined;
         completedAt?: number | undefined;
         durationMs?: number | undefined;
@@ -90543,7 +90548,8 @@ export type PostHeartbeatsHeartbeatIdResume_Response = {
           | 'pending'
           | 'canceled'
           | 'bailed'
-          | 'paused';
+          | 'paused'
+          | 'skipped';
         startedAt?: number | undefined;
         completedAt?: number | undefined;
         durationMs?: number | undefined;
