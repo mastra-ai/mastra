@@ -218,3 +218,50 @@ describe('client observability carrier propagation', () => {
     });
   });
 });
+
+describe('background-task chunk passthrough', () => {
+  it('surfaces background-task-started as a data-* UI part with the structured payload', () => {
+    // Mirror the agent-stream flow: convertMastraChunkToAISDK flattens the chunk,
+    // then convertFullStreamChunkToUIMessageStream maps it to a UI part.
+    const part = convertMastraChunkToAISDKv6({
+      chunk: {
+        type: 'background-task-started',
+        runId: 'run-1',
+        from: ChunkFrom.AGENT,
+        payload: {
+          taskId: 'task-123',
+          toolName: 'deepResearch',
+          toolCallId: 'call-1',
+        },
+      } as any,
+    }) as any;
+
+    const uiChunk = convertFullStreamChunkToUIMessageStream({
+      part,
+      onError: err => (err instanceof Error ? err.message : String(err)),
+    }) as any;
+
+    expect(uiChunk).toEqual({
+      type: 'data-background-task-started',
+      id: 'call-1',
+      data: {
+        taskId: 'task-123',
+        toolName: 'deepResearch',
+        toolCallId: 'call-1',
+      },
+    });
+  });
+
+  it('passes through other background-task-* lifecycle chunks as data parts', () => {
+    const uiChunk = convertFullStreamChunkToUIMessageStream({
+      part: { type: 'background-task-failed', taskId: 'task-9', toolCallId: 'call-9', error: 'boom' } as any,
+      onError: err => (err instanceof Error ? err.message : String(err)),
+    }) as any;
+
+    expect(uiChunk).toEqual({
+      type: 'data-background-task-failed',
+      id: 'call-9',
+      data: { taskId: 'task-9', toolCallId: 'call-9', error: 'boom' },
+    });
+  });
+});
