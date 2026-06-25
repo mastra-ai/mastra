@@ -823,7 +823,7 @@ describe('WorkflowsPG step result updates', () => {
         stepId: 'step-1',
         result: {
           status: 'success',
-          output: { text: 'prefix suffix', escape: 'Omschr\\vijving' },
+          output: { text: 'prefix\u0000suffix', escape: 'Omschr\\vijving' },
           payload: {},
           startedAt: Date.now(),
         } as any,
