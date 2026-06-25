@@ -76,6 +76,27 @@ const MODE_ID_KEY = 'currentModeId';
 const modeModelKey = (modeId: string) => `modeModelId_${modeId}`;
 
 /**
+ * Internal thread-metadata keys used by `Session.loadMetadata()` to persist
+ * runtime bookkeeping (selected model/mode, observer/reflector config, token
+ * usage). These share the flat thread `metadata` bag with user-provided
+ * session scoping tags, so they must never be treated as tags: they are
+ * skipped when stamping tags onto a thread and excluded when reading tags
+ * back out of thread metadata.
+ */
+function isReservedThreadMetadataKey(key: string): boolean {
+  return (
+    key === 'currentModelId' ||
+    key === MODE_ID_KEY ||
+    key === 'observerModelId' ||
+    key === 'reflectorModelId' ||
+    key === 'observationThreshold' ||
+    key === 'reflectionThreshold' ||
+    key === 'tokenUsage' ||
+    key.startsWith('modeModelId_')
+  );
+}
+
+/**
  * Owns the session's identity: the memory `resourceId` and the active
  * `threadId` this session reads and writes under. Together they form the memory
  * binding (`{ thread, resource }`) every run uses. In a multi-user host one
@@ -518,10 +539,20 @@ export class SessionThread {
       metadata[`modeModelId_${session.mode.get()}`] = modelId;
     }
 
-    // Auto-tag with projectPath from state so threads are scoped to the working directory
-    const projectPath = (session.state.get() as any).projectPath;
-    if (projectPath) {
-      metadata.projectPath = projectPath;
+    // Stamp the session's scoping tags onto the thread so listings can be
+    // filtered back to this session's scope (e.g. a `projectPath` per git
+    // worktree). Fall back to a `projectPath` read from state for unscoped
+    // sessions that still carry one in their initial state.
+    const tags = session.getTags();
+    if (Object.keys(tags).length > 0) {
+      for (const [key, value] of Object.entries(tags)) {
+        if (!isReservedThreadMetadataKey(key)) metadata[key] = value;
+      }
+    } else {
+      const projectPath = (session.state.get() as any).projectPath;
+      if (projectPath) {
+        metadata.projectPath = projectPath;
+      }
     }
 
     // Acquire lock on new thread before releasing old one.
@@ -2553,18 +2584,27 @@ export class Session<TState = unknown> {
   readonly displayState: SessionDisplayState;
   /** The session-owned Harness state domain. */
   readonly state: HarnessRequestState<TState>;
+  /**
+   * Scoping tags for this session (e.g. `{ projectPath }`). Seeded at creation
+   * and stamped onto every thread this session creates so thread listings can be
+   * filtered back to the session's scope. Empty when the session is unscoped.
+   */
+  readonly #tags: Record<string, string>;
 
   constructor({
     resourceId,
     state,
     id,
     ownerId,
+    tags,
   }: {
     resourceId: string;
     state?: SessionStateOptions<TState>;
     id: string;
     ownerId: string;
+    tags?: Record<string, string>;
   }) {
+    this.#tags = tags && Object.keys(tags).length > 0 ? { ...tags } : {};
     this.identity = new SessionIdentity({ resourceId, id, ownerId });
     this.thread = new SessionThread(() => this.identity.getResourceId());
     this.displayState = new SessionDisplayState({
@@ -2575,6 +2615,14 @@ export class Session<TState = unknown> {
     });
     this.#bus.setDisplayState(this.displayState);
     this.state = new SessionState(state ?? { initialState: {} as TState }, this.#bus);
+  }
+
+  /**
+   * This session's scoping tags (e.g. `{ projectPath }`), stamped onto every
+   * thread it creates. Returns a copy; empty when the session is unscoped.
+   */
+  getTags(): Record<string, string> {
+    return { ...this.#tags };
   }
 
   // ===========================================================================
