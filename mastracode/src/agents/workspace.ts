@@ -116,6 +116,15 @@ const DEFAULT_ALLOWED_PATHS: string[] = [os.tmpdir(), '/tmp', getPlansDir()].red
 
 const WORKSPACE_ID_PREFIX = 'mastra-code-workspace';
 
+function getHarnessState(
+  ctx: HarnessRequestContext<MastraCodeState> | undefined,
+): Readonly<MastraCodeState> | undefined {
+  const sessionState = ctx?.session?.state;
+  if (typeof sessionState?.get === 'function') return sessionState.get();
+  if (typeof ctx?.getState === 'function') return ctx.getState();
+  return ctx?.state;
+}
+
 /**
  * Detect the project's package runner from lock files.
  * Used as a fallback packageRunner for LSP when no binary is found locally or on PATH.
@@ -130,7 +139,7 @@ function detectPackageRunner(projectPath: string): string | undefined {
 
 export function getDynamicWorkspace({ requestContext, mastra }: { requestContext: RequestContext; mastra?: Mastra }) {
   const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
-  const state = ctx?.session.state.get();
+  const state = getHarnessState(ctx);
   const rawProjectPath = state?.projectPath;
 
   if (!rawProjectPath) {

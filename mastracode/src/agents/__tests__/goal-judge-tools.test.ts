@@ -35,6 +35,27 @@ const READONLY = ['view', 'search_content', 'find_files', 'file_stat', 'lsp_insp
 const MUTATING = ['write_file', 'string_replace_lsp', 'delete_file', 'mkdir', 'ast_smart_edit', 'execute_command'];
 
 describe('getGoalJudgeTools', () => {
+  it('resolves workspace from the harness state snapshot when session state is unavailable', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-workspace-state-fallback-'));
+    try {
+      const { getDynamicWorkspace } = await import('../workspace.js');
+      const requestContext = new RequestContext();
+      requestContext.set('harness', {
+        state: {
+          projectPath: tempDir,
+          sandboxAllowedPaths: [],
+        },
+      });
+
+      const workspace = getDynamicWorkspace({ requestContext: requestContext as any });
+
+      expect(workspace.filesystem.basePath).toBe(tempDir);
+      expect(workspace.skills).toBeDefined();
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('returns only the read-only verification subset of workspace tools', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-goal-judge-tools-'));
     try {
