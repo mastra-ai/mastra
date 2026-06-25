@@ -71,6 +71,12 @@ export function shouldResetAfterIdle(lastSuccessAt: number, now: number, thresho
   return now - lastSuccessAt > thresholdMs;
 }
 
+export function isDeltaCompatibleOrderBy(orderBy?: ListTracesArgs['orderBy'] | ListBranchesArgs['orderBy']): boolean {
+  const field = orderBy?.field ?? 'startedAt';
+  const direction = orderBy?.direction ?? 'DESC';
+  return field === 'startedAt' && direction === 'DESC';
+}
+
 function isHttp501(error: unknown): boolean {
   return (error as { status?: number } | null)?.status === 501;
 }
@@ -82,6 +88,7 @@ type FetchTracesFnArgs = TracesFilters & {
   perPage?: number;
   after?: string;
   limit?: number;
+  orderBy?: ListTracesArgs['orderBy'] | ListBranchesArgs['orderBy'];
 };
 
 const fetchTracesFn = async ({
@@ -93,11 +100,12 @@ const fetchTracesFn = async ({
   limit,
   filters,
   listMode = 'traces',
+  orderBy,
 }: FetchTracesFnArgs) => {
   const params =
     mode === 'delta'
       ? { mode: 'delta' as const, after, limit, filters }
-      : { pagination: { page: page!, perPage: perPage! }, filters };
+      : { pagination: { page: page!, perPage: perPage! }, filters, ...(orderBy ? { orderBy } : {}) };
 
   if (listMode === 'branches') {
     return client.listBranches(params as ListBranchesArgs);
@@ -111,6 +119,7 @@ export const TRACES_PER_PAGE = 25;
 export interface TracesFilters {
   filters?: ListTracesArgs['filters'] | ListBranchesArgs['filters'];
   listMode?: TraceListMode;
+  orderBy?: ListTracesArgs['orderBy'] | ListBranchesArgs['orderBy'];
 }
 
 /** Returns the next page number if the server indicates more pages are available. */
@@ -276,6 +285,7 @@ interface UseTracesReturn {
 export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
   filters,
   listMode = 'traces',
+  orderBy,
   polling = {},
 }: UseTracesArgs) => {
   const {
@@ -294,6 +304,7 @@ export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
 
   const [deltaSupport, setDeltaSupport] = useState<DeltaSupport>(() => deltaSupportByClient.get(client) ?? 'unknown');
   const deltaUnsupported = deltaSupport === 'unsupported';
+  const deltaCompatible = isDeltaCompatibleOrderBy(orderBy);
 
   // When false, all automatic polling stops: delta polls, status refresh,
   // idle-guard resets, and the page-mode fallback interval. Manual `resync`
@@ -307,9 +318,9 @@ export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
   const [recentlyAddedKeys, setRecentlyAddedKeys] = useState<Set<string>>(() => new Set());
   useEffect(() => {
     setRecentlyAddedKeys(new Set());
-  }, [listMode, filters]);
+  }, [listMode, filters, orderBy]);
 
-  const tracesQueryKey = ['traces', listMode, filters] as const;
+  const tracesQueryKey = ['traces', listMode, filters, orderBy] as const;
 
   const query = useInfiniteQuery({
     queryKey: tracesQueryKey,
@@ -320,6 +331,7 @@ export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
         perPage: TRACES_PER_PAGE,
         filters,
         listMode,
+        orderBy,
       }),
     initialPageParam: 0,
     getNextPageParam: getTracesNextPageParam,
@@ -330,7 +342,7 @@ export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
     refetchInterval: q => {
       if (is403ForbiddenError(q.state.error)) return false;
       if (!autoRefetch) return false;
-      return deltaUnsupported ? pageModeRefetchIntervalMs : false;
+      return deltaUnsupported || !deltaCompatible ? pageModeRefetchIntervalMs : false;
     },
   });
 
@@ -340,14 +352,14 @@ export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
   // support delta polling. Pin the client to 'unsupported' so the infinite
   // query resumes page-mode polling and we stop probing.
   useEffect(() => {
-    if (query.isSuccess && cursor === undefined && deltaSupport === 'unknown') {
+    if (deltaCompatible && query.isSuccess && cursor === undefined && deltaSupport === 'unknown') {
       deltaSupportByClient.set(client, 'unsupported');
       setDeltaSupport('unsupported');
     }
-  }, [query.isSuccess, cursor, deltaSupport, client]);
+  }, [query.isSuccess, cursor, deltaSupport, client, deltaCompatible]);
 
   const deltaQuery = useQuery({
-    queryKey: ['traces-delta', listMode, filters] as const,
+    queryKey: ['traces-delta', listMode, filters, orderBy] as const,
     queryFn: () => {
       const current = queryClient.getQueryData<InfiniteData<TracesPageResponse>>(tracesQueryKey)?.pages[0]?.deltaCursor;
       if (!current) return null;
@@ -360,7 +372,7 @@ export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
         listMode,
       });
     },
-    enabled: !!cursor && !deltaUnsupported && autoRefetch,
+    enabled: deltaCompatible && !!cursor && !deltaUnsupported && autoRefetch,
     retry: false,
     refetchInterval: q => {
       if (q.state.error) return false;
@@ -403,9 +415,9 @@ export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
       });
     }, deltaHighlightMs);
     // tracesQueryKey is a new array each render but its contents drive cache keying;
-    // depending on its members (listMode/filters) is enough.
+    // depending on its members is enough.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deltaQuery.data, queryClient, listMode, filters, deltaHighlightMs]);
+  }, [deltaQuery.data, queryClient, listMode, filters, orderBy, deltaHighlightMs]);
 
   // A 501 means the server is too old (or store doesn't support delta) — pin
   // 'unsupported' so the delta query disables and page-mode polling resumes.
@@ -420,7 +432,7 @@ export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
   // (running → success/error). Only runs while delta is the primary polling
   // mechanism; otherwise the infinite query's own refetchInterval covers it.
   const statusRefreshQuery = useQuery({
-    queryKey: ['traces-status-refresh', listMode, filters] as const,
+    queryKey: ['traces-status-refresh', listMode, filters, orderBy] as const,
     queryFn: () =>
       fetchTracesFn({
         client,
@@ -428,8 +440,9 @@ export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
         perPage: TRACES_PER_PAGE,
         filters,
         listMode,
+        orderBy,
       }),
-    enabled: !!cursor && !deltaUnsupported && autoRefetch,
+    enabled: deltaCompatible && !!cursor && !deltaUnsupported && autoRefetch,
     refetchInterval: page0StatusRefreshIntervalMs,
     refetchOnMount: false,
     retry: false,
@@ -442,7 +455,7 @@ export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
       refreshPage0Rows(old, result, listMode),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusRefreshQuery.data, queryClient, listMode, filters]);
+  }, [statusRefreshQuery.data, queryClient, listMode, filters, orderBy]);
 
   // Idle guard: when the tab returns from being hidden, check how long it's
   // been since the last successful poll. If past the threshold, reset the
@@ -467,11 +480,11 @@ export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
       if (document.visibilityState !== 'visible') return;
       if (!autoRefetchRef.current) return;
       if (!shouldResetAfterIdle(lastSuccessAtRef.current, Date.now(), idleGuardThresholdMs)) return;
-      void queryClient.resetQueries({ queryKey: ['traces', listMode, filters] });
+      void queryClient.resetQueries({ queryKey: ['traces', listMode, filters, orderBy] });
     };
     document.addEventListener('visibilitychange', handler);
     return () => document.removeEventListener('visibilitychange', handler);
-  }, [queryClient, listMode, filters, idleGuardThresholdMs]);
+  }, [queryClient, listMode, filters, orderBy, idleGuardThresholdMs]);
 
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;
 

@@ -530,9 +530,12 @@ export class ObservabilityDSQL extends ObservabilityStorage {
 
       // Build ORDER BY clause with proper NULL handling for endedAt
       // Note: Aurora DSQL does not support NULLS FIRST/LAST syntax
-      const sortField = `${orderBy?.field ?? 'startedAt'}Z`;
+      const sortField = orderBy?.field ?? 'startedAt';
       const sortDirection = orderBy?.direction ?? 'DESC';
-      const orderClause = `ORDER BY r."${sortField}" ${sortDirection}`;
+      const orderClause =
+        sortField === 'durationMs'
+          ? `ORDER BY CASE WHEN r."endedAtZ" IS NULL THEN 1 ELSE 0 END, GREATEST(0, EXTRACT(EPOCH FROM (r."endedAtZ"::timestamptz - r."startedAtZ"::timestamptz)) * 1000) ${sortDirection}`
+          : `ORDER BY r."${sortField}Z" ${sortDirection}`;
 
       // Get total count
       const countResult = await this.#db.client.oneOrNone<{ count: string }>(

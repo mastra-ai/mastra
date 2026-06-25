@@ -504,8 +504,8 @@ export const tracesFilterSchema = z
  * Fields available for ordering trace results
  */
 export const tracesOrderByFieldSchema = z
-  .enum(['startedAt', 'endedAt'])
-  .describe("Field to order by: 'startedAt' | 'endedAt'");
+  .enum(['startedAt', 'endedAt', 'durationMs'])
+  .describe("Field to order by: 'startedAt' | 'endedAt' | 'durationMs'");
 
 /**
  * Order by configuration for trace queries
@@ -614,8 +614,8 @@ export const branchesFilterSchema = z
   .describe('Filters for querying trace branches');
 
 export const branchesOrderByFieldSchema = z
-  .enum(['startedAt', 'endedAt'])
-  .describe("Field to order by: 'startedAt' | 'endedAt'");
+  .enum(['startedAt', 'endedAt', 'durationMs'])
+  .describe("Field to order by: 'startedAt' | 'endedAt' | 'durationMs'");
 
 export const branchesOrderBySchema = z
   .object({

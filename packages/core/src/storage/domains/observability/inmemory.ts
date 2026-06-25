@@ -660,6 +660,19 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     const { field: sortField, direction: sortDirection } = orderBy;
 
     matchingRootSpans.sort((a, b) => {
+      if (sortField === 'durationMs') {
+        const aRunning = a.endedAt == null;
+        const bRunning = b.endedAt == null;
+        if (aRunning && bRunning) return 0;
+        if (aRunning) return 1;
+        if (bRunning) return -1;
+
+        const aDurationMs = Math.max(0, a.endedAt!.getTime() - a.startedAt.getTime());
+        const bDurationMs = Math.max(0, b.endedAt!.getTime() - b.startedAt.getTime());
+        const diff = aDurationMs - bDurationMs;
+        return sortDirection === 'DESC' ? -diff : diff;
+      }
+
       if (sortField === 'endedAt') {
         const aVal = a.endedAt;
         const bVal = b.endedAt;
@@ -972,6 +985,19 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
     const { field: sortField, direction: sortDirection } = orderBy;
     matches.sort((a, b) => {
+      if (sortField === 'durationMs') {
+        const aRunning = a.endedAt == null;
+        const bRunning = b.endedAt == null;
+        if (aRunning && bRunning) return 0;
+        if (aRunning) return 1;
+        if (bRunning) return -1;
+
+        const aDurationMs = Math.max(0, a.endedAt!.getTime() - a.startedAt.getTime());
+        const bDurationMs = Math.max(0, b.endedAt!.getTime() - b.startedAt.getTime());
+        const diff = aDurationMs - bDurationMs;
+        return sortDirection === 'DESC' ? -diff : diff;
+      }
+
       if (sortField === 'endedAt') {
         const aVal = a.endedAt;
         const bVal = b.endedAt;

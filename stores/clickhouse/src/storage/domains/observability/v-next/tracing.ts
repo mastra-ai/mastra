@@ -410,8 +410,11 @@ export async function listBranches(
     };
   }
 
-  const sortField = orderBy?.field === 'endedAt' ? 'endedAt' : 'startedAt';
   const sortDirection = orderBy?.direction === 'ASC' ? 'ASC' : 'DESC';
+  const orderClause =
+    orderBy?.field === 'durationMs'
+      ? `CASE WHEN endedAt IS NULL THEN 1 ELSE 0 END, greatest(0, dateDiff('millisecond', startedAt, ifNull(endedAt, startedAt))) ${sortDirection}, dedupeKey ASC`
+      : `${orderBy?.field === 'endedAt' ? 'endedAt' : 'startedAt'} ${sortDirection}, dedupeKey ASC`;
   const currentDeltaCursor = deltaCursorEnabled ? await getDeltaCursor(client, whereClause, params) : undefined;
 
   // Count (deduplicated)
@@ -449,7 +452,7 @@ export async function listBranches(
         ORDER BY b.dedupeKey
         LIMIT 1 BY b.dedupeKey
       )
-      ORDER BY ${sortField} ${sortDirection}, dedupeKey ASC
+      ORDER BY ${orderClause}
       LIMIT {limit:UInt32}
       OFFSET {offset:UInt32}
     `,

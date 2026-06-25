@@ -218,16 +218,18 @@ async function listTracesPage(
   filters: ListTracesArgs['filters'],
   page: number,
   perPage: number,
-  orderField: 'startedAt' | 'endedAt',
+  orderField: 'startedAt' | 'endedAt' | 'durationMs',
   orderDir: 'ASC' | 'DESC',
 ): Promise<ListTracesResponse> {
   const { conditions, params, nextParamIdx } = buildListTracesFilters(filters, span, 1);
   let i = nextParamIdx;
   const whereClause = `WHERE ${conditions.join(' AND ')}`;
   const orderClause =
-    orderField === 'endedAt'
-      ? `ORDER BY r."endedAt" ${orderDir} NULLS ${orderDir === 'DESC' ? 'FIRST' : 'LAST'}, r."cursorId" ${orderDir}`
-      : `ORDER BY r."${orderField}" ${orderDir}, r."cursorId" ${orderDir}`;
+    orderField === 'durationMs'
+      ? `ORDER BY CASE WHEN r."endedAt" IS NULL THEN 1 ELSE 0 END, GREATEST(0, EXTRACT(EPOCH FROM (r."endedAt" - r."startedAt")) * 1000) ${orderDir}, r."cursorId" ${orderDir}`
+      : orderField === 'endedAt'
+        ? `ORDER BY r."endedAt" ${orderDir} NULLS ${orderDir === 'DESC' ? 'FIRST' : 'LAST'}, r."cursorId" ${orderDir}`
+        : `ORDER BY r."${orderField}" ${orderDir}, r."cursorId" ${orderDir}`;
 
   const countRow = await client.oneOrNone<{ count: string }>(
     `SELECT COUNT(*)::text AS count FROM ${span} r ${whereClause}`,
@@ -527,7 +529,7 @@ async function listBranchesPage(
   filters: ListBranchesArgs['filters'],
   page: number,
   perPage: number,
-  orderField: 'startedAt' | 'endedAt',
+  orderField: 'startedAt' | 'endedAt' | 'durationMs',
   orderDir: 'ASC' | 'DESC',
 ): Promise<ListBranchesResponse> {
   const built = buildListBranchesFilters(filters, filters?.spanType, 1);
@@ -547,9 +549,11 @@ async function listBranchesPage(
   let i = nextParamIdx;
   const whereClause = `WHERE ${conditions.join(' AND ')}`;
   const orderClause =
-    orderField === 'endedAt'
-      ? `ORDER BY r."endedAt" ${orderDir} NULLS ${orderDir === 'DESC' ? 'FIRST' : 'LAST'}, r."cursorId" ${orderDir}`
-      : `ORDER BY r."${orderField}" ${orderDir}, r."cursorId" ${orderDir}`;
+    orderField === 'durationMs'
+      ? `ORDER BY CASE WHEN r."endedAt" IS NULL THEN 1 ELSE 0 END, GREATEST(0, EXTRACT(EPOCH FROM (r."endedAt" - r."startedAt")) * 1000) ${orderDir}, r."cursorId" ${orderDir}`
+      : orderField === 'endedAt'
+        ? `ORDER BY r."endedAt" ${orderDir} NULLS ${orderDir === 'DESC' ? 'FIRST' : 'LAST'}, r."cursorId" ${orderDir}`
+        : `ORDER BY r."${orderField}" ${orderDir}, r."cursorId" ${orderDir}`;
 
   const countRow = await client.oneOrNone<{ count: string }>(
     `SELECT COUNT(*)::text AS count FROM ${span} r ${whereClause}`,

@@ -1,6 +1,6 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ArrowDownIcon, ArrowUpIcon, ArrowUpDownIcon } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { getInputPreview } from '../utils/span-utils';
 import { DataListSkeleton, TracesDataList } from '@/ds/components/DataList';
 import { TracesDataListDurationCell } from '@/ds/components/DataList/TracesDataList/traces-data-list-cells';
@@ -35,15 +35,7 @@ export type TracesListViewTrace = {
 // Fixed widths on non-flex columns prevent track shifts as the virtualizer swaps rows in/out.
 const COLUMNS = '6rem 9rem 14rem minmax(8rem,1fr) 14rem 7rem 6rem';
 
-type DurationSort = 'none' | 'desc' | 'asc';
-
-/** Compute duration in ms from startedAt/endedAt. Returns -1 for running traces (no endedAt). */
-function getTraceDurationMs(trace: TracesListViewTrace): number {
-  if (!trace.startedAt || !trace.endedAt) return -1;
-  const start = trace.startedAt instanceof Date ? trace.startedAt : new Date(trace.startedAt as string);
-  const end = trace.endedAt instanceof Date ? trace.endedAt : new Date(trace.endedAt as string);
-  return end.getTime() - start.getTime();
-}
+export type DurationSort = 'none' | 'desc' | 'asc';
 
 const ROW_HEIGHT = 36;
 const OVERSCAN = 8;
@@ -71,9 +63,12 @@ export type TracesListViewProps = {
   recentlyAddedKeys?: Set<string>;
   /** Called when a row is clicked. The current selection logic (toggle on same id) is the consumer's call. */
   onTraceClick: (trace: TracesListViewTrace) => void;
-  /** When true, the Total Time column header is interactive and sorts rows client-side.
-   *  Defaults to true. */
+  /** When true and `onDurationSortChange` is provided, the Total Time column header is interactive. */
   sortableByDuration?: boolean;
+  /** Current server-side Total Time sort state. */
+  durationSort?: DurationSort;
+  /** Called to request a new server-side Total Time sort state. */
+  onDurationSortChange?: (sort: DurationSort) => void;
 };
 
 /**
@@ -93,31 +88,17 @@ export function TracesListView({
   recentlyAddedKeys,
   onTraceClick,
   sortableByDuration = true,
+  durationSort = 'none',
+  onDurationSortChange,
 }: TracesListViewProps) {
-  const [durationSort, setDurationSort] = useState<DurationSort>('none');
-
   const cycleDurationSort = useCallback(() => {
-    setDurationSort(prev => (prev === 'none' ? 'desc' : prev === 'desc' ? 'asc' : 'none'));
-  }, []);
-
-  const sortedTraces = useMemo(() => {
-    if (durationSort === 'none') return traces;
-    return [...traces].sort((a, b) => {
-      const aDurRaw = getTraceDurationMs(a);
-      const bDurRaw = getTraceDurationMs(b);
-      // Running traces (duration -1) sink to the bottom regardless of sort direction
-      if (aDurRaw === -1 && bDurRaw === -1) return 0;
-      if (aDurRaw === -1) return 1;
-      if (bDurRaw === -1) return -1;
-      const aDur = Math.max(0, aDurRaw);
-      const bDur = Math.max(0, bDurRaw);
-      return durationSort === 'desc' ? bDur - aDur : aDur - bDur;
-    });
-  }, [traces, durationSort]);
+    onDurationSortChange?.(durationSort === 'none' ? 'desc' : durationSort === 'desc' ? 'asc' : 'none');
+  }, [durationSort, onDurationSortChange]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const isDurationSortable = sortableByDuration && !!onDurationSortChange;
 
   const virtualizer = useVirtualizer({
-    count: sortedTraces.length,
+    count: traces.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_HEIGHT,
     overscan: OVERSCAN,
@@ -159,7 +140,7 @@ export function TracesListView({
         <TracesDataList.TopCell>Name</TracesDataList.TopCell>
         <TracesDataList.TopCell>Input</TracesDataList.TopCell>
         <TracesDataList.TopCell>Entity</TracesDataList.TopCell>
-        {sortableByDuration ? (
+        {isDurationSortable ? (
           <TracesDataList.TopCell
             as="button"
             onClick={cycleDurationSort}
@@ -181,7 +162,7 @@ export function TracesListView({
         <TracesDataList.TopCell>Status</TracesDataList.TopCell>
       </TracesDataList.Top>
 
-      {sortedTraces.length === 0 ? (
+      {traces.length === 0 ? (
         <TracesDataList.NoMatch
           message={filtersApplied ? 'No traces found for applied filters' : 'No traces found yet'}
         />
@@ -189,7 +170,7 @@ export function TracesListView({
         <>
           <TracesDataList.Spacer height={paddingTop} />
           {virtualItems.map(vi => {
-            const trace = sortedTraces[vi.index];
+            const trace = traces[vi.index];
             if (!trace) return null;
 
             const isFeatured =

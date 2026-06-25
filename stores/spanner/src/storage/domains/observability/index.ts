@@ -564,11 +564,14 @@ export class ObservabilitySpanner extends ObservabilityStorage {
       // top when viewing newest) and NULLS LAST on ASC (running traces sink
       // to the bottom when viewing oldest). startedAt is NOT NULL so no
       // emulation is needed there.
-      const nullsClause =
-        orderField === 'endedAt'
-          ? `(${rAlias}.${quoteIdent(orderField, 'column name')} IS NULL) ${sortDirection === 'DESC' ? 'DESC' : 'ASC'}, `
-          : '';
-      const orderSql = `ORDER BY ${nullsClause}${rAlias}.${quoteIdent(orderField, 'column name')} ${sortDirection}, ${rAlias}.${quoteIdent('spanId', 'column name')} ${sortDirection}`;
+      const orderSql =
+        orderField === 'durationMs'
+          ? `ORDER BY CASE WHEN ${rAlias}.${quoteIdent('endedAt', 'column name')} IS NULL THEN 1 ELSE 0 END ASC, CASE WHEN TIMESTAMP_DIFF(${rAlias}.${quoteIdent('endedAt', 'column name')}, ${rAlias}.${quoteIdent('startedAt', 'column name')}, MILLISECOND) < 0 THEN 0 ELSE TIMESTAMP_DIFF(${rAlias}.${quoteIdent('endedAt', 'column name')}, ${rAlias}.${quoteIdent('startedAt', 'column name')}, MILLISECOND) END ${sortDirection}, ${rAlias}.${quoteIdent('spanId', 'column name')} ${sortDirection}`
+          : `ORDER BY ${
+              orderField === 'endedAt'
+                ? `(${rAlias}.${quoteIdent(orderField, 'column name')} IS NULL) ${sortDirection === 'DESC' ? 'DESC' : 'ASC'}, `
+                : ''
+            }${rAlias}.${quoteIdent(orderField, 'column name')} ${sortDirection}, ${rAlias}.${quoteIdent('spanId', 'column name')} ${sortDirection}`;
 
       const [countRows] = await this.database.run({
         sql: `SELECT COUNT(*) AS count FROM ${tableName} ${rAlias} ${whereSql}`,

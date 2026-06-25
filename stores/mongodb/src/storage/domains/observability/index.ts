@@ -796,7 +796,21 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
 
         // Get paginated spans with proper NULL ordering for endedAt
         let aggregationPipeline: any[];
-        if (sortField === 'endedAt') {
+        if (sortField === 'durationMs') {
+          aggregationPipeline = [
+            ...pipeline,
+            {
+              $addFields: {
+                _durationMissing: { $cond: [{ $eq: ['$endedAt', null] }, 1, 0] },
+                _durationMs: { $max: [0, { $subtract: ['$endedAt', '$startedAt'] }] },
+              },
+            },
+            { $sort: { _durationMissing: 1, _durationMs: sortDirection } },
+            { $skip: page * perPage },
+            { $limit: perPage },
+            { $project: { _errorSpans: 0, _durationMissing: 0, _durationMs: 0 } },
+          ];
+        } else if (sortField === 'endedAt') {
           // Add helper field to sort NULLs first for DESC, last for ASC
           const nullSortValue = sortDirection === -1 ? 0 : 1;
           aggregationPipeline = [
@@ -853,7 +867,26 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
       // For endedAt we want the opposite: NULLs FIRST for DESC, LAST for ASC
       // So we need aggregation with $addFields to control NULL ordering for endedAt
       let spans: any[];
-      if (sortField === 'endedAt') {
+      if (sortField === 'durationMs') {
+        spans = await collection
+          .aggregate(
+            [
+              { $match: mongoFilter },
+              {
+                $addFields: {
+                  _durationMissing: { $cond: [{ $eq: ['$endedAt', null] }, 1, 0] },
+                  _durationMs: { $max: [0, { $subtract: ['$endedAt', '$startedAt'] }] },
+                },
+              },
+              { $sort: { _durationMissing: 1, _durationMs: sortDirection } },
+              { $skip: page * perPage },
+              { $limit: perPage },
+              { $project: { _durationMissing: 0, _durationMs: 0 } },
+            ],
+            { allowDiskUse: true },
+          )
+          .toArray();
+      } else if (sortField === 'endedAt') {
         // Use aggregation to handle NULL ordering for endedAt
         // Add a helper field to sort NULLs first for DESC, last for ASC
         const nullSortValue = sortDirection === -1 ? 0 : 1; // DESC: NULLs first (0), ASC: NULLs last (1)
