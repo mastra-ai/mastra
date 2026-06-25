@@ -1,3 +1,4 @@
+import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect } from 'vitest';
 import { RegisteredLogger } from '../../../logger';
 import { ChunkFrom } from '../../types';
@@ -217,6 +218,7 @@ describe('AISDKV5InputStream', () => {
       payload: {
         id: 'text-1',
         providerMetadata: undefined,
+        textStreamPartType: 'narration',
       },
     });
 
@@ -229,6 +231,7 @@ describe('AISDKV5InputStream', () => {
         id: 'text-1',
         providerMetadata: undefined,
         text: 'Hello',
+        textStreamPartType: 'narration',
       },
     });
 
@@ -240,6 +243,7 @@ describe('AISDKV5InputStream', () => {
         id: 'text-1',
         providerMetadata: undefined,
         text: ', ',
+        textStreamPartType: 'narration',
       },
     });
 
@@ -251,6 +255,7 @@ describe('AISDKV5InputStream', () => {
         id: 'text-1',
         providerMetadata: undefined,
         text: 'world!',
+        textStreamPartType: 'narration',
       },
     });
 
@@ -262,6 +267,7 @@ describe('AISDKV5InputStream', () => {
       payload: {
         type: 'text-end',
         id: 'text-1',
+        textStreamPartType: 'narration',
       },
     });
 
@@ -310,5 +316,50 @@ describe('AISDKV5InputStream', () => {
         type: 'finish',
       },
     });
+  });
+
+  it('marks text-only steps as final answer text', async () => {
+    const inputStream = new AISDKV5InputStream({
+      component: RegisteredLogger.LLM,
+      name: 'test-stream',
+    });
+    const mockModel = createTestModel({
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start', warnings: [] },
+        { type: 'text-start', id: 'final-text' },
+        { type: 'text-delta', id: 'final-text', delta: 'Final answer' },
+        { type: 'text-end', id: 'final-text' },
+        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 } },
+      ]),
+    });
+
+    const stream = inputStream.initialize({
+      runId: 'test-run-123',
+      createStream: async () => {
+        const result = await mockModel.doStream({
+          prompt: [{ role: 'user', content: [{ type: 'text', text: 'test' }] }],
+        });
+        return { stream: result.stream, warnings: {}, request: {}, rawResponse: {} };
+      },
+      onResult: () => {},
+    });
+
+    const capturedChunks: any[] = [];
+    const reader = stream.getReader();
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        capturedChunks.push(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    expect(capturedChunks.filter(chunk => chunk.type.startsWith('text')).map(chunk => chunk.payload)).toEqual([
+      { id: 'final-text', providerMetadata: undefined, textStreamPartType: 'final-answer' },
+      { id: 'final-text', providerMetadata: undefined, text: 'Final answer', textStreamPartType: 'final-answer' },
+      { type: 'text-end', id: 'final-text', textStreamPartType: 'final-answer' },
+    ]);
   });
 });

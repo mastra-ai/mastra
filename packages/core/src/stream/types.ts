@@ -94,20 +94,25 @@ interface ResponseMetadataPayload {
   [key: string]: unknown;
 }
 
+export type TextStreamPartType = 'narration' | 'final-answer';
+
 export interface TextStartPayload {
   id: string;
   providerMetadata?: ProviderMetadata;
+  textStreamPartType?: TextStreamPartType;
 }
 
 export interface TextDeltaPayload {
   id: string;
   providerMetadata?: ProviderMetadata;
   text: string;
+  textStreamPartType?: TextStreamPartType;
 }
 
 interface TextEndPayload {
   id: string;
   providerMetadata?: ProviderMetadata;
+  textStreamPartType?: TextStreamPartType;
   [key: string]: unknown;
 }
 
