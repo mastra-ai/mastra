@@ -361,7 +361,9 @@ describe('WorkflowsUpstash.persistWorkflowSnapshot', () => {
 
     await workflowsDomain.deleteWorkflowRunById({ runId, workflowName });
 
-    await expect(workflowsDomain.loadWorkflowSnapshot({ namespace: 'workflows', workflowName, runId })).resolves.toBeNull();
+    await expect(
+      workflowsDomain.loadWorkflowSnapshot({ namespace: 'workflows', workflowName, runId }),
+    ).resolves.toBeNull();
     await expect(workflowsDomain.getWorkflowRunById({ runId, workflowName })).resolves.toBeNull();
   });
 });
