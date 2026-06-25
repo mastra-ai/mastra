@@ -25,6 +25,10 @@ vi.mock('@mastra/playground-ui', async () => {
   };
 });
 
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
+
 // The starter renders a chat-driven builder that boots an SSE stream and has
 // its own dedicated test. Stub it as a thin seam and assert the create page
 // mounts it once permissions allow.

@@ -1,6 +1,6 @@
-import { toast } from '@mastra/playground-ui';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import type { JsonSchema } from '@mastra/schema-compat/json-to-zod';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';

@@ -1,4 +1,3 @@
-import { Icon, cn } from '@mastra/playground-ui';
 import type { JsonSchema, JsonSchemaProperty } from '@mastra/playground-ui';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
@@ -6,6 +5,8 @@ import { HoverPopover, PopoverTrigger, PopoverContent } from '@mastra/playground
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Braces, ChevronDown, ChevronRight, Wrench, Cpu, Eye, Pencil } from 'lucide-react';
 import { useState, useMemo } from 'react';
 

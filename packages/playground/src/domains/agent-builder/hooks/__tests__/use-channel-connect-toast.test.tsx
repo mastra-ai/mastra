@@ -18,6 +18,13 @@ vi.mock('@mastra/playground-ui', async () => {
   };
 });
 
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: {
+    success: (...args: unknown[]) => successMock(...args),
+    error: (...args: unknown[]) => errorMock(...args),
+  },
+}));
+
 function Harness() {
   useChannelConnectToast();
   return null;

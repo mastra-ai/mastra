@@ -4514,6 +4514,9 @@ importers:
       eslint:
         specifier: ^10.4.1
         version: 10.5.0(jiti@2.7.0)
+      get-port:
+        specifier: ^7.1.0
+        version: 7.1.0
       hono:
         specifier: ^4.12.8
         version: 4.12.25

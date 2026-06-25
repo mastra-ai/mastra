@@ -1,5 +1,4 @@
 import type { DatasetRecord } from '@mastra/client-js';
-import { toast } from '@mastra/playground-ui';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Column, Columns } from '@mastra/playground-ui/components/Columns';
@@ -11,6 +10,7 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
 import { Tabs, TabContent, TabList, Tab } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { Database, GaugeIcon, FlaskConical, ChevronLeft, Plus, Paperclip } from 'lucide-react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useWatch } from 'react-hook-form';

@@ -1,4 +1,3 @@
-import { Icon } from '@mastra/playground-ui';
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
@@ -9,6 +8,7 @@ import {
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { KeyRound } from 'lucide-react';
 import { useState } from 'react';
 import { RequestContextSchemaForm } from '@/domains/request-context';
