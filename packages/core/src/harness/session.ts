@@ -3,6 +3,7 @@ import { createSignal } from '../agent/signals';
 import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import type {
   AgentThreadSubscription,
+  MastraBrowser,
   SendAgentNotificationSignalOptions,
   SendAgentNotificationSignalResult,
   SendAgentSignalAccepted,
@@ -18,6 +19,7 @@ import type { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import { safeStringify } from '../utils';
+import { Workspace } from '../workspace';
 
 import { SessionRunEngine } from './session-run-engine';
 import type { TaskItemSnapshot } from './tools';
@@ -2590,6 +2592,8 @@ export class Session<TState = unknown> {
    * filtered back to the session's scope. Empty when the session is unscoped.
    */
   readonly #tags: Record<string, string>;
+  readonly #workspace: Workspace;
+  browser?: MastraBrowser;
 
   constructor({
     resourceId,
@@ -2597,12 +2601,16 @@ export class Session<TState = unknown> {
     id,
     ownerId,
     tags,
+    workspace,
+    browser,
   }: {
     resourceId: string;
     state?: SessionStateOptions<TState>;
     id: string;
     ownerId: string;
     tags?: Record<string, string>;
+    workspace: Workspace;
+    browser?: MastraBrowser;
   }) {
     this.#tags = tags && Object.keys(tags).length > 0 ? { ...tags } : {};
     this.identity = new SessionIdentity({ resourceId, id, ownerId });
@@ -2615,6 +2623,23 @@ export class Session<TState = unknown> {
     });
     this.#bus.setDisplayState(this.displayState);
     this.state = new SessionState(state ?? { initialState: {} as TState }, this.#bus);
+
+    if (!workspace || !(workspace instanceof Workspace)) {
+      const error = new Error(`A session requires a valid workspace instance.`);
+      this.emit({ type: 'workspace_status_changed', status: 'error', error });
+      this.emit({ type: 'workspace_error', error });
+      throw error;
+    }
+
+    this.emit({ type: 'workspace_status_changed', status: 'ready' });
+    this.emit({
+      type: 'workspace_ready',
+      workspaceId: workspace.id,
+      workspaceName: workspace.name,
+    });
+
+    this.#workspace = workspace;
+    this.browser = browser;
   }
 
   /**

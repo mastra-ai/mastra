@@ -16,6 +16,7 @@ import { RequestContext } from '../request-context';
 import type { MastraCompositeStore } from '../storage/base';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord } from '../storage/types';
+import type { DynamicArgument } from '../types';
 import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
@@ -175,20 +176,11 @@ export class Harness<TState = {}> {
   readonly id: string;
 
   private config: HarnessConfig<TState>;
-  private workspace: Workspace | undefined = undefined;
-  private workspaceFn:
-    | ((ctx: {
-        requestContext: RequestContext;
-        mastra?: Mastra;
-      }) => Promise<Workspace | undefined> | Workspace | undefined)
-    | undefined = undefined;
   private workspaceInitialized = false;
   private initPromise: Promise<void> | undefined = undefined;
   private workspaceError: Error | undefined = undefined;
-  private browser: MastraBrowser | undefined = undefined;
-  private browserFn:
-    | ((ctx: { requestContext: RequestContext }) => Promise<MastraBrowser | undefined> | MastraBrowser | undefined)
-    | undefined = undefined;
+  private browser: DynamicArgument<MastraBrowser | undefined> = undefined;
+  private workspace: DynamicArgument<Workspace | undefined> = undefined;
   private heartbeatTimers = new Map<string, { timer: NodeJS.Timeout; shutdown?: () => void | Promise<void> }>();
   /**
    * The mode every new session starts in. Resolved once at construction from
@@ -243,19 +235,8 @@ export class Harness<TState = {}> {
 
     this.#defaultMode = defaultMode;
 
-    // Store workspace: pre-built instance, dynamic factory, or config (constructed in init())
-    if (config.workspace instanceof Workspace) {
-      this.workspace = config.workspace;
-    } else if (typeof config.workspace === 'function') {
-      this.workspaceFn = config.workspace;
-    }
-
-    // Store browser: pre-built instance or dynamic factory
-    if (config.browser && typeof config.browser !== 'function') {
-      this.browser = config.browser;
-    } else if (typeof config.browser === 'function') {
-      this.browserFn = config.browser;
-    }
+    this.workspace = config.workspace;
+    this.browser = config.browser;
   }
 
   /**
@@ -353,6 +334,9 @@ export class Harness<TState = {}> {
     ownerId,
     id,
     tags,
+    workspace,
+    browser,
+    requestContext,
   }: {
     resourceId?: string;
     id?: string;
@@ -366,6 +350,9 @@ export class Harness<TState = {}> {
      * changing the API. Falls back to `initialState` when omitted.
      */
     tags?: Record<string, string>;
+    workspace?: DynamicArgument<Workspace | undefined>;
+    browser?: DynamicArgument<MastraBrowser | undefined>;
+    requestContext?: RequestContext;
   } = {}): Promise<Session<TState>> {
     const effectiveResourceId = resourceId ?? this.config.resourceId ?? this.config.id;
     const effectiveSessionId = id ?? this.config.id;
@@ -381,7 +368,11 @@ export class Harness<TState = {}> {
       return existing;
     }
 
-    const creation = this.#createSessionForResource(effectiveOwnerId, effectiveSessionId, effectiveResourceId, tags);
+    const creation = this.#createSessionForResource(effectiveOwnerId, effectiveSessionId, effectiveResourceId, tags, {
+      workspace,
+      browser,
+      requestContext,
+    });
     this.#sessionsByResource.set(effectiveResourceId, creation);
     try {
       return await creation;
@@ -399,15 +390,43 @@ export class Harness<TState = {}> {
     id: string,
     effectiveResourceId: string,
     tags?: Record<string, string>,
+    overrides?: {
+      workspace?: DynamicArgument<Workspace | undefined>;
+      browser?: DynamicArgument<MastraBrowser | undefined>;
+      requestContext?: RequestContext;
+    },
   ): Promise<Session<TState>> {
     // Seed the session's tags into its state so thread tagging + the workspace
     // factory resolve against this session's scope (e.g. its `projectPath`), not
     // the harness-global default (which, on a multi-session server, may point at
     // a different repo).
-    const initialState =
-      tags && Object.keys(tags).length > 0
-        ? ({ ...(this.config.initialState as Record<string, unknown>), ...tags } as TState)
-        : this.config.initialState;
+    const requestContext = overrides?.requestContext ?? new RequestContext();
+    let initialState = structuredClone(this.config.initialState);
+    if (tags && Object.keys(tags).length > 0) {
+      initialState = { ...initialState, ...tags } as TState;
+    }
+    requestContext.set('harness', {
+      harnessId: this.id,
+      getState: () => initialState,
+      setState: (updates: Partial<TState>) => {
+        initialState = { ...initialState, ...updates };
+      },
+      session: {
+        id,
+        ownerId,
+        resourceId: effectiveResourceId,
+      },
+    });
+
+    let workspaceToConnect = overrides?.workspace ?? this.workspace;
+    if (typeof workspaceToConnect === 'function') {
+      workspaceToConnect = await workspaceToConnect({ requestContext, mastra: this.getMastra() });
+    }
+
+    let browserToConnect = overrides?.browser ?? this.browser;
+    if (typeof browserToConnect === 'function') {
+      browserToConnect = await browserToConnect({ requestContext, mastra: this.getMastra() });
+    }
 
     const session = this.#wireSession(
       new Session({
@@ -419,21 +438,19 @@ export class Harness<TState = {}> {
           initialState,
           stateSchema: this.config.stateSchema,
         },
+        workspace: workspaceToConnect as Workspace,
+        browser: browserToConnect,
       }),
     );
 
-    // Replay current workspace status onto the new session so a session created
-    // after init() still observes the shared workspace being ready (or failed).
-    if (this.workspace && this.workspaceInitialized) {
-      session.emit({ type: 'workspace_status_changed', status: 'ready' });
-      session.emit({
-        type: 'workspace_ready',
-        workspaceId: this.workspace.id,
-        workspaceName: this.workspace.name,
-      });
-    } else if (this.workspaceError) {
-      session.emit({ type: 'workspace_status_changed', status: 'error', error: this.workspaceError });
-      session.emit({ type: 'workspace_error', error: this.workspaceError });
+    if (workspaceToConnect && workspaceToConnect instanceof Workspace) {
+      try {
+        await workspaceToConnect.init();
+      } catch (error) {
+        const initError = getErrorFromUnknown(error);
+        session.emit({ type: 'workspace_status_changed', status: 'error', error: initError });
+        session.emit({ type: 'workspace_error', error: initError });
+      }
     }
 
     // Bring the session online with a current thread. Selection is tag-aware so
@@ -544,7 +561,6 @@ export class Harness<TState = {}> {
    */
   setBrowser(browser: MastraBrowser | undefined): void {
     this.browser = browser;
-    this.browserFn = undefined;
 
     // Collect unique agents: shared backing agent + any deprecated mode.agent
     // instances so all receive the browser (signal providers may be attached to
@@ -609,13 +625,13 @@ export class Harness<TState = {}> {
     }
 
     // Initialize workspace if configured (skip for dynamic factory — resolved per-request)
-    if (this.config.workspace && !this.workspaceInitialized && !this.workspaceFn) {
+    if (this.config.workspace && !this.workspaceInitialized && typeof this.workspace !== 'function') {
       try {
         if (!this.workspace) {
           this.workspace = new Workspace(this.config.workspace as WorkspaceConfig);
         }
 
-        await this.workspace.init();
+        await (this.workspace as Workspace).init();
         this.workspaceInitialized = true;
         this.workspaceError = undefined;
       } catch (error) {
@@ -909,18 +925,9 @@ export class Harness<TState = {}> {
     return this.config.modes;
   }
 
-  private propagateRuntimeServicesToAgent(agent: Agent): Agent {
-    const workspaceForAgents = this.workspaceFn ?? this.workspace;
-    const browserForAgents = this.browserFn ?? this.browser;
-
+  private propagateRuntimeServicesToAgent(agent: Agent, _session?: Session<TState>): Agent {
     if (this.config.memory && !agent.hasOwnMemory()) {
       agent.__setMemory(this.config.memory);
-    }
-    if (workspaceForAgents && !agent.hasOwnWorkspace()) {
-      agent.__setWorkspace(workspaceForAgents);
-    }
-    if (browserForAgents && !agent.hasOwnBrowser()) {
-      agent.setBrowser(browserForAgents as MastraBrowser);
     }
     if (this.config.pubsub && !agent.hasOwnPubSub()) {
       agent.__setPubSub(this.config.pubsub);
@@ -1023,7 +1030,7 @@ export class Harness<TState = {}> {
   getCurrentAgent(session: Session<TState>): Agent {
     const mode = session.mode.resolve();
 
-    return this.propagateRuntimeServicesToAgent(this.getAgentForMode(mode));
+    return this.propagateRuntimeServicesToAgent(this.getAgentForMode(mode), session);
   }
 
   /**
@@ -1915,25 +1922,11 @@ export class Harness<TState = {}> {
         },
       },
       abortSignal: session.run.getAbortSignal(),
-      workspace: this.workspace,
       emitEvent: event => session.emit(event),
       getSubagentModelId: params => session.subagents.model.get(params ?? {}),
     };
 
     requestContext.set('harness', harnessContext);
-
-    if (this.workspaceFn) {
-      // Pass the internal Mastra instance so the workspace factory can dedupe
-      // against the registered workspace (getWorkspaceById). Without it, a
-      // dynamic factory would build a *separate* Workspace/filesystem instance
-      // from the one the agent resolves and registers — leaving harness-side
-      // tools (e.g. request_access) mutating a different filesystem than the
-      // agent's workspace tools (e.g. view) read from.
-      const resolved = await Promise.resolve(this.workspaceFn({ requestContext, mastra: this.getMastra() }));
-      harnessContext.workspace = resolved;
-      // Cache for getWorkspace() so callers outside request flow (e.g. /skills) can access it
-      this.workspace = resolved;
-    }
 
     return requestContext;
   }
@@ -1979,59 +1972,6 @@ export class Harness<TState = {}> {
       }
     } catch {
       // Token persistence is not critical
-    }
-  }
-
-  // ===========================================================================
-  // Workspace
-  // ===========================================================================
-
-  getWorkspace(): Workspace | undefined {
-    return this.workspace;
-  }
-
-  /**
-   * Eagerly resolve the workspace. For dynamic workspaces (factory function),
-   * this triggers resolution and caches the result so getWorkspace() returns it.
-   * Useful for code paths outside the request flow (e.g. slash commands).
-   */
-  async resolveWorkspace({
-    session,
-    requestContext,
-  }: {
-    session: Session<TState>;
-    requestContext?: RequestContext;
-  }): Promise<Workspace | undefined> {
-    if (this.workspace) return this.workspace;
-    if (this.workspaceFn) {
-      // buildRequestContext resolves the workspace and caches it on this.workspace
-      await this.buildRequestContext(session, requestContext);
-      return this.workspace;
-    }
-    return undefined;
-  }
-
-  hasWorkspace(): boolean {
-    return this.config.workspace !== undefined;
-  }
-
-  isWorkspaceReady(): boolean {
-    if (this.workspaceFn) return true;
-    return this.workspaceInitialized && this.workspace !== undefined;
-  }
-
-  async destroyWorkspace(): Promise<void> {
-    if (this.workspaceFn) return;
-    if (this.workspace && this.workspaceInitialized) {
-      // The workspace is a Harness-shared resource torn down at Harness
-      // shutdown; there is no single session to emit lifecycle events onto.
-      try {
-        await this.workspace.destroy();
-      } catch (error) {
-        console.warn('Workspace destroy failed:', error);
-      } finally {
-        this.workspaceInitialized = false;
-      }
     }
   }
 
@@ -2120,7 +2060,6 @@ export class Harness<TState = {}> {
     // cleanup) is the caller's responsibility via `session.thread.*`. Here we
     // only tear down Harness-shared resources.
     await this.stopHeartbeats();
-    await this.destroyWorkspace();
   }
 
   // ===========================================================================
