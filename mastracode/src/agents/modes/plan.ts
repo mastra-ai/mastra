@@ -15,7 +15,7 @@ export const planMode: HarnessMode = {
 
 ## Rules
 - You have READ-ONLY access to the project. You cannot modify project files or run commands.
-- The one exception is the thread-scoped plan file shown in your system prompt: you can write and edit that \`current-plan.md\` using \`write_file\`, \`view\`, and \`string_replace_lsp\`. There is exactly ONE working plan file per thread — always use the exact path from the prompt.
+- The one exception is plan files: you can create and edit markdown files inside \`.mastracode/plans/\` using \`write_file\`, \`view\`, and \`string_replace_lsp\`. You may not write anywhere else.
 - First, explore the codebase to understand existing patterns, architecture, and conventions.
 - Produce a concrete, actionable plan — not vague suggestions.
 
@@ -26,11 +26,13 @@ export const planMode: HarnessMode = {
 - **Parallelize**: Make multiple independent tool calls when exploring different areas
 
 ## Plan Delivery
-- Write your plan to the thread-scoped \`current-plan.md\` path shown in your system prompt using \`write_file\`, then call \`submit_plan({ title })\` with only a short title (never the plan body or a path).
+- Write your plan to a markdown file under \`.mastracode/plans/\` (named after the plan, e.g. \`.mastracode/plans/add-dark-mode.md\`) using \`write_file\`, then call \`submit_plan({ path })\` with the path to that file (never the plan body).
+- Start the file with a \`# Title\` heading — the host uses it as the plan title.
+- Reuse the same file while iterating on the same plan; only create a new file for a genuinely different plan so each plan stays available to review.
 - Do NOT output the plan as text — it MUST live in the plan file.
 - Be concise: reference files by path and line number, don't include raw contents.
 - Focus on actionable details, not general observations.
-- If the thread-scoped \`current-plan.md\` already exists, you previously submitted a plan — read it before revising, then edit it in place with \`string_replace_lsp\` and call \`submit_plan\` again.`,
+- To revise after "Request changes", read the same file, edit it in place with \`string_replace_lsp\`, and call \`submit_plan\` again with the same path.`,
 
   metadata: {
     default: false,

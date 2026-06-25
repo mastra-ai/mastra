@@ -3,41 +3,19 @@ import path from 'node:path';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { getAppDataDir } from './project.js';
 
-/** The working plan filename within a thread-scoped plan directory. */
-export const CURRENT_PLAN_FILENAME = 'current-plan.md';
-
-/** Global plans directory for approved plans. */
+/** Global plans directory for approved-plan archives. */
 export function getPlansDir(): string {
   return process.env.MASTRA_PLANS_DIR ?? path.join(getAppDataDir(), 'plans');
 }
 
-/** Local (project-scoped) plans directory for the working plan file + approved archives. */
+/** Local (project-scoped) plans directory where the agent writes named plan files. */
 export function getLocalPlansDir(projectPath: string): string {
   return path.join(projectPath, DEFAULT_CONFIG_DIR, 'plans');
 }
 
-function encodeThreadId(threadId: string): string {
-  return encodeURIComponent(threadId);
-}
-
-/** Local directory for one thread's working plan file. */
-export function getThreadPlansDir(projectPath: string, threadId: string): string {
-  return path.join(getLocalPlansDir(projectPath), 'threads', encodeThreadId(threadId));
-}
-
-/** Path to show in the approval UI, relative to `.mastracode/plans/`. */
-export function getCurrentPlanFilename(threadId: string): string {
-  return path.join('threads', encodeThreadId(threadId), CURRENT_PLAN_FILENAME);
-}
-
-/** Workspace-relative path to the thread-scoped working plan file. */
-export function getCurrentPlanRelativePath(threadId: string): string {
-  return path.join(DEFAULT_CONFIG_DIR, 'plans', getCurrentPlanFilename(threadId));
-}
-
-/** Absolute path to the thread-scoped working plan file. */
-export function getCurrentPlanPath(projectPath: string, threadId: string): string {
-  return path.join(getThreadPlansDir(projectPath, threadId), CURRENT_PLAN_FILENAME);
+/** Workspace-relative directory the agent writes plan files into. */
+export function getLocalPlansRelativeDir(): string {
+  return path.join(DEFAULT_CONFIG_DIR, 'plans');
 }
 
 function slugify(str: string): string {
@@ -46,6 +24,47 @@ function slugify(str: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
   return slug || 'untitled';
+}
+
+/** Derive a plan filename from a title (e.g. `add-dark-mode.md`). */
+export function getPlanFilename(title: string): string {
+  return `${slugify(title)}.md`;
+}
+
+/**
+ * Suggested workspace-relative path for a new plan file, shown in plan-mode prompts.
+ * Without a title we fall back to a generic name the agent can rename later.
+ */
+export function getSuggestedPlanRelativePath(title?: string): string {
+  const filename = title ? getPlanFilename(title) : 'plan.md';
+  return path.join(getLocalPlansRelativeDir(), filename);
+}
+
+/**
+ * Resolve a plan path submitted by the agent (absolute or project-relative) to an
+ * absolute path. Returns `undefined` when no usable path was provided.
+ */
+export function resolvePlanPath(projectPath: string, submittedPath: string): string | undefined {
+  if (!submittedPath) return undefined;
+  return path.isAbsolute(submittedPath) ? submittedPath : path.resolve(projectPath, submittedPath);
+}
+
+/**
+ * Whether `targetPath` (absolute or project-relative) is a valid plan file: a `.md`
+ * file located directly inside the project's `.mastracode/plans/` directory. Used by the
+ * plan-mode write guard so the agent can write any named plan file there, but nothing
+ * outside that directory.
+ */
+export function isPlanFilePath(projectPath: string, targetPath: string): boolean {
+  const abs = resolvePlanPath(projectPath, targetPath);
+  if (!abs) return false;
+  if (path.extname(abs).toLowerCase() !== '.md') return false;
+
+  const plansDir = path.resolve(getLocalPlansDir(projectPath));
+  const rel = path.relative(plansDir, abs);
+  // Must be directly inside the plans dir (no nested subdirectories, no escaping it).
+  if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) return false;
+  return !rel.includes(path.sep);
 }
 
 export async function savePlanToDisk(opts: {
@@ -76,19 +95,15 @@ export async function savePlanToDisk(opts: {
 }
 
 /**
- * Read the thread-scoped working plan file.
+ * Read a plan markdown file by absolute path.
  *
  * The leading `# <title>` heading (if present) is parsed as the title and the remaining
  * content is returned as the plan body. Returns `undefined` when the file does not exist.
  */
-export async function readCurrentPlan(
-  projectPath: string,
-  threadId: string,
-): Promise<{ title: string; plan: string } | undefined> {
-  const target = getCurrentPlanPath(projectPath, threadId);
+export async function readPlanFile(absPath: string): Promise<{ title: string; plan: string } | undefined> {
   let raw: string;
   try {
-    raw = await fs.readFile(target, 'utf-8');
+    raw = await fs.readFile(absPath, 'utf-8');
   } catch {
     return undefined;
   }
@@ -110,51 +125,30 @@ export async function readCurrentPlan(
 }
 
 /**
- * Approve the thread-scoped working plan: archive `current-plan.md` to a stable,
- * title-derived local name (`.mastracode/plans/<slug>.md`), write a copy to the
- * global plans archive, then delete the thread working file so the next plan in
- * this thread starts fresh.
+ * Approve the plan file at `planPath`: write a timestamped copy to the global plans
+ * archive so approved plans are findable later. The local named plan file is left in
+ * place so the user can review every plan made over time.
  *
- * Returns the archived local filename (e.g. `add-dark-mode.md`), or `undefined` when there
- * was no working plan file to approve.
+ * Returns the local plan filename (e.g. `add-dark-mode.md`), or `undefined` when there
+ * was no plan file to approve.
  */
-export async function approveCurrentPlan(opts: {
+export async function approvePlanFile(opts: {
+  planPath: string;
   title: string;
-  projectPath: string;
   resourceId: string;
-  threadId: string;
   plansDir?: string;
 }): Promise<string | undefined> {
-  const { title, projectPath, resourceId, threadId, plansDir } = opts;
+  const { planPath, title, resourceId, plansDir } = opts;
 
-  const current = await readCurrentPlan(projectPath, threadId);
+  const current = await readPlanFile(planPath);
   if (!current) {
     return undefined;
   }
 
   const resolvedTitle = title || current.title || 'Implementation Plan';
-  const baseDir = path.resolve(getLocalPlansDir(projectPath));
-  const filename = `${slugify(resolvedTitle)}.md`;
-  const target = path.resolve(baseDir, filename);
-  const rel = path.relative(baseDir, target);
-  if (rel.startsWith('..') || path.isAbsolute(rel)) {
-    throw new Error(`Invalid plan title: ${resolvedTitle}`);
-  }
-
-  const content = `# ${resolvedTitle}\n\n${current.plan}\n`;
-  await fs.mkdir(baseDir, { recursive: true });
-  await fs.writeFile(target, content, 'utf-8');
 
   // Global archive (timestamped, never overwritten) so approved plans are findable later.
   await savePlanToDisk({ title: resolvedTitle, plan: current.plan, resourceId, plansDir });
 
-  // Delete the working file so the next plan re-creates a fresh current-plan.md.
-  await fs.rm(getCurrentPlanPath(projectPath, threadId), { force: true });
-
-  return filename;
-}
-
-/** Derive the plan filename from a title without writing to disk. */
-export function getPlanFilename(title: string): string {
-  return `${slugify(title)}.md`;
+  return path.basename(planPath);
 }

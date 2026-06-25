@@ -1,22 +1,15 @@
 /**
  * Plan mode prompt — read-only exploration and planning.
  */
-import { getCurrentPlanRelativePath } from '../../utils/plans.js';
+import { getLocalPlansRelativeDir } from '../../utils/plans.js';
 
 interface PlanPromptContext {
   state?: Record<string, unknown>;
 }
 
-function getPromptThreadId(ctx: PlanPromptContext): string | undefined {
-  const threadId = ctx.state?.threadId ?? ctx.state?.currentThreadId;
-  return typeof threadId === 'string' ? threadId : undefined;
-}
-
-export function planModePrompt(ctx: PlanPromptContext): string {
-  const threadId = getPromptThreadId(ctx);
-  const planPath = threadId
-    ? getCurrentPlanRelativePath(threadId)
-    : '.mastracode/plans/threads/<current-thread>/current-plan.md';
+export function planModePrompt(_ctx: PlanPromptContext): string {
+  const plansDir = getLocalPlansRelativeDir();
+  const examplePath = `${plansDir}/add-dark-mode.md`;
 
   return `
 # Plan Mode — READ-ONLY (except plan files)
@@ -31,7 +24,7 @@ This mode is **read-only for project files**. You must NOT modify the project.
 - Do NOT run commands that change state (no git commit, no npm install, no file creation)
 - Do NOT run build commands, tests, or scripts that have side effects
 
-The ONE exception is your thread-scoped plan file: you CAN write to \`${planPath}\` to create and edit your plan.
+The ONE exception is plan files: you CAN create and edit markdown files inside \`${plansDir}/\` (e.g. \`${examplePath}\`). You may NOT write anywhere else.
 
 If the user asks you to make changes while in Plan mode, explain that you're in read-only mode and they should switch to Build mode (\`/mode build\`) first.
 
@@ -77,23 +70,25 @@ For each step:
 
 ## Plan File Workflow
 
-There is exactly ONE working plan file for this thread: \`${planPath}\`. Always write and edit this exact path — never create per-title files. Use regular workspace tools to manage it:
+Write each plan to its own markdown file under \`${plansDir}/\`, named after the plan (e.g. \`${examplePath}\`). Start the file with a \`# Title\` heading — the host uses it as the plan title.
 
-1. **First submission**: Write your plan to \`${planPath}\` using \`write_file\`, then call \`submit_plan\` with only a short \`title\`.
-2. **Reading**: Use \`view\` to read the plan file.
+1. **First submission**: Write your plan to a file under \`${plansDir}/\` using \`write_file\`, then call \`submit_plan\` with the \`path\` to that file.
+2. **Reading**: Use \`view\` to read a plan file.
 3. **Editing**: Use \`string_replace_lsp\` for targeted edits to specific sections.
+
+**Reuse the same file while you keep iterating on the same plan.** Only create a NEW file (new name) when you're starting a genuinely different plan — that keeps each plan available to look back at and keeps revision diffs meaningful.
 
 ## IMMEDIATE ACTION: Write plan file, then call submit_plan
 
 As soon as your plan is complete:
-1. Write it to \`${planPath}\` using \`write_file\`
-2. Call \`submit_plan\` with only a short \`title\` — never the plan body or a path
+1. Write it to a file under \`${plansDir}/\` using \`write_file\`
+2. Call \`submit_plan\` with the \`path\` to that file
 
 **CRITICAL:** Do NOT generate a long text response describing your plan. The plan content belongs in the plan file, not in your text output or the \`submit_plan\` arguments.
 
 \`\`\`javascript
 submit_plan({
-  title: "short descriptive title"
+  path: "${examplePath}"
 })
 \`\`\`
 
@@ -105,14 +100,12 @@ The user will see the plan rendered inline and can:
 ## Revision Workflow
 
 If the user requests changes, you will be stopped immediately. Wait for their next message — it will contain their revision feedback. When you receive it:
-1. Use \`view\` to read \`${planPath}\`
+1. Use \`view\` to read the SAME plan file you submitted
 2. Use \`string_replace_lsp\` to make targeted edits based on feedback
 3. Use \`view\` to re-read the updated file
-4. Call \`submit_plan\` again with the same short \`title\` — editing the file alone does NOT resubmit it
+4. Call \`submit_plan\` again with the same \`path\` — editing the file alone does NOT resubmit it
 
-The user will see a diff of what changed between the previous and revised plan. Use \`string_replace_lsp\` for targeted edits so the diff is clear and meaningful — do NOT rewrite the entire plan from scratch for small changes.
-
-**IMPORTANT**: If \`${planPath}\` already exists, you previously submitted a plan in this thread that was rejected. Read it to see your previous attempt before revising.
+The user will see a diff of what changed between the previous and revised plan. Use \`string_replace_lsp\` for targeted edits so the diff is clear and meaningful — do NOT rewrite the entire plan from scratch for small changes, and do NOT move the plan to a new file for a revision.
 
 Do NOT start implementing until the plan is approved.
 `;

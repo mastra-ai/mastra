@@ -4,16 +4,15 @@ import { describe, it, expect, afterEach, afterAll } from 'vitest';
 import {
   savePlanToDisk,
   getPlanFilename,
-  getCurrentPlanFilename,
-  getCurrentPlanPath,
-  readCurrentPlan,
-  approveCurrentPlan,
+  getLocalPlansDir,
+  isPlanFilePath,
+  readPlanFile,
+  approvePlanFile,
 } from '../plans.js';
 
 const projectRoot = path.resolve(import.meta.dirname, '../../..');
 const tmpDir = path.join(projectRoot, '.test-tmp-plans');
 const tmpProjectPath = path.join(projectRoot, '.test-tmp-project');
-const TEST_THREAD_ID = 'thread-test-save-plan';
 
 afterEach(() => {
   if (fs.existsSync(tmpDir)) {
@@ -156,62 +155,71 @@ describe('savePlanToDisk', () => {
   });
 });
 
-function writeCurrentPlan(content: string, threadId = TEST_THREAD_ID): void {
-  const filePath = getCurrentPlanPath(tmpProjectPath, threadId);
+function writePlanFile(filename: string, content: string): string {
+  const filePath = path.join(getLocalPlansDir(tmpProjectPath), filename);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, content, 'utf-8');
+  return filePath;
 }
 
-describe('getCurrentPlanPath', () => {
-  it('points to the thread-scoped working plan file', () => {
-    expect(getCurrentPlanPath(tmpProjectPath, TEST_THREAD_ID)).toBe(
-      path.join(tmpProjectPath, '.mastracode', 'plans', getCurrentPlanFilename(TEST_THREAD_ID)),
-    );
+describe('isPlanFilePath', () => {
+  it('accepts a .md file directly inside .mastracode/plans/', () => {
+    expect(isPlanFilePath(tmpProjectPath, '.mastracode/plans/add-dark-mode.md')).toBe(true);
+  });
+
+  it('accepts an absolute path inside .mastracode/plans/', () => {
+    const abs = path.join(getLocalPlansDir(tmpProjectPath), 'feature.md');
+    expect(isPlanFilePath(tmpProjectPath, abs)).toBe(true);
+  });
+
+  it('rejects files outside .mastracode/plans/', () => {
+    expect(isPlanFilePath(tmpProjectPath, 'src/index.ts')).toBe(false);
+    expect(isPlanFilePath(tmpProjectPath, '.mastracode/other.md')).toBe(false);
+  });
+
+  it('rejects non-markdown files and nested subdirectories', () => {
+    expect(isPlanFilePath(tmpProjectPath, '.mastracode/plans/notes.txt')).toBe(false);
+    expect(isPlanFilePath(tmpProjectPath, '.mastracode/plans/sub/plan.md')).toBe(false);
+  });
+
+  it('rejects path traversal out of the plans directory', () => {
+    expect(isPlanFilePath(tmpProjectPath, '.mastracode/plans/../../evil.md')).toBe(false);
   });
 });
 
-describe('readCurrentPlan', () => {
-  it('returns undefined when the working file does not exist', async () => {
-    expect(await readCurrentPlan(tmpProjectPath, TEST_THREAD_ID)).toBeUndefined();
+describe('readPlanFile', () => {
+  it('returns undefined when the file does not exist', async () => {
+    expect(await readPlanFile(path.join(getLocalPlansDir(tmpProjectPath), 'missing.md'))).toBeUndefined();
   });
 
   it('parses the leading heading as the title and the rest as the body', async () => {
-    writeCurrentPlan('# My plan\n\nStep 1\nStep 2\n');
+    const file = writePlanFile('my-plan.md', '# My plan\n\nStep 1\nStep 2\n');
 
-    const result = await readCurrentPlan(tmpProjectPath, TEST_THREAD_ID);
-    expect(result).toEqual({ title: 'My plan', plan: 'Step 1\nStep 2' });
+    expect(await readPlanFile(file)).toEqual({ title: 'My plan', plan: 'Step 1\nStep 2' });
   });
 
   it('returns an empty title when there is no leading heading', async () => {
-    writeCurrentPlan('Just a body with no heading\n');
+    const file = writePlanFile('no-heading.md', 'Just a body with no heading\n');
 
-    const result = await readCurrentPlan(tmpProjectPath, TEST_THREAD_ID);
-    expect(result).toEqual({ title: '', plan: 'Just a body with no heading' });
+    expect(await readPlanFile(file)).toEqual({ title: '', plan: 'Just a body with no heading' });
   });
 });
 
-describe('approveCurrentPlan', () => {
-  it('archives current-plan.md to a slugified local file and deletes the working file', async () => {
-    writeCurrentPlan('# My plan\n\nStep 1\nStep 2\n');
+describe('approvePlanFile', () => {
+  it('archives the plan to the global plans dir and leaves the local file in place', async () => {
+    const file = writePlanFile('my-plan.md', '# My plan\n\nStep 1\nStep 2\n');
 
-    const filename = await approveCurrentPlan({
+    const filename = await approvePlanFile({
+      planPath: file,
       title: 'My plan',
-      projectPath: tmpProjectPath,
       resourceId: 'resource-1',
-      threadId: TEST_THREAD_ID,
       plansDir: tmpDir,
     });
 
     expect(filename).toBe('my-plan.md');
 
-    const archivePath = path.join(tmpProjectPath, '.mastracode', 'plans', 'my-plan.md');
-    expect(fs.existsSync(archivePath)).toBe(true);
-    const archived = fs.readFileSync(archivePath, 'utf-8');
-    expect(archived).toContain('# My plan');
-    expect(archived).toContain('Step 1');
-
-    // Working file is deleted so the next plan starts fresh.
-    expect(fs.existsSync(getCurrentPlanPath(tmpProjectPath, TEST_THREAD_ID))).toBe(false);
+    // The local named plan file is preserved so the user can review it later.
+    expect(fs.existsSync(file)).toBe(true);
 
     // Global archive (timestamped) was written under the resource dir.
     const resourceDir = path.join(tmpDir, 'resource-1');
@@ -221,25 +229,23 @@ describe('approveCurrentPlan', () => {
   });
 
   it('uses the title from the file when no title is provided', async () => {
-    writeCurrentPlan('# File title\n\nBody\n');
+    const file = writePlanFile('file-title.md', '# File title\n\nBody\n');
 
-    const filename = await approveCurrentPlan({
+    const filename = await approvePlanFile({
+      planPath: file,
       title: '',
-      projectPath: tmpProjectPath,
       resourceId: 'resource-2',
-      threadId: TEST_THREAD_ID,
       plansDir: tmpDir,
     });
 
     expect(filename).toBe('file-title.md');
   });
 
-  it('returns undefined when there is no working plan file', async () => {
-    const filename = await approveCurrentPlan({
+  it('returns undefined when the plan file does not exist', async () => {
+    const filename = await approvePlanFile({
+      planPath: path.join(getLocalPlansDir(tmpProjectPath), 'missing.md'),
       title: 'Anything',
-      projectPath: tmpProjectPath,
       resourceId: 'resource-3',
-      threadId: TEST_THREAD_ID,
       plansDir: tmpDir,
     });
 
