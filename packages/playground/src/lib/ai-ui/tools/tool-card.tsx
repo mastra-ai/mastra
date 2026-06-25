@@ -194,15 +194,7 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
     askUserSuspendMeta?.suspendPayload &&
     isAskUserSuspendPayload(askUserSuspendMeta.suspendPayload)
   ) {
-    return (
-      <AskUserBadge
-        toolCallId={toolCallId}
-        toolName={toolName}
-        suspendPayload={askUserSuspendMeta.suspendPayload}
-        result={result}
-        isGenerateMode={metadata?.mode === 'generate'}
-      />
-    );
+    return <AskUserBadge toolCallId={toolCallId} suspendPayload={askUserSuspendMeta.suspendPayload} result={result} />;
   }
 
   if (isBackgroundTaskResult) {

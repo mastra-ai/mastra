@@ -8,10 +8,8 @@ import { useToolCall } from '@/services/tool-call-provider';
 
 export interface AskUserBadgeProps {
   toolCallId: string;
-  toolName: string;
   suspendPayload: AskUserSuspendPayload;
-  result: any;
-  isGenerateMode?: boolean;
+  result: unknown;
 }
 
 export const AskUserBadge = ({ toolCallId, suspendPayload, result }: AskUserBadgeProps) => {
@@ -67,7 +65,7 @@ export const AskUserBadge = ({ toolCallId, suspendPayload, result }: AskUserBadg
       <div className="space-y-3">
         <p className="text-sm text-text1 font-medium">{question}</p>
 
-        {isAnswered && result && (
+        {isAnswered && result != null && (
           <div className="flex items-center gap-2 rounded-md bg-surface4 px-3 py-2">
             <Icon>
               <Check className="text-accent1" />

@@ -40,7 +40,7 @@ export const TaskPanel = () => {
   return (
     <div className="px-2 pb-1" data-testid="task-panel">
       <div className="max-w-3xl w-full mx-auto">
-        <div className="rounded-[22px] border border-border2/40 bg-surface3 px-3 py-2.5">
+        <div className="rounded-2xl border border-border2/40 bg-surface3 px-3 py-2.5">
           {/* Header */}
           <div className="flex items-center gap-2 mb-2">
             <ListChecks className="h-4 w-4 shrink-0 text-accent6" />

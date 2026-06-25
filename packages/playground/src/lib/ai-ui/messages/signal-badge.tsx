@@ -1,3 +1,4 @@
+import type { TaskItem } from '@mastra/core/harness';
 import { Bell, Database, Radio } from 'lucide-react';
 
 import { getNotificationMetadata, isRecord, isSignalData } from './signal-data';
@@ -62,13 +63,6 @@ const Pill = ({ children }: { children: string }) => (
   </span>
 );
 
-interface TaskItem {
-  id: string;
-  content: string;
-  status: 'pending' | 'in_progress' | 'completed';
-  activeForm: string;
-}
-
 function isTaskItemArray(value: unknown): value is TaskItem[] {
   return (
     Array.isArray(value) &&
@@ -83,7 +77,7 @@ function isTaskItemArray(value: unknown): value is TaskItem[] {
   );
 }
 
-function getTaskSignalData(signal: SignalData): { tasks: TaskItem[]; mode: 'snapshot' | 'delta' } | undefined {
+function getTaskSignalData(signal: SignalData): TaskItem[] | undefined {
   const isTaskSignal =
     signal.id === 'tasks' || signal.tagName === 'current-task-list' || signal.tagName === 'task-list-update';
   if (!isTaskSignal) return undefined;
@@ -93,8 +87,7 @@ function getTaskSignalData(signal: SignalData): { tasks: TaskItem[]; mode: 'snap
   const tasks = value?.tasks;
   if (!isTaskItemArray(tasks)) return undefined;
 
-  const mode = signal.tagName === 'task-list-update' ? 'delta' : 'snapshot';
-  return { tasks, mode };
+  return tasks;
 }
 
 export const SignalBadge = ({ signal: value }: SignalBadgeProps) => {
