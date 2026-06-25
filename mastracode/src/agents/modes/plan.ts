@@ -2,6 +2,7 @@
  * Plan mode — read-only analysis and planning.
  */
 import type { HarnessMode } from '@mastra/core/harness';
+import { MC_TOOLS } from '../../tool-names.js';
 
 export const planMode: HarnessMode = {
   id: 'plan',
@@ -34,4 +35,26 @@ export const planMode: HarnessMode = {
   metadata: {
     default: false,
   },
+
+  availableTools: [
+    // Read-only exploration tools
+    MC_TOOLS.VIEW,
+    MC_TOOLS.FIND_FILES,
+    MC_TOOLS.SEARCH_CONTENT,
+    MC_TOOLS.FILE_STAT,
+    MC_TOOLS.LSP_INSPECT,
+    // Plan file writing (restricted to .mastracode/plans/ by workspace paths)
+    MC_TOOLS.WRITE_FILE,
+    MC_TOOLS.STRING_REPLACE_LSP,
+    // Plan delivery tools
+    'ask_user',
+    'submit_plan',
+    // Task tools for plan-stage tracking
+    'task_write',
+    'task_update',
+    'task_complete',
+    'task_check',
+    // Notification access
+    MC_TOOLS.NOTIFICATION_INBOX,
+  ],
 };

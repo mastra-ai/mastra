@@ -6,6 +6,7 @@
  * the codebase, then returns a concise summary of its findings.
  */
 import type { HarnessMode } from '@mastra/core/harness';
+import { MC_TOOLS } from '../../tool-names.js';
 
 export const fastMode: HarnessMode = {
   id: 'fast',
@@ -39,4 +40,13 @@ End with a structured summary:
 . **Details**: Additional context if needed
 
 Keep your summary under 300 words.`,
+
+  availableTools: [
+    MC_TOOLS.VIEW,
+    MC_TOOLS.FIND_FILES,
+    MC_TOOLS.SEARCH_CONTENT,
+    MC_TOOLS.FILE_STAT,
+    MC_TOOLS.LSP_INSPECT,
+    'ask_user',
+  ],
 };

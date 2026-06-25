@@ -131,7 +131,6 @@ function detectPackageRunner(projectPath: string): string | undefined {
 export function getDynamicWorkspace({ requestContext, mastra }: { requestContext: RequestContext; mastra?: Mastra }) {
   const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
   const state = ctx?.session.state.get();
-  const modeId = ctx?.session?.modeId ?? 'build';
   const rawProjectPath = state?.projectPath;
 
   if (!rawProjectPath) {
@@ -144,17 +143,12 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
   const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectPath}`;
   const sandboxPaths = state?.sandboxAllowedPaths ?? [];
   const allowedPaths = [...skillPaths, ...DEFAULT_ALLOWED_PATHS, ...sandboxPaths.map((p: string) => path.resolve(p))];
-  const isPlanMode = modeId === 'plan';
 
-  const planModeTools = {
-    // write_file stays enabled — the agent uses it to create the initial plan .md file.
-    // edit_file (string_replace_lsp) stays enabled for targeted plan revisions.
-    // ast_edit is disabled because plans are markdown, not code.
-    mastra_workspace_ast_edit: { ...TOOL_NAME_OVERRIDES.mastra_workspace_ast_edit, enabled: false },
-  };
-
+  // All modes share the same workspace tool configuration.  Per-mode tool
+  // visibility is enforced at LLM-call time via `availableTools` /
+  // `activeTools` on the Harness, not by mutating workspace capabilities.
   const workspaceTools: WorkspaceToolsConfig = {
-    ...(isPlanMode ? { ...TOOL_NAME_OVERRIDES, ...planModeTools } : TOOL_NAME_OVERRIDES),
+    ...TOOL_NAME_OVERRIDES,
   };
 
   // Reuse existing workspace if already registered (preserves ProcessManager state)
