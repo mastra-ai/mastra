@@ -79,6 +79,17 @@ export const scheduleTriggerOutcomeSchema = z.enum([
   'skipped',
   'aborted',
   'failed',
+  // Legacy queue/notification outcomes — no longer written, but trigger rows
+  // persisted by older builds may still carry them. Kept readable so the
+  // response validator does not reject historical rows. Mirrors the core
+  // ScheduleTriggerOutcome union.
+  'acked',
+  'alerted',
+  'deferred',
+  'appended-from-queue',
+  'dropped-stale',
+  'dropped-superseded',
+  'dropped-busy',
 ]);
 
 export const scheduleTriggerKindSchema = z.enum(['schedule-fire', 'queue-drain', 'manual']);

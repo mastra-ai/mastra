@@ -2214,7 +2214,7 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Lists workflow schedules with optional filtering by workflowId or status.
+   * Lists schedules with optional filtering by workflowId, status, ownerType, or ownerId.
    */
   public listSchedules(params: ListSchedulesParams = {}): Promise<ListSchedulesResponse> {
     const searchParams = new URLSearchParams();
@@ -2268,8 +2268,7 @@ export class MastraClient extends BaseResource {
 
   /**
    * Lists heartbeats across all agents. Pass `agentId` to scope the list to
-   * a single agent. Heartbeats are the user-facing view of scheduled agent
-   * self-messages; the schedule + workflow that backs them is hidden.
+   * a single agent. Filter further by `threadId`, `resourceId`, or `name`.
    */
   public listHeartbeats(params: ListHeartbeatsParams = {}): Promise<Heartbeat[]> {
     const searchParams = new URLSearchParams();
@@ -2346,11 +2345,10 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Fires a heartbeat manually, out-of-band from the cron schedule. The run
-   * goes through the same HeartbeatWorker pipeline as a scheduled fire
-   * (ifActive/ifIdle, broadcast processor). Does not advance nextFireAt. The
-   * returned `claimId` is the trigger row's runId — look it up via
-   * `listScheduleTriggers(heartbeatId)`.
+   * Fires a heartbeat manually, out-of-band from the cron schedule. Behaves
+   * like a scheduled fire (honoring `ifActive` / `ifIdle` and `broadcast`) but
+   * does not advance `nextFireAt`. The returned `claimId` is the trigger row's
+   * runId — look it up via `listScheduleTriggers(heartbeatId)`.
    */
   public runHeartbeat(heartbeatId: string): Promise<RunHeartbeatResponse> {
     return this.request(`/heartbeats/${encodeURIComponent(heartbeatId)}/run`, {

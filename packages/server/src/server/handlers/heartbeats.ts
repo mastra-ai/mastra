@@ -88,8 +88,11 @@ export const CREATE_HEARTBEAT_ROUTE = createRoute({
   tags: ['Heartbeats'],
   requiresAuth: true,
   handler: async ({ mastra, agentId, ...body }) => {
-    const agent = mastra.getAgentById(agentId);
-    if (!agent) {
+    // getAgentById throws a MastraError (status 404) when the agent is unknown;
+    // translate that into a clean HTTP 404 instead of letting it surface as 500.
+    try {
+      mastra.getAgentById(agentId);
+    } catch {
       throw new HTTPException(404, { message: `Agent "${agentId}" not found` });
     }
     const heartbeats = getHeartbeats(mastra);

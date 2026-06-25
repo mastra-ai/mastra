@@ -1,8 +1,20 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
 import { Agent } from '../agent';
+
+// Track every Mastra instance created in a test so it is always shut down,
+// even if an assertion throws before the test reaches its own shutdown call.
+const activeInstances: Mastra[] = [];
+function track(mastra: Mastra): Mastra {
+  activeInstances.push(mastra);
+  return mastra;
+}
+afterEach(async () => {
+  const instances = activeInstances.splice(0, activeInstances.length);
+  await Promise.all(instances.map(m => m.shutdown().catch(() => {})));
+});
 
 async function waitUntil(
   predicate: () => boolean | Promise<boolean>,
@@ -55,6 +67,7 @@ describe('Agent heartbeats — scheduler integration', () => {
       notifications: { dispatch: { enabled: false } },
       scheduler: { tickIntervalMs: 50 },
     });
+    track(mastra);
 
     const hb = await mastra.heartbeats.create({ cron: '* * * * * *', prompt: 'ping', agentId: agent.id });
     await mastra.startWorkers();
@@ -77,8 +90,6 @@ describe('Agent heartbeats — scheduler integration', () => {
     const triggers = await schedulesStore.listTriggers(hb.id);
     expect(triggers.length).toBeGreaterThan(0);
     expect(triggers[0]!.outcome).toBe('succeeded');
-
-    await mastra.shutdown();
   }, 10_000);
 
   it('lazily injects + starts the scheduler when create() is called after startWorkers()', async () => {
@@ -91,6 +102,7 @@ describe('Agent heartbeats — scheduler integration', () => {
       notifications: { dispatch: { enabled: false } },
       scheduler: { tickIntervalMs: 50 },
     });
+    track(mastra);
 
     await mastra.startWorkers();
     // No scheduler should be running yet — no declarative scheduled
@@ -118,8 +130,6 @@ describe('Agent heartbeats — scheduler integration', () => {
     const triggers = await schedulesStore.listTriggers(hb.id);
     expect(triggers.length).toBeGreaterThan(0);
     expect(triggers[0]!.outcome).toBe('succeeded');
-
-    await mastra.shutdown();
   }, 10_000);
 
   it('auto-starts the scheduler and heartbeat worker on boot when heartbeat schedule rows already exist in storage', async () => {
@@ -136,6 +146,7 @@ describe('Agent heartbeats — scheduler integration', () => {
         notifications: { dispatch: { enabled: false } },
         scheduler: { tickIntervalMs: 50 },
       });
+      track(mastra);
       await mastra.heartbeats.create({ cron: '* * * * * *', prompt: 'ping', agentId: agent.id });
       await mastra.startWorkers();
       await waitForScheduler(mastra);
@@ -153,13 +164,12 @@ describe('Agent heartbeats — scheduler integration', () => {
       notifications: { dispatch: { enabled: false } },
       scheduler: { tickIntervalMs: 50 },
     });
+    track(mastra2);
 
     await mastra2.startWorkers();
 
     // Scheduler should be running because storage has a heartbeat target.
     await waitForScheduler(mastra2);
-
-    await mastra2.shutdown();
   }, 10_000);
 
   it('does not start the scheduler when scheduler is explicitly disabled', async () => {
@@ -172,6 +182,7 @@ describe('Agent heartbeats — scheduler integration', () => {
       notifications: { dispatch: { enabled: false } },
       scheduler: { enabled: false },
     });
+    track(mastra);
 
     await mastra.startWorkers();
     await mastra.heartbeats.create({ cron: '* * * * * *', prompt: 'ping', agentId: agent.id });
@@ -179,8 +190,6 @@ describe('Agent heartbeats — scheduler integration', () => {
     // Scheduler stays off because the user explicitly disabled it,
     // even though create() would normally signal "scheduler needed".
     expect(mastra.scheduler).toBeUndefined();
-
-    await mastra.shutdown();
   });
 
   it('does not inject heartbeat/scheduler workers when workers are explicitly disabled', async () => {
@@ -195,6 +204,7 @@ describe('Agent heartbeats — scheduler integration', () => {
       // A separate standalone worker is expected to run the scheduler.
       workers: false,
     });
+    track(mastra);
 
     await mastra.startWorkers();
     // create() still persists the heartbeat row so a standalone worker
@@ -202,7 +212,5 @@ describe('Agent heartbeats — scheduler integration', () => {
     await mastra.heartbeats.create({ cron: '* * * * * *', prompt: 'ping', agentId: agent.id });
 
     expect(mastra.scheduler).toBeUndefined();
-
-    await mastra.shutdown();
   });
 });

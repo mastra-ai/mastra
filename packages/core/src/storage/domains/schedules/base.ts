@@ -47,7 +47,7 @@ export type HeartbeatScheduleTarget = {
   threadId?: string;
   /** Required when `threadId` is set. */
   resourceId?: string;
-  /** Signal type used by threaded heartbeats. Defaults to `'user-message'`. */
+  /** Signal type used by threaded heartbeats. Defaults to `'system-reminder'`. */
   signalType?: AgentSignalType;
   /** Behavior when the target thread is actively streaming. Threaded only. */
   ifActive?: HeartbeatIfActive;

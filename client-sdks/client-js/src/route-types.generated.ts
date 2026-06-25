@@ -89860,7 +89860,22 @@ export type GetSchedulesScheduleIdTriggers_Response = {
     runId: string | null;
     scheduledFireAt: number;
     actualFireAt: number;
-    outcome: 'published' | 'succeeded' | 'delivered' | 'persisted' | 'discarded' | 'skipped' | 'aborted' | 'failed';
+    outcome:
+      | 'published'
+      | 'succeeded'
+      | 'delivered'
+      | 'persisted'
+      | 'discarded'
+      | 'skipped'
+      | 'aborted'
+      | 'failed'
+      | 'acked'
+      | 'alerted'
+      | 'deferred'
+      | 'appended-from-queue'
+      | 'dropped-stale'
+      | 'dropped-superseded'
+      | 'dropped-busy';
     error?: string | undefined;
     triggerKind?: ('schedule-fire' | 'queue-drain' | 'manual') | undefined;
     parentTriggerId?: string | undefined;
