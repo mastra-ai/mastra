@@ -1447,7 +1447,7 @@ describe('ModelSpanTracker', () => {
 
       const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
       expect(stepSpans).toHaveLength(1);
-      expect(stepSpans[0]!.input).toEqual([{ role: 'tool', content: '[tool-result: Summarized file content]' }]);
+      expect(stepSpans[0]!.input).toEqual([{ role: 'tool', content: 'Summarized file content' }]);
     });
 
     it('should show modelOutput content when available', async () => {
@@ -1496,7 +1496,7 @@ describe('ModelSpanTracker', () => {
 
       const stepSpans = testExporter.getSpansByType(SpanType.MODEL_STEP);
       expect(stepSpans).toHaveLength(1);
-      expect(stepSpans[0]!.input).toEqual([{ role: 'tool', content: '[tool-result: Summarized file content]' }]);
+      expect(stepSpans[0]!.input).toEqual([{ role: 'tool', content: 'Summarized file content' }]);
     });
 
     it('should not expose raw result when modelOutput is absent', async () => {
