@@ -6,12 +6,14 @@
     "Qwen/Qwen3.5-35B-A3B",
     "Qwen/Qwen3.5-397B-A17B",
     "Qwen/Qwen3.5-9B",
+    "Qwen/Qwen3.6-27B",
     "Qwen/Qwen3.6-35B-A3B",
     "google/gemma-4-26B-A4B-it",
     "google/gemma-4-31B-it",
     "moonshotai/Kimi-K2.5",
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
+    "stepfun-ai/Step-3.7-Flash",
     "zai-org/GLM-4.5V"
   ]
 }

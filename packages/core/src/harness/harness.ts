@@ -299,7 +299,7 @@ export class Harness<TState = {}> {
       setState: updates => void session.state.set(updates as Partial<TState>),
       setSetting: ({ key, value }) => session.thread.setSetting({ key, value }),
     });
-    session.thread.connect(this.createThreadDataStore(session), session as Session);
+    session.thread.connect(this.createThreadDataStore(), session as Session);
     session.setMachinery({
       getAgent: () => this.getCurrentAgent(session),
       subscribeToThread: ({ resourceId, threadId }) =>
@@ -344,8 +344,8 @@ export class Harness<TState = {}> {
    * Call {@link init} once before creating sessions so shared storage and
    * workspace are ready.
    *
-   * @param id - Stable session identifier (mirrors `SessionRecord.id`). Required.
-   * @param ownerId - Stable session owner (mirrors `SessionRecord.ownerId`). Required.
+   * @param id - Stable session identifier (mirrors `SessionRecord.id`). Defaults to the harness `id`.
+   * @param ownerId - Stable session owner (mirrors `SessionRecord.ownerId`). Defaults to the harness `id`.
    * @param resourceId - Memory resource to bind this session to. Defaults to the harness `resourceId` or `id`.
    */
   async createSession({
@@ -354,10 +354,12 @@ export class Harness<TState = {}> {
     id,
   }: {
     resourceId?: string;
-    id: string;
-    ownerId: string;
-  }): Promise<Session<TState>> {
+    id?: string;
+    ownerId?: string;
+  } = {}): Promise<Session<TState>> {
     const effectiveResourceId = resourceId ?? this.config.resourceId ?? this.config.id;
+    const effectiveSessionId = id ?? this.config.id;
+    const effectiveOwnerId = ownerId ?? this.config.id;
 
     // Get-or-create: a resourceId maps to exactly one durable session per
     // Harness. Asking for the same resource twice returns the same session, so
@@ -369,7 +371,7 @@ export class Harness<TState = {}> {
       return existing;
     }
 
-    const creation = this.#createSessionForResource(ownerId, id, effectiveResourceId);
+    const creation = this.#createSessionForResource(effectiveOwnerId, effectiveSessionId, effectiveResourceId);
     this.#sessionsByResource.set(effectiveResourceId, creation);
     try {
       return await creation;
@@ -409,13 +411,20 @@ export class Harness<TState = {}> {
       session.emit({ type: 'workspace_error', error: this.workspaceError });
     }
 
-    // Bring the session online with a current thread: resume the most recent
-    // thread for this resource, or create a fresh one when none exist.
+    // Bring the session online with a current thread. The selection strategy is
+    // projectPath-aware so worktrees sharing a resourceId each resume their own
+    // thread without claiming threads owned by another resource.
+    const projectPath = (this.config.initialState as any)?.projectPath as string | undefined;
+
     const threads = await session.thread.list();
-    if (threads.length === 0) {
+    const candidates = projectPath ? threads.filter(t => (t.metadata as any)?.projectPath === projectPath) : threads;
+
+    // Resume the most recent same-resource candidate, or create a new thread.
+    if (candidates.length === 0) {
       await session.thread.create();
     } else {
-      const mostRecent = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
+      const mostRecent = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
+
       await this.config.threadLock?.acquire(mostRecent.id);
       session.thread.set({ threadId: mostRecent.id });
       await session.thread.loadMetadata();
@@ -473,6 +482,22 @@ export class Harness<TState = {}> {
    */
   #resolveStorage(): MastraCompositeStore | undefined {
     return this.#externalMastra?.getStorage() ?? this.config.storage;
+  }
+
+  private async resolveConfiguredMemory(): Promise<MastraMemory | undefined> {
+    const configuredMemory = this.config.memory;
+    if (!configuredMemory) return undefined;
+
+    const memory =
+      typeof configuredMemory === 'function'
+        ? await configuredMemory({ requestContext: new RequestContext(), mastra: this.getMastra() })
+        : configuredMemory;
+
+    if (!memory) {
+      throw new Error('Dynamic memory factory returned empty value');
+    }
+
+    return memory;
   }
 
   /**
@@ -601,10 +626,10 @@ export class Harness<TState = {}> {
    * through. The Session owns the thread-domain logic; this adapter just maps
    * raw storage rows to Harness types — it does not call back into Session.
    */
-  private createThreadDataStore(session: Session<TState>): ThreadDataStore {
+  private createThreadDataStore(): ThreadDataStore {
     return {
-      listThreads: ({ resourceId, includeForkedSubagents }) =>
-        this.queryThreads({ resourceId, includeForkedSubagents }),
+      listThreads: ({ resourceId, includeForkedSubagents, metadata }) =>
+        this.queryThreads({ resourceId, includeForkedSubagents, metadata }),
       getById: ({ threadId }) => this.queryThreadById({ threadId }),
       listMessages: ({ threadId, limit }) => this.queryThreadMessages({ threadId, limit }),
       firstUserMessages: ({ threadIds }) => this.queryFirstUserMessages({ threadIds }),
@@ -614,8 +639,8 @@ export class Harness<TState = {}> {
       hasStorage: () => !!this.#resolveStorage(),
       saveThread: ({ thread }) => this.persistThreadRow(thread),
       deleteThread: ({ threadId }) => this.deleteThreadRow(threadId),
-      cloneThread: ({ sourceThreadId, resourceId, title }) =>
-        this.cloneThreadRow(session, { sourceThreadId, resourceId, title }),
+      cloneThread: ({ sourceThreadId, resourceId, title, metadata }) =>
+        this.cloneThreadRow({ sourceThreadId, resourceId, title, metadata }),
       acquireLock: threadId => this.config.threadLock?.acquire(threadId) ?? Promise.resolve(),
       releaseLock: threadId => this.config.threadLock?.release(threadId) ?? Promise.resolve(),
       getModeIds: () => this.config.modes.map(m => m.id),
@@ -646,23 +671,26 @@ export class Harness<TState = {}> {
   }
 
   /** Clone a thread (and messages) via the host's memory (gateway primitive for the Session thread domain). */
-  private async cloneThreadRow(
-    session: Session<TState>,
-    {
-      sourceThreadId,
-      resourceId,
-      title,
-    }: {
-      sourceThreadId: string;
-      resourceId: string;
-      title?: string;
-    },
-  ): Promise<HarnessThread> {
-    if (!this.config.memory) {
-      throw new Error('Memory is not configured on this Harness');
+  private async cloneThreadRow({
+    sourceThreadId,
+    resourceId,
+    title,
+    metadata,
+  }: {
+    sourceThreadId: string;
+    resourceId: string;
+    title?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<HarnessThread> {
+    const storage = this.#resolveStorage();
+    const memory = storage ? await storage.getStore('memory') : await this.resolveConfiguredMemory();
+    if (!memory) {
+      throw new Error(
+        storage ? 'Storage does not have a memory domain configured' : 'Memory is not configured on this Harness',
+      );
     }
-    const memory = await this.resolveMemory(session);
-    const result = await memory.cloneThread({ sourceThreadId, resourceId, title });
+
+    const result = await memory.cloneThread({ sourceThreadId, resourceId, title, metadata });
     return {
       id: result.thread.id,
       resourceId: result.thread.resourceId,
@@ -748,14 +776,24 @@ export class Harness<TState = {}> {
   private async queryThreads({
     resourceId,
     includeForkedSubagents,
+    metadata,
   }: {
     resourceId?: string;
     includeForkedSubagents?: boolean;
+    metadata?: Record<string, unknown>;
   }): Promise<HarnessThread[]> {
-    if (!this.#resolveStorage()) return [];
+    if (!this.#resolveStorage()) {
+      return [];
+    }
 
     const memoryStorage = await this.getMemoryStorage();
-    const filter: { resourceId?: string } | undefined = resourceId === undefined ? undefined : { resourceId };
+    const filter =
+      resourceId === undefined && metadata === undefined
+        ? undefined
+        : {
+            ...(resourceId === undefined ? {} : { resourceId }),
+            ...(metadata === undefined ? {} : { metadata }),
+          };
 
     const result = await memoryStorage.listThreads({ filter, perPage: false });
 

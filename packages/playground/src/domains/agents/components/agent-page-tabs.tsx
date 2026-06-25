@@ -1,5 +1,6 @@
-import { Tooltip, TooltipContent, TooltipTrigger, Txt, Icon } from '@mastra/playground-ui';
+import { Txt, Icon } from '@mastra/playground-ui';
 import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { ExternalLink, EyeIcon, FlaskConical, MessageSquare, ClipboardCheck, GitBranch } from 'lucide-react';
 
 import { useLinkComponent } from '@/lib/framework';

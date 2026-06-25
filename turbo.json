@@ -13,6 +13,14 @@
     "lint": {
       "dependsOn": []
     },
+    "//#lint:format": {
+      "dependsOn": [],
+      "cache": false
+    },
+    "//#format:prettier": {
+      "dependsOn": [],
+      "cache": false
+    },
     "typecheck": {
       "dependsOn": ["^build"]
     },

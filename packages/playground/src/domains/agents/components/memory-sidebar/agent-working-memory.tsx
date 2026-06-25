@@ -1,6 +1,7 @@
-import { Button, ScrollArea, Tooltip, TooltipContent, TooltipTrigger, toast, cn } from '@mastra/playground-ui';
+import { Button, ScrollArea, toast, cn } from '@mastra/playground-ui';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { RefreshCcwIcon, ExternalLink } from 'lucide-react';
 import { useState } from 'react';

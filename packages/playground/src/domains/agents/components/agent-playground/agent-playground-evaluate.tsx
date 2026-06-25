@@ -1,18 +1,8 @@
 import type { DatasetRecord } from '@mastra/client-js';
-import {
-  Button,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogBody,
-  DataList,
-  DataListSkeleton,
-  Txt,
-  toast,
-} from '@mastra/playground-ui';
+import { Button, DataList, DataListSkeleton, Txt, toast } from '@mastra/playground-ui';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Column, Columns } from '@mastra/playground-ui/components/Columns';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Searchbar } from '@mastra/playground-ui/components/Searchbar';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';

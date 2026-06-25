@@ -1,5 +1,5 @@
-import { TooltipProvider } from '@mastra/playground-ui';
 import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen } from '@testing-library/react';
