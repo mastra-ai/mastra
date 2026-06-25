@@ -1,6 +1,7 @@
 import type { DatasetItemToolMock } from '@mastra/client-js';
-import { Button, is401UnauthorizedError, is403ForbiddenError, toast } from '@mastra/playground-ui';
+import { is401UnauthorizedError, is403ForbiddenError, toast } from '@mastra/playground-ui';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Column, Columns } from '@mastra/playground-ui/components/Columns';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';

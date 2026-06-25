@@ -58,7 +58,7 @@ const createNumericOperator = (symbol: string) => {
       // number-typed rows are compared and everything else is excluded, mirroring the
       // $size/$in pattern already used in this file and MongoDB-style range semantics.
       return {
-        sql: `(CASE WHEN jsonb_typeof(metadata#>'{${jsonPathKey}}') = 'number' THEN (metadata#>>'{${jsonPathKey}}')::numeric ${symbol} $${paramIndex}::numeric ELSE FALSE END)`,
+        sql: `(CASE WHEN jsonb_typeof(metadata#>'{${jsonPathKey}}') = 'number' THEN (metadata#>>'{${jsonPathKey}}')::numeric ${symbol} $${paramIndex}::numeric ELSE NULL END)`,
         needsValue: true,
       };
     } else {

@@ -1,4 +1,4 @@
-import { Button } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { ArrowLeftIcon } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router';
 import { SkillBuilderStarter } from '@/domains/agent-builder/components/skill-starter/skill-builder-starter';

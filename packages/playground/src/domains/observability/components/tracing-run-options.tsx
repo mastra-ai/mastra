@@ -1,6 +1,7 @@
 import { jsonLanguage } from '@codemirror/lang-json';
-import { Txt, cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui';
 import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import CodeMirror from '@uiw/react-codemirror';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 import { WorkflowRunOptions } from '@/domains/workflows/workflow/workflow-run-options';

@@ -44,6 +44,10 @@ export const toolSchemaCompatScenario: McE2eScenario = {
     runtime.printScreen('spawned', terminal);
 
     await runtime.waitForScreenText(/Resource ID:/i, terminal);
+    // Switch to plan mode so submit_plan is available (it's only offered in
+    // modes with `transitionsTo`, i.e. planning modes).
+    terminal.submit('/mode plan');
+    await runtime.waitForScreenText(/▐plan▌/i, terminal, 8_000);
     terminal.submit('Check built-in tool schema compatibility for provider requests.');
     await runtime.waitForScreenText(/MC tool schema compatibility response/i, terminal);
 

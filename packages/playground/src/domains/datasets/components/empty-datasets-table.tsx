@@ -1,4 +1,5 @@
-import { Button, Icon } from '@mastra/playground-ui';
+import { Icon } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Plus, Database, BookOpen } from 'lucide-react';
 

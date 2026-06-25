@@ -146,6 +146,17 @@ describe('Harness Resource', () => {
     expect(threads).toEqual([{ id: 't-1', title: 'One' }]);
     expect(lastCall()[0]).toBe('http://localhost:4111/api/harness/code/sessions/user-1/threads');
 
+    // `tags` is JSON-encoded into the query string so worktrees sharing a
+    // resourceId can scope the listing to their own threads.
+    mockJson({ threads: [{ id: 't-1', title: 'One', tags: { projectPath: '/repo/wt-a' } }] });
+    const scoped = await client
+      .getHarness('code')
+      .session('user-1')
+      .listThreads({ tags: { projectPath: '/repo/wt-a' } });
+    expect(scoped).toEqual([{ id: 't-1', title: 'One', tags: { projectPath: '/repo/wt-a' } }]);
+    const scopedUrl = new URL(lastCall()[0] as string);
+    expect(scopedUrl.searchParams.get('tags')).toBe(JSON.stringify({ projectPath: '/repo/wt-a' }));
+
     mockJson({ ok: true });
     await client.getHarness('code').session('user-1').switchThread('t-1');
     const [url, init] = lastCall();

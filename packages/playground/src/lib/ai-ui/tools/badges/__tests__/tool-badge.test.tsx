@@ -1,5 +1,4 @@
-// @vitest-environment jsdom
-import { TooltipProvider } from '@mastra/playground-ui';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';

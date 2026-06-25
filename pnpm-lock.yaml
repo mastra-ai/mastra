@@ -403,15 +403,15 @@ importers:
         specifier: ^6.2.1
         version: 6.2.3
     devDependencies:
+      '@internal/auth':
+        specifier: workspace:*
+        version: link:../../packages/_internals/auth
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -439,16 +439,19 @@ importers:
       better-auth:
         specifier: ^1.4.18
         version: 1.6.11(@cloudflare/workers-types@4.20260511.1)(@opentelemetry/api@1.9.1)(mongodb@7.2.0(@aws-sdk/credential-providers@3.1006.0)(socks@2.8.7))(mysql2@3.22.4(@types/node@22.19.15))(pg@8.21.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@4.1.8)
+      hono:
+        specifier: ^4.0.0
+        version: 4.12.25
     devDependencies:
+      '@internal/auth':
+        specifier: workspace:*
+        version: link:../../packages/_internals/auth
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -480,15 +483,15 @@ importers:
         specifier: workspace:*
         version: link:../../packages/auth
     devDependencies:
+      '@internal/auth':
+        specifier: workspace:*
+        version: link:../../packages/_internals/auth
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -516,16 +519,19 @@ importers:
       '@mastra/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      hono:
+        specifier: ^4.0.0
+        version: 4.12.25
     devDependencies:
+      '@internal/auth':
+        specifier: workspace:*
+        version: link:../../packages/_internals/auth
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -552,17 +558,17 @@ importers:
     dependencies:
       firebase-admin:
         specifier: ^13.7.0
-        version: 13.9.0(encoding@0.1.13)
+        version: 13.9.0
     devDependencies:
+      '@internal/auth':
+        specifier: workspace:*
+        version: link:../../packages/_internals/auth
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -627,6 +633,9 @@ importers:
       '@okta/okta-sdk-nodejs':
         specifier: ^8.0.0
         version: 8.1.0(encoding@0.1.13)
+      hono:
+        specifier: ^4.0.0
+        version: 4.12.25
       jose:
         specifier: ^6.2.1
         version: 6.2.3
@@ -634,15 +643,15 @@ importers:
         specifier: ^11.2.7
         version: 11.3.6
     devDependencies:
+      '@internal/auth':
+        specifier: workspace:*
+        version: link:../../packages/_internals/auth
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -667,15 +676,15 @@ importers:
 
   auth/studio:
     devDependencies:
+      '@internal/auth':
+        specifier: workspace:*
+        version: link:../../packages/_internals/auth
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -704,15 +713,15 @@ importers:
         specifier: ^2.108.0
         version: 2.108.0
     devDependencies:
+      '@internal/auth':
+        specifier: workspace:*
+        version: link:../../packages/_internals/auth
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -746,19 +755,22 @@ importers:
       '@workos/authkit-session':
         specifier: ^0.5.0
         version: 0.5.4(@workos-inc/node@8.8.0)(typescript@6.0.3)
+      hono:
+        specifier: ^4.0.0
+        version: 4.12.25
       lru-cache:
         specifier: ^11.2.7
         version: 11.3.6
     devDependencies:
+      '@internal/auth':
+        specifier: workspace:*
+        version: link:../../packages/_internals/auth
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -1806,16 +1818,16 @@ importers:
     dependencies:
       '@ai-sdk/google':
         specifier: ^2.0.62
-        version: 2.0.72(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.8)(@vitest/ui@4.1.8)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.5(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))(zod@3.25.76)
+        version: 2.0.72(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.8)(@vitest/ui@4.1.8)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.5(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))(zod@3.25.76)
       '@ai-sdk/openai':
         specifier: ^2.0.99
-        version: 2.0.106(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.8)(@vitest/ui@4.1.8)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.5(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))(zod@3.25.76)
+        version: 2.0.106(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.8)(@vitest/ui@4.1.8)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.5(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))(zod@3.25.76)
       '@ai-sdk/provider':
         specifier: ^2.0.1
         version: 2.0.3
       '@ai-sdk/provider-utils':
         specifier: ^3.0.22
-        version: 3.0.25(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.8)(@vitest/ui@4.1.8)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.5(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))(zod@3.25.76)
+        version: 3.0.25(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.8)(@vitest/ui@4.1.8)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.5(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))(zod@3.25.76)
       '@huggingface/hub':
         specifier: ^0.15.2
         version: 0.15.2
@@ -1888,7 +1900,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: 'catalog:'
-        version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.8)(@vitest/ui@4.1.8)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.5(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))
+        version: 4.1.8(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.8)(@vitest/ui@4.1.8)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.5(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))
 
   integrations/brightdata:
     devDependencies:
@@ -2985,6 +2997,49 @@ importers:
         specifier: 'catalog:'
         version: 4.4.3
 
+  packages/_internals/auth:
+    dependencies:
+      '@internal/core':
+        specifier: workspace:*
+        version: link:../../_internal-core
+      hono:
+        specifier: ^4.9.4
+        version: 4.12.25
+    devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../_config
+      '@internal/test-utils':
+        specifier: workspace:*
+        version: link:../../_test-utils
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../../_types-builder
+      '@types/node':
+        specifier: 22.19.15
+        version: 22.19.15
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 4.1.8(vitest@4.1.8)
+      '@vitest/ui':
+        specifier: 'catalog:'
+        version: 4.1.8(vitest@4.1.8)
+      eslint:
+        specifier: ^10.2.1
+        version: 10.5.0(jiti@2.7.0)
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(patch_hash=78092cc873f6c3c61ff4846b4b326faa7db54bb3c1506c510614d708601e2b7f)(@microsoft/api-extractor@7.58.9(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.7.0)(postcss@8.5.15)(tsx@4.22.4)(typescript@6.0.3)(yaml@2.9.0)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.8)(@vitest/ui@4.1.8)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.5(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
+
   packages/_internals/voice:
     dependencies:
       '@internal/ai-sdk-v5':
@@ -3417,15 +3472,15 @@ importers:
         specifier: ^3.2.2
         version: 3.2.2
     devDependencies:
+      '@internal/auth':
+        specifier: workspace:*
+        version: link:../_internals/auth
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../_types-builder
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../core
       '@types/jsonwebtoken':
         specifier: ^9.0.10
         version: 9.0.10
@@ -3659,6 +3714,9 @@ importers:
       '@ai-sdk/provider-v6':
         specifier: npm:@ai-sdk/provider@3.0.10
         version: '@ai-sdk/provider@3.0.10'
+      '@ai-sdk/ui-utils-v5':
+        specifier: npm:@ai-sdk/ui-utils@1.2.11
+        version: '@ai-sdk/ui-utils@1.2.11(zod@4.4.3)'
       '@isaacs/ttlcache':
         specifier: ^2.1.4
         version: 2.1.4
@@ -3819,6 +3877,9 @@ importers:
       '@internal/ai-v6':
         specifier: workspace:*
         version: link:../_vendored/ai_v6
+      '@internal/auth':
+        specifier: workspace:*
+        version: link:../_internals/auth
       '@internal/core':
         specifier: workspace:*
         version: link:../_internal-core
@@ -4417,6 +4478,9 @@ importers:
       eslint:
         specifier: ^10.4.1
         version: 10.5.0(jiti@2.7.0)
+      get-port:
+        specifier: ^7.1.0
+        version: 7.1.0
       hono:
         specifier: ^4.12.8
         version: 4.12.25
@@ -28880,10 +28944,10 @@ snapshots:
       '@ai-sdk/provider-utils': 2.2.8(zod@4.4.3)
       zod: 4.4.3
 
-  '@ai-sdk/google@2.0.72(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.8)(@vitest/ui@4.1.8)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.5(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))(zod@3.25.76)':
+  '@ai-sdk/google@2.0.72(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.8)(@vitest/ui@4.1.8)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.5(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 2.0.3
-      '@ai-sdk/provider-utils': 3.0.25(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.8)(@vitest/ui@4.1.8)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.5(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))(zod@3.25.76)
+      '@ai-sdk/provider-utils': 3.0.25(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.8)(@vitest/ui@4.1.8)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.5(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))(zod@3.25.76)
       zod: 3.25.76
     transitivePeerDependencies:
       - '@edge-runtime/vm'
@@ -29033,6 +29097,26 @@ snapshots:
       '@ai-sdk/provider': 1.1.3
       '@ai-sdk/provider-utils': 2.2.8(zod@4.4.3)
       zod: 4.4.3
+
+  '@ai-sdk/openai@2.0.106(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.8)(@vitest/ui@4.1.8)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.5(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))(zod@3.25.76)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.3
+      '@ai-sdk/provider-utils': 3.0.25(@opentelemetry/api@1.9.0)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.8)(@vitest/ui@4.1.8)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.5(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))(zod@3.25.76)
+      zod: 3.25.76
+    transitivePeerDependencies:
+      - '@edge-runtime/vm'
+      - '@opentelemetry/api'
+      - '@types/node'
+      - '@vitest/browser-playwright'
+      - '@vitest/browser-preview'
+      - '@vitest/browser-webdriverio'
+      - '@vitest/coverage-istanbul'
+      - '@vitest/coverage-v8'
+      - '@vitest/ui'
+      - happy-dom
+      - jsdom
+      - typescript
+      - vite
 
   '@ai-sdk/openai@2.0.106(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.8)(@vitest/ui@4.1.8)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.5(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))(zod@3.25.76)':
     dependencies:
@@ -34010,7 +34094,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google-cloud/firestore@7.11.6(encoding@0.1.13)':
+  '@google-cloud/firestore@7.11.6':
     dependencies:
       '@opentelemetry/api': 1.9.1
       fast-deep-equal: 3.1.3
@@ -44434,7 +44518,7 @@ snapshots:
       pkg-types: 1.3.1
       yaml: 2.9.0
 
-  firebase-admin@13.9.0(encoding@0.1.13):
+  firebase-admin@13.9.0:
     dependencies:
       '@fastify/busboy': 3.2.0
       '@firebase/database-compat': 2.1.0
@@ -44447,7 +44531,7 @@ snapshots:
       node-forge: 1.4.0
       uuid: 11.1.0
     optionalDependencies:
-      '@google-cloud/firestore': 7.11.6(encoding@0.1.13)
+      '@google-cloud/firestore': 7.11.6
       '@google-cloud/storage': 7.19.0(encoding@0.1.13)
     transitivePeerDependencies:
       - encoding

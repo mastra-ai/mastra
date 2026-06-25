@@ -1,6 +1,10 @@
-import { Button, DataList, DataListSkeleton, NoDataPageLayout, PageLayout, Txt, toast } from '@mastra/playground-ui';
+import { toast } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { DataList, DataListSkeleton } from '@mastra/playground-ui/components/DataList';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useMemo, useState } from 'react';
 import {
   useChannelPlatforms,

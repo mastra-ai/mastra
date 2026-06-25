@@ -262,20 +262,28 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     updatedAt?: Date;
   }) {
     const now = new Date();
-    const data = {
-      workflow_name: workflowName,
-      run_id: runId,
-      resourceId,
-      snapshot,
-      createdAt: createdAt ?? now,
-      updatedAt: updatedAt ?? now,
-    };
+    const createdAtValue = (createdAt ?? now).toISOString();
+    const updatedAtValue = (updatedAt ?? now).toISOString();
 
-    this.logger.debug('Persisting workflow snapshot', { workflowName, runId, data });
-    await this.#db.insert({
-      tableName: TABLE_WORKFLOW_SNAPSHOT,
-      record: data,
-    });
+    this.logger.debug('Persisting workflow snapshot', { workflowName, runId });
+
+    // Upsert keyed on (workflow_name, run_id) so re-persisting an existing run preserves the
+    // original createdAt and only advances updatedAt. The generic INSERT OR REPLACE helper
+    // would rewrite the whole row, resetting createdAt on every step persist. This mirrors
+    // updateWorkflowResults above and the pg/mysql/mongodb stores.
+    await this.executeWithRetry(
+      () =>
+        withClientWriteLock(this.#client, () =>
+          this.#client.execute({
+            sql: `INSERT INTO ${TABLE_WORKFLOW_SNAPSHOT} (workflow_name, run_id, resourceId, snapshot, createdAt, updatedAt)
+                VALUES (?, ?, ?, jsonb(?), ?, ?)
+                ON CONFLICT(workflow_name, run_id)
+                DO UPDATE SET resourceId = excluded.resourceId, snapshot = excluded.snapshot, updatedAt = excluded.updatedAt`,
+            args: [workflowName, runId, resourceId ?? null, safeStringify(snapshot), createdAtValue, updatedAtValue],
+          }),
+        ),
+      'persistWorkflowSnapshot',
+    );
   }
 
   async loadWorkflowSnapshot({

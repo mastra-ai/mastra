@@ -18,6 +18,7 @@ export interface ApiGlobalOptions {
   timeout?: string;
   pretty: boolean;
   schema?: boolean;
+  serverApiPrefix?: string;
 }
 
 export interface ResolvedTarget {
@@ -25,6 +26,8 @@ export interface ResolvedTarget {
   headers: Record<string, string>;
   timeoutMs: number;
   fallbackHeaders?: Record<string, string>;
+  /** API route prefix of the target server (e.g. `/api/mastra-studio`). Undefined when the default `/api` applies. */
+  apiPrefix?: string;
 }
 
 export async function resolveTarget(
@@ -34,17 +37,18 @@ export async function resolveTarget(
 ): Promise<ResolvedTarget> {
   const timeoutMs = parseTimeout(options.timeout);
   const customHeaders = parseHeaders(options.header);
+  const apiPrefix = resolveApiPrefix(options);
 
   if (isObservabilityPath(path)) {
     return resolveObservabilityTarget(options, customHeaders, timeoutMs);
   }
 
   if (options.url) {
-    return { baseUrl: options.url, headers: customHeaders, timeoutMs };
+    return { baseUrl: options.url, headers: customHeaders, timeoutMs, apiPrefix };
   }
 
-  if (await canReachLocal(timeoutMs, fetchFn)) {
-    return { baseUrl: LOCAL_URL, headers: customHeaders, timeoutMs };
+  if (await canReachLocal(timeoutMs, fetchFn, apiPrefix)) {
+    return { baseUrl: LOCAL_URL, headers: customHeaders, timeoutMs, apiPrefix };
   }
 
   const config = await loadProjectConfig(process.cwd());
@@ -71,6 +75,7 @@ export async function resolveTarget(
       baseUrl,
       headers: { Authorization: `Bearer ${token}`, ...customHeaders },
       timeoutMs,
+      apiPrefix,
     };
   } catch (error) {
     if (error instanceof ApiCliError) throw error;
@@ -142,6 +147,26 @@ function getHeader(headers: Record<string, string>, name: string): string | unde
   return entry?.[1];
 }
 
+/**
+ * Resolves the server API route prefix from the `--server-api-prefix` flag or the `MASTRA_API_PREFIX`
+ * env var, normalizing it to a leading-slash, no-trailing-slash form. Returns undefined when the
+ * default `/api` prefix applies so callers can omit it from the resolved target.
+ */
+function resolveApiPrefix(options: ApiGlobalOptions): string | undefined {
+  const raw = options.serverApiPrefix ?? process.env.MASTRA_API_PREFIX;
+  if (!raw) return undefined;
+  const normalized = normalizeApiPrefix(raw);
+  return normalized === '/api' ? undefined : normalized;
+}
+
+function normalizeApiPrefix(prefix: string): string {
+  const value = prefix.trim();
+  if (!value) return '/api';
+  const withLeadingSlash = value.startsWith('/') ? value : `/${value}`;
+  const trimmed = withLeadingSlash.replace(/\/+$/, '');
+  return trimmed || '/api';
+}
+
 function parseTimeout(timeout?: string): number {
   if (!timeout) return 30_000;
   const parsed = Number(timeout);
@@ -149,11 +174,14 @@ function parseTimeout(timeout?: string): number {
   return parsed;
 }
 
-async function canReachLocal(timeoutMs: number, fetchFn: typeof fetch): Promise<boolean> {
+async function canReachLocal(timeoutMs: number, fetchFn: typeof fetch, apiPrefix?: string): Promise<boolean> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), Math.min(timeoutMs, 1_000));
   try {
-    const response = await fetchFn(`${LOCAL_URL}/api/system/api-schema`, { method: 'GET', signal: controller.signal });
+    const response = await fetchFn(`${LOCAL_URL}${apiPrefix ?? '/api'}/system/api-schema`, {
+      method: 'GET',
+      signal: controller.signal,
+    });
     await response.body?.cancel();
     return response.ok;
   } catch {

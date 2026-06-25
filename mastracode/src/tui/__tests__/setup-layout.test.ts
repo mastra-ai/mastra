@@ -16,6 +16,7 @@ vi.mock('node:fs', () => ({
 }));
 
 vi.mock('@earendil-works/pi-tui', () => ({
+  Box: class {},
   CombinedAutocompleteProvider: class {},
   Container: class {
     children: unknown[] = [];

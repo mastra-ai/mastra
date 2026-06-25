@@ -1,17 +1,14 @@
+import { Icon, McpServerIcon, ToolsIcon, cn } from '@mastra/playground-ui';
 import {
   Entity,
   EntityContent,
   EntityDescription,
   EntityIcon,
   EntityName,
-  Txt,
-  Icon,
-  McpServerIcon,
-  ToolsIcon,
-  cn,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Entity';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Switch } from '@mastra/playground-ui/components/Switch';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { TryConnectMcpMutation } from '../../hooks/use-try-connect-mcp';
 
 interface MCPClientToolPreviewProps {
