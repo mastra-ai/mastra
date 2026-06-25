@@ -22,8 +22,8 @@ vi.mock('react-router', async importOriginal => {
 
 vi.mock('@mastra/playground-ui', () => ({
   getSignalName: (signalId: string) => (signalId === 'tasks' ? 'Tasks' : signalId),
-  SignalsOverviewPage: ({ onSignalSelect }: { onSignalSelect: (signal: { id: string }) => void }) => (
-    <button type="button" onClick={() => onSignalSelect({ id: 'tasks' })}>
+  SignalsOverviewPage: ({ onSignalSelect }: { onSignalSelect: (signalName: string) => void }) => (
+    <button type="button" onClick={() => onSignalSelect('tasks')}>
       Select signal
     </button>
   ),

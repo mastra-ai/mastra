@@ -1,5 +1,5 @@
-import { signals } from '../signals-data';
-
+// The signals UI is keyed by signal name, so the route `signalId` is already the
+// display name. Kept as a function so the breadcrumb call site stays stable.
 export function getSignalName(signalId: string) {
-  return signals.find(signal => signal.id === signalId)?.name ?? signalId;
+  return signalId;
 }

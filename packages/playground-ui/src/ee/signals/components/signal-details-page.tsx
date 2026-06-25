@@ -1,63 +1,76 @@
 import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useTraces } from '../../../domains/traces/hooks';
+import { EmptyState } from '../../../ds/components/EmptyState';
+import { ErrorState } from '../../../ds/components/ErrorState';
 import { ScatterPlotChart } from '../../../ds/components/ScatterPlotChart';
+import { Skeleton } from '../../../ds/components/Skeleton/skeleton';
 import { Tab, TabContent, TabList, Tabs } from '../../../ds/components/Tabs';
 import { stringToColor } from '../../../lib/colors';
 import { cn } from '../../../lib/utils';
+import type { TopicTraceSummary } from '../../topics';
 import { TopicTraceDetailsPanel, TopicTraceSummaryList, TopicsLayout } from '../../topics';
-import { getSignalChartData } from '../signals-chart-data';
-import { signals } from '../signals-data';
-import type { Signal, SignalCluster } from '../types';
+import { useEntityForSignal } from '../hooks/use-entity-learning';
+import { useSignalPoints } from '../hooks/use-signal-points';
+import { useSignalTopics } from '../hooks/use-signal-topics';
+import { useTopicExamples } from '../hooks/use-topic-examples';
+import type { EntityLearningExample, EntityLearningPoint, EntityLearningTopic } from '../types';
 
 const SignalTraceSummaryList = TopicTraceSummaryList;
 export const SignalTraceDetailsPanel = TopicTraceDetailsPanel;
 const SignalsLayout = TopicsLayout;
 
+const OUTLIER_COLOR = '#a1a1aa';
+
 type SignalTab = 'trace-list' | 'chart';
 
-function findClusterByTraceId(signal: Signal | undefined, traceId: string | undefined) {
-  if (!signal || !traceId) return undefined;
-  return signal.clusters.find(cluster => cluster.traceSummaries.some(trace => trace.id === traceId));
+// Adapt an Entity Learning example into the generic topics trace summary shape.
+// This is the only allowed boundary adaptation — the domain model stays as the
+// API types and is only reshaped where the reused topics list requires it.
+function exampleToTraceSummary(example: EntityLearningExample): TopicTraceSummary {
+  return {
+    id: example.traceId,
+    name: example.signalText,
+  };
 }
 
-interface SignalClusterSidebarProps {
-  signal: Signal;
-  selectedClusterIds: string[];
-  onClusterSelect: (clusterId: string) => void;
+interface SignalTopicSidebarProps {
+  topics: EntityLearningTopic[];
+  selectedTopicIds: string[];
+  onTopicSelect: (topicId: string) => void;
   multiple?: boolean;
   ariaLabel?: string;
 }
 
-export function SignalClusterSidebar({
-  signal,
-  selectedClusterIds,
-  onClusterSelect,
+export function SignalTopicSidebar({
+  topics,
+  selectedTopicIds,
+  onTopicSelect,
   multiple = false,
   ariaLabel = 'Signal clusters',
-}: SignalClusterSidebarProps) {
+}: SignalTopicSidebarProps) {
   return (
     <aside
       className="min-h-0 w-72 shrink-0 overflow-y-auto border-r border-border1/60 pr-4 py-4"
       aria-label={ariaLabel}
     >
       <ul className="space-y-1" role={multiple ? 'group' : undefined}>
-        {signal.clusters.map(cluster => {
-          const selected = selectedClusterIds.includes(cluster.id);
+        {topics.map(topic => {
+          const selected = selectedTopicIds.includes(topic.topicId);
           return (
-            <li key={cluster.id}>
+            <li key={topic.topicId}>
               <button
                 type="button"
                 role={multiple ? 'checkbox' : undefined}
                 aria-checked={multiple ? selected : undefined}
                 aria-pressed={multiple ? undefined : selected}
                 className="group cursor-pointer w-full rounded-xl px-3 py-2 text-left transition-colors hover:bg-surface3 aria-pressed:bg-surface3 aria-checked:bg-surface3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent1"
-                onClick={() => onClusterSelect(cluster.id)}
+                onClick={() => onTopicSelect(topic.topicId)}
               >
                 <span className="flex items-start gap-2">
                   <span
                     className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', multiple && !selected && 'invisible')}
-                    style={{ backgroundColor: stringToColor(cluster.name) }}
+                    style={{ backgroundColor: stringToColor(topic.name) }}
                   />
                   <span className="min-w-0 space-y-1">
                     <span
@@ -66,7 +79,7 @@ export function SignalClusterSidebar({
                         multiple && !selected ? 'text-neutral3' : 'text-neutral5',
                       )}
                     >
-                      {cluster.name}
+                      {topic.name}
                     </span>
                     <span
                       className={cn(
@@ -74,7 +87,7 @@ export function SignalClusterSidebar({
                         multiple && !selected ? 'text-neutral1' : 'text-neutral2',
                       )}
                     >
-                      {cluster.description}
+                      {topic.description}
                     </span>
                   </span>
                 </span>
@@ -87,88 +100,137 @@ export function SignalClusterSidebar({
   );
 }
 
-export function SignalTraceListTab({
-  cluster,
-  selectedTraceId,
-  onTraceSelect,
-}: {
-  cluster: SignalCluster;
+interface SignalTraceListTabProps {
+  entityId: string;
+  topicId: string;
+  signalName: string;
+  runId: string;
   selectedTraceId: string | null;
   onTraceSelect: () => void;
-}) {
-  return (
-    <SignalTraceSummaryList
-      traces={cluster.traceSummaries}
-      selectedTraceId={selectedTraceId}
-      onTraceSelect={onTraceSelect}
-    />
-  );
+}
+
+export function SignalTraceListTab({
+  entityId,
+  topicId,
+  signalName,
+  runId,
+  selectedTraceId,
+  onTraceSelect,
+}: SignalTraceListTabProps) {
+  const { data: examples, isPending, error } = useTopicExamples(entityId, topicId, signalName, runId);
+  const traces = useMemo(() => (examples ?? []).map(exampleToTraceSummary), [examples]);
+
+  if (isPending) {
+    return (
+      <div className="space-y-2" aria-label="Loading traces">
+        <Skeleton className="h-9 w-full rounded-md" />
+        <Skeleton className="h-9 w-full rounded-md" />
+        <Skeleton className="h-9 w-full rounded-md" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return <ErrorState title="Couldn't load traces" message="Failed to load traces for this cluster." />;
+  }
+
+  return <SignalTraceSummaryList traces={traces} selectedTraceId={selectedTraceId} onTraceSelect={onTraceSelect} />;
+}
+
+function pointToChartDatum(point: EntityLearningPoint) {
+  return {
+    x: point.x,
+    y: point.y,
+    name: point.exampleId,
+    color: point.isOutlier ? OUTLIER_COLOR : stringToColor(point.topicId ?? point.exampleId),
+  };
 }
 
 interface SignalChartTabProps {
-  signal: Signal;
-  selectedClusterIds: string[];
-  onClusterToggle: (clusterId: string) => void;
+  entityId: string;
+  signalName: string;
+  runId: string;
+  topics: EntityLearningTopic[];
+  selectedTopicIds: string[];
+  onTopicToggle: (topicId: string) => void;
 }
 
-export function SignalChartTab({ signal, selectedClusterIds, onClusterToggle }: SignalChartTabProps) {
-  const selectedClusters = useMemo(
-    () => signal.clusters.filter(cluster => selectedClusterIds.includes(cluster.id)),
-    [signal.clusters, selectedClusterIds],
-  );
-  const chartData = useMemo(() => getSignalChartData(selectedClusters), [selectedClusters]);
+export function SignalChartTab({
+  entityId,
+  signalName,
+  runId,
+  topics,
+  selectedTopicIds,
+  onTopicToggle,
+}: SignalChartTabProps) {
+  const { data: points, isPending, error } = useSignalPoints(entityId, signalName, runId);
+
+  const chartData = useMemo(() => {
+    const selected = new Set(selectedTopicIds);
+    return (points ?? []).filter(point => point.topicId == null || selected.has(point.topicId)).map(pointToChartDatum);
+  }, [points, selectedTopicIds]);
 
   return (
     <div className="flex h-full min-w-0 gap-6">
-      <SignalClusterSidebar
-        signal={signal}
-        selectedClusterIds={selectedClusterIds}
-        onClusterSelect={onClusterToggle}
+      <SignalTopicSidebar
+        topics={topics}
+        selectedTopicIds={selectedTopicIds}
+        onTopicSelect={onTopicToggle}
         multiple
         ariaLabel="Chart cluster filters"
       />
       <div className="min-h-0 min-w-0 flex-1 py-4">
-        <ScatterPlotChart
-          data={chartData}
-          xKey="duration"
-          yKey="spans"
-          nameKey="name"
-          colorKey="color"
-          height="100%"
-          className="h-full"
-          xLabel="Duration"
-          yLabel="Spans"
-          formatX={value => `${value}ms`}
-          formatY={value => `${value} spans`}
-        />
+        {isPending ? (
+          <Skeleton className="h-full w-full rounded-md" aria-label="Loading chart" />
+        ) : error ? (
+          <ErrorState title="Couldn't load chart" message="Failed to load projection points for this signal." />
+        ) : (
+          <ScatterPlotChart
+            data={chartData}
+            xKey="x"
+            yKey="y"
+            nameKey="name"
+            colorKey="color"
+            height="100%"
+            className="h-full"
+            xLabel="x"
+            yLabel="y"
+          />
+        )}
       </div>
     </div>
   );
 }
 
-interface SignalClusterTabsProps {
-  signal: Signal;
-  selectedCluster: SignalCluster;
+interface SignalTopicTabsProps {
+  entityId: string;
+  signalName: string;
+  runId: string;
+  topics: EntityLearningTopic[];
+  selectedTopic: EntityLearningTopic;
   selectedTraceId: string | null;
-  selectedChartClusterIds: string[];
+  selectedChartTopicIds: string[];
   activeTab: SignalTab;
   onActiveTabChange: (tab: SignalTab) => void;
-  onClusterSelect: (clusterId: string) => void;
-  onChartClusterToggle: (clusterId: string) => void;
+  onTopicSelect: (topicId: string) => void;
+  onChartTopicToggle: (topicId: string) => void;
   onTraceSelect: () => void;
 }
 
-export function SignalClusterTabs({
-  signal,
-  selectedCluster,
+export function SignalTopicTabs({
+  entityId,
+  signalName,
+  runId,
+  topics,
+  selectedTopic,
   selectedTraceId,
-  selectedChartClusterIds,
+  selectedChartTopicIds,
   activeTab,
   onActiveTabChange,
-  onClusterSelect,
-  onChartClusterToggle,
+  onTopicSelect,
+  onChartTopicToggle,
   onTraceSelect,
-}: SignalClusterTabsProps) {
+}: SignalTopicTabsProps) {
   return (
     <Tabs<SignalTab>
       defaultTab="trace-list"
@@ -182,14 +244,17 @@ export function SignalClusterTabs({
       </TabList>
       <TabContent value="trace-list" className="min-h-0 flex-1 overflow-hidden py-0">
         <div className="flex h-full min-w-0 gap-6">
-          <SignalClusterSidebar
-            signal={signal}
-            selectedClusterIds={[selectedCluster.id]}
-            onClusterSelect={onClusterSelect}
+          <SignalTopicSidebar
+            topics={topics}
+            selectedTopicIds={[selectedTopic.topicId]}
+            onTopicSelect={onTopicSelect}
           />
           <div className="min-w-0 flex-1 overflow-hidden py-4">
             <SignalTraceListTab
-              cluster={selectedCluster}
+              entityId={entityId}
+              topicId={selectedTopic.topicId}
+              signalName={signalName}
+              runId={runId}
               selectedTraceId={selectedTraceId}
               onTraceSelect={onTraceSelect}
             />
@@ -198,9 +263,12 @@ export function SignalClusterTabs({
       </TabContent>
       <TabContent value="chart" className="min-h-0 flex-1 overflow-hidden py-0">
         <SignalChartTab
-          signal={signal}
-          selectedClusterIds={selectedChartClusterIds}
-          onClusterToggle={onChartClusterToggle}
+          entityId={entityId}
+          signalName={signalName}
+          runId={runId}
+          topics={topics}
+          selectedTopicIds={selectedChartTopicIds}
+          onTopicToggle={onChartTopicToggle}
         />
       </TabContent>
     </Tabs>
@@ -215,53 +283,85 @@ export interface SignalDetailsPageProps {
 }
 
 export function SignalDetailsPage({ signalId, selectedTraceId, tracePanel, onTraceSelect }: SignalDetailsPageProps) {
-  const selectedSignal = useMemo(() => signals.find(signal => signal.id === signalId), [signalId]);
-  const initialCluster =
-    findClusterByTraceId(selectedSignal, selectedTraceId ?? undefined) ?? selectedSignal?.clusters[0];
-  const [selectedClusterId, setSelectedClusterId] = useState<string | null>(() => initialCluster?.id ?? null);
-  const [selectedChartClusterIds, setSelectedChartClusterIds] = useState<string[]>(
-    () => selectedSignal?.clusters.map(cluster => cluster.id) ?? [],
-  );
+  const { data: entity, isFetching: entityFetching, error: entityError } = useEntityForSignal(signalId);
+  const entityId = entity?.entityId;
+  const runId = entity?.latestRunId;
+
+  const {
+    data: topicsData,
+    isFetching: topicsFetching,
+    error: topicsError,
+  } = useSignalTopics(entityId, signalId, runId);
+  const topics = useMemo(() => topicsData?.topics ?? [], [topicsData]);
+
+  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
+  const [selectedChartTopicIds, setSelectedChartTopicIds] = useState<string[] | null>(null);
   const [activeTab, setActiveTab] = useState<SignalTab>('trace-list');
-  const selectedCluster = selectedSignal?.clusters.find(cluster => cluster.id === selectedClusterId) ?? initialCluster;
+
+  const selectedTopic = topics.find(topic => topic.topicId === selectedTopicId) ?? topics[0];
+  const chartTopicIds = selectedChartTopicIds ?? topics.map(topic => topic.topicId);
+
   const { data: tracesData } = useTraces({});
   const resolvedTraceId = tracesData?.spans[0]?.traceId ?? null;
 
   const handleTraceSelect = () => {
-    if (!selectedSignal || !resolvedTraceId) return;
-
-    onTraceSelect(selectedSignal.id, resolvedTraceId);
+    if (!signalId || !resolvedTraceId) return;
+    onTraceSelect(signalId, resolvedTraceId);
   };
 
-  const handleChartClusterToggle = (clusterId: string) => {
-    setSelectedChartClusterIds(current =>
-      current.includes(clusterId) ? current.filter(id => id !== clusterId) : [...current, clusterId],
-    );
+  const handleChartTopicToggle = (topicId: string) => {
+    setSelectedChartTopicIds(current => {
+      const base = current ?? topics.map(topic => topic.topicId);
+      return base.includes(topicId) ? base.filter(id => id !== topicId) : [...base, topicId];
+    });
   };
 
-  if (!selectedSignal || !selectedCluster) {
-    return <SignalsLayout sidebar={null}>Signal not found</SignalsLayout>;
-  }
+  const error = entityError ?? topicsError;
+  const isLoading = !error && (entityFetching || topicsFetching);
 
   return (
     <SignalsLayout sidebar={null} tracePanel={activeTab === 'trace-list' ? tracePanel : undefined}>
       <section className="flex h-full min-w-0 flex-col gap-4">
         <header className="space-y-1">
-          <h1 className="text-icon-xl font-semibold text-neutral6">{selectedSignal.name}</h1>
+          <h1 className="text-icon-xl font-semibold text-neutral6 capitalize">{signalId}</h1>
           <p className="text-ui-sm text-neutral3">Explore trace patterns by cluster.</p>
         </header>
         <div className="min-h-0 flex-1 overflow-hidden">
-          <SignalClusterTabs
-            signal={selectedSignal}
-            selectedCluster={selectedCluster}
-            selectedTraceId={selectedTraceId}
-            selectedChartClusterIds={selectedChartClusterIds}
-            activeTab={activeTab}
-            onActiveTabChange={setActiveTab}
-            onClusterSelect={setSelectedClusterId}
-            onChartClusterToggle={handleChartClusterToggle}
-            onTraceSelect={handleTraceSelect}
-          />
+          {isLoading ? (
+            <div className="flex h-full min-w-0 gap-6" aria-label="Loading signal">
+              <div className="w-72 shrink-0 space-y-2 py-4">
+                <Skeleton className="h-12 w-full rounded-xl" />
+                <Skeleton className="h-12 w-full rounded-xl" />
+                <Skeleton className="h-12 w-full rounded-xl" />
+              </div>
+              <div className="min-w-0 flex-1 py-4">
+                <Skeleton className="h-full w-full rounded-md" />
+              </div>
+            </div>
+          ) : error ? (
+            <ErrorState title="Couldn't load signal" message="Failed to load entity learning data for this signal." />
+          ) : !entity || !selectedTopic ? (
+            <EmptyState
+              iconSlot={null}
+              titleSlot="Signal not found"
+              descriptionSlot="No clusters were found for this signal."
+            />
+          ) : (
+            <SignalTopicTabs
+              entityId={entity.entityId}
+              signalName={signalId!}
+              runId={entity.latestRunId}
+              topics={topics}
+              selectedTopic={selectedTopic}
+              selectedTraceId={selectedTraceId}
+              selectedChartTopicIds={chartTopicIds}
+              activeTab={activeTab}
+              onActiveTabChange={setActiveTab}
+              onTopicSelect={setSelectedTopicId}
+              onChartTopicToggle={handleChartTopicToggle}
+              onTraceSelect={handleTraceSelect}
+            />
+          )}
         </div>
       </section>
     </SignalsLayout>
