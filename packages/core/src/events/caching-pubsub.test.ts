@@ -862,6 +862,64 @@ describe('CachingPubSub', () => {
       expect(pullInner.getAckedIndices()).toEqual([0, 1]);
     });
 
+    it('allows nack-redelivered events through even when index <= lastDelivered', async () => {
+      const pullInner = new PullModePubSub();
+      const pullCaching = new CachingPubSub(pullInner, cache);
+      const topic = 'pull-nack-retry';
+
+      await pullCaching.publish(topic, { type: 'e0', runId: 'r', data: {} });
+      await pullCaching.publish(topic, { type: 'e1', runId: 'r', data: {} });
+
+      const received: Array<{ index: number; attempt: number | undefined }> = [];
+      await pullCaching.subscribeWithReplay(topic, (event: Event) => {
+        received.push({ index: event.index!, attempt: event.deliveryAttempt });
+      });
+
+      expect(received).toEqual([
+        { index: 0, attempt: undefined },
+        { index: 1, attempt: undefined },
+      ]);
+
+      // Simulate a nack redelivery: same index, deliveryAttempt > 1
+      pullInner.emitLiveOnly(topic, {
+        id: 'retry-id',
+        type: 'e1',
+        runId: 'r',
+        data: {},
+        createdAt: new Date(),
+        index: 1,
+        deliveryAttempt: 2,
+      });
+
+      expect(received).toHaveLength(3);
+      expect(received[2]).toEqual({ index: 1, attempt: 2 });
+    });
+
+    it('cleans up wrappedCb when replay bootstrap fails', async () => {
+      const pullInner = new PullModePubSub();
+      const pullCaching = new CachingPubSub(pullInner, cache);
+      const topic = 'pull-bootstrap-fail';
+
+      await pullCaching.publish(topic, { type: 'e0', runId: 'r', data: {} });
+
+      vi.spyOn(pullCaching, 'getHistory').mockRejectedValueOnce(new Error('cache down'));
+
+      const cb = vi.fn();
+      await expect(pullCaching.subscribeWithReplay(topic, cb)).rejects.toThrow('cache down');
+
+      // wrappedCb should have been unsubscribed — new events must not reach cb
+      pullInner.emitLiveOnly(topic, {
+        id: 'after-fail',
+        type: 'e1',
+        runId: 'r',
+        data: {},
+        createdAt: new Date(),
+        index: 1,
+      });
+
+      expect(cb).not.toHaveBeenCalled();
+    });
+
     it('preserves ack and nack handles for buffered live events that are delivered after history', async () => {
       const pullInner = new PullModePubSub();
       const pullCaching = new CachingPubSub(pullInner, cache);

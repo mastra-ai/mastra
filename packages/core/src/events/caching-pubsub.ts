@@ -222,7 +222,10 @@ export class CachingPubSub extends PubSub {
       }
 
       // Steady-state: skip events we already delivered via history or buffer drain.
-      if (typeof event.index === 'number' && event.index <= lastDelivered) {
+      // Allow nack-redelivered messages through — they carry the same index but
+      // deliveryAttempt > 1, and the consumer must see them to retry processing.
+      const isRetry = typeof event.deliveryAttempt === 'number' && event.deliveryAttempt > 1;
+      if (typeof event.index === 'number' && event.index <= lastDelivered && !isRetry) {
         this.ackSuppressedEvent(ack);
         return;
       }
@@ -236,35 +239,42 @@ export class CachingPubSub extends PubSub {
     this.callbackMap.set(cb, wrappedCb);
     await this.inner.subscribe(topic, wrappedCb);
 
-    // --- Phase 2: fetch and deliver cached history ---
-    const seen = new Set<string>();
-    const history = await this.getHistory(topic, offset);
-    for (const event of history) {
-      const key = this.dedupKey(event);
-      seen.add(key);
-      if (typeof event.index === 'number') {
-        lastDelivered = event.index;
+    try {
+      // --- Phase 2: fetch and deliver cached history ---
+      const seen = new Set<string>();
+      const history = await this.getHistory(topic, offset);
+      for (const event of history) {
+        const key = this.dedupKey(event);
+        seen.add(key);
+        if (typeof event.index === 'number') {
+          lastDelivered = event.index;
+        }
+        cb(event);
       }
-      cb(event);
-    }
 
-    // --- Phase 3: drain buffer, suppressing duplicates history already covered ---
-    for (const { event, ack, nack } of buffer) {
-      const key = this.dedupKey(event);
-      if (seen.has(key)) {
-        this.ackSuppressedEvent(ack);
-        continue;
+      // --- Phase 3: drain buffer, suppressing duplicates history already covered ---
+      for (const { event, ack, nack } of buffer) {
+        const key = this.dedupKey(event);
+        if (seen.has(key)) {
+          this.ackSuppressedEvent(ack);
+          continue;
+        }
+        seen.add(key);
+        if (typeof event.index === 'number') {
+          lastDelivered = event.index;
+        }
+        cb(event, ack, nack);
       }
-      seen.add(key);
-      if (typeof event.index === 'number') {
-        lastDelivered = event.index;
-      }
-      cb(event, ack, nack);
-    }
 
-    // --- Phase 4: flip to passthrough ---
-    bootstrapping = false;
-    buffer.length = 0;
+      // --- Phase 4: flip to passthrough ---
+      bootstrapping = false;
+      buffer.length = 0;
+    } catch (error) {
+      // Rollback: unsubscribe wrappedCb so it doesn't strand in bootstrap mode
+      this.callbackMap.delete(cb);
+      await this.inner.unsubscribe(topic, wrappedCb).catch(() => {});
+      throw error;
+    }
   }
 
   /**
