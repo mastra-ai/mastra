@@ -4,7 +4,9 @@
 
 Fixed MCP tool execution failures being recorded as successes.
 
-Per the MCP spec, a server reports a tool execution failure in-band by returning a result with `isError: true` and the error text in its content. `MCPClient` previously ignored this flag, so failed tool calls were traced and persisted as successes, error-handling machinery (error chunks, retry policies, Studio error states) never engaged, and for tools with an `outputSchema` the error text was dropped entirely — so neither the model nor the user saw why the call failed.
+A failing MCP tool used to look like it succeeded. The call was traced and saved as a success, and error handling like retries and Studio error states never ran. For tools with an `outputSchema`, the error message was thrown away, so neither the model nor the user saw why the call failed.
+
+This happened because the server reports the failure inside a normal result (with an `isError` flag), and `MCPClient` did not check that flag.
 
 Now `isError: true` results are surfaced on the failed-tool-call path: the tool throws with the server's error text, so spans, stream chunks, scorers, and persisted messages reflect the failure and the model can self-correct.
 
