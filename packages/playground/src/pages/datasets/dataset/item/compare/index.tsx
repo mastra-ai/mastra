@@ -1,5 +1,6 @@
 import type { DatasetItem } from '@mastra/client-js';
-import { Button, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { CodeDiff } from '@mastra/playground-ui/components/CodeDiff';
 import { Column, Columns } from '@mastra/playground-ui/components/Columns';

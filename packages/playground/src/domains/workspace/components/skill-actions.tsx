@@ -1,5 +1,5 @@
-import { Button } from '@mastra/playground-ui';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Trash2, Loader2, Download } from 'lucide-react';
 
 export interface SkillUpdateButtonProps {

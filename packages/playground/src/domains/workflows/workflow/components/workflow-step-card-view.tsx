@@ -1,4 +1,5 @@
-import { Txt, cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { Clock } from '../workflow-clock';
 import type { WorkflowStepCardViewProps } from './types';

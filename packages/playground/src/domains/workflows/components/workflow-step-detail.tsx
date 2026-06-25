@@ -1,4 +1,5 @@
-import { Txt, WorkflowIcon } from '@mastra/playground-ui';
+import { WorkflowIcon } from '@mastra/playground-ui';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ReactFlowProvider } from '@xyflow/react';
 import { List, X } from 'lucide-react';
 

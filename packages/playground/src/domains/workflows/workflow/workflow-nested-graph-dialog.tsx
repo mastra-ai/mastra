@@ -1,5 +1,5 @@
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
-import { Button } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
   DialogBody,

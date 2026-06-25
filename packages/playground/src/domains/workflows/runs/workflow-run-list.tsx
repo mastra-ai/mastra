@@ -1,4 +1,4 @@
-import { Icon, Txt } from '@mastra/playground-ui';
+import { Icon } from '@mastra/playground-ui';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -8,6 +8,7 @@ import {
   ThreadListItem,
   ThreadListItems,
 } from '@mastra/playground-ui/components/ThreadList';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { formatDate } from 'date-fns';
 import { useState } from 'react';
 import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';

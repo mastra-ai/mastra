@@ -1,5 +1,5 @@
-import { Button } from '@mastra/playground-ui';
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { X } from 'lucide-react';
 
 interface VersionIndicatorProps {

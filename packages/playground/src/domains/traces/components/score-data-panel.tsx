@@ -1,5 +1,6 @@
 import type { ScoreRowData } from '@mastra/core/evals';
-import { Button, Icon, cn } from '@mastra/playground-ui';
+import { Icon, cn } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
