@@ -306,7 +306,7 @@ describe('voice capabilities', () => {
         voice: new SpyVoice({ speaker: 'mock-voice' }),
       });
 
-      const mastra = new Mastra({ agents: { 'voice-mastra-agent': agent } });
+      new Mastra({ agents: { 'voice-mastra-agent': agent } });
 
       await agent.getVoice();
 
