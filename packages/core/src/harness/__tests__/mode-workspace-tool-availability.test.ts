@@ -46,7 +46,7 @@ function createTextStream(text = 'Done.') {
     { type: 'stream-start', warnings: [] },
     { type: 'response-metadata', id: 'id-1', modelId: 'mock', timestamp: new Date(0) },
     { type: 'text-start', id: 'text-1' },
-    { type: 'text-delta', id: 'text-1', textDelta: text },
+    { type: 'text-delta', id: 'text-1', delta: text },
     { type: 'text-end', id: 'text-1' },
     { type: 'finish', finishReason: 'stop' as const, usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
   ]);

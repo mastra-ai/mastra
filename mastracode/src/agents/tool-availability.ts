@@ -12,7 +12,9 @@ export const PLAN_MODE_AVAILABLE_TOOLS: readonly string[] = [
   MC_TOOLS.SEARCH_CONTENT,
   MC_TOOLS.FILE_STAT,
   MC_TOOLS.LSP_INSPECT,
-  // Plan file writing (restricted to .mastracode/plans/ by workspace paths)
+  // Plan file writing (visibility gated by availableTools; the shared workspace
+  // is mode-agnostic and does not path-restrict these — plan-mode instructions
+  // scope writes to .mastracode/plans/)
   MC_TOOLS.WRITE_FILE,
   MC_TOOLS.STRING_REPLACE_LSP,
   // Plan delivery tools
