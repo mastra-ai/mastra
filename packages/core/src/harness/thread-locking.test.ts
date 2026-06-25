@@ -285,6 +285,31 @@ describe('Harness thread locking', () => {
         tags: { projectPath: '/repo/worktree-a' },
       });
       expect(sessionA2.thread.getId()).toBe(threadA);
+
+      // The tags are stamped onto the thread metadata (not just used for
+      // selection), so listings can filter threads back to their scope.
+      const threadsA = await sessionA2.thread.list();
+      const resumed = threadsA.find(t => t.id === threadA);
+      expect((resumed?.metadata as Record<string, unknown> | undefined)?.projectPath).toBe('/repo/worktree-a');
+    });
+
+    it('stamps every tag onto created threads (multi-dimensional scope)', async () => {
+      const store = new InMemoryStore();
+      const harness = freshHarness(store);
+      await harness.init();
+      const session = await harness.createSession({
+        id: 'multi',
+        ownerId: 'test-owner',
+        resourceId: 'repo',
+        tags: { projectPath: '/repo/wt', branch: 'feat/x' },
+      });
+
+      const threadId = session.thread.getId();
+      const threads = await session.thread.list();
+      const created = threads.find(t => t.id === threadId);
+      const metadata = (created?.metadata as Record<string, unknown> | undefined) ?? {};
+      expect(metadata.projectPath).toBe('/repo/wt');
+      expect(metadata.branch).toBe('feat/x');
     });
   });
 

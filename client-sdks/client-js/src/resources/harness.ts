@@ -218,6 +218,12 @@ export interface HarnessThreadInfo {
   resourceId?: string;
   createdAt?: string;
   updatedAt?: string;
+  /**
+   * The session scoping tags this thread was stamped with at creation (e.g.
+   * `{ projectPath }`). Present on `listThreads()` results; used to tell which
+   * worktree/scope a thread belongs to when a resourceId is shared.
+   */
+  tags?: Record<string, string>;
 }
 
 export interface HarnessAvailableModel {
@@ -454,15 +460,16 @@ export class HarnessSession extends BaseResource {
   /** List the threads for this session's resource, most-recently-updated first. Pass `limit` for just the newest N. */
   /**
    * List the session's threads, newest first. Pass `limit` to cap the count
-   * (e.g. for a sidebar) and `projectPath` to scope to threads tagged for a
-   * specific working directory — necessary when one resourceId is shared across
-   * git worktrees of the same repo.
+   * (e.g. for a sidebar) and `tags` to scope to threads matching every tag —
+   * necessary when one resourceId is shared across git worktrees of the same
+   * repo (e.g. `{ tags: { projectPath } }` so each worktree sees only its own
+   * threads). Passing a bare number is shorthand for `{ limit }`.
    */
-  async listThreads(options?: number | { limit?: number; projectPath?: string }): Promise<HarnessThreadInfo[]> {
+  async listThreads(options?: number | { limit?: number; tags?: Record<string, string> }): Promise<HarnessThreadInfo[]> {
     const opts = typeof options === 'number' ? { limit: options } : (options ?? {});
     const params = new URLSearchParams();
     if (opts.limit != null) params.set('limit', String(opts.limit));
-    if (opts.projectPath) params.set('projectPath', opts.projectPath);
+    if (opts.tags && Object.keys(opts.tags).length > 0) params.set('tags', JSON.stringify(opts.tags));
     const query = params.toString() ? `?${params.toString()}` : '';
     const body = await this.request<{ threads: HarnessThreadInfo[] }>(`${this.base()}/threads${query}`);
     return body.threads;

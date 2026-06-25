@@ -76,7 +76,25 @@ const cloneThreadBodySchema = z.object({
   title: z.string().optional(),
 });
 const listMessagesQuerySchema = z.object({ limit: z.coerce.number().optional() });
-const listThreadsQuerySchema = z.object({ limit: z.coerce.number().optional(), projectPath: z.string().optional() });
+/**
+ * `tags` arrives as a JSON-encoded object in the query string (query params are
+ * flat strings). It scopes the listing to threads whose metadata matches every
+ * tag — e.g. `{ projectPath }` so git worktrees sharing a resourceId each see
+ * only their own threads. Malformed JSON is treated as "no filter".
+ */
+const listThreadsQuerySchema = z.object({
+  limit: z.coerce.number().optional(),
+  tags: z
+    .preprocess(value => {
+      if (typeof value !== 'string' || value.length === 0) return undefined;
+      try {
+        return JSON.parse(value);
+      } catch {
+        return undefined;
+      }
+    }, z.record(z.string(), z.string()).optional())
+    .optional(),
+});
 const followUpBodySchema = z.object({ message: z.string() });
 
 const sendNotificationBodySchema = z.object({
@@ -145,7 +163,8 @@ const listThreadsResponseSchema = z.object({
       id: z.string(),
       title: z.string().optional(),
       updatedAt: z.string().optional(),
-      projectPath: z.string().optional(),
+      /** The session scoping tags stamped on this thread (e.g. `{ projectPath }`). */
+      tags: z.record(z.string(), z.string()).optional(),
     }),
   ),
 });
@@ -624,34 +643,55 @@ export const LIST_HARNESS_THREADS_ROUTE = createRoute({
   responseSchema: listThreadsResponseSchema,
   summary: 'List session threads',
   description:
-    'Lists the threads for the session\u2019s resource, most-recently-updated first. Pass `limit` to return only the newest N (e.g. for a sidebar).',
+    'Lists the threads for the session\u2019s resource, most-recently-updated first. Pass `limit` to return only the newest N (e.g. for a sidebar). Pass `tags` (a JSON-encoded object) to scope the list to threads matching every tag \u2014 e.g. `{ projectPath }` so git worktrees sharing a resourceId each see only their own threads.',
   tags: ['Harness'],
   requiresAuth: true,
   requiresPermission: 'harness:read',
-  handler: async ({ mastra, harnessId, resourceId, limit, projectPath }) => {
+  handler: async ({ mastra, harnessId, resourceId, limit, tags }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
       const session = await getSession(harness, resourceId);
       const threads = await session.thread.list();
+      // A thread's metadata mixes the session scoping tags (stamped at creation,
+      // e.g. `projectPath`) with model bookkeeping (`currentModelId`,
+      // `modeModelId_<mode>`). Return only the string-valued scoping tags, so the
+      // response stays valid and the model keys don't leak out as "tags".
+      const isModelMetaKey = (key: string) => key === 'currentModelId' || key.startsWith('modeModelId_');
+      const getTags = (t: { metadata?: unknown }): Record<string, string> => {
+        const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
+        const result: Record<string, string> = {};
+        for (const [key, value] of Object.entries(metadata)) {
+          if (typeof value === 'string' && !isModelMetaKey(key)) result[key] = value;
+        }
+        return result;
+      };
       // A single resourceId can be shared across git worktrees of the same repo
-      // (the id is derived from the git URL). When a projectPath is supplied,
-      // scope to threads tagged for that working directory and drop untagged
-      // ones, so worktree A never shows worktree B's threads. Mirrors the TUI's
-      // worktree-strict selection (PR #18332).
-      const scoped = projectPath
-        ? threads.filter(t => (t.metadata as Record<string, unknown> | undefined)?.projectPath === projectPath)
-        : threads;
+      // (the id is derived from the git URL). When tags are supplied, scope to
+      // threads whose metadata matches every tag and drop the rest, so worktree A
+      // never shows worktree B's threads. Mirrors the harness's tag-aware
+      // selection and the TUI's worktree-strict listing.
+      const tagEntries = tags ? Object.entries(tags) : [];
+      const scoped =
+        tagEntries.length > 0
+          ? threads.filter(t => {
+              const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
+              return tagEntries.every(([key, value]) => metadata[key] === value);
+            })
+          : threads;
       const toTime = (t: { updatedAt?: Date; createdAt?: Date }) => (t.updatedAt ?? t.createdAt)?.getTime() ?? 0;
       const sorted = [...scoped].sort((a, b) => toTime(b) - toTime(a));
       const max = Number(limit);
       const limited = Number.isFinite(max) && max > 0 ? sorted.slice(0, max) : sorted;
       return {
-        threads: limited.map(t => ({
-          id: t.id,
-          title: t.title,
-          projectPath: (t.metadata as Record<string, unknown> | undefined)?.projectPath as string | undefined,
-          updatedAt: t.updatedAt instanceof Date ? t.updatedAt.toISOString() : undefined,
-        })),
+        threads: limited.map(t => {
+          const threadTags = getTags(t);
+          return {
+            id: t.id,
+            title: t.title,
+            tags: Object.keys(threadTags).length > 0 ? threadTags : undefined,
+            updatedAt: t.updatedAt instanceof Date ? t.updatedAt.toISOString() : undefined,
+          };
+        }),
       };
     } catch (error) {
       return handleError(error, 'error listing harness threads');

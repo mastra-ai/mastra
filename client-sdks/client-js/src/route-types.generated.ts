@@ -90291,6 +90291,11 @@ export type PostHarnessHarnessIdSessions_PathParams = {
 
 export type PostHarnessHarnessIdSessions_Body = {
   resourceId: string;
+  tags?:
+    | {
+        [key: string]: string;
+      }
+    | undefined;
 };
 
 export type PostHarnessHarnessIdSessions_Response = {
@@ -90387,7 +90392,14 @@ export type GetHarnessHarnessIdSessionsResourceIdThreads_PathParams = {
 
 export type GetHarnessHarnessIdSessionsResourceIdThreads_QueryParams = {
   limit?: number | undefined;
-  projectPath?: string | undefined;
+  tags?:
+    | (
+        | {
+            [key: string]: string;
+          }
+        | undefined
+      )
+    | undefined;
 };
 
 export type GetHarnessHarnessIdSessionsResourceIdThreads_Response = {
@@ -90395,7 +90407,11 @@ export type GetHarnessHarnessIdSessionsResourceIdThreads_Response = {
     id: string;
     title?: string | undefined;
     updatedAt?: string | undefined;
-    projectPath?: string | undefined;
+    tags?:
+      | {
+          [key: string]: string;
+        }
+      | undefined;
   }[];
 };
 

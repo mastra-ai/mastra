@@ -8,9 +8,11 @@ Scope harness session creation with tags so sessions sharing a resourceId can
 each resume their own thread.
 
 `harness.createSession()` now accepts an optional `tags` record. The tags are
-(a) seeded into the new session's state and (b) used to filter initial thread
-selection: a thread is a resume candidate only when its metadata matches every
-provided tag. Previously, initial thread selection only consulted the
+(a) seeded into the new session's state, (b) stamped onto every thread the
+session creates (so thread listings can be filtered back to the session's
+scope), and (c) used to filter initial thread selection: a thread is a resume
+candidate only when its metadata matches every provided tag. Previously, initial
+thread selection only consulted the
 harness-global `initialState.projectPath`; on a multi-session server (where one
 Harness serves many scopes) a session could resume the most recently updated
 thread from a *different* scope that shared the resourceId. Using a generic tag

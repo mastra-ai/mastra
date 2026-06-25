@@ -414,6 +414,7 @@ export class Harness<TState = {}> {
         resourceId: effectiveResourceId,
         id,
         ownerId,
+        tags,
         state: {
           initialState,
           stateSchema: this.config.stateSchema,

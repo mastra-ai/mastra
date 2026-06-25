@@ -229,10 +229,10 @@ describe('harness routes', () => {
       expect(times[0]).toBeGreaterThanOrEqual(times[1]!);
     });
 
-    it('scopes the result to `projectPath` so worktrees sharing a resourceId stay isolated', async () => {
+    it('scopes the result to `tags` so worktrees sharing a resourceId stay isolated', async () => {
       // One resourceId can be shared across git worktrees of the same repo (the
-      // id derives from the git URL). Threads are auto-tagged with the working
-      // directory via session state, and the list must filter on it.
+      // id derives from the git URL). Threads are stamped with the session's
+      // scoping tags at creation, and the list must filter on every tag.
       await CREATE_HARNESS_SESSION_ROUTE.handler({ mastra, harnessId: 'code', resourceId: 'user-wt' } as any);
       const session = await mastra.getHarness('code')!.createSession({ resourceId: 'user-wt' });
 
@@ -246,21 +246,21 @@ describe('harness routes', () => {
         mastra,
         harnessId: 'code',
         resourceId: 'user-wt',
-        projectPath: '/repo/worktree-a',
-      } as any)) as { threads: { title?: string; projectPath?: string }[] };
+        tags: { projectPath: '/repo/worktree-a' },
+      } as any)) as { threads: { title?: string; tags?: Record<string, string> }[] };
       expect(onlyA.threads.map(t => t.title).sort()).toEqual(['a1', 'a2']);
-      expect(onlyA.threads.every(t => t.projectPath === '/repo/worktree-a')).toBe(true);
+      expect(onlyA.threads.every(t => t.tags?.projectPath === '/repo/worktree-a')).toBe(true);
 
       const onlyB = (await LIST_HARNESS_THREADS_ROUTE.handler({
         mastra,
         harnessId: 'code',
         resourceId: 'user-wt',
-        projectPath: '/repo/worktree-b',
+        tags: { projectPath: '/repo/worktree-b' },
       } as any)) as { threads: { title?: string }[] };
       expect(onlyB.threads.map(t => t.title)).toEqual(['b1']);
 
-      // Without a projectPath, every thread for the resource is returned
-      // (including the untagged auto-created startup thread).
+      // Without tags, every thread for the resource is returned (including the
+      // untagged auto-created startup thread).
       const all = (await LIST_HARNESS_THREADS_ROUTE.handler({
         mastra,
         harnessId: 'code',

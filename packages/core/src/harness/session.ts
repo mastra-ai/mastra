@@ -518,10 +518,18 @@ export class SessionThread {
       metadata[`modeModelId_${session.mode.get()}`] = modelId;
     }
 
-    // Auto-tag with projectPath from state so threads are scoped to the working directory
-    const projectPath = (session.state.get() as any).projectPath;
-    if (projectPath) {
-      metadata.projectPath = projectPath;
+    // Stamp the session's scoping tags onto the thread so listings can be
+    // filtered back to this session's scope (e.g. a `projectPath` per git
+    // worktree). Fall back to a `projectPath` read from state for unscoped
+    // sessions that still carry one in their initial state.
+    const tags = session.getTags();
+    if (Object.keys(tags).length > 0) {
+      Object.assign(metadata, tags);
+    } else {
+      const projectPath = (session.state.get() as any).projectPath;
+      if (projectPath) {
+        metadata.projectPath = projectPath;
+      }
     }
 
     // Acquire lock on new thread before releasing old one.
@@ -2553,18 +2561,27 @@ export class Session<TState = unknown> {
   readonly displayState: SessionDisplayState;
   /** The session-owned Harness state domain. */
   readonly state: HarnessRequestState<TState>;
+  /**
+   * Scoping tags for this session (e.g. `{ projectPath }`). Seeded at creation
+   * and stamped onto every thread this session creates so thread listings can be
+   * filtered back to the session's scope. Empty when the session is unscoped.
+   */
+  readonly #tags: Record<string, string>;
 
   constructor({
     resourceId,
     state,
     id,
     ownerId,
+    tags,
   }: {
     resourceId: string;
     state?: SessionStateOptions<TState>;
     id: string;
     ownerId: string;
+    tags?: Record<string, string>;
   }) {
+    this.#tags = tags && Object.keys(tags).length > 0 ? { ...tags } : {};
     this.identity = new SessionIdentity({ resourceId, id, ownerId });
     this.thread = new SessionThread(() => this.identity.getResourceId());
     this.displayState = new SessionDisplayState({
@@ -2575,6 +2592,14 @@ export class Session<TState = unknown> {
     });
     this.#bus.setDisplayState(this.displayState);
     this.state = new SessionState(state ?? { initialState: {} as TState }, this.#bus);
+  }
+
+  /**
+   * This session's scoping tags (e.g. `{ projectPath }`), stamped onto every
+   * thread it creates. Returns a copy; empty when the session is unscoped.
+   */
+  getTags(): Record<string, string> {
+    return { ...this.#tags };
   }
 
   // ===========================================================================

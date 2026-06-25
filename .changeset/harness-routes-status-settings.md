@@ -16,10 +16,11 @@ read behavior settings, and scope threads per working directory.
   `notifications`, `smartEditing`)
 
 `GET /harness/:harnessId/sessions/:resourceId/threads` accepts an optional
-`projectPath` query param. A single resourceId can be shared across git
-worktrees of the same repo (the id is derived from the git URL), so passing
-`projectPath` scopes the list to threads tagged for that working directory.
-Each returned thread now also includes its `projectPath` metadata.
+`tags` query param (a JSON-encoded object). A single resourceId can be shared
+across git worktrees of the same repo (the id is derived from the git URL), so
+passing `tags` scopes the list to threads matching every tag (e.g.
+`{ projectPath }` for the working directory). Each returned thread now also
+includes the scoping `tags` it was stamped with at creation.
 
 The session event stream route (`.../stream`) now enqueues raw event objects
 and lets the server adapter handle SSE framing, fixing a double-framing bug
@@ -33,4 +34,20 @@ parsed by clients.
 - a `display_state_changed` event in `KnownHarnessEvent` carrying the
   status-line figures
 - `HarnessSession.listThreads()` now accepts either a number (back-compat) or
-  `{ limit?, projectPath? }`
+  `{ limit?, tags? }`
+
+Example:
+
+```ts
+const session = client.getHarness('code').session(resourceId);
+
+// Scope a worktree's thread list (and resumed session) to its own threads.
+await session.create({ tags: { projectPath: '/repo/worktree-a' } });
+const threads = await session.listThreads({ tags: { projectPath: '/repo/worktree-a' } });
+
+// Read the status-line figures and agent settings.
+const state = await session.state();
+state.omProgress; // observational-memory progress
+state.tokenUsage; // cumulative token usage
+state.settings; // { yolo, thinkingLevel, notifications, smartEditing }
+```
