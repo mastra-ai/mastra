@@ -167,6 +167,51 @@ describe('createTool with providerOptions', () => {
   });
 });
 
+describe('createTool with background', () => {
+  it('should preserve background config when creating a tool', () => {
+    const backgroundTool = createTool({
+      id: 'background-tool',
+      description: 'A tool that runs in the background',
+      inputSchema: z.object({
+        input: z.string(),
+      }),
+      background: { enabled: true, timeoutMs: 60_000 },
+      execute: async ({ input }) => {
+        return { output: input };
+      },
+    });
+
+    expect(backgroundTool.background).toEqual({ enabled: true, timeoutMs: 60_000 });
+  });
+
+  it('should be undefined when background is not provided', () => {
+    const toolWithoutBackground = createTool({
+      id: 'no-background-tool',
+      description: 'A tool without background config',
+      inputSchema: z.object({
+        input: z.string(),
+      }),
+      execute: async ({ input }) => {
+        return { output: input };
+      },
+    });
+
+    expect(toolWithoutBackground.background).toBeUndefined();
+  });
+
+  it('should preserve background config through Tool class constructor', () => {
+    const tool = new Tool({
+      id: 'direct-background-tool',
+      description: 'Tool created directly with constructor',
+      inputSchema: z.object({ value: z.string() }),
+      background: { enabled: true },
+      execute: async ({ value }) => ({ result: value }),
+    });
+
+    expect(tool.background).toEqual({ enabled: true });
+  });
+});
+
 describe('createTool with strict mode', () => {
   it('should preserve strict when creating a tool', () => {
     const strictTool = createTool({
