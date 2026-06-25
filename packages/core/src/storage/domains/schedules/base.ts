@@ -122,6 +122,11 @@ export type Schedule = {
  * - `skipped`    — the user `prepare` hook returned `null`, asking the worker
  *                  to skip this fire entirely.
  * - `aborted`    — the agent run was aborted mid-stream.
+ *
+ * Legacy outcomes (no longer written, kept readable for rows persisted by
+ * older builds so that listing/exhaustive handling does not break):
+ * - `acked`, `alerted`, `deferred`, `appended-from-queue`, `dropped-stale`,
+ *   `dropped-superseded`, `dropped-busy`.
  */
 export type ScheduleTriggerOutcome =
   | 'published'
@@ -131,7 +136,16 @@ export type ScheduleTriggerOutcome =
   | 'discarded'
   | 'skipped'
   | 'aborted'
-  | 'failed';
+  | 'failed'
+  // Legacy queue/notification outcomes — never written by current code, but
+  // older trigger rows may still carry them. Retained so reads stay typed.
+  | 'acked'
+  | 'alerted'
+  | 'deferred'
+  | 'appended-from-queue'
+  | 'dropped-stale'
+  | 'dropped-superseded'
+  | 'dropped-busy';
 
 /**
  * Distinguishes a tick-loop schedule fire from a deferred drain event or a
