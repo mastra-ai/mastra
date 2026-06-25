@@ -1256,7 +1256,15 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               // the model-stream loop in llm-execution-step that invokes onChunk.
               // Fire it here so consumers observing the agent stream via onChunk
               // receive the structured `background-task-started` lifecycle chunk.
-              await options?.onChunk?.(backgroundTaskStartedChunk as any);
+              try {
+                await options?.onChunk?.(backgroundTaskStartedChunk as any);
+              } catch (error) {
+                logger?.warn?.('Error invoking onChunk for background-task-started', {
+                  toolCallId: inputData.toolCallId,
+                  toolName: inputData.toolName,
+                  error,
+                });
+              }
 
               // Return placeholder result so the LLM can continue
               return {

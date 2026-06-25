@@ -2,12 +2,12 @@
 '@mastra/ai-sdk': patch
 ---
 
-Pass `background-task-*` lifecycle chunks through to the UI message stream as `data-*` parts. When an agent dispatches a tool as a background task, `toAISdkStream` / `handleChatStream` previously dropped the `background-task-started` chunk, so a web-chat UI could not get the `taskId` and had to regex-parse it out of the tool-result string. The chunk now arrives as a typed data part, giving the frontend the `taskId` at dispatch time to render a live progress card and subscribe to the task's lifecycle.
+Fixed background task IDs not reaching the chat UI. When an agent starts a tool as a background task, your frontend now receives the task's ID the moment it starts, instead of having to dig it out of the tool's result text. This lets you show a "task running" card and follow the task's progress right away while the user keeps chatting.
 
 ```ts
 // In your useChat data-part handler:
 if (part.type === 'data-background-task-started') {
   const { taskId, toolName, toolCallId } = part.data;
-  // open a task-scoped subscription, render a "running" card, etc.
+  // render a "running" card and subscribe to the task by taskId
 }
 ```
