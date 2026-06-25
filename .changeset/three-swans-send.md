@@ -10,7 +10,7 @@ const researchTool = createTool({
   description: 'Run a long research job',
   inputSchema: z.object({ topic: z.string() }),
   background: { enabled: true, timeoutMs: 600_000 },
-  execute: async ({ context }) => {
+  execute: async ({ topic }, context) => {
     // ...
   },
 })
