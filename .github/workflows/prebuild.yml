@@ -238,6 +238,48 @@ jobs:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
+  mastracode-e2e-check-changes:
+    name: Detect Mastra Code E2E changes
+    if: github.repository == 'mastra-ai/mastra' && needs.changes.outputs.has_code == 'true'
+    needs: changes
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      mastracode-e2e-changed: ${{ steps.filter.outputs.mastracode_e2e }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+
+      - name: Check for changes that require Mastra Code E2E
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          base: ${{ github.event.pull_request.base.ref }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          filters: |
+            mastracode_e2e:
+              - 'mastracode/**'
+              - 'packages/core/**'
+              - 'pnpm-lock.yaml'
+              - '.github/workflows/mastracode-e2e.yml'
+              - '!**/*.md'
+
+  mastracode-e2e:
+    name: Mastra Code E2E
+    needs: [changes, mastracode-e2e-check-changes, prebuild]
+    if: always() && github.repository == 'mastra-ai/mastra' && needs.mastracode-e2e-check-changes.outputs.mastracode-e2e-changed == 'true' && needs.prebuild.result == 'success'
+    uses: ./.github/workflows/mastracode-e2e.yml
+    permissions:
+      contents: read
+    with:
+      head_sha: ${{ github.event.pull_request.head.sha }}
+    secrets:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+
   combined-stores-check-changes:
     name: Detect stores changes
     if: github.repository == 'mastra-ai/mastra' && needs.changes.outputs.has_code == 'true'
