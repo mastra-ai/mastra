@@ -538,7 +538,129 @@ export class MessageList {
       // Used for creating LLM prompt messages without AI SDK streamText/generateText.
       // Produces a prompt for AI SDK v5 (spec 'v2') providers, which accept
       // tool-result `media` parts as-is.
-      llmPrompt: (options?: LlmPromptOptions): Promise<LanguageModelV2Prompt> => this.#buildLlmPrompt(options),
+      llmPrompt: async (
+        options: LlmPromptOptions = { downloadConcurrency: 10, downloadRetries: 3 },
+      ): Promise<LanguageModelV2Prompt> => {
+        const promptMessages = this.getMessagesForModelPrompt();
+        const modelMessages = convertAIV5UIToModelMessages(
+          this.toAIV5UIMessages(promptMessages, { transformToolPayloads: false }),
+          promptMessages,
+          this.filterIncompleteToolCalls,
+        );
+
+        const storedModelOutputs = new Map<string, unknown>();
+        for (const dbMsg of this.messages) {
+          if (dbMsg.content?.format !== 2 || !dbMsg.content.parts) continue;
+
+          for (const part of dbMsg.content.parts) {
+            if (
+              part.type === 'tool-invocation' &&
+              part.toolInvocation?.state === 'result' &&
+              part.providerMetadata?.mastra &&
+              typeof part.providerMetadata.mastra === 'object' &&
+              'modelOutput' in (part.providerMetadata.mastra as Record<string, unknown>)
+            ) {
+              storedModelOutputs.set(
+                part.toolInvocation.toolCallId,
+                (part.providerMetadata.mastra as Record<string, unknown>).modelOutput,
+              );
+            }
+          }
+        }
+
+        if (storedModelOutputs.size > 0) {
+          for (const modelMsg of modelMessages) {
+            if (modelMsg.role !== 'tool' || !Array.isArray(modelMsg.content)) continue;
+
+            for (let i = 0; i < modelMsg.content.length; i++) {
+              const part = modelMsg.content[i]!;
+              if (part.type === 'tool-result' && storedModelOutputs.has(part.toolCallId)) {
+                modelMsg.content[i] = {
+                  ...part,
+                  output: storedModelOutputs.get(part.toolCallId) as any,
+                };
+              }
+            }
+          }
+        }
+
+        const systemMessages = convertAIV4CoreToAIV5ModelMessages(
+          [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()],
+          `system`,
+          this.createAdapterContext(),
+          this.messages,
+        );
+
+        const downloadedAssets = await downloadAssetsFromMessages({
+          messages: modelMessages,
+          downloadConcurrency: options?.downloadConcurrency,
+          downloadRetries: options?.downloadRetries,
+          supportedUrls: options?.supportedUrls,
+        });
+
+        let messages = [...systemMessages, ...modelMessages];
+
+        // Check if any messages have image/file content that needs processing
+        const hasImageOrFileContent = modelMessages.some(
+          message =>
+            (message.role === 'user' || message.role === 'assistant') &&
+            typeof message.content !== 'string' &&
+            message.content.some(part => part.type === 'image' || part.type === 'file'),
+        );
+
+        if (hasImageOrFileContent) {
+          messages = messages.map(message => {
+            if (message.role === 'user') {
+              if (typeof message.content === 'string') {
+                return {
+                  role: 'user' as const,
+                  content: [{ type: 'text' as const, text: message.content }],
+                  providerOptions: message.providerOptions,
+                } as AIV5Type.ModelMessage;
+              }
+
+              const convertedContent = message.content
+                .map(part => {
+                  if (part.type === 'image' || part.type === 'file') {
+                    return convertImageFilePart(part, downloadedAssets);
+                  }
+                  return part;
+                })
+                .filter(part => part.type !== 'text' || part.text !== '');
+
+              return {
+                role: 'user' as const,
+                content: convertedContent,
+                providerOptions: message.providerOptions,
+              } as AIV5Type.ModelMessage;
+            }
+
+            if (message.role === 'assistant' && typeof message.content !== 'string') {
+              const convertedContent = message.content.map(part => {
+                if (part.type === 'file') {
+                  return convertImageFilePart(part, downloadedAssets);
+                }
+                return part;
+              });
+
+              return {
+                ...message,
+                content: convertedContent,
+              };
+            }
+
+            return message;
+          });
+        }
+
+        messages = ensureGeminiCompatibleMessages(messages, this.logger);
+
+        return messages
+          .map(aiV5ModelMessageToV2PromptMessage)
+          .filter(
+            message => message.role === 'system' || typeof message.content === 'string' || message.content.length > 0,
+          );
+      },
     },
     aiV6: {
       ui: () => this.toAIV6UIMessages(this.all.db()),
@@ -584,136 +706,6 @@ export class MessageList {
       },
     },
   };
-
-  /**
-   * Builds the base LLM prompt for AI SDK v5 (spec 'v2') providers.
-   *
-   * `aiV5.llmPrompt` returns this directly; `aiV6.llmPrompt` chains a single
-   * v5 -> v6 conversion (`aiV5PromptToAIV6Prompt`) on top of it.
-   */
-  async #buildLlmPrompt(
-    options: LlmPromptOptions = { downloadConcurrency: 10, downloadRetries: 3 },
-  ): Promise<LanguageModelV2Prompt> {
-    const promptMessages = this.getMessagesForModelPrompt();
-    const modelMessages = convertAIV5UIToModelMessages(
-      this.toAIV5UIMessages(promptMessages, { transformToolPayloads: false }),
-      promptMessages,
-      this.filterIncompleteToolCalls,
-    );
-
-    const storedModelOutputs = new Map<string, unknown>();
-    for (const dbMsg of this.messages) {
-      if (dbMsg.content?.format !== 2 || !dbMsg.content.parts) continue;
-
-      for (const part of dbMsg.content.parts) {
-        if (
-          part.type === 'tool-invocation' &&
-          part.toolInvocation?.state === 'result' &&
-          part.providerMetadata?.mastra &&
-          typeof part.providerMetadata.mastra === 'object' &&
-          'modelOutput' in (part.providerMetadata.mastra as Record<string, unknown>)
-        ) {
-          storedModelOutputs.set(
-            part.toolInvocation.toolCallId,
-            (part.providerMetadata.mastra as Record<string, unknown>).modelOutput,
-          );
-        }
-      }
-    }
-
-    if (storedModelOutputs.size > 0) {
-      for (const modelMsg of modelMessages) {
-        if (modelMsg.role !== 'tool' || !Array.isArray(modelMsg.content)) continue;
-
-        for (let i = 0; i < modelMsg.content.length; i++) {
-          const part = modelMsg.content[i]!;
-          if (part.type === 'tool-result' && storedModelOutputs.has(part.toolCallId)) {
-            modelMsg.content[i] = {
-              ...part,
-              output: storedModelOutputs.get(part.toolCallId) as any,
-            };
-          }
-        }
-      }
-    }
-
-    const systemMessages = convertAIV4CoreToAIV5ModelMessages(
-      [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()],
-      `system`,
-      this.createAdapterContext(),
-      this.messages,
-    );
-
-    const downloadedAssets = await downloadAssetsFromMessages({
-      messages: modelMessages,
-      downloadConcurrency: options?.downloadConcurrency,
-      downloadRetries: options?.downloadRetries,
-      supportedUrls: options?.supportedUrls,
-    });
-
-    let messages = [...systemMessages, ...modelMessages];
-
-    // Check if any messages have image/file content that needs processing
-    const hasImageOrFileContent = modelMessages.some(
-      message =>
-        (message.role === 'user' || message.role === 'assistant') &&
-        typeof message.content !== 'string' &&
-        message.content.some(part => part.type === 'image' || part.type === 'file'),
-    );
-
-    if (hasImageOrFileContent) {
-      messages = messages.map(message => {
-        if (message.role === 'user') {
-          if (typeof message.content === 'string') {
-            return {
-              role: 'user' as const,
-              content: [{ type: 'text' as const, text: message.content }],
-              providerOptions: message.providerOptions,
-            } as AIV5Type.ModelMessage;
-          }
-
-          const convertedContent = message.content
-            .map(part => {
-              if (part.type === 'image' || part.type === 'file') {
-                return convertImageFilePart(part, downloadedAssets);
-              }
-              return part;
-            })
-            .filter(part => part.type !== 'text' || part.text !== '');
-
-          return {
-            role: 'user' as const,
-            content: convertedContent,
-            providerOptions: message.providerOptions,
-          } as AIV5Type.ModelMessage;
-        }
-
-        if (message.role === 'assistant' && typeof message.content !== 'string') {
-          const convertedContent = message.content.map(part => {
-            if (part.type === 'file') {
-              return convertImageFilePart(part, downloadedAssets);
-            }
-            return part;
-          });
-
-          return {
-            ...message,
-            content: convertedContent,
-          };
-        }
-
-        return message;
-      });
-    }
-
-    messages = ensureGeminiCompatibleMessages(messages, this.logger);
-
-    return messages
-      .map(aiV5ModelMessageToV2PromptMessage)
-      .filter(
-        message => message.role === 'system' || typeof message.content === 'string' || message.content.length > 0,
-      );
-  }
 
   private remembered = {
     db: () => this.messages.filter(m => this.memoryMessages.has(m)),
