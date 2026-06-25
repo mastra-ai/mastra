@@ -35,7 +35,11 @@ const PLATFORM = 'slack';
  * configured value (e.g. MASTRA_BASE_URL) includes a trailing slash.
  */
 export function stripTrailingSlash(url: string): string {
-  return url.replace(/\/+$/, '');
+  let end = url.length;
+  while (end > 0 && url.charCodeAt(end - 1) === 47 /* '/' */) {
+    end--;
+  }
+  return end === url.length ? url : url.slice(0, end);
 }
 
 /**
