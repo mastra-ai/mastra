@@ -125,10 +125,9 @@ describe('HeartbeatWorker — executeHeartbeat', () => {
     expect(target).toMatchObject({
       threadId: 't1',
       resourceId: 'r1',
-      ifActive: { behavior: 'discard' },
-      ifIdle: { behavior: 'wake' },
     });
-    expect(target.ifIdle.streamOptions).toBeUndefined();
+    expect(target.ifActive).toBeUndefined();
+    expect(target.ifIdle).toBeUndefined();
   });
 
   it('forwards signalType, ifActive, ifIdle to sendSignal', async () => {
@@ -181,27 +180,6 @@ describe('HeartbeatWorker — executeHeartbeat', () => {
     expect(result.status).toBe('skipped-thread-blocked');
     expect(result.outcome).toBe('skipped');
     expect(result.runId).toBe('run-blocked');
-  });
-
-  it('skips when the thread updated within idleThresholdMs', async () => {
-    const sendSignal = vi.fn();
-    const agent = {
-      sendSignal,
-      generate: vi.fn(),
-      getMemory: vi.fn(async () => ({
-        getThreadById: vi.fn(async () => ({ id: 't1', updatedAt: new Date(Date.now() - 1_000) })),
-      })),
-    };
-    const mastra = makeMastra({ agent });
-
-    const result = await executeHeartbeat(
-      mastra,
-      'hb_a1',
-      makeTarget({ threadId: 't1', resourceId: 'r1', idleThresholdMs: 30_000 }),
-    );
-
-    expect(result.status).toBe('skipped-idle-threshold');
-    expect(sendSignal).not.toHaveBeenCalled();
   });
 
   it('calls agent.generate in threadless mode', async () => {

@@ -89685,7 +89685,6 @@ export type GetSchedules_Response = {
           signalType?: string | undefined;
           ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
           ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
-          idleThresholdMs?: number | undefined;
           broadcast?: ('live' | 'on-complete' | 'never') | undefined;
           requestContext?:
             | {
@@ -89780,7 +89779,6 @@ export type GetSchedulesScheduleId_Response = {
         signalType?: string | undefined;
         ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
         ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
-        idleThresholdMs?: number | undefined;
         broadcast?: ('live' | 'on-complete' | 'never') | undefined;
         requestContext?:
           | {
@@ -89958,7 +89956,6 @@ export type PostSchedulesScheduleIdPause_Response = {
         signalType?: string | undefined;
         ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
         ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
-        idleThresholdMs?: number | undefined;
         broadcast?: ('live' | 'on-complete' | 'never') | undefined;
         requestContext?:
           | {
@@ -90048,7 +90045,6 @@ export type PostSchedulesScheduleIdResume_Response = {
         signalType?: string | undefined;
         ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
         ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
-        idleThresholdMs?: number | undefined;
         broadcast?: ('live' | 'on-complete' | 'never') | undefined;
         requestContext?:
           | {
@@ -90155,7 +90151,6 @@ export type GetHeartbeats_Response = {
     signalType?: string | undefined;
     ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
     ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
-    idleThresholdMs?: number | undefined;
     broadcast?: ('live' | 'on-complete' | 'never') | undefined;
     metadata?:
       | {
@@ -90229,7 +90224,6 @@ export type GetHeartbeatsHeartbeatId_Response = {
   signalType?: string | undefined;
   ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
   ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
-  idleThresholdMs?: number | undefined;
   broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {
@@ -90269,7 +90263,6 @@ export type PostHeartbeats_Body = {
   signalType?: string | undefined;
   ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
   ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
-  idleThresholdMs?: number | undefined;
   broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {
@@ -90314,7 +90307,6 @@ export type PostHeartbeats_Response = {
   signalType?: string | undefined;
   ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
   ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
-  idleThresholdMs?: number | undefined;
   broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {
@@ -90359,7 +90351,6 @@ export type PatchHeartbeatsHeartbeatId_Body = {
   signalType?: string | undefined;
   ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
   ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
-  idleThresholdMs?: number | undefined;
   broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {
@@ -90404,7 +90395,6 @@ export type PatchHeartbeatsHeartbeatId_Response = {
   signalType?: string | undefined;
   ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
   ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
-  idleThresholdMs?: number | undefined;
   broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {
@@ -90503,7 +90493,6 @@ export type PostHeartbeatsHeartbeatIdPause_Response = {
   signalType?: string | undefined;
   ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
   ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
-  idleThresholdMs?: number | undefined;
   broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {
@@ -90574,7 +90563,6 @@ export type PostHeartbeatsHeartbeatIdResume_Response = {
   signalType?: string | undefined;
   ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
   ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
-  idleThresholdMs?: number | undefined;
   broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {

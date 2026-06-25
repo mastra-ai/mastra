@@ -107,7 +107,6 @@ export const CREATE_HEARTBEAT_ROUTE = createRoute({
       ...(body.signalType ? { signalType: body.signalType } : {}),
       ...(body.ifActive ? { ifActive: body.ifActive } : {}),
       ...(body.ifIdle ? { ifIdle: body.ifIdle } : {}),
-      ...(body.idleThresholdMs !== undefined ? { idleThresholdMs: body.idleThresholdMs } : {}),
       ...(body.broadcast ? { broadcast: body.broadcast } : {}),
       ...(body.metadata ? { metadata: body.metadata } : {}),
     });
@@ -137,7 +136,6 @@ export const UPDATE_HEARTBEAT_ROUTE = createRoute({
       ...(body.signalType !== undefined ? { signalType: body.signalType } : {}),
       ...(body.ifActive !== undefined ? { ifActive: body.ifActive } : {}),
       ...(body.ifIdle !== undefined ? { ifIdle: body.ifIdle } : {}),
-      ...(body.idleThresholdMs !== undefined ? { idleThresholdMs: body.idleThresholdMs } : {}),
       ...(body.broadcast !== undefined ? { broadcast: body.broadcast } : {}),
       ...(body.metadata !== undefined ? { metadata: body.metadata } : {}),
     });

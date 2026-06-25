@@ -1,5 +1,6 @@
 import { z } from 'zod/v4';
 import type { AgentSignalAttributes, AgentSignalType } from '../signals';
+import type { AgentSignalActiveBehavior, AgentSignalIdleBehavior } from '../types';
 
 export const HeartbeatBroadcastModeSchema = z.enum(['live', 'on-complete', 'never']);
 
@@ -23,11 +24,19 @@ export const HeartbeatBroadcastModeSchema = z.enum(['live', 'on-complete', 'neve
  */
 export type HeartbeatBroadcastMode = 'live' | 'on-complete' | 'never';
 
-/** Action to take when the target thread is actively streaming. Threaded only. */
-export type HeartbeatIfActive = 'deliver' | 'persist' | 'discard';
+/**
+ * Action to take when the target thread is actively streaming. Threaded only.
+ * Reuses the signal runtime's active behavior so heartbeats accept whatever
+ * `agent.sendSignal` allows.
+ */
+export type HeartbeatIfActive = AgentSignalActiveBehavior;
 
-/** Action to take when the target thread is idle. Threaded only. */
-export type HeartbeatIfIdle = 'wake' | 'persist' | 'discard';
+/**
+ * Action to take when the target thread is idle. Threaded only. Reuses the
+ * signal runtime's idle behavior so heartbeats accept whatever
+ * `agent.sendSignal` allows.
+ */
+export type HeartbeatIfIdle = AgentSignalIdleBehavior;
 
 /** Stable schedule id prefix for heartbeats. */
 export const HEARTBEAT_SCHEDULE_PREFIX = 'hb_';
@@ -44,7 +53,6 @@ export const HEARTBEAT_SCHEDULE_PREFIX = 'hb_';
 export type HeartbeatRunStatus =
   | 'fired'
   | 'signal-accepted'
-  | 'skipped-idle-threshold'
   | 'skipped-thread-blocked'
   | 'thread-missing'
   | 'agent-missing'
@@ -63,7 +71,6 @@ export const HeartbeatInputSchema = z.object({
   signalType: z.enum(['user', 'state', 'reactive', 'notification', 'user-message', 'system-reminder']).optional(),
   ifActive: z.enum(['deliver', 'persist', 'discard']).optional(),
   ifIdle: z.enum(['wake', 'persist', 'discard']).optional(),
-  idleThresholdMs: z.number().int().positive().optional(),
   /**
    * Broadcast mode for the chunks produced by this heartbeat-driven run.
    * - `live` (default) — pass every chunk through
@@ -79,7 +86,6 @@ export const HeartbeatOutputSchema = z.object({
   status: z.enum([
     'fired',
     'signal-accepted',
-    'skipped-idle-threshold',
     'skipped-thread-blocked',
     'thread-missing',
     'agent-missing',

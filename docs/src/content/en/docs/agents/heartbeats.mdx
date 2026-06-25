@@ -100,7 +100,6 @@ Threaded heartbeats accept extra fields that control how the signal behaves:
 - `signalType`: the [signal type](/docs/agents/signals) to send, for example `notification` or `system-reminder`.
 - `ifActive`: action when the thread is already streaming. One of `deliver`, `persist`, or `discard`.
 - `ifIdle`: action when the thread is idle. One of `wake`, `persist`, or `discard`.
-- `idleThresholdMs`: treat the thread as idle only after this many milliseconds of inactivity. Below the threshold, the run is skipped.
 
 These fields require a `threadId`. Passing them on a threadless heartbeat throws.
 

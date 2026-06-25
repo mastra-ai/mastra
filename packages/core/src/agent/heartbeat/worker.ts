@@ -376,22 +376,6 @@ export async function executeHeartbeat(
         );
         return { status: 'thread-missing', outcome: 'failed', reason };
       }
-      if (target.idleThresholdMs !== undefined) {
-        const updatedAt = thread.updatedAt instanceof Date ? thread.updatedAt.getTime() : Number(thread.updatedAt);
-        if (Number.isFinite(updatedAt) && Date.now() - updatedAt < target.idleThresholdMs) {
-          await safeHookCall(log, () =>
-            hooks?.onFinish?.({
-              mastra,
-              agentId,
-              heartbeat: heartbeatRef,
-              trigger,
-              outcome: 'skipped',
-              effective,
-            }),
-          );
-          return { status: 'skipped-idle-threshold', outcome: 'skipped' };
-        }
-      }
     }
 
     let signalResult;
@@ -406,8 +390,8 @@ export async function executeHeartbeat(
         {
           resourceId: effective.resourceId,
           threadId: effective.threadId,
-          ifActive: { behavior: effective.ifActive ?? 'discard' },
-          ifIdle: { behavior: effective.ifIdle ?? 'wake' },
+          ...(effective.ifActive ? { ifActive: { behavior: effective.ifActive } } : {}),
+          ...(effective.ifIdle ? { ifIdle: { behavior: effective.ifIdle } } : {}),
         },
       );
     } catch (err) {
@@ -433,6 +417,8 @@ export async function executeHeartbeat(
     let settled;
     try {
       settled = await signalResult.accepted;
+      // eslint-disable-next-line no-console
+      console.log('heartbeat signal accepted', { scheduleId, agentId, settled });
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       await safeHookCall(log, () =>

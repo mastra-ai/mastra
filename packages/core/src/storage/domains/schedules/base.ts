@@ -53,8 +53,6 @@ export type HeartbeatScheduleTarget = {
   ifActive?: HeartbeatIfActive;
   /** Behavior when the target thread is idle. Threaded only. */
   ifIdle?: HeartbeatIfIdle;
-  /** Skip the fire if the thread was updated within this many ms. */
-  idleThresholdMs?: number;
   /** Broadcast policy for the heartbeat run's stream chunks. Defaults to `'live'`. */
   broadcast?: HeartbeatBroadcastMode;
   /** Arbitrary metadata stored alongside the schedule row. */

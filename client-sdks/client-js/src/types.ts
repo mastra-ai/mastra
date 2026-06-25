@@ -3100,7 +3100,6 @@ export interface Heartbeat {
   signalType?: string;
   ifActive?: 'deliver' | 'persist' | 'discard';
   ifIdle?: 'wake' | 'persist' | 'discard';
-  idleThresholdMs?: number;
   broadcast?: HeartbeatBroadcastMode;
   metadata?: Record<string, unknown>;
   lastRun?: ScheduleRunSummary;
@@ -3124,7 +3123,6 @@ export interface CreateHeartbeatInput {
   signalType?: string;
   ifActive?: 'deliver' | 'persist' | 'discard';
   ifIdle?: 'wake' | 'persist' | 'discard';
-  idleThresholdMs?: number;
   broadcast?: HeartbeatBroadcastMode;
   metadata?: Record<string, unknown>;
 }
@@ -3142,7 +3140,6 @@ export interface UpdateHeartbeatOptions {
   signalType?: string;
   ifActive?: 'deliver' | 'persist' | 'discard';
   ifIdle?: 'wake' | 'persist' | 'discard';
-  idleThresholdMs?: number;
   broadcast?: HeartbeatBroadcastMode;
   metadata?: Record<string, unknown>;
 }

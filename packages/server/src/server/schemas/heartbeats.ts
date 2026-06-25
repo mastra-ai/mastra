@@ -36,7 +36,6 @@ export const heartbeatSchema = z.object({
   signalType: z.string().optional(),
   ifActive: z.enum(['deliver', 'persist', 'discard']).optional(),
   ifIdle: z.enum(['wake', 'persist', 'discard']).optional(),
-  idleThresholdMs: z.number().int().positive().optional(),
   broadcast: heartbeatBroadcastModeSchema.optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   createdAt: z.number(),
@@ -70,7 +69,6 @@ export const createHeartbeatBodySchema = z.object({
   signalType: z.string().optional(),
   ifActive: z.enum(['deliver', 'persist', 'discard']).optional(),
   ifIdle: z.enum(['wake', 'persist', 'discard']).optional(),
-  idleThresholdMs: z.number().int().positive().optional(),
   broadcast: heartbeatBroadcastModeSchema.optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
@@ -89,7 +87,6 @@ export const updateHeartbeatBodySchema = z.object({
   signalType: z.string().optional(),
   ifActive: z.enum(['deliver', 'persist', 'discard']).optional(),
   ifIdle: z.enum(['wake', 'persist', 'discard']).optional(),
-  idleThresholdMs: z.number().int().positive().optional(),
   broadcast: heartbeatBroadcastModeSchema.optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
