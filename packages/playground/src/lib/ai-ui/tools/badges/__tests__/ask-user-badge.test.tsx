@@ -196,4 +196,22 @@ describe('AskUserBadge', () => {
       expect((within(badge()).getByPlaceholderText('Type your answer...') as HTMLInputElement).disabled).toBe(true);
     });
   });
+
+  describe('when the badge header is clicked', () => {
+    const suspendPayload: AskUserSuspendPayload = { question: 'Pick a fruit' };
+
+    it('collapses the content and expands it again on a second click', () => {
+      renderBadge({ toolCallId: 'call-7', suspendPayload, result: undefined });
+
+      expect(screen.queryByText('Pick a fruit')).not.toBeNull();
+
+      const header = within(badge()).getByRole('button', { name: /question for you/i });
+
+      fireEvent.click(header);
+      expect(screen.queryByText('Pick a fruit')).toBeNull();
+
+      fireEvent.click(header);
+      expect(screen.queryByText('Pick a fruit')).not.toBeNull();
+    });
+  });
 });
