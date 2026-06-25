@@ -1,6 +1,6 @@
 import type { AutoFormFieldProps } from '@autoform/react';
 import { v4 as uuid } from '@lukeed/uuid';
-import { Button } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Plus, TrashIcon } from 'lucide-react';
 import * as React from 'react';

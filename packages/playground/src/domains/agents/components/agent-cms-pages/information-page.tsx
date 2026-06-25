@@ -1,6 +1,6 @@
-import { ScrollArea } from '@mastra/playground-ui';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { SectionRoot, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Controller } from 'react-hook-form';

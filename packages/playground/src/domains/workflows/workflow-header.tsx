@@ -1,4 +1,5 @@
-import { Button, Icon, ApiIcon } from '@mastra/playground-ui';
+import { Icon, ApiIcon } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { CalendarClockIcon, EyeIcon } from 'lucide-react';
 import { Link } from 'react-router';
 import { useSchedules } from '@/domains/schedules/hooks/use-schedules';

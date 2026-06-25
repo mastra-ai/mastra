@@ -1,4 +1,5 @@
-import { Button, ScrollArea, Txt, Icon, toast } from '@mastra/playground-ui';
+import { Icon, toast } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import {
   Dialog,
@@ -10,8 +11,10 @@ import {
 } from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Sparkles, Trash2, Plus } from 'lucide-react';
 import { useState, useCallback, useRef } from 'react';
 

@@ -1,5 +1,6 @@
-import { Button, AmazonIcon, AzureIcon, GoogleIcon } from '@mastra/playground-ui';
+import { AmazonIcon, AzureIcon, GoogleIcon } from '@mastra/playground-ui';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import {

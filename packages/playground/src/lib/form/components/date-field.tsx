@@ -1,5 +1,6 @@
 import type { AutoFormFieldProps } from '@autoform/react';
-import { Button, cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { DatePicker } from '@mastra/playground-ui/components/DateTimePicker';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { format, isValid } from 'date-fns';

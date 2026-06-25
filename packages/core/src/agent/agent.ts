@@ -2081,8 +2081,35 @@ export class Agent<
     }
 
     const voice = this.#voice;
-    voice?.addTools(await this.listTools({ requestContext }));
-    const instructions = await this.getInstructions({ requestContext });
+
+    const resolvedRequestContext = requestContext ?? new RequestContext();
+    const rawTools = await this.listTools({ requestContext: resolvedRequestContext });
+    const toolEntries = Object.entries(rawTools || {});
+    const model = toolEntries.length ? await this.getModel({ requestContext: resolvedRequestContext }) : undefined;
+    const mastraProxy = this.#mastra ? createMastraProxy({ mastra: this.#mastra, logger: this.logger }) : undefined;
+    const wrappedTools = Object.fromEntries(
+      await Promise.all(
+        toolEntries.map(async ([k, tool]) => {
+          if (!tool) return [k, tool];
+          const options: ToolOptions = {
+            name: k,
+            logger: this.logger,
+            mastra: mastraProxy as MastraUnion | undefined,
+            agentName: this.name,
+            agentId: this.id,
+            requestContext: resolvedRequestContext,
+            tracingPolicy: this.#options?.tracingPolicy,
+            requireApproval: (tool as any).requireApproval,
+            backgroundConfig: (tool as any).background,
+            model,
+          };
+          return [k, makeCoreTool(tool, options)];
+        }),
+      ),
+    );
+    voice?.addTools(wrappedTools as TTools);
+
+    const instructions = await this.getInstructions({ requestContext: resolvedRequestContext });
     voice?.addInstructions(this.#convertInstructionsToString(instructions));
     return voice;
   }
