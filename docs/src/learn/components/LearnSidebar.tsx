@@ -2,7 +2,6 @@ import { useMemo } from 'react'
 import Link from '@docusaurus/Link'
 import { useLocation } from '@docusaurus/router'
 import { cn } from '@site/src/lib/utils'
-import { ThemeSwitcher } from '@site/src/components/theme-switcher'
 import type { Lesson, LearnStorageV1, LessonStatus } from '../types'
 import { course } from '../course'
 import { LearnProgressBar } from './LearnProgressBar'
@@ -97,11 +96,6 @@ export function LearnSidebar({ lessons, storage, className }: LearnSidebarProps)
 						</div>
 					))}
 				</div>
-
-				{/* Color mode toggle */}
-				<footer className="mr-4 flex justify-end border-t-[0.5px] border-(--border) py-2 pr-0.5">
-					<ThemeSwitcher />
-				</footer>
 			</nav>
 		</aside>
 	)

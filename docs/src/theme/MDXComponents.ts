@@ -17,6 +17,8 @@ import { VideoPlayer } from '@mastra/docusaurus-theme/components/video'
 import { YouTube } from '@mastra/docusaurus-theme/components/youtube'
 // Import the original mapper
 import MDXComponents from '@theme-original/MDXComponents'
+import Tabs from '@theme-original/Tabs'
+import TabItem from '@theme-original/TabItem'
 
 export default {
 	// Re-use the default mapping
@@ -42,4 +44,6 @@ export default {
 	StepItem,
 	VideoPlayer,
 	Override,
+	Tabs,
+	TabItem,
 }

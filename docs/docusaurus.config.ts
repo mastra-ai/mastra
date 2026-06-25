@@ -68,7 +68,6 @@ const config: Config = {
 	].filter(Boolean),
 	customFields: {
 		hsPortalId: process.env.HS_PORTAL_ID,
-		hsFormGuidLearn: process.env.HS_FORM_GUID_LEARN,
 		gaId: process.env.GA_ID,
 		posthogApiKey: process.env.POSTHOG_API_KEY,
 		posthogHost: process.env.POSTHOG_HOST,
@@ -254,7 +253,6 @@ Below is an overview of all available documentation.`,
 					position: 'left',
 					label: 'Learn',
 					to: '/learn',
-					badge: 'new',
 				},
 				{
 					type: 'docSidebar',

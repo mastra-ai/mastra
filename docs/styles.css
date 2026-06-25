@@ -4,11 +4,21 @@
 @import 'tailwindcss/utilities.css' layer(utilities);
 
 @import '@mastra/docusaurus-theme';
+@import '@mastra/docusaurus-plugin-algolia';
+@import '@mastra/docusaurus-plugin-kapa';
 
 @custom-variant dark (&:is([data-theme="dark"] *));
 
 [data-theme='dark'] .navbar__logo {
 	filter: invert(1);
+}
+
+.navbar__logo {
+	height: 2rem;
+}
+
+.grecaptcha-badge {
+	display: none !important;
 }
 
 /* ==================== LEARN SECTION ==================== */

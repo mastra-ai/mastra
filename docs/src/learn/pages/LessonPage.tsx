@@ -10,7 +10,6 @@ import { LearnLayout } from '../components/LearnLayout'
 import { LessonHeader } from '../components/LessonHeader'
 import { LessonNav } from '../components/LessonNav'
 import { YouTubePlayerWithResume } from '../components/YouTubePlayerWithResume'
-import { CourseSignupCTA } from '../components/CourseSignupCTA'
 import { getLessonIndex } from '../utils'
 
 function PublishedContent({
@@ -61,7 +60,6 @@ function PublishedContent({
 				</div>
 			)}
 			<MarkAsCompleteButton watched={watched} onToggle={() => setWatched(!watched)} className="mt-8" />
-			<CourseSignupCTA className="mt-8" />
 		</>
 	)
 }

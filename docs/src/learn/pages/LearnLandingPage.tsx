@@ -5,9 +5,7 @@ import { course } from '../course'
 import type { Lesson } from '../types'
 import { useSharedLearnStorage } from '../hooks/LearnStorageContext'
 import { LearnLayout } from '../components/LearnLayout'
-
 import { LessonListItem } from '../components/LessonListItem'
-import { CourseSignupCTA } from '../components/CourseSignupCTA'
 
 function useModules(lessons: Lesson[]) {
 	return useMemo(() => {
@@ -103,9 +101,6 @@ function LandingContent() {
 					</div>
 				))}
 			</div>
-
-			{/* Footer CTA */}
-			<CourseSignupCTA className="mt-10" />
 		</>
 	)
 }
