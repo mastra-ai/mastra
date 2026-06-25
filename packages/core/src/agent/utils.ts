@@ -57,7 +57,14 @@ export async function tryGenerateWithJsonFallback<OUTPUT>(
     console.warn('Error in tryGenerateWithJsonFallback. Attempting fallback.', error);
     return await agent.generate(prompt, {
       ...options,
-      structuredOutput: { ...options.structuredOutput, jsonPromptInjection: true },
+      structuredOutput: {
+        ...options.structuredOutput,
+        jsonPromptInjection:
+          options.structuredOutput.jsonPromptInjection === 'inline' ||
+          options.structuredOutput.jsonPromptInjection === 'system'
+            ? options.structuredOutput.jsonPromptInjection
+            : true,
+      },
     });
   }
 }
@@ -98,7 +105,14 @@ export async function tryStreamWithJsonFallback<OUTPUT extends {}>(
     console.warn('Error in tryStreamWithJsonFallback. Attempting fallback.', error);
     const result = await agent.stream(prompt, {
       ...streamOptions,
-      structuredOutput: { ...streamOptions.structuredOutput, jsonPromptInjection: true },
+      structuredOutput: {
+        ...streamOptions.structuredOutput,
+        jsonPromptInjection:
+          streamOptions.structuredOutput.jsonPromptInjection === 'inline' ||
+          streamOptions.structuredOutput.jsonPromptInjection === 'system'
+            ? streamOptions.structuredOutput.jsonPromptInjection
+            : true,
+      },
     });
     void onStream?.(result as unknown as Awaited<ReturnType<Agent['stream']>>);
     return result;

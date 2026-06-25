@@ -1,5 +1,6 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import { coreFeatures } from '@mastra/core/features';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -167,6 +168,82 @@ describe('Extractor', () => {
       { slug: 'priority', error: 'structured call failed' },
       { slug: 'profile', error: 'structured call failed' },
     ]);
+  });
+
+  it('retries structured extraction with inline json prompt injection when native output throws', async () => {
+    const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
+    const generate = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('native failed'))
+      .mockResolvedValueOnce({ object: { priority: 'high' } });
+
+    const result = await extractStructuredValues({
+      agent: { generate } as unknown as Agent<any, any, any, any>,
+      source: 'observer',
+      extractors: [priority],
+    });
+
+    expect(result.values).toEqual({ priority: 'high' });
+    expect(generate).toHaveBeenCalledTimes(2);
+    expect(generate.mock.calls[0][1].structuredOutput.jsonPromptInjection).toBeUndefined();
+    expect(generate.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe('inline');
+  });
+
+  it('retries structured extraction with inline json prompt injection when native output has no object', async () => {
+    const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
+    const generate = vi
+      .fn()
+      .mockResolvedValueOnce({ object: undefined })
+      .mockResolvedValueOnce({ object: { priority: 'medium' } });
+
+    const result = await extractStructuredValues({
+      agent: { generate } as unknown as Agent<any, any, any, any>,
+      source: 'observer',
+      extractors: [priority],
+    });
+
+    expect(result.values).toEqual({ priority: 'medium' });
+    expect(generate).toHaveBeenCalledTimes(2);
+    expect(generate.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe('inline');
+  });
+
+  it('falls back to system json prompt injection when inline support is not advertised', async () => {
+    const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
+    const generate = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('native failed'))
+      .mockResolvedValueOnce({ object: { priority: 'low' } });
+
+    coreFeatures.delete('json-prompt-injection:inline');
+    try {
+      const result = await extractStructuredValues({
+        agent: { generate } as unknown as Agent<any, any, any, any>,
+        source: 'observer',
+        extractors: [priority],
+      });
+
+      expect(result.values).toEqual({ priority: 'low' });
+      expect(generate.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe(true);
+    } finally {
+      coreFeatures.add('json-prompt-injection:inline');
+    }
+  });
+
+  it('rethrows abort errors without retrying structured extraction', async () => {
+    const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
+    const abortSignal = AbortSignal.abort();
+    const generate = vi.fn().mockRejectedValueOnce(new DOMException('aborted', 'AbortError'));
+
+    await expect(
+      extractStructuredValues({
+        agent: { generate } as unknown as Agent<any, any, any, any>,
+        source: 'observer',
+        extractors: [priority],
+        abortSignal,
+      }),
+    ).rejects.toThrow(/aborted/);
+
+    expect(generate).toHaveBeenCalledTimes(1);
   });
 
   it('uses a direct extraction-only prompt for structured observer follow-up calls', async () => {

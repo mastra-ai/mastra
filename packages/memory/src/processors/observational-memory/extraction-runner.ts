@@ -1,4 +1,5 @@
 import type { Agent, AgentMemoryOption } from '@mastra/core/agent';
+import { coreFeatures } from '@mastra/core/features';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import { z } from 'zod';
@@ -58,26 +59,44 @@ ${extractorInstructions}${priorLines.length > 0 ? `\n\n## Prior Extracted Values
   const values: Record<string, unknown> = {};
   const failures: Array<{ slug: string; error: string }> = [];
 
-  let object: Record<string, unknown>;
-  try {
+  const generateWithStructuredOutput = async (jsonPromptInjection?: boolean | 'system' | 'inline') => {
     const output = await opts.agent.generate(prompt, {
-      structuredOutput: { schema },
+      structuredOutput: { schema, ...(jsonPromptInjection ? { jsonPromptInjection } : {}) },
       ...(opts.memory ? { memory: opts.memory } : {}),
       ...(opts.abortSignal ? { abortSignal: opts.abortSignal } : {}),
       ...(opts.requestContext ? { requestContext: opts.requestContext } : {}),
       ...opts.observabilityContext,
     });
-    object = output.object ?? {};
+
+    if (output.object === undefined) {
+      throw new Error('structuredOutput object is undefined');
+    }
+
+    return output.object;
+  };
+
+  let object: Record<string, unknown>;
+  try {
+    object = await generateWithStructuredOutput();
   } catch (error) {
     if (isAbortError(error, opts.abortSignal)) {
       throw error;
     }
 
-    const message = error instanceof Error ? error.message : String(error);
-    return {
-      values,
-      failures: structuredExtractors.map(extractor => ({ slug: extractor.slug, error: message })),
-    };
+    try {
+      const fallbackJsonPromptInjection = coreFeatures.has('json-prompt-injection:inline') ? 'inline' : true;
+      object = await generateWithStructuredOutput(fallbackJsonPromptInjection);
+    } catch (fallbackError) {
+      if (isAbortError(fallbackError, opts.abortSignal)) {
+        throw fallbackError;
+      }
+
+      const message = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+      return {
+        values,
+        failures: structuredExtractors.map(extractor => ({ slug: extractor.slug, error: message })),
+      };
+    }
   }
 
   for (const extractor of structuredExtractors) {
