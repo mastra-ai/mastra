@@ -677,7 +677,9 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
       const orderClause =
         sortField === 'durationMs'
           ? `CASE WHEN r.[endedAt] IS NULL THEN 1 ELSE 0 END, CASE WHEN DATEDIFF_BIG(millisecond, r.[startedAt], r.[endedAt]) < 0 THEN 0 ELSE DATEDIFF_BIG(millisecond, r.[startedAt], r.[endedAt]) END ${sortDirection}`
-          : `r.[${sortField}] ${sortDirection}`;
+          : sortField === 'endedAt'
+            ? `CASE WHEN r.[endedAt] IS NULL THEN ${sortDirection === 'DESC' ? 0 : 1} ELSE ${sortDirection === 'DESC' ? 1 : 0} END, r.[endedAt] ${sortDirection}`
+            : `r.[${sortField}] ${sortDirection}`;
 
       // Get total count
       const countRequest = this.pool.request();

@@ -802,7 +802,14 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
             {
               $addFields: {
                 _durationMissing: { $cond: [{ $eq: ['$endedAt', null] }, 1, 0] },
-                _durationMs: { $max: [0, { $subtract: ['$endedAt', '$startedAt'] }] },
+                _durationMs: {
+                  $max: [
+                    0,
+                    {
+                      $subtract: [{ $toDate: '$endedAt' }, { $toDate: '$startedAt' }],
+                    },
+                  ],
+                },
               },
             },
             { $sort: { _durationMissing: 1, _durationMs: sortDirection } },
@@ -875,7 +882,14 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
               {
                 $addFields: {
                   _durationMissing: { $cond: [{ $eq: ['$endedAt', null] }, 1, 0] },
-                  _durationMs: { $max: [0, { $subtract: ['$endedAt', '$startedAt'] }] },
+                  _durationMs: {
+                    $max: [
+                      0,
+                      {
+                        $subtract: [{ $toDate: '$endedAt' }, { $toDate: '$startedAt' }],
+                      },
+                    ],
+                  },
                 },
               },
               { $sort: { _durationMissing: 1, _durationMs: sortDirection } },
