@@ -125,6 +125,13 @@ export function TracesDataListDurationCell({ startedAt, endedAt }: TracesDataLis
   const start = startedAt instanceof Date ? startedAt : new Date(startedAt);
   const end = endedAt instanceof Date ? endedAt : new Date(endedAt);
   const durationMs = end.getTime() - start.getTime();
+  if (!Number.isFinite(durationMs)) {
+    return (
+      <DataListCell height="compact" className="text-ui-smd font-mono text-neutral2">
+        -
+      </DataListCell>
+    );
+  }
 
   return (
     <DataListCell height="compact" className="text-ui-smd font-mono text-neutral3">

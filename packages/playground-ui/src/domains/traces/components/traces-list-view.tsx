@@ -103,12 +103,14 @@ export function TracesListView({
   const sortedTraces = useMemo(() => {
     if (durationSort === 'none') return traces;
     return [...traces].sort((a, b) => {
-      const aDur = getTraceDurationMs(a);
-      const bDur = getTraceDurationMs(b);
+      const aDurRaw = getTraceDurationMs(a);
+      const bDurRaw = getTraceDurationMs(b);
       // Running traces (duration -1) sink to the bottom regardless of sort direction
-      if (aDur === -1 && bDur === -1) return 0;
-      if (aDur === -1) return 1;
-      if (bDur === -1) return -1;
+      if (aDurRaw === -1 && bDurRaw === -1) return 0;
+      if (aDurRaw === -1) return 1;
+      if (bDurRaw === -1) return -1;
+      const aDur = Math.max(0, aDurRaw);
+      const bDur = Math.max(0, bDurRaw);
       return durationSort === 'desc' ? bDur - aDur : aDur - bDur;
     });
   }, [traces, durationSort]);
