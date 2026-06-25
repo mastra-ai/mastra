@@ -12,6 +12,7 @@ import { ProcessorRunner } from '../../../../processors/runner';
 import { execute } from '../../../../stream/aisdk/v5/execute';
 import { MastraModelOutput } from '../../../../stream/base/output';
 import type { TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
+import type { CoreTool } from '../../../../tools/types';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';
@@ -428,11 +429,17 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 // `toolCalls`, downstream tool execution) MUST be built from the
                 // untransformed `rawChunk` so display-layer redactions/rewrites
                 // do not leak into actual tool inputs.
+                //
+                // Use the per-step `currentTools` (post-`prepareStep` and input
+                // processors) rather than the registry-level tool list — that way
+                // any tool-level `transformToolPayload` added or replaced for the
+                // current step is honoured, instead of being silently skipped.
+                const transformTools = currentTools as unknown as Record<string, CoreTool> | undefined;
                 const clientChunk =
-                  registryEntry?.toolPayloadTransform || registryEntry?.tools
+                  registryEntry?.toolPayloadTransform || transformTools
                     ? await applyToolPayloadTransformToChunk(rawChunk, {
                         policy: registryEntry?.toolPayloadTransform,
-                        tools: registryEntry?.tools,
+                        tools: transformTools,
                         logger: logger as any,
                       })
                     : rawChunk;
@@ -532,15 +539,27 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // Check if the stream captured an error (MastraModelOutput swallows errors internally)
             const streamError = outputStream.error;
             if (streamError) {
-              logger?.error?.('Stream captured error', { error: streamError, runId });
+              const streamErrorObj = streamError instanceof Error ? streamError : new Error(String(streamError));
+              logger?.error?.('Stream captured error', { error: streamErrorObj, runId });
 
               if (modelSpanTracker) {
-                modelSpanTracker.reportGenerationError({ error: streamError });
+                modelSpanTracker.reportGenerationError({ error: streamErrorObj });
               } else if (modelSpan) {
-                modelSpan.error({ error: streamError });
+                modelSpan.error({ error: streamErrorObj });
               }
 
-              lastError = streamError;
+              // Mirror the iterator catch: a captured stream error that turns out
+              // to be a confirmed abort must short-circuit retry/fallback and
+              // publish the abort event so the client bridge closes cleanly.
+              const isStreamErrorAbort = executionAbortSignal?.aborted === true || streamErrorObj.name === 'AbortError';
+              if (isStreamErrorAbort) {
+                if (pubsub) {
+                  await emitAbortEvent(pubsub, runId, { steps: [] });
+                }
+                throw streamErrorObj;
+              }
+
+              lastError = streamErrorObj;
               if (attempt < maxRetries) continue; // retry same model
               break; // exhausted retries, try next model
             }
