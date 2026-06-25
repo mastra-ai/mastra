@@ -9,6 +9,8 @@ import type {
   ToolsetsInput,
 } from '../agent/types';
 import { getErrorFromUnknown } from '../error';
+import type { MastraModelGatewayInterface } from '../llm/model/gateways';
+import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraModelConfig } from '../llm/model/shared.types';
 import type { SendNotificationSignalInput } from '../notifications';
 import type { TracingContext, TracingOptions } from '../observability';
@@ -16,6 +18,7 @@ import type { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import { safeStringify } from '../utils';
+
 import { SessionRunEngine } from './session-run-engine';
 import type { TaskItemSnapshot } from './tools';
 import { createEmptyTokenUsage, defaultDisplayState, defaultOMProgressState } from './types';
@@ -71,6 +74,27 @@ function addOptionalUsageField(usage: TokenUsage, key: OptionalUsageField, value
 const MODE_ID_KEY = 'currentModeId';
 /** Persisted thread-setting key prefix for a mode's last-used model. */
 const modeModelKey = (modeId: string) => `modeModelId_${modeId}`;
+
+/**
+ * Internal thread-metadata keys used by `Session.loadMetadata()` to persist
+ * runtime bookkeeping (selected model/mode, observer/reflector config, token
+ * usage). These share the flat thread `metadata` bag with user-provided
+ * session scoping tags, so they must never be treated as tags: they are
+ * skipped when stamping tags onto a thread and excluded when reading tags
+ * back out of thread metadata.
+ */
+function isReservedThreadMetadataKey(key: string): boolean {
+  return (
+    key === 'currentModelId' ||
+    key === MODE_ID_KEY ||
+    key === 'observerModelId' ||
+    key === 'reflectorModelId' ||
+    key === 'observationThreshold' ||
+    key === 'reflectionThreshold' ||
+    key === 'tokenUsage' ||
+    key.startsWith('modeModelId_')
+  );
+}
 
 /**
  * Owns the session's identity: the memory `resourceId` and the active
@@ -147,7 +171,11 @@ export class SessionIdentity {
  */
 export interface ThreadDataStore {
   /** List threads for a resource (or all resources), already mapped + filtered of forked subagents unless asked. */
-  listThreads(input: { resourceId?: string; includeForkedSubagents?: boolean }): Promise<HarnessThread[]>;
+  listThreads(input: {
+    resourceId?: string;
+    includeForkedSubagents?: boolean;
+    metadata?: Record<string, unknown>;
+  }): Promise<HarnessThread[]>;
   /** Fetch a single thread by id, or null when it doesn't exist. */
   getById(input: { threadId: string }): Promise<HarnessThread | null>;
   /** List messages for a thread, newest-`limit` (returned oldest-first) or all. */
@@ -167,7 +195,12 @@ export interface ThreadDataStore {
   /** Delete a thread row by id. No-op when storage is unavailable. */
   deleteThread(input: { threadId: string }): Promise<void>;
   /** Clone a thread (and its messages) via the host's memory, returning the new thread. */
-  cloneThread(input: { sourceThreadId: string; resourceId: string; title?: string }): Promise<HarnessThread>;
+  cloneThread(input: {
+    sourceThreadId: string;
+    resourceId: string;
+    title?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<HarnessThread>;
   /** Acquire the host thread lock for a thread id. No-op when no lock is configured. */
   acquireLock(threadId: string): Promise<void>;
   /** Release the host thread lock for a thread id. No-op when no lock is configured. */
@@ -328,18 +361,57 @@ export class SessionThread {
   // ---------------------------------------------------------------------------
 
   /** List this session's threads (its own resource by default, or all resources). */
-  async list(options?: { allResources?: boolean; includeForkedSubagents?: boolean }): Promise<HarnessThread[]> {
-    if (!this.#store) return [];
-    return this.#store.listThreads({
-      resourceId: options?.allResources ? undefined : this.#getResourceId(),
+  async list(options?: {
+    allResources?: boolean;
+    includeForkedSubagents?: boolean;
+    metadata?: Record<string, unknown>;
+  }): Promise<HarnessThread[]> {
+    if (!this.#store) {
+      return [];
+    }
+    const resourceId = options?.allResources ? undefined : this.#getResourceId();
+    const threads = await this.#store.listThreads({
+      resourceId,
       includeForkedSubagents: options?.includeForkedSubagents,
+      metadata: options?.metadata,
     });
+    return threads;
   }
 
   /** Fetch a single thread by id, or null when it doesn't exist / no storage. */
   async getById({ threadId }: { threadId: string }): Promise<HarnessThread | null> {
     if (!this.#store) return null;
     return this.#store.getById({ threadId });
+  }
+
+  /** Clone a detected cross-resource project thread into this session's resource. */
+  async cloneToCurrentResource({
+    threadId,
+    expectedResourceId,
+    expectedProjectPath,
+  }: {
+    threadId: string;
+    expectedResourceId: string;
+    expectedProjectPath: string;
+  }): Promise<HarnessThread> {
+    if (!this.#store?.hasStorage()) {
+      throw new Error('Memory is not configured on this Harness');
+    }
+    const thread = await this.#store.getById({ threadId });
+    if (
+      !thread ||
+      thread.resourceId !== expectedResourceId ||
+      thread.metadata?.projectPath !== expectedProjectPath ||
+      expectedResourceId === this.#getResourceId()
+    ) {
+      throw new Error(`Thread not found: ${threadId}`);
+    }
+    return this.#cloneThread({
+      sourceThreadId: thread.id,
+      resourceId: this.#getResourceId(),
+      title: thread.title,
+      metadata: thread.metadata,
+    });
   }
 
   /**
@@ -467,10 +539,20 @@ export class SessionThread {
       metadata[`modeModelId_${session.mode.get()}`] = modelId;
     }
 
-    // Auto-tag with projectPath from state so threads are scoped to the working directory
-    const projectPath = (session.state.get() as any).projectPath;
-    if (projectPath) {
-      metadata.projectPath = projectPath;
+    // Stamp the session's scoping tags onto the thread so listings can be
+    // filtered back to this session's scope (e.g. a `projectPath` per git
+    // worktree). Fall back to a `projectPath` read from state for unscoped
+    // sessions that still carry one in their initial state.
+    const tags = session.getTags();
+    if (Object.keys(tags).length > 0) {
+      for (const [key, value] of Object.entries(tags)) {
+        if (!isReservedThreadMetadataKey(key)) metadata[key] = value;
+      }
+    } else {
+      const projectPath = (session.state.get() as any).projectPath;
+      if (projectPath) {
+        metadata.projectPath = projectPath;
+      }
     }
 
     // Acquire lock on new thread before releasing old one.
@@ -572,25 +654,39 @@ export class SessionThread {
     title?: string;
     resourceId?: string;
   } = {}): Promise<HarnessThread> {
-    const session = this.#owner;
-    const store = this.#store;
     const sourceId = sourceThreadId ?? this.#threadId;
     if (!sourceId) {
       throw new Error('No source thread to clone');
     }
     // Only allow cloning from a source thread this session owns.
-    if (store?.hasStorage()) {
+    if (this.#store?.hasStorage()) {
       await this.#requireOwnedThread({ threadId: sourceId });
     }
+    return this.#cloneThread({
+      sourceThreadId: sourceId,
+      resourceId: resourceId ?? this.#owner.identity.getResourceId(),
+      title,
+    });
+  }
+
+  async #cloneThread({
+    sourceThreadId,
+    resourceId,
+    title,
+    metadata,
+  }: {
+    sourceThreadId: string;
+    resourceId: string;
+    title?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<HarnessThread> {
+    const session = this.#owner;
+    const store = this.#store;
     if (!store) {
       throw new Error('Memory is not configured on this Harness');
     }
 
-    const clonedThread = await store.cloneThread({
-      sourceThreadId: sourceId,
-      resourceId: resourceId ?? session.identity.getResourceId(),
-      title,
-    });
+    const clonedThread = await store.cloneThread({ sourceThreadId, resourceId, title, metadata });
 
     // Acquire lock on new thread before releasing old one
     const oldThreadId = this.#threadId;
@@ -1533,7 +1629,7 @@ class SessionOMRole {
   #setState: ((updates: Record<string, unknown>) => void) | undefined;
   #setSetting: ((args: { key: string; value: unknown }) => Promise<void>) | undefined;
   #omConfig: HarnessOMConfig | undefined;
-  #resolveModel: ((modelId: string) => MastraModelConfig) | undefined;
+  #gateways: MastraModelGatewayInterface[] | undefined;
 
   constructor(config: SessionOMRoleConfig, bus: SessionBus) {
     this.#config = config;
@@ -1546,13 +1642,13 @@ class SessionOMRole {
     setState: (updates: Record<string, unknown>) => void;
     setSetting: (args: { key: string; value: unknown }) => Promise<void>;
     omConfig?: HarnessOMConfig;
-    resolveModel?: (modelId: string) => MastraModelConfig;
+    gateways?: MastraModelGatewayInterface[];
   }): void {
     this.#getState = wiring.getState;
     this.#setState = wiring.setState;
     this.#setSetting = wiring.setSetting;
     this.#omConfig = wiring.omConfig;
-    this.#resolveModel = wiring.resolveModel;
+    this.#gateways = wiring.gateways;
   }
 
   /** This role's model id from session state, falling back to `omConfig`. */
@@ -1567,11 +1663,16 @@ class SessionOMRole {
     return (typeof fromState === 'number' ? fromState : undefined) ?? this.#config.defaultThreshold(this.#omConfig);
   }
 
-  /** Resolve this role's model id to a model instance, or undefined when unset. */
+  /**
+   * Resolve this role's model id to a model instance via the configured
+   * gateways, or undefined when unset. The bare model id string is routed
+   * through {@link ModelRouterLanguageModel}, which selects the matching
+   * gateway (or the built-in defaults) and resolves provider auth.
+   */
   resolvedModel(): MastraModelConfig | undefined {
     const modelId = this.modelId();
-    if (!modelId || !this.#resolveModel) return undefined;
-    return this.#resolveModel(modelId);
+    if (!modelId) return undefined;
+    return new ModelRouterLanguageModel(modelId as `${string}/${string}`, this.#gateways);
   }
 
   /** Switch this role's model: update session state, persist, and emit. */
@@ -1626,7 +1727,7 @@ class SessionOM {
     setState: (updates: Record<string, unknown>) => void;
     setSetting: (args: { key: string; value: unknown }) => Promise<void>;
     omConfig?: HarnessOMConfig;
-    resolveModel?: (modelId: string) => MastraModelConfig;
+    gateways?: MastraModelGatewayInterface[];
   }): void {
     this.observer.setWiring(options);
     this.reflector.setWiring(options);
@@ -2483,18 +2584,27 @@ export class Session<TState = unknown> {
   readonly displayState: SessionDisplayState;
   /** The session-owned Harness state domain. */
   readonly state: HarnessRequestState<TState>;
+  /**
+   * Scoping tags for this session (e.g. `{ projectPath }`). Seeded at creation
+   * and stamped onto every thread this session creates so thread listings can be
+   * filtered back to the session's scope. Empty when the session is unscoped.
+   */
+  readonly #tags: Record<string, string>;
 
   constructor({
     resourceId,
     state,
     id,
     ownerId,
+    tags,
   }: {
     resourceId: string;
     state?: SessionStateOptions<TState>;
     id: string;
     ownerId: string;
+    tags?: Record<string, string>;
   }) {
+    this.#tags = tags && Object.keys(tags).length > 0 ? { ...tags } : {};
     this.identity = new SessionIdentity({ resourceId, id, ownerId });
     this.thread = new SessionThread(() => this.identity.getResourceId());
     this.displayState = new SessionDisplayState({
@@ -2505,6 +2615,14 @@ export class Session<TState = unknown> {
     });
     this.#bus.setDisplayState(this.displayState);
     this.state = new SessionState(state ?? { initialState: {} as TState }, this.#bus);
+  }
+
+  /**
+   * This session's scoping tags (e.g. `{ projectPath }`), stamped onto every
+   * thread it creates. Returns a copy; empty when the session is unscoped.
+   */
+  getTags(): Record<string, string> {
+    return { ...this.#tags };
   }
 
   // ===========================================================================

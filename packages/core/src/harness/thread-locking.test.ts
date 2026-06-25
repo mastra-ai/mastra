@@ -245,6 +245,72 @@ describe('Harness thread locking', () => {
       const newSession = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
       expect(acquire).toHaveBeenCalledWith(newSession.thread.getId());
     });
+
+    it('scopes initial thread selection to tags so worktrees stay isolated', async () => {
+      const store = new InMemoryStore();
+
+      // Two worktrees of the same repo share one resourceId but live at
+      // different paths. Each session is created with its own projectPath tag.
+      const harnessA = freshHarness(store);
+      await harnessA.init();
+      const sessionA = await harnessA.createSession({
+        id: 'session-a',
+        ownerId: 'test-owner',
+        resourceId: 'repo',
+        tags: { projectPath: '/repo/worktree-a' },
+      });
+      const threadA = sessionA.thread.getId();
+      expect(threadA).toBeDefined();
+
+      const harnessB = freshHarness(store);
+      await harnessB.init();
+      const sessionB = await harnessB.createSession({
+        id: 'session-b',
+        ownerId: 'test-owner',
+        resourceId: 'repo',
+        tags: { projectPath: '/repo/worktree-b' },
+      });
+      const threadB = sessionB.thread.getId();
+
+      // worktree-b must NOT claim worktree-a's most-recent thread.
+      expect(threadB).not.toBe(threadA);
+
+      // Reconnecting to worktree-a resumes its own thread, not worktree-b's.
+      const harnessA2 = freshHarness(store);
+      await harnessA2.init();
+      const sessionA2 = await harnessA2.createSession({
+        id: 'session-a2',
+        ownerId: 'test-owner',
+        resourceId: 'repo',
+        tags: { projectPath: '/repo/worktree-a' },
+      });
+      expect(sessionA2.thread.getId()).toBe(threadA);
+
+      // The tags are stamped onto the thread metadata (not just used for
+      // selection), so listings can filter threads back to their scope.
+      const threadsA = await sessionA2.thread.list();
+      const resumed = threadsA.find(t => t.id === threadA);
+      expect((resumed?.metadata as Record<string, unknown> | undefined)?.projectPath).toBe('/repo/worktree-a');
+    });
+
+    it('stamps every tag onto created threads (multi-dimensional scope)', async () => {
+      const store = new InMemoryStore();
+      const harness = freshHarness(store);
+      await harness.init();
+      const session = await harness.createSession({
+        id: 'multi',
+        ownerId: 'test-owner',
+        resourceId: 'repo',
+        tags: { projectPath: '/repo/wt', branch: 'feat/x' },
+      });
+
+      const threadId = session.thread.getId();
+      const threads = await session.thread.list();
+      const created = threads.find(t => t.id === threadId);
+      const metadata = (created?.metadata as Record<string, unknown> | undefined) ?? {};
+      expect(metadata.projectPath).toBe('/repo/wt');
+      expect(metadata.branch).toBe('feat/x');
+    });
   });
 
   describe('deleteThread', () => {

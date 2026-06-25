@@ -1,4 +1,5 @@
 import { Menu as MenuPrimitive } from '@base-ui/react/menu';
+import type { MenuPopupProps, MenuPositionerProps } from '@base-ui/react/menu';
 import { CheckIcon, ChevronDown, Circle } from 'lucide-react';
 import * as React from 'react';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
@@ -72,23 +73,51 @@ const DropdownMenuSubTrigger = React.forwardRef<HTMLDivElement, DropdownMenuSubT
 );
 DropdownMenuSubTrigger.displayName = 'DropdownMenuSubTrigger';
 
-type DropdownMenuSubContentProps = MenuPrimitive.Popup.Props &
-  Pick<MenuPrimitive.Positioner.Props, 'align' | 'alignOffset' | 'side' | 'sideOffset'>;
+type DropdownMenuContentPositionerProps = Omit<MenuPositionerProps, keyof MenuPopupProps>;
+
+type DropdownMenuSubContentProps = MenuPopupProps & DropdownMenuContentPositionerProps;
 
 const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownMenuSubContentProps>(
-  ({ className, align = 'start', alignOffset = -4, side = 'right', sideOffset = 0, ...props }, ref) => {
+  (
+    {
+      className,
+      align = 'start',
+      alignOffset = -4,
+      side = 'right',
+      sideOffset = 0,
+      anchor,
+      positionMethod,
+      collisionBoundary,
+      collisionPadding,
+      sticky,
+      arrowPadding,
+      disableAnchorTracking,
+      collisionAvoidance,
+      ...props
+    },
+    ref,
+  ) => {
     // Default to the nearest SideDialog/Drawer popup so the submenu stays
     // interactive inside a modal drawer.
     const resolvedContainer = usePortalContainer();
+    const positionerProps: DropdownMenuContentPositionerProps = {
+      align,
+      alignOffset,
+      side,
+      sideOffset,
+      anchor,
+      positionMethod,
+      collisionBoundary,
+      collisionPadding,
+      sticky,
+      arrowPadding,
+      disableAnchorTracking,
+      collisionAvoidance,
+    };
+
     return (
       <MenuPrimitive.Portal container={resolvedContainer}>
-        <MenuPrimitive.Positioner
-          align={align}
-          alignOffset={alignOffset}
-          side={side}
-          sideOffset={sideOffset}
-          className="z-50 outline-none"
-        >
+        <MenuPrimitive.Positioner className="z-50 outline-none" {...positionerProps}>
           <MenuPrimitive.Popup
             ref={ref}
             data-slot="dropdown-menu-sub-content"
@@ -102,25 +131,53 @@ const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownMenuSubC
 );
 DropdownMenuSubContent.displayName = 'DropdownMenuSubContent';
 
-type DropdownMenuContentProps = MenuPrimitive.Popup.Props &
-  Pick<MenuPrimitive.Positioner.Props, 'align' | 'alignOffset' | 'side' | 'sideOffset'> & {
+type DropdownMenuContentProps = MenuPopupProps &
+  DropdownMenuContentPositionerProps & {
     container?: HTMLElement;
   };
 
 const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContentProps>(
-  ({ className, container, align = 'start', alignOffset = 0, side = 'bottom', sideOffset = 8, ...props }, ref) => {
+  (
+    {
+      className,
+      container,
+      align = 'start',
+      alignOffset = 0,
+      side = 'bottom',
+      sideOffset = 8,
+      anchor,
+      positionMethod,
+      collisionBoundary,
+      collisionPadding,
+      sticky,
+      arrowPadding,
+      disableAnchorTracking,
+      collisionAvoidance,
+      ...props
+    },
+    ref,
+  ) => {
     // Default to the nearest SideDialog/Drawer popup so the menu stays
     // interactive inside a modal drawer; an explicit `container` still wins.
     const resolvedContainer = usePortalContainer(container);
+    const positionerProps: DropdownMenuContentPositionerProps = {
+      align,
+      alignOffset,
+      side,
+      sideOffset,
+      anchor,
+      positionMethod,
+      collisionBoundary,
+      collisionPadding,
+      sticky,
+      arrowPadding,
+      disableAnchorTracking,
+      collisionAvoidance,
+    };
+
     return (
       <MenuPrimitive.Portal container={resolvedContainer}>
-        <MenuPrimitive.Positioner
-          align={align}
-          alignOffset={alignOffset}
-          side={side}
-          sideOffset={sideOffset}
-          className="z-50 outline-none"
-        >
+        <MenuPrimitive.Positioner className="z-50 outline-none" {...positionerProps}>
           <MenuPrimitive.Popup
             ref={ref}
             data-slot="dropdown-menu-content"

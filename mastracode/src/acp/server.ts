@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Readable, Writable } from 'node:stream';
 import { AgentSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
 import type { Harness, HarnessMode, Session } from '@mastra/core/harness';
@@ -21,7 +22,10 @@ export async function runAcpServer(
 
   // Handle cleanup on disconnect (success or error)
   try {
-    session = await harness.createSession();
+    session = await harness.createSession({
+      id: `acp-${randomUUID()}`,
+      ownerId: `acp-owner-${randomUUID()}`,
+    });
     const activeSession = session;
 
     // Create the agent-side connection

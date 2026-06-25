@@ -1,7 +1,9 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { DataList, Tooltip, TooltipContent, TooltipTrigger, cn } from '@mastra/playground-ui';
 import { Chip } from '@mastra/playground-ui/components/Chip';
+import { DataList } from '@mastra/playground-ui/components/DataList';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { format, isThisYear, isToday } from 'date-fns';
 import { Play } from 'lucide-react';
 

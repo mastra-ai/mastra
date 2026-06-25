@@ -23,7 +23,7 @@ import { AvailableHooks, registerHook } from '../hooks';
 import { LicenseClient } from '../license';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import { getGatewayId } from '../llm/model/gateways';
-import { defaultGateways } from '../llm/model/router';
+import { defaultGateways } from '../llm/model/gateways/defaults';
 import { LogLevel, noopLogger, ConsoleLogger, DualLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';

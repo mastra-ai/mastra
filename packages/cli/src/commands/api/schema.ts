@@ -8,7 +8,7 @@ export async function getCommandSchema(descriptor: ApiCommandDescriptor, target:
     throw new ApiCliError('SCHEMA_UNAVAILABLE', 'This command does not accept JSON input');
   }
 
-  const manifest = await fetchSchemaManifest(target.baseUrl, target.headers, target.timeoutMs);
+  const manifest = await fetchSchemaManifest(target.baseUrl, target.headers, target.timeoutMs, target.apiPrefix);
   if (!manifest || typeof manifest !== 'object' || !Array.isArray((manifest as { routes?: unknown }).routes)) {
     throw new ApiCliError('SCHEMA_UNAVAILABLE', 'Target server returned an invalid schema manifest', {
       reason: 'invalid_manifest',

@@ -1,5 +1,36 @@
 # @mastra/pg
 
+## 1.14.2-alpha.0
+
+### Patch Changes
+
+- Fixed PgVector numeric range filters (`$gt`, `$gte`, `$lt`, `$lte`) so rows with non-numeric metadata values no longer fail the whole query. ([#18430](https://github.com/mastra-ai/mastra/pull/18430))
+
+  A single document with a value like `{ price: 'N/A' }` used to make the entire query error out, breaking all range-filtered vector queries (and semantic recall using `semanticRecall.filter`) on that index. Rows whose value isn't a number are now skipped for numeric range checks instead, matching the behavior of the other Mastra vector stores. Numeric rows still match as expected.
+
+  ```typescript
+  await pgVector.upsert({
+    indexName: 'products',
+    vectors: [
+      [1, 0],
+      [0, 1],
+    ],
+    metadata: [{ price: 100 }, { price: 'N/A' }],
+  });
+
+  // Before: threw "invalid input syntax for type numeric: N/A"
+  // After: returns only the row whose price is actually a number
+  await pgVector.query({
+    indexName: 'products',
+    queryVector: [1, 0],
+    topK: 10,
+    filter: { price: { $gt: 50 } },
+  });
+  ```
+
+- Updated dependencies [[`86623c1`](https://github.com/mastra-ai/mastra/commit/86623c1adf7d22de32cc916dda17f4155184db36), [`7c9dd77`](https://github.com/mastra-ai/mastra/commit/7c9dd77bd18cb8dc72797e25f1a0fbdc71a11347), [`9990965`](https://github.com/mastra-ai/mastra/commit/999096571635a83b42ef40841fd7028cfa630779), [`c0ffa3c`](https://github.com/mastra-ai/mastra/commit/c0ffa3c897ccd326de880df734740a7f0681a18f), [`0504bf5`](https://github.com/mastra-ai/mastra/commit/0504bf5e8cffc571a4b343326178de371e6f859b), [`5afe423`](https://github.com/mastra-ai/mastra/commit/5afe423e4badf040f1b0d4525183a856fcb8146e), [`86623c1`](https://github.com/mastra-ai/mastra/commit/86623c1adf7d22de32cc916dda17f4155184db36), [`8c9f1c0`](https://github.com/mastra-ai/mastra/commit/8c9f1c0361d89066f9bcd14a2f69e761b01766c8)]:
+  - @mastra/core@1.47.0-alpha.2
+
 ## 1.14.1
 
 ### Patch Changes

@@ -1,19 +1,17 @@
 import type { McpToolInfo } from '@mastra/client-js';
 import type { ServerInfo } from '@mastra/core/mcp';
+import { FolderIcon, Icon, McpServerIcon } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import {
   Entity,
   EntityContent,
   EntityDescription,
   EntityIcon,
   EntityName,
-  Txt,
-  FolderIcon,
-  Icon,
-  McpServerIcon,
-} from '@mastra/playground-ui';
-import { Badge } from '@mastra/playground-ui/components/Badge';
-import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+} from '@mastra/playground-ui/components/Entity';
 import { MainContentContent } from '@mastra/playground-ui/components/MainContent';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEffect, useRef, useState } from 'react';
 import { useMCPServerTools } from '../hooks/useMCPServerTools';
 import { ToolIconMap } from '@/domains/tools';
