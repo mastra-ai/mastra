@@ -1,5 +1,119 @@
 # @mastra/core
 
+## 1.47.0-alpha.3
+
+### Minor Changes
+
+- Brought `DurableAgent.stream()` to parity with `Agent.stream()` for the full `AgentExecutionOptions` surface, so the same call works on both. ([#18461](https://github.com/mastra-ai/mastra/pull/18461))
+
+  **What's new**
+
+  `DurableAgent.stream()` now honors these options that were previously dropped or silently coerced:
+  - Full `modelSettings` (was: only `temperature`) — `maxOutputTokens`, `topP`, `topK`, `presencePenalty`, `frequencyPenalty`, `stopSequences`, `seed`, `headers`
+  - `stopWhen`, `prepareStep`, `isTaskComplete`, `transform`
+  - Per-call `instructions` and `system`
+  - `disableBackgroundTasks`, `tracingOptions`, `actor`
+  - Function-form `requireToolApproval(toolName, args, …)` (was: coerced to "approve all" — now evaluated per tool call)
+  - New callbacks: `onAbort` and `onIterationComplete` (joining the existing `onChunk` / `onStepFinish` / `onFinish` / `onError` / `onSuspended` bridge)
+
+  **Example**
+
+  The same options that work on `Agent.stream()` now work on `DurableAgent.stream()`:
+
+  ```ts
+  const durable = createDurableAgent({ agent, pubsub });
+
+  await durable.stream('Plan the trip', {
+    modelSettings: { temperature: 0.2, maxOutputTokens: 500, topP: 0.9 },
+    stopWhen: ({ steps }) => steps.length >= 3,
+    prepareStep: ({ stepNumber }) => ({
+      activeTools: stepNumber === 0 ? ['search'] : ['book'],
+    }),
+    requireToolApproval: ({ toolName }) => toolName === 'book',
+    onIterationComplete: ({ iteration }) => console.log('iter', iteration),
+  });
+  ```
+
+- Added an optional `availableTools` allowlist to `HarnessModeBase` so each mode can declare one unified list of visible tool names. When set, the harness resolves `activeTools` at LLM-call time and hides any tool not in the list — including workspace tools, which are matched by their exposed names. Per-tool and category `deny` permission rules still take precedence over the allowlist. `undefined` means no mode-level restriction (existing behavior). This moves mode-based tool visibility out of workspace construction and into a single, serializable contract. ([#18463](https://github.com/mastra-ai/mastra/pull/18463))
+
+  **Example**
+
+  Declare a mode that only exposes read and plan-writing tools:
+
+  ```ts
+  import type { HarnessMode } from '@mastra/core/harness';
+
+  const planMode: HarnessMode = {
+    id: 'plan',
+    // Only these tools are visible to the model in plan mode.
+    // Workspace tools are matched by their exposed (renamed) names.
+    availableTools: ['view', 'find_files', 'search_content', 'write_file', 'submit_plan'],
+    // ...other mode config
+  };
+
+  // Omitting availableTools (or setting undefined) leaves all tools visible.
+  // Set to [] to hide every tool for this mode.
+  ```
+
+- Scope harness session creation with tags so sessions sharing a resourceId can ([#18446](https://github.com/mastra-ai/mastra/pull/18446))
+  each resume their own thread.
+
+  `harness.createSession()` now accepts an optional `tags` record. The tags are
+  (a) seeded into the new session's state, (b) stamped onto every thread the
+  session creates (so thread listings can be filtered back to the session's
+  scope), and (c) used to filter initial thread selection: a thread is a resume
+  candidate only when its metadata matches every provided tag. Previously, initial
+  thread selection only consulted the
+  harness-global `initialState.projectPath`; on a multi-session server (where one
+  Harness serves many scopes) a session could resume the most recently updated
+  thread from a _different_ scope that shared the resourceId. Using a generic tag
+  record (e.g. `{ projectPath }`) keeps room for future scoping dimensions without
+  further API changes.
+
+  The `@mastra/client-js` `HarnessSession.create()` method accepts `{ tags }`, and
+  the `POST /harness/:id/sessions` route accepts a `tags` body field.
+
+  ```ts
+  // before: initial thread chosen by resourceId only
+  const session = await harness.createSession({ resourceId, id, ownerId });
+
+  // after: initial thread scoped to this worktree via a tag
+  const session = await harness.createSession({
+    resourceId,
+    id,
+    ownerId,
+    tags: { projectPath: '/repo/worktree-a' },
+  });
+  ```
+
+### Patch Changes
+
+- Fixed the in-memory workflow store resetting a run's `createdAt` on every re-persist, so it now matches the persistent stores. Re-persisting an existing run preserves the original `createdAt` and only advances `updatedAt`. ([#18004](https://github.com/mastra-ai/mastra/pull/18004))
+
+- Fixed images from tool results being dropped when using AI SDK v6 (`@ai-sdk/*` v3) providers. Tools that return image data via `toModelOutput` (for example screenshots) now reach the model correctly instead of arriving empty. ([#18396](https://github.com/mastra-ai/mastra/pull/18396))
+
+- Fixed tool-level `background` config being silently ignored. The `background` option passed to `createTool` was accepted by the type system but never stored on the tool instance, so tools opted into background execution at the tool level always ran in the foreground. The option is now stored on the tool and dispatched as a background task. ([#18454](https://github.com/mastra-ai/mastra/pull/18454))
+
+  ```typescript
+  const researchTool = createTool({
+    id: 'research',
+    description: 'Run a long research job',
+    inputSchema: z.object({ topic: z.string() }),
+    background: { enabled: true, timeoutMs: 600_000 },
+    execute: async ({ topic }, context) => {
+      // ...
+    },
+  });
+  ```
+
+- Fixed durable agents (`createDurableAgent`) silently dropping stored working memory from the prompt. Working memory was saved correctly but never injected back, so per-request preferences had no effect on output. Durable preparation now establishes the memory context before resolving input processors so the working-memory injector is included. ([#18411](https://github.com/mastra-ai/mastra/pull/18411))
+
+- Fixed conditional workflows so that re-running or rehydrating a run (time travel) no longer leaves the wrong branch marked as active. When a paused or replayed run lands on a conditional, arms whose condition does not evaluate truthy are now correctly recorded as skipped instead of staying stuck in a running state. ([#18228](https://github.com/mastra-ai/mastra/pull/18228))
+
+  The server workflow and schedule run-status response schemas now include the `'skipped'` status so they stay in sync with core's `WorkflowRunStatus`.
+
+- Improved auth package builds by removing the direct core dependency from auth providers while preserving the existing public auth APIs. ([#17142](https://github.com/mastra-ai/mastra/pull/17142))
+
 ## 1.47.0-alpha.2
 
 ### Minor Changes
