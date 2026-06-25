@@ -211,7 +211,7 @@ export function refreshPage0Rows(
  *  ordering for both list endpoints. Rows missing `startedAt` sink to the
  *  bottom (compared as time 0). */
 function sortRowsByStartedAtDesc<T extends { startedAt?: unknown }>(rows: T[]): T[] {
-  return [...rows].sort((a, b) => {
+  return rows.toSorted((a, b) => {
     const aTime = a.startedAt ? new Date(a.startedAt as string | number | Date).getTime() : 0;
     const bTime = b.startedAt ? new Date(b.startedAt as string | number | Date).getTime() : 0;
     return bTime - aTime;
