@@ -192,12 +192,44 @@ export function serializeModelSettings(
   if (source.headers && typeof source.headers === 'object' && !Array.isArray(source.headers)) {
     const headers: Record<string, string> = {};
     for (const [key, value] of Object.entries(source.headers as Record<string, unknown>)) {
-      if (typeof value === 'string') headers[key] = value;
+      if (typeof value !== 'string') continue;
+      // Durable execution engines (e.g. Inngest) persist the serialized workflow
+      // input to durable storage. Headers carrying secrets (API keys, bearer
+      // tokens, cookies) must never be written there — strip them before
+      // persistence. Callers that need credentials on the LLM HTTP call should
+      // configure them on the model factory (e.g. `openai({ apiKey })`) or via
+      // environment variables, not via per-call `modelSettings.headers`.
+      if (isSensitiveHeaderName(key)) continue;
+      headers[key] = value;
     }
     if (Object.keys(headers).length > 0) out.headers = headers;
   }
 
   return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * Header names whose values frequently carry credentials. We drop them from the
+ * serialized workflow input so they never reach durable storage. Match is
+ * case-insensitive because HTTP header names are case-insensitive.
+ */
+const SENSITIVE_HEADER_NAMES = new Set<string>([
+  'authorization',
+  'proxy-authorization',
+  'cookie',
+  'set-cookie',
+  'x-api-key',
+  'api-key',
+  'x-auth-token',
+  'x-access-token',
+  'x-amz-security-token',
+  'x-goog-api-key',
+  'openai-api-key',
+  'anthropic-api-key',
+]);
+
+function isSensitiveHeaderName(name: string): boolean {
+  return SENSITIVE_HEADER_NAMES.has(name.toLowerCase());
 }
 
 /**
