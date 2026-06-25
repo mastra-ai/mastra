@@ -7,8 +7,8 @@
 
 import { createSign } from 'node:crypto';
 
-import type { IRBACProvider, RoleMapping } from '@mastra/core/auth/ee';
-import { matchesPermission, resolvePermissionsFromMapping } from '@mastra/core/auth/ee';
+import type { IRBACProvider, RoleMapping } from '@internal/auth/ee';
+import { matchesPermission, resolvePermissionsFromMapping } from '@internal/auth/ee';
 import { LRUCache } from 'lru-cache';
 
 import type { GoogleUser, GoogleWorkspaceGroup, MastraRBACGoogleOptions } from './types';

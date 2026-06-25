@@ -12,8 +12,8 @@ import type {
   Session,
   SSOCallbackResult,
   SSOLoginConfig,
-} from '@mastra/core/auth';
-import { MastraAuthProvider } from '@mastra/core/server';
+} from '@internal/auth';
+import { MastraAuthProvider } from '@internal/auth/provider';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { JWTPayload } from 'jose';
 

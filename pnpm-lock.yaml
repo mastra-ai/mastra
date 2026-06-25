@@ -600,15 +600,15 @@ importers:
         specifier: ^11.2.7
         version: 11.3.6
     devDependencies:
+      '@internal/auth':
+        specifier: workspace:*
+        version: link:../../packages/_internals/auth
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15

@@ -2,8 +2,8 @@
  * Shared types for Google Workspace authentication and RBAC.
  */
 
-import type { EEUser, RoleMapping } from '@mastra/core/auth/ee';
-import type { MastraAuthProviderOptions } from '@mastra/core/server';
+import type { EEUser, RoleMapping } from '@internal/auth/ee';
+import type { MastraAuthProviderOptions } from '@internal/auth/provider';
 import type { JWTPayload } from 'jose';
 
 /**
