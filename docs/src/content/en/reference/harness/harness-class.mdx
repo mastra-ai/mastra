@@ -211,16 +211,16 @@ await harness.sendMessage({ content: 'Hello!' })
   },
   {
     name: 'workspace',
-    type: 'Workspace | WorkspaceConfig | ((ctx) => Workspace)',
+    type: 'Workspace | ((ctx) => Workspace)',
     description:
-      'Workspace configuration. Accepts a pre-constructed Workspace, a WorkspaceConfig for the harness to construct internally, or a dynamic factory function.',
+      'Workspace instance or a dynamic factory function. When omitted, each session created via createSession must provide its own workspace. The factory receives the request context and Mastra instance.',
     isOptional: true,
   },
   {
     name: 'browser',
     type: 'MastraBrowser | ((ctx) => MastraBrowser)',
     description:
-      "Browser automation configuration. Propagated to mode agents that don't have their own browser configured.",
+      'Browser automation instance or a dynamic factory function. When omitted, each session created via createSession can provide its own browser.',
     isOptional: true,
   },
   {
@@ -425,19 +425,21 @@ await harness.sendMessage({ content: 'Hello!' })
 
 #### `init()`
 
-Initialize the harness. Loads storage, initializes the workspace, propagates memory and workspace to mode agents, and starts heartbeat handlers. Call this before using the harness.
+Initialize the harness. Loads storage, initializes a static workspace (dynamic factory workspaces are resolved per-session during `createSession`), propagates memory and workspace to mode agents, and starts heartbeat handlers. Call this before using the harness.
 
 ```typescript
 await harness.init()
 ```
 
-#### `createSession({ id, ownerId, resourceId? })`
+#### `createSession({ id, ownerId, resourceId?, tags?, workspace?, browser?, requestContext? })`
 
-Create a new, fully-wired `Session` and bring it online. The session starts in the default mode with the seeded model, connects to the Harness's shared machinery (agent, storage/lock, config catalog), and has a current thread (the most recent thread for the resource, or a freshly created one). Call `init()` once before creating sessions so shared storage and workspace are ready.
+Create a new, fully-wired `Session` and bring it online. The session starts in the default mode with the seeded model, connects to the Harness's shared machinery (agent, storage/lock, config catalog), and has a current thread (the most recent thread for the resource, or a freshly created one). Call `init()` once before creating sessions so shared storage is ready.
 
 The Harness owns no session of its own — every consumer creates its own session and drives all work through it. In a server or multiplayer setting, each request, thread, or user gets its own session, isolated from every other: independent event bus, mode, model, state, and current thread.
 
 `id` and `ownerId` are required — they mirror `SessionRecord.id` and `SessionRecord.ownerId` and are stable for the life of the session. `resourceId` is optional and defaults to `config.resourceId` then `config.id`.
+
+Each session owns its own `Workspace` and `Browser` instance. When `workspace` is omitted, the Harness resolves its configured workspace (a static instance or a dynamic factory) and passes it to the session. Pass a `workspace` override to give a specific session a different workspace than the Harness default. The workspace is initialized during session creation; `workspace_ready` and `workspace_status_changed` events are emitted on the session bus after `init()` completes, and late subscribers receive a replay of the last workspace status.
 
 ```typescript
 const session = await harness.createSession({
@@ -455,6 +457,19 @@ const session = await harness.createSession({
   resourceId: 'project-abc',
 })
 ```
+
+Override the workspace and browser for a specific session:
+
+```typescript
+const session = await harness.createSession({
+  id: 'session-xyz',
+  ownerId: 'user-123',
+  workspace: myWorkspace,
+  browser: myBrowser,
+})
+```
+
+`tags` scopes initial thread selection: a thread is a resume candidate only when its metadata matches every provided tag. This lets worktrees sharing a resourceId each resume their own thread (via a `projectPath` tag).
 
 Switching the resource ID via `harness.setResourceId()` changes only the resource ID, not `id` or `ownerId`. Read them through `session.identity.getId()` and `session.identity.getOwnerId()`.
 
@@ -732,52 +747,6 @@ Resolve a tool's category using the configured `toolCategoryResolver`.
 ```typescript
 const category = harness.getToolCategory({ toolName: 'mastra_workspace_write_file' })
 // 'edit'
-```
-
-### Workspace
-
-#### `getWorkspace()`
-
-Return the current workspace instance, or `undefined` if no workspace is configured or it hasn't been resolved yet.
-
-```typescript
-const workspace = harness.getWorkspace()
-```
-
-#### `resolveWorkspace({ requestContext? })`
-
-Eagerly resolve and cache the workspace. For dynamic workspaces (factory function), this triggers the factory and caches the result so `getWorkspace()` returns it. Returns the resolved workspace or `undefined` if none is configured.
-
-```typescript
-const workspace = await harness.resolveWorkspace()
-```
-
-#### `hasWorkspace()`
-
-Return whether a workspace is configured (static, config-based, or dynamic).
-
-```typescript
-if (harness.hasWorkspace()) {
-  const workspace = await harness.resolveWorkspace()
-}
-```
-
-#### `isWorkspaceReady()`
-
-Return whether the workspace is ready to use. For dynamic workspaces (factory function), always returns `true`. For static workspaces, returns `true` after `init()` succeeds.
-
-```typescript
-if (harness.isWorkspaceReady()) {
-  const workspace = harness.getWorkspace()
-}
-```
-
-#### `destroyWorkspace()`
-
-Destroy the workspace and release resources. Only applies to static workspaces — dynamic workspaces aren't destroyed.
-
-```typescript
-await harness.destroyWorkspace()
 ```
 
 ### Observational Memory
