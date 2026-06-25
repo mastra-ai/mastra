@@ -2,6 +2,7 @@
  * Plan mode — read-only analysis and planning.
  */
 import type { HarnessMode } from '@mastra/core/harness';
+import { PLAN_MODE_AVAILABLE_TOOLS } from '../tool-availability.js';
 
 export const planMode: HarnessMode = {
   id: 'plan',
@@ -34,4 +35,6 @@ export const planMode: HarnessMode = {
   metadata: {
     default: false,
   },
+
+  availableTools: [...PLAN_MODE_AVAILABLE_TOOLS],
 };

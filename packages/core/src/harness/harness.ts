@@ -1275,6 +1275,60 @@ export class Harness<TState = {}> {
   // Message Handling
   // ===========================================================================
 
+  /**
+   * Resolve the `activeTools` allowlist for the current mode's run.
+   *
+   * Returns `undefined` when the mode has no `availableTools` configured
+   * (no restriction — all tools visible). When the mode declares
+   * `availableTools`, returns that list filtered to remove tools whose
+   * permission category is denied.
+   *
+   * Per-tool `deny` is already handled by `buildToolsets` (denied tools are
+   * deleted from the toolsets), so those tools won't exist at execution time
+   * regardless of whether they appear in the allowlist.
+   *
+   * The returned list uses the same exposed tool names the execution pipeline
+   * checks against (e.g. `view`, `write_file`, `ask_user`), which matches the
+   * names workspace tools are renamed to via `TOOL_NAME_OVERRIDES`.
+   */
+  private resolveModeActiveTools(session: Session<TState>): string[] | undefined {
+    const currentMode = session.mode.resolve();
+    const availableTools = currentMode?.availableTools;
+    if (!availableTools) {
+      return undefined;
+    }
+    if (availableTools.length === 0) {
+      return [];
+    }
+
+    const permissionRules = session.permissions.getRules();
+    const deniedTools = new Set(
+      Object.entries(permissionRules.tools)
+        .filter(([, policy]) => policy === 'deny')
+        .map(([tool]) => tool),
+    );
+    const deniedCategories = new Set(
+      Object.entries(permissionRules.categories)
+        .filter(([, policy]) => policy === 'deny')
+        .map(([cat]) => cat),
+    );
+
+    if (deniedTools.size === 0 && deniedCategories.size === 0) {
+      return availableTools;
+    }
+
+    return availableTools.filter(toolName => {
+      // Per-tool deny always wins — even over the mode allowlist.
+      if (deniedTools.has(toolName)) {
+        return false;
+      }
+      // Category deny: tools with no category (null — always-allowed tools
+      // like ask_user) are not subject to category deny.
+      const category = this.getToolCategory({ toolName });
+      return !category || !deniedCategories.has(category);
+    });
+  }
+
   private async buildAgentMessageStreamOptions({
     session,
     requestContext: requestContextInput,
@@ -1321,6 +1375,15 @@ export class Harness<TState = {}> {
       ...(callTimeInstructions && { instructions: callTimeInstructions }),
     };
     streamOptions.toolsets = await this.buildToolsets(session, requestContext);
+
+    // Apply mode-level tool visibility via `activeTools` — the same mechanism
+    // the execution pipeline already enforces at tool-call time.  Only set
+    // when the helper returns a concrete list so modes without
+    // `availableTools` keep unrestricted behaviour.
+    const activeTools = this.resolveModeActiveTools(session);
+    if (activeTools !== undefined) {
+      streamOptions.activeTools = activeTools;
+    }
 
     return streamOptions;
   }
