@@ -475,6 +475,101 @@ describe('Agent client-side tools', () => {
     expect(global.fetch).toHaveBeenCalledTimes(3);
   });
 
+  it('stream: executes multiple client tool calls emitted in one streamed step', async () => {
+    const firstCycle = [
+      { type: 'step-start', payload: { messageId: 'm1' } },
+      {
+        type: 'tool-call',
+        payload: { toolCallId: 'call_weather', toolName: 'weatherTool', args: { location: 'NYC' } },
+      },
+      {
+        type: 'tool-call',
+        payload: { toolCallId: 'call_news', toolName: 'newsTool', args: { topic: 'tech' } },
+      },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 4 } } },
+    ];
+
+    const secondCycle = [
+      { type: 'step-start', payload: { messageId: 'm2' } },
+      { type: 'text-delta', payload: { text: 'done' } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 5 } } },
+    ];
+
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse(firstCycle))
+      .mockResolvedValueOnce(sseResponse(secondCycle));
+
+    const weatherExecuteSpy = vi.fn(async () => ({ temperature: 72 }));
+    const newsExecuteSpy = vi.fn(async () => ({ headline: 'AI advances' }));
+
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Get weather',
+      inputSchema: z.object({ location: z.string() }),
+      outputSchema: z.object({ temperature: z.number() }),
+      execute: weatherExecuteSpy,
+    });
+
+    const newsTool = createTool({
+      id: 'newsTool',
+      description: 'Get news',
+      inputSchema: z.object({ topic: z.string() }),
+      outputSchema: z.object({ headline: z.string() }),
+      execute: newsExecuteSpy,
+    });
+
+    const resp = await agent.stream('Give me weather and news', {
+      clientTools: { weatherTool, newsTool },
+    });
+
+    const receivedChunks: any[] = [];
+    await resp.processDataStream({
+      onChunk: async chunk => {
+        receivedChunks.push(chunk);
+      },
+    });
+
+    expect(weatherExecuteSpy).toHaveBeenCalledTimes(1);
+    expect(weatherExecuteSpy).toHaveBeenCalledWith(
+      { location: 'NYC' },
+      expect.objectContaining({ agent: expect.objectContaining({ toolCallId: 'call_weather' }) }),
+    );
+    expect(newsExecuteSpy).toHaveBeenCalledTimes(1);
+    expect(newsExecuteSpy).toHaveBeenCalledWith(
+      { topic: 'tech' },
+      expect.objectContaining({ agent: expect.objectContaining({ toolCallId: 'call_news' }) }),
+    );
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+
+    const toolResultChunks = receivedChunks.filter(chunk => chunk.type === 'tool-result');
+    expect(toolResultChunks.map(chunk => chunk.payload.toolCallId)).toEqual(['call_weather', 'call_news']);
+
+    const secondCallBody = JSON.parse((global.fetch as any).mock.calls[1][1].body);
+    const toolResultParts = secondCallBody.messages.flatMap((msg: any) =>
+      msg.role === 'tool' && Array.isArray(msg.content) ? msg.content : [],
+    );
+    expect(toolResultParts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'tool-result',
+          toolCallId: 'call_weather',
+          toolName: 'weatherTool',
+          input: { location: 'NYC' },
+          result: { temperature: 72 },
+        }),
+        expect.objectContaining({
+          type: 'tool-result',
+          toolCallId: 'call_news',
+          toolName: 'newsTool',
+          input: { topic: 'tech' },
+          result: { headline: 'AI advances' },
+        }),
+      ]),
+    );
+  });
+
   it('stream: step execution when client tool is present without an execute function', async () => {
     const toolCallId = 'call_1';
 
