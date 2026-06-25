@@ -22,7 +22,7 @@ export default defineConfig({
   root: resolve(here, 'ui'),
   plugins: [react()],
   build: {
-    outDir: resolve(here, '../dist/web/ui'),
+    outDir: resolve(here, '../../dist/web/ui'),
     emptyOutDir: true,
   },
   server: {

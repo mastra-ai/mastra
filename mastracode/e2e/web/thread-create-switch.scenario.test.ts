@@ -26,11 +26,7 @@ describe('web scenario: thread-create-switch', () => {
         expect(secondThreadId).not.toBe(firstThreadId);
 
         // Transcript should be empty on the new thread.
-        const afterCreate = driver.state().entries;
-        const hasOldContent = afterCreate.some(
-          e => e.kind === 'assistant' && (e as { text: string }).text.includes('THREAD_ONE'),
-        );
-        expect(hasOldContent).toBe(false);
+        expect(driver.text().includes('THREAD_ONE')).toBe(false);
 
         // Send a message on the second thread.
         await driver.submit('Hello from thread two');

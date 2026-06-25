@@ -58,9 +58,9 @@
   "scripts": {
     "cli": "tsx src/main.ts",
     "check": "tsc --noEmit",
-    "web:dev": "concurrently --kill-others-on-fail --names server,ui \"tsx src/web/server.ts\" \"vite --config web/vite.config.ts\"",
-    "web:ui:build": "vite --config web/vite.config.ts build",
-    "web:test": "vitest run --config web/vitest.config.ts",
+    "web:dev": "concurrently --kill-others-on-fail --names server,ui \"tsx src/web/server.ts\" \"vite --config src/web/vite.config.ts\"",
+    "web:ui:build": "vite --config src/web/vite.config.ts build",
+    "web:test": "vitest run --config e2e/web/vitest.config.ts",
     "build:lib": "tsup --silent --config tsup.config.ts",
     "prepack": "tsx ../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build --watch",

@@ -9,7 +9,7 @@ export default defineConfig({
     // Scenarios drive a real in-process harness server + AIMock; they need
     // network + node builtins, so run in the node environment.
     environment: 'node',
-    include: ['scenarios/**/*.scenario.test.ts'],
+    include: ['**/*.scenario.test.ts'],
     testTimeout: 30_000,
     hookTimeout: 30_000,
     // Run test files sequentially — each scenario starts its own AIMock +

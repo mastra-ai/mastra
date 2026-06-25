@@ -25,21 +25,22 @@ describe('active project persistence', () => {
   });
 
   it('persists and restores the active project id', async () => {
-    const { saveActiveProjectId, loadActiveProjectId } = await import('../ui/projects.js');
+    const { saveActiveProjectId, loadActiveProjectId } = await import('../../src/web/ui/projects.js');
     expect(loadActiveProjectId()).toBeNull();
     saveActiveProjectId('proj-1');
     expect(loadActiveProjectId()).toBe('proj-1');
   });
 
   it('clears the active id when null is saved', async () => {
-    const { saveActiveProjectId, loadActiveProjectId } = await import('../ui/projects.js');
+    const { saveActiveProjectId, loadActiveProjectId } = await import('../../src/web/ui/projects.js');
     saveActiveProjectId('proj-1');
     saveActiveProjectId(null);
     expect(loadActiveProjectId()).toBeNull();
   });
 
   it('clears the active id when the active project is removed', async () => {
-    const { saveProjects, saveActiveProjectId, loadActiveProjectId, removeProject } = await import('../ui/projects.js');
+    const { saveProjects, saveActiveProjectId, loadActiveProjectId, removeProject } =
+      await import('../../src/web/ui/projects.js');
     saveProjects([
       { id: 'proj-1', name: 'A', path: '/a', resourceId: 'mastra-aaa', createdAt: 1 },
       { id: 'proj-2', name: 'B', path: '/b', resourceId: 'mastra-bbb', createdAt: 2 },
@@ -50,7 +51,8 @@ describe('active project persistence', () => {
   });
 
   it('leaves the active id alone when a different project is removed', async () => {
-    const { saveProjects, saveActiveProjectId, loadActiveProjectId, removeProject } = await import('../ui/projects.js');
+    const { saveProjects, saveActiveProjectId, loadActiveProjectId, removeProject } =
+      await import('../../src/web/ui/projects.js');
     saveProjects([
       { id: 'proj-1', name: 'A', path: '/a', resourceId: 'mastra-aaa', createdAt: 1 },
       { id: 'proj-2', name: 'B', path: '/b', resourceId: 'mastra-bbb', createdAt: 2 },

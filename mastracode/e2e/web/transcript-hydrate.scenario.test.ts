@@ -1,8 +1,8 @@
 import type { HarnessMessage } from '@mastra/client-js';
 import { describe, it, expect } from 'vitest';
 
-import { initialTranscript, transcriptReducer } from '../ui/transcript.js';
-import type { TimelineEntry } from '../ui/transcript.js';
+import { initialTranscript, transcriptReducer } from '../../src/web/ui/transcript.js';
+import type { TimelineEntry } from '../../src/web/ui/transcript.js';
 
 /** Flatten an assistant entry's ordered text/thinking segments to a string. */
 function assistantText(entry: TimelineEntry): string {

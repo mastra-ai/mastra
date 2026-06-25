@@ -104,7 +104,7 @@ export async function startWebServer(options: WebServerOptions = {}): Promise<We
 /**
  * Default built-UI location. The web UI is a monorepo dev-only feature, so this
  * module always runs from source (`src/web/server.ts`) via tsx; the Vite UI
- * build outputs to `<pkgRoot>/dist/web/ui` (see web/vite.config.ts), which is
+ * build outputs to `<pkgRoot>/dist/web/ui` (see src/web/vite.config.ts), which is
  * two levels up from this module. We also check `ui` next to this module as a
  * fallback for any compiled layout.
  */

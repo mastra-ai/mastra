@@ -2,7 +2,7 @@ import { MastraClient } from '@mastra/client-js';
 import type { HarnessEvent } from '@mastra/client-js';
 import { describe, it, expect } from 'vitest';
 
-import { initialTranscript, transcriptReducer } from '../ui/transcript';
+import { initialTranscript, transcriptReducer } from '../../src/web/ui/transcript';
 import { startAimock } from './aimock';
 import { startHarnessServer } from './harness-server';
 

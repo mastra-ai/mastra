@@ -12,5 +12,5 @@
     "jsx": "react-jsx",
     "types": ["node"]
   },
-  "include": [".", "../ui/transcript.ts"]
+  "include": [".", "../../src/web/ui/transcript.ts"]
 }

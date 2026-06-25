@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { matchCommands, SLASH_COMMANDS } from '../ui/commands';
+import { matchCommands, SLASH_COMMANDS } from '../../src/web/ui/commands';
 
 /**
  * Slash-command autocomplete is pure client logic: given the composer draft,
