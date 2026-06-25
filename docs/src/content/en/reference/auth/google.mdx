@@ -296,7 +296,89 @@ const canReadAgents = await rbac.hasPermission(user, 'agents:read')
 
 Returns: `Promise<boolean>`
 
+#### `hasRole(user, role)`
+
+Checks whether a user resolved to a specific Google Workspace group role.
+
+```typescript
+const isAdmin = await rbac.hasRole(user, 'admins@example.com')
+```
+
+Returns: `Promise<boolean>`
+
+#### `hasAllPermissions(user, permissions)`
+
+Checks whether a user has every requested permission.
+
+```typescript
+const canManageAgents = await rbac.hasAllPermissions(user, ['agents:read', 'agents:update'])
+```
+
+Returns: `Promise<boolean>`
+
+#### `hasAnyPermission(user, permissions)`
+
+Checks whether a user has at least one requested permission.
+
+```typescript
+const canReadSomething = await rbac.hasAnyPermission(user, ['agents:read', 'workflows:read'])
+```
+
+Returns: `Promise<boolean>`
+
+#### `getAvailableRoles()`
+
+Returns the role IDs configured in `roleMapping`, excluding `_default`.
+
+```typescript
+const roles = await rbac.getAvailableRoles()
+```
+
+Returns: `Promise<{ id: string; name: string }[]>`
+
+#### `getPermissionsForRole(roleId)`
+
+Returns the permissions configured for a role ID.
+
+```typescript
+const permissions = await rbac.getPermissionsForRole('engineering@example.com')
+```
+
+Returns: `Promise<string[]>`
+
+#### `clearCache()`
+
+Clears all cached Google Workspace group lookups.
+
+```typescript
+rbac.clearCache()
+```
+
+Returns: `void`
+
+#### `clearUserCache(userKey)`
+
+Clears the cached group lookup for one Directory API user key, such as an email address.
+
+```typescript
+rbac.clearUserCache('user@example.com')
+```
+
+Returns: `void`
+
+#### `getCacheStats()`
+
+Returns the current group lookup cache size and maximum size.
+
+```typescript
+const stats = rbac.getCacheStats()
+```
+
+Returns: `{ size: number; maxSize: number }`
+
 ## `GoogleUser` type
+
+`GoogleUser` extends Mastra's base `EEUser` interface. The table below lists common fields and Google-specific fields.
 
 <PropertiesTable
   content={[
@@ -323,6 +405,18 @@ Returns: `Promise<boolean>`
     isOptional: true,
   },
   {
+    name: 'expiresAt',
+    type: 'Date',
+    description: 'Verified ID token expiration time, when available.',
+    isOptional: true,
+  },
+  {
+    name: 'emailVerified',
+    type: 'boolean',
+    description: 'Whether Google reports the email address as verified.',
+    isOptional: true,
+  },
+  {
     name: 'groups',
     type: 'string[]',
     description: 'Optional pre-resolved Google Workspace group role IDs.',
@@ -334,5 +428,7 @@ Returns: `Promise<boolean>`
 ## Additional configuration
 
 `MastraRBACGoogle` uses `GET https://admin.googleapis.com/admin/directory/v1/groups?userKey=...` and handles pagination. Provide a service account with domain-wide delegation for production Google Workspace deployments, or pass `accessToken` / `getAccessToken` if your application already manages Google API tokens.
+
+If `user.groups` is already an array, `MastraRBACGoogle` uses that value and does not call the Directory API. An empty `groups` array means the user has no Google group roles and resolves to `_default` permissions when `_default` is configured.
 
 Visit [Google auth docs](/docs/server/auth/google) for setup guidance.

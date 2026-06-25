@@ -72,13 +72,17 @@ export const mastra = new Mastra({
 | `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` | PEM private key for the service account                          |
 | `GOOGLE_WORKSPACE_ADMIN_EMAIL`       | Workspace admin email to impersonate with domain-wide delegation |
 
+`MastraAuthGoogle` reads the Google auth variables directly. The service-account variables above are examples for wiring `MastraRBACGoogle`; pass them through the `serviceAccount` option as shown.
+
 ## Exports
 
 - `MastraAuthGoogle`
 - `MastraRBACGoogle`
 - `mapGoogleClaimsToUser`
+- `GoogleSessionOptions`
 - `GoogleUser`
 - `GoogleWorkspaceGroup`
 - `GoogleWorkspaceServiceAccount`
 - `MastraAuthGoogleOptions`
 - `MastraRBACGoogleOptions`
+- `PermissionCacheOptions`

@@ -26,7 +26,7 @@ Set the following environment variables:
 ```env title=".env"
 GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-client-secret
-GOOGLE_REDIRECT_URI=http://localhost:4111/api/auth/callback
+GOOGLE_REDIRECT_URI=http://localhost:4111/api/auth/sso/callback
 GOOGLE_COOKIE_PASSWORD=a-random-string-at-least-32-characters-long
 GOOGLE_ALLOWED_DOMAINS=example.com
 
@@ -38,6 +38,8 @@ GOOGLE_WORKSPACE_ADMIN_EMAIL=admin@example.com
 :::note
 
 `GOOGLE_COOKIE_PASSWORD` encrypts session cookies. If omitted, an auto-generated value is used that doesn't survive server restarts. Set it explicitly for production.
+
+`MastraAuthGoogle` reads the `GOOGLE_*` auth variables automatically. The service-account variables shown above are read by the configuration code you pass to `MastraRBACGoogle`.
 
 :::
 
@@ -133,7 +135,7 @@ export const mastra = new Mastra({
 
 ## Client-side setup
 
-When auth is enabled, requests to Mastra routes require authentication. `MastraAuthGoogle` uses Google sign-in and stores the authenticated user in an encrypted session cookie.
+When auth is enabled, requests to Mastra routes require authentication. When SSO is enabled with `GOOGLE_CLIENT_SECRET`, `MastraAuthGoogle` uses Google sign-in and stores the authenticated user in an encrypted session cookie.
 
 For cross-origin requests, enable CORS credentials on the Mastra server:
 
@@ -169,7 +171,7 @@ You can also pass a Google ID token as a Bearer token. Mastra verifies the token
 - **401 after sign-in**: Check that `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI` match the Google Cloud OAuth client.
 - **Workspace users are rejected**: Verify `GOOGLE_ALLOWED_DOMAINS` matches the Google ID token `hd` claim.
 - **Consumer Gmail accounts are rejected**: This is expected when `allowedDomains` is configured because Gmail accounts don't have a Workspace `hd` claim.
-- **RBAC returns default permissions**: Verify the service account has domain-wide delegation and the Directory API group read-only scope.
+- **RBAC returns default permissions**: No roles were resolved for the user. Verify the user email or custom `getUserKey`, Google group membership, and `roleMapping`. If the Directory API lookup fails, the provider throws an error instead of returning `_default`.
 - **Cookies are not sent cross-origin**: Set `credentials: "include"` in `MastraClient` and configure `server.cors` with `credentials: true`.
 
 ## Related
