@@ -1,17 +1,5 @@
-export type ToolCallTrajectoryStep = {
-  stepType?: string;
-  name?: string;
-  toolArgs?: Record<string, unknown>;
-  toolResult?: unknown;
-  children?: ToolCallTrajectoryStep[];
-};
-
-export type DerivedToolMock = {
-  toolName: string;
-  args: Record<string, unknown>;
-  output: unknown;
-  matchArgs?: 'strict' | 'ignore';
-};
+import type { DatasetItemToolMock } from '../storage/types';
+import type { TrajectoryStep } from './types';
 
 /**
  * Sub-agent delegation is exposed to the parent as a tool named `agent-<name>`
@@ -32,7 +20,7 @@ function isSubAgentDelegation(toolName: string): boolean {
  */
 function extractToolName(label: string): string {
   const match = label.match(/^(?:mcp_)?tool:\s*'(.*?)'/);
-  return match ? match[1] : label;
+  return match?.[1] ?? label;
 }
 
 /**
@@ -48,18 +36,20 @@ function extractToolName(label: string): string {
  * sub-agent delegation call, which mocks the sub-agent's whole response.
  */
 export function collectToolMocks(
-  steps: ToolCallTrajectoryStep[] | undefined,
-  acc: DerivedToolMock[] = [],
-): DerivedToolMock[] {
+  steps: TrajectoryStep[] | undefined,
+  acc: DatasetItemToolMock[] = [],
+): DatasetItemToolMock[] {
   if (!steps) return acc;
   for (const step of steps) {
     const isToolCall = step.stepType === 'tool_call' || step.stepType === 'mcp_tool_call';
     if (isToolCall && step.name) {
       const toolName = extractToolName(step.name);
+      const toolArgs = 'toolArgs' in step ? step.toolArgs : undefined;
+      const toolResult = 'toolResult' in step ? step.toolResult : undefined;
       acc.push({
         toolName,
-        args: step.toolArgs ?? {},
-        output: step.toolResult,
+        args: toolArgs ?? {},
+        output: toolResult,
         // Sub-agent delegation args are LLM-authored + runtime-injected; default
         // to ignore-args matching so the saved mock matches on replay.
         ...(isSubAgentDelegation(toolName) ? { matchArgs: 'ignore' as const } : {}),
