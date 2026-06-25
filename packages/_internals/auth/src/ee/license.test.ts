@@ -95,6 +95,42 @@ describe('license', () => {
       await startLicenseValidation();
       expect(isLicenseValid()).toBe(true);
     });
+
+    it('should treat "undefined" string key as unset', () => {
+      process.env['MASTRA_LICENSE_KEY'] = 'undefined';
+      expect(isLicenseValid()).toBe(false);
+    });
+
+    it('should treat "null" string key as unset', () => {
+      process.env['MASTRA_LICENSE_KEY'] = 'null';
+      expect(isLicenseValid()).toBe(false);
+    });
+
+    it('should treat legacy alias with "undefined" string key as unset', () => {
+      process.env['MASTRA_EE_LICENSE'] = 'undefined';
+      expect(isLicenseValid()).toBe(false);
+    });
+
+    it('should treat legacy alias with "null" string key as unset', () => {
+      process.env['MASTRA_EE_LICENSE'] = 'null';
+      expect(isLicenseValid()).toBe(false);
+    });
+
+    it('should prefer a valid legacy alias when the primary key is set to a sentinel value like "undefined"', async () => {
+      process.env['MASTRA_LICENSE_KEY'] = 'undefined';
+      process.env['MASTRA_EE_LICENSE'] = 'LIC-legacy-key';
+      vi.stubGlobal('fetch', mockValidateResponse(VALID_ENTERPRISE));
+      await startLicenseValidation();
+      expect(isLicenseValid()).toBe(true);
+    });
+
+    it('should prefer a valid legacy alias when the primary key is set to a sentinel value like "null"', async () => {
+      process.env['MASTRA_LICENSE_KEY'] = 'null';
+      process.env['MASTRA_EE_LICENSE'] = 'LIC-legacy-key';
+      vi.stubGlobal('fetch', mockValidateResponse(VALID_ENTERPRISE));
+      await startLicenseValidation();
+      expect(isLicenseValid()).toBe(true);
+    });
   });
 
   describe('validate request contract', () => {

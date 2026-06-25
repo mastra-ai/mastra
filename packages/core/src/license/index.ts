@@ -52,7 +52,8 @@ export class LicenseClient {
     this.logger = logger;
     // MASTRA_LICENSE_KEY is the primary env var; MASTRA_EE_LICENSE is a
     // supported legacy alias kept for backward compatibility.
-    this.licenseKey = process.env.MASTRA_LICENSE_KEY || process.env.MASTRA_EE_LICENSE;
+    const cleanKey = (val?: string) => (val && val !== 'undefined' && val !== 'null' ? val : undefined);
+    this.licenseKey = cleanKey(process.env.MASTRA_LICENSE_KEY) || cleanKey(process.env.MASTRA_EE_LICENSE);
     this.licenseUrl = process.env.MASTRA_LICENSE_URL || 'https://license.mastra.ai';
 
     if (this.licenseKey) {
