@@ -1,4 +1,4 @@
-import type { Event } from '../../events/types';
+import type { Event, EventCallback } from '../../events/types';
 import type { Mastra } from '../../mastra';
 import type { ScheduleTarget } from '../../storage/domains/schedules/base';
 import { PullTransport } from '../../worker/transport/pull-transport';
@@ -47,6 +47,7 @@ export class HeartbeatWorker extends MastraWorker {
 
   #config: HeartbeatWorkerConfig;
   #transport?: WorkerTransport;
+  #pushCb?: EventCallback;
   #running = false;
 
   constructor(config: HeartbeatWorkerConfig = {}) {
@@ -65,6 +66,22 @@ export class HeartbeatWorker extends MastraWorker {
   async start(): Promise<void> {
     if (this.#running) return;
     if (!this.deps) throw new Error('HeartbeatWorker: call init() before start()');
+
+    // Push-only pubsubs (EventEmitter, UnixSocketPubSub) don't support the
+    // grouped pull subscription a PullTransport requires. They deliver every
+    // event to every in-process subscriber, so subscribe directly without a
+    // group — mirroring how Mastra.startWorkers handles workflow events for
+    // push-only transports instead of running the pull-based worker.
+    const modes = this.deps.pubsub.supportedModes ?? ['pull'];
+    if (!modes.includes('pull')) {
+      const cb: EventCallback = (event, ack, nack) => {
+        void this.#handleEvent(event, ack, nack);
+      };
+      this.#pushCb = cb;
+      await this.deps.pubsub.subscribe(TOPIC_HEARTBEATS, cb);
+      this.#running = true;
+      return;
+    }
 
     const group = this.#config.group ?? DEFAULT_GROUP;
     this.#transport = new PullTransport({
@@ -87,6 +104,10 @@ export class HeartbeatWorker extends MastraWorker {
       if (this.#transport) {
         await this.#transport.stop();
         this.#transport = undefined;
+      }
+      if (this.#pushCb && this.deps) {
+        await this.deps.pubsub.unsubscribe(TOPIC_HEARTBEATS, this.#pushCb);
+        this.#pushCb = undefined;
       }
     } finally {
       this.#running = false;
