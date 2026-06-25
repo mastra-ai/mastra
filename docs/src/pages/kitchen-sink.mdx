@@ -11,7 +11,6 @@ import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 import { CardGrid, CardGridItem } from "@site/src/components/cards/card-grid";
 import YouTube from "@site/src/components/YouTube-player";
-import { ReferenceCards } from "@site/src/components/ReferenceCards";
 
 # Kitchen Sink
 
@@ -164,7 +163,11 @@ Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
         </div>
 
         <div className="flex items-center gap-2 text-sm">
-          <NetlifyLogo className="w-4 h-4" />
+          <img
+            src="/assets/netlify-monogram.svg"
+            alt="Netlify"
+            className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200"
+          />
 
           <span>Netlify</span>
         </div>
@@ -226,10 +229,6 @@ Some **content** with _Markdown_ `syntax`. Check [this `api`](#).
 ## YouTube
 
 <YouTube id="1qnmnRICX50" />
-
-## Reference Cards
-
-<ReferenceCards />
 
 ## Properties Table
 

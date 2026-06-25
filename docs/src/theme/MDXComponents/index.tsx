@@ -11,7 +11,6 @@ import MDXUl from '@theme/MDXComponents/Ul'
 import Mermaid from '@theme/Mermaid'
 import { type ComponentProps } from 'react'
 import GithubLink from '@site/src/components/GithubLink'
-import NetlifyLogo from '@site/src/components/NetlifyLogo'
 import OperatorsTable from '@site/src/components/OperatorsTable'
 import PropertiesTable from '@site/src/components/PropertiesTable'
 import ProviderModelsTable from '@site/src/components/ProviderModelsTable'
@@ -38,7 +37,6 @@ const MDXComponents: MDXComponentsObject = {
   Callout: Admonition,
   mermaid: Mermaid,
   GithubLink,
-  NetlifyLogo,
   OperatorsTable,
   ProviderModelsTable,
   PropertiesTable,

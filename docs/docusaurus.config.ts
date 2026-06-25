@@ -17,7 +17,7 @@ const ADMONITIONS_CONFIG = {
 const config: Config = {
   title: 'Mastra Docs',
   tagline: 'The TypeScript Agent Framework',
-  favicon: '/img/favicon.ico',
+  favicon: '/favicon.ico',
   url: 'https://mastra.ai',
   baseUrl: '/',
   // hint: do NOT set trailingSlash to any value to avoid rendering issues on vercel

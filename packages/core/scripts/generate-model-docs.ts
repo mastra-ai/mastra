@@ -313,7 +313,7 @@ description: "Use ${provider.name} models with Mastra. ${modelCount} model${mode
 
 ${getGeneratedComment()}
 
-# <img src="${getLogoUrl(provider.id)}" alt="${provider.name} logo" className="${getLogoClass(provider.id)}" />${provider.name}
+# <img src="${getLogoUrl(provider.id)}" alt="${provider.name} logo" className="${getLogoClass()}" />${provider.name}
 
 ${introText}
 
@@ -439,20 +439,15 @@ async function checkAiSdkDocsLink(providerId: string): Promise<string | null> {
 }
 
 function getLogoUrl(providerId: string): string {
+  if (providerId === 'netlify') {
+    return '/assets/netlify-monogram.svg';
+  }
+
   return `https://models.dev/logos/${providerId}.svg`;
 }
 
-function getLogoClass(providerId: string): string {
-  // Providers with colored logos that shouldn't be inverted
-  const coloredLogos = ['netlify'];
-
-  const baseClass = 'inline w-8 h-8 mr-2 align-middle';
-
-  if (coloredLogos.includes(providerId)) {
-    return baseClass;
-  }
-
-  return `${baseClass} dark:invert dark:brightness-0 dark:contrast-200`;
+function getLogoClass(): string {
+  return `inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200`;
 }
 
 /**
@@ -534,7 +529,7 @@ ${allModels.map(m => `| \`${m}\` |`).join('\n')}
     : '';
   const logoMarkup = hasLogoComponent(gatewayName)
     ? getLogoComponentJSX(gatewayName)
-    : `<img src="${getLogoUrl(gatewayName)}" alt="${displayName} logo" className="${getLogoClass(gatewayName)}" />`;
+    : `<img src="${getLogoUrl(gatewayName)}" alt="${displayName} logo" className="${getLogoClass()}" />`;
 
   return `---
 title: "${displayName} | Models"
@@ -607,7 +602,6 @@ ${getGeneratedComment()}
 import { CardGrid, CardGridItem } from "@site/src/components/cards/card-grid";
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
-import { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";
 
 # Model Providers
 
@@ -730,14 +724,8 @@ ${(() => {
         displayName = 'Vercel';
       }
 
-      // Use NetlifyLogo component for Netlify, img tag for others
-      const logoMarkup =
-        gatewayId === 'netlify'
-          ? `<NetlifyLogo className="w-4 h-4" />`
-          : `<img src="${getLogoUrl(gatewayId)}" alt="${displayName}" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />`;
-
       return `          <div className="flex items-center gap-2 text-sm">
-            ${logoMarkup}
+            <img src="${getLogoUrl(gatewayId)}" alt="${displayName}" className="w-4 h-4 object-contain dark:invert dark:brightness-0 dark:contrast-200" />
             <span>${displayName}</span>
           </div>`;
     })
@@ -1033,9 +1021,6 @@ function generateGatewaysIndexPage(grouped: GroupedProviders): string {
   // Sort gateways alphabetically
   const gatewaysList = Array.from(grouped.gateways.keys()).sort((a, b) => a.localeCompare(b));
 
-  const hasNetlify = gatewaysList.includes('netlify');
-  const logoImport = hasNetlify ? '\nimport { NetlifyLogo } from "@site/src/components/logos/NetlifyLogo";' : '';
-
   return `---
 title: "Gateways"
 description: "Access AI models through gateway providers with caching, rate limiting, and analytics."
@@ -1043,7 +1028,7 @@ description: "Access AI models through gateway providers with caching, rate limi
 
 ${getGeneratedComment()}
 
-import { CardGrid, CardGridItem } from "@site/src/components/cards/card-grid";${logoImport}
+import { CardGrid, CardGridItem } from "@site/src/components/cards/card-grid";
 
 # Gateway Providers
 
@@ -1069,7 +1054,7 @@ ${gatewaysList
     />`;
       }
 
-      if (g === 'mastra') {
+    if (g === 'mastra') {
         return `    <CardGridItem
       title="Mastra"
       description="Built-in Observational Memory"
@@ -1079,20 +1064,11 @@ ${gatewaysList
       }
     }
 
-    if (g === 'netlify') {
-      return `    <CardGridItem
-      title="${formatProviderName(g).replace(/&/g, '&amp;')}"
-      description="${grouped.gateways.get(g)?.reduce((sum, p) => sum + p.models.length, 0) || 0} models"
-      href="/models/gateways/${g}"
-      logo={<NetlifyLogo />}
-    />`;
-    }
     return `    <CardGridItem
       title="${formatProviderName(g).replace(/&/g, '&amp;')}"
       description="${grouped.gateways.get(g)?.reduce((sum, p) => sum + p.models.length, 0) || 0} models"
       href="/models/gateways/${g}"
       logo="${getLogoUrl(g)}"
-
     />`;
   })
   .join('\n')}
@@ -1168,7 +1144,7 @@ function generateProvidersSidebarItems(grouped: GroupedProviders, aiSdkProviders
 async function generateAiSdkProviderPage(provider: any, aiSdkDocsUrl: string | null): Promise<string> {
   const packageName = provider.npm;
   const logoUrl = getLogoUrl(provider.id);
-  const logoClass = getLogoClass(provider.id);
+  const logoClass = getLogoClass();
 
   const aiSdkDocsText = aiSdkDocsUrl
     ? `
