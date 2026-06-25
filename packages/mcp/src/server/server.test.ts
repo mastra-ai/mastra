@@ -20,6 +20,7 @@ import type {
   Prompt,
 } from '@modelcontextprotocol/sdk/types.js';
 import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai/test';
+import getPort from 'get-port';
 import { Hono } from 'hono';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } from 'vitest';
 import { z } from 'zod/v3';
@@ -29,39 +30,17 @@ import { MCPClient } from '../client/configuration';
 import { MCPServer } from './server';
 import type { MastraPrompt, MCPServerResources, MCPServerResourceContent, MCPRequestHandlerExtra } from './types';
 
-// Helper: bind to OS-assigned port (port 0) and resolve to the actual port.
-// Avoids random-port collisions that flake tests on CI.
-const listenOnEphemeralPort = (server: http.Server): Promise<number> =>
-  new Promise<number>((resolve, reject) => {
+// Bind `server` to a free port found via the `get-port` package (the same approach the
+// mastra CLI uses for port allocation) and resolve to the assigned port.
+// Avoids hardcoded random port ranges that flake tests on CI when two suites pick the same port.
+const listenOnFreePort = async (server: http.Server): Promise<number> => {
+  const port = await getPort();
+  await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
-    server.listen(0, () => {
-      const address = server.address();
-      if (address && typeof address === 'object') {
-        resolve(address.port);
-      } else {
-        reject(new Error('Failed to obtain ephemeral port'));
-      }
-    });
+    server.listen(port, () => resolve());
   });
-
-// Helper: resolve the port of a server that is already listening (e.g. started by Hono serve()).
-const getServerPort = (server: http.Server): Promise<number> =>
-  new Promise<number>((resolve, reject) => {
-    const address = server.address();
-    if (address && typeof address === 'object') {
-      resolve(address.port);
-    } else {
-      server.once('error', reject);
-      server.once('listening', () => {
-        const address = server.address();
-        if (address && typeof address === 'object') {
-          resolve(address.port);
-        } else {
-          reject(new Error('Failed to obtain ephemeral port'));
-        }
-      });
-    }
-  });
+  return port;
+};
 
 let PORT: number;
 let server: MCPServer;
@@ -498,7 +477,7 @@ describe('MCPServer', () => {
         });
       });
 
-      RESOURCE_TEST_PORT = await listenOnEphemeralPort(localHttpServerForResources);
+      RESOURCE_TEST_PORT = await listenOnFreePort(localHttpServerForResources);
 
       resourceTestInternalClient = new InternalMastraMCPClient({
         name: 'resource-test-internal-client',
@@ -822,7 +801,7 @@ describe('MCPServer', () => {
           res,
         });
       });
-      PROMPT_PORT = await listenOnEphemeralPort(promptHttpServer);
+      PROMPT_PORT = await listenOnFreePort(promptHttpServer);
       promptInternalClient = new InternalMastraMCPClient({
         name: 'prompt-test-internal-client',
         server: { url: new URL(`http://localhost:${PROMPT_PORT}/sse`) },
@@ -972,7 +951,7 @@ describe('MCPServer', () => {
         });
       });
 
-      PORT = await listenOnEphemeralPort(httpServer);
+      PORT = await listenOnFreePort(httpServer);
     });
 
     afterAll(async () => {
@@ -1130,7 +1109,7 @@ describe('MCPServer', () => {
         });
       });
 
-      PORT = await listenOnEphemeralPort(httpServer);
+      PORT = await listenOnFreePort(httpServer);
 
       client = new MCPClient({
         servers: {
@@ -1276,8 +1255,8 @@ describe('MCPServer', () => {
         });
       });
 
-      honoServer = serve({ fetch: hono.fetch, port: 0 });
-      PORT = await getServerPort(honoServer);
+      PORT = await getPort();
+      honoServer = serve({ fetch: hono.fetch, port: PORT });
 
       // Initialize MCPClient with SSE endpoint
       client = new MCPClient({
@@ -1362,7 +1341,7 @@ describe('MCPServer', () => {
         });
       });
 
-      currentTestPort = await listenOnEphemeralPort(sessionHttpServer);
+      currentTestPort = await listenOnFreePort(sessionHttpServer);
 
       const client = new InternalMastraMCPClient({
         name: 'default-session-client',
@@ -1401,7 +1380,7 @@ describe('MCPServer', () => {
         });
       });
 
-      currentTestPort = await listenOnEphemeralPort(sessionHttpServer);
+      currentTestPort = await listenOnFreePort(sessionHttpServer);
 
       const client = new InternalMastraMCPClient({
         name: 'no-session-client',
@@ -1440,7 +1419,7 @@ describe('MCPServer', () => {
         });
       });
 
-      currentTestPort = await listenOnEphemeralPort(sessionHttpServer);
+      currentTestPort = await listenOnFreePort(sessionHttpServer);
 
       const client = new InternalMastraMCPClient({
         name: 'serverless-client',
@@ -1488,7 +1467,7 @@ describe('MCPServer', () => {
         });
       });
 
-      currentTestPort = await listenOnEphemeralPort(sessionHttpServer);
+      currentTestPort = await listenOnFreePort(sessionHttpServer);
 
       const client = new InternalMastraMCPClient({
         name: 'custom-session-client',
@@ -1528,7 +1507,7 @@ describe('MCPServer', () => {
         });
       });
 
-      currentTestPort = await listenOnEphemeralPort(sessionHttpServer);
+      currentTestPort = await listenOnFreePort(sessionHttpServer);
 
       const client = new InternalMastraMCPClient({
         name: 'override-test-client',
@@ -1564,7 +1543,7 @@ describe('MCPServer', () => {
         });
       });
 
-      currentTestPort = await listenOnEphemeralPort(sessionHttpServer);
+      currentTestPort = await listenOnFreePort(sessionHttpServer);
 
       // Send a POST request with a session ID that doesn't exist on the server
       const response = await fetch(`http://localhost:${currentTestPort}/http`, {
@@ -2247,7 +2226,7 @@ describe('MCPServer - Elicitation', () => {
       });
     });
 
-    ELICITATION_PORT = await listenOnEphemeralPort(elicitationHttpServer);
+    ELICITATION_PORT = await listenOnFreePort(elicitationHttpServer);
   });
 
   afterAll(async () => {
@@ -2577,7 +2556,7 @@ describe('MCPServer - Elicitation', () => {
       });
     });
 
-    customTimeoutPort = await listenOnEphemeralPort(customTimeoutHttpServer);
+    customTimeoutPort = await listenOnFreePort(customTimeoutHttpServer);
 
     try {
       // Create a client that responds after a delay but within the custom timeout
@@ -2674,7 +2653,7 @@ describe('MCPServer with Tool Output Schema', () => {
       });
     });
 
-    PORT = await listenOnEphemeralPort(httpServerWithOutputSchema);
+    PORT = await listenOnFreePort(httpServerWithOutputSchema);
 
     clientWithOutputSchema = new MCPClient({
       servers: {
@@ -2790,11 +2769,11 @@ describe('MCPServer - Tool Input Validation', () => {
       });
     });
 
+    VALIDATION_PORT = await getPort();
     httpValidationServer = serve({
       fetch: app.fetch,
-      port: 0,
+      port: VALIDATION_PORT,
     });
-    VALIDATION_PORT = await getServerPort(httpValidationServer);
 
     validationClient = new InternalMastraMCPClient({
       name: 'validation-test-client',
@@ -3104,7 +3083,7 @@ describe('MCPServer readJsonBody compatibility', () => {
       });
     });
 
-    READ_JSON_BODY_PORT = await listenOnEphemeralPort(readJsonHttpServer);
+    READ_JSON_BODY_PORT = await listenOnFreePort(readJsonHttpServer);
   });
 
   afterAll(async () => {
@@ -3173,7 +3152,7 @@ describe('MCPServer readJsonBody compatibility', () => {
         });
       });
 
-      PREPARSED_PORT = await listenOnEphemeralPort(preParsedHttpServer);
+      PREPARSED_PORT = await listenOnFreePort(preParsedHttpServer);
     });
 
     afterAll(async () => {
@@ -3263,7 +3242,7 @@ describe('MCPServer readJsonBody compatibility', () => {
         });
       });
 
-      SSE_PORT = await listenOnEphemeralPort(sseHttpServer);
+      SSE_PORT = await listenOnFreePort(sseHttpServer);
     });
 
     afterAll(async () => {
@@ -3316,7 +3295,7 @@ describe('MCPServer readJsonBody compatibility', () => {
         });
       });
 
-      SSE_RAW_PORT = await listenOnEphemeralPort(sseRawHttpServer);
+      SSE_RAW_PORT = await listenOnFreePort(sseRawHttpServer);
     });
 
     afterAll(async () => {
