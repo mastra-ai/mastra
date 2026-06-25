@@ -2,11 +2,11 @@
 'mastracode': patch
 ---
 
-Fixed the `mastracode web` server creating a second, redundant Mastra instance.
-The browser and terminal versions now share a single Mastra and storage, so
-threads, memory, and observability stay consistent regardless of which one you
-use.
+The published `mastracode` package is now terminal-only. The in-development web
+UI is kept in the repository for local development but is no longer wired into
+the CLI and is excluded from the published package, so installs stay lean and
+ship only the TUI.
 
-Internally, startup is now split into a shared base factory plus small
-per-environment helpers, so the local terminal app and the web server build the
+Internally, harness startup is shared through a single base factory with small
+per-environment helpers, so the terminal app and the local web server build the
 exact same harness without duplicating wiring.

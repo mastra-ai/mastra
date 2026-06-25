@@ -210,44 +210,7 @@ function handleFatalError(error: unknown): never {
   process.exit(1);
 }
 
-function hasWebCommand(argv: string[]): boolean {
-  // `mastracode web` — argv[2] is the first positional after the binary.
-  return argv[2] === 'web';
-}
-
-function resolveWebPort(argv: string[]): number | undefined {
-  const idx = argv.findIndex(a => a === '--port' || a === '-p');
-  if (idx !== -1 && argv[idx + 1]) {
-    const parsed = Number(argv[idx + 1]);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  const envPort = process.env.MASTRACODE_WEB_PORT?.trim();
-  if (envPort) {
-    const parsed = Number(envPort);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return undefined;
-}
-
-async function webMain() {
-  const { startWebServer } = await import('./web/server.js');
-  const port = resolveWebPort(process.argv);
-  const server = await startWebServer({ ...(port ? { port } : {}) });
-  process.stderr.write(`\nMastra Code web UI running at ${server.url}\n`);
-
-  const shutdown = () => {
-    void server.stop().finally(() => process.exit(0));
-  };
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
-  // Keep the process alive; the Hono server holds the event loop open.
-}
-
 async function main() {
-  if (hasWebCommand(process.argv)) {
-    return webMain();
-  }
-
   if (hasHeadlessFlag(process.argv) || process.argv.includes('--help') || process.argv.includes('-h')) {
     return headlessMain();
   }

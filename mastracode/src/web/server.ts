@@ -102,15 +102,17 @@ export async function startWebServer(options: WebServerOptions = {}): Promise<We
 }
 
 /**
- * Default built-UI location. After build this module lives at
- * `dist/web/server.js` and the Vite UI build outputs to `dist/web/ui/`, so the
- * UI dir is the `ui` subdirectory next to this module.
+ * Default built-UI location. The web UI is a monorepo dev-only feature, so this
+ * module always runs from source (`src/web/server.ts`) via tsx; the Vite UI
+ * build outputs to `<pkgRoot>/dist/web/ui` (see web/vite.config.ts), which is
+ * two levels up from this module. We also check `ui` next to this module as a
+ * fallback for any compiled layout.
  */
 function defaultUiDir(): string | undefined {
   try {
     const here = dirname(fileURLToPath(import.meta.url));
-    const uiDir = join(here, 'ui');
-    return existsSync(join(uiDir, 'index.html')) ? uiDir : undefined;
+    const candidates = [join(here, '..', '..', 'dist', 'web', 'ui'), join(here, 'ui')];
+    return candidates.find(dir => existsSync(join(dir, 'index.html')));
   } catch {
     return undefined;
   }
@@ -120,4 +122,40 @@ function defaultUiDir(): string | undefined {
 function relativeFromCwd(abs: string): string {
   const cwd = process.cwd();
   return abs.startsWith(cwd) ? abs.slice(cwd.length).replace(/^[/\\]/, '') || '.' : abs;
+}
+
+function resolveWebPort(argv: string[]): number | undefined {
+  const idx = argv.findIndex(a => a === '--port' || a === '-p');
+  if (idx !== -1 && argv[idx + 1]) {
+    const parsed = Number(argv[idx + 1]);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  const envPort = process.env.MASTRACODE_WEB_PORT?.trim();
+  if (envPort) {
+    const parsed = Number(envPort);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+}
+
+/**
+ * Standalone entry for local development only. The web UI is not part of the
+ * published TUI package; run it from the monorepo via `pnpm --filter mastracode
+ * web:dev` (which launches this module with tsx alongside Vite).
+ */
+async function webMain() {
+  const port = resolveWebPort(process.argv);
+  const server = await startWebServer({ ...(port ? { port } : {}) });
+  process.stderr.write(`\nMastra Code web UI running at ${server.url}\n`);
+
+  const shutdown = () => {
+    void server.stop().finally(() => process.exit(0));
+  };
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+  // Keep the process alive; the Hono server holds the event loop open.
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  void webMain();
 }
