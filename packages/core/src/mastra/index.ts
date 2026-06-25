@@ -487,11 +487,12 @@ export interface Config<
   };
 
   /**
-   * Heartbeat runtime configuration. Lifecycle hooks are keyed by `agentId`
-   * and invoked by the heartbeat worker around heartbeat-driven agent runs.
-   * Keying by `agentId` (rather than configuring hooks on the Agent) lets
-   * both code-defined and stored agents share the same hook surface, since
-   * stored agents cannot define functions in their serialized config.
+   * Heartbeat runtime configuration. A single lifecycle-hook bundle runs for
+   * every heartbeat fire and is invoked by the heartbeat worker around
+   * heartbeat-driven agent runs; hooks branch per agent via the `agentId` on
+   * each context. Configuring hooks here (rather than on the Agent) lets both
+   * code-defined and stored agents share the same hook surface, since stored
+   * agents cannot define functions in their serialized config.
    */
   heartbeat?: HeartbeatConfig<Mastra>;
 
