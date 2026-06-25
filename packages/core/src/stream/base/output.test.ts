@@ -1,5 +1,5 @@
 import { ReadableStream } from 'node:stream/web';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../../agent/message-list';
 import type { Processor, ProcessorStreamWriter } from '../../processors';
 import { ChunkFrom } from '../types';
@@ -942,6 +942,56 @@ describe('MastraModelOutput', () => {
 
       expect(result.toolCalls).toHaveLength(1);
       expect(result.toolCalls[0]?.payload.observability).toEqual(observability);
+    });
+  });
+
+  describe('consumeStream onError fan-out', () => {
+    it('invokes every callers onError when the shared drain errors', async () => {
+      const drainError = new Error('drain boom');
+      const stream = new ReadableStream<ChunkType>({
+        pull(controller) {
+          controller.error(drainError);
+        },
+      });
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId: 'test-run' },
+      });
+
+      const firstErrors: unknown[] = [];
+      const secondErrors: unknown[] = [];
+
+      // First caller starts the drain; second caller shares the same drain promise.
+      await Promise.all([
+        output.consumeStream({ onError: e => firstErrors.push(e) }),
+        output.consumeStream({ onError: e => secondErrors.push(e) }),
+      ]);
+
+      expect(firstErrors).toEqual([drainError]);
+      expect(secondErrors).toEqual([drainError]);
+    });
+
+    it('does not call onError when the drain succeeds', async () => {
+      const runId = 'test-run';
+      const stream = createChunkStream([createStepFinishChunk(runId), createFinishChunk(runId)]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      const onError = vi.fn();
+      await output.consumeStream({ onError });
+      await output.consumeStream({ onError });
+
+      expect(onError).not.toHaveBeenCalled();
     });
   });
 });

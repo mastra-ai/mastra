@@ -243,6 +243,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
   #consumptionStarted = false;
   #consumeStreamPromise: Promise<void> | undefined;
+  #consumeStreamErrored = false;
+  #consumeStreamError: unknown;
   #returnScorerData = false;
   #structuredOutputMode: 'direct' | 'processor' | undefined = undefined;
 
@@ -1384,31 +1386,28 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     // shared promise — rather than early-returning nothing — means later callers
     // await the run to be fully consumed, so `await consumeStream()` keeps its
     // contract regardless of who started consumption first.
-    if (this.#consumeStreamPromise) {
-      return this.#consumeStreamPromise;
+    // The drain runs once, but every caller's onError must still fire. Capture any
+    // drain error a single time inside the shared promise (do NOT bind a caller's
+    // onError to the drain), then invoke each caller's own onError after awaiting
+    // the shared promise below. This keeps error reporting per-caller instead of
+    // binding it to whoever started consumption first.
+    if (!this.#consumeStreamPromise) {
+      this.#consumptionStarted = true;
+      this.#consumeStreamPromise = consumeStream({
+        stream: this.#baseStream as globalThis.ReadableStream<any>,
+        onError: error => {
+          this.#consumeStreamErrored = true;
+          this.#consumeStreamError = error;
+        },
+        logger: this.logger,
+      });
     }
 
-    this.#consumptionStarted = true;
-    // NOTE: onError is bound to the FIRST caller only. Later callers share this
-    // promise and do not get their own onError invoked (and the shared promise
-    // always resolves, so a later caller passing a rethrowing onError — e.g.
-    // getFullOutput — won't observe an error raised by the first caller's drain).
-    // This matches prior behavior, where later callers early-returned and ran no
-    // onError at all. A proper fix is to register per-caller error handlers and
-    // fan the drain error out to all of them; deferred as a follow-up.
-    this.#consumeStreamPromise = (async () => {
-      try {
-        await consumeStream({
-          stream: this.#baseStream as globalThis.ReadableStream<any>,
-          onError: options?.onError,
-          logger: this.logger,
-        });
-      } catch (error) {
-        options?.onError?.(error);
-      }
-    })();
+    await this.#consumeStreamPromise;
 
-    return this.#consumeStreamPromise;
+    if (this.#consumeStreamErrored) {
+      options?.onError?.(this.#consumeStreamError);
+    }
   }
 
   /**
