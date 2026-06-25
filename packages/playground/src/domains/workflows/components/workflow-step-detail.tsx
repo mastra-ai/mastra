@@ -19,7 +19,7 @@ export function WorkflowStepDetailContent() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full" data-testid="workflow-step-detail-panel">
       {/* Header with title and close button */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border1 bg-surface1">
         <div className="flex items-center gap-2">
@@ -51,7 +51,7 @@ export function WorkflowStepDetailContent() {
         {stepDetail.type === 'map-config' && stepDetail.mapConfig && <CodeDialogContent data={stepDetail.mapConfig} />}
         {stepDetail.type === 'nested-graph' && stepDetail.nestedGraph && (
           <div className="h-full min-h-[400px]">
-            <ReactFlowProvider key={stepDetail.nestedGraph.fullStep}>
+            <ReactFlowProvider key={`nested-graph-${stepDetail.nestedGraph.fullStep}`}>
               <WorkflowNestedGraph
                 stepGraph={stepDetail.nestedGraph.stepGraph}
                 open={true}

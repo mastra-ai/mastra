@@ -11,7 +11,7 @@ export interface WorkflowCancelButtonProps {
 }
 
 const DONE_STATUSES = ['success', 'failed', 'canceled', 'tripwire'];
-const VISIBLE_STATUSES = ['running', 'suspended'];
+const VISIBLE_STATUSES = ['running', 'suspended', 'paused'];
 
 export function WorkflowCancelButton({
   status,

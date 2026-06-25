@@ -91,7 +91,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
 
                   return (
                     <ThreadListItem
-                      key={run.runId}
+                      key={`run-${run.runId}`}
                       as={Link}
                       to={paths.workflowRunLink(workflowId, run.runId)}
                       isActive={isActiveRun}
