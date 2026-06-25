@@ -223,8 +223,8 @@ export interface TUIState {
   activeOnboarding?: OnboardingInlineComponent;
   lastSubmitPlanComponent?: Component;
   pendingSubmitPlanComponents: Map<string, PlanApprovalInlineComponent>;
-  /** Previous plan snapshot for diff display on resubmission */
-  previousPlanSnapshot?: { title: string; plan: string };
+  /** Previous plan snapshot (keyed by plan file path) for diff display on resubmission */
+  previousPlanSnapshot?: { path: string; plan: string };
   /** User-message follow-ups queued while the agent is running */
   pendingFollowUpMessages: Array<{ content: string; images?: Array<{ data: string; mimeType: string }> }>;
   /** FIFO ordering across queued follow-up messages and slash commands */

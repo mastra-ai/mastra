@@ -402,7 +402,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
           payload.selectionMode as AskUserSelectionMode | undefined,
         );
       } else if (event.toolName === 'submit_plan') {
-        await handlePlanApproval(ectx, event.toolCallId, String(payload.title ?? ''), String(payload.plan ?? ''));
+        await handlePlanApproval(ectx, event.toolCallId, String(payload.path ?? ''));
       }
       break;
     }

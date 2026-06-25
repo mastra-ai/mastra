@@ -5,7 +5,7 @@ import { Container } from '@earendil-works/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { getCurrentPlanPath } from '../utils/plans.js';
+import { getLocalPlansDir } from '../utils/plans.js';
 import { isChatBoundarySpacer } from './components/chat-boundary-spacer.js';
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
@@ -19,11 +19,13 @@ function visibleChildren(state: TUIState) {
 
 const tmpProjects: string[] = [];
 const TEST_THREAD_ID = 'thread-test-render-messages';
+const PLAN_FILENAME = 'my-plan.md';
+const PLAN_PATH = `.mastracode/plans/${PLAN_FILENAME}`;
 
-function createTmpProjectWithPlan(title: string, plan: string, threadId = TEST_THREAD_ID): string {
+function createTmpProjectWithPlan(title: string, plan: string, filename = PLAN_FILENAME): string {
   const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-render-test-'));
   tmpProjects.push(projectPath);
-  const planPath = getCurrentPlanPath(projectPath, threadId);
+  const planPath = path.join(getLocalPlansDir(projectPath), filename);
   fs.mkdirSync(path.dirname(planPath), { recursive: true });
   fs.writeFileSync(planPath, `# ${title}\n\n${plan}\n`, 'utf-8');
   return projectPath;
@@ -881,7 +883,7 @@ describe('renderExistingMessages submit_plan approval status', () => {
             type: 'tool_call',
             id: 'call-1',
             name: 'submit_plan',
-            args: { title: 'My Plan' },
+            args: { path: PLAN_PATH },
           },
           {
             type: 'tool_result',
@@ -907,8 +909,8 @@ describe('renderExistingMessages submit_plan approval status', () => {
     expect(rendered).not.toContain('Approved');
     // Should contain "Changes requested"
     expect(rendered).toContain('Changes requested');
-    // Should restore previousPlanSnapshot for future diff computation
-    expect(state.previousPlanSnapshot).toEqual({ title: 'My Plan', plan: 'Step 1\nStep 2' });
+    // Should restore previousPlanSnapshot (keyed by path) for future diff computation
+    expect(state.previousPlanSnapshot).toEqual({ path: PLAN_PATH, plan: 'Step 1\nStep 2' });
   });
 
   it('renders approved plan as "Approved"', async () => {
@@ -922,7 +924,7 @@ describe('renderExistingMessages submit_plan approval status', () => {
             type: 'tool_call',
             id: 'call-1',
             name: 'submit_plan',
-            args: { title: 'My Plan' },
+            args: { path: PLAN_PATH },
           },
           {
             type: 'tool_result',

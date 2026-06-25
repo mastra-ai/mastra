@@ -13,7 +13,7 @@
             "id": "call_plan_approval_e2e_write",
             "name": "write_file",
             "arguments": {
-              "path": ".mastracode/plans/threads/thread-e2e-plan-approval-handoff/current-plan.md",
+              "path": ".mastracode/plans/e2e-approval-plan.md",
               "content": "# E2E Approval Plan\n\n## Overview\nApprove this plan from the real TUI.\n\n## Steps\n1. Render the submitted plan.\n2. Approve it.\n3. Start the build handoff.\n\n## Verification\nConfirm the build-mode acknowledgement renders.\n",
               "overwrite": true
             }
@@ -38,7 +38,7 @@
             "id": "call_plan_approval_e2e_submit",
             "name": "submit_plan",
             "arguments": {
-              "title": "E2E Approval Plan"
+              "path": ".mastracode/plans/e2e-approval-plan.md"
             }
           }
         ]

@@ -2,20 +2,21 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getCurrentPlanPath } from '../../../utils/plans.js';
+import { getLocalPlansDir } from '../../../utils/plans.js';
 import { createMockState } from '../../__tests__/harness-mock.js';
 import { PlanApprovalInlineComponent } from '../../components/plan-approval-inline.js';
 import type { TUIState } from '../../state.js';
-import { handleAskQuestion, handlePlanApproval, shouldShowDiff } from '../prompts.js';
+import { handleAskQuestion, handlePlanApproval } from '../prompts.js';
 import type { EventHandlerContext } from '../types.js';
 
 const tmpProjects: string[] = [];
-const TEST_THREAD_ID = 'thread-test-plan-approval';
+const PLAN_FILENAME = 'test-plan.md';
+const PLAN_PATH = `.mastracode/plans/${PLAN_FILENAME}`;
 
-function createTmpProjectWithPlan(title: string, plan: string, threadId = TEST_THREAD_ID): string {
+function createTmpProjectWithPlan(title: string, plan: string, filename = PLAN_FILENAME): string {
   const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plan-test-'));
   tmpProjects.push(projectPath);
-  const planPath = getCurrentPlanPath(projectPath, threadId);
+  const planPath = path.join(getLocalPlansDir(projectPath), filename);
   fs.mkdirSync(path.dirname(planPath), { recursive: true });
   fs.writeFileSync(planPath, `# ${title}\n\n${plan}\n`, 'utf-8');
   return projectPath;
@@ -107,7 +108,7 @@ describe('handleAskQuestion goal mode', () => {
   });
 });
 
-function createPlanApprovalCtx(projectPath?: string, threadId = TEST_THREAD_ID) {
+function createPlanApprovalCtx(projectPath?: string) {
   const sendSignal = vi.fn().mockReturnValue({
     id: 'sig-1',
     type: 'system-reminder',
@@ -115,9 +116,8 @@ function createPlanApprovalCtx(projectPath?: string, threadId = TEST_THREAD_ID) 
   });
   const state = {
     ...createMockState({
-      threadId,
       session: {
-        state: { get: vi.fn(() => ({ projectPath, threadId })), set: vi.fn().mockResolvedValue(undefined) },
+        state: { get: vi.fn(() => ({ projectPath })), set: vi.fn().mockResolvedValue(undefined) },
         identity: { getResourceId: vi.fn(() => 'resource-1') },
         respondToToolSuspension: vi.fn().mockResolvedValue(undefined),
         abort: vi.fn(),
@@ -153,8 +153,8 @@ function createPlanApprovalCtx(projectPath?: string, threadId = TEST_THREAD_ID) 
   return { state, ctx, sendSignal };
 }
 
-async function renderPlanApproval(ctx: EventHandlerContext, state: any, title: string, plan = '') {
-  const promise = handlePlanApproval(ctx, 'plan-1', title, plan);
+async function renderPlanApproval(ctx: EventHandlerContext, state: any, planPath = PLAN_PATH) {
+  const promise = handlePlanApproval(ctx, 'plan-1', planPath);
   for (let i = 0; i < 10 && state.chatContainer.children.length === 0; i++) {
     await new Promise(r => setTimeout(r, 5));
   }
@@ -166,7 +166,7 @@ describe('handlePlanApproval goal mode', () => {
     const projectPath = createTmpProjectWithPlan('Ship it', '1. Build\n2. Test');
     const { state, ctx } = createPlanApprovalCtx(projectPath);
 
-    const promise = handlePlanApproval(ctx, 'plan-1', 'Ship it', '');
+    const promise = handlePlanApproval(ctx, 'plan-1', PLAN_PATH);
     // The handler reads the plan from disk asynchronously before creating the
     // component, so wait for it to be added to the chat container.
     for (let i = 0; i < 10 && state.chatContainer.children.length === 0; i++) {
@@ -199,7 +199,7 @@ describe('handlePlanApproval goal mode', () => {
     const { state, ctx } = createPlanApprovalCtx();
     state.goalManager.getGoal = vi.fn(() => undefined);
 
-    const promise = handlePlanApproval(ctx, 'plan-1', 'Ship it', '1. Build\n2. Test');
+    const promise = handlePlanApproval(ctx, 'plan-1', PLAN_PATH);
     const component = state.chatContainer.children[0];
 
     await (component as any).onGoal();
@@ -218,7 +218,7 @@ describe('handlePlanApproval regular approval', () => {
     state.lastSubmitPlanComponent = streamedComponent;
     state.chatContainer.children.push(streamedComponent);
 
-    handlePlanApproval(ctx, 'plan-1', 'Ship it', 'Build the feature');
+    handlePlanApproval(ctx, 'plan-1', PLAN_PATH);
 
     expect(state.chatContainer.children.filter((child: unknown) => child === streamedComponent)).toHaveLength(1);
     expect(state.activeInlinePlanApproval).toBe(streamedComponent);
@@ -229,7 +229,7 @@ describe('handlePlanApproval regular approval', () => {
   it('approves the plan without sending a handoff signal', async () => {
     const { state, ctx, sendSignal } = createPlanApprovalCtx();
 
-    const promise = handlePlanApproval(ctx, 'plan-1', 'Ship it', '1. Build\n2. Test');
+    const promise = handlePlanApproval(ctx, 'plan-1', PLAN_PATH);
     const component = state.chatContainer.children[0];
 
     await (component as any).onApprove();
@@ -251,7 +251,7 @@ describe('handlePlanApproval regular approval', () => {
   it('rejects the plan by resuming with a rejection then aborting the run host-side', async () => {
     const { state, ctx } = createPlanApprovalCtx();
 
-    const promise = handlePlanApproval(ctx, 'plan-1', 'Ship it', '1. Build\n2. Test');
+    const promise = handlePlanApproval(ctx, 'plan-1', PLAN_PATH);
     const component = state.chatContainer.children[0];
 
     await (component as any).onReject();
@@ -271,71 +271,49 @@ describe('handlePlanApproval regular approval', () => {
     expect(state.activeInlinePlanApproval).toBeUndefined();
   });
 
-  it('renders a full plan instead of diffing against a stale snapshot with a different title', async () => {
+  it('renders a full plan instead of diffing against a snapshot from a different plan file', async () => {
     const projectPath = createTmpProjectWithPlan('New Plan', 'Build the new thing\nRun tests');
     const { state, ctx } = createPlanApprovalCtx(projectPath);
-    state.previousPlanSnapshot = { title: 'Old Plan', plan: 'Delete something unrelated\nRewrite old feature' };
+    // Snapshot is from a different plan file path — it must not diff against it.
+    state.previousPlanSnapshot = {
+      path: '.mastracode/plans/old-plan.md',
+      plan: 'Delete something unrelated\nRewrite old feature',
+    };
 
-    const { component } = await renderPlanApproval(ctx, state, 'New Plan');
+    const { component } = await renderPlanApproval(ctx, state, PLAN_PATH);
     const output = component.render(100).join('\n');
 
     expect(output).toContain('Build the new thing');
     expect(output).not.toContain('Changes from previous plan:');
-    expect(state.previousPlanSnapshot).toEqual({ title: 'New Plan', plan: 'Build the new thing\nRun tests' });
+    expect(state.previousPlanSnapshot).toEqual({ path: PLAN_PATH, plan: 'Build the new thing\nRun tests' });
   });
 
-  it('clears a stale snapshot and renders a full plan when current-plan.md is missing', async () => {
+  it('clears a stale snapshot and renders a full plan when the plan file is missing', async () => {
     const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plan-test-'));
     tmpProjects.push(projectPath);
     const { state, ctx } = createPlanApprovalCtx(projectPath);
-    state.previousPlanSnapshot = { title: 'Old Plan', plan: 'Old stale plan' };
+    state.previousPlanSnapshot = { path: '.mastracode/plans/old-plan.md', plan: 'Old stale plan' };
 
-    const { component } = await renderPlanApproval(ctx, state, 'New Plan', 'Fallback plan body');
+    const { component } = await renderPlanApproval(ctx, state, PLAN_PATH);
     const output = component.render(100).join('\n');
 
-    expect(output).toContain('Fallback plan body');
     expect(output).not.toContain('Changes from previous plan:');
     expect(state.previousPlanSnapshot).toBeUndefined();
   });
 
-  it('renders a diff for a small resubmission of the same active plan', async () => {
+  it('renders a diff for a small resubmission of the same plan file', async () => {
     const projectPath = createTmpProjectWithPlan('Same Plan', 'Build the feature\nAdd focused tests\nUpdate docs');
     const { state, ctx } = createPlanApprovalCtx(projectPath);
-    state.previousPlanSnapshot = { title: 'Same Plan', plan: 'Build the feature\nRun tests\nUpdate docs' };
+    state.previousPlanSnapshot = { path: PLAN_PATH, plan: 'Build the feature\nRun tests\nUpdate docs' };
 
-    const { component } = await renderPlanApproval(ctx, state, 'Same Plan');
+    const { component } = await renderPlanApproval(ctx, state, PLAN_PATH);
     const output = component.render(100).join('\n');
 
     expect(output).toContain('Changes from previous plan:');
     expect(output).toContain('Add focused tests');
     expect(state.previousPlanSnapshot).toEqual({
-      title: 'Same Plan',
+      path: PLAN_PATH,
       plan: 'Build the feature\nAdd focused tests\nUpdate docs',
     });
-  });
-});
-
-describe('shouldShowDiff (size-gated diff)', () => {
-  it('shows a diff for a small targeted edit', () => {
-    const previous = ['Build the feature', 'Run tests', 'Update docs'].join('\n');
-    const next = ['Build the feature', 'Add tests', 'Update docs'].join('\n');
-    expect(shouldShowDiff(previous, next)).toBe(true);
-  });
-
-  it('shows a diff when no more than 50% of the new plan changed', () => {
-    const previous = ['Old line 1', 'Old line 2', 'Keep 1', 'Keep 2'].join('\n');
-    const next = ['New line 1', 'New line 2', 'Keep 1', 'Keep 2'].join('\n');
-    expect(shouldShowDiff(previous, next)).toBe(true);
-  });
-
-  it('falls back to the full plan when more than 50% of the new plan changed', () => {
-    const previous = ['Old line 1', 'Old line 2', 'Old line 3', 'Keep'].join('\n');
-    const next = ['New line 1', 'New line 2', 'New line 3', 'Keep'].join('\n');
-    expect(shouldShowDiff(previous, next)).toBe(false);
-  });
-
-  it('returns false when there is no previous plan or no change', () => {
-    expect(shouldShowDiff('', 'New plan')).toBe(false);
-    expect(shouldShowDiff('Same plan', 'Same plan')).toBe(false);
   });
 });

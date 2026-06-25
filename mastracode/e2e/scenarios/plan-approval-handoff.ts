@@ -1,21 +1,12 @@
 import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
-const PLAN_APPROVAL_HANDOFF_THREAD_ID = 'thread-e2e-plan-approval-handoff';
-
-function createPlanApprovalIdGenerator(): () => string {
-  let count = 0;
-  return () => (++count === 2 ? PLAN_APPROVAL_HANDOFF_THREAD_ID : `plan-approval-handoff-id-${count}`);
-}
-
 export const planApprovalHandoffScenario: McE2eScenario = {
   name: 'plan-approval-handoff',
   description: 'Use AIMock submit_plan and approve the inline plan card through the real TUI.',
   testName: 'renders and approves an AIMock-driven submit_plan handoff',
   useOpenAIModel: true,
   aimockFixture: 'plan-approval-handoff.json',
-  inProcessApp: ({ startMastraCodeApp }) =>
-    startMastraCodeApp({ config: { idGenerator: createPlanApprovalIdGenerator() } }),
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
     await (expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })) as any).toBeVisible();

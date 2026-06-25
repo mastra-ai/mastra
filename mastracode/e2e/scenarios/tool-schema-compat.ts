@@ -76,8 +76,8 @@ export const toolSchemaCompatScenario: McE2eScenario = {
 
     const submitPlanSchema = schemaFor(findTool(requests, 'submit_plan'));
     expectObjectSchema(submitPlanSchema, 'submit_plan');
-    if (!submitPlanSchema.properties.title) {
-      throw new Error('Expected submit_plan schema to include title property');
+    if (!submitPlanSchema.properties.path) {
+      throw new Error('Expected submit_plan schema to include path property');
     }
     if (submitPlanSchema.properties.plan) {
       throw new Error('Expected submit_plan schema to omit plan property');

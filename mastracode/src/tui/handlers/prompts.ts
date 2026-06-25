@@ -3,7 +3,8 @@
  * tool_suspended (ask_user / request_access / submit_plan).
  */
 import type { AskUserSelectionMode } from '@mastra/core/tools';
-import { approveCurrentPlan, getCurrentPlanFilename, readCurrentPlan } from '../../utils/plans.js';
+import { shouldShowDiff } from '../../utils/plan-diff.js';
+import { approvePlanFile, readPlanFile, resolvePlanPath } from '../../utils/plans.js';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { PlanApprovalInlineComponent } from '../components/plan-approval-inline.js';
@@ -248,7 +249,13 @@ export async function handleSandboxAccessRequest(
  * "Request changes" rejects the tool call and aborts the agent so the user can
  * provide revision feedback via a normal chat message.
  */
-async function approvePlan(ctx: EventHandlerContext, toolCallId: string, title: string, plan: string): Promise<void> {
+async function approvePlan(
+  ctx: EventHandlerContext,
+  toolCallId: string,
+  title: string,
+  plan: string,
+  planPath: string | undefined,
+): Promise<void> {
   const { state } = ctx;
   await state.session.state.set({
     activePlan: {
@@ -258,22 +265,17 @@ async function approvePlan(ctx: EventHandlerContext, toolCallId: string, title: 
     },
   });
 
-  // Archive the working plan: move + rename current-plan.md to a stable local
-  // <slug>.md, copy to the global plans archive, and delete current-plan.md so
-  // the next plan in this branch starts fresh.
-  const projectPath = (state.session.state.get() as any)?.projectPath as string | undefined;
-  const threadId = getSessionThreadId(state);
-  if (projectPath && threadId) {
-    await approveCurrentPlan({
+  // Archive the approved plan to the global plans dir so it's findable later. The
+  // local named plan file is left in place so the user can review every plan made.
+  if (planPath) {
+    await approvePlanFile({
+      planPath,
       title,
-      projectPath,
       resourceId: state.session.identity.getResourceId(),
-      threadId,
     }).catch(() => {});
   }
 
-  // Reset in-memory plan state to a neutral baseline so the next plan re-creates
-  // current-plan.md and does not diff against the now-archived plan.
+  // Reset in-memory diff state so the next plan doesn't diff against this one.
   state.previousPlanSnapshot = undefined;
   state.lastSubmitPlanComponent = undefined;
 
@@ -287,68 +289,39 @@ function formatPlanGoalObjective(title: string, plan: string): string {
   return `# ${title}\n\n${plan}`;
 }
 
-function getSessionThreadId(state: TUIState): string | undefined {
-  const thread = (state.session as any).thread;
-  const threadId = thread?.getId?.() ?? (state.session.state.get() as any)?.threadId;
-  return typeof threadId === 'string' ? threadId : undefined;
-}
-
-/**
- * Decide whether a diff is worth showing over the full plan. If more than 50%
- * of the new plan's lines changed, the diff is no clearer than just rendering
- * the full plan, so fall back to the full plan.
- */
-export function shouldShowDiff(previousPlan: string, plan: string): boolean {
-  if (!previousPlan || previousPlan === plan) return false;
-
-  const oldLines = previousPlan.split('\n');
-  const newLines = plan.split('\n');
-  const maxLines = Math.max(oldLines.length, newLines.length);
-
-  let changed = 0;
-  for (let i = 0; i < maxLines; i++) {
-    if (oldLines[i] !== newLines[i]) changed++;
-  }
-
-  return changed / newLines.length <= 0.5;
-}
-
 export async function handlePlanApproval(
   ctx: EventHandlerContext,
   toolCallId: string,
-  title: string,
-  _plan: string,
+  submittedPath: string,
 ): Promise<void> {
   const { state } = ctx;
 
-  // The submit_plan tool no longer carries the plan body — it lives in the
-  // single working file. Read the real content from disk so the approval UI
-  // renders and diffs the actual plan.
+  // submit_plan carries only the path to the plan file. Read the real content
+  // from disk so the approval UI renders and diffs the actual plan.
   const projectPath = (state.session.state.get() as any)?.projectPath as string | undefined;
-  const threadId = getSessionThreadId(state);
-  const current = projectPath && threadId ? await readCurrentPlan(projectPath, threadId) : undefined;
-  if (projectPath && (!threadId || !current)) {
+  const planPath = projectPath ? resolvePlanPath(projectPath, submittedPath) : undefined;
+  const current = planPath ? await readPlanFile(planPath) : undefined;
+  if (!current) {
     state.previousPlanSnapshot = undefined;
   }
-  const plan = current?.plan ?? _plan ?? '';
-  const resolvedTitle = title || current?.title || 'Implementation Plan';
+  const plan = current?.plan ?? '';
+  const resolvedTitle = current?.title || 'Implementation Plan';
 
-  // Previous plan content is only valid for revisions of the same active plan.
-  // If the working file disappeared or the title changed, render the full plan
-  // instead of diffing against a stale snapshot from another plan lifecycle.
+  // A previous snapshot is only a valid diff base for a revision of the SAME
+  // plan file. A different path means a brand-new plan, so render it in full
+  // rather than diffing against an unrelated plan.
   const snapshot = state.previousPlanSnapshot;
-  const snapshotPlan = snapshot?.title === resolvedTitle ? snapshot.plan : undefined;
+  const snapshotPlan = snapshot && snapshot.path === submittedPath ? snapshot.plan : undefined;
   const previousPlan = snapshotPlan && shouldShowDiff(snapshotPlan, plan) ? snapshotPlan : undefined;
 
-  // Snapshot this submission so the next resubmission of the same plan can diff
-  // against it. If a project path exists but current-plan.md is missing, do not
-  // seed diff history from stale suspension data.
-  if (current || !projectPath) {
-    state.previousPlanSnapshot = { title: resolvedTitle, plan };
+  // Snapshot this submission (keyed by path) so the next resubmission of the same
+  // file can diff against it. Skip seeding history when the file couldn't be read.
+  if (current) {
+    state.previousPlanSnapshot = { path: submittedPath, plan };
   }
 
   return new Promise(resolve => {
-    const planFilename = threadId ? getCurrentPlanFilename(threadId) : 'current-plan.md';
+    const planFilename = submittedPath;
     const approvalOptions = {
       toolCallId,
       title: resolvedTitle,
@@ -358,13 +331,13 @@ export async function handlePlanApproval(
       onApprove: async () => {
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
-        await approvePlan(ctx, toolCallId, resolvedTitle, plan);
+        await approvePlan(ctx, toolCallId, resolvedTitle, plan, planPath);
         resolve();
       },
       onGoal: async () => {
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
-        await approvePlan(ctx, toolCallId, resolvedTitle, plan);
+        await approvePlan(ctx, toolCallId, resolvedTitle, plan, planPath);
 
         // `approvePlan` waits for plan mode to idle before `startGoal` sends
         // the canonical goal reminder, so this starts a fresh build-mode run.
