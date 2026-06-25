@@ -15,6 +15,7 @@ const createMastraCodeModelCatalogProviderMock = vi.fn(() => mastraCodeCatalogPr
 const resolveModelMock = vi.fn();
 
 vi.mock('@mastra/core/llm', () => ({
+  MastraModelGateway: class {},
   PROVIDER_REGISTRY: providerRegistryMock,
 }));
 
@@ -390,7 +391,9 @@ describe('createMastraCode', () => {
           subagents?: unknown[];
         }
       | undefined;
-    expect(harnessConfig?.gateways).toEqual([mastraCodeGatewayMock]);
+    const gateways = harnessConfig?.gateways as Array<{ id?: string }> | undefined;
+    expect(gateways?.[0]?.id).toBe('amazon-bedrock');
+    expect(gateways?.[1]).toBe(mastraCodeGatewayMock);
     expect(harnessConfig?.subagents).toEqual([subagent]);
   }, 10_000);
 
