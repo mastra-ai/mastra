@@ -52,7 +52,7 @@ describe('Trailing guard does not swallow new-run null-runId chunks', () => {
   it('delivers null-runId chunks from a new run after a different run was aborted', async () => {
     const harness = createHarness();
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const events: HarnessEvent[] = [];
     session.subscribe(event => {
       events.push(event);

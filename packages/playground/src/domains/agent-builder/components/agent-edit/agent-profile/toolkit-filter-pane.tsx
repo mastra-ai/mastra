@@ -1,5 +1,6 @@
-import { ScrollArea, Txt, cn } from '@mastra/playground-ui';
+import { Txt, cn } from '@mastra/playground-ui';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { memo, useMemo, useState } from 'react';
 import { useToolkits } from '../../../../tool-providers/hooks/use-toolkits';

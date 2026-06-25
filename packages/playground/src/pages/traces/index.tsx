@@ -2,7 +2,6 @@ import { EntityType } from '@mastra/core/observability';
 import {
   Button,
   NoTracesInfo,
-  PageLayout,
   SpanDataPanelView,
   TraceDataPanelView,
   TracesErrorContent,
@@ -29,6 +28,7 @@ import type { SpanTab } from '@mastra/playground-ui';
 import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { CircleSlash2, RefreshCw } from 'lucide-react';

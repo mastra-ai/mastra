@@ -568,9 +568,6 @@ export class MastraTUI {
     await this.state.harness.init();
     await this.state.harness.getMastra()?.startWorkers();
 
-    // Check for existing threads and prompt for resume
-    await promptForThreadSelection(this.state);
-
     // Load custom slash commands
     await loadCustomSlashCommands(this.state);
 
@@ -590,6 +587,12 @@ export class MastraTUI {
       doubleCtrlCMs: MastraTUI.DOUBLE_CTRL_C_MS,
     });
 
+    // Start the UI before thread selection so resource-drift prompts can render.
+    this.state.ui.start();
+
+    // Check for existing threads and prompt for resume
+    await promptForThreadSelection(this.state);
+
     // Subscribe to harness events
     subscribeToHarness(this.state, event => this.handleEvent(event));
     // Restore escape-as-cancel setting from persisted state
@@ -607,8 +610,6 @@ export class MastraTUI {
     // promptForThreadSelection fired before we subscribed above.
     await syncInitialThreadState(this.state);
 
-    // Start the UI
-    this.state.ui.start();
     this.state.isInitialized = true;
 
     // Start MCP connections now that the TUI owns the terminal.

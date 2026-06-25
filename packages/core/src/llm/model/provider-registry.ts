@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import type { ProviderConfig, MastraModelGatewayInterface } from './gateways/base.js';
-import { getGatewayId, shouldEnableGateway } from './gateways/index.js';
+import { getGatewayId, shouldEnableGateway } from './gateways/gateway-helpers.js';
 import { MastraGateway } from './gateways/mastra.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';

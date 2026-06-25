@@ -1,6 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { Button, cn, Collapsible, CollapsibleContent, CollapsibleTrigger, Icon, Txt } from '@mastra/playground-ui';
+import { Button, cn, Icon, Txt } from '@mastra/playground-ui';
 import { Card } from '@mastra/playground-ui/components/Card';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { MessageFactory } from '@mastra/react';

@@ -1,4 +1,6 @@
-import { Button, DialogBody, DialogFooter, Entity, EntityContent, EntityName, Icon } from '@mastra/playground-ui';
+import { Button, Icon } from '@mastra/playground-ui';
+import { DialogBody, DialogFooter } from '@mastra/playground-ui/components/Dialog';
+import { Entity, EntityContent, EntityName } from '@mastra/playground-ui/components/Entity';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { ChevronRight, Plus } from 'lucide-react';
 

@@ -1,5 +1,32 @@
 # @internal/playground
 
+## 1.15.2-alpha.2
+
+### Patch Changes
+
+- Fixed Studio dropping a code-defined agent's tools when saving. A code agent that doesn't set an `editor` config is fully editable, but Studio was leaving the tools out of the save request, so tool changes (and description overrides) were silently discarded. Studio now sends the edited tools for these agents, matching the fields the server actually persists. ([#18404](https://github.com/mastra-ai/mastra/pull/18404))
+
+- Move the Memory Studio (timeline, flamegraph, and observational-memory detail) into the agent chat view as an opt-in panel. ([#18272](https://github.com/mastra-ai/mastra/pull/18272))
+  - The standalone Memory nav entry, `/memory` routes, and the separate thread/chat list are removed; the studio is now opened from the chat view and shown inside the Memory sidepanel, with the agent layout's left resizable panel expanding when the detail opens. Clicking the flamegraph timeline drives a replay cursor that highlights the matching observational-memory record. Marker types are imported from `@mastra/memory` instead of being redeclared in the UI so the studio stays in sync with the stream format.
+  - `MemoryStudioPanel` gains an optional `contextWindow` prop so callers can supply authoritative message/observation token counts and thresholds; when provided these take precedence over values re-derived from message markers, keeping the panel's MESSAGES/OBSERVATIONS readout in sync with the observational-memory sidebar (marker-derived values remain the fallback for standalone usage).
+  - `MemoryStudioPanel` now shows both Messages and Observations progress bars, matching the collapsed memory sidebar. The FlameGraph zoom range is lifted into the panel and filters the observation list: collapsing the range hides out-of-range observations and "Reset zoom" restores the full list. `FlameGraph` gains optional controlled `zoomRange`/`onZoomRangeChange` props (uncontrolled usage is unchanged).
+
+- Updated dependencies [[`86623c1`](https://github.com/mastra-ai/mastra/commit/86623c1adf7d22de32cc916dda17f4155184db36), [`7c9dd77`](https://github.com/mastra-ai/mastra/commit/7c9dd77bd18cb8dc72797e25f1a0fbdc71a11347), [`d763590`](https://github.com/mastra-ai/mastra/commit/d763590cf147273276b485263209f2cf5ff7319b), [`47c5c7b`](https://github.com/mastra-ai/mastra/commit/47c5c7b2b3cd8efc3ecb408029771d6083f5bf6c), [`9990965`](https://github.com/mastra-ai/mastra/commit/999096571635a83b42ef40841fd7028cfa630779), [`c0ffa3c`](https://github.com/mastra-ai/mastra/commit/c0ffa3c897ccd326de880df734740a7f0681a18f), [`0504bf5`](https://github.com/mastra-ai/mastra/commit/0504bf5e8cffc571a4b343326178de371e6f859b), [`c5df3f1`](https://github.com/mastra-ai/mastra/commit/c5df3f155750c3d78666dc699fd26941dd5d24e7), [`5afe423`](https://github.com/mastra-ai/mastra/commit/5afe423e4badf040f1b0d4525183a856fcb8146e), [`86623c1`](https://github.com/mastra-ai/mastra/commit/86623c1adf7d22de32cc916dda17f4155184db36), [`8c9f1c0`](https://github.com/mastra-ai/mastra/commit/8c9f1c0361d89066f9bcd14a2f69e761b01766c8), [`a368407`](https://github.com/mastra-ai/mastra/commit/a368407010c8c1b34d349a2ad1506f5b01ed9301)]:
+  - @mastra/core@1.47.0-alpha.2
+  - @mastra/playground-ui@36.1.0-alpha.2
+  - @mastra/client-js@1.27.1-alpha.2
+  - @mastra/react@1.1.2-alpha.2
+
+## 1.15.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`7f9ae70`](https://github.com/mastra-ai/mastra/commit/7f9ae70826b047e5a66218f9e92f20e54a2d791f), [`667be96`](https://github.com/mastra-ai/mastra/commit/667be96ac5ddfc1983afb430cc3b72b89f91051b), [`2a67d9b`](https://github.com/mastra-ai/mastra/commit/2a67d9bf70e17da28df39de3436d697ca25bf120), [`1505c07`](https://github.com/mastra-ai/mastra/commit/1505c07603f6346bae12aa82f140e8b88ffea9ab), [`e940f09`](https://github.com/mastra-ai/mastra/commit/e940f099ef5d18b403e6f2b4937e086a4da857b1)]:
+  - @mastra/core@1.46.1-alpha.1
+  - @mastra/playground-ui@36.1.0-alpha.1
+  - @mastra/client-js@1.27.1-alpha.1
+  - @mastra/react@1.1.2-alpha.1
+
 ## 1.15.2-alpha.0
 
 ### Patch Changes

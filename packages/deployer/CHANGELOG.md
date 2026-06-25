@@ -1,5 +1,23 @@
 # @mastra/deployer
 
+## 1.47.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`86623c1`](https://github.com/mastra-ai/mastra/commit/86623c1adf7d22de32cc916dda17f4155184db36), [`7c9dd77`](https://github.com/mastra-ai/mastra/commit/7c9dd77bd18cb8dc72797e25f1a0fbdc71a11347), [`9990965`](https://github.com/mastra-ai/mastra/commit/999096571635a83b42ef40841fd7028cfa630779), [`c0ffa3c`](https://github.com/mastra-ai/mastra/commit/c0ffa3c897ccd326de880df734740a7f0681a18f), [`0504bf5`](https://github.com/mastra-ai/mastra/commit/0504bf5e8cffc571a4b343326178de371e6f859b), [`5afe423`](https://github.com/mastra-ai/mastra/commit/5afe423e4badf040f1b0d4525183a856fcb8146e), [`86623c1`](https://github.com/mastra-ai/mastra/commit/86623c1adf7d22de32cc916dda17f4155184db36), [`8c9f1c0`](https://github.com/mastra-ai/mastra/commit/8c9f1c0361d89066f9bcd14a2f69e761b01766c8)]:
+  - @mastra/core@1.47.0-alpha.2
+  - @mastra/server@1.47.0-alpha.2
+
+## 1.46.1-alpha.1
+
+### Patch Changes
+
+- Add the experimental Signals observability experience to Studio. Introduces a route-driven enterprise topics/signals trace explorer (topic, subtopic, and trace panels) and a reusable scatter plot chart component in `@mastra/playground-ui`, with the reusable Signals UI and data placed behind the playground-ui EE export boundary. The Signals page is gated behind a server-injected `MASTRA_SIGNALS_UI` runtime flag: the Studio HTML exposes `window.MASTRA_SIGNALS_UI`, which the CLI and deployers populate from the `MASTRA_SIGNALS_UI` env var (default off). When disabled, the Signals sidebar item and `/signals` routes are not registered. ([#18138](https://github.com/mastra-ai/mastra/pull/18138))
+
+- Updated dependencies [[`7f9ae70`](https://github.com/mastra-ai/mastra/commit/7f9ae70826b047e5a66218f9e92f20e54a2d791f), [`1505c07`](https://github.com/mastra-ai/mastra/commit/1505c07603f6346bae12aa82f140e8b88ffea9ab), [`e940f09`](https://github.com/mastra-ai/mastra/commit/e940f099ef5d18b403e6f2b4937e086a4da857b1)]:
+  - @mastra/core@1.46.1-alpha.1
+  - @mastra/server@1.46.1-alpha.1
+
 ## 1.46.1-alpha.0
 
 ### Patch Changes

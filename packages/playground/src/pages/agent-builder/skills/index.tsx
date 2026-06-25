@@ -1,9 +1,10 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { Button, PageLayout, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { Button, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { DownloadIcon, PlusIcon, SparklesIcon } from 'lucide-react';
