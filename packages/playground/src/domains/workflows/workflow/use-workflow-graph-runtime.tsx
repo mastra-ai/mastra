@@ -1,10 +1,11 @@
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
-import type { Edge, EdgeProps, NodeProps } from '@xyflow/react';
+import type { EdgeProps, NodeProps } from '@xyflow/react';
 import { useContext, useMemo } from 'react';
 
 import { useCurrentRun } from '../context/use-current-run';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { buildStepSuccessors, buildStepsFlow, collectGraphStepFlags, isBranchArmBypassed } from './utils';
+import type { WorkflowGraphEdge } from './utils';
 import { WorkflowBoundaryNode } from './workflow-boundary-node';
 import { WorkflowDataEdge, WORKFLOW_DATA_EDGE_TYPE } from './workflow-data-edge';
 import { WorkflowGraphNode } from './workflow-graph-node';
@@ -19,7 +20,7 @@ export const useWorkflowGraphRuntime = ({
   workflowName,
   stepGraph,
 }: {
-  edges: Edge[];
+  edges: WorkflowGraphEdge[];
   workflowName?: string;
   stepGraph?: SerializedStepFlowEntry[];
 }) => {
@@ -56,7 +57,7 @@ export const useWorkflowGraphRuntime = ({
   );
   const edgeTypes = useMemo(
     () => ({
-      [WORKFLOW_DATA_EDGE_TYPE]: (props: EdgeProps) => (
+      [WORKFLOW_DATA_EDGE_TYPE]: (props: EdgeProps<WorkflowGraphEdge>) => (
         <WorkflowDataEdge parentWorkflowName={workflowName} {...props} />
       ),
     }),
@@ -65,14 +66,14 @@ export const useWorkflowGraphRuntime = ({
   const styledEdges = useMemo(
     () =>
       edges.map(edge => {
-        const previousStepId = getScopedStepId(edge.data?.previousStepId as string | undefined, workflowName);
-        const nextStepId = getScopedStepId(edge.data?.nextStepId as string | undefined, workflowName);
+        const previousStepId = getScopedStepId(edge.data?.previousStepId, workflowName);
+        const nextStepId = getScopedStepId(edge.data?.nextStepId, workflowName);
         const previousStepSucceeded = steps[previousStepId ?? '']?.status === 'success';
-        const nextStepStatus = steps[nextStepId ?? '']?.status as string | undefined;
+        const nextStepStatus = steps[nextStepId ?? '']?.status;
         // A conditional arm that lost the branch decision never runs, so its status
         // stays `undefined`. Treat such a bypassed arm like an explicitly skipped step
         // so edges feeding it stay neutral.
-        const nextStepBypassed = isArmBypassed(edge.data?.nextStepId as string | undefined);
+        const nextStepBypassed = isArmBypassed(edge.data?.nextStepId);
         // The boundary edge into the End node carries no step ids; it should light
         // green once the whole workflow run has finished successfully.
         if (edge.data?.boundaryPayload === 'workflow-output') {
