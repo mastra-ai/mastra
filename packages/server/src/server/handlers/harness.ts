@@ -28,9 +28,13 @@ function getHarnessOrThrow(
   return harness;
 }
 
-async function getSession(harness: Harness<any>, resourceId: string): Promise<Session<any>> {
+async function getSession(
+  harness: Harness<any>,
+  resourceId: string,
+  tags?: Record<string, string>,
+): Promise<Session<any>> {
   await harness.init();
-  return harness.createSession({ resourceId, id: resourceId, ownerId: harness.id });
+  return harness.createSession({ resourceId, id: resourceId, ownerId: harness.id, tags });
 }
 
 // ---------------------------------------------------------------------------
@@ -40,7 +44,10 @@ async function getSession(harness: Harness<any>, resourceId: string): Promise<Se
 const harnessIdPathParams = z.object({ harnessId: z.string() });
 const sessionPathParams = z.object({ harnessId: z.string(), resourceId: z.string() });
 
-const createSessionBodySchema = z.object({ resourceId: z.string() });
+const createSessionBodySchema = z.object({
+  resourceId: z.string(),
+  tags: z.record(z.string(), z.string()).optional(),
+});
 const sendMessageBodySchema = z.object({ message: z.string() });
 const steerBodySchema = z.object({ message: z.string() });
 const toolApprovalBodySchema = z.object({
@@ -234,10 +241,10 @@ export const CREATE_HARNESS_SESSION_ROUTE = createRoute({
   tags: ['Harness'],
   requiresAuth: true,
   requiresPermission: 'harness:execute',
-  handler: async ({ mastra, harnessId, resourceId }) => {
+  handler: async ({ mastra, harnessId, resourceId, tags }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
-      const session = await getSession(harness, resourceId);
+      const session = await getSession(harness, resourceId, tags);
       return {
         harnessId,
         resourceId,

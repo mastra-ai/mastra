@@ -325,11 +325,17 @@ export class HarnessSession extends BaseResource {
     return `/harness/${encodeURIComponent(this.harnessId)}/sessions/${encodeURIComponent(this.resourceId)}`;
   }
 
-  /** Create or resume this session. */
-  create(): Promise<CreateHarnessSessionResponse> {
+  /**
+   * Create or resume this session. Pass `tags` to scope initial thread
+   * selection — a thread is a resume candidate only when its metadata matches
+   * every tag. Required when sessions share a resourceId (e.g. git worktrees
+   * using a `{ projectPath }` tag) so each resumes its own thread instead of the
+   * most recent thread across the whole resource.
+   */
+  create(options?: { tags?: Record<string, string> }): Promise<CreateHarnessSessionResponse> {
     return this.request(`/harness/${encodeURIComponent(this.harnessId)}/sessions`, {
       method: 'POST',
-      body: { resourceId: this.resourceId },
+      body: { resourceId: this.resourceId, tags: options?.tags },
     });
   }
 

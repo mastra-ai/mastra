@@ -245,6 +245,47 @@ describe('Harness thread locking', () => {
       const newSession = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
       expect(acquire).toHaveBeenCalledWith(newSession.thread.getId());
     });
+
+    it('scopes initial thread selection to tags so worktrees stay isolated', async () => {
+      const store = new InMemoryStore();
+
+      // Two worktrees of the same repo share one resourceId but live at
+      // different paths. Each session is created with its own projectPath tag.
+      const harnessA = freshHarness(store);
+      await harnessA.init();
+      const sessionA = await harnessA.createSession({
+        id: 'session-a',
+        ownerId: 'test-owner',
+        resourceId: 'repo',
+        tags: { projectPath: '/repo/worktree-a' },
+      });
+      const threadA = sessionA.thread.getId();
+      expect(threadA).toBeDefined();
+
+      const harnessB = freshHarness(store);
+      await harnessB.init();
+      const sessionB = await harnessB.createSession({
+        id: 'session-b',
+        ownerId: 'test-owner',
+        resourceId: 'repo',
+        tags: { projectPath: '/repo/worktree-b' },
+      });
+      const threadB = sessionB.thread.getId();
+
+      // worktree-b must NOT claim worktree-a's most-recent thread.
+      expect(threadB).not.toBe(threadA);
+
+      // Reconnecting to worktree-a resumes its own thread, not worktree-b's.
+      const harnessA2 = freshHarness(store);
+      await harnessA2.init();
+      const sessionA2 = await harnessA2.createSession({
+        id: 'session-a2',
+        ownerId: 'test-owner',
+        resourceId: 'repo',
+        tags: { projectPath: '/repo/worktree-a' },
+      });
+      expect(sessionA2.thread.getId()).toBe(threadA);
+    });
   });
 
   describe('deleteThread', () => {
