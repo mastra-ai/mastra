@@ -5,6 +5,8 @@ import type { MastraDBMessage } from '../agent/message-list/state/types';
 import { mastraDBMessageToSignal } from '../agent/signals';
 import type { AgentInstructions, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
+import { AgentChannels } from '../channels/agent-channels';
+import type { ChannelConfig } from '../channels/types';
 import { getErrorFromUnknown } from '../error';
 import { GatewayManager } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/gateways/defaults';
@@ -218,6 +220,13 @@ export class Harness<TState = {}> {
   #externalMastra: Mastra | undefined = undefined;
   #gatewayManager: GatewayManager | undefined = undefined;
   #legacyAgentMode: Record<string, Agent<any, any, any, any>> = {};
+  /**
+   * Channels bound to this Harness. When set, the channel acts as a full
+   * Harness UI: incoming messages drive a durable per-resource {@link Session}
+   * and replies render from that session's event stream. Null when no channels
+   * are configured.
+   */
+  #channels: AgentChannels | null = null;
 
   constructor(config: HarnessConfig<TState>) {
     validateModes(config.modes);
@@ -256,6 +265,33 @@ export class Harness<TState = {}> {
     } else if (typeof config.browser === 'function') {
       this.browserFn = config.browser;
     }
+
+    // Bind channels: the channel becomes a full Harness UI (peer of the TUI).
+    if (config.channels) {
+      const channels =
+        config.channels instanceof AgentChannels
+          ? config.channels
+          : new AgentChannels(config.channels as ChannelConfig);
+      this.setChannels(channels);
+    }
+  }
+
+  /**
+   * Returns the AgentChannels instance bound to this Harness, or null if no
+   * channels are configured. Mirrors `Agent.getChannels()`.
+   */
+  getChannels(): AgentChannels | null {
+    return this.#channels;
+  }
+
+  /**
+   * Bind an AgentChannels instance to this Harness, turning configured channels
+   * into a full Harness UI. Mirrors `Agent.setChannels()`. Used both by the
+   * constructor and by ChannelProvider implementations that inject adapters.
+   */
+  setChannels(channels: AgentChannels): void {
+    this.#channels = channels;
+    channels.__setHarness(this);
   }
 
   /**

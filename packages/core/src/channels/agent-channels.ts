@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { Agent } from '../agent/agent';
 import type { MastraProviderMetadata } from '../agent/message-list/state/types';
 import type { AgentSignalContents } from '../agent/signals';
+import type { Harness } from '../harness/harness';
 import type { IMastraLogger } from '../logger/logger';
 import type { Mastra } from '../mastra';
 import type { StorageThreadType } from '../memory/types';
@@ -34,6 +35,7 @@ import type { InlineLinkRule } from './inline-media';
 import { ChatChannelOutputProcessor, CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './output-processor';
 import type { ChatChannelRenderContext } from './output-processor';
 import { ChatChannelProcessor } from './processor';
+import { SessionChannelRenderer } from './session-renderer';
 import { MastraStateAdapter } from './state-adapter';
 import type { PendingApprovalRecord } from './stream-helpers';
 import type {
@@ -66,6 +68,15 @@ export class AgentChannels {
   /** Stored initialization promise so webhook handlers can await readiness on serverless cold starts. */
   private initPromise: Promise<void> | null = null;
   private agent!: Agent<any, any, any, any>;
+  /**
+   * Optional Harness target. When set, incoming channel messages drive a
+   * Harness {@link Session} instead of the agent directly: the channel becomes
+   * a full Harness UI (a peer of the TUI) rather than a thin pipe to one agent
+   * loop. The Agent path (`__setAgent` + `agent.sendMessage`) is untouched;
+   * this is purely additive. Mutually exclusive with the Agent target in
+   * practice — whichever was bound last wins on the send tail.
+   */
+  private harness?: Harness<any>;
   private logger?: IMastraLogger;
   private customState: StateAdapter | undefined;
   private stateAdapter!: StateAdapter;
@@ -160,6 +171,16 @@ export class AgentChannels {
    */
   __setAgent(agent: Agent<any, any, any, any>): void {
     this.agent = agent;
+  }
+
+  /**
+   * Bind this AgentChannels to a Harness, turning the channel into a full
+   * Harness UI. Mirrors {@link __setAgent} for the Agent path. Called by
+   * `Harness.setChannels`. Additive — does not affect the Agent send path.
+   * @internal
+   */
+  __setHarness(harness: Harness<any>): void {
+    this.harness = harness;
   }
 
   /**
@@ -335,12 +356,14 @@ export class AgentChannels {
           let runId: string | undefined;
           let toolName: string | undefined;
           let toolArgs: Record<string, unknown> | undefined;
+          let sessionResourceId: string | undefined;
 
           const stashed = this.pendingApprovalCards.get(toolCallId);
           if (stashed?.runId) {
             runId = stashed.runId;
             toolName = stashed.toolName;
             toolArgs = stashed.args;
+            sessionResourceId = stashed.sessionResourceId;
           } else {
             const storage = mastra.getStorage();
             const memoryStore = storage ? await storage.getStore('memory') : undefined;
@@ -376,6 +399,14 @@ export class AgentChannels {
             this.log('info', `No pending approval found for toolCallId=${toolCallId}`);
             return;
           }
+
+          // Harness target: resume the parked tool call through the durable
+          // Session that owns it rather than the agent. Prefer the resourceId
+          // stashed on the approval card; fall back to the thread's resourceId
+          // for the process-restart case (the Session is durable and
+          // get-or-create by resourceId).
+          const harness = this.harness;
+          const harnessResourceId = harness ? (sessionResourceId ?? mastraThread.resourceId) : undefined;
 
           // Build the card header with tool name and args
           const displayName = toolName ? stripToolPrefix(toolName) : 'tool';
@@ -422,19 +453,30 @@ export class AgentChannels {
             requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, renderContext);
 
             try {
-              const resumed = await this.agent.declineToolCall({
-                runId,
-                toolCallId,
-                requestContext,
-                memory: {
-                  thread: mastraThread.id,
-                  resource: mastraThread.resourceId,
-                },
-              });
-              // Drive the run to completion so serverless runtimes don't kill it.
-              void resumed.consumeStream().catch(err => {
-                this.log('error', 'Error consuming resumed decline stream', err);
-              });
+              if (harness && harnessResourceId) {
+                // Harness path: decline through the durable Session that owns
+                // the parked tool call and render the resumed run's output
+                // (e.g. the agent's acknowledgement) via a SessionChannelRenderer.
+                const session = await harness.createSession({ resourceId: harnessResourceId });
+                const renderer = new SessionChannelRenderer({ session, render: renderContext });
+                const drained = renderer.start();
+                await session.declineToolCall({ toolCallId, requestContext });
+                await drained;
+              } else {
+                const resumed = await this.agent.declineToolCall({
+                  runId,
+                  toolCallId,
+                  requestContext,
+                  memory: {
+                    thread: mastraThread.id,
+                    resource: mastraThread.resourceId,
+                  },
+                });
+                // Drive the run to completion so serverless runtimes don't kill it.
+                void resumed.consumeStream().catch(err => {
+                  this.log('error', 'Error consuming resumed decline stream', err);
+                });
+              }
             } catch (err) {
               const isStaleApproval = err instanceof Error && err.message.includes('No snapshot found');
               if (isStaleApproval) {
@@ -472,6 +514,24 @@ export class AgentChannels {
 
           const renderContext = this._buildRenderContext(chatThread, platform, { toolCallId, messageId });
           requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, renderContext);
+
+          if (harness && harnessResourceId) {
+            // Harness path: approve through the durable Session that owns the
+            // parked tool call. The resumed run (tool-result + any follow-up
+            // text) is rendered inline via a SessionChannelRenderer. The
+            // session re-supplies the shared run budget on resume so the run
+            // doesn't stall on the agent's small default maxSteps.
+            const session = await harness.createSession({ resourceId: harnessResourceId });
+            const renderer = new SessionChannelRenderer({ session, render: renderContext });
+            const drained = renderer.start();
+            try {
+              await session.approveToolCall({ toolCallId, requestContext });
+              await drained;
+            } finally {
+              this.pendingApprovalCards.delete(toolCallId);
+            }
+            return;
+          }
 
           const resumed = await this.agent.approveToolCall({
             runId,
@@ -1033,6 +1093,20 @@ export class AgentChannels {
     // Otherwise pass the parts array directly — both shapes match AgentSignalContents.
     const signalContents: AgentSignalContents = parts.length === 1 && parts[0]?.type === 'text' ? parts[0].text : parts;
 
+    // Harness target: the channel is a full Harness UI. Drive a durable
+    // per-resource Session and render its event stream through the same
+    // channel drivers used by the Agent path. This branch is additive — the
+    // Agent path below is unchanged.
+    if (this.harness) {
+      await this.processHarnessMessage({
+        parts,
+        threadResourceId,
+        renderContext,
+        canRenderApprovalButtons,
+      });
+      return;
+    }
+
     const result = this.agent.sendMessage(
       {
         contents: signalContents,
@@ -1073,6 +1147,60 @@ export class AgentChannels {
       }
     } catch (err) {
       this.log('debug', 'accepted consume failed', err);
+    }
+  }
+
+  /**
+   * Harness send/render tail. Resolves (get-or-create) the durable per-resource
+   * Session for this conversation, starts a {@link SessionChannelRenderer} that
+   * translates the Session's event stream into channel chunks, then sends the
+   * message. The renderer drains when the run reaches a terminal `agent_end`.
+   *
+   * The Session is keyed by `resourceId` so each channel user/thread resumes
+   * its own durable Harness session across messages and process restarts.
+   *
+   * @internal
+   */
+  private async processHarnessMessage(args: {
+    parts: Exclude<AgentSignalContents, string>;
+    threadResourceId: string;
+    renderContext: ChatChannelRenderContext;
+    canRenderApprovalButtons: boolean;
+  }): Promise<void> {
+    const harness = this.harness;
+    if (!harness) return;
+
+    const session = await harness.createSession({ resourceId: args.threadResourceId });
+
+    // Stamp the owning Session's resourceId onto any approval card stashed
+    // during this run, so the approval-button handler can resolve the exact
+    // Session to resume (Harness path) instead of the agent (Agent path).
+    const baseOnApprovalPosted = args.renderContext.onApprovalPosted;
+    const renderContext: ChatChannelRenderContext = {
+      ...args.renderContext,
+      onApprovalPosted: (toolCallId, record) => {
+        baseOnApprovalPosted(toolCallId, { ...record, sessionResourceId: args.threadResourceId });
+      },
+    };
+
+    // Map channel parts → Session.sendMessage shape: a single text string plus
+    // an optional file array.
+    const content = args.parts
+      .filter((p): p is { type: 'text'; text: string } => p.type === 'text')
+      .map(p => p.text)
+      .join('\n\n');
+    const files = args.parts
+      .filter((p): p is { type: 'file'; data: string; mediaType: string; filename?: string } => p.type === 'file')
+      .map(p => ({ data: p.data, mediaType: p.mediaType, ...(p.filename ? { filename: p.filename } : {}) }));
+
+    const renderer = new SessionChannelRenderer({ session, render: renderContext });
+    // Start translating before sending so no early events are missed.
+    const drained = renderer.start();
+    try {
+      await session.sendMessage({ content, ...(files.length ? { files } : {}) });
+      await drained;
+    } catch (err) {
+      this.log('debug', 'harness session message failed', err);
     }
   }
 

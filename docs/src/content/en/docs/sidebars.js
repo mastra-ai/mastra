@@ -397,6 +397,11 @@ const sidebars = {
           id: 'harness/tool-approvals',
           label: 'Tool Approvals',
         },
+        {
+          type: 'doc',
+          id: 'harness/channels',
+          label: 'Channels',
+        },
       ],
     },
     {

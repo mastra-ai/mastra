@@ -1,0 +1,100 @@
+---
+title: "Channels | Harness"
+description: "Run a Harness inside a messaging channel like Slack, turning the channel into a full Harness UI — a peer of the terminal interface."
+packages:
+  - "@mastra/core"
+---
+
+# Channels
+
+:::experimental
+
+The `Harness` feature is in beta stage and subject to breaking changes in minor versions until it graduates from its beta status.
+
+:::
+
+A channel turns a messaging platform like Slack into a **Harness UI** — a peer of the terminal interface ([Mastra Code](https://code.mastra.ai/)). Where an [Agent channel](/docs/agents/channels) is a thin pipe to a single agent loop, a Harness channel is the interface to the Harness itself: incoming messages drive a durable per-conversation [`Session`](/docs/harness/session), and replies render from that session's event stream — the same contract the terminal UI consumes.
+
+## How it differs from an Agent channel
+
+- **An Agent channel** routes each message through the agent loop and streams the reply back.
+- **A Harness channel** resolves a durable `Session` for the conversation, sends the message through `Session.sendMessage`, and renders the session's events (streamed text, tool calls, and approval cards) back to the channel.
+
+Because the channel consumes the Session, it surfaces Harness capabilities through the same seam the terminal UI uses. V1 covers **messaging and tool approvals**.
+
+## Quickstart
+
+Pass `channels` to your Harness, using adapters from the [Chat SDK](https://chat-sdk.dev/adapters):
+
+```typescript title="src/mastra/harness.ts"
+import { Harness } from '@mastra/core/harness'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+export const harness = new Harness({
+  id: 'coding-harness',
+  modes: [{ id: 'build', defaultModelId: '__GATEWAY_OPENAI_MODEL__' }],
+  channels: {
+    adapters: {
+      slack: createSlackAdapter(),
+    },
+  },
+})
+```
+
+You can also attach a pre-built `AgentChannels` instance, or bind one later with `setChannels`:
+
+```typescript
+import { AgentChannels } from '@mastra/core/channels'
+
+const channels = new AgentChannels({
+  adapters: { slack: createSlackAdapter() },
+})
+
+harness.setChannels(channels)
+```
+
+`harness.getChannels()` returns the bound `AgentChannels` instance, or `null` when no channels are configured.
+
+## Sessions and conversations
+
+Each channel conversation maps to one durable Harness `Session`, keyed by `resourceId` (by default `${platform}:${userId}`). The session is get-or-create, so the same user resumes their own conversation across messages and process restarts. State, mode, and thread binding persist exactly as they do in the terminal UI.
+
+## Messaging
+
+When a user sends a message, the Harness:
+
+1. Resolves (or creates) the `Session` for that conversation.
+1. Sends the message through the session.
+1. Renders the session's event stream back to the channel — streamed assistant text appears as an updating reply.
+
+## Tool approvals
+
+Tools with `requireApproval: true` render as interactive cards with Approve and Deny buttons, just like in the terminal UI. Clicking a button resumes the parked tool call through the owning `Session`:
+
+```typescript
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+const deleteFile = createTool({
+  id: 'delete-file',
+  description: 'Delete a file from the system',
+  inputSchema: z.object({
+    path: z.string().describe('Path to the file to delete'),
+  }),
+  requireApproval: true,
+  execute: async ({ path }) => {
+    await fs.unlink(path)
+    return { deleted: path }
+  },
+})
+```
+
+The approval card records the owning session so the button click resolves the exact `Session` to resume — even after a process restart, because sessions are durable and keyed by `resourceId`.
+
+## Related
+
+- [Harness overview](/docs/harness/overview)
+- [Session](/docs/harness/session)
+- [Tool approvals](/docs/harness/tool-approvals)
+- [Agent channels](/docs/agents/channels)
+- [Chat SDK adapters](https://chat-sdk.dev/adapters)

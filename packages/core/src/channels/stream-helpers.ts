@@ -25,6 +25,14 @@ export interface PendingApprovalRecord {
   runId?: string;
   toolName?: string;
   args?: Record<string, unknown>;
+  /**
+   * Set only for the Harness channel path: the `resourceId` of the durable
+   * Harness Session that owns this parked tool call. The approval-button
+   * handler uses it to resolve the exact Session to resume (via
+   * `session.approveToolCall` / `session.declineToolCall`) instead of going
+   * through the agent. Absent for the Agent path, which resumes by `runId`.
+   */
+  sessionResourceId?: string;
 }
 
 /**

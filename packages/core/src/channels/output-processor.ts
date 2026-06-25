@@ -4,8 +4,8 @@ import type { IMastraLogger } from '../logger/logger';
 import type { ProcessOutputStreamArgs } from '../processors';
 import type { AgentChunkType, ChunkType } from '../stream/types';
 
-import { runStaticDriver } from './chat-driver-static';
-import { runStreamingDriver } from './chat-driver-streaming';
+import { openRenderSession } from './render-pump';
+import type { RenderSession } from './render-pump';
 import type { PendingApprovalRecord } from './stream-helpers';
 import type { ToolDisplay, ToolDisplayFn } from './types';
 
@@ -41,70 +41,6 @@ export interface ChatChannelRenderContext {
 
 /** Key the processor reads off `requestContext` to locate its render deps. */
 export const CHAT_CHANNEL_RENDER_CONTEXT_KEY = '__mastra_chat_channel_render';
-
-interface ChunkQueue {
-  iterable: AsyncIterable<AgentChunkType<any>>;
-  push: (chunk: AgentChunkType<any>) => void;
-  close: () => void;
-}
-
-/**
- * Single-producer / single-consumer async queue. The processor pushes chunks
- * synchronously from `processOutputStream`; the driver consumes them via the
- * async iterable. `close()` ends the iteration after pending items are drained.
- */
-function createChunkQueue(): ChunkQueue {
-  const buffer: AgentChunkType<any>[] = [];
-  const waiters: Array<(result: IteratorResult<AgentChunkType<any>>) => void> = [];
-  let closed = false;
-
-  const push = (chunk: AgentChunkType<any>) => {
-    if (closed) return;
-    const waiter = waiters.shift();
-    if (waiter) {
-      waiter({ value: chunk, done: false });
-    } else {
-      buffer.push(chunk);
-    }
-  };
-
-  const close = () => {
-    if (closed) return;
-    closed = true;
-    while (waiters.length > 0) {
-      waiters.shift()!({ value: undefined, done: true });
-    }
-  };
-
-  const iterable: AsyncIterable<AgentChunkType<any>> = {
-    [Symbol.asyncIterator]() {
-      return {
-        next() {
-          if (buffer.length > 0) {
-            return Promise.resolve({ value: buffer.shift()!, done: false });
-          }
-          if (closed) {
-            return Promise.resolve({ value: undefined as any, done: true });
-          }
-          return new Promise<IteratorResult<AgentChunkType<any>>>(resolve => {
-            waiters.push(resolve);
-          });
-        },
-        return() {
-          close();
-          return Promise.resolve({ value: undefined as any, done: true });
-        },
-      };
-    },
-  };
-
-  return { iterable, push, close };
-}
-
-interface RenderSession {
-  queue: ChunkQueue;
-  driverPromise: Promise<void>;
-}
 
 /**
  * Output processor that mirrors the agent's stream to the originating chat
@@ -144,7 +80,7 @@ export class ChatChannelOutputProcessor {
     let session = state.session as RenderSession | undefined;
 
     if (!session) {
-      session = this.#openSession(render);
+      session = openRenderSession(render);
       state.session = session;
     }
 
@@ -166,63 +102,5 @@ export class ChatChannelOutputProcessor {
     }
 
     return part;
-  }
-
-  #openSession(render: ChatChannelRenderContext): RenderSession {
-    const queue = createChunkQueue();
-    const wrapped = render.wrapStream(queue.iterable);
-
-    // Seed the approval-card stash on resumed runs so the driver can resolve
-    // `messageId` for the incoming `tool-result` even though it never saw the
-    // pre-suspension `tool-call`.
-    if (render.approvalContext) {
-      const existing = render.getPendingApproval(render.approvalContext.toolCallId);
-      render.onApprovalPosted(render.approvalContext.toolCallId, {
-        ...existing,
-        messageId: render.approvalContext.messageId,
-        displayName: existing?.displayName ?? '',
-        argsSummary: existing?.argsSummary ?? '',
-        startedAt: existing?.startedAt ?? Date.now(),
-      });
-    }
-
-    const driverPromise = (
-      render.streaming.enabled
-        ? runStreamingDriver({
-            stream: wrapped,
-            chatThread: render.chatThread,
-            adapter: render.adapter,
-            toolDisplay: render.toolDisplay as 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden',
-            toolDisplayFn: render.toolDisplayFn,
-            streamingOptions: render.streaming.options,
-            channelToolNames: render.channelToolNames,
-            logger: render.logger,
-            onApprovalPosted: render.onApprovalPosted,
-            getPendingApproval: render.getPendingApproval,
-            takePendingApproval: render.takePendingApproval,
-            typingGate: render.typingGate,
-            formatError: render.formatError,
-          })
-        : runStaticDriver({
-            stream: wrapped,
-            chatThread: render.chatThread,
-            adapter: render.adapter,
-            toolDisplay: render.toolDisplay as 'cards' | 'text' | 'hidden',
-            toolDisplayFn: render.toolDisplayFn,
-            channelToolNames: render.channelToolNames,
-            logger: render.logger,
-            onApprovalPosted: render.onApprovalPosted,
-            getPendingApproval: render.getPendingApproval,
-            takePendingApproval: render.takePendingApproval,
-            formatError: render.formatError,
-          })
-    ).catch(err => {
-      // Prevent unhandled rejection if the driver fails before a terminal chunk
-      // reaches processOutputStream. The error is re-thrown when awaited at cleanup.
-      render.logger?.error?.(`[${render.platform}] channel render driver failed early`, { error: err });
-      throw err;
-    });
-
-    return { queue, driverPromise };
   }
 }

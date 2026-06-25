@@ -2,6 +2,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, expect, it, vi } from 'vitest';
 
 import { Agent } from '../../agent';
+import { Harness } from '../../harness/harness';
 import { ConsoleLogger } from '../../logger';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage/mock';
@@ -86,6 +87,53 @@ describe('Mastra Channel Integration', () => {
       });
       const channels = agent.getChannels()!;
       expect(Object.keys(channels.adapters)).toEqual(['discord', 'slack']);
+    });
+  });
+
+  describe('harness-level channel registration', () => {
+    it('creates AgentChannels from a ChannelConfig and binds the Harness target', () => {
+      const harness = new Harness({
+        id: 'harness-bot',
+        modes: [{ id: 'build', defaultModelId: 'test/build-model' }],
+        channels: { adapters: { slack: createMockAdapter('slack') } },
+      });
+      const channels = harness.getChannels();
+      expect(channels).not.toBeNull();
+      // The Harness target must be bound so incoming messages drive a Session.
+      expect((channels as any).harness).toBe(harness);
+    });
+
+    it('returns null when no channels are configured', () => {
+      const harness = new Harness({
+        id: 'harness-no-channels',
+        modes: [{ id: 'build', defaultModelId: 'test/build-model' }],
+      });
+      expect(harness.getChannels()).toBeNull();
+    });
+
+    it('accepts a pre-built AgentChannels instance and exposes its adapters', () => {
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord'), slack: createMockAdapter('slack') },
+      });
+      const harness = new Harness({
+        id: 'harness-prebuilt',
+        modes: [{ id: 'build', defaultModelId: 'test/build-model' }],
+        channels,
+      });
+      expect(harness.getChannels()).toBe(channels);
+      expect(Object.keys(harness.getChannels()!.adapters)).toEqual(['discord', 'slack']);
+      expect((channels as any).harness).toBe(harness);
+    });
+
+    it('rebinds the Harness target via setChannels()', () => {
+      const harness = new Harness({
+        id: 'harness-rebind',
+        modes: [{ id: 'build', defaultModelId: 'test/build-model' }],
+      });
+      const channels = new AgentChannels({ adapters: { slack: createMockAdapter('slack') } });
+      harness.setChannels(channels);
+      expect(harness.getChannels()).toBe(channels);
+      expect((channels as any).harness).toBe(harness);
     });
   });
 

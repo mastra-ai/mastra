@@ -1,6 +1,8 @@
 import type { Agent } from '../agent';
 import type { AgentInstructions, ToolsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
+import type { AgentChannels } from '../channels/agent-channels';
+import type { ChannelConfig } from '../channels/types';
 import type { PubSub } from '../events/pubsub';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import type { LoopOptions } from '../loop/types';
@@ -336,6 +338,16 @@ export interface HarnessConfig<TState = {}> {
    * observability backend so that agent runs produce trace spans.
    */
   observability?: ObservabilityEntrypoint;
+
+  /**
+   * Channel configuration. When provided, the Harness becomes reachable through
+   * messaging channels (e.g. Slack) as a full Harness UI — a peer of the TUI.
+   * Each incoming channel message drives a durable per-resource Harness
+   * {@link Session}; replies (and tool-approval cards) are rendered from that
+   * session's event stream. Accepts a `ChannelConfig` or a pre-built
+   * `AgentChannels` instance (the same shapes the Agent accepts).
+   */
+  channels?: ChannelConfig | AgentChannels;
 }
 
 /**
