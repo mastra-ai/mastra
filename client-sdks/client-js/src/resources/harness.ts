@@ -41,11 +41,6 @@ export interface HarnessMessage {
 }
 
 /**
- * Harness events the SDK types explicitly. This is a discriminated union, so
- * narrowing on `event.type` gives you the right payload fields. This mirrors the
- * subset of the harness event stream a web client typically renders.
- */
-/**
  * Status-line relevant slice of observational-memory progress, mirroring the
  * TUI status line. `msg` reads `pendingTokens/threshold ↓projectedMessageRemoval`
  * (the active message window before an observation fires); `mem` reads
@@ -64,6 +59,11 @@ export interface HarnessOMProgress {
   projectedReflectionSavings: number;
 }
 
+/**
+ * Harness events the SDK types explicitly. This is a discriminated union, so
+ * narrowing on `event.type` gives you the right payload fields. This mirrors the
+ * subset of the harness event stream a web client typically renders.
+ */
 export type KnownHarnessEvent =
   | { type: 'agent_start' }
   | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' | 'suspended' }
