@@ -14,6 +14,7 @@ import { CacheKeyGenerator } from './cache/CacheKeyGenerator';
 import {
   aiV4CoreMessageToV1PromptMessage,
   aiV5ModelMessageToV2PromptMessage,
+  aiV5PromptToAIV6Prompt,
   coreContentToString,
   messagesAreEqual,
   inputToMastraDBMessage as convertInputToMastraDBMessage,
@@ -661,6 +662,14 @@ export class MessageList {
     },
     aiV6: {
       ui: () => this.toAIV6UIMessages(this.all.db()),
+
+      // Builds the v5 prompt, then converts it to the shape AI SDK v6 (spec 'v3')
+      // providers require (tool-result `media` -> `image-data`/`file-data`).
+      llmPrompt: async (options?: {
+        downloadConcurrency?: number;
+        downloadRetries?: number;
+        supportedUrls?: Record<string, RegExp[]>;
+      }): Promise<LanguageModelV2Prompt> => aiV5PromptToAIV6Prompt(await this.all.aiV5.llmPrompt(options)),
     },
 
     /* @deprecated use list.get.all.aiV4.prompt() instead */

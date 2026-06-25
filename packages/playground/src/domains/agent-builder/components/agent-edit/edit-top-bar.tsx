@@ -1,5 +1,5 @@
-import { Button } from '@mastra/playground-ui';
 import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { RefreshCwIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';

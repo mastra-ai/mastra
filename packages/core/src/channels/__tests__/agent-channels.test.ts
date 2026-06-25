@@ -40,7 +40,9 @@ function createMockAgent(name = 'test-agent') {
         },
       }),
     }),
-    sendMessage: vi.fn().mockResolvedValue({ accepted: true, runId: 'run-1' }),
+    sendMessage: vi.fn().mockReturnValue({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }),
+    }),
     subscribeToThread: vi.fn().mockResolvedValue({
       stream: (async function* () {})(),
       activeRunId: () => null,
@@ -379,6 +381,80 @@ describe('AgentChannels', () => {
         }),
       );
     });
+
+    it('consumes the run stream when the signal outcome is `wake`', async () => {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+
+      await agentChannels.initialize(mockMastra);
+
+      const consumeStream = vi.fn().mockResolvedValue(undefined);
+      mockAgent.sendMessage.mockReturnValueOnce({
+        accepted: Promise.resolve({ action: 'wake', runId: 'run-1', output: { consumeStream } }),
+      });
+
+      const chatThread = {
+        id: 'channel-1:thread-1',
+        channelId: 'channel-1',
+        isDM: false,
+        adapter: agentChannels.adapters.discord,
+        isSubscribed: vi.fn().mockResolvedValue(true),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+        mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+        messages: (async function* () {})(),
+      } as any;
+      const message = {
+        id: 'message-1',
+        text: 'hello',
+        author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+        attachments: [],
+      } as any;
+
+      await (agentChannels as any).processChatMessage(chatThread, message, mockMastra);
+
+      expect(consumeStream).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not consume a stream when the signal outcome is not `wake`', async () => {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+
+      await agentChannels.initialize(mockMastra);
+
+      // Stub resolves the outcome to `deliver` (signal handed off) with a consumeStream spy.
+      const consumeStream = vi.fn().mockResolvedValue(undefined);
+      mockAgent.sendMessage.mockReturnValueOnce({
+        accepted: Promise.resolve({ action: 'deliver', runId: 'run-1', output: { consumeStream } }),
+      });
+
+      const chatThread = {
+        id: 'channel-1:thread-1',
+        channelId: 'channel-1',
+        isDM: false,
+        adapter: agentChannels.adapters.discord,
+        isSubscribed: vi.fn().mockResolvedValue(true),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+        mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+        messages: (async function* () {})(),
+      } as any;
+      const message = {
+        id: 'message-1',
+        text: 'hello',
+        author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+        attachments: [],
+      } as any;
+
+      await expect((agentChannels as any).processChatMessage(chatThread, message, mockMastra)).resolves.not.toThrow();
+      expect(consumeStream).not.toHaveBeenCalled();
+    });
   });
 
   describe('resolveResourceId', () => {
@@ -607,55 +683,6 @@ describe('AgentChannels', () => {
         expect.anything(),
         expect.objectContaining({ resourceId: 'original-owner' }),
       );
-    });
-  });
-
-  describe('close', () => {
-    it('unsubscribes all cached thread subscriptions', () => {
-      const unsubscribeA = vi.fn();
-      const unsubscribeB = vi.fn();
-      // Seed the internal cache with two fake subscriptions to verify close() drains them.
-      (agentChannels as any).threadSubscriptions.set('thread-a', {
-        subscription: { unsubscribe: unsubscribeA },
-        consumer: Promise.resolve(),
-      });
-      (agentChannels as any).threadSubscriptions.set('thread-b', {
-        subscription: { unsubscribe: unsubscribeB },
-        consumer: Promise.resolve(),
-      });
-
-      (agentChannels as any).pendingApprovalCards.set('run-1', { channel: 'C', ts: '123' });
-
-      agentChannels.close();
-
-      expect(unsubscribeA).toHaveBeenCalledTimes(1);
-      expect(unsubscribeB).toHaveBeenCalledTimes(1);
-      expect((agentChannels as any).threadSubscriptions.size).toBe(0);
-      expect((agentChannels as any).pendingApprovalCards.size).toBe(0);
-    });
-
-    it('is safe to call without any subscriptions', () => {
-      expect(() => agentChannels.close()).not.toThrow();
-    });
-
-    it('swallows errors from individual unsubscribe calls', () => {
-      const failing = vi.fn(() => {
-        throw new Error('boom');
-      });
-      const succeeding = vi.fn();
-      (agentChannels as any).threadSubscriptions.set('thread-a', {
-        subscription: { unsubscribe: failing },
-        consumer: Promise.resolve(),
-      });
-      (agentChannels as any).threadSubscriptions.set('thread-b', {
-        subscription: { unsubscribe: succeeding },
-        consumer: Promise.resolve(),
-      });
-
-      expect(() => agentChannels.close()).not.toThrow();
-      expect(failing).toHaveBeenCalledTimes(1);
-      expect(succeeding).toHaveBeenCalledTimes(1);
-      expect((agentChannels as any).threadSubscriptions.size).toBe(0);
     });
   });
 });

@@ -1,5 +1,6 @@
-import { Button, DocsIcon, Icon } from '@mastra/playground-ui';
+import { DocsIcon, Icon } from '@mastra/playground-ui';
 import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Header } from '@mastra/playground-ui/components/Header';
 import { Link } from 'react-router';
 import { RouteHeaderActionsSlot } from './route-header-actions';

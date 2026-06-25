@@ -1,15 +1,9 @@
 import type { StorageThreadType } from '@mastra/core/memory';
-import {
-  Button,
-  MemoryIcon,
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-  Txt,
-  cn,
-} from '@mastra/playground-ui';
+import { MemoryIcon, cn } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ChevronDown, ChevronUp, Eye, MessageSquare, NotebookPen, Search } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';

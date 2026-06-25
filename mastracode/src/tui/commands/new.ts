@@ -22,6 +22,7 @@ export async function handleNewCommand(ctx: SlashCommandContext): Promise<void> 
   state.session.displayState.get().modifiedFiles.clear();
   // Clear per-thread ephemeral state from the global harness state
   await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+  state.previousPlanSnapshot = undefined;
   if (state.taskProgress) {
     state.taskProgress.updateTasks([]);
   }

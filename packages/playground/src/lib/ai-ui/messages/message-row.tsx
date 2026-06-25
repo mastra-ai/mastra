@@ -1,5 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { Button, cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { MessageFactory } from '@mastra/react';
 import type { MessageRenderers } from '@mastra/react';

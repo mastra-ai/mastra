@@ -148,6 +148,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       // Clear per-thread ephemeral state first so renderExistingMessages
       // and other downstream observers see clean state.
       await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+      state.previousPlanSnapshot = undefined;
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
         state.ui.requestRender();
@@ -206,6 +207,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       }
       // Clear per-thread ephemeral state so new threads start clean.
       await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+      state.previousPlanSnapshot = undefined;
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
       }

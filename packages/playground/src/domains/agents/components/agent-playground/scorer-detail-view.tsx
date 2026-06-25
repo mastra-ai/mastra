@@ -1,8 +1,10 @@
 import type { GetScorerResponse } from '@mastra/client-js';
-import { Button, Txt, Icon } from '@mastra/playground-ui';
+import { Icon } from '@mastra/playground-ui';
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Chip } from '@mastra/playground-ui/components/Chip';
 import { Switch } from '@mastra/playground-ui/components/Switch';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Pencil } from 'lucide-react';
 
 interface LinkedDataset {

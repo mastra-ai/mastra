@@ -1,4 +1,7 @@
-import { Button, ScrollArea, Txt, Icon } from '@mastra/playground-ui';
+import { Icon } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Plus, Sparkles, Database, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { useState, useMemo } from 'react';
 

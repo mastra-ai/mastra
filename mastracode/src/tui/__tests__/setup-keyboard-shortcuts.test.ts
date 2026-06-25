@@ -21,6 +21,7 @@ const autocompleteProviders: Array<{
 }> = [];
 
 vi.mock('@earendil-works/pi-tui', () => ({
+  Box: class {},
   CombinedAutocompleteProvider: class {
     constructor(
       commands: Array<{
