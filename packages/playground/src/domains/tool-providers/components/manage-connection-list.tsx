@@ -1,5 +1,8 @@
-import { Button, DialogBody, DialogFooter, Entity, EntityContent, EntityName, Icon } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { DialogBody, DialogFooter } from '@mastra/playground-ui/components/Dialog';
+import { Entity, EntityContent, EntityName } from '@mastra/playground-ui/components/Entity';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ChevronRight, Plus } from 'lucide-react';
 
 import type { ManageableConnection } from './manage-connection-dialog';

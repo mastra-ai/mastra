@@ -42,6 +42,7 @@ export const workflowRunStatusSchema = z.enum([
   'canceled',
   'bailed',
   'paused',
+  'skipped',
 ]);
 
 export const scheduleRunSummarySchema = z.object({

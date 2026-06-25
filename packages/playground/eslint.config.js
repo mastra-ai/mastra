@@ -5,6 +5,70 @@ const reactHooks = (await import('eslint-plugin-react-hooks')).default;
 
 const config = await createConfig();
 
+const playgroundUiIconImportNames = [
+  'AgentCoinIcon',
+  'AgentIcon',
+  'AgentNetworkCoinIcon',
+  'AiIcon',
+  'AmazonIcon',
+  'AnthropicChatIcon',
+  'AnthropicMessagesIcon',
+  'ApiIcon',
+  'AzureIcon',
+  'BranchIcon',
+  'CheckIcon',
+  'ChevronIcon',
+  'CohereIcon',
+  'CommitIcon',
+  'CrossIcon',
+  'DatasetsIcon',
+  'DbIcon',
+  'DebugIcon',
+  'DeploymentIcon',
+  'DividerIcon',
+  'DocsIcon',
+  'EnvIcon',
+  'ExperimentsIcon',
+  'FiltersIcon',
+  'FolderIcon',
+  'GithubCoinIcon',
+  'GithubIcon',
+  'GoogleIcon',
+  'GroqIcon',
+  'HomeIcon',
+  'Icon',
+  'InfoIcon',
+  'JudgeIcon',
+  'LatencyIcon',
+  'LogsIcon',
+  'MastraIcon',
+  'McpCoinIcon',
+  'McpServerIcon',
+  'MemoryIcon',
+  'MetricsIcon',
+  'MistralIcon',
+  'NetlifyIcon',
+  'OpenaiChatIcon',
+  'OpenAIIcon',
+  'ProcessorIcon',
+  'PromptIcon',
+  'RepoIcon',
+  'RequestContextIcon',
+  'ScorersIcon',
+  'SettingsIcon',
+  'SkillIcon',
+  'SlashIcon',
+  'ToolCoinIcon',
+  'ToolsIcon',
+  'TraceIcon',
+  'TsIcon',
+  'VariablesIcon',
+  'WorkflowCoinIcon',
+  'WorkflowIcon',
+  'WorkspacesIcon',
+  'XGroqIcon',
+];
+
 const restrictedPlaygroundUiBarrelImportSpecifiers = [
   {
     importNames: ['useCopyToClipboard'],
@@ -27,6 +91,18 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import keyboard shortcut hooks from @mastra/playground-ui/hooks/use-keyboard-shortcut-label.',
   },
   {
+    importNames: ['cn'],
+    message: 'Import cn from @mastra/playground-ui/utils/cn.',
+  },
+  {
+    importNames: ['toast'],
+    message: 'Import toast from @mastra/playground-ui/utils/toast.',
+  },
+  {
+    importNames: playgroundUiIconImportNames,
+    message: 'Import icons from @mastra/playground-ui/icons/<IconName>.',
+  },
+  {
     importNames: ['AlertDialog'],
     message: 'Import AlertDialog from @mastra/playground-ui/components/AlertDialog.',
   },
@@ -41,6 +117,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
   {
     importNames: ['Breadcrumb', 'BreadcrumbProps', 'Crumb', 'CrumbProps'],
     message: 'Import Breadcrumb exports from @mastra/playground-ui/components/Breadcrumb.',
+  },
+  {
+    importNames: ['Button', 'ButtonProps'],
+    message: 'Import Button exports from @mastra/playground-ui/components/Button.',
   },
   {
     importNames: [
@@ -75,6 +155,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
   {
     importNames: ['Checkbox', 'CheckboxProps', 'CheckedState'],
     message: 'Import Checkbox exports from @mastra/playground-ui/components/Checkbox.',
+  },
+  {
+    importNames: ['Collapsible', 'CollapsibleContent', 'CollapsibleTrigger'],
+    message: 'Import Collapsible exports from @mastra/playground-ui/components/Collapsible.',
   },
   {
     importNames: ['Chip', 'ChipProps', 'ChipsGroup', 'ChipsGroupProps'],
@@ -152,6 +236,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import DateTimeRangePicker exports from @mastra/playground-ui/components/DateTimeRangePicker.',
   },
   {
+    importNames: ['DataList', 'DataListSkeleton', 'ScoresDataList'],
+    message: 'Import DataList exports from @mastra/playground-ui/components/DataList.',
+  },
+  {
     importNames: [
       'DataKeysAndValues',
       'DataKeysAndValuesProps',
@@ -175,6 +263,26 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
       'DataPanelSectionHeadingProps',
     ],
     message: 'Import DataPanel exports from @mastra/playground-ui/components/DataPanel.',
+  },
+  {
+    importNames: [
+      'Dialog',
+      'DialogPortal',
+      'DialogOverlay',
+      'DialogTrigger',
+      'DialogClose',
+      'DialogContent',
+      'DialogHeader',
+      'DialogFooter',
+      'DialogBody',
+      'DialogTitle',
+      'DialogDescription',
+    ],
+    message: 'Import Dialog exports from @mastra/playground-ui/components/Dialog.',
+  },
+  {
+    importNames: ['Entity', 'EntityContent', 'EntityName', 'EntityDescription', 'EntityIcon'],
+    message: 'Import Entity exports from @mastra/playground-ui/components/Entity.',
   },
   {
     importNames: ['EntityHeader', 'EntityHeaderProps'],
@@ -388,12 +496,20 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import Notice exports from @mastra/playground-ui/components/Notice.',
   },
   {
+    importNames: ['PageLayout', 'NoDataPageLayout', 'PageHeadingContext'],
+    message: 'Import PageLayout exports from @mastra/playground-ui/components/PageLayout.',
+  },
+  {
     importNames: ['PageHeader', 'PageHeaderRootProps', 'PageHeaderTitleProps', 'PageHeaderDescriptionProps'],
     message: 'Import PageHeader exports from @mastra/playground-ui/components/PageHeader.',
   },
   {
     importNames: ['PendingIndicator', 'PendingIndicatorProps'],
     message: 'Import PendingIndicator exports from @mastra/playground-ui/components/PendingIndicator.',
+  },
+  {
+    importNames: ['Popover', 'PopoverTrigger', 'PopoverContent', 'HoverPopover'],
+    message: 'Import Popover exports from @mastra/playground-ui/components/Popover.',
   },
   {
     importNames: ['PermissionDenied', 'PermissionDeniedProps'],
@@ -426,6 +542,26 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
   {
     importNames: ['Searchbar', 'SearchbarWrapper', 'SearchbarProps'],
     message: 'Import Searchbar exports from @mastra/playground-ui/components/Searchbar.',
+  },
+  {
+    importNames: ['ScrollArea'],
+    message: 'Import ScrollArea from @mastra/playground-ui/components/ScrollArea.',
+  },
+  {
+    importNames: [
+      'Select',
+      'SelectGroup',
+      'SelectValue',
+      'SelectTrigger',
+      'SelectContent',
+      'SelectItem',
+      'SelectValueProps',
+      'SelectTriggerVariant',
+      'SelectTriggerProps',
+      'SelectContentProps',
+      'SelectItemProps',
+    ],
+    message: 'Import Select exports from @mastra/playground-ui/components/Select.',
   },
   {
     importNames: ['Section', 'SectionProps', 'SectionRoot', 'SubSectionRoot', 'SectionRootProps'],
@@ -478,6 +614,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
   {
     importNames: ['Textarea', 'TextareaProps'],
     message: 'Import Textarea exports from @mastra/playground-ui/components/Textarea.',
+  },
+  {
+    importNames: ['Txt'],
+    message: 'Import Txt from @mastra/playground-ui/components/Txt.',
   },
   {
     importNames: ['ThemeProvider', 'useTheme', 'ThemeProviderProps', 'Theme', 'ResolvedTheme', 'ThemeContextValue'],
@@ -542,6 +682,14 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
   {
     importNames: ['TextAndIcon', 'TextAndIconProps', 'getShortId'],
     message: 'Import Text exports from @mastra/playground-ui/components/Text.',
+  },
+  {
+    importNames: ['Tooltip', 'TooltipTrigger', 'TooltipContent', 'TooltipProvider'],
+    message: 'Import Tooltip exports from @mastra/playground-ui/components/Tooltip.',
+  },
+  {
+    importNames: ['Toaster'],
+    message: 'Import Toaster from @mastra/playground-ui/components/Toaster.',
   },
   {
     importNames: ['Truncate', 'TruncateProps'],

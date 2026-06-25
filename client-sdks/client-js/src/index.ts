@@ -27,6 +27,8 @@ export type {
   SubscribeHarnessSessionOptions,
   HarnessSubscription,
   HarnessSessionState,
+  HarnessSessionSettings,
+  HarnessOMProgress,
   HarnessModeInfo,
   HarnessThreadInfo,
   HarnessTaskSnapshot,

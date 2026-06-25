@@ -77,6 +77,26 @@ interface HarnessModeBase {
   transitionsTo?: string;
 
   /**
+   * Unified per-mode tool visibility allowlist. When set, only tools whose
+   * final exposed names appear in this list are visible to the model and
+   * executable during this mode's runs. Workspace tools use the same list
+   * as all other tools — configure them by exposed tool names such as
+   * `view`, `write_file`, `find_files`, etc. (after workspace tool renaming
+   * via `TOOL_NAME_OVERRIDES`).
+   *
+   * - `undefined` (default): no mode-level restriction; all tools are visible.
+   * - `[]`: no tools are available for this mode.
+   * - Per-tool permission `deny` and category `deny` still win — a denied
+   *   tool is hidden even if it appears in this list.
+   * - `tools` / `additionalTools` remain toolset composition inputs (which
+   *   tools are added to the run), not visibility gates.
+   *
+   * Enforced at LLM-call time via `activeTools`, matching the existing
+   * execution-time enforcement in the durable tool-call step.
+   */
+  availableTools?: string[];
+
+  /**
    * Arbitrary user-defined metadata. `metadata.default === true` is a
    * reserved harness hint for choosing the default mode when `defaultModeId`
    * is unset; all other metadata is pass-through and unvalidated. Use for UI
@@ -91,9 +111,11 @@ interface HarnessModeBase {
 type HarnessModeToolOverrides =
   | {
       /**
-       * The tool set this mode runs with. **Replaces** the backing agent's
-       * tools — the agent's own tools are hidden for the duration of the
-       * mode. Mutually exclusive with `additionalTools`.
+       * Mode-level tools added as a separate toolset alongside the backing
+       * agent's own tools. With a shared backing agent (`HarnessConfig.agent`),
+       * these are layered as an augment — the agent's own tools are **not**
+       * masked. To restrict which tools are visible, use `availableTools`
+       * instead. Mutually exclusive with `additionalTools`.
        */
       tools?: ToolsInput;
       additionalTools?: never;

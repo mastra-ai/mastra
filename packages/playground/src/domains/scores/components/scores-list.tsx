@@ -1,6 +1,7 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 import type { ScoreRowData } from '@mastra/core/evals';
-import { ScoresDataList, DataListSkeleton, cn } from '@mastra/playground-ui';
+import { ScoresDataList, DataListSkeleton } from '@mastra/playground-ui/components/DataList';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';
 

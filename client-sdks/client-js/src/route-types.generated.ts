@@ -9307,6 +9307,7 @@ export type GetWorkflowsWorkflowIdRuns_QueryParams = {
         | 'bailed'
         | 'tripwire'
         | 'paused'
+        | 'skipped'
       )
     | undefined;
 };
@@ -9379,7 +9380,8 @@ export type GetWorkflowsWorkflowIdRunsRunId_Response = {
     | 'pending'
     | 'bailed'
     | 'tripwire'
-    | 'paused';
+    | 'paused'
+    | 'skipped';
   initialState?:
     | {
         [key: string]: any;
@@ -9686,6 +9688,7 @@ export type PostWorkflowsWorkflowIdStartAsync_Response = {
         | 'bailed'
         | 'tripwire'
         | 'paused'
+        | 'skipped'
       )
     | undefined;
   result?: unknown | undefined;
@@ -9892,6 +9895,7 @@ export type PostWorkflowsWorkflowIdResumeAsync_Response = {
         | 'bailed'
         | 'tripwire'
         | 'paused'
+        | 'skipped'
       )
     | undefined;
   result?: unknown | undefined;
@@ -10255,6 +10259,7 @@ export type PostWorkflowsWorkflowIdTimeTravelAsync_Response = {
         | 'bailed'
         | 'tripwire'
         | 'paused'
+        | 'skipped'
       )
     | undefined;
   result?: unknown | undefined;
@@ -10495,6 +10500,7 @@ export type PostWorkflowsWorkflowIdRestartAsync_Response = {
         | 'bailed'
         | 'tripwire'
         | 'paused'
+        | 'skipped'
       )
     | undefined;
   result?: unknown | undefined;
@@ -88774,6 +88780,7 @@ export type GetAgentBuilderActionIdRuns_QueryParams = {
         | 'bailed'
         | 'tripwire'
         | 'paused'
+        | 'skipped'
       )
     | undefined;
 };
@@ -88846,7 +88853,8 @@ export type GetAgentBuilderActionIdRunsRunId_Response = {
     | 'pending'
     | 'bailed'
     | 'tripwire'
-    | 'paused';
+    | 'paused'
+    | 'skipped';
   initialState?:
     | {
         [key: string]: any;
@@ -89117,6 +89125,7 @@ export type PostAgentBuilderActionIdStartAsync_Response = {
         | 'bailed'
         | 'tripwire'
         | 'paused'
+        | 'skipped'
       )
     | undefined;
   result?: unknown | undefined;
@@ -89357,6 +89366,7 @@ export type PostAgentBuilderActionIdResumeAsync_Response = {
         | 'bailed'
         | 'tripwire'
         | 'paused'
+        | 'skipped'
       )
     | undefined;
   result?: unknown | undefined;
@@ -89701,7 +89711,8 @@ export type GetSchedules_Response = {
             | 'pending'
             | 'canceled'
             | 'bailed'
-            | 'paused';
+            | 'paused'
+            | 'skipped';
           startedAt?: number | undefined;
           completedAt?: number | undefined;
           durationMs?: number | undefined;
@@ -89795,7 +89806,8 @@ export type GetSchedulesScheduleId_Response = {
           | 'pending'
           | 'canceled'
           | 'bailed'
-          | 'paused';
+          | 'paused'
+          | 'skipped';
         startedAt?: number | undefined;
         completedAt?: number | undefined;
         durationMs?: number | undefined;
@@ -89869,7 +89881,8 @@ export type GetSchedulesScheduleIdTriggers_Response = {
             | 'pending'
             | 'canceled'
             | 'bailed'
-            | 'paused';
+            | 'paused'
+            | 'skipped';
           startedAt?: number | undefined;
           completedAt?: number | undefined;
           durationMs?: number | undefined;
@@ -89956,7 +89969,8 @@ export type PostSchedulesScheduleIdPause_Response = {
           | 'pending'
           | 'canceled'
           | 'bailed'
-          | 'paused';
+          | 'paused'
+          | 'skipped';
         startedAt?: number | undefined;
         completedAt?: number | undefined;
         durationMs?: number | undefined;
@@ -90045,7 +90059,8 @@ export type PostSchedulesScheduleIdResume_Response = {
           | 'pending'
           | 'canceled'
           | 'bailed'
-          | 'paused';
+          | 'paused'
+          | 'skipped';
         startedAt?: number | undefined;
         completedAt?: number | undefined;
         durationMs?: number | undefined;
@@ -90854,6 +90869,11 @@ export type PostHarnessHarnessIdSessions_PathParams = {
 
 export type PostHarnessHarnessIdSessions_Body = {
   resourceId: string;
+  tags?:
+    | {
+        [key: string]: string;
+      }
+    | undefined;
 };
 
 export type PostHarnessHarnessIdSessions_Response = {
@@ -90895,6 +90915,32 @@ export type GetHarnessHarnessIdSessionsResourceId_Response = {
   threadId?: string | undefined;
   modeId: string;
   modelId: string;
+  omProgress?:
+    | {
+        status: string;
+        pendingTokens: number;
+        threshold: number;
+        thresholdPercent: number;
+        observationTokens: number;
+        reflectionThreshold: number;
+        reflectionThresholdPercent: number;
+        projectedMessageRemoval: number;
+        projectedReflectionSavings: number;
+      }
+    | undefined;
+  tokenUsage?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  settings?:
+    | {
+        yolo: boolean;
+        thinkingLevel: 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+        notifications: 'off' | 'bell' | 'system' | 'both';
+        smartEditing: boolean;
+      }
+    | undefined;
 };
 
 export type GetHarnessHarnessIdSessionsResourceId_Request = Simplify<
@@ -90924,6 +90970,14 @@ export type GetHarnessHarnessIdSessionsResourceIdThreads_PathParams = {
 
 export type GetHarnessHarnessIdSessionsResourceIdThreads_QueryParams = {
   limit?: number | undefined;
+  tags?:
+    | (
+        | {
+            [key: string]: string;
+          }
+        | undefined
+      )
+    | undefined;
 };
 
 export type GetHarnessHarnessIdSessionsResourceIdThreads_Response = {
@@ -90931,6 +90985,11 @@ export type GetHarnessHarnessIdSessionsResourceIdThreads_Response = {
     id: string;
     title?: string | undefined;
     updatedAt?: string | undefined;
+    tags?:
+      | {
+          [key: string]: string;
+        }
+      | undefined;
   }[];
 };
 
