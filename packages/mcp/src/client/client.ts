@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import type { Stream } from 'node:stream';
 import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createTool } from '@mastra/core/tools';
 import type { NeedsApprovalFn, Tool } from '@mastra/core/tools';
 
@@ -94,6 +95,24 @@ type DatadogTracerLike = {
 
 function shouldDetachPersistentTransportRequest(init?: RequestInit): boolean {
   return (init?.method ?? 'GET').toUpperCase() === 'GET';
+}
+
+/**
+ * Extract a human-readable error message from a failed CallToolResult's `content`.
+ * Joins the text of all `text` content blocks, falling back to a generic message
+ * when the server returned no text (e.g. only image/resource content).
+ */
+function extractToolErrorText(content: unknown): string {
+  const fallback = 'MCP tool execution failed';
+  if (!Array.isArray(content)) return fallback;
+  const text = content
+    .filter((part): part is { type: 'text'; text: string } => {
+      return !!part && typeof part === 'object' && (part as { type?: unknown }).type === 'text';
+    })
+    .map(part => part.text)
+    .join('\n')
+    .trim();
+  return text || fallback;
 }
 
 function getDatadogScope(): DatadogScopeLike | null {
@@ -202,6 +221,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private serverInstructions?: string;
   private _roots: Root[];
   private readonly requireToolApproval: RequireToolApproval | undefined;
+  private readonly onToolError: 'throw' | 'return';
 
   /** Provides access to resource operations (list, read, subscribe, etc.) */
   public readonly resources: ResourceClientActions;
@@ -230,6 +250,7 @@ export class InternalMastraMCPClient extends MastraBase {
     this.serverConfig = server;
     this.enableProgressTracking = !!server.enableProgressTracking;
     this.requireToolApproval = server.requireToolApproval;
+    this.onToolError = server.onToolError ?? 'throw';
 
     // Initialize roots from server config
     this._roots = server.roots ?? [];
@@ -874,6 +895,24 @@ export class InternalMastraMCPClient extends MastraBase {
                     signal: context?.abortSignal,
                   },
                 );
+
+                // Per the MCP spec, tool *execution* failures are reported in-band:
+                // the server returns a normal CallToolResult with `isError: true` and
+                // the failure details in `content`. Map that onto Mastra's failed-tool-call
+                // path (unless the consumer opted into the legacy `'return'` behaviour) so
+                // tool spans, stream chunks, scorers, and persisted message parts reflect the
+                // failure, and the model sees the error text so it can self-correct.
+                if (res.isError && this.onToolError === 'throw') {
+                  const errorText = extractToolErrorText(res.content);
+                  this.log('debug', `Tool reported an error: ${tool.name}`, { error: errorText });
+                  throw new MastraError({
+                    id: 'MCP_CLIENT_TOOL_EXECUTION_FAILED',
+                    domain: ErrorDomain.MCP,
+                    category: ErrorCategory.THIRD_PARTY,
+                    text: errorText,
+                    details: { toolName: tool.name, serverName: this.name },
+                  });
+                }
 
                 this.log('debug', `Tool executed successfully: ${tool.name}`);
 
