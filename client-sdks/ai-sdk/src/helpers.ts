@@ -794,6 +794,21 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
     }
 
     default: {
+      // Background-task lifecycle chunks (e.g. `background-task-started`) are not
+      // `data-` prefixed, so without this they'd fall through and be dropped from
+      // the UI message stream. Surface them as `data-background-task-*` parts so a
+      // web-chat UI can read the structured payload (e.g. `{ taskId, toolName,
+      // toolCallId }`) at dispatch time instead of regex-parsing the tool-result.
+      if (typeof partType === 'string' && partType.startsWith('background-task-')) {
+        const { type, ...data } = part as Record<string, unknown> & { type: string };
+        const toolCallId = data.toolCallId;
+        return {
+          type: `data-${type}`,
+          ...(typeof toolCallId === 'string' ? { id: toolCallId } : {}),
+          data,
+        } as InferUIMessageChunk<UI_MESSAGE>;
+      }
+
       // return the chunk as is if it's not a known type
       if (isDataChunkType(part)) {
         if (!('data' in part)) {
