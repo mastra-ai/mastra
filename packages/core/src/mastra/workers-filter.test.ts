@@ -1,7 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { HeartbeatWorker } from '../agent/heartbeat/worker';
 import { MockStore } from '../storage/mock';
-import { SchedulerWorker } from '../worker';
 import { Mastra } from './index';
 
 const ORIGINAL_ENV = process.env.MASTRA_WORKERS;
