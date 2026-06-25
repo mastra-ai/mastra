@@ -316,4 +316,83 @@ describe('GatewayManager', () => {
       expect(models[0].apiKeyEnvVar).toBe('FIRST_KEY');
     });
   });
+
+  describe('provider-equals-gateway (two-part router ids)', () => {
+    // A gateway whose provider id is the same as its gateway id (e.g. a
+    // standalone amazon-bedrock gateway) emits two-part catalog ids like
+    // `amazon-bedrock/<model>` rather than `amazon-bedrock/amazon-bedrock/<model>`.
+    it('parses a two-part router id when gateway id equals provider id', () => {
+      const gateway = createFakeGateway({
+        id: 'amazon-bedrock',
+        provider: 'amazon-bedrock',
+        models: ['anthropic.claude-sonnet-4-5'],
+      });
+      const manager = new GatewayManager([gateway]);
+      expect(manager.parseModelId('amazon-bedrock/anthropic.claude-sonnet-4-5')).toEqual({
+        gatewayId: 'amazon-bedrock',
+        providerId: 'amazon-bedrock',
+        modelId: 'anthropic.claude-sonnet-4-5',
+      });
+    });
+
+    it('listAvailableModels emits unprefixed amazon-bedrock/<model> ids', async () => {
+      const gateway = createFakeGateway({
+        id: 'amazon-bedrock',
+        provider: 'amazon-bedrock',
+        models: ['anthropic.claude-sonnet-4-5', 'anthropic.claude-haiku-4-5'],
+        resolveAuth: () => ({ apiKey: 'aws-credential-chain', source: 'gateway' }),
+      });
+      const manager = new GatewayManager([gateway]);
+
+      const models = await manager.listAvailableModels();
+      expect(models.map(m => m.id)).toEqual([
+        'amazon-bedrock/anthropic.claude-sonnet-4-5',
+        'amazon-bedrock/anthropic.claude-haiku-4-5',
+      ]);
+      expect(models[0]).toMatchObject({
+        provider: 'amazon-bedrock',
+        modelName: 'anthropic.claude-sonnet-4-5',
+        hasApiKey: true,
+      });
+    });
+
+    it('resolveAuth calls the gateway with the two-part router id', async () => {
+      const resolveAuth = vi.fn(
+        (_req: GatewayAuthRequest): GatewayAuthResult => ({
+          apiKey: 'aws-credential-chain',
+          source: 'gateway',
+        }),
+      );
+      const gateway = createFakeGateway({
+        id: 'amazon-bedrock',
+        provider: 'amazon-bedrock',
+        models: ['anthropic.claude-sonnet-4-5'],
+        resolveAuth,
+      });
+      const manager = new GatewayManager([gateway]);
+
+      const auth = await manager.resolveAuth('amazon-bedrock/anthropic.claude-sonnet-4-5');
+      expect(auth.apiKey).toBe('aws-credential-chain');
+      expect(resolveAuth).toHaveBeenCalledWith({
+        gatewayId: 'amazon-bedrock',
+        providerId: 'amazon-bedrock',
+        modelId: 'anthropic.claude-sonnet-4-5',
+        routerId: 'amazon-bedrock/anthropic.claude-sonnet-4-5',
+      });
+    });
+
+    it('still parses standard three-part gateway/provider/model ids', () => {
+      const gateway = createFakeGateway({
+        id: 'netlify',
+        provider: 'anthropic',
+        models: ['claude-sonnet-4-5'],
+      });
+      const manager = new GatewayManager([gateway]);
+      expect(manager.parseModelId('netlify/anthropic/claude-sonnet-4-5')).toEqual({
+        gatewayId: 'netlify',
+        providerId: 'anthropic',
+        modelId: 'claude-sonnet-4-5',
+      });
+    });
+  });
 });

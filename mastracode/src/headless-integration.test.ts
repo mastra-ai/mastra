@@ -1394,6 +1394,16 @@ describe('headless mode — thread control', () => {
       storage,
       memory,
       workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
+      gateways: [
+        createFakeGatewayFromModels([
+          {
+            id: 'anthropic/claude-haiku-4-5',
+            provider: 'anthropic',
+            modelName: 'claude-haiku-4-5',
+            hasApiKey: true,
+          },
+        ]),
+      ],
       modes: [
         {
           id: 'default',

@@ -79,3 +79,46 @@ describe('getBedrockModelCatalog', () => {
     expect(models.length).toBeGreaterThan(0);
   });
 });
+
+describe('AmazonBedrockGateway', () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+  });
+
+  afterEach(async () => {
+    const { clearBedrockCatalogCache } = await import('../amazon-bedrock.js');
+    clearBedrockCatalogCache();
+    vi.resetModules();
+  });
+
+  it('fetchProviders surfaces bedrock models under an unprefixed amazon-bedrock provider key', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        'amazon-bedrock': {
+          models: {
+            [MODEL_TOKENS.__BEDROCK_MODEL_SONNET_BARE__]: {},
+            [MODEL_TOKENS.__BEDROCK_MODEL_OPUS_BARE__]: {},
+          },
+        },
+        anthropic: { models: { [MODEL_TOKENS.__AI_SDK_ANTHROPIC_MODEL_SONNET__]: {} } },
+      }),
+    );
+
+    const { createAmazonBedrockGateway } = await import('../amazon-bedrock-gateway.js');
+    const gateway = createAmazonBedrockGateway();
+
+    expect(gateway.id).toBe('amazon-bedrock');
+    expect(gateway.name).toBe('Amazon Bedrock');
+
+    const providers = await gateway.fetchProviders();
+
+    // Provider key must be the unprefixed `amazon-bedrock`, NOT namespaced under
+    // the MastraCode gateway (`mastracode/amazon-bedrock`).
+    expect(Object.keys(providers)).toEqual(['amazon-bedrock']);
+    expect(providers['amazon-bedrock'].gateway).toBe('amazon-bedrock');
+    expect(providers['amazon-bedrock'].models).toEqual([
+      MODEL_TOKENS.__BEDROCK_MODEL_OPUS_BARE__,
+      MODEL_TOKENS.__BEDROCK_MODEL_SONNET_BARE__,
+    ]);
+  });
+});

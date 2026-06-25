@@ -72,6 +72,7 @@ import {
 } from './onboarding/settings.js';
 import { getToolCategory } from './permissions.js';
 import { PlanRejectionAbortProcessor } from './processors/plan-rejection-abort.js';
+import { createAmazonBedrockGateway } from './providers/amazon-bedrock-gateway.js';
 import { setAuthStorage } from './providers/claude-max.js';
 import { setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
@@ -339,6 +340,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     routeThroughMastraGateway: false,
     settingsPath: config?.settingsPath,
   });
+  const amazonBedrockGateway = createAmazonBedrockGateway();
 
   // Project detection
   const project = detectProject(cwd);
@@ -769,7 +771,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     stateSchema: typedStateSchema,
     agent: codeAgent,
     subagents: config?.subagents ?? [],
-    gateways: [mastraCodeGateway],
+    gateways: [amazonBedrockGateway, mastraCodeGateway],
     workspace: config?.workspace ?? (args => getDynamicWorkspace(args)),
     browser: config?.browser,
     toolCategoryResolver: getToolCategory,
