@@ -57,6 +57,7 @@ export {
   Extractor,
   type ExtractorConfig,
   type ExtractorOnExtractedContext,
+  type ExtractorRuntimeContext,
   type ExtractorSource,
 } from './processors/observational-memory';
 
@@ -1657,6 +1658,7 @@ ${workingMemory}`;
 
     return new OMClass({
       storage: memoryStore,
+      memory: this,
       scope: omConfig.scope,
       retrieval: omConfig.retrieval,
       activateAfterIdle: omConfig.activateAfterIdle,

@@ -13,6 +13,7 @@ import {
   buildExtractorPriorLines,
   parseExtractedValues,
   parseExtractorValue,
+  resolveExtractors,
   stripExtractorSections,
   validateExtractorList,
 } from '../extractor';
@@ -147,6 +148,39 @@ describe('Extractor', () => {
     expect(buildExtractorPriorLines([keep, skip], { keep: 'previous', skip: 'hidden' })).toEqual([
       '<keep>\nprevious\n</keep>',
     ]);
+  });
+
+  it('resolves dynamic instructions and schemas with runtime context', () => {
+    const schema = z.object({ memoryEnabled: z.boolean() });
+    const memory = { marker: 'active-memory' } as any;
+    const extractor = new Extractor({
+      name: 'Working Memory Draft',
+      instructions: context => `Use ${context.memory === memory ? 'active' : 'missing'} memory for ${context.source}.`,
+      schema: context => (context.memory === memory ? schema : undefined),
+    });
+
+    const [resolved] = resolveExtractors([extractor], { source: 'observer', memory });
+
+    expect(resolved?.instructions).toBe('Use active memory for observer.');
+    expect(resolved?.mode).toBe('structured');
+    expect(resolved?.schema).toBe(schema);
+    expect(buildExtractorOutputSections([resolved!])).toBe('');
+  });
+
+  it('passes the active memory instance to extractor hooks', async () => {
+    const onExtracted = vi.fn((_context: { memory?: unknown }) => undefined);
+    const memory = { marker: 'active-memory' } as any;
+    const extractor = new Extractor({ name: 'Hook', instructions: 'Extract hook.', onExtracted });
+
+    await applyExtractorHooks({
+      source: 'observer',
+      extractors: [extractor],
+      values: { hook: 'value' },
+      threadId: 'thread-1',
+      memory,
+    });
+
+    expect(onExtracted).toHaveBeenCalledWith(expect.objectContaining({ memory }));
   });
 
   it('returns extractor failures when the structured extraction call fails', async () => {

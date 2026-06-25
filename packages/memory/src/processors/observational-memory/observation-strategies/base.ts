@@ -3,6 +3,7 @@ import type { MessageHistory } from '@mastra/core/processors';
 import type { MemoryStorage } from '@mastra/core/storage';
 import xxhash from 'xxhash-wasm';
 
+import type { Memory } from '../../..';
 import { omDebug, omError } from '../debug';
 import { stripThreadTags } from '../message-utils';
 import { parseObservationGroups, wrapInObservationGroup } from '../observation-groups';
@@ -28,6 +29,7 @@ const hasherPromise = xxhash();
  */
 export interface StrategyDeps {
   storage: MemoryStorage;
+  memory?: Memory;
   messageHistory: MessageHistory;
   tokenCounter: TokenCounter;
   observationConfig: ResolvedObservationConfig;

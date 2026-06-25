@@ -11,6 +11,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord, ObservationalMemoryHistoryOptions } from '@mastra/core/storage';
 import xxhash from 'xxhash-wasm';
 
+import type { Memory } from '../..';
 import { resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
 import { composeObservationExtractors, composeReflectionExtractors } from './built-in-extractors';
@@ -306,6 +307,7 @@ export class ObservationalMemory {
   private shouldObscureThreadIds = false;
   private hasher = xxhash();
   private mastra?: Mastra;
+  private memory?: Memory;
 
   /**
    * Track message IDs observed during this instance's lifetime.
@@ -387,6 +389,7 @@ export class ObservationalMemory {
     this.retrieval = Boolean(config.retrieval);
     this.onIndexObservations = config.onIndexObservations;
     this.mastra = config.mastra;
+    this.memory = config.memory;
 
     // Resolve "default" to the model default for the agent being configured.
     const resolveModel = (model: ObservationalMemoryModel | undefined, defaultModel: string) =>
@@ -565,6 +568,7 @@ export class ObservationalMemory {
       resolveModel: inputTokens => this.resolveObservationModel(inputTokens),
       tokenCounter: this.tokenCounter,
       mastra: config.mastra,
+      memory: this.memory,
     });
 
     this.buffering = new BufferingCoordinator({
@@ -586,6 +590,7 @@ export class ObservationalMemory {
       getCompressionStartLevel: rc => this.getCompressionStartLevel(rc),
       resolveModel: inputTokens => this.resolveReflectionModel(inputTokens),
       mastra: config.mastra,
+      memory: this.memory,
     });
 
     // Validate buffer configuration
@@ -3608,6 +3613,13 @@ ${formattedMessages}
    */
   getStorage(): MemoryStorage {
     return this.storage;
+  }
+
+  /**
+   * Get the owning Memory instance when available.
+   */
+  getMemory(): Memory | undefined {
+    return this.memory;
   }
 
   /**

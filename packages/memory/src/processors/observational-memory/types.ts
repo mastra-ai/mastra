@@ -2,6 +2,7 @@ import type { AgentConfig } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ObservationalMemoryModelSettings } from '@mastra/core/memory';
 import type { MemoryStorage } from '@mastra/core/storage';
+import type { Memory } from '../..';
 import type { Extractor } from './extractor';
 import type { ModelByInputTokens } from './model-by-input-tokens';
 
@@ -877,6 +878,9 @@ export interface ObservationalMemoryConfig {
    * Must be a MemoryStorage instance (from MastraStorage.stores.memory).
    */
   storage: MemoryStorage;
+
+  /** Active Memory instance, when Observational Memory is created by Memory. */
+  memory?: Memory;
 
   /**
    * Enable retrieval-mode observation group metadata.

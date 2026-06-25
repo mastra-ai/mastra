@@ -8,6 +8,7 @@ import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/proce
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
 
+import type { Memory } from '../..';
 import { resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
 import { omDebug, omError } from './debug';
@@ -20,6 +21,7 @@ import {
   mergeExtractionFailures,
 } from './extracted-values';
 import { extractStructuredValues } from './extraction-runner';
+import { resolveExtractors } from './extractor';
 import { withOmInternalThreadId } from './internal-request-context';
 import {
   createActivationMarker,
@@ -200,6 +202,7 @@ export class ReflectorRunner {
     resourceId?: string,
   ) => Promise<void>;
   private readonly getCompressionStartLevel: (requestContext?: RequestContext) => Promise<CompressionLevel>;
+  private readonly memory?: Memory;
   private mastra?: Mastra;
 
   constructor(opts: {
@@ -224,6 +227,7 @@ export class ReflectorRunner {
     getCompressionStartLevel: (requestContext?: RequestContext) => Promise<CompressionLevel>;
     resolveModel: ReflectionModelResolver;
     mastra?: Mastra;
+    memory?: Memory;
   }) {
     this.reflectionConfig = opts.reflectionConfig;
     this.observationConfig = opts.observationConfig;
@@ -237,17 +241,22 @@ export class ReflectorRunner {
     this.persistMarkerToMessage = opts.persistMarkerToMessage;
     this.getCompressionStartLevel = opts.getCompressionStartLevel;
     this.mastra = opts.mastra;
+    this.memory = opts.memory;
   }
 
   __registerMastra(mastra: Mastra): void {
     this.mastra = mastra;
   }
 
-  private createAgent(model: ConcreteReflectionModel, memory?: MastraMemory): Agent {
+  private createAgent(
+    model: ConcreteReflectionModel,
+    memory?: MastraMemory,
+    extractors = this.reflectionConfig.extractors,
+  ): Agent {
     const agent = new Agent({
       id: 'observational-memory-reflector',
       name: 'Reflector',
-      instructions: buildReflectorSystemPrompt(this.reflectionConfig.instruction, this.reflectionConfig.extractors),
+      instructions: buildReflectorSystemPrompt(this.reflectionConfig.instruction, extractors),
       model,
       ...(memory ? { memory } : {}),
     });
@@ -318,17 +327,27 @@ export class ReflectorRunner {
   }> {
     const originalTokens = this.tokenCounter.countObservations(observations);
     const resolvedModel = model ? { model } : this.resolveModel(originalTokens);
-    const activeExtractors = skipContinuationHints
-      ? this.reflectionConfig.extractors.filter(
-          extractor => extractor.slug !== 'current-task' && extractor.slug !== 'suggested-response',
-        )
-      : this.reflectionConfig.extractors;
+    const activeExtractors = resolveExtractors(
+      skipContinuationHints
+        ? this.reflectionConfig.extractors.filter(
+            extractor => extractor.slug !== 'current-task' && extractor.slug !== 'suggested-response',
+          )
+        : this.reflectionConfig.extractors,
+      {
+        source: 'reflector',
+        threadId: streamContext?.threadId,
+        resourceId: streamContext?.resourceId,
+        mainAgent,
+        memory: this.memory,
+        requestContext,
+      },
+    );
     const structuredExtractors = activeExtractors.filter(extractor => extractor.mode === 'structured');
     const temporaryMemory =
       structuredExtractors.length > 0 ? await createTemporaryOmMemoryContext('structured-reflector') : undefined;
     const agent = temporaryMemory
-      ? this.createAgent(resolvedModel.model, temporaryMemory.memory)
-      : this.createAgent(resolvedModel.model);
+      ? this.createAgent(resolvedModel.model, temporaryMemory.memory, activeExtractors)
+      : this.createAgent(resolvedModel.model, undefined, activeExtractors);
     const internalRequestContext = withOmInternalThreadId(requestContext, agent.id);
     const targetThreshold = observationTokensThreshold ?? getMaxThreshold(this.reflectionConfig.observationTokens);
 
@@ -518,6 +537,7 @@ export class ReflectorRunner {
       threadId: streamContext?.threadId ?? 'unknown',
       resourceId: streamContext?.resourceId,
       mainAgent,
+      memory: this.memory,
       sendSignal,
       requestContext,
     });

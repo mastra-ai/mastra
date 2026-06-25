@@ -238,6 +238,16 @@ new Extractor({
 })
 ```
 
+Use dynamic `instructions` or `schema` functions when an extractor needs runtime context, such as the active memory instance or request context:
+
+```typescript title="src/mastra/agents/agent.ts"
+new Extractor({
+  name: 'Workspace summary',
+  instructions: ({ memory }) =>
+    memory ? 'Extract workspace facts for this memory instance.' : 'Extract workspace facts.',
+})
+```
+
 Use `onExtracted` to normalize or react to custom extracted values before they are persisted:
 
 ```typescript title="src/mastra/agents/agent.ts"

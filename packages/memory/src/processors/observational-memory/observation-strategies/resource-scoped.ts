@@ -308,6 +308,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         threadId,
         resourceId: this.resourceId,
         mainAgent: this.opts.agent,
+        memory: this.deps.memory,
         sendSignal: this.opts.sendSignal,
         requestContext: this.opts.requestContext,
       });

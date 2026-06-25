@@ -2,28 +2,37 @@ import type { ProcessorContext } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import { z } from 'zod';
 
+import type { Memory } from '../..';
+
 type ExtractorMode = 'inline' | 'structured';
 export type ExtractorSource = 'observer' | 'reflector';
 
-export interface ExtractorOnExtractedContext<T = unknown> {
+export interface ExtractorRuntimeContext {
   source: ExtractorSource;
-  extractor: Extractor<T>;
-  threadId: string;
+  threadId?: string;
   resourceId?: string;
-  previous?: T;
-  current: T;
   mainAgent?: ProcessorContext['agent'];
-  sendSignal?: ProcessorContext['sendSignal'];
+  memory?: Memory;
   requestContext?: RequestContext;
 }
+
+export interface ExtractorOnExtractedContext<T = unknown> extends ExtractorRuntimeContext {
+  extractor: Extractor<T>;
+  threadId: string;
+  previous?: T;
+  current: T;
+  sendSignal?: ProcessorContext['sendSignal'];
+}
+
+type ExtractorConfigValue<TValue> = TValue | ((context: ExtractorRuntimeContext) => TValue);
 
 export interface ExtractorConfig<T = unknown> {
   /** Human-readable extractor name. Converted to a stable kebab-case slug for XML tags and metadata keys. */
   name: string;
   /** Instructions describing what this extractor should return. */
-  instructions: string;
+  instructions: ExtractorConfigValue<string>;
   /** Zod schema used for structured extraction. Omit to extract an inline string value from the observer/reflector output. */
-  schema?: z.ZodType<T>;
+  schema?: ExtractorConfigValue<z.ZodType<T> | undefined>;
   /** Whether the previous extraction should be shown to the extractor prompt. Defaults to true. */
   includePreviousExtraction?: boolean;
   /** Optional lifecycle hook invoked after a value is parsed and before it is persisted. */
@@ -85,16 +94,18 @@ export class Extractor<T = unknown> {
   readonly onExtracted?: ExtractorConfig<T>['onExtracted'];
   /** @internal */
   readonly internal: boolean;
+  private readonly instructionsConfig: ExtractorConfigValue<string>;
+  private readonly schemaConfig?: ExtractorConfigValue<z.ZodType<T> | undefined>;
 
   constructor(config: ExtractorConfig<T>, internal = false) {
     const name = config.name.trim();
-    const instructions = config.instructions.trim();
+    const instructions = typeof config.instructions === 'string' ? config.instructions.trim() : undefined;
     const slug = slugifyExtractorName(name);
 
     if (!name) {
       throw new Error('Extractor name is required.');
     }
-    if (!instructions) {
+    if (instructions !== undefined && !instructions) {
       throw new Error(`Extractor "${name}" must include instructions.`);
     }
     assertValidSlug(slug, name);
@@ -104,13 +115,44 @@ export class Extractor<T = unknown> {
 
     this.name = name;
     this.slug = slug;
-    this.instructions = instructions;
-    this.schema = (config.schema ?? z.string()) as z.ZodType<T>;
+    this.instructionsConfig = config.instructions;
+    this.schemaConfig = config.schema;
+    this.instructions = instructions ?? '';
+    this.schema = (typeof config.schema === 'function' ? z.string() : (config.schema ?? z.string())) as z.ZodType<T>;
     this.mode = internal || !config.schema ? 'inline' : 'structured';
     this.includePreviousExtraction = config.includePreviousExtraction ?? true;
     this.onExtracted = config.onExtracted;
     this.internal = internal;
   }
+
+  resolve(context: ExtractorRuntimeContext): Extractor<T> {
+    const instructions =
+      typeof this.instructionsConfig === 'function'
+        ? this.instructionsConfig(context).trim()
+        : this.instructionsConfig.trim();
+    if (!instructions) {
+      throw new Error(`Extractor "${this.name}" must include instructions.`);
+    }
+
+    const schema = typeof this.schemaConfig === 'function' ? this.schemaConfig(context) : this.schemaConfig;
+    return new Extractor(
+      {
+        name: this.name,
+        instructions,
+        ...(schema ? { schema } : {}),
+        includePreviousExtraction: this.includePreviousExtraction,
+        onExtracted: this.onExtracted,
+      },
+      this.internal,
+    );
+  }
+}
+
+export function resolveExtractors(
+  extractors: readonly Extractor<any>[],
+  context: ExtractorRuntimeContext,
+): Extractor<any>[] {
+  return extractors.map(extractor => extractor.resolve(context));
 }
 
 export function validateExtractorList(extractors: readonly Extractor<any>[]): Extractor<any>[] {

@@ -410,14 +410,15 @@ const memory = new Memory({
   },
   {
     name: 'instructions',
-    type: 'string',
-    description: 'Instructions for what to extract and when to update the value.',
+    type: 'string | (context) => string',
+    description:
+      'Instructions for what to extract and when to update the value. Use a function to derive instructions from runtime context.',
   },
   {
     name: 'schema',
-    type: 'ZodType<T>',
+    type: 'ZodType<T> | (context) => ZodType<T> | undefined',
     description:
-      'Optional Zod schema for structured extraction. When provided, OM runs a follow-up structured output call after the main OM operation. When omitted, the extractor is an inline string extractor emitted in the Observer or Reflector response.',
+      'Optional Zod schema for structured extraction. When provided, OM runs a follow-up structured output call after the main OM operation. When omitted, the extractor is an inline string extractor emitted in the Observer or Reflector response. Use a function to derive the schema from runtime context.',
     isOptional: true,
   },
   {
@@ -446,6 +447,7 @@ const memory = new Memory({
 - `observation.extract` runs during observation. `reflection.extract` runs during reflection.
 - Schema-backed extractors add a follow-up model call. The call uses the same temporary in-memory Observer or Reflector thread so providers that support prompt caching can reuse the shared prompt prefix.
 - Schema-less extractors are inline string extractors emitted directly in the Observer or Reflector output.
+- Dynamic extractor functions receive runtime context, including `source`, `threadId`, `resourceId`, `mainAgent`, `memory`, and `requestContext` when available.
 - Extraction failures are reported in OM marker data and do not discard other successful extracted values.
 
 ## Examples

@@ -1,6 +1,7 @@
 import type { ProcessorContext } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 
+import type { Memory } from '../..';
 import type { BuiltInExtractorSlug, Extractor, ExtractorSource } from './extractor';
 import { BUILT_IN_EXTRACTOR_SLUGS, isBuiltInExtractorSlug } from './extractor';
 
@@ -151,6 +152,7 @@ export async function applyExtractorHooks(opts: {
   threadId: string;
   resourceId?: string;
   mainAgent?: ProcessorContext['agent'];
+  memory?: Memory;
   sendSignal?: ProcessorContext['sendSignal'];
   requestContext?: RequestContext;
 }): Promise<{ values?: Record<string, unknown>; failures?: ExtractionFailure[] }> {
@@ -181,6 +183,7 @@ export async function applyExtractorHooks(opts: {
         previous: opts.previousValues?.[extractor.slug],
         current,
         mainAgent: opts.mainAgent,
+        memory: opts.memory,
         sendSignal: opts.sendSignal,
         requestContext: opts.requestContext,
       });

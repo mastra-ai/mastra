@@ -4,11 +4,14 @@ import { modelSupportsAttachments } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraMemory } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
+import type { ProcessorContext } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 
+import type { Memory } from '../..';
 import { omDebug } from './debug';
 import { getBuiltInExtractedValues, mergeExtractedValues, mergeExtractionFailures } from './extracted-values';
 import { extractStructuredValues } from './extraction-runner';
+import { resolveExtractors } from './extractor';
 import { withOmInternalThreadId } from './internal-request-context';
 import type { ModelByInputTokens } from './model-by-input-tokens';
 import type { ObserverAttachmentFilter } from './observer-agent';
@@ -77,6 +80,7 @@ export class ObserverRunner {
   private readonly observedMessageIds: Set<string>;
   private readonly resolveModel: ObservationModelResolver;
   private readonly tokenCounter: TokenCounter;
+  private readonly memory?: Memory;
   private mastra?: Mastra;
 
   /** Captured prompt/response from the last observer call (for repro capture). */
@@ -88,19 +92,26 @@ export class ObserverRunner {
     resolveModel: ObservationModelResolver;
     tokenCounter: TokenCounter;
     mastra?: Mastra;
+    memory?: Memory;
   }) {
     this.observationConfig = opts.observationConfig;
     this.observedMessageIds = opts.observedMessageIds;
     this.resolveModel = opts.resolveModel;
     this.tokenCounter = opts.tokenCounter;
     this.mastra = opts.mastra;
+    this.memory = opts.memory;
   }
 
   __registerMastra(mastra: Mastra): void {
     this.mastra = mastra;
   }
 
-  private createAgent(model: ConcreteObservationModel, isMultiThread = false, memory?: MastraMemory): Agent {
+  private createAgent(
+    model: ConcreteObservationModel,
+    isMultiThread = false,
+    memory?: MastraMemory,
+    extractors = this.observationConfig.extractors ?? [],
+  ): Agent {
     const agent = new Agent({
       id: isMultiThread ? 'multi-thread-observer' : 'observational-memory-observer',
       name: isMultiThread ? 'multi-thread-observer' : 'Observer',
@@ -108,7 +119,7 @@ export class ObserverRunner {
         isMultiThread,
         this.observationConfig.instruction,
         this.observationConfig.threadTitle,
-        this.observationConfig.extractors ?? [],
+        extractors,
       ),
       model,
       ...(memory ? { memory } : {}),
@@ -194,6 +205,8 @@ export class ObserverRunner {
       priorExtractedValues?: Record<string, unknown>;
       wasTruncated?: boolean;
       model?: ConcreteObservationModel;
+      resourceId?: string;
+      mainAgent?: ProcessorContext['agent'];
     },
   ): Promise<{
     observations: string;
@@ -206,16 +219,23 @@ export class ObserverRunner {
   }> {
     const inputTokens = this.tokenCounter.countMessages(messagesToObserve);
     const resolvedModel = options?.model ? { model: options.model } : this.resolveModel(inputTokens);
-    const activeExtractors = filterObserverExtractors(
-      this.observationConfig.extractors,
-      options?.skipContinuationHints,
+    const activeExtractors = resolveExtractors(
+      filterObserverExtractors(this.observationConfig.extractors, options?.skipContinuationHints),
+      {
+        source: 'observer',
+        threadId: messagesToObserve[0]?.threadId,
+        resourceId: options?.resourceId,
+        mainAgent: options?.mainAgent,
+        memory: this.memory,
+        requestContext: options?.requestContext,
+      },
     );
     const structuredExtractors = activeExtractors.filter(extractor => extractor.mode === 'structured');
     const temporaryMemory =
       structuredExtractors.length > 0 ? await createTemporaryOmMemoryContext('structured-observer') : undefined;
     const agent = temporaryMemory
-      ? this.createAgent(resolvedModel.model, false, temporaryMemory.memory)
-      : this.createAgent(resolvedModel.model);
+      ? this.createAgent(resolvedModel.model, false, temporaryMemory.memory, activeExtractors)
+      : this.createAgent(resolvedModel.model, false, undefined, activeExtractors);
     const internalRequestContext = withOmInternalThreadId(options?.requestContext, agent.id);
 
     const attachmentFilter = this.resolveAttachmentFilter(resolvedModel.model, options?.requestContext);
@@ -374,7 +394,11 @@ export class ObserverRunner {
       0,
     );
     const resolvedModel = model ? { model } : this.resolveModel(inputTokens);
-    const activeExtractors = this.observationConfig.extractors ?? [];
+    const activeExtractors = resolveExtractors(this.observationConfig.extractors ?? [], {
+      source: 'observer',
+      memory: this.memory,
+      requestContext,
+    });
     const structuredExtractors = activeExtractors.filter(extractor => extractor.mode === 'structured');
 
     if (structuredExtractors.length > 0) {
@@ -418,7 +442,7 @@ export class ObserverRunner {
     }
 
     let temporaryMemory: Awaited<ReturnType<typeof createTemporaryOmMemoryContext>> | undefined;
-    const agent = this.createAgent(resolvedModel.model, true);
+    const agent = this.createAgent(resolvedModel.model, true, undefined, activeExtractors);
     const internalRequestContext = withOmInternalThreadId(requestContext, agent.id);
 
     const multiThreadAttachmentFilter = this.resolveAttachmentFilter(resolvedModel.model, requestContext);
