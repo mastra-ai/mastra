@@ -47,6 +47,25 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
+/**
+ * Return a safe href, or null if the URL uses a dangerous scheme. Agent output
+ * can contain attacker-influenced links, so block `javascript:`, `data:`,
+ * `vbscript:`, and similar script-bearing schemes. Relative URLs and the common
+ * safe schemes (http/https/mailto/tel) are allowed.
+ */
+function safeUrl(raw: string): string | null {
+  const url = raw.trim();
+  // Strip control/whitespace chars that can hide a scheme (e.g. "java\tscript:").
+
+  const collapsed = url.replace(/[\u0000-\u001f\u007f-\u009f\s]/g, '').toLowerCase();
+  const scheme = collapsed.match(/^([a-z][a-z0-9+.-]*):/);
+  if (scheme) {
+    const allowed = new Set(['http', 'https', 'mailto', 'tel']);
+    if (!allowed.has(scheme[1])) return null;
+  }
+  return url;
+}
+
 const marked = new Marked({
   breaks: true,
   gfm: true,
@@ -72,8 +91,37 @@ marked.use({
     html({ text }) {
       return escapeHtml(text);
     },
+    // Sanitize link/image URLs so a markdown link/image cannot smuggle a
+    // `javascript:`/`data:` scheme into a clickable anchor or src.
+    link({ href, title, tokens }) {
+      const inner = this.parser.parseInline(tokens);
+      const safe = safeUrl(href);
+      if (!safe) return inner; // Drop the unsafe link, keep its visible text.
+      const titleAttr = title ? ` title="${escapeHtml(title)}"` : '';
+      return `<a href="${escapeHtml(safe)}"${titleAttr} target="_blank" rel="noopener noreferrer nofollow">${inner}</a>`;
+    },
+    image({ href, title, text }) {
+      const safe = safeUrl(href);
+      const alt = escapeHtml(text ?? '');
+      if (!safe) return alt; // Drop the unsafe image, keep its alt text.
+      const titleAttr = title ? ` title="${escapeHtml(title)}"` : '';
+      return `<img src="${escapeHtml(safe)}" alt="${alt}"${titleAttr} />`;
+    },
   },
 });
+
+/**
+ * Parse a markdown string to sanitized HTML. Raw HTML is neutralized, inline
+ * code is escaped, and link/image URLs with dangerous schemes are dropped.
+ * Exported for testing the sanitization in isolation.
+ */
+export function renderMarkdown(src: string): string {
+  try {
+    return marked.parse(src) as string;
+  } catch {
+    return src;
+  }
+}
 
 interface MarkdownProps {
   children: string;
@@ -87,13 +135,7 @@ interface MarkdownProps {
  * escaped before being injected via `dangerouslySetInnerHTML`.
  */
 export function Markdown({ children, className }: MarkdownProps) {
-  const html = useMemo(() => {
-    try {
-      return marked.parse(children) as string;
-    } catch {
-      return children;
-    }
-  }, [children]);
+  const html = useMemo(() => renderMarkdown(children), [children]);
 
   return <div className={`markdown ${className ?? ''}`} dangerouslySetInnerHTML={{ __html: html }} />;
 }
