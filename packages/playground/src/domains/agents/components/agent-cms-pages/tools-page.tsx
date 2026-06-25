@@ -1,5 +1,6 @@
-import { Button, Icon, ToolsIcon, cn } from '@mastra/playground-ui';
+import { Icon, ToolsIcon, cn } from '@mastra/playground-ui';
 import type { RuleGroup } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { EntityName, EntityDescription, EntityContent, Entity } from '@mastra/playground-ui/components/Entity';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';

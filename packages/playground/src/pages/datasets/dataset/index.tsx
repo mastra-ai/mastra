@@ -1,4 +1,5 @@
-import { Button, is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui';
+import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';

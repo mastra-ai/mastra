@@ -9308,6 +9308,7 @@ export type GetWorkflowsWorkflowIdRuns_QueryParams = {
         | 'bailed'
         | 'tripwire'
         | 'paused'
+        | 'skipped'
       )
     | undefined;
 };
@@ -9380,7 +9381,8 @@ export type GetWorkflowsWorkflowIdRunsRunId_Response = {
     | 'pending'
     | 'bailed'
     | 'tripwire'
-    | 'paused';
+    | 'paused'
+    | 'skipped';
   initialState?:
     | {
         [key: string]: any;
@@ -9687,6 +9689,7 @@ export type PostWorkflowsWorkflowIdStartAsync_Response = {
         | 'bailed'
         | 'tripwire'
         | 'paused'
+        | 'skipped'
       )
     | undefined;
   result?: unknown | undefined;
@@ -9893,6 +9896,7 @@ export type PostWorkflowsWorkflowIdResumeAsync_Response = {
         | 'bailed'
         | 'tripwire'
         | 'paused'
+        | 'skipped'
       )
     | undefined;
   result?: unknown | undefined;
@@ -10256,6 +10260,7 @@ export type PostWorkflowsWorkflowIdTimeTravelAsync_Response = {
         | 'bailed'
         | 'tripwire'
         | 'paused'
+        | 'skipped'
       )
     | undefined;
   result?: unknown | undefined;
@@ -10496,6 +10501,7 @@ export type PostWorkflowsWorkflowIdRestartAsync_Response = {
         | 'bailed'
         | 'tripwire'
         | 'paused'
+        | 'skipped'
       )
     | undefined;
   result?: unknown | undefined;
@@ -88775,6 +88781,7 @@ export type GetAgentBuilderActionIdRuns_QueryParams = {
         | 'bailed'
         | 'tripwire'
         | 'paused'
+        | 'skipped'
       )
     | undefined;
 };
@@ -88847,7 +88854,8 @@ export type GetAgentBuilderActionIdRunsRunId_Response = {
     | 'pending'
     | 'bailed'
     | 'tripwire'
-    | 'paused';
+    | 'paused'
+    | 'skipped';
   initialState?:
     | {
         [key: string]: any;
@@ -89118,6 +89126,7 @@ export type PostAgentBuilderActionIdStartAsync_Response = {
         | 'bailed'
         | 'tripwire'
         | 'paused'
+        | 'skipped'
       )
     | undefined;
   result?: unknown | undefined;
@@ -89358,6 +89367,7 @@ export type PostAgentBuilderActionIdResumeAsync_Response = {
         | 'bailed'
         | 'tripwire'
         | 'paused'
+        | 'skipped'
       )
     | undefined;
   result?: unknown | undefined;
@@ -89684,7 +89694,8 @@ export type GetSchedules_Response = {
             | 'pending'
             | 'canceled'
             | 'bailed'
-            | 'paused';
+            | 'paused'
+            | 'skipped';
           startedAt?: number | undefined;
           completedAt?: number | undefined;
           durationMs?: number | undefined;
@@ -89760,7 +89771,8 @@ export type GetSchedulesScheduleId_Response = {
           | 'pending'
           | 'canceled'
           | 'bailed'
-          | 'paused';
+          | 'paused'
+          | 'skipped';
         startedAt?: number | undefined;
         completedAt?: number | undefined;
         durationMs?: number | undefined;
@@ -89844,7 +89856,8 @@ export type GetSchedulesScheduleIdTriggers_Response = {
             | 'pending'
             | 'canceled'
             | 'bailed'
-            | 'paused';
+            | 'paused'
+            | 'skipped';
           startedAt?: number | undefined;
           completedAt?: number | undefined;
           durationMs?: number | undefined;
@@ -89913,7 +89926,8 @@ export type PostSchedulesScheduleIdPause_Response = {
           | 'pending'
           | 'canceled'
           | 'bailed'
-          | 'paused';
+          | 'paused'
+          | 'skipped';
         startedAt?: number | undefined;
         completedAt?: number | undefined;
         durationMs?: number | undefined;
@@ -89984,7 +89998,8 @@ export type PostSchedulesScheduleIdResume_Response = {
           | 'pending'
           | 'canceled'
           | 'bailed'
-          | 'paused';
+          | 'paused'
+          | 'skipped';
         startedAt?: number | undefined;
         completedAt?: number | undefined;
         durationMs?: number | undefined;

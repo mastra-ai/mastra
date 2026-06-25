@@ -1,5 +1,6 @@
 import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
-import { AgentIcon, Button, ProcessorIcon, ScorersIcon, WorkflowIcon } from '@mastra/playground-ui';
+import { AgentIcon, ProcessorIcon, ScorersIcon, WorkflowIcon } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Chip } from '@mastra/playground-ui/components/Chip';
 import {
   DataList as EntityList,

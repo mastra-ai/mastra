@@ -1,5 +1,6 @@
 import type { BuilderRegistrySkillSummary } from '@mastra/client-js';
-import { Button, SkillIcon, cn } from '@mastra/playground-ui';
+import { SkillIcon, cn } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
   DialogBody,

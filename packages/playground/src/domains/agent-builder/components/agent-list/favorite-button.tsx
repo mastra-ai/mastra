@@ -1,4 +1,5 @@
-import { Button, cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Star } from 'lucide-react';
 import type { MouseEvent } from 'react';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder';

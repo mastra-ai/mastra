@@ -1,7 +1,6 @@
 import type { ScoreRowData } from '@mastra/core/evals';
 import { EntityType } from '@mastra/core/observability';
 import {
-  Button,
   SpanDataPanelView,
   TraceDataPanelView,
   TraceKeysAndValues,
@@ -12,6 +11,7 @@ import {
   useTraceSpanNavigation,
 } from '@mastra/playground-ui';
 import type { SpanTab } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { CircleGaugeIcon, SaveIcon } from 'lucide-react';

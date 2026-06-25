@@ -46,6 +46,17 @@ function formatPreviewLabel(label: unknown, fallback: string): string {
   return typeof label === 'string' && label.length > 0 ? label : fallback;
 }
 
+function formatToolResultPreviewValue(value: unknown): string {
+  if (typeof value === 'string') return value;
+
+  if (value && typeof value === 'object' && 'type' in value && (value as { type?: unknown }).type === 'text') {
+    const textValue = (value as { value?: unknown }).value;
+    if (typeof textValue === 'string') return textValue;
+  }
+
+  return JSON.stringify(value);
+}
+
 function summarizePart(part: unknown): string {
   if (typeof part === 'string') {
     return part;
@@ -83,7 +94,7 @@ function summarizePart(part: unknown): string {
     return `[tool: ${formatPreviewLabel((part.function as { name?: unknown }).name, 'unknown')}]`;
   }
 
-  if ('toolName' in part) {
+  if ('toolName' in part && !('type' in part && (part as { type: unknown }).type === 'tool-result')) {
     return `[tool: ${formatPreviewLabel((part as { toolName?: unknown }).toolName, 'unknown')}]`;
   }
 
@@ -97,8 +108,20 @@ function summarizePart(part: unknown): string {
         return '[reasoning]';
       case 'tool-call':
         return `[tool: ${formatPreviewLabel((part as { toolName?: unknown }).toolName, 'unknown')}]`;
-      case 'tool-result':
-        return '[tool-result]';
+      case 'tool-result': {
+        const toolResult = part as {
+          providerMetadata?: Record<string, unknown>;
+          providerOptions?: Record<string, unknown>;
+        };
+        const mastraMeta = (toolResult.providerMetadata?.mastra ?? toolResult.providerOptions?.mastra) as
+          | Record<string, unknown>
+          | undefined;
+        const toolName = formatPreviewLabel((part as { toolName?: unknown }).toolName, 'unknown');
+        if (mastraMeta?.modelOutput !== undefined) {
+          return formatToolResultPreviewValue(mastraMeta.modelOutput);
+        }
+        return `[tool-result: ${toolName}]`;
+      }
       default:
         return `[${part.type}]`;
     }
@@ -951,7 +974,14 @@ export class ModelSpanTracker {
               if (providerExecuted !== undefined) metadata.providerExecuted = providerExecuted;
               if (providerMetadata !== undefined) metadata.providerMetadata = providerMetadata;
 
-              this.#createEventSpan(chunk.type, providerExecuted ? result : undefined, { metadata });
+              const mastraMeta = providerMetadata?.mastra as Record<string, unknown> | undefined;
+              const spanOutput = providerExecuted
+                ? result
+                : mastraMeta?.modelOutput !== undefined
+                  ? mastraMeta.modelOutput
+                  : undefined;
+
+              this.#createEventSpan(chunk.type, spanOutput, { metadata });
               break;
             }
 
