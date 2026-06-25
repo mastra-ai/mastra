@@ -350,8 +350,8 @@ export class Harness<TState = {}> {
      * changing the API. Falls back to `initialState` when omitted.
      */
     tags?: Record<string, string>;
-    workspace?: DynamicArgument<Workspace | undefined>;
-    browser?: DynamicArgument<MastraBrowser | undefined>;
+    workspace?: Workspace;
+    browser?: MastraBrowser;
     requestContext?: RequestContext;
   } = {}): Promise<Session<TState>> {
     const effectiveResourceId = resourceId ?? this.config.resourceId ?? this.config.id;
@@ -391,8 +391,8 @@ export class Harness<TState = {}> {
     effectiveResourceId: string,
     tags?: Record<string, string>,
     overrides?: {
-      workspace?: DynamicArgument<Workspace | undefined>;
-      browser?: DynamicArgument<MastraBrowser | undefined>;
+      workspace?: Workspace;
+      browser?: MastraBrowser;
       requestContext?: RequestContext;
     },
   ): Promise<Session<TState>> {

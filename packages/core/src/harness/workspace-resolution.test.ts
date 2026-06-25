@@ -154,9 +154,9 @@ describe('Harness workspace — none configured', () => {
 // ===========================================================================
 
 describe('Harness createSession — workspace overrides', () => {
-  it('per-session workspace override factory is resolved at session creation', async () => {
-    const sessionWs = createMockWorkspace('factory-session-ws');
-    const workspaceFn = vi.fn().mockReturnValue(sessionWs);
+  it('per-session workspace override is resolved at session creation', async () => {
+    const sessionWs = createMockWorkspace('session-ws');
+    const initSpy = vi.spyOn(sessionWs, 'init');
     const harness = new Harness({
       id: 'test',
       storage: new InMemoryStore(),
@@ -167,10 +167,10 @@ describe('Harness createSession — workspace overrides', () => {
     const session = await harness.createSession({
       id: 'test-session',
       ownerId: 'test-owner',
-      workspace: workspaceFn,
+      workspace: sessionWs,
     });
 
-    expect(workspaceFn).toHaveBeenCalledTimes(1);
+    expect(initSpy).toHaveBeenCalledTimes(1);
     expect(session).toBeDefined();
   });
 
@@ -221,23 +221,6 @@ describe('Harness createSession — workspace overrides', () => {
     // The session-level workspace is initialized, not the harness-level one.
     expect(sessionInitSpy).toHaveBeenCalled();
     expect(harnessInitSpy).not.toHaveBeenCalled();
-  });
-
-  it('throws when a workspace override factory resolves to undefined', async () => {
-    const harness = new Harness({
-      id: 'test',
-      storage: new InMemoryStore(),
-      modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
-    });
-    await harness.init();
-
-    await expect(
-      harness.createSession({
-        id: 'test-session',
-        ownerId: 'test-owner',
-        workspace: () => undefined,
-      }),
-    ).rejects.toThrow('A session requires a valid workspace instance.');
   });
 });
 
@@ -339,10 +322,9 @@ describe('Harness createSession — browser overrides', () => {
     expect(session.browser).not.toBe(harnessBrowser);
   });
 
-  it('per-session dynamic browser factory is resolved at session creation', async () => {
+  it('per-session browser override is used at session creation', async () => {
     const ws = createMockWorkspace();
-    const sessionBrowser = createMockBrowser('factory-session-browser');
-    const browserFn = vi.fn().mockReturnValue(sessionBrowser);
+    const sessionBrowser = createMockBrowser('session-browser');
     const harness = new Harness({
       id: 'test',
       storage: new InMemoryStore(),
@@ -354,10 +336,9 @@ describe('Harness createSession — browser overrides', () => {
     const session = await harness.createSession({
       id: 'test-session',
       ownerId: 'test-owner',
-      browser: browserFn,
+      browser: sessionBrowser,
     });
 
-    expect(browserFn).toHaveBeenCalledTimes(1);
     expect(session.browser).toBe(sessionBrowser);
   });
 
