@@ -371,3 +371,16 @@ export class Scheduler extends MastraBase {
     }
   }
 }
+
+/**
+ * @deprecated Renamed to {@link Scheduler}. The scheduler now drives both
+ * workflow and heartbeat schedules, so the `Workflow`-prefixed name is no longer
+ * accurate. This alias will be removed in a future major release.
+ */
+export const WorkflowScheduler = Scheduler;
+
+/**
+ * @deprecated Renamed to {@link Scheduler}. This alias will be removed in a
+ * future major release.
+ */
+export type WorkflowScheduler = Scheduler;

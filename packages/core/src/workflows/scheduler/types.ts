@@ -103,3 +103,10 @@ export type SchedulerConfig = {
    */
   missesBeforeDelete?: number;
 };
+
+/**
+ * @deprecated Renamed to {@link SchedulerConfig}. The scheduler now drives both
+ * workflow and heartbeat schedules, so the `Workflow`-prefixed name is no longer
+ * accurate. This alias will be removed in a future major release.
+ */
+export type WorkflowSchedulerConfig = SchedulerConfig;
