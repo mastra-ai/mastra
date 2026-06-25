@@ -2,4 +2,4 @@
 '@mastra/pg': patch
 ---
 
-Fixed numeric range filters ($gt, $gte, $lt, $lte) returning incorrect results when negated with $not on rows where the field is missing or non-numeric. The CASE guard introduced in #18430 used ELSE FALSE, which made NOT(FALSE)=TRUE incorrectly include those rows. Changed to ELSE NULL so NOT(NULL)=NULL correctly excludes them.
+Negated numeric range filters (`$not` with `$gt`, `$gte`, `$lt`, `$lte`) now correctly exclude rows where the filtered field is missing or non-numeric. Previously these rows were incorrectly included in results.
