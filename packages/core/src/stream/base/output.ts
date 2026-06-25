@@ -1379,18 +1379,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }
 
   async consumeStream(options?: ConsumeStreamOptions): Promise<void> {
-    // Drain the base stream exactly once and share that single operation with
-    // every caller. Consumption can be kicked off from several places (an
-    // explicit consumeStream() call, a delayed-promise accessor, or the evented
-    // stream's pull()), but it must only drain #baseStream once. Returning the
-    // shared promise — rather than early-returning nothing — means later callers
-    // await the run to be fully consumed, so `await consumeStream()` keeps its
-    // contract regardless of who started consumption first.
-    // The drain runs once, but every caller's onError must still fire. Capture any
-    // drain error a single time inside the shared promise (do NOT bind a caller's
-    // onError to the drain), then invoke each caller's own onError after awaiting
-    // the shared promise below. This keeps error reporting per-caller instead of
-    // binding it to whoever started consumption first.
+    // Drain #baseStream exactly once but let every caller await full consumption,
+    // so `await consumeStream()` holds regardless of who started it. Capture any
+    // drain error once (don't bind a caller's onError to the drain), then fire each
+    // caller's own onError after the shared promise settles.
     if (!this.#consumeStreamPromise) {
       this.#consumptionStarted = true;
       this.#consumeStreamPromise = consumeStream({
