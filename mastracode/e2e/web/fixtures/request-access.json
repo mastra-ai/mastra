@@ -1,0 +1,35 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Read the file at /etc/hosts",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_request_access",
+            "name": "request_access",
+            "arguments": {
+              "path": "/etc/hosts",
+              "reason": "Need to read the hosts file to check DNS entries"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_request_access",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Access was granted. I can now read /etc/hosts."
+      }
+    }
+  ]
+}
