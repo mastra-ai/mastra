@@ -1,7 +1,7 @@
-import { cn } from '@mastra/playground-ui';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { useAgentVersions } from '../hooks/use-agent-versions';
 
 function formatTimestamp(isoString: string): string {

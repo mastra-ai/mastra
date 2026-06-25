@@ -1,8 +1,9 @@
-import { CheckIcon, CrossIcon, Icon, cn } from '@mastra/playground-ui';
+import { CheckIcon, CrossIcon, Icon } from '@mastra/playground-ui';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog } from '@mastra/playground-ui/components/Dialog';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useAutoscroll } from '@mastra/playground-ui/hooks/use-autoscroll';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import {
   ChevronDown,
   CirclePause,

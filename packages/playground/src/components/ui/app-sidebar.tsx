@@ -1,8 +1,8 @@
-import { cn } from '@mastra/playground-ui';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import type { NavLink } from '@mastra/playground-ui/components/MainSidebar';
 import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Search, Wrench } from 'lucide-react';
 import { useLocation } from 'react-router';
 import { useAgentBuilderSidebarVisibility } from '@/domains/agent-builder/hooks/use-agent-builder-sidebar-visibility';

@@ -1,9 +1,10 @@
 import type { ScoreRowData } from '@mastra/core/evals';
-import { Icon, cn } from '@mastra/playground-ui';
+import { Icon } from '@mastra/playground-ui';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { format } from 'date-fns/format';
 import { FileInputIcon, FileOutputIcon, GaugeIcon, ReceiptText, SaveIcon } from 'lucide-react';
 import { useState } from 'react';

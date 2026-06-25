@@ -27,6 +27,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import keyboard shortcut hooks from @mastra/playground-ui/hooks/use-keyboard-shortcut-label.',
   },
   {
+    importNames: ['cn'],
+    message: 'Import cn from @mastra/playground-ui/utils/cn.',
+  },
+  {
     importNames: ['AlertDialog'],
     message: 'Import AlertDialog from @mastra/playground-ui/components/AlertDialog.',
   },
