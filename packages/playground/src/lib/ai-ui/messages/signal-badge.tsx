@@ -72,13 +72,12 @@ interface TaskItem {
 function isTaskItemArray(value: unknown): value is TaskItem[] {
   return (
     Array.isArray(value) &&
-    value.length > 0 &&
     value.every(
       item =>
         isRecord(item) &&
         typeof item.id === 'string' &&
         typeof item.content === 'string' &&
-        typeof item.status === 'string' &&
+        (item.status === 'pending' || item.status === 'in_progress' || item.status === 'completed') &&
         typeof item.activeForm === 'string',
     )
   );
