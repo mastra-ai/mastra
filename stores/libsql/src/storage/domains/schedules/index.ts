@@ -92,6 +92,20 @@ export class SchedulesLibSQL extends SchedulesStorage {
       tableName: TABLE_SCHEDULE_TRIGGERS,
       schema: TABLE_SCHEMAS[TABLE_SCHEDULE_TRIGGERS],
     });
+
+    await this.#client.batch(
+      [
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_schedules_status_next_fire ON "${TABLE_SCHEDULES}" ("status", "next_fire_at")`,
+          args: [],
+        },
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_schedule_triggers_schedule_fire ON "${TABLE_SCHEDULE_TRIGGERS}" ("schedule_id", "actual_fire_at")`,
+          args: [],
+        },
+      ],
+      'write',
+    );
   }
 
   async dangerouslyClearAll(): Promise<void> {

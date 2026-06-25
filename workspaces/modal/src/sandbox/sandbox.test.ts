@@ -355,6 +355,8 @@ describe('ModalProcessManager', () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toBe('hello\n');
     expect(result.stderr).toBe('warning\n');
+    expect(result.killed).toBeUndefined();
+    expect(result.timedOut).toBeUndefined();
   });
 
   it('wait() returns failure for non-zero exit code', async () => {
@@ -462,6 +464,8 @@ describe('ModalProcessManager', () => {
     const result = await handle.wait();
     expect(result.success).toBe(false);
     expect(result.exitCode).toBe(137);
+    expect(result.killed).toBe(true);
+    expect(result.timedOut).toBe(false);
   });
 
   it('sendStdin() throws not supported', async () => {
@@ -483,6 +487,8 @@ describe('ModalProcessManager', () => {
 
     expect(result.exitCode).toBe(124);
     expect(result.success).toBe(false);
+    expect(result.killed).toBe(true);
+    expect(result.timedOut).toBe(true);
   }, 5000);
 
   it('list() returns tracked processes', async () => {

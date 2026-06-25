@@ -10,4 +10,13 @@ describe('agent badge falsy output regression', () => {
 
     expect(source).toContain('return message.toolOutput !== undefined;');
   });
+
+  it('keeps AgentBadge content open while streaming or waiting for approval', () => {
+    const source = readSource('../badges/agent-badge.tsx');
+
+    expect(source).toContain(
+      'const shouldCollapseContent = isComplete && !toolApprovalMetadata && !keepOpenForStreamingChildMessages;',
+    );
+    expect(source).toContain('initialCollapsed={shouldCollapseContent}');
+  });
 });

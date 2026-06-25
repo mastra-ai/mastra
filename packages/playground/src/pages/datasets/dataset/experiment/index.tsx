@@ -1,26 +1,28 @@
-import {
-  Breadcrumb,
-  Crumb,
-  Header,
-  Icon,
-  MainContentLayout,
-  PermissionDenied,
-  SessionExpired,
-  Spinner,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
-import { Database } from 'lucide-react';
-import { useParams, Link } from 'react-router';
+import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { ArrowLeft, PlayCircle } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { Link, useParams } from 'react-router';
 import { useDatasetExperiment, useDatasetExperimentResults } from '@/domains/datasets/hooks/use-dataset-experiments';
-import { useDataset } from '@/domains/datasets/hooks/use-datasets';
-import { ExperimentPageContent } from '@/domains/experiments/components/experiment-page-content';
-import { ExperimentPageHeader } from '@/domains/experiments/components/experiment-page-header';
+import { ExperimentPageTabs } from '@/domains/experiments/components/experiment-page-tabs';
+import { ExperimentTopArea } from '@/domains/experiments/components/experiment-top-area';
+
+function ExperimentPageShell({ children }: { children?: ReactNode }) {
+  return (
+    <PageLayout height="full">
+      <div />
+      <PageLayout.MainArea isCentered>{children}</PageLayout.MainArea>
+    </PageLayout>
+  );
+}
 
 function DatasetExperimentPage() {
   const { datasetId, experimentId } = useParams<{ datasetId: string; experimentId: string }>();
-
-  const { data: dataset } = useDataset(datasetId ?? '');
 
   const {
     data: experiment,
@@ -40,84 +42,78 @@ function DatasetExperimentPage() {
     experimentStatus: experiment?.status,
   });
 
-  if (!datasetId || !experimentId) {
-    return null;
-  }
-
-  if (experimentLoading) {
-    return (
-      <MainContentLayout>
-        <div className="flex items-center justify-center h-full">
-          <Spinner />
-        </div>
-      </MainContentLayout>
-    );
-  }
+  if (!datasetId || !experimentId) return null;
+  if (experimentLoading) return null; // Avoid layout shift on initial load
 
   if (experimentError && is401UnauthorizedError(experimentError)) {
     return (
-      <MainContentLayout>
-        <div className="flex h-full items-center justify-center">
-          <SessionExpired />
-        </div>
-      </MainContentLayout>
+      <ExperimentPageShell>
+        <SessionExpired />
+      </ExperimentPageShell>
     );
   }
 
   if (experimentError && is403ForbiddenError(experimentError)) {
     return (
-      <MainContentLayout>
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="datasets" />
-        </div>
-      </MainContentLayout>
+      <ExperimentPageShell>
+        <PermissionDenied resource="datasets" />
+      </ExperimentPageShell>
     );
   }
 
-  if (experimentError || !experiment) {
+  if (
+    (experimentError && is404NotFoundError(experimentError)) ||
+    (!experimentLoading && !experimentError && !experiment)
+  ) {
     return (
-      <MainContentLayout>
-        <div className="text-red-500 p-4">
-          Error loading experiment: {experimentError instanceof Error ? experimentError.message : 'Unknown error'}
-        </div>
-      </MainContentLayout>
+      <ExperimentPageShell>
+        <EmptyState
+          iconSlot={<PlayCircle />}
+          titleSlot="Experiment not found"
+          descriptionSlot={`No experiment with id "${experimentId}".`}
+          actionSlot={
+            <Button as={Link} to={`/datasets/${datasetId}?tab=experiments`}>
+              <ArrowLeft />
+              Back to Dataset
+            </Button>
+          }
+        />
+      </ExperimentPageShell>
+    );
+  }
+
+  if (experimentError) {
+    return (
+      <ExperimentPageShell>
+        <ErrorState
+          title="Failed to load experiment"
+          message={
+            experimentError instanceof Error
+              ? experimentError.message
+              : 'An unexpected error occurred. Please try again.'
+          }
+        />
+      </ExperimentPageShell>
     );
   }
 
   return (
-    <MainContentLayout>
-      <Header>
-        <Breadcrumb>
-          <Crumb as={Link} to="/datasets">
-            <Icon>
-              <Database />
-            </Icon>
-            Datasets
-          </Crumb>
-          <Crumb as={Link} to={`/datasets/${datasetId}`}>
-            {dataset?.name}
-          </Crumb>
-          <Crumb isCurrent as="span">
-            Experiment
-          </Crumb>
-        </Breadcrumb>
-      </Header>
+    <PageLayout height="full">
+      <ExperimentTopArea experiment={experiment!} />
 
-      <div className="h-full overflow-hidden px-[3vw] pb-4">
-        <div className="grid gap-1 max-w-[140rem] mx-auto grid-rows-[auto_1fr] h-full">
-          <ExperimentPageHeader experimentId={experimentId!} experiment={experiment} />
-          <ExperimentPageContent
-            experimentId={experimentId!}
-            experimentStatus={experiment?.status}
-            results={results ?? []}
-            isLoading={resultsLoading}
-            setEndOfListElement={setEndOfListElement}
-            isFetchingNextPage={isFetchingNextPage}
-            hasNextPage={hasNextPage}
-          />
-        </div>
-      </div>
-    </MainContentLayout>
+      <PageLayout.MainArea>
+        <ExperimentPageTabs
+          experimentId={experimentId}
+          datasetId={datasetId}
+          experimentStatus={experiment!.status}
+          results={results ?? []}
+          isLoading={resultsLoading}
+          setEndOfListElement={setEndOfListElement}
+          isFetchingNextPage={isFetchingNextPage}
+          hasNextPage={hasNextPage}
+        />
+      </PageLayout.MainArea>
+    </PageLayout>
   );
 }
 

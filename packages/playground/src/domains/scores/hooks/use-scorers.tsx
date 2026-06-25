@@ -1,5 +1,6 @@
 import type { GetScorerResponse, ListScoresResponse } from '@mastra/client-js';
-import { toast, useInView } from '@mastra/playground-ui';
+import { useInView } from '@mastra/playground-ui/hooks/use-in-view';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';

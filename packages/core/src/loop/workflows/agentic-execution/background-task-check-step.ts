@@ -1,6 +1,15 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { ChunkFrom } from '../../../stream/types';
-import { createStep } from '../../../workflows';
+import { createStep } from '../../../workflows/workflow';
+import { readScoped } from '../../run-scope-access';
+import {
+  AGENT_BACKGROUND_CONFIG_KEY,
+  BACKGROUND_TASK_MANAGER_CONFIG_KEY,
+  BACKGROUND_TASK_MANAGER_KEY,
+  RESOURCE_ID_KEY,
+  SKIP_BG_TASK_WAIT_KEY,
+  THREAD_ID_KEY,
+} from '../../run-scope-keys';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
@@ -28,15 +37,18 @@ export function createBackgroundTaskCheckStep<Tools extends ToolSet = ToolSet, O
   controller,
   runId,
   agentId,
+  mastra,
 }: OuterLLMRun<Tools, OUTPUT>) {
+  const scopeCtx = { mastra, runId, _internal };
   return createStep({
     id: 'backgroundTaskCheckStep',
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
     execute: async ({ inputData, retryCount }) => {
       const typedInput = inputData as LLMIterationData<Tools, OUTPUT>;
-      const { threadId, resourceId } = _internal || {};
-      const bgManager = _internal?.backgroundTaskManager;
+      const threadId = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
+      const resourceId = readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId');
+      const bgManager = readScoped(scopeCtx, BACKGROUND_TASK_MANAGER_KEY, 'backgroundTaskManager');
 
       if (!bgManager) {
         return typedInput;
@@ -59,15 +71,15 @@ export function createBackgroundTaskCheckStep<Tools extends ToolSet = ToolSet, O
       // continuation from outside, skip the in-loop wait entirely. The outer
       // will re-enter via `stream([])` once tasks complete. We still mark the
       // pending flag so `isTaskCompleteStep` knows to skip scoring.
-      if (_internal?.skipBgTaskWait) {
+      if (readScoped(scopeCtx, SKIP_BG_TASK_WAIT_KEY, 'skipBgTaskWait')) {
         return { ...typedInput, backgroundTaskPending: true };
       }
 
       const taskIds = runningTasks.map(task => task.id);
 
       // Resolve wait timeout: agent config → manager config → undefined (wait forever)
-      const agentBgConfig = _internal?.agentBackgroundConfig;
-      const managerConfig = _internal?.backgroundTaskManagerConfig;
+      const agentBgConfig = readScoped(scopeCtx, AGENT_BACKGROUND_CONFIG_KEY, 'agentBackgroundConfig');
+      const managerConfig = readScoped(scopeCtx, BACKGROUND_TASK_MANAGER_CONFIG_KEY, 'backgroundTaskManagerConfig');
       const waitTimeoutMs = agentBgConfig?.waitTimeoutMs ?? managerConfig?.waitTimeoutMs;
 
       // First invocation — signal pending but don't block

@@ -1,8 +1,5 @@
 import './index.css';
 
-// DS Components - Threads
-export * from './ds/components/Threads';
-
 // DS Components - Existing
 export * from './ds/components/Avatar';
 export * from './ds/components/Badge/index';
@@ -25,14 +22,17 @@ export * from './ds/components/Checkbox';
 export * from './ds/components/Collapsible';
 export * from './ds/components/Combobox';
 export * from './ds/components/Command';
+export * from './ds/components/Code';
 export * from './ds/components/CodeBlock';
 export * from './ds/components/CopyButton';
 export * from './ds/components/DashboardCard';
 export * from './ds/components/Dialog';
+export * from './ds/components/Drawer';
 export * from './ds/components/DropdownMenu';
 export * from './ds/components/Entry';
 export * from './ds/components/EntityHeader';
 export * from './ds/components/FormFieldBlocks';
+export * from './ds/components/HoverCard';
 export * from './ds/components/Input';
 export * from './ds/components/InputGroup';
 export * from './ds/components/Kbd';
@@ -44,8 +44,10 @@ export * from './ds/components/Popover';
 export * from './ds/components/PropertyFilter';
 export * from './ds/components/RadioGroup';
 export * from './ds/components/ScrollArea';
+export * from './ds/components/PendingIndicator';
 export * from './ds/components/Searchbar';
 export * from './ds/components/Select';
+export * from './ds/components/Shimmer';
 export * from './ds/components/Skeleton';
 export * from './ds/components/Slider';
 export * from './ds/components/Spinner';
@@ -55,6 +57,7 @@ export * from './ds/components/ThemeProvider';
 export * from './ds/components/ThemeToggle';
 export * from './ds/components/Tooltip';
 export * from './ds/components/Truncate';
+export * from './ds/components/ThreadList';
 
 // DS Components - Migrated Containers
 export * from './ds/components/ButtonsGroup';
@@ -64,16 +67,12 @@ export * from './ds/components/Sections';
 
 // DS Components - Migrated Complex Elements
 export * from './ds/components/DateTimePicker';
-export * from './ds/components/EntryList';
 export * from './ds/components/JSONSchemaForm';
 export * from './ds/components/KeyValueList';
 export * from './ds/components/MainSidebar';
 export * from './ds/components/PageHeader';
 export * from './ds/components/Section';
 export * from './ds/components/SectionCard';
-export * from './ds/components/SelectElement';
-export * from './ds/components/SettingsRow';
-export * from './ds/components/SideDialog';
 export * from './ds/components/Steps';
 export * from './ds/components/Tabs';
 export * from './ds/components/Text';
@@ -88,13 +87,12 @@ export * from './ds/components/Chip';
 export * from './ds/components/Tree';
 export * from './ds/components/DataFilter';
 export * from './ds/components/DataList';
-export * from './ds/components/EntityList';
 export * from './ds/components/LogsDataList';
-export * from './ds/components/EntityListPageLayout';
 export * from './ds/components/PageLayout';
 export * from './ds/components/ListSearch';
 export * from './ds/components/ErrorBoundary';
 export * from './ds/components/ErrorState';
+export * from './ds/components/EnvironmentVariablesEditor';
 export * from './ds/components/Card';
 export * from './ds/components/DataCodeSection';
 export * from './ds/components/DataDetailsPanel';
@@ -102,11 +100,8 @@ export * from './ds/components/DataKeysAndValues';
 export * from './ds/components/DataPanel';
 export * from './ds/components/DateTimeRangePicker';
 export * from './ds/components/HorizontalBars';
-export * from './ds/components/MetricsDataTable';
-export * from './ds/components/MetricsKpiCard';
 export * from './ds/components/MetricsLineChart';
-export * from './ds/components/PrevNextNav';
-export * from './ds/components/ScrollableContainer';
+export * from './ds/components/ScatterPlotChart';
 export * from './ds/components/StatusBadge';
 
 // DS Icons
@@ -116,6 +111,7 @@ export * from './ds/icons/index';
 export * from './ds/tokens';
 
 // DS Primitives
+export * from './ds/primitives/control-size';
 export * from './ds/primitives/form-element';
 export * from './ds/primitives/transitions';
 
@@ -123,6 +119,9 @@ export * from './ds/primitives/transitions';
 export * from './hooks/use-copy-to-clipboard';
 export * from './hooks/use-in-view';
 export * from './hooks/use-autoscroll';
+export * from './hooks/use-is-mobile';
+export * from './hooks/use-keyboard-shortcut-label';
+export * from './hooks/use-environment-variables-editor';
 
 // Pure lib utilities
 export { cn } from './lib/utils';
@@ -139,8 +138,11 @@ export * from './lib/toast';
 // Pure lib modules
 export * from './lib/rule-engine';
 export * from './lib/json-schema';
-export * from './lib/resize';
+export * from './lib/resize/collapsible-panel';
+export * from './lib/resize/separator';
+export * from './lib/resize/panel-drawer';
 export * from './lib/file';
+export * from './lib/env-file';
 export * from './lib/template';
 
 // Store
@@ -150,6 +152,8 @@ export { usePlaygroundStore } from './store/playground-store';
 export * from './domains/metrics';
 export * from './domains/traces';
 export * from './domains/logs';
+export * from './domains/memory';
+export * from './ee';
 
 // DS Types
 export type { LinkComponent, LinkComponentProps } from './ds/types/link-component';

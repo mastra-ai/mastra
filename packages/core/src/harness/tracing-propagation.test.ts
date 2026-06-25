@@ -1,67 +1,85 @@
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Agent } from '../agent';
 import type { TracingContext, TracingOptions } from '../observability';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
+import type { Session } from './session';
+import { createMockWorkspace } from './test-utils';
 
-function createAgent() {
-  return new Agent({
-    name: 'test-agent',
-    instructions: 'You are a test agent.',
-    model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
+function createTextStreamModel(responseText: string) {
+  return new MockLanguageModelV2({
+    doStream: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start', warnings: [] },
+        { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+        { type: 'text-start', id: 'text-1' },
+        { type: 'text-delta', id: 'text-1', delta: responseText },
+        { type: 'text-end', id: 'text-1' },
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        },
+      ]),
+    }),
   });
 }
 
-/**
- * Create a mock stream response that processStream can consume without errors.
- */
-function createMockStreamResponse() {
-  const chunks: any[] = [
-    { type: 'text-start', payload: { id: 'msg-1' } },
-    { type: 'text-delta', payload: { id: 'msg-1', text: 'Hello' } },
-    { type: 'text-end', payload: { id: 'msg-1' } },
-    { type: 'step-end', payload: {} },
-    { type: 'finish', payload: {} },
-  ];
-
-  return {
-    fullStream: (async function* () {
-      for (const chunk of chunks) {
-        yield chunk;
-      }
-    })(),
-  };
+function createAgent() {
+  return new Agent({
+    id: 'test-agent',
+    name: 'test-agent',
+    instructions: 'You are a test agent.',
+    model: createTextStreamModel('Hello'),
+  });
 }
 
 describe('Harness tracing propagation', () => {
   let agent: Agent;
   let harness: Harness;
+  let session: Session;
   let streamSpy: ReturnType<typeof vi.spyOn>;
 
-  beforeEach(() => {
+  function getInitialStreamOptions() {
+    const initialStreamCall = streamSpy.mock.calls.find(([, options]) => {
+      return !(options as Record<string, unknown> | undefined)?.untilIdle;
+    });
+
+    expect(initialStreamCall).toBeDefined();
+
+    return initialStreamCall![1] as Record<string, unknown>;
+  }
+
+  beforeEach(async () => {
     agent = createAgent();
     harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test-harness',
       storage: new InMemoryStore(),
       modes: [{ id: 'default', name: 'Default', default: true, agent }],
     });
 
-    // Spy on agent.stream to capture the options it receives
-    streamSpy = vi.spyOn(agent, 'stream').mockResolvedValue(createMockStreamResponse() as any);
+    // Spy on the real stream so the run actually completes (driving the
+    // session's stream to idle) while still capturing the options it receives.
+    const originalStream = agent.stream.bind(agent);
+    streamSpy = vi.spyOn(agent, 'stream').mockImplementation((signal: any, options: any) => {
+      return originalStream(signal, options);
+    });
 
-    // Set up a thread so sendMessage doesn't try to create one via storage
-    (harness as any).currentThreadId = 'test-thread-123';
+    await harness.init();
+    session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
   });
 
   it('should forward tracingContext to agent.stream() when provided', async () => {
     const mockSpan = { spanContext: () => ({ traceId: 'abc', spanId: 'def' }) };
     const tracingContext: TracingContext = { currentSpan: mockSpan as any };
 
-    await harness.sendMessage({ content: 'hello', tracingContext });
+    await session.sendMessage({ content: 'hello', tracingContext });
 
-    expect(streamSpy).toHaveBeenCalledTimes(1);
-
-    const [, streamOptions] = streamSpy.mock.calls[0]!;
+    const streamOptions = getInitialStreamOptions();
 
     expect(streamOptions).toHaveProperty('tracingContext');
     expect((streamOptions as any).tracingContext).toBe(tracingContext);
@@ -74,22 +92,18 @@ describe('Harness tracing propagation', () => {
       metadata: { requestId: 'req-789' },
     };
 
-    await harness.sendMessage({ content: 'hello', tracingOptions });
+    await session.sendMessage({ content: 'hello', tracingOptions });
 
-    expect(streamSpy).toHaveBeenCalledTimes(1);
-
-    const [, streamOptions] = streamSpy.mock.calls[0]!;
+    const streamOptions = getInitialStreamOptions();
 
     expect(streamOptions).toHaveProperty('tracingOptions');
     expect((streamOptions as any).tracingOptions).toBe(tracingOptions);
   });
 
   it('should not include tracingContext/tracingOptions when not provided', async () => {
-    await harness.sendMessage({ content: 'hello' });
+    await session.sendMessage({ content: 'hello' });
 
-    expect(streamSpy).toHaveBeenCalledTimes(1);
-
-    const [, streamOptions] = streamSpy.mock.calls[0]!;
+    const streamOptions = getInitialStreamOptions();
 
     expect(streamOptions).not.toHaveProperty('tracingContext');
     expect(streamOptions).not.toHaveProperty('tracingOptions');
@@ -97,13 +111,13 @@ describe('Harness tracing propagation', () => {
 
   it('starts a new message with a clean abort state after a stale operation was aborted', async () => {
     const events: Array<{ type: string; reason?: string }> = [];
-    harness.subscribe(event => {
+    session.subscribe(event => {
       events.push(event as { type: string; reason?: string });
     });
-    (harness as unknown as { abortRequested: boolean }).abortRequested = true;
+    session.run.requestAbort();
 
-    await harness.sendMessage({ content: 'hello' });
+    await session.sendMessage({ content: 'hello' });
 
-    expect(events).toContainEqual({ type: 'agent_end', reason: 'complete' });
+    expect(events.some(event => event.type === 'agent_end' && event.reason === 'complete')).toBe(true);
   });
 });

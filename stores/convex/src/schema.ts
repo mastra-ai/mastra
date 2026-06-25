@@ -15,6 +15,11 @@ import {
   TABLE_THREADS,
   TABLE_RESOURCES,
   TABLE_SCORERS,
+  TABLE_SCHEDULES,
+  TABLE_SCHEDULE_TRIGGERS,
+  TABLE_CHANNEL_INSTALLATIONS,
+  TABLE_CHANNEL_CONFIG,
+  TABLE_BACKGROUND_TASKS,
 } from '@mastra/core/storage/constants';
 import { defineTable } from 'convex/server';
 import { v } from 'convex/values';
@@ -133,6 +138,142 @@ export const mastraScoresTable = defineTable(buildTableFromSchema(TABLE_SCHEMAS[
   .index('by_run', ['runId'])
   .index('by_created', ['createdAt']);
 
+/**
+ * Schedules table - stores workflow scheduler state.
+ *
+ * Schedule times are represented as JavaScript millisecond timestamps. Target
+ * and metadata payloads are serialized JSON strings because user-provided JSON
+ * can contain Convex-reserved field names such as `$schema`.
+ */
+export const mastraSchedulesTable = defineTable({
+  id: v.string(),
+  target: v.string(),
+  cron: v.string(),
+  timezone: v.optional(v.union(v.string(), v.null())),
+  status: v.string(),
+  next_fire_at: v.number(),
+  last_fire_at: v.optional(v.union(v.number(), v.null())),
+  last_run_id: v.optional(v.union(v.string(), v.null())),
+  created_at: v.number(),
+  updated_at: v.number(),
+  metadata: v.optional(v.union(v.string(), v.null())),
+  owner_type: v.optional(v.union(v.string(), v.null())),
+  owner_id: v.optional(v.union(v.string(), v.null())),
+  workflow_id: v.optional(v.union(v.string(), v.null())),
+})
+  .index('by_record_id', ['id'])
+  .index('by_status_next_fire_at', ['status', 'next_fire_at'])
+  .index('by_workflow_status', ['workflow_id', 'status'])
+  .index('by_workflow_id', ['workflow_id'])
+  .index('by_owner', ['owner_type', 'owner_id'])
+  .index('by_owner_id', ['owner_id'])
+  .index('by_created', ['created_at']);
+
+/**
+ * Schedule trigger table - stores scheduler trigger history.
+ */
+export const mastraScheduleTriggersTable = defineTable({
+  id: v.string(),
+  schedule_id: v.string(),
+  run_id: v.optional(v.union(v.string(), v.null())),
+  scheduled_fire_at: v.number(),
+  actual_fire_at: v.number(),
+  outcome: v.string(),
+  error: v.optional(v.union(v.string(), v.null())),
+  trigger_kind: v.string(),
+  parent_trigger_id: v.optional(v.union(v.string(), v.null())),
+  metadata: v.optional(v.union(v.string(), v.null())),
+})
+  .index('by_record_id', ['id'])
+  .index('by_schedule_actual', ['schedule_id', 'actual_fire_at'])
+  .index('by_parent_trigger', ['parent_trigger_id']);
+
+/**
+ * Channel installations table - stores platform app installations for agents.
+ *
+ * Platform data is serialized as a JSON string because user/platform payloads
+ * can contain Convex-reserved field names such as `$schema`.
+ */
+export const mastraChannelInstallationsTable = defineTable({
+  id: v.string(),
+  platform: v.string(),
+  agentId: v.string(),
+  status: v.string(),
+  webhookId: v.optional(v.union(v.string(), v.null())),
+  data: v.string(),
+  configHash: v.optional(v.union(v.string(), v.null())),
+  error: v.optional(v.union(v.string(), v.null())),
+  createdAt: v.string(),
+  updatedAt: v.string(),
+})
+  .index('by_record_id', ['id'])
+  .index('by_webhook', ['webhookId'])
+  .index('by_platform_agent', ['platform', 'agentId'])
+  .index('by_platform', ['platform']);
+
+/**
+ * Channel config table - stores platform-level channel configuration.
+ *
+ * The synthetic id mirrors `platform` so the generic Convex storage operations
+ * can use their existing by-record-id lookup path.
+ */
+export const mastraChannelConfigTable = defineTable({
+  id: v.string(),
+  platform: v.string(),
+  data: v.string(),
+  updatedAt: v.string(),
+})
+  .index('by_record_id', ['id'])
+  .index('by_platform', ['platform']);
+
+/**
+ * Background tasks table - stores durable background task state.
+ *
+ * JSON-like payloads are stored as encoded strings to match the existing
+ * Convex storage serialization used by this adapter.
+ *
+ * Optional fields are stored as null when cleared so partial Convex patches can
+ * preserve the existing task row while explicitly removing suspended state.
+ */
+export const mastraBackgroundTasksTable = defineTable({
+  id: v.string(),
+  tool_call_id: v.string(),
+  tool_name: v.string(),
+  agent_id: v.string(),
+  run_id: v.string(),
+  thread_id: v.union(v.string(), v.null()),
+  resource_id: v.union(v.string(), v.null()),
+  status: v.union(
+    v.literal('pending'),
+    v.literal('running'),
+    v.literal('suspended'),
+    v.literal('completed'),
+    v.literal('failed'),
+    v.literal('cancelled'),
+    v.literal('timed_out'),
+  ),
+  args: v.string(),
+  result: v.union(v.string(), v.null()),
+  error: v.union(v.string(), v.null()),
+  suspend_payload: v.union(v.string(), v.null()),
+  retry_count: v.number(),
+  max_retries: v.number(),
+  timeout_ms: v.number(),
+  createdAt: v.string(),
+  startedAt: v.union(v.string(), v.null()),
+  suspendedAt: v.union(v.string(), v.null()),
+  completedAt: v.union(v.string(), v.null()),
+})
+  .index('by_record_id', ['id'])
+  .index('by_status_created', ['status', 'createdAt'])
+  .index('by_agent_status', ['agent_id', 'status'])
+  .index('by_run', ['run_id'])
+  .index('by_tool_call', ['tool_call_id'])
+  .index('by_thread', ['thread_id'])
+  .index('by_resource', ['resource_id'])
+  .index('by_tool', ['tool_name'])
+  .index('by_created', ['createdAt']);
+
 // ============================================================================
 // Vector Tables - Not in core schemas (vector-specific)
 // ============================================================================
@@ -163,6 +304,93 @@ export const mastraVectorsTable = defineTable({
   .index('by_index_id', ['indexName', 'id']) // Composite for scoped lookups per index
   .index('by_index', ['indexName']);
 
+export type MastraNativeVectorTableConfig = {
+  /**
+   * Vector dimensions for the deployed Convex vector index.
+   */
+  dimensions: number;
+  /**
+   * Convex vector index name.
+   *
+   * @default 'by_embedding'
+   */
+  vectorIndexName?: string;
+  /**
+   * Stage the vector index for a later backfill.
+   *
+   * @default false
+   */
+  staged?: boolean;
+};
+
+/**
+ * Defines a dedicated Convex table for native vector search with the default
+ * `ConvexNativeVector` field names.
+ *
+ * Use a custom `defineTable()` when you need native vector `filterFields`,
+ * because filter fields must also be declared in the table schema.
+ */
+export function defineMastraNativeVectorTable({
+  dimensions,
+  vectorIndexName = 'by_embedding',
+  staged = false,
+}: MastraNativeVectorTableConfig) {
+  if (!Number.isInteger(dimensions) || dimensions < 2 || dimensions > 4096) {
+    throw new Error('defineMastraNativeVectorTable: dimensions must be an integer between 2 and 4096.');
+  }
+
+  const table = defineTable({
+    id: v.string(),
+    embedding: v.array(v.float64()),
+    metadata: v.optional(v.any()),
+  }).index('by_record_id', ['id']);
+
+  if (staged) {
+    return table.vectorIndex(vectorIndexName, {
+      vectorField: 'embedding',
+      dimensions,
+      staged: true,
+    });
+  }
+
+  return table.vectorIndex(vectorIndexName, {
+    vectorField: 'embedding',
+    dimensions,
+  });
+}
+
+// ============================================================================
+// Server Cache Tables - Used by ConvexServerCache
+// ============================================================================
+
+/**
+ * Cache metadata table - stores scalar cache values, list counters, and numeric
+ * counters used by ConvexServerCache.
+ */
+export const mastraCacheTable = defineTable({
+  key: v.string(),
+  keyPrefix: v.string(),
+  kind: v.union(v.literal('value'), v.literal('list'), v.literal('counter'), v.literal('deleted')),
+  value: v.optional(v.string()),
+  counter: v.optional(v.number()),
+  expiresAt: v.union(v.number(), v.null()),
+})
+  .index('by_key', ['key'])
+  .index('by_key_prefix', ['keyPrefix']);
+
+/**
+ * Cache list item table - stores each list entry as its own row so replay
+ * history does not grow into a single large Convex document.
+ */
+export const mastraCacheListItemsTable = defineTable({
+  key: v.string(),
+  keyPrefix: v.string(),
+  index: v.number(),
+  value: v.string(),
+})
+  .index('by_key_prefix', ['keyPrefix'])
+  .index('by_key_index', ['key', 'index']);
+
 // ============================================================================
 // Fallback Table - For unknown/custom tables
 // ============================================================================
@@ -182,7 +410,18 @@ export const mastraDocumentsTable = defineTable({
 // Re-export table name constants for convenience
 // ============================================================================
 
-export { TABLE_WORKFLOW_SNAPSHOT, TABLE_MESSAGES, TABLE_THREADS, TABLE_RESOURCES, TABLE_SCORERS };
+export {
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_MESSAGES,
+  TABLE_THREADS,
+  TABLE_RESOURCES,
+  TABLE_SCORERS,
+  TABLE_SCHEDULES,
+  TABLE_SCHEDULE_TRIGGERS,
+  TABLE_CHANNEL_INSTALLATIONS,
+  TABLE_CHANNEL_CONFIG,
+  TABLE_BACKGROUND_TASKS,
+};
 
 // Additional table name constants for vector tables (not in core)
 export const TABLE_VECTOR_INDEXES = 'mastra_vector_indexes';

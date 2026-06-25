@@ -1,16 +1,22 @@
-import { MCPClient } from '@mastra/mcp';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { loadMcpConfig } from '../config.js';
 import { createMcpManager } from '../manager.js';
 import type { McpConfig, McpHttpServerConfig, McpStdioServerConfig } from '../types.js';
 
-// Mock @mastra/mcp before importing manager
-vi.mock('@mastra/mcp', () => {
+const mcpMocks = vi.hoisted(() => {
   const MCPClient = vi.fn(function (this: any) {
     // individual tests override listToolsets/disconnect via mockImplementation
   });
-  return { MCPClient };
+  const MCPOAuthClientProvider = vi.fn(function (this: any, options: any) {
+    this.options = options;
+  });
+  return { MCPClient, MCPOAuthClientProvider };
+});
+
+// Mock @mastra/mcp before importing manager
+vi.mock('@mastra/mcp', () => {
+  return mcpMocks;
 });
 
 // Mock config module to control what loadMcpConfig returns
@@ -23,7 +29,8 @@ vi.mock('../config.js', async importOriginal => {
 });
 
 const mockedLoadMcpConfig = vi.mocked(loadMcpConfig);
-const MockedMCPClient = vi.mocked(MCPClient);
+const MockedMCPClient = vi.mocked(mcpMocks.MCPClient);
+const MockedMCPOAuthClientProvider = vi.mocked(mcpMocks.MCPOAuthClientProvider);
 
 function setupConfig(config: McpConfig) {
   mockedLoadMcpConfig.mockReturnValue(config);
@@ -140,6 +147,76 @@ describe('createMcpManager', () => {
       expect(serverDef.requestInit).toBeUndefined();
     });
 
+    it('builds http server def with OAuth authProvider', async () => {
+      const httpConfig: McpHttpServerConfig = {
+        url: 'https://mcp.example.com/mcp',
+        oauth: {
+          redirectUrl: 'http://localhost:3000/oauth/callback',
+          clientName: 'Remote MCP',
+          scopes: ['mcp:read', 'mcp:write'],
+          clientId: 'client-id',
+          clientSecret: 'client-secret',
+        },
+      };
+      setupConfig({ mcpServers: { remote: httpConfig } });
+
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { remote: {} }, errors: {} });
+        this.disconnect = vi.fn().mockResolvedValue(undefined);
+      } as any);
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      const call = MockedMCPClient.mock.calls[0]![0]!;
+      const serverDef = call.servers['remote'] as any;
+      expect(serverDef.authProvider).toBeInstanceOf(mcpMocks.MCPOAuthClientProvider);
+      expect(MockedMCPOAuthClientProvider).toHaveBeenCalledWith(
+        expect.objectContaining({
+          redirectUrl: 'http://localhost:3000/oauth/callback',
+          clientMetadata: {
+            redirect_uris: ['http://localhost:3000/oauth/callback'],
+            client_name: 'Remote MCP',
+            grant_types: ['authorization_code', 'refresh_token'],
+            response_types: ['code'],
+            scope: 'mcp:read mcp:write',
+          },
+          clientInformation: {
+            client_id: 'client-id',
+            client_secret: 'client-secret',
+          },
+          storage: expect.anything(),
+        }),
+      );
+    });
+
+    it('uses separate OAuth token storage for the same server name in different projects', async () => {
+      const httpConfig: McpHttpServerConfig = {
+        url: 'https://mcp.example.com/mcp',
+        oauth: {
+          redirectUrl: 'http://localhost:3000/oauth/callback',
+          clientName: 'Remote MCP',
+          scopes: ['mcp:read'],
+          clientId: 'client-id',
+        },
+      };
+      setupConfig({ mcpServers: { remote: httpConfig } });
+
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { remote: {} }, errors: {} });
+        this.disconnect = vi.fn().mockResolvedValue(undefined);
+      } as any);
+
+      await createMcpManager('/tmp/project-a').init();
+      await createMcpManager('/tmp/project-b').init();
+
+      const firstStoragePath = MockedMCPOAuthClientProvider.mock.calls[0]?.[0]?.storage?.filePath;
+      const secondStoragePath = MockedMCPOAuthClientProvider.mock.calls[1]?.[0]?.storage?.filePath;
+      expect(firstStoragePath).toEqual(expect.stringMatching(/mcp-oauth\/[a-f0-9]{16}\.json$/));
+      expect(secondStoragePath).toEqual(expect.stringMatching(/mcp-oauth\/[a-f0-9]{16}\.json$/));
+      expect(firstStoragePath).not.toBe(secondStoragePath);
+    });
+
     it('creates one MCPClient with all servers', async () => {
       setupConfig({
         mcpServers: {
@@ -175,7 +252,7 @@ describe('createMcpManager', () => {
         this.disconnect = vi.fn();
       } as any);
 
-      const manager = createMcpManager('/tmp/test', {
+      const manager = createMcpManager('/tmp/test', undefined, {
         remote: { url: 'https://mcp.example.com/sse' },
       });
       await manager.init();
@@ -193,7 +270,7 @@ describe('createMcpManager', () => {
         this.disconnect = vi.fn();
       } as any);
 
-      const manager = createMcpManager('/tmp/test', {
+      const manager = createMcpManager('/tmp/test', undefined, {
         myserver: { command: 'new-cmd', args: ['--flag'] },
       });
       await manager.init();
@@ -205,7 +282,7 @@ describe('createMcpManager', () => {
 
     it('hasServers returns true when only extraServers provided and config is empty', () => {
       setupConfig({});
-      const manager = createMcpManager('/tmp/test', {
+      const manager = createMcpManager('/tmp/test', undefined, {
         extra: { url: 'https://example.com/mcp' },
       });
       expect(manager.hasServers()).toBe(true);
@@ -221,7 +298,7 @@ describe('createMcpManager', () => {
         this.disconnect = vi.fn();
       } as any);
 
-      const manager = createMcpManager('/tmp/test', {
+      const manager = createMcpManager('/tmp/test', undefined, {
         extra: { url: 'https://example.com/mcp' },
       });
       await manager.init();

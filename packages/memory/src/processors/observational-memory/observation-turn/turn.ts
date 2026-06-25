@@ -1,9 +1,10 @@
 import type { MessageList } from '@mastra/core/agent';
 import type { ObservabilityContext } from '@mastra/core/observability';
-import type { ProcessorStreamWriter } from '@mastra/core/processors';
+import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
+import { omDebug } from '../debug';
 import type { ObservationalMemory } from '../observational-memory';
 import type { MemoryContextProvider } from '../processor';
 import type { ObservationModelContext } from '../types';
@@ -57,6 +58,11 @@ export class ObservationTurn {
   /** Optional observability context for nested OM spans. */
   observabilityContext?: ObservabilityContext;
 
+  /** Optional signal sender for processor-originated notifications. */
+  sendSignal?: (
+    signal: Parameters<NonNullable<ProcessorContext['sendSignal']>>[0],
+  ) => ReturnType<NonNullable<ProcessorContext['sendSignal']>>;
+
   /** Current actor model for this step. Updated by the processor before prepare(). */
   actorModelContext?: ObservationModelContext;
 
@@ -68,6 +74,8 @@ export class ObservationTurn {
     threadId: string;
     resourceId?: string;
     messageList: MessageList;
+    sendSignal?: ProcessorContext['sendSignal'];
+    requestContext?: RequestContext;
     observabilityContext?: ObservabilityContext;
     hooks?: ObservationTurnHooks;
   }) {
@@ -75,6 +83,8 @@ export class ObservationTurn {
     this.threadId = opts.threadId;
     this.resourceId = opts.resourceId;
     this.messageList = opts.messageList;
+    this.sendSignal = opts.sendSignal;
+    this.requestContext = opts.requestContext;
     this.observabilityContext = opts.observabilityContext;
     this.hooks = opts.hooks ?? {};
   }
@@ -161,7 +171,12 @@ export class ObservationTurn {
   }
 
   /**
-   * Finalize the turn: save any remaining messages and return the latest record state.
+   * Finalize the turn: save any remaining messages and return the current cached record.
+   *
+   * When async observation buffering is enabled and there are unobserved messages,
+   * a background buffer operation is kicked off so that observations are computed
+   * proactively while the agent is idle, rather than waiting for the next turn.
+   * The returned record does not wait for that background buffering pass to finish.
    */
   async end(): Promise<TurnResult> {
     if (this._ended) throw new Error('Turn already ended');
@@ -173,6 +188,35 @@ export class ObservationTurn {
     const unsavedMessages = [...unsavedInput, ...unsavedOutput];
     if (unsavedMessages.length > 0) {
       await this.om.persistMessages(unsavedMessages, this.threadId, this.resourceId);
+    }
+
+    // When the agent goes idle, start buffering any unobserved messages in the background.
+    // This ensures messages accumulated during the turn are observed proactively
+    // rather than waiting for the next turn's step.prepare() to trigger buffering.
+    const asyncObservationEnabled = this.om.buffering.isAsyncObservationEnabled();
+    const bufferOnIdle = this.om.getObservationConfig().bufferOnIdle;
+    if (asyncObservationEnabled && bufferOnIdle) {
+      const allMessages = this.messageList.get.all.db();
+      const record = this._record!;
+      const unobservedMessages = this.om.getUnobservedMessages(allMessages, record);
+      if (unobservedMessages.length > 0) {
+        void this.om
+          .buffer({
+            threadId: this.threadId,
+            resourceId: this.resourceId,
+            messages: unobservedMessages,
+            record,
+            writer: this.writer,
+            sendSignal: this.sendSignal,
+            requestContext: this.requestContext,
+            currentModel: this.actorModelContext,
+            observabilityContext: this.observabilityContext,
+            skipMinimumTokenCheck: true,
+          })
+          .catch((err: Error) => {
+            omDebug(`[OM:turn.end] idle buffer failed: ${err?.message}`);
+          });
+      }
     }
 
     return { record: this._record! };

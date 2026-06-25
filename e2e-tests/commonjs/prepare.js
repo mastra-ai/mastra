@@ -13,7 +13,7 @@ export async function setupTestProject(pathToStoreFiles) {
   await cp(projectPath, newPath, { recursive: true });
 
   console.log('Installing dependencies...');
-  spawnSync('pnpm', ['install'], {
+  spawnSync('pnpm', ['install', '--config.minimum-release-age=0'], {
     cwd: newPath,
     stdio: 'inherit',
     shell: true,

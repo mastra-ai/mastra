@@ -1,6 +1,6 @@
 'use client';
 
-import { Icon } from '@mastra/playground-ui';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { AlertTriangle } from 'lucide-react';
 import type { JSONValidationError } from '../../utils/json-validation';
 

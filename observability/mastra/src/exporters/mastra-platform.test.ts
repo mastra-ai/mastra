@@ -11,6 +11,7 @@ import { EntityType, SpanType, TracingEventType } from '@mastra/core/observabili
 
 import { fetchWithRetry } from '@mastra/core/utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { AuthFailureCooldown } from './auth-failure-cooldown';
 import { MastraPlatformExporter } from './mastra-platform';
 
 // Mock fetchWithRetry
@@ -19,6 +20,37 @@ vi.mock('@mastra/core/utils', () => ({
 }));
 
 const mockFetchWithRetry = vi.mocked(fetchWithRetry);
+
+describe('AuthFailureCooldown', () => {
+  it('should keep jitter when the exponential cooldown reaches the cap', () => {
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+    const logger = {
+      warn: vi.fn(),
+    };
+    const cooldown = new AuthFailureCooldown('TestExporter', () => logger as any);
+
+    try {
+      for (let i = 0; i < 5; i++) {
+        cooldown.recordFailure({
+          status: 401,
+          failedSignals: ['traces'],
+          droppedBatchSize: 1,
+        });
+      }
+
+      expect(logger.warn).toHaveBeenLastCalledWith(
+        'TestExporter received an authentication failure; pausing uploads for 810s',
+        expect.objectContaining({
+          cooldownMs: 810_000,
+        }),
+      );
+    } finally {
+      nowSpy.mockRestore();
+      randomSpy.mockRestore();
+    }
+  });
+});
 
 // Helper to create a valid JWT token for testing
 function createTestJWT(payload: { teamId: string; projectId: string }): string {
@@ -151,6 +183,15 @@ function getMockFeedbackEvent(overrides: Partial<FeedbackEvent['feedback']> = {}
       ...overrides,
     },
   };
+}
+
+function mockAuthFailure(status: 401 | 403): void {
+  const statusText = status === 401 ? 'Unauthorized' : 'Forbidden';
+
+  mockFetchWithRetry.mockImplementation(async (_url, _options, _maxRetries, retryOptions) => {
+    retryOptions?.shouldRetryResponse?.(new Response('auth failure', { status, statusText }));
+    throw new Error(`Request failed with status: ${status} ${statusText}`);
+  });
 }
 
 describe('MastraPlatformExporter', () => {
@@ -779,6 +820,7 @@ describe('MastraPlatformExporter', () => {
           body: expect.any(String),
         },
         3,
+        expect.objectContaining({ shouldRetryResponse: expect.any(Function) }),
       );
     });
 
@@ -843,6 +885,113 @@ describe('MastraPlatformExporter', () => {
 
       expect(headers.Authorization).toBe(`Bearer ${testJWT}`);
       await authExporter.shutdown();
+    });
+
+    it('should use MASTRA_CLOUD_ACCESS_TOKEN from the environment', async () => {
+      const envToken = createTestJWT({ teamId: 'cloud-env-token', projectId: 'auth-project' });
+      vi.stubEnv('MASTRA_CLOUD_ACCESS_TOKEN', envToken);
+
+      const authExporter = new MastraPlatformExporter({
+        endpoint: 'http://localhost:3000',
+      });
+
+      try {
+        await authExporter.exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
+          exportedSpan: mockSpan,
+        });
+
+        await authExporter.flush();
+
+        const requestOptions = mockFetchWithRetry.mock.calls[0][1] as RequestInit;
+        const headers = requestOptions.headers as Record<string, string>;
+
+        expect(headers.Authorization).toBe(`Bearer ${envToken}`);
+      } finally {
+        await authExporter.shutdown();
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('should use MASTRA_PLATFORM_ACCESS_TOKEN from the environment', async () => {
+      const envToken = createTestJWT({ teamId: 'platform-env-token', projectId: 'auth-project' });
+      vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', envToken);
+
+      const authExporter = new MastraPlatformExporter({
+        endpoint: 'http://localhost:3000',
+      });
+
+      try {
+        await authExporter.exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
+          exportedSpan: mockSpan,
+        });
+
+        await authExporter.flush();
+
+        const requestOptions = mockFetchWithRetry.mock.calls[0][1] as RequestInit;
+        const headers = requestOptions.headers as Record<string, string>;
+
+        expect(headers.Authorization).toBe(`Bearer ${envToken}`);
+      } finally {
+        await authExporter.shutdown();
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('should prefer MASTRA_PLATFORM_ACCESS_TOKEN over MASTRA_CLOUD_ACCESS_TOKEN', async () => {
+      const cloudToken = createTestJWT({ teamId: 'cloud-env-token', projectId: 'auth-project' });
+      const platformToken = createTestJWT({ teamId: 'platform-env-token', projectId: 'auth-project' });
+      vi.stubEnv('MASTRA_CLOUD_ACCESS_TOKEN', cloudToken);
+      vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', platformToken);
+
+      const authExporter = new MastraPlatformExporter({
+        endpoint: 'http://localhost:3000',
+      });
+
+      try {
+        await authExporter.exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
+          exportedSpan: mockSpan,
+        });
+
+        await authExporter.flush();
+
+        const requestOptions = mockFetchWithRetry.mock.calls[0][1] as RequestInit;
+        const headers = requestOptions.headers as Record<string, string>;
+
+        expect(headers.Authorization).toBe(`Bearer ${platformToken}`);
+      } finally {
+        await authExporter.shutdown();
+        vi.unstubAllEnvs();
+      }
+    });
+
+    it('should fall back to MASTRA_CLOUD_ACCESS_TOKEN when MASTRA_PLATFORM_ACCESS_TOKEN is empty', async () => {
+      const cloudToken = createTestJWT({ teamId: 'cloud-env-token', projectId: 'auth-project' });
+      vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
+      vi.stubEnv('MASTRA_CLOUD_ACCESS_TOKEN', cloudToken);
+
+      const authExporter = new MastraPlatformExporter({
+        endpoint: 'http://localhost:3000',
+      });
+
+      try {
+        await authExporter.exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
+          exportedSpan: mockSpan,
+        });
+
+        await authExporter.flush();
+
+        const requestOptions = mockFetchWithRetry.mock.calls[0][1] as RequestInit;
+        const headers = requestOptions.headers as Record<string, string>;
+
+        expect(headers.Authorization).toBe(`Bearer ${cloudToken}`);
+      } finally {
+        await authExporter.shutdown();
+        vi.unstubAllEnvs();
+      }
     });
 
     it('should handle multiple spans in batch', async () => {
@@ -920,6 +1069,7 @@ describe('MastraPlatformExporter', () => {
           body: expect.any(String),
         }),
         3,
+        expect.objectContaining({ shouldRetryResponse: expect.any(Function) }),
       );
 
       await derivedExporter.shutdown();
@@ -1019,6 +1169,7 @@ describe('MastraPlatformExporter', () => {
           body: expect.any(String),
         }),
         3,
+        expect.objectContaining({ shouldRetryResponse: expect.any(Function) }),
       );
 
       await derivedExporter.shutdown();
@@ -1041,6 +1192,7 @@ describe('MastraPlatformExporter', () => {
           body: expect.any(String),
         }),
         3,
+        expect.objectContaining({ shouldRetryResponse: expect.any(Function) }),
       );
 
       await derivedExporter.shutdown();
@@ -1067,6 +1219,7 @@ describe('MastraPlatformExporter', () => {
           body: expect.any(String),
         }),
         3,
+        expect.objectContaining({ shouldRetryResponse: expect.any(Function) }),
       );
       expect(mockFetchWithRetry).toHaveBeenCalledWith(
         'https://collector.example.com/custom/metrics/publish',
@@ -1075,6 +1228,7 @@ describe('MastraPlatformExporter', () => {
           body: expect.any(String),
         }),
         3,
+        expect.objectContaining({ shouldRetryResponse: expect.any(Function) }),
       );
 
       await derivedExporter.shutdown();
@@ -1102,6 +1256,7 @@ describe('MastraPlatformExporter', () => {
           body: expect.any(String),
         }),
         3,
+        expect.objectContaining({ shouldRetryResponse: expect.any(Function) }),
       );
       expect(mockFetchWithRetry).toHaveBeenCalledWith(
         'https://collector.example.com/projects/project-workos/ai/metrics/publish',
@@ -1110,6 +1265,7 @@ describe('MastraPlatformExporter', () => {
           body: expect.any(String),
         }),
         3,
+        expect.objectContaining({ shouldRetryResponse: expect.any(Function) }),
       );
 
       await derivedExporter.shutdown();
@@ -1132,6 +1288,7 @@ describe('MastraPlatformExporter', () => {
           body: expect.any(String),
         }),
         3,
+        expect.objectContaining({ shouldRetryResponse: expect.any(Function) }),
       );
 
       await derivedExporter.shutdown();
@@ -1159,6 +1316,7 @@ describe('MastraPlatformExporter', () => {
           body: expect.any(String),
         }),
         3,
+        expect.objectContaining({ shouldRetryResponse: expect.any(Function) }),
       );
       expect(mockFetchWithRetry).toHaveBeenCalledWith(
         'https://logs.example.com/custom/logs/publish',
@@ -1167,6 +1325,7 @@ describe('MastraPlatformExporter', () => {
           body: expect.any(String),
         }),
         3,
+        expect.objectContaining({ shouldRetryResponse: expect.any(Function) }),
       );
 
       await derivedExporter.shutdown();
@@ -1190,6 +1349,7 @@ describe('MastraPlatformExporter', () => {
             body: expect.any(String),
           }),
           3,
+          expect.objectContaining({ shouldRetryResponse: expect.any(Function) }),
         );
       } finally {
         await derivedExporter.shutdown();
@@ -1216,6 +1376,7 @@ describe('MastraPlatformExporter', () => {
             body: expect.any(String),
           }),
           3,
+          expect.objectContaining({ shouldRetryResponse: expect.any(Function) }),
         );
       } finally {
         await derivedExporter.shutdown();
@@ -1243,6 +1404,7 @@ describe('MastraPlatformExporter', () => {
             body: expect.any(String),
           }),
           3,
+          expect.objectContaining({ shouldRetryResponse: expect.any(Function) }),
         );
       } finally {
         await derivedExporter.shutdown();
@@ -1269,6 +1431,7 @@ describe('MastraPlatformExporter', () => {
             body: expect.any(String),
           }),
           3,
+          expect.objectContaining({ shouldRetryResponse: expect.any(Function) }),
         );
       } finally {
         await derivedExporter.shutdown();
@@ -1381,6 +1544,52 @@ describe('MastraPlatformExporter', () => {
       mockFetchWithRetry.mockResolvedValue(new Response('{}', { status: 200 }));
     });
 
+    it('should log auth cooldown warnings through the injected exporter logger', async () => {
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+      const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+      const cooldownExporter = new MastraPlatformExporter({
+        accessToken: createTestJWT({ teamId: 'auth-team', projectId: 'auth-project' }),
+        endpoint: 'http://localhost:3000',
+        maxBatchSize: 1,
+      });
+      const originalWarnSpy = vi.spyOn((cooldownExporter as any).logger, 'warn');
+      const injectedLogger = {
+        debug: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        info: vi.fn(),
+        trackException: vi.fn(),
+      };
+
+      try {
+        cooldownExporter.__setLogger(injectedLogger as any);
+        mockAuthFailure(401);
+
+        await cooldownExporter.exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
+          exportedSpan: mockSpan,
+        });
+        await (cooldownExporter as any).flush();
+
+        expect(injectedLogger.warn).toHaveBeenCalledWith(
+          'MastraPlatformExporter received an authentication failure; pausing uploads for 60s',
+          expect.objectContaining({
+            status: 401,
+            authFailureCount: 1,
+            cooldownMs: 60_000,
+          }),
+        );
+        expect(originalWarnSpy).not.toHaveBeenCalledWith(
+          'MastraPlatformExporter received an authentication failure; pausing uploads for 60s',
+          expect.any(Object),
+        );
+      } finally {
+        nowSpy.mockRestore();
+        randomSpy.mockRestore();
+        await cooldownExporter.shutdown();
+      }
+    });
+
     it('should retry on API failures using fetchWithRetry', async () => {
       const retryExporter = new MastraPlatformExporter({
         accessToken: createTestJWT({ teamId: 'retry-team', projectId: 'retry-project' }),
@@ -1406,6 +1615,7 @@ describe('MastraPlatformExporter', () => {
         'http://localhost:3000/ai/spans/publish',
         expect.any(Object),
         3, // maxRetries passed to fetchWithRetry
+        expect.objectContaining({ shouldRetryResponse: expect.any(Function) }),
       );
       await retryExporter.shutdown();
     });
@@ -1430,8 +1640,154 @@ describe('MastraPlatformExporter', () => {
         expect.any(String),
         expect.any(Object),
         5, // Custom maxRetries value
+        expect.objectContaining({ shouldRetryResponse: expect.any(Function) }),
       );
       await customRetryExporter.shutdown();
+    });
+
+    it('should drop events during auth cooldown and probe again after cooldown expires', async () => {
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+      const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+      const cooldownExporter = new MastraPlatformExporter({
+        accessToken: createTestJWT({ teamId: 'auth-team', projectId: 'auth-project' }),
+        endpoint: 'http://localhost:3000',
+        maxBatchSize: 1,
+      });
+      const loggerWarnSpy = vi.spyOn((cooldownExporter as any).logger, 'warn');
+      const loggerDebugSpy = vi.spyOn((cooldownExporter as any).logger, 'debug');
+
+      try {
+        mockAuthFailure(401);
+
+        await cooldownExporter.exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
+          exportedSpan: mockSpan,
+        });
+        await (cooldownExporter as any).flush();
+
+        expect(mockFetchWithRetry).toHaveBeenCalledTimes(1);
+        expect(loggerWarnSpy).toHaveBeenCalledWith(
+          'MastraPlatformExporter received an authentication failure; pausing uploads for 60s',
+          expect.objectContaining({
+            status: 401,
+            authFailureCount: 1,
+            cooldownMs: 60_000,
+            droppedEventsDuringCooldown: 0,
+          }),
+        );
+
+        await cooldownExporter.exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
+          exportedSpan: mockSpan,
+        });
+        await cooldownExporter.onLogEvent(getMockLogEvent());
+        await cooldownExporter.onMetricEvent(getMockMetricEvent());
+        await cooldownExporter.onScoreEvent(getMockScoreEvent());
+        await cooldownExporter.onFeedbackEvent(getMockFeedbackEvent());
+        await (cooldownExporter as any).flush();
+
+        expect(mockFetchWithRetry).toHaveBeenCalledTimes(1);
+        expect((cooldownExporter as any).buffer.totalSize).toBe(0);
+        expect((cooldownExporter as any).authFailureCooldown.droppedEventsDuringCooldown).toBe(5);
+
+        nowSpy.mockReturnValue(61_001);
+        mockAuthFailure(403);
+
+        await cooldownExporter.exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
+          exportedSpan: mockSpan,
+        });
+        await (cooldownExporter as any).flush();
+
+        expect(mockFetchWithRetry).toHaveBeenCalledTimes(2);
+        expect(loggerWarnSpy).toHaveBeenCalledWith(
+          'MastraPlatformExporter received an authentication failure; pausing uploads for 120s',
+          expect.objectContaining({
+            status: 403,
+            authFailureCount: 2,
+            cooldownMs: 120_000,
+            droppedEventsDuringCooldown: 5,
+          }),
+        );
+        expect((cooldownExporter as any).authFailureCooldown.droppedEventsDuringCooldown).toBe(0);
+
+        nowSpy.mockReturnValue(61_002);
+        await cooldownExporter.onLogEvent(getMockLogEvent());
+        await (cooldownExporter as any).flush();
+
+        expect(mockFetchWithRetry).toHaveBeenCalledTimes(2);
+        expect((cooldownExporter as any).authFailureCooldown.droppedEventsDuringCooldown).toBe(1);
+
+        nowSpy.mockReturnValue(181_002);
+        mockFetchWithRetry.mockResolvedValue(new Response('{}', { status: 200 }));
+
+        await cooldownExporter.exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
+          exportedSpan: mockSpan,
+        });
+        await (cooldownExporter as any).flush();
+
+        expect(mockFetchWithRetry).toHaveBeenCalledTimes(3);
+        expect(loggerDebugSpy).toHaveBeenCalledWith(
+          'Batch flushed successfully',
+          expect.objectContaining({
+            droppedEventsDuringAuthCooldown: 1,
+          }),
+        );
+        expect((cooldownExporter as any).authFailureCooldown.failureCount).toBe(0);
+        expect((cooldownExporter as any).authFailureCooldown.cooldownUntilMs).toBe(0);
+        expect((cooldownExporter as any).authFailureCooldown.droppedEventsDuringCooldown).toBe(0);
+      } finally {
+        nowSpy.mockRestore();
+        randomSpy.mockRestore();
+        await cooldownExporter.shutdown();
+      }
+    });
+
+    it('should drop events buffered during an in-flight auth failure before retrying', async () => {
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+      const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+      const deferredUpload = createDeferred<Response>();
+      let shouldRetryResponse: ((response: Response) => boolean) | undefined;
+      const cooldownExporter = new MastraPlatformExporter({
+        accessToken: createTestJWT({ teamId: 'auth-team', projectId: 'auth-project' }),
+        endpoint: 'http://localhost:3000',
+      });
+
+      mockFetchWithRetry.mockImplementation(async (_url, _options, _maxRetries, retryOptions) => {
+        shouldRetryResponse = retryOptions?.shouldRetryResponse;
+        return deferredUpload.promise;
+      });
+
+      try {
+        await cooldownExporter.exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
+          exportedSpan: mockSpan,
+        });
+
+        const flushPromise = (cooldownExporter as any).flush();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockFetchWithRetry).toHaveBeenCalledTimes(1);
+
+        await cooldownExporter.onLogEvent(getMockLogEvent());
+
+        expect((cooldownExporter as any).buffer.totalSize).toBe(1);
+
+        shouldRetryResponse?.(new Response('auth failure', { status: 401, statusText: 'Unauthorized' }));
+        deferredUpload.reject(new Error('Request failed with status: 401 Unauthorized'));
+
+        await flushPromise;
+
+        expect(mockFetchWithRetry).toHaveBeenCalledTimes(1);
+        expect((cooldownExporter as any).buffer.totalSize).toBe(0);
+        expect((cooldownExporter as any).authFailureCooldown.failureCount).toBe(1);
+        expect((cooldownExporter as any).authFailureCooldown.droppedEventsDuringCooldown).toBe(1);
+      } finally {
+        nowSpy.mockRestore();
+        randomSpy.mockRestore();
+        await cooldownExporter.shutdown();
+      }
     });
 
     it('should drop batch after fetchWithRetry exhausts all retries', async () => {

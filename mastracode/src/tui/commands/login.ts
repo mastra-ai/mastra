@@ -1,5 +1,6 @@
 import { getOAuthProviders, PROVIDER_DEFAULT_MODELS } from '../../auth/storage.js';
 import { LoginDialogComponent } from '../components/login-dialog.js';
+import { promptAuthMode } from '../components/login-mode-selector.js';
 import { LoginSelectorComponent } from '../components/login-selector.js';
 import { showModalOverlay } from '../overlay.js';
 import type { SlashCommandContext } from './types.js';
@@ -10,6 +11,12 @@ async function performLogin(ctx: SlashCommandContext, providerId: string): Promi
 
   if (!ctx.authStorage) {
     ctx.showError('Auth storage not configured');
+    return;
+  }
+
+  const authMode = await promptAuthMode(ctx.state.ui, providerName, provider?.authModes);
+  if (authMode === null) {
+    // User cancelled at the mode-selection step.
     return;
   }
 
@@ -39,13 +46,14 @@ async function performLogin(ctx: SlashCommandContext, providerId: string): Promi
           dialog.showProgress(message);
         },
         signal: dialog.signal,
+        authMode,
       })
       .then(async () => {
         ctx.state.ui.hideOverlay();
 
         const defaultModel = PROVIDER_DEFAULT_MODELS[providerId as keyof typeof PROVIDER_DEFAULT_MODELS];
         if (defaultModel) {
-          await ctx.state.harness.switchModel({ modelId: defaultModel });
+          await ctx.state.session.model.switch({ modelId: defaultModel });
           ctx.showInfo(`Logged in to ${providerName} - switched to ${defaultModel}`);
         } else {
           ctx.showInfo(`Successfully logged in to ${providerName}`);
@@ -79,6 +87,14 @@ export async function handleLoginCommand(ctx: SlashCommandContext, mode: 'login'
   if (providers.length === 0) {
     ctx.showInfo('No OAuth providers available.');
     return;
+  }
+
+  if (mode === 'login') {
+    ctx.analytics?.trackInteractivePrompt('login_provider_selector', {
+      threadId: ctx.state.session.thread.getId(),
+      resourceId: ctx.state.session.identity.getResourceId(),
+      mode: ctx.state.session.mode.get(),
+    });
   }
 
   return new Promise<void>(resolve => {

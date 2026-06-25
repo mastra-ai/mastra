@@ -29,7 +29,9 @@ export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps)
   }, [field.options, query]);
 
   const token = useMemo(() => tokens.find(t => t.fieldId === field.id), [tokens, field.id]);
-  const selectedValue = typeof token?.value === 'string' ? token.value : undefined;
+  // Fall back to `defaultValue` when no token exists — lets view-toggle fields (e.g. List mode)
+  // show their default option pre-selected before the user explicitly picks one.
+  const selectedValue = typeof token?.value === 'string' ? token.value : !field.multi ? field.defaultValue : undefined;
   const selectedValues = useMemo<string[]>(() => {
     if (Array.isArray(token?.value)) return token!.value as string[];
     if (typeof token?.value === 'string') return [token.value];
@@ -59,7 +61,7 @@ export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps)
 
       {field.isLoading ? (
         <div className="flex items-center gap-2 px-2 py-1.5 text-ui-sm text-neutral3">
-          <Spinner size="sm" className="w-3 h-3" color="var(--neutral3)" />
+          <Spinner size="sm" className="size-3 text-neutral3" />
           Loading options…
         </div>
       ) : filteredOptions.length === 0 ? (
@@ -109,13 +111,15 @@ export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps)
               <span className="truncate min-w-0 flex-1">{option.label}</span>
             </label>
           ))}
-          <label
-            title="Any"
-            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-ui-md text-neutral4 hover:bg-surface4 hover:text-neutral6 cursor-pointer focus-within:bg-surface4 focus-within:text-neutral6 min-w-0"
-          >
-            <RadioGroupItem data-pick-multi-item="" value="Any" className="shrink-0" />
-            <span className="truncate min-w-0 flex-1">Any</span>
-          </label>
+          {!field.omitAnyOption && (
+            <label
+              title="Any"
+              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-ui-md text-neutral4 hover:bg-surface4 hover:text-neutral6 cursor-pointer focus-within:bg-surface4 focus-within:text-neutral6 min-w-0"
+            >
+              <RadioGroupItem data-pick-multi-item="" value="Any" className="shrink-0" />
+              <span className="truncate min-w-0 flex-1">Any</span>
+            </label>
+          )}
         </RadioGroup>
       )}
     </>

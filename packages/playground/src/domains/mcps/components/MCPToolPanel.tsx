@@ -1,4 +1,6 @@
-import { Skeleton, Txt, toast } from '@mastra/playground-ui';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import type { JsonSchema } from '@mastra/schema-compat/json-to-zod';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
@@ -50,7 +52,7 @@ export const MCPToolPanel = ({ toolId, serverId }: MCPToolPanelProps) => {
   });
 
   const handleToolCall = useCallback(
-    async (toolName: string, args: Record<string, unknown>) => {
+    async (_toolName: string, args: Record<string, unknown>) => {
       const response = await executeTool(args);
       return response;
     },

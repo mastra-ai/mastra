@@ -1,21 +1,17 @@
 import type { ModelMessage, ToolChoice } from '@internal/ai-sdk-v5';
-import type { AgentBackgroundConfig } from '../background-tasks';
+import type { ActorSignal } from '../auth/ee';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { SystemMessage } from '../llm';
 import type { ProviderOptions } from '../llm/model/provider-options';
-import type { MastraLanguageModel, MastraLegacyLanguageModel } from '../llm/model/shared.types';
+import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { CompletionConfig, CompletionRunResult } from '../loop/network/validation';
 import type { LoopConfig, LoopOptions, PrepareStepFunction } from '../loop/types';
-import type { Mastra } from '../mastra';
 import type { VersionOverrides } from '../mastra/types';
-import type { MastraMemory } from '../memory/memory';
 import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
-import type { FullOutput, MastraModelOutput } from '../stream/base/output';
-import type { ToolPayloadTransformPolicy } from '../tools';
-import type { DynamicArgument } from '../types';
-import type { OutputWriter } from '../workflows/types';
+import type { RequireToolApproval, ToolHooks, ToolPayloadTransformPolicy } from '../tools';
+import type { OutputWriter, WorkflowRunState } from '../workflows/types';
 import type { MessageListInput } from './message-list';
 import type {
   AgentMemoryOption,
@@ -25,7 +21,6 @@ import type {
   PublicStructuredOutputOptions,
   AgentMethodType,
   MastraDBMessage,
-  AgentInstructions,
 } from './types';
 
 // Re-export types for convenience
@@ -149,6 +144,14 @@ export interface DelegationCompleteContext {
     text: string;
     subAgentThreadId?: string;
     subAgentResourceId?: string;
+    /** Aggregate token usage from the sub-agent's execution */
+    usage?: {
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+      reasoningTokens?: number;
+      cachedInputTokens?: number;
+    };
   };
   /** Duration of the delegation in milliseconds */
   duration: number;
@@ -308,69 +311,6 @@ export interface DelegationConfig {
    */
   messageFilter?: (context: MessageFilterContext) => MastraDBMessage[] | Promise<MastraDBMessage[]>;
 }
-
-/**
- * Minimal interface for objects that can be used as subagents in the `agents` field.
- * `Agent` already satisfies this interface. Implement this to create lighter-weight
- * subagents without the full Agent class.
- */
-export interface SubAgent<TOutput = unknown, TRequestContext extends Record<string, any> | unknown = unknown> {
-  /** Unique identifier for this subagent */
-  readonly id: string;
-
-  /** Human-readable name used in logs and error details */
-  readonly name?: string;
-
-  /** Human-readable description used for the generated tool description */
-  getDescription(): string;
-
-  /** Returns the model instance used to select the execution path. */
-  getModel(opts: {
-    requestContext?: RequestContext;
-  }): MastraLanguageModel | MastraLegacyLanguageModel | Promise<MastraLanguageModel | MastraLegacyLanguageModel>;
-
-  /** Returns default execution options, if configured. */
-  getDefaultOptions?(opts: {
-    requestContext?: RequestContext;
-  }): AgentExecutionOptions<TOutput> | Promise<AgentExecutionOptions<TOutput>> | undefined;
-
-  /** Whether this subagent has its own memory configured */
-  hasOwnMemory(): boolean;
-
-  /** Inject parent memory into this subagent when it does not have its own */
-  __setMemory(memory: DynamicArgument<MastraMemory, TRequestContext>): void;
-
-  /** Returns the memory instance, if configured */
-  getMemory(opts: { requestContext?: RequestContext }): Promise<MastraMemory | undefined>;
-
-  /** Returns the system prompt / instructions */
-  getInstructions(opts: { requestContext?: RequestContext }): AgentInstructions | Promise<AgentInstructions>;
-
-  /** Execute a prompt and return the full result */
-  generate(messages: MessageListInput, options?: AgentExecutionOptionsBase<any>): Promise<FullOutput>;
-
-  /** Stream a prompt execution */
-  stream(messages: MessageListInput, options?: AgentExecutionOptionsBase<any>): Promise<MastraModelOutput>;
-
-  /** Resume a previously suspended generate execution */
-  resumeGenerate(resumeData: any, options?: AgentExecutionOptionsBase<any>): Promise<FullOutput>;
-
-  /** Resume a previously suspended stream execution */
-  resumeStream(resumeData: any, options?: AgentExecutionOptionsBase<any>): Promise<MastraModelOutput>;
-
-  /** Execute a prompt using a legacy v1 model */
-  generateLegacy?(messages: MessageListInput, options?: any): Promise<any>;
-
-  /** Stream a prompt execution using a legacy v1 model */
-  streamLegacy?(messages: MessageListInput, options?: any): Promise<any>;
-
-  /** Register a Mastra instance on implementations that need it */
-  __registerMastra?(mastra: Mastra): void;
-
-  /** Returns background task configuration, if configured */
-  getBackgroundTasksConfig?(): AgentBackgroundConfig | undefined;
-}
-
 /**
  * Configuration for the routing agent's behavior.
  */
@@ -534,6 +474,9 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   /** Request Context containing dynamic configuration and state */
   requestContext?: RequestContext<any>; // @TODO: Figure out how to type this without breaking all the inner types
 
+  /** Trusted server-side signal for this agent FGA check. */
+  actor?: ActorSignal;
+
   /**
    * Per-invocation version overrides for sub-agents (and future primitives).
    * Merged on top of Mastra instance-level versions and propagated via requestContext.
@@ -584,6 +527,8 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   toolsets?: ToolsetsInput;
   /** Client-side tools available during execution */
   clientTools?: ToolsInput;
+  /** Per-execution hooks that run before and after tool calls, overriding matching agent-level hooks. */
+  hooks?: ToolHooks;
   /** Tool selection strategy: 'auto', 'none', 'required', or specific tools */
   toolChoice?: ToolChoice<any>;
 
@@ -629,8 +574,12 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    */
   isTaskComplete?: StreamIsTaskCompleteConfig;
 
-  /** Require approval for all tool calls */
-  requireToolApproval?: boolean;
+  /**
+   * Require approval for tool calls. Pass `true` to require approval for every tool call,
+   * or a function evaluated per call (with the tool name, args, and request context) to
+   * decide conditionally — e.g. to gate approval by a regex on the tool name.
+   */
+  requireToolApproval?: RequireToolApproval;
 
   /** Automatically resume suspended tools */
   autoResumeSuspendedTools?: boolean;
@@ -696,10 +645,39 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   disableBackgroundTasks?: boolean;
 
   /**
+   * When set, keeps the stream open across background-task continuations.
+   * The agent will automatically re-invoke the LLM when background tasks
+   * complete, streaming those continuation turns through the same
+   * `fullStream`. The stream closes when no background tasks remain and
+   * no queued completions are pending.
+   *
+   * Pass `true` to enable with default settings (5 minute idle timeout),
+   * or pass an object to configure `maxIdleMs`.
+   *
+   * Requires memory to be configured on the agent (continuations need
+   * conversation persistence). Falls through to a regular `stream()` call
+   * if memory is not available.
+   *
+   * @example
+   * ```typescript
+   * const result = await agent.stream('Research solana for me', {
+   *   untilIdle: true,
+   *   memory: { thread: 't1', resource: 'u1' },
+   * });
+   *
+   * for await (const chunk of result.fullStream) {
+   *   // initial turn + continuation turns from bg task completions
+   * }
+   * ```
+   */
+  untilIdle?: boolean | { maxIdleMs?: number };
+
+  /**
    * @internal
    * When true, the in-loop `backgroundTaskCheckStep` returns immediately
    * without waiting for running tasks to complete. Set by
-   * `agent.streamUntilIdle`, which drives continuation from outside the loop.
+   * `agent.streamUntilIdle` / `stream({ untilIdle })`, which drives
+   * continuation from outside the loop.
    */
   _skipBgTaskWait?: boolean;
 } & Partial<ObservabilityContext>;
@@ -709,14 +687,22 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
  * Use this type for public method signatures.
  */
 export type PublicAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> &
-  (OUTPUT extends {} ? { structuredOutput: PublicStructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });
+  ([NonNullable<OUTPUT>] extends [never]
+    ? { structuredOutput?: never }
+    : OUTPUT extends {}
+      ? { structuredOutput: PublicStructuredOutputOptions<OUTPUT> }
+      : { structuredOutput?: never });
 
 /**
  * Internal agent execution options that require StandardSchemaWithJSON.
  * Use this type internally after converting from PublicSchema.
  */
 export type AgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> &
-  (OUTPUT extends {} ? { structuredOutput: StructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });
+  ([NonNullable<OUTPUT>] extends [never]
+    ? { structuredOutput?: never }
+    : OUTPUT extends {}
+      ? { structuredOutput: StructuredOutputOptions<OUTPUT> }
+      : { structuredOutput?: never });
 
 export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> & {
   outputWriter?: OutputWriter;
@@ -727,7 +713,11 @@ export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptions
   /** Internal: Whether the execution is a resume */
   resumeContext?: {
     resumeData: any;
-    snapshot: any;
+    snapshot: WorkflowRunState;
   };
   toolCallId?: string;
-} & (OUTPUT extends {} ? { structuredOutput: StructuredOutputOptions<OUTPUT> } : { structuredOutput?: never });
+} & ([NonNullable<OUTPUT>] extends [never]
+    ? { structuredOutput?: never }
+    : OUTPUT extends {}
+      ? { structuredOutput: StructuredOutputOptions<OUTPUT> }
+      : { structuredOutput?: never });

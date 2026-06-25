@@ -116,10 +116,21 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
     conditions,
     workflowId,
     runId,
+    stepResults = {} as Record<string, StepResult<any, any, any, any>>,
+    timeTravel,
+    executionPath = [],
   }: {
     conditions: any[];
     workflowId: string;
     runId: string;
+    stepResults?: Record<string, StepResult<any, any, any, any>>;
+    timeTravel?: {
+      executionPath: number[];
+      steps: string[];
+      stepResults: Record<string, StepResult<any, any, any, any>>;
+      inputData?: any;
+    };
+    executionPath?: number[];
   }) {
     const entry = {
       type: 'conditional' as const,
@@ -146,17 +157,18 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
       conditions,
     };
 
-    return await engine.executeConditional({
+    const result = await engine.executeConditional({
       workflowId,
       runId,
       entry,
       prevOutput: null,
       serializedStepGraph: [],
-      stepResults: {} as Record<string, StepResult<any, any, any, any>>,
+      stepResults,
+      timeTravel: timeTravel as any,
       executionContext: {
         workflowId,
         runId,
-        executionPath: [],
+        executionPath,
         suspendedPaths: {} as Record<string, number[]>,
         retryConfig: {
           attempts: 3,
@@ -171,6 +183,8 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
       requestContext,
       tracingContext: {},
     });
+
+    return { result, stepResults };
   }
 
   it('should handle MastraError during condition evaluation and continue workflow', async () => {
@@ -193,7 +207,7 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
     ];
 
     // Act: Execute conditional with the conditions
-    const result = await runConditional({
+    const { result } = await runConditional({
       conditions,
       workflowId: 'test-workflow',
       runId: randomUUID(),
@@ -232,7 +246,7 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
     ];
 
     // Act: Execute conditional with the conditions
-    const result = await runConditional({
+    const { result } = await runConditional({
       conditions,
       workflowId,
       runId,
@@ -256,6 +270,79 @@ describe('DefaultExecutionEngine.executeConditional error handling', () => {
 
     // Verify that the original error is preserved as the cause
     expect(wrappedError.cause).toBe(regularError);
+  });
+
+  // Regression coverage for the time-travel conditional reconciliation in
+  // packages/core/src/workflows/handlers/control-flow.ts. When a paused run is rehydrated and
+  // time-travelled into a conditional, createTimeTravelExecutionParams pre-marks the targeted arm
+  // as 'running'. If the condition re-evaluates and selects a different arm, the targeted-but-
+  // rejected arm must be rewritten to 'skipped' so the wrong branch is neither rendered as active
+  // nor executed on the rehydrated run.
+  describe('conditional time-travel reconciliation', () => {
+    it("rewrites a targeted-but-non-truthy arm from 'running' to 'skipped' during time travel", async () => {
+      const workflowId = 'test-workflow';
+      const runId = randomUUID();
+
+      // arm step1 (index 0) is truthy, arm step2 (index 1) is NOT truthy.
+      const conditions = [async () => true, async () => false];
+
+      // Mirror createTimeTravelExecutionParams: the targeted arm (step2) is pre-marked 'running'.
+      const stepResults: Record<string, StepResult<any, any, any, any>> = {
+        step2: {
+          status: 'running',
+          payload: { from: 'time-travel' },
+          startedAt: Date.now(),
+        } as unknown as StepResult<any, any, any, any>,
+      };
+
+      const { result, stepResults: finalStepResults } = await runConditional({
+        conditions,
+        workflowId,
+        runId,
+        stepResults,
+        executionPath: [0],
+        timeTravel: {
+          executionPath: [0],
+          steps: ['step2'],
+          stepResults: {},
+        },
+      });
+
+      // The rejected arm is reconciled to 'skipped' with the expected bookkeeping fields.
+      expect(finalStepResults.step2.status).toBe('skipped');
+      expect(finalStepResults.step2).toHaveProperty('payload');
+      expect(finalStepResults.step2).toHaveProperty('startedAt');
+      expect(finalStepResults.step2).toHaveProperty('endedAt');
+
+      // The truthy arm (step1) still runs and the conditional succeeds.
+      expect(result.status).toBe('success');
+      expect(finalStepResults.step2.status).not.toBe('running');
+    });
+
+    it("leaves a 'running' arm untouched for normal start/resume (no time travel)", async () => {
+      const workflowId = 'test-workflow';
+      const runId = randomUUID();
+
+      const conditions = [async () => true, async () => false];
+
+      const stepResults: Record<string, StepResult<any, any, any, any>> = {
+        step2: {
+          status: 'running',
+          payload: {},
+          startedAt: Date.now(),
+        } as unknown as StepResult<any, any, any, any>,
+      };
+
+      const { stepResults: finalStepResults } = await runConditional({
+        conditions,
+        workflowId,
+        runId,
+        stepResults,
+        // no timeTravel param -> reconciliation must not fire
+      });
+
+      expect(finalStepResults.step2.status).toBe('running');
+    });
   });
 });
 
@@ -821,6 +908,223 @@ describe('DefaultExecutionEngine.executeForeach cancellation', () => {
 
     expect(result.status).toBe('canceled');
   }, 30_000);
+});
+
+describe('DefaultExecutionEngine.executeForeach concurrency', () => {
+  let engine: DefaultExecutionEngine;
+  let pubsub: PubSub;
+  let requestContext: RequestContext;
+  let abortController: AbortController;
+
+  const deferred = () => {
+    let resolve!: () => void;
+    const promise = new Promise<void>(res => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+
+  const waitFor = async (predicate: () => boolean, timeout = 1000) => {
+    const startedAt = Date.now();
+    while (!predicate()) {
+      if (Date.now() - startedAt > timeout) {
+        throw new Error('Timed out waiting for foreach test condition');
+      }
+      await new Promise(resolve => setTimeout(resolve, 5));
+    }
+  };
+
+  const runForeach = async ({
+    step,
+    prevOutput,
+    concurrency,
+    workflowId = 'test-workflow',
+    runId = randomUUID(),
+  }: {
+    step: any;
+    prevOutput: any[];
+    concurrency: number;
+    workflowId?: string;
+    runId?: string;
+  }) =>
+    engine.executeForeach({
+      workflowId,
+      runId,
+      entry: {
+        type: 'foreach' as const,
+        step,
+        opts: { concurrency },
+      },
+      prevStep: { type: 'step', step } as any,
+      prevOutput,
+      stepResults: {} as Record<string, StepResult<any, any, any, any>>,
+      serializedStepGraph: [],
+      executionContext: {
+        workflowId,
+        runId,
+        executionPath: [0],
+        stepExecutionPath: [],
+        suspendedPaths: {},
+        retryConfig: { attempts: 0, delay: 0 },
+        activeStepsPath: {},
+        resumeLabels: {},
+        state: {},
+      },
+      pubsub,
+      abortController,
+      requestContext,
+      tracingContext: {},
+    });
+
+  beforeEach(() => {
+    engine = new DefaultExecutionEngine({ mastra: undefined });
+    pubsub = new EventEmitterPubSub();
+    requestContext = new RequestContext();
+    abortController = new AbortController();
+  });
+
+  it('keeps concurrency slots filled and preserves ordered results while progress follows completion order', async () => {
+    const runId = randomUUID();
+    const firstItemGate = deferred();
+    const starts: number[] = [];
+    const completed: number[] = [];
+    const progressEvents: any[] = [];
+    let active = 0;
+    let maxActive = 0;
+
+    await pubsub.subscribe(`workflow.events.v2.${runId}`, event => {
+      if (event.data.type === 'workflow-step-progress') {
+        progressEvents.push(event.data.payload);
+      }
+    });
+
+    const step = {
+      id: 'process-item',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async ({ inputData }: { inputData: number }) => {
+        starts.push(inputData);
+        active++;
+        maxActive = Math.max(maxActive, active);
+        try {
+          if (inputData === 0) {
+            await firstItemGate.promise;
+          }
+          return inputData * 2;
+        } finally {
+          completed.push(inputData);
+          active--;
+        }
+      },
+    };
+
+    const resultPromise = runForeach({ step, prevOutput: [0, 1, 2, 3], concurrency: 2, runId });
+
+    await waitFor(() => starts.includes(2));
+
+    expect(starts.slice(0, 3)).toEqual([0, 1, 2]);
+    expect(completed).not.toContain(0);
+    expect(maxActive).toBeLessThanOrEqual(2);
+
+    firstItemGate.resolve();
+    const result = await resultPromise;
+
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.output).toEqual([0, 2, 4, 6]);
+    }
+    expect(maxActive).toBe(2);
+    expect(progressEvents.map(event => event.currentIndex)).toEqual([1, 2, 3, 0]);
+    expect(progressEvents.map(event => event.iterationOutput)).toEqual([2, 4, 6, 0]);
+    expect(progressEvents.map(event => event.iterationStatus)).toEqual(['success', 'success', 'success', 'success']);
+  });
+
+  it('stops queued work and returns failed when an iteration fails', async () => {
+    const firstItemGate = deferred();
+    const starts: number[] = [];
+    const step = {
+      id: 'process-item',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async ({ inputData }: { inputData: number }) => {
+        starts.push(inputData);
+        if (inputData === 0) {
+          await firstItemGate.promise;
+          return inputData;
+        }
+        if (inputData === 1) {
+          throw new Error('item failed');
+        }
+        return inputData;
+      },
+    };
+
+    const resultPromise = runForeach({ step, prevOutput: [0, 1, 2, 3], concurrency: 2 });
+
+    await waitFor(() => starts.includes(1));
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(starts).toEqual([0, 1]);
+
+    firstItemGate.resolve();
+    const result = await resultPromise;
+
+    expect(result.status).toBe('failed');
+    if (result.status === 'failed') {
+      expect(result.error).toBeInstanceOf(Error);
+      expect(result.error.message).toBe('item failed');
+    }
+  });
+
+  it('stops queued work and returns suspended when an iteration suspends', async () => {
+    const firstItemGate = deferred();
+    const starts: number[] = [];
+    const step = {
+      id: 'process-item',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      suspendSchema: z.object({ item: z.number() }),
+      execute: async ({
+        inputData,
+        suspend,
+      }: {
+        inputData: number;
+        suspend: (payload: { item: number }) => Promise<void>;
+      }) => {
+        starts.push(inputData);
+        if (inputData === 0) {
+          await firstItemGate.promise;
+          return inputData;
+        }
+        if (inputData === 1) {
+          await suspend({ item: inputData });
+          return inputData;
+        }
+        return inputData;
+      },
+    };
+
+    const resultPromise = runForeach({ step, prevOutput: [0, 1, 2, 3], concurrency: 2 });
+
+    await waitFor(() => starts.includes(1));
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(starts).toEqual([0, 1]);
+
+    firstItemGate.resolve();
+    const result = await resultPromise;
+
+    expect(result.status).toBe('suspended');
+    if (result.status === 'suspended') {
+      expect(result.suspendPayload?.item).toBe(1);
+      expect(result.suspendPayload?.__workflow_meta.foreachIndex).toBe(1);
+      expect(result.suspendPayload?.__workflow_meta.foreachOutput[0]).toMatchObject({ status: 'success', output: 0 });
+      expect(result.suspendPayload?.__workflow_meta.foreachOutput[1]).toMatchObject({
+        status: 'suspended',
+        suspendPayload: { item: 1 },
+      });
+    }
+  });
 });
 
 describe('DefaultExecutionEngine.fmtReturnValue stepExecutionPath and payload deduplication', () => {

@@ -80,6 +80,64 @@ function filterEmptyTextParts(parts: MastraMessagePart[]): MastraMessagePart[] {
   });
 }
 
+function getSignalType(message: MastraDBMessage): string | undefined {
+  const signal = message.content.metadata?.signal;
+  if (signal && typeof signal === 'object' && !Array.isArray(signal)) {
+    const type = (signal as Record<string, unknown>).type;
+    return typeof type === 'string' ? type : message.type;
+  }
+
+  return message.type;
+}
+
+function getSignalTagName(message: MastraDBMessage): string | undefined {
+  const signal = message.content.metadata?.signal;
+  if (signal && typeof signal === 'object' && !Array.isArray(signal)) {
+    const tagName = (signal as Record<string, unknown>).tagName;
+    if (typeof tagName === 'string') return tagName;
+  }
+
+  const type = getSignalType(message);
+  if (type === 'user') return 'user';
+  if (type === 'reactive') return message.type;
+  return type;
+}
+
+function isUserSignalType(type: string | undefined): boolean {
+  return type === 'user' || type === 'user-message';
+}
+
+function toSignalDataPart(message: MastraDBMessage, contents: string): MastraMessagePart {
+  const signal =
+    message.content.metadata?.signal && typeof message.content.metadata.signal === 'object'
+      ? (message.content.metadata.signal as Record<string, unknown>)
+      : {};
+  const metadata =
+    signal.metadata && typeof signal.metadata === 'object' && !Array.isArray(signal.metadata)
+      ? (signal.metadata as Record<string, unknown>)
+      : {};
+  const attributes =
+    signal.attributes && typeof signal.attributes === 'object' && !Array.isArray(signal.attributes)
+      ? (signal.attributes as Record<string, unknown>)
+      : {};
+
+  const type = getSignalType(message) ?? 'signal';
+  const tagName = getSignalTagName(message) ?? type;
+  return {
+    type: type === 'user' ? 'data-user-message' : 'data-signal',
+    data: {
+      id: typeof signal.id === 'string' ? signal.id : message.id,
+      type,
+      tagName,
+      contents: 'contents' in signal ? signal.contents : contents,
+      createdAt: typeof signal.createdAt === 'string' ? signal.createdAt : message.createdAt.toISOString(),
+      ...(typeof signal.acceptedAt === 'string' ? { acceptedAt: signal.acceptedAt } : {}),
+      ...(Object.keys(attributes).length ? { attributes } : {}),
+      ...(Object.keys(metadata).length ? { metadata } : {}),
+    },
+  } as MastraMessagePart;
+}
+
 // Re-export for backward compatibility
 export type { UIMessageWithMetadata };
 
@@ -216,7 +274,11 @@ export class AIV4Adapter {
       parts.push({ type: 'text', text: '' });
     }
 
-    const v4Parts = preserveExtendedParts(parts);
+    const signalType = m.role === 'signal' ? getSignalType(m) : undefined;
+    const isUserMessageSignal = isUserSignalType(signalType);
+    const v4Parts = preserveExtendedParts(
+      m.role === 'signal' && !isUserMessageSignal ? [toSignalDataPart(m, m.content.content || contentString)] : parts,
+    );
 
     if (m.role === `user`) {
       const uiMessage: UIMessageWithMetadata = {
@@ -269,8 +331,8 @@ export class AIV4Adapter {
 
     const uiMessage: UIMessageWithMetadata = {
       id: m.id,
-      role: m.role,
-      content: m.content.content || contentString,
+      role: m.role === 'signal' ? (isUserMessageSignal ? 'user' : 'system') : m.role,
+      content: m.role === 'signal' && !isUserMessageSignal ? '' : m.content.content || contentString,
       createdAt: m.createdAt,
       parts: v4Parts,
       experimental_attachments: experimentalAttachments,

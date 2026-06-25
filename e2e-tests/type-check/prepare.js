@@ -17,9 +17,14 @@ export async function setupTemplate(pathToStoreFiles, pkgManager) {
   await mkdir(newPath, { recursive: true });
   await cp(templatePath, newPath, { recursive: true });
 
+  const installArgs =
+    pkgManager === 'pnpm'
+      ? ['install', '--config.minimum-release-age=0', '--config.trust-policy=no-check']
+      : ['install'];
+
   console.log('Directory:', newPath);
   console.log('Installing dependencies...');
-  await execa(pkgManager, ['install'], {
+  await execa(pkgManager, installArgs, {
     cwd: newPath,
     stdio: 'inherit',
     env: process.env,

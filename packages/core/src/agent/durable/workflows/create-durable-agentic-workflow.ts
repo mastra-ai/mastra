@@ -3,14 +3,15 @@ import type { MastraScorer, MastraScorerEntry } from '../../../evals/base';
 import { runScorer } from '../../../evals/hooks';
 import type { PubSub } from '../../../events/pubsub';
 import type { Mastra } from '../../../mastra';
-import { createObservabilityContext } from '../../../observability';
+import { createObservabilityContext, InternalSpans } from '../../../observability';
+import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../observability';
 import { RequestContext } from '../../../request-context';
-import { createWorkflow } from '../../../workflows';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
+import { createWorkflow } from '../../../workflows/create';
 import { MessageList } from '../../message-list';
 import { DurableStepIds, DurableAgentDefaults } from '../constants';
 import { globalRunRegistry } from '../run-registry';
-import { emitFinishEvent } from '../stream-adapter';
+import { emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
 import type {
   DurableToolCallInput,
   DurableAgenticWorkflowInput,
@@ -28,6 +29,7 @@ import {
 } from './shared';
 import {
   createDurableBackgroundTaskCheckStep,
+  createDurableIsTaskCompleteStep,
   createDurableLLMExecutionStep,
   createDurableToolCallStep,
   createDurableLLMMappingStep,
@@ -58,6 +60,9 @@ const durableAgenticInputSchema = z.object({
   options: z.any(),
   state: z.any(),
   messageId: z.string(),
+  // Exported AGENT_RUN / MODEL_GENERATION span data, threaded so the run shares one trace
+  agentSpanData: z.any().optional(),
+  modelSpanData: z.any().optional(),
 });
 
 // Re-export shared output schema (identical across implementations)
@@ -102,6 +107,11 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
   // Create the background task check step
   const backgroundTaskCheckStep = createDurableBackgroundTaskCheckStep();
 
+  // Create the isTaskComplete evaluation step (mirrors the non-durable
+  // createIsTaskCompleteStep). Lives as a real step (not predicate logic)
+  // so it shows up in workflow traces and produces a proper state transition.
+  const isTaskCompleteStep = createDurableIsTaskCompleteStep(maxSteps);
+
   // Create the single iteration workflow (LLM -> Tool Calls -> Mapping)
   // Note: foreach runs with concurrency: 1 (sequential) because tool approval
   // and suspension require sequential execution to properly handle suspend/resume.
@@ -111,9 +121,24 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
     inputSchema: iterationStateSchema,
     outputSchema: iterationStateSchema,
     options: {
-      shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+      shouldPersistSnapshot: params => {
+        // We need a persisted snapshot record to support `resumeStream()`.
+        // - Create the initial record early ("pending")
+        // - Update it when execution is suspended ("paused"/"suspended")
+        // Avoid persisting "running" snapshots so we don't overwrite an existing suspended snapshot.
+        return (
+          params.workflowStatus === 'pending' ||
+          params.workflowStatus === 'paused' ||
+          params.workflowStatus === 'suspended'
+        );
+      },
       validateInputs: false,
       sharePubsub: true,
+      // Internal durable-agent execution plumbing — hide workflow spans;
+      // the agent/tool/model spans within still surface for users.
+      tracingPolicy: {
+        internal: InternalSpans.WORKFLOW,
+      },
     },
   })
     // Step 0: Convert iteration state to LLM input format
@@ -131,17 +156,23 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           options: state.options,
           state: state.state,
           messageId: state.messageId,
+          stepIndex: state.iterationCount,
+          agentSpanData: state.agentSpanData,
+          modelSpanData: state.modelSpanData,
         };
       },
       { id: 'map-to-llm-input' },
     )
     // Step 1: Execute LLM
     .then(llmExecutionStep)
-    // Step 2: Extract tool calls as array for foreach
+    // Step 2: Extract tool calls as array for foreach (forward model_step span for nesting)
     .map(
       async ({ inputData }) => {
         const llmOutput = inputData as DurableLLMStepOutput;
-        return (llmOutput.toolCalls ?? []) as DurableToolCallInput[];
+        return (llmOutput.toolCalls ?? []).map(toolCall => ({
+          ...toolCall,
+          stepSpanData: llmOutput.stepSpanData,
+        })) as DurableToolCallInput[];
       },
       { id: 'extract-tool-calls' },
     )
@@ -191,6 +222,11 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
       },
       { id: 'update-iteration-state' },
     )
+    // Step 8: Evaluate user-supplied isTaskComplete scorers (if any). Runs as
+    // a real step so it shows up in traces and may mutate lastStepResult /
+    // messageListState before the dowhile predicate decides whether to loop
+    // again. No-op when the run has no policy configured.
+    .then(isTaskCompleteStep)
     .commit();
 
   // Create the main agentic loop workflow with dowhile
@@ -200,8 +236,22 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
       inputSchema: durableAgenticInputSchema,
       outputSchema: durableAgenticOutputSchema,
       options: {
-        shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+        shouldPersistSnapshot: params => {
+          // We need a persisted snapshot record to support `resumeStream()`.
+          // - Create the initial record early ("pending")
+          // - Update it when execution is suspended ("paused"/"suspended")
+          // Avoid persisting "running" snapshots so we don't overwrite an existing suspended snapshot.
+          return (
+            params.workflowStatus === 'pending' ||
+            params.workflowStatus === 'paused' ||
+            params.workflowStatus === 'suspended'
+          );
+        },
         validateInputs: false,
+        // Internal durable-agent execution plumbing — see singleIterationWorkflow.
+        tracingPolicy: {
+          internal: InternalSpans.WORKFLOW,
+        },
       },
     })
       // Initialize iteration state from input
@@ -224,20 +274,70 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
         { id: 'init-iteration-state' },
       )
       // Run the agentic loop with dowhile
-      .dowhile(singleIterationWorkflow, async ({ inputData }) => {
+      .dowhile(singleIterationWorkflow, async params => {
+        const { inputData } = params;
         const state = inputData as IterationState;
+        const initData = params.getInitData() as DurableAgenticWorkflowInput;
+        const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
 
-        // Check if we should continue
+        // Continuation check. isTaskComplete (when configured) runs as a
+        // proper step inside singleIterationWorkflow and may have already
+        // flipped lastStepResult.isContinued by the time we get here.
         const shouldContinue = state.lastStepResult?.isContinued === true;
         const runMaxSteps = state.options?.maxSteps ?? maxSteps;
         const underMaxSteps = state.iterationCount < runMaxSteps;
 
-        return shouldContinue && underMaxSteps;
+        // Evaluate user-supplied stopWhen predicate(s) parked on the registry
+        // up-front so we can include them in the finality decision emitted on
+        // the iteration-complete event. The predicate is a closure and can't
+        // survive the wire, so we read it from in-process state. Cross-process
+        // engines (Inngest after worker restart) won't have the registry entry
+        // and fall back to maxSteps only.
+        let stopWhenMatched = false;
+        if (shouldContinue && underMaxSteps) {
+          const registryEntry = globalRunRegistry.get(state.runId);
+          const stopWhen = registryEntry?.stopWhen;
+          if (stopWhen && state.accumulatedSteps.length > 0) {
+            const conditions = Array.isArray(stopWhen) ? stopWhen : [stopWhen];
+            // Mirror agentic-loop: cast steps to any for v5/v6 StopCondition shape
+            // compatibility — the StepRecord we accumulate is sufficient at runtime.
+            const steps = state.accumulatedSteps as any;
+            const results = await Promise.all(conditions.map(condition => condition({ steps })));
+            stopWhenMatched = results.some(Boolean);
+          }
+        }
+
+        const isFinal = !shouldContinue || !underMaxSteps || stopWhenMatched;
+
+        // Emit an iteration-complete event for observability. This fires after
+        // every iteration (including the last one) so client callbacks can
+        // track progress. continue/feedback return values are not honored —
+        // the loop's continuation is governed by isContinued + maxSteps +
+        // stopWhen above.
+        if (pubsub) {
+          const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
+          await emitIterationCompleteEvent(pubsub, state.runId, {
+            iteration: state.iterationCount,
+            maxIterations: runMaxSteps,
+            text: lastStep?.text,
+            toolCalls: lastStep?.toolCalls,
+            toolResults: lastStep?.toolResults,
+            isFinal,
+            finishReason: lastStep?.finishReason,
+            runId: state.runId,
+            threadId: initData.state?.threadId,
+            resourceId: initData.state?.resourceId,
+            agentId: initData.agentId,
+            agentName: initData.agentName,
+          });
+        }
+
+        return !isFinal;
       })
       // Map final state to output format, run output processors, persist memory, emit finish
       .map(
         async params => {
-          const { inputData, mastra, requestContext } = params;
+          const { inputData, mastra, requestContext, tracingContext } = params;
           const state = inputData as IterationState;
           const initData = params.getInitData() as DurableAgenticWorkflowInput;
 
@@ -263,7 +363,14 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
               });
               const outputMessageList = new MessageList();
               outputMessageList.deserialize(state.messageListState);
-              await runner.runOutputProcessors(outputMessageList, {} as any, requestContext ?? new RequestContext(), 0);
+              // Forward the step's tracingContext so processor_run spans parent
+              // to the AGENT_RUN ancestor via ProcessorRunner's findParent walk.
+              await runner.runOutputProcessors(
+                outputMessageList,
+                createObservabilityContext(tracingContext),
+                requestContext ?? new RequestContext(),
+                0,
+              );
             } catch (error) {
               logger?.warn?.(`[DurableAgent] Error running output processors: ${error}`);
             }
@@ -321,6 +428,35 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
               output: finalOutput.output,
               stepResult: finalOutput.stepResult,
             });
+          }
+
+          // End MODEL_GENERATION then AGENT_RUN once at completion. After a resume the
+          // originals were ended as `suspended`, so end the *resume* spans (registry override).
+          try {
+            const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({
+              requestContext,
+            });
+            const reg = globalRunRegistry.get(initData.runId);
+            const modelSpanData = reg?.resumeModelSpanData ?? initData.modelSpanData;
+            const agentSpanData = reg?.resumeAgentSpanData ?? initData.agentSpanData;
+            if (observability) {
+              if (modelSpanData) {
+                const modelSpan = observability.rebuildSpan(
+                  modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>,
+                ) as AIModelGenerationSpan | undefined;
+                modelSpan?.createTracker()?.endGeneration({
+                  output: { text: finalText },
+                  attributes: { finishReason: finalOutput.stepResult?.reason },
+                  usage: state.accumulatedUsage,
+                });
+              }
+              if (agentSpanData) {
+                const agentSpan = observability.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
+                agentSpan?.end({ output: { text: finalText } });
+              }
+            }
+          } catch (error) {
+            logger?.warn?.(`[DurableAgent] Error ending observability spans: ${error}`);
           }
 
           return finalOutput;

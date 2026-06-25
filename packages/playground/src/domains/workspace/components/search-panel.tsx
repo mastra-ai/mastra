@@ -1,4 +1,6 @@
-import { Button, Input, SkillIcon } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { Search, Loader2, Sparkles, FileText, Zap, FolderOpen } from 'lucide-react';
 import { useState } from 'react';
 import type { SearchResult, SearchResponse, SkillSearchResult } from '../types';
@@ -84,7 +86,8 @@ export function SearchWorkspacePanel({
               value={query}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
               placeholder="Search workspace files..."
-              className="pl-9 h-10 bg-surface2 border-border1"
+              variant="outline"
+              className="pl-9 h-10"
             />
           </div>
 

@@ -333,7 +333,7 @@ export function buildMessagesFromChunks({
     .join('\n');
 
   // Build a single assistant message with all parts in stream order
-  const message: MastraDBMessage = {
+  const message = {
     id: messageId,
     role: 'assistant' as const,
     content: {
@@ -342,8 +342,7 @@ export function buildMessagesFromChunks({
       ...(contentString ? { content: contentString } : {}),
       ...responseModelMetadata,
     },
-    createdAt: new Date(),
-  };
+  } as MastraDBMessage;
 
   return [message];
 }

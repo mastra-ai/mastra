@@ -15,7 +15,7 @@ Expected result: each thread restores its own pack selection instead of using on
 ## 2) Model usage ranking
 
 - [ ] Open `/models` and choose a pack that uses a model you can repeatedly select.
-- [ ] Re-select the same model multiple times (through pack switches or model picks that call `switchModel`).
+- [ ] Re-select the same model multiple times (through pack switches or model picks that call `session.model.switch`).
 - [ ] Re-open the model selector.
 - [ ] Confirm frequently selected models appear higher in the sorted list.
 

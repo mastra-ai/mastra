@@ -20,6 +20,7 @@ import xxhash from 'xxhash-wasm';
 
 import { validateConfig, isCloudSqlConfig, isConnectionStringConfig, isHostConfig } from '../shared/config';
 import type { PgVectorConfig } from '../shared/config';
+import { buildConnectionStringPoolConfig } from '../shared/pool-config';
 import { PGFilterTranslator } from './filter';
 import type { PGVectorFilter } from './filter';
 import { buildFilterQuery, buildDeleteFilterQuery } from './sql-builder';
@@ -119,18 +120,18 @@ export class PgVector extends MastraVector<PGVectorFilter> {
   constructor(config: PgVectorConfig & { id: string }) {
     try {
       validateConfig('PgVector', config);
-      super({ id: config.id });
+      super({ id: config.id, disableInit: config.disableInit });
 
       this.schema = config.schemaName;
 
       let poolConfig: pg.PoolConfig;
 
       if (isConnectionStringConfig(config)) {
+        // Delegate to the shared helper so an explicit `ssl` option wins over an
+        // `sslmode=`/`ssl=` query param in the connection string, matching
+        // PostgresStore. See https://github.com/mastra-ai/mastra/issues/17307
         poolConfig = {
-          connectionString: config.connectionString,
-          ssl: config.ssl,
-          max: config.max ?? 20,
-          idleTimeoutMillis: config.idleTimeoutMillis ?? 30000,
+          ...buildConnectionStringPoolConfig(config, { max: 20, idleTimeoutMillis: 30000 }),
           connectionTimeoutMillis: 2000,
           ...config.pgPoolOptions,
         };
@@ -865,6 +866,11 @@ export class PgVector extends MastraVector<PGVectorFilter> {
       );
       this.logger?.trackException(mastraError);
       throw mastraError;
+    }
+
+    // Skip all DDL when init is disabled - caller manages schema/extension/tables/indexes externally
+    if (this.disableInit || process.env.MASTRA_DISABLE_STORAGE_INIT === 'true') {
+      return;
     }
 
     const indexCacheKey = await this.getIndexCacheKey({

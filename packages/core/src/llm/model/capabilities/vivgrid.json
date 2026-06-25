@@ -1,0 +1,11 @@
+{
+  "attachment": [
+    "gemini-3.1-flash-lite-preview",
+    "gemini-3.1-pro-preview",
+    "gpt-5-mini",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.4-nano",
+    "gpt-5.5"
+  ]
+}

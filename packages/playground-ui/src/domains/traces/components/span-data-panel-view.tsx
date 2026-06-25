@@ -53,6 +53,12 @@ export interface SpanDataPanelViewProps {
   feedbackTabSlot?: (args: { span: SpanRecord; traceId: string; spanId: string }) => ReactNode;
   /** Optional count shown in the "Feedback" tab label. */
   feedbackTabBadge?: ReactNode;
+  /**
+   * Whether this span is the displayed root of the current view (trace root or
+   * branch anchor). Controls visibility of trace-level metadata fields. Defaults
+   * to `span.parentSpanId == null` (trace case) when omitted.
+   */
+  isAnchor?: boolean;
 }
 
 export function SpanDataPanelView({
@@ -69,6 +75,7 @@ export function SpanDataPanelView({
   scoringTabBadge,
   feedbackTabSlot,
   feedbackTabBadge,
+  isAnchor,
 }: SpanDataPanelViewProps) {
   return (
     <DataPanel>
@@ -102,6 +109,7 @@ export function SpanDataPanelView({
           scoringTabBadge={scoringTabBadge}
           feedbackTabSlot={feedbackTabSlot}
           feedbackTabBadge={feedbackTabBadge}
+          isAnchor={isAnchor}
         />
       )}
     </DataPanel>
@@ -118,6 +126,7 @@ function SpanDataPanelContent({
   scoringTabBadge,
   feedbackTabSlot,
   feedbackTabBadge,
+  isAnchor,
 }: {
   span: SpanRecord;
   traceId: string;
@@ -128,6 +137,7 @@ function SpanDataPanelContent({
   scoringTabBadge?: ReactNode;
   feedbackTabSlot?: (args: { span: SpanRecord; traceId: string; spanId: string }) => ReactNode;
   feedbackTabBadge?: ReactNode;
+  isAnchor?: boolean;
 }) {
   const durationMs =
     span.startedAt && span.endedAt ? new Date(span.endedAt).getTime() - new Date(span.startedAt).getTime() : null;
@@ -146,9 +156,9 @@ function SpanDataPanelContent({
       {usage && <SpanTokenUsage usage={usage} className="mb-3" />}
 
       <DataKeysAndValues>
-        {/* Root-span only: rich trace-context fields. Live on the full SpanRecord, not on the
+        {/* Anchor-only: rich trace-context fields. Live on the full SpanRecord, not on the
          *  lightweight payload, so they only have values once the full span is loaded. */}
-        {span.parentSpanId == null && (
+        {(isAnchor ?? span.parentSpanId == null) && (
           <>
             {span.traceId && (
               <>

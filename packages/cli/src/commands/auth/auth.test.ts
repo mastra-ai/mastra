@@ -30,6 +30,8 @@ const mockLoadCredentials = vi.fn();
 const mockGetCurrentOrgId = vi.fn().mockResolvedValue('org-1');
 const mockSetCurrentOrgId = vi.fn().mockResolvedValue(undefined);
 const mockClearCredentials = vi.fn().mockResolvedValue(undefined);
+const mockVerifyToken = vi.fn().mockResolvedValue(false);
+const mockTryRefreshToken = vi.fn().mockResolvedValue(null);
 const mockLogin = vi.fn().mockResolvedValue({
   token: 'new-token',
   user: { id: 'u1', email: 'user@test.com', firstName: 'A', lastName: 'B' },
@@ -42,6 +44,8 @@ vi.mock('./credentials.js', () => ({
   getCurrentOrgId: mockGetCurrentOrgId,
   setCurrentOrgId: mockSetCurrentOrgId,
   clearCredentials: mockClearCredentials,
+  verifyToken: mockVerifyToken,
+  tryRefreshToken: mockTryRefreshToken,
   login: mockLogin,
 }));
 
@@ -61,6 +65,8 @@ beforeEach(() => {
   vi.resetAllMocks();
   mockGetToken.mockResolvedValue('test-token');
   mockGetCurrentOrgId.mockResolvedValue('org-1');
+  mockVerifyToken.mockResolvedValue(false);
+  mockTryRefreshToken.mockResolvedValue(null);
   mockFetchOrgs.mockResolvedValue([
     { id: 'org-1', name: 'Test Org', role: 'admin', isCurrent: true },
     { id: 'org-2', name: 'Other Org', role: 'member', isCurrent: false },
@@ -77,7 +83,59 @@ afterEach(() => {
 /* ------------------------------------------------------------------ */
 
 describe('loginAction', () => {
-  it('calls login()', async () => {
+  it('calls login() when no existing credentials', async () => {
+    mockLoadCredentials.mockResolvedValue(null);
+    const { loginAction } = await import('./login.js');
+    await loginAction();
+    expect(mockLogin).toHaveBeenCalled();
+  });
+
+  it('skips login() and prints user when existing token is still valid', async () => {
+    mockLoadCredentials.mockResolvedValue({
+      token: 'tok',
+      user: { id: 'u1', email: 'existing@test.com', firstName: 'A', lastName: 'B' },
+      organizationId: 'org-1',
+    });
+    mockVerifyToken.mockResolvedValue(true);
+
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { loginAction } = await import('./login.js');
+    await loginAction();
+
+    expect(mockLogin).not.toHaveBeenCalled();
+    const output = spy.mock.calls.map(c => c[0]).join('\n');
+    expect(output).toContain('Already logged in as existing@test.com');
+    spy.mockRestore();
+  });
+
+  it('skips login() when refresh succeeds for an expired token', async () => {
+    mockLoadCredentials.mockResolvedValue({
+      token: 'expired',
+      refreshToken: 'r',
+      user: { id: 'u1', email: 'existing@test.com', firstName: 'A', lastName: 'B' },
+      organizationId: 'org-1',
+    });
+    mockVerifyToken.mockResolvedValue(false);
+    mockTryRefreshToken.mockResolvedValue('new-tok');
+
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { loginAction } = await import('./login.js');
+    await loginAction();
+
+    expect(mockLogin).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it('falls back to login() when verify and refresh both fail', async () => {
+    mockLoadCredentials.mockResolvedValue({
+      token: 'expired',
+      refreshToken: 'r',
+      user: { id: 'u1', email: 'existing@test.com', firstName: 'A', lastName: 'B' },
+      organizationId: 'org-1',
+    });
+    mockVerifyToken.mockResolvedValue(false);
+    mockTryRefreshToken.mockResolvedValue(null);
+
     const { loginAction } = await import('./login.js');
     await loginAction();
     expect(mockLogin).toHaveBeenCalled();

@@ -1,5 +1,6 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import { Skeleton, lodashTitleCase } from '@mastra/playground-ui';
+import { lodashTitleCase } from '@mastra/playground-ui';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { ReactFlowProvider } from '@xyflow/react';
 import { AlertCircleIcon } from 'lucide-react';
 import { useContext } from 'react';

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { resetStorage } from '../__utils__/reset-storage';
+import { expectCurrentBreadcrumb } from '../__utils__/route-header';
 
 test.beforeEach(async () => {
   await resetStorage();
@@ -13,7 +14,7 @@ test('has page title', async ({ page }) => {
   await page.goto('/settings');
 
   await expect(page).toHaveTitle(/Mastra Studio/);
-  await expect(page.locator('h1')).toHaveText('Settings');
+  await expectCurrentBreadcrumb(page, 'Settings');
 });
 
 test('renders settings form', async ({ page }) => {

@@ -4,8 +4,8 @@ import { z } from 'zod/v4';
 import type { MessageList } from '../../../agent/message-list';
 import { RequestContext } from '../../../request-context';
 import { ToolStream } from '../../../tools/stream';
-import { createStep } from '../../../workflows';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../../../workflows/constants';
+import { createStep } from '../../../workflows/evented';
 import type { ExecuteFunctionParams } from '../../../workflows/step';
 import { createLLMMappingStep } from './llm-mapping-step';
 
@@ -997,6 +997,131 @@ describe('createLLMMappingStep toModelOutput', () => {
             modelOutput: {
               type: 'text',
               value: 'Transformed: {"temperature":72,"conditions":"sunny"}',
+            },
+          }),
+        }),
+      }),
+    );
+
+    // The emitted tool-result chunk should also carry modelOutput on providerMetadata
+    // so harness consumers (e.g. mastracode TUI) can read it without going through the messageList.
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-result',
+        payload: expect.objectContaining({
+          toolCallId: 'call-1',
+          providerMetadata: expect.objectContaining({
+            mastra: expect.objectContaining({
+              modelOutput: {
+                type: 'text',
+                value: 'Transformed: {"temperature":72,"conditions":"sunny"}',
+              },
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('should preserve media parts in toModelOutput', async () => {
+    const toModelOutputMock = vi.fn(() => ({
+      type: 'content',
+      value: [
+        { type: 'media', data: 'base64png', mediaType: 'image/png' },
+        { type: 'media', data: 'base64pdf', mediaType: 'application/pdf' },
+        { type: 'text', text: 'caption' },
+      ],
+    }));
+
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: { generateId: () => 'test-message-id' },
+        tools: {
+          screenshot: {
+            execute: async () => ({ base64: 'abc' }),
+            toModelOutput: toModelOutputMock,
+            inputSchema: z.object({}),
+          },
+        },
+      } as any,
+      llmExecutionStep,
+    );
+
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'screenshot',
+        args: {},
+        result: { base64: 'abc' },
+      },
+    ];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerMetadata: expect.objectContaining({
+          mastra: expect.objectContaining({
+            modelOutput: {
+              type: 'content',
+              value: [
+                { type: 'media', data: 'base64png', mediaType: 'image/png' },
+                { type: 'media', data: 'base64pdf', mediaType: 'application/pdf' },
+                { type: 'text', text: 'caption' },
+              ],
+            },
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('should not throw when toModelOutput returns malformed content entries', async () => {
+    const toModelOutputMock = vi.fn(() => ({
+      type: 'content',
+      value: [null, undefined, 'not-an-object', { type: 'media', data: 'abc', mediaType: 'image/png' }],
+    }));
+
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: { generateId: () => 'test-message-id' },
+        tools: {
+          screenshot: {
+            execute: async () => ({ base64: 'abc' }),
+            toModelOutput: toModelOutputMock,
+            inputSchema: z.object({}),
+          },
+        },
+      } as any,
+      llmExecutionStep,
+    );
+
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'screenshot',
+        args: {},
+        result: { base64: 'abc' },
+      },
+    ];
+
+    await expect(llmMappingStep.execute(createExecuteParams(inputData))).resolves.not.toThrow();
+
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerMetadata: expect.objectContaining({
+          mastra: expect.objectContaining({
+            modelOutput: {
+              type: 'content',
+              value: [null, undefined, 'not-an-object', { type: 'media', data: 'abc', mediaType: 'image/png' }],
             },
           }),
         }),

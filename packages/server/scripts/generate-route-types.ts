@@ -251,7 +251,13 @@ async function formatGeneratedFileContent(fileContent: string): Promise<string> 
 }
 
 const rawFileContent = generateRouteTypesFileContent();
-const fileContent = await formatGeneratedFileContent(rawFileContent);
+
+// Strip `[x: string]: never` index signatures emitted by zod-to-ts for `.strict()` schemas.
+// These conflict with concrete properties under `strict: true` in tsconfig, producing
+// TS errors like "Property 'modelId' of type 'string' is not assignable to 'string' index type 'never'".
+const cleanedFileContent = rawFileContent.replace(/\[x:\s*string\]:\s*never;?\s*\n?/g, '');
+
+const fileContent = await formatGeneratedFileContent(cleanedFileContent);
 const existingFileContent = fs.existsSync(OUTPUT_PATH) ? fs.readFileSync(OUTPUT_PATH, 'utf8') : null;
 
 if (existingFileContent !== fileContent) {

@@ -1,4 +1,4 @@
-import { PageHeader, PageLayout } from '@mastra/playground-ui';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { BookIcon, EarthIcon, MessageSquareIcon, ExternalLinkIcon, CloudUploadIcon, BuildingIcon } from 'lucide-react';
 
 const resources = [
@@ -50,14 +50,6 @@ const resources = [
 export default function Resources() {
   return (
     <PageLayout width="narrow">
-      <PageLayout.TopArea>
-        <PageHeader>
-          <PageHeader.Title>
-            <BookIcon /> Resources
-          </PageHeader.Title>
-        </PageHeader>
-      </PageLayout.TopArea>
-
       <PageLayout.MainArea>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-3xl">
           {resources.map(resource => (

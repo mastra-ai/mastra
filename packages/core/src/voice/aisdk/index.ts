@@ -1,2 +1,1 @@
-export * from './speech';
-export * from './transcription';
+export { AISDKSpeech, AISDKTranscription } from '@internal/voice';

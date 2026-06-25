@@ -1,20 +1,12 @@
 import type { UpdateStoredScorerParams } from '@mastra/client-js';
-import {
-  Notice,
-  Badge,
-  Button,
-  Header,
-  HeaderAction,
-  HeaderTitle,
-  Icon,
-  MainContentLayout,
-  Skeleton,
-  Spinner,
-  toast,
-} from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
-import { GaugeIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import { AgentEditLayout } from '@/domains/agents/components/agent-edit-page/agent-edit-layout';
@@ -26,6 +18,7 @@ import type { ScorerFormValues } from '@/domains/scores/components/scorer-edit-p
 import { ScorerVersionCombobox } from '@/domains/scores/components/scorer-version-combobox';
 import { useScorerVersions, useScorerVersion } from '@/domains/scores/hooks/use-scorer-versions';
 import { useLinkComponent } from '@/lib/framework';
+import { RouteHeaderActions } from '@/lib/route-header';
 
 type StoredScorerData = NonNullable<ReturnType<typeof useStoredScorer>['data']>;
 
@@ -139,7 +132,7 @@ function CmsScorersEditForm({
       // Fetch latest version after save and activate it
       const versionsResponse = await client
         .getStoredScorer(scorerId)
-        .listVersions({ sortDirection: 'DESC', perPage: 1 });
+        .listVersions({ orderBy: { direction: 'DESC' }, perPage: 1 });
       const latestVersion = versionsResponse.versions[0];
       if (latestVersion) {
         await client.getStoredScorer(scorerId).activateVersion(latestVersion.id);
@@ -224,7 +217,7 @@ function CmsScorersEditPage() {
   const { data: scorer, isLoading } = useStoredScorer(scorerId, { status: 'draft' });
   const { data: versionsData } = useScorerVersions({
     scorerId: scorerId ?? '',
-    params: { sortDirection: 'DESC' },
+    params: { orderBy: { direction: 'DESC' } },
   });
 
   const activeVersionId = scorer?.activeVersionId;
@@ -248,24 +241,16 @@ function CmsScorersEditPage() {
 
   if (isLoading) {
     return (
-      <MainContentLayout>
-        <Header>
-          <HeaderTitle>
-            <Icon>
-              <GaugeIcon />
-            </Icon>
-            <Skeleton className="h-6 w-[200px]" />
-          </HeaderTitle>
-        </Header>
+      <MainContentLayout className="grid-rows-[1fr]">
         <AgentEditLayout
           leftSlot={
             <div className="flex items-center justify-center h-full">
-              <Spinner className="h-8 w-8" />
+              <Spinner className="size-8" />
             </div>
           }
         >
           <div className="flex items-center justify-center h-full">
-            <Spinner className="h-8 w-8" />
+            <Spinner className="size-8" />
           </div>
         </AgentEditLayout>
       </MainContentLayout>
@@ -274,15 +259,7 @@ function CmsScorersEditPage() {
 
   if (!scorer || !scorerId) {
     return (
-      <MainContentLayout>
-        <Header>
-          <HeaderTitle>
-            <Icon>
-              <GaugeIcon />
-            </Icon>
-            Scorer not found
-          </HeaderTitle>
-        </Header>
+      <MainContentLayout className="grid-rows-[1fr]">
         <AgentEditLayout
           leftSlot={<div className="flex items-center justify-center h-full text-neutral3">Scorer not found</div>}
         >
@@ -293,25 +270,19 @@ function CmsScorersEditPage() {
   }
 
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>
-          <Icon>
-            <GaugeIcon />
-          </Icon>
-          Edit scorer: {scorer.name}
+    <MainContentLayout className="grid-rows-[1fr]">
+      <RouteHeaderActions owner="cms-scorer-edit">
+        <div className="flex items-center gap-2">
           {hasDraft && <Badge variant="info">Unpublished changes</Badge>}
-        </HeaderTitle>
-        <HeaderAction>
           <ScorerVersionCombobox
             scorerId={scorerId}
             value={selectedVersionId ?? ''}
             onValueChange={handleVersionSelect}
-            variant="outline"
+            variant="ghost"
             activeVersionId={activeVersionId}
           />
-        </HeaderAction>
-      </Header>
+        </div>
+      </RouteHeaderActions>
       <CmsScorersEditForm
         scorer={scorer}
         scorerId={scorerId}

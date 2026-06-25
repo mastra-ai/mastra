@@ -1,6 +1,8 @@
 import { version } from '@mastra/core/package.json';
-import { AgentIcon, Breadcrumb, Crumb, Header, Icon, MainContentLayout, ToolsIcon } from '@mastra/playground-ui';
-import { BrainIcon, PackageIcon, TagIcon, WorkflowIcon } from 'lucide-react';
+import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import { BrainIcon, TagIcon, WorkflowIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { TemplateFailure } from '@/domains/templates/template-failure';
@@ -325,20 +327,6 @@ export default function Template() {
 
   return (
     <MainContentLayout>
-      <Header>
-        <Breadcrumb>
-          <Crumb as={Link} to={`/templates`}>
-            <Icon>
-              <PackageIcon />
-            </Icon>
-            Templates
-          </Crumb>
-
-          <Crumb as={Link} to={`/templates/${template?.slug}`} isCurrent>
-            {template?.title && template.title}
-          </Crumb>
-        </Breadcrumb>
-      </Header>
       <div className={cn('w-full lg:px-12 h-full overflow-y-scroll')}>
         <div className="p-6 w-full max-w-[80rem] mx-auto grid gap-y-4">
           <TemplateInfo

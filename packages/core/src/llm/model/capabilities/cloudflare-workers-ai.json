@@ -1,0 +1,9 @@
+{
+  "attachment": [
+    "@cf/google/gemma-4-26b-a4b-it",
+    "@cf/meta/llama-3.2-11b-vision-instruct",
+    "@cf/meta/llama-4-scout-17b-16e-instruct",
+    "@cf/moonshotai/kimi-k2.6",
+    "@cf/moonshotai/kimi-k2.7-code"
+  ]
+}

@@ -32,6 +32,10 @@ export const Tab = ({ children, value, onClick, onClose, disabled, className }: 
         'group-data-[variant=pill]/tabs-list:relative group-data-[variant=pill]/tabs-list:z-10',
         'group-data-[variant=pill]/tabs-list:py-1 group-data-[variant=pill]/tabs-list:px-3',
         'group-data-[variant=pill]/tabs-list:rounded-full',
+        // Pill-ghost variant (pill without list background)
+        'group-data-[variant=pill-ghost]/tabs-list:relative group-data-[variant=pill-ghost]/tabs-list:z-10',
+        'group-data-[variant=pill-ghost]/tabs-list:py-1 group-data-[variant=pill-ghost]/tabs-list:px-3',
+        'group-data-[variant=pill-ghost]/tabs-list:rounded-full',
         className,
       )}
       onClick={onClick}

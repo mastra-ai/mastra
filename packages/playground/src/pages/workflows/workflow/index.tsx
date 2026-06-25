@@ -1,7 +1,42 @@
-import { PermissionDenied, SessionExpired, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import type { GetWorkflowResponse } from '@mastra/client-js';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { useParams } from 'react-router';
+import { WorkflowStepDetailContent } from '@/domains/workflows/components/workflow-step-detail';
+import { useWorkflowStepDetail } from '@/domains/workflows/context/workflow-step-detail-context';
+import { WorkflowStepDetailProvider } from '@/domains/workflows/context/workflow-step-detail-provider';
 import { WorkflowGraph } from '@/domains/workflows/workflow/workflow-graph';
+import { WorkflowSuspendedOverlay } from '@/domains/workflows/workflow/workflow-suspended-overlay';
+import { WorkflowTimeline } from '@/domains/workflows/workflow/workflow-timeline';
 import { useWorkflow } from '@/hooks/use-workflows';
+
+interface WorkflowContentProps {
+  workflowId: string;
+  workflow?: GetWorkflowResponse;
+  isLoading: boolean;
+}
+
+const WorkflowContent = ({ workflowId, workflow, isLoading }: WorkflowContentProps) => {
+  const { stepDetail } = useWorkflowStepDetail();
+
+  return (
+    <div className="flex h-full min-h-0">
+      <div className="flex h-full min-h-0 flex-1 flex-col">
+        <div className="relative min-h-0 flex-1 p-2 pb-0">
+          <WorkflowGraph workflowId={workflowId} workflow={workflow} isLoading={isLoading} />
+          <WorkflowSuspendedOverlay />
+          <WorkflowTimeline />
+        </div>
+      </div>
+      {stepDetail && (
+        <div className="w-[420px] min-h-0 overflow-hidden border-l border-border1">
+          <WorkflowStepDetailContent />
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const Workflow = () => {
   const { workflowId } = useParams();
@@ -25,5 +60,9 @@ export const Workflow = () => {
     );
   }
 
-  return <WorkflowGraph workflowId={workflowId!} workflow={workflow ?? undefined} isLoading={isLoading} />;
+  return (
+    <WorkflowStepDetailProvider>
+      <WorkflowContent workflowId={workflowId!} workflow={workflow ?? undefined} isLoading={isLoading} />
+    </WorkflowStepDetailProvider>
+  );
 };

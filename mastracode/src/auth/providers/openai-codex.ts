@@ -11,6 +11,8 @@
 // NEVER convert to top-level imports - breaks browser/Vite builds (web-ui)
 let _randomBytes: ((size: number) => Buffer) | null = null;
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
+let _cryptoPromise: Promise<typeof import('node:crypto')> | null = null;
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 let _httpPromise: Promise<typeof import('node:http')> | null = null;
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 let _http: typeof import('node:http') | null = null;
@@ -21,8 +23,9 @@ type HttpServer = {
   close: () => void;
 };
 if (typeof process !== 'undefined' && (process.versions?.node || process.versions?.bun)) {
-  import('node:crypto').then(m => {
+  _cryptoPromise = import('node:crypto').then(m => {
     _randomBytes = m.randomBytes;
+    return m;
   });
   _httpPromise = import('node:http').then(m => {
     _http = m;
@@ -31,14 +34,34 @@ if (typeof process !== 'undefined' && (process.versions?.node || process.version
 }
 
 import { generatePKCE } from '../pkce.js';
-import type { OAuthCredentials, OAuthLoginCallbacks, OAuthPrompt, OAuthProviderInterface } from '../types.js';
+import type { AuthMode, OAuthCredentials, OAuthLoginCallbacks, OAuthPrompt, OAuthProviderInterface } from '../types.js';
+
+export const OPENAI_CODEX_AUTH_MODES: ReadonlyArray<AuthMode> = [
+  {
+    id: 'browser',
+    name: 'Browser (local callback)',
+    description: 'Opens the browser and waits for the OAuth callback on localhost.',
+  },
+  {
+    id: 'device',
+    name: 'Device code (headless)',
+    description: 'Shows a code to enter at openai.com — for SSH, remote, or no-browser environments.',
+  },
+];
 
 const CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann';
-const AUTHORIZE_URL = 'https://auth.openai.com/oauth/authorize';
-const TOKEN_URL = 'https://auth.openai.com/oauth/token';
+const ISSUER = 'https://auth.openai.com';
+const AUTHORIZE_URL = `${ISSUER}/oauth/authorize`;
+const TOKEN_URL = `${ISSUER}/oauth/token`;
+const DEVICE_USER_CODE_URL = `${ISSUER}/api/accounts/deviceauth/usercode`;
+const DEVICE_TOKEN_URL = `${ISSUER}/api/accounts/deviceauth/token`;
+const DEVICE_AUTHORIZE_URL = `${ISSUER}/codex/device`;
+const DEVICE_REDIRECT_URI = `${ISSUER}/deviceauth/callback`;
 const DEFAULT_CALLBACK_PORT = 1455;
 const FALLBACK_CALLBACK_PORT = 1457;
-const SCOPE = 'openid profile email offline_access';
+const DEFAULT_TOKEN_EXPIRES_IN_SECONDS = 3600;
+const DEVICE_AUTH_TIMEOUT_MS = 15 * 60 * 1000;
+const SCOPE = 'openid profile email offline_access api.connectors.read api.connectors.invoke';
 const JWT_CLAIM_PATH = 'https://api.openai.com/auth';
 
 const SUCCESS_HTML = `<!doctype html>
@@ -58,22 +81,22 @@ type TokenSuccess = {
   access: string;
   refresh: string;
   expires: number;
+  idToken?: string;
 };
 type TokenFailure = { type: 'failed' };
 type TokenResult = TokenSuccess | TokenFailure;
 
 type JwtPayload = {
+  chatgpt_account_id?: string;
   [JWT_CLAIM_PATH]?: {
     chatgpt_account_id?: string;
   };
   [key: string]: unknown;
 };
 
-function createState(): string {
-  if (!_randomBytes) {
-    throw new Error('OpenAI Codex OAuth is only available in Node.js environments');
-  }
-  return _randomBytes(16).toString('hex');
+async function createState(): Promise<string> {
+  const randomBytes = await getRandomBytes();
+  return randomBytes(16).toString('hex');
 }
 
 function parseAuthorizationInput(input: string): {
@@ -114,11 +137,61 @@ function decodeJwt(token: string): JwtPayload | null {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
     const payload = parts[1] ?? '';
-    const decoded = atob(payload);
+    const padded = payload
+      .replace(/-/g, '+')
+      .replace(/_/g, '/')
+      .padEnd(Math.ceil(payload.length / 4) * 4, '=');
+    const decoded = atob(padded);
     return JSON.parse(decoded) as JwtPayload;
   } catch {
     return null;
   }
+}
+
+function extractAccountIdFromClaims(payload: JwtPayload | null | undefined): string | null {
+  if (!payload) return null;
+  const accountId = payload.chatgpt_account_id ?? payload[JWT_CLAIM_PATH]?.chatgpt_account_id;
+  return typeof accountId === 'string' && accountId.length > 0 ? accountId : null;
+}
+
+function getAccountId(tokens: { idToken?: string; access: string }, fallback?: string): string | undefined {
+  const fromIdToken = tokens.idToken ? extractAccountIdFromClaims(decodeJwt(tokens.idToken)) : null;
+  if (fromIdToken) return fromIdToken;
+
+  const fromAccessToken = extractAccountIdFromClaims(decodeJwt(tokens.access));
+  if (fromAccessToken) return fromAccessToken;
+
+  return fallback;
+}
+
+function requireAccountId(tokens: { idToken?: string; access: string }, fallback?: string): string {
+  const accountId = getAccountId(tokens, fallback);
+  if (!accountId) {
+    throw new Error('Failed to extract ChatGPT account id from OpenAI Codex token');
+  }
+  return accountId;
+}
+
+type TokenResponseJson = {
+  id_token?: string;
+  access_token?: string;
+  refresh_token?: string;
+  expires_in?: number;
+};
+
+function tokenResponseToResult(json: TokenResponseJson, logPrefix: string): TokenResult {
+  if (!json.access_token || !json.refresh_token) {
+    console.error(`[openai-codex] ${logPrefix} response missing fields:`, json);
+    return { type: 'failed' };
+  }
+
+  return {
+    type: 'success',
+    access: json.access_token,
+    refresh: json.refresh_token,
+    expires: Date.now() + (json.expires_in ?? DEFAULT_TOKEN_EXPIRES_IN_SECONDS) * 1000,
+    idToken: json.id_token,
+  };
 }
 
 async function exchangeAuthorizationCode(code: string, verifier: string, redirectUri: string): Promise<TokenResult> {
@@ -140,23 +213,7 @@ async function exchangeAuthorizationCode(code: string, verifier: string, redirec
     return { type: 'failed' };
   }
 
-  const json = (await response.json()) as {
-    access_token?: string;
-    refresh_token?: string;
-    expires_in?: number;
-  };
-
-  if (!json.access_token || !json.refresh_token || typeof json.expires_in !== 'number') {
-    console.error('[openai-codex] token response missing fields:', json);
-    return { type: 'failed' };
-  }
-
-  return {
-    type: 'success',
-    access: json.access_token,
-    refresh: json.refresh_token,
-    expires: Date.now() + json.expires_in * 1000,
-  };
+  return tokenResponseToResult((await response.json()) as TokenResponseJson, 'token');
 }
 
 async function refreshAccessToken(refreshToken: string): Promise<TokenResult> {
@@ -177,33 +234,27 @@ async function refreshAccessToken(refreshToken: string): Promise<TokenResult> {
       return { type: 'failed' };
     }
 
-    const json = (await response.json()) as {
-      access_token?: string;
-      refresh_token?: string;
-      expires_in?: number;
-    };
-
-    if (!json.access_token || !json.refresh_token || typeof json.expires_in !== 'number') {
-      console.error('[openai-codex] Token refresh response missing fields:', json);
-      return { type: 'failed' };
-    }
-
-    return {
-      type: 'success',
-      access: json.access_token,
-      refresh: json.refresh_token,
-      expires: Date.now() + json.expires_in * 1000,
-    };
+    return tokenResponseToResult((await response.json()) as TokenResponseJson, 'Token refresh');
   } catch (error) {
     console.error('[openai-codex] Token refresh error:', error);
     return { type: 'failed' };
   }
 }
 
+async function getRandomBytes() {
+  if (!_randomBytes && _cryptoPromise) {
+    _randomBytes = (await _cryptoPromise).randomBytes;
+  }
+  if (!_randomBytes) {
+    throw new Error('OpenAI Codex OAuth is only available in Node.js environments');
+  }
+  return _randomBytes;
+}
+
 async function createAuthorizationFlow(
   redirectUri: string,
   state: string,
-  originator: string = 'pi',
+  originator: string = 'mastracode',
 ): Promise<{ verifier: string; url: string }> {
   const { verifier, challenge } = await generatePKCE();
 
@@ -364,11 +415,107 @@ async function startLocalOAuthServer(
   });
 }
 
-function getAccountId(accessToken: string): string | null {
-  const payload = decodeJwt(accessToken);
-  const auth = payload?.[JWT_CLAIM_PATH];
-  const accountId = auth?.chatgpt_account_id;
-  return typeof accountId === 'string' && accountId.length > 0 ? accountId : null;
+async function loginOpenAICodexDevice(options: {
+  onAuth: (info: { url: string; instructions?: string }) => void;
+  onProgress?: (message: string) => void;
+  signal?: AbortSignal;
+  sleep?: (ms: number) => Promise<void>;
+}): Promise<OAuthCredentials> {
+  const response = await fetch(DEVICE_USER_CODE_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'User-Agent': 'mastracode',
+    },
+    body: JSON.stringify({ client_id: CLIENT_ID, originator: 'mastracode' }),
+    signal: options.signal,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to initiate OpenAI Codex device authorization: ${response.status}`);
+  }
+
+  const deviceData = (await response.json()) as {
+    device_auth_id?: string;
+    user_code?: string;
+    usercode?: string;
+    interval?: string | number;
+  };
+
+  const userCode = deviceData.user_code ?? deviceData.usercode;
+
+  if (!deviceData.device_auth_id || !userCode) {
+    throw new Error('OpenAI Codex device authorization response missing required fields');
+  }
+
+  const intervalSeconds =
+    typeof deviceData.interval === 'number' ? deviceData.interval : Number.parseInt(deviceData.interval ?? '', 10) || 5;
+  const pollDelayMs = Math.max(intervalSeconds, 1) * 1000;
+  const sleep = options.sleep ?? (ms => new Promise<void>(resolve => setTimeout(resolve, ms)));
+  const startedAt = Date.now();
+
+  options.onAuth({
+    url: DEVICE_AUTHORIZE_URL,
+    instructions: `Enter code: ${userCode}`,
+  });
+
+  while (true) {
+    if (options.signal?.aborted) {
+      throw new Error('Login cancelled');
+    }
+    if (Date.now() - startedAt >= DEVICE_AUTH_TIMEOUT_MS) {
+      throw new Error('OpenAI Codex device authorization timed out after 15 minutes');
+    }
+
+    const pollResponse = await fetch(DEVICE_TOKEN_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'mastracode',
+      },
+      body: JSON.stringify({
+        device_auth_id: deviceData.device_auth_id,
+        user_code: userCode,
+      }),
+      signal: options.signal,
+    });
+
+    if (pollResponse.ok) {
+      const data = (await pollResponse.json()) as {
+        authorization_code?: string;
+        code_verifier?: string;
+      };
+
+      if (!data.authorization_code || !data.code_verifier) {
+        throw new Error('OpenAI Codex device token response missing required fields');
+      }
+
+      const tokenResult = await exchangeAuthorizationCode(
+        data.authorization_code,
+        data.code_verifier,
+        DEVICE_REDIRECT_URI,
+      );
+      if (tokenResult.type !== 'success') {
+        throw new Error('Token exchange failed');
+      }
+
+      const accountId = requireAccountId(tokenResult);
+      return {
+        access: tokenResult.access,
+        refresh: tokenResult.refresh,
+        expires: tokenResult.expires,
+        accountId,
+      };
+    }
+
+    if (pollResponse.status !== 403 && pollResponse.status !== 404) {
+      const text = await pollResponse.text().catch(() => '');
+      throw new Error(`OpenAI Codex device authorization failed: ${pollResponse.status}${text ? ` ${text}` : ''}`);
+    }
+
+    options.onProgress?.('Waiting for OpenAI Codex device authorization...');
+    await sleep(pollDelayMs);
+  }
 }
 
 /**
@@ -380,21 +527,40 @@ function getAccountId(accessToken: string): string | null {
  * @param options.onManualCodeInput - Optional promise that resolves with user-pasted code.
  *                                    Races with browser callback - whichever completes first wins.
  *                                    Useful for showing paste input immediately alongside browser flow.
- * @param options.originator - OAuth originator parameter (defaults to "pi")
+ * @param options.originator - OAuth originator parameter (defaults to "mastracode")
  */
 export async function loginOpenAICodex(options: {
   onAuth: (info: { url: string; instructions?: string }) => void;
   onPrompt: (prompt: OAuthPrompt) => Promise<string>;
   onProgress?: (message: string) => void;
   onManualCodeInput?: () => Promise<string>;
+  signal?: AbortSignal;
   originator?: string;
+  mode?: 'browser' | 'device';
 }): Promise<OAuthCredentials> {
-  const state = createState();
+  const envMode =
+    typeof process !== 'undefined' && process.env?.MASTRACODE_OPENAI_CODEX_AUTH_MODE === 'device'
+      ? 'device'
+      : undefined;
+  const mode = options.mode ?? envMode ?? 'browser';
+  if (mode === 'device') {
+    return loginOpenAICodexDevice({
+      onAuth: options.onAuth,
+      onProgress: options.onProgress,
+      signal: options.signal,
+    });
+  }
+
+  const state = await createState();
   const server = await startLocalOAuthServer(state);
   if (server.warning) {
     options.onProgress?.(server.warning);
   }
-  const { verifier, url } = await createAuthorizationFlow(server.redirectUri, state, options.originator);
+  const { verifier, url } = await createAuthorizationFlow(
+    server.redirectUri,
+    state,
+    options.originator ?? 'mastracode',
+  );
 
   options.onAuth({
     url,
@@ -482,10 +648,7 @@ export async function loginOpenAICodex(options: {
       throw new Error('Token exchange failed');
     }
 
-    const accountId = getAccountId(tokenResult.access);
-    if (!accountId) {
-      throw new Error('Failed to extract accountId from token');
-    }
+    const accountId = requireAccountId(tokenResult);
 
     return {
       access: tokenResult.access,
@@ -500,22 +663,27 @@ export async function loginOpenAICodex(options: {
 
 export const __testing = {
   createAuthorizationFlow,
+  decodeJwt,
+  extractAccountIdFromClaims,
+  getAccountId,
+  loginOpenAICodexDevice,
+  requireAccountId,
   startLocalOAuthServer,
 };
 
 /**
  * Refresh OpenAI Codex OAuth token
  */
-export async function refreshOpenAICodexToken(refreshToken: string): Promise<OAuthCredentials> {
+export async function refreshOpenAICodexToken(
+  refreshToken: string,
+  previousAccountId?: string,
+): Promise<OAuthCredentials> {
   const result = await refreshAccessToken(refreshToken);
   if (result.type !== 'success') {
     throw new Error('Failed to refresh OpenAI Codex token');
   }
 
-  const accountId = getAccountId(result.access);
-  if (!accountId) {
-    throw new Error('Failed to extract accountId from token');
-  }
+  const accountId = requireAccountId(result, previousAccountId);
 
   return {
     access: result.access,
@@ -529,18 +697,22 @@ export const openaiCodexOAuthProvider: OAuthProviderInterface = {
   id: 'openai-codex',
   name: 'ChatGPT Plus/Pro (Codex Subscription)',
   usesCallbackServer: true,
+  authModes: OPENAI_CODEX_AUTH_MODES,
 
   async login(callbacks: OAuthLoginCallbacks): Promise<OAuthCredentials> {
+    const mode = callbacks.authMode === 'device' || callbacks.authMode === 'browser' ? callbacks.authMode : undefined;
     return loginOpenAICodex({
       onAuth: callbacks.onAuth,
       onPrompt: callbacks.onPrompt,
       onProgress: callbacks.onProgress,
       onManualCodeInput: callbacks.onManualCodeInput,
+      signal: callbacks.signal,
+      mode,
     });
   },
 
   async refreshToken(credentials: OAuthCredentials): Promise<OAuthCredentials> {
-    return refreshOpenAICodexToken(credentials.refresh);
+    return refreshOpenAICodexToken(credentials.refresh, credentials.accountId as string | undefined);
   },
 
   getApiKey(credentials: OAuthCredentials): string {

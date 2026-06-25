@@ -6,7 +6,8 @@
  */
 
 import { createOpenAI } from '@ai-sdk/openai-v5';
-import { config } from 'dotenv';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { setupDummyApiKeys } from '@internal/test-utils';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../../mastra';
@@ -16,11 +17,11 @@ import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
-config();
+setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const describeE2E = process.env.OPENAI_API_KEY ? describe : describe.skip;
+const describeE2E = describe.skip;
 
 const testStorage = new MockStore();
 
@@ -88,7 +89,7 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
     // Wire the workflow event processor pubsub subscriptions so the
     // bg-task workflow (engine='workflow', the default) can run to
     // completion. Without this, runs hang and the agent stream times out.
-    await mastra.startEventEngine();
+    await mastra.startWorkers();
   });
 
   afterEach(async () => {
@@ -96,7 +97,7 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
     if (manager) {
       await manager.shutdown();
     }
-    await mastra.stopEventEngine();
+    await mastra.stopWorkers();
     const backgroundTasksStore = await testStorage.getStore('backgroundTasks');
     await backgroundTasksStore?.dangerouslyClearAll();
   });
@@ -229,7 +230,7 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
       },
       storage: testStorage,
     });
-    await memoryMastra.startEventEngine();
+    await memoryMastra.startWorkers();
 
     try {
       const stream1 = await memoryDurableAgent.stream('Please research "neural networks" for me', {
@@ -302,7 +303,7 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
       expect(allContent).toContain('bob');
     } finally {
       await memoryMastra.backgroundTaskManager?.shutdown();
-      await memoryMastra.stopEventEngine();
+      await memoryMastra.stopWorkers();
     }
   }, 60_000);
 
@@ -335,7 +336,7 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
       },
       storage: testStorage,
     });
-    await memoryMastra.startEventEngine();
+    await memoryMastra.startWorkers();
 
     try {
       const result = await memoryDurableAgent.streamUntilIdle('Please research "quantum computing" for me', {
@@ -374,7 +375,7 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
       result.cleanup();
     } finally {
       await memoryMastra.backgroundTaskManager?.shutdown();
-      await memoryMastra.stopEventEngine();
+      await memoryMastra.stopWorkers();
     }
   }, 60_000);
 
@@ -434,7 +435,7 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
       backgroundTasks: { enabled: true, globalConcurrency: 5, perAgentConcurrency: 3 },
       storage: testStorage,
     });
-    await memoryMastra.startEventEngine();
+    await memoryMastra.startWorkers();
 
     try {
       // --- Initial turn: dispatches bg task, which suspends ---
@@ -501,7 +502,7 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
       stream2.cleanup();
     } finally {
       await memoryMastra.backgroundTaskManager?.shutdown();
-      await memoryMastra.stopEventEngine();
+      await memoryMastra.stopWorkers();
     }
   }, 90_000);
 
@@ -532,7 +533,7 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
       },
       storage: testStorage,
     });
-    await memoryMastra.startEventEngine();
+    await memoryMastra.startWorkers();
 
     try {
       const result = await memoryDurableAgent.streamUntilIdle('Greet someone named Carol', {
@@ -563,7 +564,7 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
       result.cleanup();
     } finally {
       await memoryMastra.backgroundTaskManager?.shutdown();
-      await memoryMastra.stopEventEngine();
+      await memoryMastra.stopWorkers();
     }
   }, 30_000);
 });

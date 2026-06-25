@@ -6,7 +6,8 @@ import {
 } from '@internal/storage-test-utils';
 import { createClient } from '@libsql/client';
 import { Mastra } from '@mastra/core/mastra';
-import { vi } from 'vitest';
+import { TABLE_MESSAGES, TABLE_THREADS } from '@mastra/core/storage';
+import { describe, expect, it, vi } from 'vitest';
 
 import { DatasetsLibSQL } from './domains/datasets';
 import { ExperimentsLibSQL } from './domains/experiments';
@@ -96,4 +97,99 @@ createDomainDirectTests({
       maxRetries: 10,
       initialBackoffMs: 200,
     }),
+});
+
+describe('MemoryLibSQL', () => {
+  it('clears storage when the resources table has not been migrated yet', async () => {
+    const client = createTestClient();
+    try {
+      const memory = new MemoryLibSQL({ client });
+      await client.execute(`CREATE TABLE IF NOT EXISTS ${TABLE_THREADS} (
+        id TEXT PRIMARY KEY,
+        resourceId TEXT NOT NULL,
+        title TEXT NOT NULL,
+        metadata TEXT,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      )`);
+      await client.execute(`CREATE TABLE IF NOT EXISTS ${TABLE_MESSAGES} (
+        id TEXT PRIMARY KEY,
+        thread_id TEXT NOT NULL,
+        content TEXT NOT NULL,
+        role TEXT NOT NULL,
+        type TEXT NOT NULL,
+        createdAt TEXT NOT NULL,
+        resourceId TEXT
+      )`);
+
+      await expect(memory.dangerouslyClearAll()).resolves.toBeUndefined();
+    } finally {
+      client.close();
+    }
+  });
+});
+
+describe('LibSQLStore notifications domain', () => {
+  it('exposes notifications through the composite store', async () => {
+    const client = createTestClient();
+    try {
+      const store = new LibSQLStore({ id: 'libsql-notifications-test', client, maxRetries: 1, initialBackoffMs: 10 });
+      await store.init();
+
+      const notifications = await store.getStore('notifications');
+      expect(notifications).toBeDefined();
+
+      const record = await notifications!.createNotification({
+        id: 'notification-1',
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        agentId: 'agent-1',
+        source: 'mastracode',
+        kind: 'manual',
+        summary: 'Composite notification',
+      });
+
+      expect(record.id).toBe('notification-1');
+      await expect(
+        notifications!.getNotification({ threadId: 'thread-1', id: 'notification-1' }),
+      ).resolves.toMatchObject({
+        summary: 'Composite notification',
+      });
+    } finally {
+      client.close();
+    }
+  });
+});
+
+describe('LibSQLStore harness domain', () => {
+  it('exposes harness sessions through the composite store', async () => {
+    const client = createTestClient();
+    try {
+      const store = new LibSQLStore({ id: 'libsql-harness-test', client, maxRetries: 1, initialBackoffMs: 10 });
+      await store.init();
+
+      const harness = await store.getStore('harness');
+      expect(harness).toBeDefined();
+
+      await harness!.saveSession({
+        id: 'session-1',
+        ownerId: 'owner-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        origin: 'top-level',
+        modeId: 'mode-1',
+        modelId: '__GATEWAY_OPENAI_MODEL__',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        lastActivityAt: new Date('2026-01-01T00:00:00.000Z'),
+        metadata: { from: 'composite' },
+      });
+
+      await expect(harness!.loadSession('session-1')).resolves.toMatchObject({
+        id: 'session-1',
+        metadata: { from: 'composite' },
+      });
+    } finally {
+      client.close();
+    }
+  });
 });

@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 
 export interface CommonBinary {
   name: string;
@@ -29,6 +29,7 @@ const COMMON_BINARIES = [
 ] as const;
 
 let cachedBinaries: CommonBinary[] | null = null;
+let inFlightPromise: Promise<CommonBinary[]> | null = null;
 
 function resolveBinary(name: string): string | null {
   const command = process.platform === 'win32' ? 'where' : 'which';
@@ -40,6 +41,19 @@ function resolveBinary(name: string): string | null {
   }
 }
 
+function resolveBinaryAsync(name: string): Promise<string | null> {
+  const command = process.platform === 'win32' ? 'where' : 'which';
+  return new Promise(resolve => {
+    execFile(command, [name], { encoding: 'utf-8' }, (err, stdout) => {
+      if (err) {
+        resolve(null);
+        return;
+      }
+      resolve(stdout.trim().split(/\r?\n/)[0] || null);
+    });
+  });
+}
+
 export function detectCommonBinaries(): CommonBinary[] {
   cachedBinaries ??= COMMON_BINARIES.map(name => ({
     name,
@@ -47,4 +61,23 @@ export function detectCommonBinaries(): CommonBinary[] {
   }));
 
   return cachedBinaries;
+}
+
+export async function detectCommonBinariesAsync(): Promise<CommonBinary[]> {
+  if (cachedBinaries) return cachedBinaries;
+  if (inFlightPromise) return inFlightPromise;
+
+  inFlightPromise = Promise.all(
+    COMMON_BINARIES.map(async name => ({
+      name,
+      path: await resolveBinaryAsync(name),
+    })),
+  );
+
+  try {
+    cachedBinaries = await inFlightPromise;
+    return cachedBinaries;
+  } finally {
+    inFlightPromise = null;
+  }
 }

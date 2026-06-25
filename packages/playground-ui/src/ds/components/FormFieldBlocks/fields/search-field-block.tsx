@@ -1,4 +1,3 @@
-import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { SearchIcon, XIcon } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { Button } from '../../Button';
@@ -6,6 +5,7 @@ import { Input } from '../../Input';
 import type { InputProps } from '../../Input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../Tooltip';
 import { FieldBlock } from '../block/field-block';
+import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
 
 export type SearchFieldBlockProps = {
@@ -25,6 +25,7 @@ export type SearchFieldBlockProps = {
   layout?: 'horizontal' | 'vertical';
   className?: string;
   size?: InputProps['size'];
+  variant?: InputProps['variant'];
   isMinimized?: boolean;
   onMinimizedChange?: (minimized: boolean) => void;
 };
@@ -44,10 +45,12 @@ export function SearchFieldBlock({
   onReset,
   className,
   size,
+  variant,
   isMinimized,
   onMinimizedChange,
 }: SearchFieldBlockProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const buttonSize = size === 'default' ? 'lg' : size;
 
   useEffect(() => {
     if (isMinimized === false) {
@@ -60,7 +63,7 @@ export function SearchFieldBlock({
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
-            size={size || 'sm'}
+            size={buttonSize || 'sm'}
             aria-label={label || 'Search'}
             disabled={disabled}
             onClick={() => onMinimizedChange?.(false)}
@@ -97,6 +100,7 @@ export function SearchFieldBlock({
             placeholder={placeholder}
             onChange={onChange}
             size={size}
+            variant={variant}
             className={cn(
               size === 'sm' && 'pl-8 pr-8',
               size === 'md' && 'pl-9 pr-9',
@@ -117,7 +121,7 @@ export function SearchFieldBlock({
           {onReset && (value || isMinimized === false) && (
             <Button
               variant="ghost"
-              size={size || 'default'}
+              size={buttonSize || 'lg'}
               aria-label="Clear search"
               onClick={() => {
                 if (value) {

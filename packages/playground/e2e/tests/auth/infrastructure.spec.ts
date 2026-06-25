@@ -23,6 +23,7 @@ import {
   buildAuthCapabilities,
 } from '../__utils__/auth';
 import { resetStorage } from '../__utils__/reset-storage';
+import { expectCurrentBreadcrumb } from '../__utils__/route-header';
 
 test.describe('Auth Infrastructure', () => {
   test.afterEach(async () => {
@@ -153,7 +154,7 @@ test.describe('Auth Infrastructure', () => {
       });
 
       await page.goto('/agents');
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       // With RBAC off, permission-gated links are visible again.
       await expect(page.getByRole('link', { name: /^Tools$/i })).toBeVisible();

@@ -1,5 +1,4 @@
-import { Header, HeaderTitle, Icon, MainContentLayout } from '@mastra/playground-ui';
-import { BookIcon } from 'lucide-react';
+import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { PromptBlockCreateContent } from '@/domains/prompt-blocks';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -7,15 +6,7 @@ function CmsPromptBlocksCreatePage() {
   const { navigate, paths } = useLinkComponent();
 
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>
-          <Icon>
-            <BookIcon />
-          </Icon>
-          Create a prompt block
-        </HeaderTitle>
-      </Header>
+    <MainContentLayout className="grid-rows-[1fr]">
       <PromptBlockCreateContent onSuccess={block => navigate(paths.cmsPromptBlockEditLink(block.id))} />
     </MainContentLayout>
   );

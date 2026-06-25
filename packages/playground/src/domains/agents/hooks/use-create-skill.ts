@@ -1,16 +1,20 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { toast } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { extractSkillInstructions, extractSkillLicense } from '../components/agent-cms-pages/skill-file-tree';
+import { extractSkillInstructions, extractSkillLicense } from '../components/agent-cms-pages/skill-file-tree-utils';
 import type { InMemoryFileNode } from '../components/agent-edit-page/utils/form-validation';
+import { usePermissions } from '@/domains/auth/hooks';
 import { useWriteWorkspaceFile } from '@/domains/workspace/hooks';
 
 interface CreateSkillParams {
+  /** Optional client-generated id. When omitted, the server derives one from the name. */
+  id?: string;
   name: string;
   description: string;
-  workspaceId: string;
+  instructions?: string;
+  visibility?: 'private' | 'public';
+  workspaceId?: string;
   files: InMemoryFileNode[];
 }
 
@@ -31,39 +35,48 @@ export function useCreateSkill() {
   const client = useMastraClient();
   const queryClient = useQueryClient();
   const writeFile = useWriteWorkspaceFile();
+  const { hasPermission } = usePermissions();
+  const canWriteWorkspace = hasPermission('workspaces:write');
 
   return useMutation({
     mutationFn: async (params: CreateSkillParams): Promise<StoredSkillResponse> => {
-      const { name, description, workspaceId, files } = params;
-      // Write all files to workspace filesystem
-      const filesToWrite = flattenFiles(files, '');
-      await Promise.all(
-        filesToWrite.map(file =>
-          writeFile.mutateAsync({
-            workspaceId,
-            path: `skills/${file.path}`,
-            content: file.content,
-            recursive: true,
-          }),
-        ),
-      );
+      const { id, name, description, instructions, workspaceId, files } = params;
 
-      // Create stored skill via API
+      // Write files to workspace filesystem (best-effort — DB is the source of truth)
+      if (workspaceId && canWriteWorkspace) {
+        const filesToWrite = flattenFiles(files, '');
+        try {
+          await Promise.all(
+            filesToWrite.map(file =>
+              writeFile.mutateAsync({
+                workspaceId,
+                path: `skills/${file.path}`,
+                content: file.content,
+                recursive: true,
+              }),
+            ),
+          );
+        } catch (err) {
+          console.warn('[skill] Workspace file write failed, saving to DB only:', err);
+        }
+      }
+
+      // Create stored skill via API (DB record always created)
       return client.createStoredSkill({
+        ...(id ? { id } : {}),
         name,
         description,
-        instructions: extractSkillInstructions(files),
+        visibility: params.visibility,
+        instructions: instructions ?? extractSkillInstructions(files),
         license: extractSkillLicense(files),
         files,
       });
     },
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['stored-skills'] });
-      void queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
-      toast.success('Skill created');
-    },
-    onError: error => {
-      toast.error(`Failed to create skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      if (variables.workspaceId) {
+        void queryClient.invalidateQueries({ queryKey: ['workspace', 'skills', variables.workspaceId] });
+      }
     },
   });
 }

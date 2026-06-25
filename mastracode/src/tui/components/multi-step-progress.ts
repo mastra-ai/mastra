@@ -3,9 +3,10 @@
  * Shows detailed progress with steps, timing, and visual feedback.
  */
 
-import { Container, Text, Spacer } from '@mariozechner/pi-tui';
+import { Container, matchesKey, Text } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { theme, mastra } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 
 export interface ProgressStep {
   id: string;
@@ -123,7 +124,6 @@ export class MultiStepProgressComponent extends Container {
     const elapsed = this.formatDuration(now - this.startTime);
     const headerText = `${theme.bold(theme.fg('accent', this.options.title))} ${progressBar} ${overallProgress}% (${elapsed})`;
 
-    this.addChild(new Spacer(1));
     this.addChild(new Text(headerText, 0, 0));
 
     // Show collapsed summary or full detail
@@ -257,7 +257,7 @@ export class MultiStepProgressComponent extends Container {
    * Handle keyboard input for expanding/collapsing.
    */
   handleInput(data: string): boolean {
-    if (data === ' ' || data === '\r') {
+    if (matchesKey(data, 'space') || matchesKey(data, 'enter')) {
       this.toggleCollapsed();
       return true;
     }
@@ -267,5 +267,9 @@ export class MultiStepProgressComponent extends Container {
   render(maxWidth: number): string[] {
     this.rebuild();
     return super.render(maxWidth);
+  }
+
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'other';
   }
 }

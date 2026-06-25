@@ -56,6 +56,10 @@ function createMockBrowser(
       .fn()
       .mockImplementation((threadId?: string) => (threadId ? `${browserId}:${threadId}` : browserId)),
     getCurrentUrl: vi.fn().mockResolvedValue('https://example.com'),
+    getBrowserState: vi.fn().mockResolvedValue({
+      tabs: [{ url: 'https://example.com', title: 'Example' }],
+      activeTabIndex: 0,
+    }),
     startScreencast: vi.fn().mockResolvedValue({ on: vi.fn(), stop: vi.fn() }),
     startScreencastIfBrowserActive: vi.fn().mockResolvedValue(null),
     injectMouseEvent: vi.fn().mockResolvedValue(undefined),
@@ -160,10 +164,10 @@ describe('Agent browser integration', () => {
       // Execute a generate call - this should inject browser context
       const result = await agent.generate('Hello');
 
-      // Without a threadId, browser context injection calls isBrowserRunning and getCurrentUrl
+      // Without a threadId, browser context injection calls isBrowserRunning and getBrowserState
       // hasThreadSession is only called when a threadId is provided
       expect(browser.isBrowserRunning).toHaveBeenCalled();
-      expect(browser.getCurrentUrl).toHaveBeenCalled();
+      expect(browser.getBrowserState).toHaveBeenCalled();
       expect(browser.getSessionId).toHaveBeenCalled();
 
       // Verify the result completed successfully
@@ -193,7 +197,7 @@ describe('Agent browser integration', () => {
       // With a threadId, browser context injection should also check hasThreadSession
       expect(browser.isBrowserRunning).toHaveBeenCalled();
       expect(browser.hasThreadSession).toHaveBeenCalledWith('test-thread-123');
-      expect(browser.getCurrentUrl).toHaveBeenCalledWith('test-thread-123');
+      expect(browser.getBrowserState).toHaveBeenCalledWith('test-thread-123');
       expect(browser.getSessionId).toHaveBeenCalledWith('test-thread-123');
 
       // Verify the result completed successfully
@@ -208,6 +212,26 @@ describe('Agent browser integration', () => {
 
       // With threadId, returns composite ID
       expect(browser.getSessionId('thread-456')).toBe('browser-123:thread-456');
+    });
+
+    it('continues when browser state lookup fails', async () => {
+      const browser = createMockBrowser();
+      browser.isBrowserRunning = vi.fn().mockReturnValue(true);
+      browser.getBrowserState = vi.fn().mockRejectedValue(new Error('CDP connection lost'));
+
+      const agent = new Agent({
+        id: 'test-agent' as const,
+        name: 'test-agent',
+        instructions: 'test',
+        model: createMockModel(),
+        browser,
+      });
+
+      const result = await agent.generate('Hello');
+
+      // Should not throw, returns degraded state instead of aborting
+      expect(result.text).toBe('OK');
+      expect(browser.getBrowserState).toHaveBeenCalled();
     });
   });
 });

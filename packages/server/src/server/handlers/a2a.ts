@@ -36,15 +36,47 @@ import { convertInstructionsToString } from '../utils';
 import { getAgentFromSystem } from './agents';
 import { getPublicOrigin } from './auth';
 
+// Mirrors @a2a-js/sdk's Part discriminated union (text | file | data) and the
+// part shape already declared in ../schemas/a2a.ts. Before this widening, the
+// schema hard-coded `kind: z.enum(['text'])` which rejected every non-text
+// part before the converter could see it — even though convertToCoreMessagePart
+// at ../a2a/protocol.ts already handles file and data parts. With this change,
+// FilePart (FileWithBytes | FileWithUri) and DataPart parse successfully and
+// reach the converter (data parts then throw a clear "not supported in core
+// messages" message; files convert natively to AI-SDK CoreMessage file parts).
+const messagePartSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('text'),
+    text: z.string(),
+    metadata: z.record(z.string(), z.any()).optional(),
+  }),
+  z.object({
+    kind: z.literal('file'),
+    file: z.union([
+      z.object({
+        bytes: z.string(),
+        mimeType: z.string().optional(),
+        name: z.string().optional(),
+      }),
+      z.object({
+        uri: z.string(),
+        mimeType: z.string().optional(),
+        name: z.string().optional(),
+      }),
+    ]),
+    metadata: z.record(z.string(), z.any()).optional(),
+  }),
+  z.object({
+    kind: z.literal('data'),
+    data: z.record(z.string(), z.any()),
+    metadata: z.record(z.string(), z.any()).optional(),
+  }),
+]);
+
 const messageSendParamsSchema = z.object({
   message: z.object({
     role: z.enum(['user', 'agent']),
-    parts: z.array(
-      z.object({
-        kind: z.enum(['text']),
-        text: z.string(),
-      }),
-    ),
+    parts: z.array(messagePartSchema),
     kind: z.literal('message'),
     messageId: z.string(),
     contextId: z.string().optional(),

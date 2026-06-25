@@ -3,8 +3,8 @@
  * Shows a preconfigured input with the current default value that the user can edit.
  */
 
-import { Box, getEditorKeybindings, Input, Spacer, Text } from '@mariozechner/pi-tui';
-import type { Focusable } from '@mariozechner/pi-tui';
+import { Box, getKeybindings, Input, Spacer, Text } from '@earendil-works/pi-tui';
+import type { Focusable } from '@earendil-works/pi-tui';
 
 import { theme } from '../theme.js';
 
@@ -55,8 +55,8 @@ export class GoalCyclesDialogComponent extends Box implements Focusable {
   }
 
   handleInput(data: string): void {
-    const kb = getEditorKeybindings();
-    if (kb.matches(data, 'selectCancel')) {
+    const kb = getKeybindings();
+    if (kb.matches(data, 'tui.select.cancel')) {
       this.onCancel();
       return;
     }

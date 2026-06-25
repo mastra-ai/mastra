@@ -1,4 +1,4 @@
-import { MastraA2AError } from '@mastra/core/a2a';
+import { MastraA2AError } from '@mastra/core/a2a/client';
 import type {
   AgentCard,
   DeleteTaskPushNotificationConfigParams,
@@ -21,7 +21,7 @@ import type {
   TaskPushNotificationConfig,
   TaskQueryParams,
   TaskStatusUpdateEvent,
-} from '@mastra/core/a2a';
+} from '@mastra/core/a2a/client';
 import type { ClientOptions } from '../types';
 import { MastraClientError as MastraClientErrorClass } from '../types';
 import { processA2AStream } from '../utils/process-a2a-stream';

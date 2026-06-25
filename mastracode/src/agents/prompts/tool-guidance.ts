@@ -78,6 +78,15 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
 - Use \`${MC_TOOLS.SEARCH_CONTENT}\` or \`${MC_TOOLS.FIND_FILES}\` first if you do not yet know where the symbol is.`);
   }
 
+  if (!denied.has(MC_TOOLS.NOTIFICATION_INBOX)) {
+    readTools.push(`
+**${MC_TOOLS.NOTIFICATION_INBOX}** — Inspect and manage notification inbox records
+- Use this when a \`<notification-summary>\` says pending notifications exist.
+- Use \`{ "action": "list", "status": "pending" }\` or \`{ "action": "search", "query": "..." }\` to find notification records for the current thread.
+- Use \`read\` to deliver unread notification signals into the chat and mark them seen; the tool result summarizes the count instead of exposing notification contents.
+- Use \`dismiss\` or \`archive\` only when the user asks or the notification is no longer relevant.`);
+  }
+
   if (readTools.length > 0) {
     sections.push(readTools.join('\n'));
   }
@@ -196,7 +205,7 @@ ${patchToolGuidance}
     sections.push(taskTools.join('\n'));
   }
 
-  // --- Plan submission tool (plan mode) ---
+  // --- Plan tools (plan mode) ---
 
   if (modeId === 'plan' && !denied.has('submit_plan')) {
     sections.push(`
@@ -205,6 +214,15 @@ ${patchToolGuidance}
 - The plan will be rendered as markdown and the user can approve, reject, or request changes.
 - On approval, the system automatically switches to the default mode so you can implement.
 - Takes two arguments: \`title\` (short descriptive title) and \`plan\` (full plan in markdown).`);
+  }
+
+  if (modeId === 'plan') {
+    sections.push(`
+**Plan file access** — Your plan lives in \`.mastracode/plans/\` with a filename derived from the title (e.g. \`add-dark-mode-toggle.md\`)
+- Use \`write_file\` to create the plan file, \`view\` to read it, and \`string_replace_lsp\` for targeted edits.
+- On first submission: write the plan to the file, then call \`submit_plan\`.
+- On revision: read the existing file, edit specific sections, re-read, then call \`submit_plan\` with updated content.
+- If a plan file already exists, you previously submitted it — read it before revising.`);
   }
 
   // --- Subagent tool (all modes) ---

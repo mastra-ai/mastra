@@ -36,6 +36,27 @@ export function createSkillTools(skills: WorkspaceSkills) {
   };
 }
 
+/**
+ * Format a skill into the activation payload: instructions followed by
+ * any references/scripts/assets listings. Shared between the `skill` tool
+ * and explicit user activations so both paths produce identical output.
+ */
+export function formatSkillActivation(skill: Skill): string {
+  const parts = [skill.instructions];
+
+  if (skill.references?.length) {
+    parts.push(`\n\n## References\n${skill.references.map(r => `- references/${r}`).join('\n')}`);
+  }
+  if (skill.scripts?.length) {
+    parts.push(`\n\n## Scripts\n${skill.scripts.map(s => `- scripts/${s}`).join('\n')}`);
+  }
+  if (skill.assets?.length) {
+    parts.push(`\n\n## Assets\n${skill.assets.map(a => `- assets/${a}`).join('\n')}`);
+  }
+
+  return parts.join('');
+}
+
 // =============================================================================
 // Individual Tools
 // =============================================================================
@@ -83,20 +104,10 @@ function createSkillTool(skills: WorkspaceSkills) {
         }
 
         const { skill } = result;
-        const parts = [skill.instructions];
-
-        if (skill.references?.length) {
-          parts.push(`\n\n## References\n${skill.references.map(r => `- references/${r}`).join('\n')}`);
-        }
-        if (skill.scripts?.length) {
-          parts.push(`\n\n## Scripts\n${skill.scripts.map(s => `- scripts/${s}`).join('\n')}`);
-        }
-        if (skill.assets?.length) {
-          parts.push(`\n\n## Assets\n${skill.assets.map(a => `- assets/${a}`).join('\n')}`);
-        }
+        const output = formatSkillActivation(skill);
 
         span.end({ success: true });
-        return parts.join('');
+        return output;
       } catch (err) {
         span.error(err);
         throw err;

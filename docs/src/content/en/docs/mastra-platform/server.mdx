@@ -1,0 +1,279 @@
+---
+title: "Server | Mastra platform"
+description: Deploy and host your Mastra application as a production API server on Mastra platform.
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Server on Mastra platform
+
+Server on Mastra platform is a production deployment target that runs your Mastra application as an API server. Use it when you want the platform to build, deploy, host, and manage your Mastra server.
+
+You get a stable API endpoint, environment variable management, custom domain support, and deploy history out of the box.
+
+:::note
+
+Server deploy provisions hosted storage automatically. If you override storage with [LibSQLStore](/reference/storage/libsql) and a file URL, switch to a remotely hosted database because Mastra platform uses an ephemeral filesystem.
+
+:::
+
+## Quickstart
+
+<Steps>
+  <StepItem>
+    Follow the [get started guide](/docs) to create your first Mastra project.
+  </StepItem>
+
+  <StepItem>
+    Install the `mastra` CLI globally:
+
+    ```bash npm2yarn
+    npm install -g mastra
+    ```
+  </StepItem>
+
+  <StepItem>
+    Deploy your project:
+
+    ```bash
+    mastra server deploy
+    ```
+
+    If you're not already authenticated, the CLI prompts you to log in. It stores your credentials locally and any subsequent CLI commands use these credentials.
+
+    The command runs `mastra build`, uploads the artifact, builds a Docker image, and deploys it. On first deploy, the CLI creates a `.mastra-project.json` file linking your local project to the platform. Commit this file so subsequent deploys and CI/CD target the same project.
+
+    :::note
+    Environment variables from `.env`, `.env.local`, and `.env.production` are included automatically. On the first deploy, these seed the project if no env vars are set yet. After that, manage env vars through the web dashboard.
+    Review and sanitize these files before first deploy to avoid uploading development-only or personal secrets.
+    :::
+
+    See the [CLI reference](/reference/cli/mastra#mastra-server-deploy) for the full list of flags.
+  </StepItem>
+
+  <StepItem>
+    Verify your deployment at the URL printed by the CLI. Append `/api/agents` to confirm it returns a JSON list of your agents.
+
+    :::warning
+    Set up [authentication](/docs/server/auth) before exposing your endpoints publicly.
+    :::
+  </StepItem>
+</Steps>
+
+## Deploy lifecycle
+
+A deploy transitions through **queued → uploading → building → deploying → running** (or **failed**, **cancelled**, **crashed**, or **stopped**). Only one build runs per project at a time. If multiple deploys queue up, only the latest proceeds and the rest are cancelled. Builds running longer than 15 minutes are automatically failed. The first deploy provisions infrastructure and seeds environment variables from your local `.env`. Your server URL remains stable across deploys.
+
+## Idle behavior
+
+Server on Mastra platform can sleep a service after a period of inactivity to save resources. Inactivity is measured by outbound network traffic. A service is considered idle only after roughly 10 minutes with no outbound packets. Any recurring outbound traffic resets this timer and keeps the service awake.
+
+A server that never sleeps usually has a background task or a long-lived connection sending traffic on a timer. Check for the following common causes.
+
+### Persistent database connections
+
+A database client that stays open keeps the connection alive even when the server is idle. Many drivers also run a background health check that pings the database on an interval, which counts as outbound traffic. For example, a MongoDB client that's never closed keeps a monitoring socket open and sends a heartbeat about every 10 seconds.
+
+Connection pool settings that drain idle connections aren't enough on their own, because the driver's monitoring connection stays open and keeps pinging. To let the server sleep, close the client after a period of inactivity and reconnect on the next request.
+
+:::note
+Closing the client adds a short reconnect delay to the first request after the server wakes. If your workload can't tolerate that delay, keep the connection open and don't rely on idle sleep.
+:::
+
+### Scheduled tasks and timers
+
+A `setInterval`, cron job, or polling loop that makes network calls keeps the server awake. If you need scheduled work, run it as a separate service or use an external scheduler that wakes the server with a request.
+
+### External pings and keep-alive checks
+
+An uptime monitor, health check, or keep-alive ping that hits the server on an interval resets the idle timer. Remove these checks or increase their interval beyond the idle window if you want the server to sleep.
+
+### Observability exporters
+
+An exporter that streams traces, logs, or metrics to a remote endpoint sends outbound traffic. Confirm the exporter batches and stops sending when the server is idle, rather than flushing on a fixed interval.
+
+### Long-lived streams
+
+An open server-sent events (SSE) stream, WebSocket, or other long-lived connection holds traffic open until it closes. A streaming response that stays subscribed in the background keeps the connection active. Confirm streams close when the client disconnects and that no stream stays open while the server is otherwise idle.
+
+### Chat integrations
+
+Some chat integrations hold a persistent connection and send a regular heartbeat, which keeps the server awake. For example, a Slack app in Socket Mode opens a WebSocket and pings about every 30 seconds, and a Discord bot keeps its gateway WebSocket open with a heartbeat on a timer. Both the open socket and the heartbeat prevent idle.
+
+If you want the server to sleep, receive events over HTTP webhooks instead of a persistent connection where the integration supports it. Slack apps, for example, can use the Events API with a request URL instead of Socket Mode. If your app needs a persistent connection, keep the service running with the **Persistent Server add-on** described below.
+
+### Inspect active connections
+
+To find what keeps the server awake, inspect the process's active handles during idle periods. A handle that remains after all requests finish is the cause to investigate. Open sockets point to a persistent connection that needs to close, and active timers point to a `setInterval` or self-rescheduling `setTimeout`.
+
+Drop the following helper into your app, then watch the log after traffic stops. Anything still listed once the server is idle is keeping it awake:
+
+```typescript title="src/mastra/diagnose-idle.ts"
+export function logActiveHandles() {
+  // process._getActiveHandles is undocumented but useful for diagnosis.
+  const handles = (process as any)._getActiveHandles() as Array<any>
+
+  const summary = handles.map(handle => {
+    const type = handle?.constructor?.name ?? typeof handle
+    if (type === 'Socket') {
+      return `Socket -> ${handle.remoteAddress}:${handle.remotePort}`
+    }
+    return type
+  })
+
+  console.log(`[idle] ${handles.length} active handles:`, summary)
+}
+
+// Log every 30 seconds so you can see what persists while the server is idle.
+setInterval(logActiveHandles, 30_000).unref()
+```
+
+Call `unref()` on the diagnostic interval so the helper itself doesn't keep the server awake.
+
+### Keep a service running
+
+Some applications genuinely need the connections or tasks described above, such as a persistent database connection for low first-request latency, a background scheduler, or a long-lived stream. If your app requires any of these, don't force the service to sleep. Use the **Persistent Server add-on** to keep the service running continuously instead.
+
+With the **Persistent Server add-on** enabled, the service stays awake even with no traffic, so persistent connections, scheduled tasks, and open streams keep working without being interrupted by idle sleep.
+
+## CI/CD
+
+Automate deployments from GitHub Actions, GitLab CI, or any CI provider. After your first interactive deploy, CI/CD needs two things: an API token and the `.mastra-project.json` file committed to your repository.
+
+:::tip
+If your code lives on GitHub, the [GitHub integration](/docs/mastra-platform/github) gives you push-to-deploy without writing a workflow file. Use the CLI-based CI/CD flow below when you need GitLab, another CI provider, or custom build steps before deploy.
+:::
+
+### Create an API token
+
+<Steps>
+  <StepItem>
+    Run the following command locally:
+
+    ```bash
+    mastra auth tokens create ci-deploy
+    ```
+
+    The CLI prints the token once. Copy it immediately — it cannot be retrieved again.
+  </StepItem>
+
+  <StepItem>
+    Add the token as a secret in your CI provider. In GitHub Actions, go to **Settings → Secrets and variables → Actions** and create a secret named `MASTRA_API_TOKEN`.
+  </StepItem>
+
+  <StepItem>
+    Ensure your `.mastra-project.json` file is committed to the repository. The CLI reads the `organizationId` and `projectId` from this file to target the correct project during CI deploys.
+  </StepItem>
+</Steps>
+
+### The `--yes` flag
+
+Pass `--yes` (or `-y`) to skip all confirmation prompts. Without it, the CLI waits for interactive input and your CI job hangs.
+
+```bash
+mastra server deploy --yes
+```
+
+### GitHub Actions
+
+The following workflow deploys on every push to `main`:
+
+```yaml title=".github/workflows/deploy-mastra.yml"
+name: Deploy to Mastra platform
+
+on:
+  push:
+    branches: [main]
+    paths: ['src/mastra/**']
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm install
+      - name: Deploy to Mastra platform
+        run: npx mastra server deploy --yes
+        env:
+          MASTRA_API_TOKEN: ${{ secrets.MASTRA_API_TOKEN }}
+```
+
+Adjust the `paths` filter and `working-directory` if your Mastra project is in a subdirectory (e.g. a monorepo).
+
+:::note
+
+For Studio deploys, replace `mastra server deploy` with `mastra studio deploy`. The flags and environment variables are the same.
+
+:::
+
+### GitLab CI
+
+The following pipeline deploys on pushes to `main`:
+
+```yaml title=".gitlab-ci.yml"
+deploy:
+  image: node:22
+  stage: deploy
+  only:
+    - main
+  before_script:
+    - npm install
+  script:
+    - npx mastra server deploy --yes
+```
+
+Add `MASTRA_API_TOKEN` as a CI/CD variable in **Settings → CI/CD → Variables**.
+
+### Other CI providers
+
+Any CI system that runs Node.js and shell commands works with Mastra:
+
+1. Install dependencies.
+1. Set `MASTRA_API_TOKEN` as an environment variable.
+1. Run `mastra server deploy --yes` (or `mastra studio deploy --yes`).
+
+### Verify the deploy
+
+After the workflow completes, verify the deployment by hitting the health endpoint:
+
+```bash
+curl -f https://<your-project>.server.mastra.cloud/health
+```
+
+Or check the agents endpoint, which returns a JSON list of your agents:
+
+```bash
+curl -f https://<your-project>.server.mastra.cloud/api/agents
+```
+
+The following example adds a verification step to a GitHub Actions workflow:
+
+```yaml
+- name: Verify deployment
+  run: |
+    sleep 30
+    curl -f https://<your-project>.server.mastra.cloud/health
+```
+
+### Override project config with environment variables
+
+The CLI reads `organizationId` and `projectId` from `.mastra-project.json` by default. To override these values (e.g. deploying to a different project from the same repository), set the following environment variables:
+
+| Variable | Description |
+| - | - |
+| `MASTRA_ORG_ID` | Overrides the organization ID from `.mastra-project.json`. |
+| `MASTRA_PROJECT_ID` | Overrides the project ID from `.mastra-project.json`. |
+
+## Related
+
+- [`mastra server deploy`](/reference/cli/mastra#mastra-server-deploy)
+- [`mastra server pause`](/reference/cli/mastra#mastra-server-pause)
+- [`mastra server restart`](/reference/cli/mastra#mastra-server-restart)
+- [`mastra studio deploy`](/reference/cli/mastra#mastra-studio-deploy)
+- [`mastra auth tokens`](/reference/cli/mastra#mastra-auth-tokens)
