@@ -1,10 +1,8 @@
 ---
-'@mastra/core': major
+'@mastra/core': minor
 ---
 
-Moved workspace and browser ownership from the Harness to individual sessions.
-
-`createSession` now accepts optional `workspace` and `browser` overrides that are passed directly to the `Session` constructor. These overrides are static instances only — use the Harness-level `DynamicArgument` config for per-request factory functions. When no override is provided, the Harness-level config is used as a fallback. Workspace is now required at session construction time — the `Session` constructor validates it is a `Workspace` instance and throws if missing.
+Moved workspace and browser ownership from the Harness to individual sessions. `createSession` now accepts optional `workspace` and `browser` overrides that are passed directly to the `Session` constructor. When no override is provided, the Harness-level config is used as a fallback.
 
 **Breaking changes:**
 

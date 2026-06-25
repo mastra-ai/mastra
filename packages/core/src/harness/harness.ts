@@ -1030,9 +1030,24 @@ export class Harness<TState = {}> {
     // otherwise the internal one). Re-bind when the agent currently has no
     // Mastra OR is bound to a different instance — e.g. an agent that built its
     // own internal Mastra before this Harness was registered on a parent.
+    // Done before workspace/browser propagation so that addAgent — which may
+    // resolve agent.getWorkspace() — does not prematurely invoke a workspace
+    // factory before the per-session request context is available.
     const mastra = this.getMastra();
     if (mastra && agent.getMastraInstance() !== mastra) {
       mastra.addAgent(agent);
+    }
+
+    if (this.workspace && typeof agent.hasOwnWorkspace === 'function' && !agent.hasOwnWorkspace()) {
+      agent.__setWorkspace(this.workspace);
+    }
+    if (
+      this.browser &&
+      typeof agent.hasOwnBrowser === 'function' &&
+      !agent.hasOwnBrowser() &&
+      typeof this.browser !== 'function'
+    ) {
+      agent.setBrowser(this.browser);
     }
 
     return agent;
