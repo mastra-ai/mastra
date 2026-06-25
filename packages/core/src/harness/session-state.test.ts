@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import { Harness } from './harness';
 import type { Session } from './session';
+import { createMockWorkspace } from './test-utils';
 import type { HarnessConfig, HarnessEvent } from './types';
 
 async function createSession<TState extends Record<string, unknown>>(
   config: Partial<HarnessConfig<TState>> = {},
 ): Promise<{ harness: Harness<TState>; session: Session<TState> }> {
   const harness = new Harness<TState>({
+    workspace: createMockWorkspace(),
     id: 'test-harness',
     modes: [{ id: 'build', defaultModelId: 'test-model' }],
     ...config,

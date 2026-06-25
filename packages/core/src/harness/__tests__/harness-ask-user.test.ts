@@ -16,6 +16,7 @@ import { askUserTool } from '../../tools/builtin/ask-user';
 
 import { Harness } from '../harness';
 import { SessionApproval } from '../session';
+import { createMockWorkspace } from '../test-utils';
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -81,6 +82,7 @@ async function buildHarness(id: string, input: string) {
   const registeredAgent = mastra.getAgent(`agent-${id}`);
 
   const harness = new Harness({
+    workspace: createMockWorkspace(),
     id: `harness-${id}`,
     storage,
     modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
@@ -337,6 +339,7 @@ describe('Harness: ask_user native suspension', () => {
     const mastra = new Mastra({ agents: { 'agent-serial': agent }, logger: false, storage });
     const registeredAgent = mastra.getAgent('agent-serial');
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'harness-serial',
       storage,
       modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
