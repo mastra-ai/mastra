@@ -455,6 +455,7 @@ describe('handleGoalCommand', () => {
       },
     });
     const goalManager = {
+      getGoal: vi.fn().mockReturnValue({ status: 'active' }),
       updateJudgeDefaults: vi.fn().mockResolvedValue({
         id: 'goal-1',
         objective: 'finish the task',
@@ -498,6 +499,7 @@ describe('handleGoalCommand', () => {
       },
     });
     const goalManager = {
+      getGoal: vi.fn().mockReturnValue(null),
       updateJudgeDefaults: vi.fn().mockResolvedValue(null),
       saveToThread: vi.fn().mockResolvedValue(undefined),
     };
