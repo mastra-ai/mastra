@@ -403,6 +403,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // Wrap with ModelSpanTracker to create/close MODEL_STEP and MODEL_CHUNK spans
             const trackedStream = modelSpanTracker?.wrapStream(stepBoundaryStream) ?? stepBoundaryStream;
 
+            let pendingProviderMetadata: Record<string, unknown> | undefined = undefined;
+
             try {
               for await (const chunk of trackedStream) {
                 if (!chunk) continue;
@@ -410,6 +412,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 // Forward every chunk to the client ('finish' was rewritten to 'step-finish' above).
                 if (pubsub) {
                   await emitChunkEvent(pubsub, runId, chunk);
+                }
+
+                const chunkPayloadMeta = (chunk as { payload?: { providerMetadata?: Record<string, unknown> } })
+                  ?.payload?.providerMetadata;
+                if (chunkPayloadMeta !== undefined) {
+                  pendingProviderMetadata = chunkPayloadMeta;
                 }
 
                 // Process different chunk types
@@ -426,7 +434,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       toolCallId: payload.toolCallId,
                       toolName: payload.toolName,
                       args: payload.args || {},
-                      providerMetadata: payload.providerMetadata as Record<string, unknown> | undefined,
+                      providerMetadata:
+                        (payload.providerMetadata as Record<string, unknown> | undefined) ?? pendingProviderMetadata,
                       providerExecuted: payload.providerExecuted,
                       output: payload.output,
                       activeTools: currentActiveTools ?? null,
@@ -515,6 +524,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     toolName: tc.toolName,
                     args: tc.args,
                   },
+                  ...(tc.providerMetadata !== undefined ? { providerMetadata: tc.providerMetadata } : {}),
+                  ...(tc.providerExecuted !== undefined ? { providerExecuted: tc.providerExecuted } : {}),
                 });
               }
 
