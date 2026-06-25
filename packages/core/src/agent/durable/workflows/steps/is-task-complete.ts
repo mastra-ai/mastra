@@ -32,7 +32,7 @@ import { emitChunkEvent } from '../../stream-adapter';
  *  - Emits an `is-task-complete` chunk via pubsub so external observers see
  *    the verdict and payload exactly like the non-durable path.
  */
-export function createDurableIsTaskCompleteStep() {
+export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = DurableAgentDefaults.MAX_STEPS) {
   // The step is a pass-through over the IterationState — we mutate
   // `lastStepResult.isContinued` and `messageListState` in place when a
   // verdict requires it. We use `z.any()` instead of the iteration schema to
@@ -100,7 +100,7 @@ export function createDurableIsTaskCompleteStep() {
         return state;
       }
 
-      const runMaxSteps = state.options?.maxSteps ?? DurableAgentDefaults.MAX_STEPS;
+      const runMaxSteps = state.options?.maxSteps ?? defaultMaxSteps;
 
       // Rehydrate the message list once so we can read the original task and
       // append feedback after scoring.

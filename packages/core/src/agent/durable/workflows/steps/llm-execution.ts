@@ -499,11 +499,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
               // If this error was triggered by abortSignal cancellation, surface an
               // abort event to the client so onAbort callbacks fire. The downstream
-              // error path still runs to close the stream.
-              const isAbort =
-                executionAbortSignal?.aborted === true ||
-                errorObj.name === 'AbortError' ||
-                /abort/i.test(errorObj.message);
+              // error path still runs to close the stream. We deliberately avoid
+              // matching on arbitrary error message text (e.g. /abort/i) because that
+              // can fire for retryable provider errors whose message happens to mention
+              // "abort"; we only trust the canonical AbortError name or an actual
+              // aborted signal.
+              const isAbort = executionAbortSignal?.aborted === true || errorObj.name === 'AbortError';
               if (isAbort && pubsub) {
                 await emitAbortEvent(pubsub, runId, { steps: [] });
               }

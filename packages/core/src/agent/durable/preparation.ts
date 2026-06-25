@@ -169,7 +169,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // Add agent instructions. Per-call `options.instructions` overrides the
   // agent's default instructions to mirror non-durable Agent.stream() behavior.
-  const instructions = execOptions?.instructions ?? (await typedAgent.getInstructions({ requestContext }));
+  const instructions = execOptions?.instructions || (await typedAgent.getInstructions({ requestContext }));
   if (instructions) {
     if (typeof instructions === 'string') {
       messageList.addSystem(instructions);

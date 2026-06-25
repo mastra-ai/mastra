@@ -154,10 +154,12 @@ export async function expectAgentParity<OUTPUT = any>(scenario: ParityScenario<O
     return out;
   };
 
-  expect(filtered(durableSnap), 'DurableAgent should match Agent observable output').toEqual(filtered(plainSnap));
-
-  // Always run cleanup
-  durableResult.cleanup?.();
+  try {
+    expect(filtered(durableSnap), 'DurableAgent should match Agent observable output').toEqual(filtered(plainSnap));
+  } finally {
+    // Always run cleanup, even when the assertion above throws.
+    durableResult.cleanup?.();
+  }
 
   return { plain: plainSnap, durable: durableSnap };
 }

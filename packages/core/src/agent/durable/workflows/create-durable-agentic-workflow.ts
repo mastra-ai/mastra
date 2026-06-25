@@ -110,7 +110,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
   // Create the isTaskComplete evaluation step (mirrors the non-durable
   // createIsTaskCompleteStep). Lives as a real step (not predicate logic)
   // so it shows up in workflow traces and produces a proper state transition.
-  const isTaskCompleteStep = createDurableIsTaskCompleteStep();
+  const isTaskCompleteStep = createDurableIsTaskCompleteStep(maxSteps);
 
   // Create the single iteration workflow (LLM -> Tool Calls -> Mapping)
   // Note: foreach runs with concurrency: 1 (sequential) because tool approval
@@ -286,13 +286,34 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
         const shouldContinue = state.lastStepResult?.isContinued === true;
         const runMaxSteps = state.options?.maxSteps ?? maxSteps;
         const underMaxSteps = state.iterationCount < runMaxSteps;
-        const isFinal = !shouldContinue || !underMaxSteps;
+
+        // Evaluate user-supplied stopWhen predicate(s) parked on the registry
+        // up-front so we can include them in the finality decision emitted on
+        // the iteration-complete event. The predicate is a closure and can't
+        // survive the wire, so we read it from in-process state. Cross-process
+        // engines (Inngest after worker restart) won't have the registry entry
+        // and fall back to maxSteps only.
+        let stopWhenMatched = false;
+        if (shouldContinue && underMaxSteps) {
+          const registryEntry = globalRunRegistry.get(state.runId);
+          const stopWhen = registryEntry?.stopWhen;
+          if (stopWhen && state.accumulatedSteps.length > 0) {
+            const conditions = Array.isArray(stopWhen) ? stopWhen : [stopWhen];
+            // Mirror agentic-loop: cast steps to any for v5/v6 StopCondition shape
+            // compatibility — the StepRecord we accumulate is sufficient at runtime.
+            const steps = state.accumulatedSteps as any;
+            const results = await Promise.all(conditions.map(condition => condition({ steps })));
+            stopWhenMatched = results.some(Boolean);
+          }
+        }
+
+        const isFinal = !shouldContinue || !underMaxSteps || stopWhenMatched;
 
         // Emit an iteration-complete event for observability. This fires after
         // every iteration (including the last one) so client callbacks can
         // track progress. continue/feedback return values are not honored —
         // the loop's continuation is governed by isContinued + maxSteps +
-        // stopWhen below.
+        // stopWhen above.
         if (pubsub) {
           const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
           await emitIterationCompleteEvent(pubsub, state.runId, {
@@ -311,28 +332,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           });
         }
 
-        if (isFinal) {
-          return false;
-        }
-
-        // Evaluate user-supplied stopWhen predicate(s) parked on the registry.
-        // The predicate is a closure and can't survive the wire, so we read it
-        // from in-process state. Cross-process engines (Inngest after worker
-        // restart) won't have the registry entry and fall back to maxSteps only.
-        const registryEntry = globalRunRegistry.get(state.runId);
-        const stopWhen = registryEntry?.stopWhen;
-        if (stopWhen && state.accumulatedSteps.length > 0) {
-          const conditions = Array.isArray(stopWhen) ? stopWhen : [stopWhen];
-          // Mirror agentic-loop: cast steps to any for v5/v6 StopCondition shape
-          // compatibility — the StepRecord we accumulate is sufficient at runtime.
-          const steps = state.accumulatedSteps as any;
-          const results = await Promise.all(conditions.map(condition => condition({ steps })));
-          if (results.some(Boolean)) {
-            return false;
-          }
-        }
-
-        return true;
+        return !isFinal;
       })
       // Map final state to output format, run output processors, persist memory, emit finish
       .map(
