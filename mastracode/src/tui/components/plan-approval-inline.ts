@@ -19,7 +19,8 @@ import {
 } from '@earendil-works/pi-tui';
 import type { Component, Focusable, SelectItem, TUI } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
-import { CURRENT_PLAN_FILENAME } from '../../utils/plans.js';
+import type { DiffEntry } from '../../utils/plan-diff.js';
+import { generatePlanDiff } from '../../utils/plan-diff.js';
 import { BOX_INDENT, theme, getSelectListTheme, getMarkdownTheme, mastra } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 
@@ -117,37 +118,6 @@ class PlanDiffBox implements Component {
   }
 }
 
-interface DiffEntry {
-  type: 'added' | 'removed' | 'context';
-  text: string;
-}
-
-/**
- * Generate structured diff entries between two plan texts.
- */
-function generatePlanDiff(oldText: string, newText: string): DiffEntry[] {
-  const oldLines = oldText.split('\n');
-  const newLines = newText.split('\n');
-  const entries: DiffEntry[] = [];
-
-  const maxLines = Math.max(oldLines.length, newLines.length);
-
-  for (let i = 0; i < maxLines; i++) {
-    if (i >= oldLines.length) {
-      entries.push({ type: 'added', text: newLines[i]! });
-    } else if (i >= newLines.length) {
-      entries.push({ type: 'removed', text: oldLines[i]! });
-    } else if (oldLines[i] !== newLines[i]) {
-      entries.push({ type: 'removed', text: oldLines[i]! });
-      entries.push({ type: 'added', text: newLines[i]! });
-    } else {
-      entries.push({ type: 'context', text: oldLines[i]! });
-    }
-  }
-
-  return entries;
-}
-
 export class PlanApprovalInlineComponent extends Container implements Focusable {
   private contentBox: Box;
   private selectList?: SelectList;
@@ -220,10 +190,13 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
 
   updateArgs(args: unknown): void {
     if (!args || typeof args !== 'object' || this.resolved) return;
-    const partial = args as { title?: unknown; plan?: unknown };
+    const partial = args as { path?: unknown; title?: unknown; plan?: unknown };
+    // submit_plan streams only the `path` arg; title/plan are filled from disk on suspend.
+    if (typeof partial.path === 'string' && partial.path) {
+      this.planFilename = partial.path;
+    }
     if (typeof partial.title === 'string') {
       this.planTitle = partial.title || 'Untitled plan';
-      this.planFilename = CURRENT_PLAN_FILENAME;
     }
     if (typeof partial.plan === 'string') {
       this.planContent = partial.plan;
@@ -288,7 +261,7 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
   private renderPlanHeader(prefix = ''): void {
     this.contentBox.addChild(new Text(`${prefix}${theme.bold(theme.fg('accent', `Plan: ${this.planTitle}`))}`, 0, 0));
     if (this.planFilename) {
-      this.contentBox.addChild(new Text(theme.fg('dim', `.mastracode/plans/${this.planFilename}`), 0, 0));
+      this.contentBox.addChild(new Text(theme.fg('dim', this.planFilename), 0, 0));
     }
     this.contentBox.addChild(new Spacer(1));
   }
@@ -387,7 +360,7 @@ export class PlanResultComponent extends Container {
 
     contentBox.addChild(new Text(theme.bold(theme.fg('accent', `Plan: ${options.title}`)), 0, 0));
     if (options.planFilename) {
-      contentBox.addChild(new Text(theme.fg('dim', `.mastracode/plans/${options.planFilename}`), 0, 0));
+      contentBox.addChild(new Text(theme.fg('dim', options.planFilename), 0, 0));
     }
     contentBox.addChild(new Spacer(1));
     contentBox.addChild(new PlanContentBox(options.plan));
