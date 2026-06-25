@@ -35,10 +35,11 @@ function extractToolName(label: string): string {
  * We only collect top-level calls the target agent itself makes — including the
  * sub-agent delegation call, which mocks the sub-agent's whole response.
  */
-export function collectToolMocks(
-  steps: TrajectoryStep[] | undefined,
-  acc: DatasetItemToolMock[] = [],
-): DatasetItemToolMock[] {
+export function collectToolMocks(steps: TrajectoryStep[] | undefined): DatasetItemToolMock[] {
+  return collectToolMocksInto(steps, []);
+}
+
+function collectToolMocksInto(steps: TrajectoryStep[] | undefined, acc: DatasetItemToolMock[]): DatasetItemToolMock[] {
   if (!steps) return acc;
   for (const step of steps) {
     const isToolCall = step.stepType === 'tool_call' || step.stepType === 'mcp_tool_call';
@@ -58,7 +59,7 @@ export function collectToolMocks(
     // Skip a tool call's own children (sub-agent internals); only recurse into
     // non-tool container steps to preserve nested top-level call order.
     if (!isToolCall && step.children?.length) {
-      collectToolMocks(step.children, acc);
+      collectToolMocksInto(step.children, acc);
     }
   }
   return acc;
