@@ -178,7 +178,10 @@ export class GoalManager {
       });
       if (updated) {
         this.record = { ...updated, id: this.record.id };
-        if (wasPaused && targetStatus === 'active') this.startActiveTimer();
+        if (wasPaused && targetStatus === 'active') {
+          this.record.pausedReason = undefined;
+          this.startActiveTimer();
+        }
       }
     } else {
       this.record = {
