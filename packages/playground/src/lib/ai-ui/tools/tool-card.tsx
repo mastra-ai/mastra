@@ -1,13 +1,13 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
-import { AskUserBadge, isAskUserTool, isAskUserSuspendPayload } from './badges/ask-user-badge';
+import { AskUserBadge } from './badges/ask-user-badge';
 import { CodeModeBadge, getCodeModeCall } from './badges/code-mode-badge';
 import { FileTreeBadge } from './badges/file-tree-badge';
 import { ObservationMarkerBadge } from './badges/observation-marker-badge';
 import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
-import { isTaskTool } from './badges/task-list-badge';
 import { ToolBadge } from './badges/tool-badge';
+import type { AskUserSuspendPayload } from './badges/types';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
 import { useActivatedSkills } from '@/domains/agents/context/activated-skills-context';
 import {
@@ -54,6 +54,17 @@ export interface ToolCardProps {
   metadata?: MessageMetadata;
   /** `data`-typed parts from the parent message, for badges that read live streaming metadata. */
   dataParts?: ReadonlyArray<DataMessagePart>;
+}
+
+const TASK_TOOL_NAMES = new Set(['task_write', 'task_update', 'task_complete', 'task_check']);
+
+function isAskUserSuspendPayload(payload: unknown): payload is AskUserSuspendPayload {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    'question' in payload &&
+    typeof (payload as AskUserSuspendPayload).question === 'string'
+  );
 }
 
 export const ToolCard = (props: ToolCardProps) => {
@@ -170,7 +181,7 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
 
   // Task tool calls are rendered in the docked TaskPanel (bottom of chat) instead
   // of inline to avoid repetition. Hide them entirely here.
-  if (isTaskTool(toolName)) {
+  if (TASK_TOOL_NAMES.has(toolName)) {
     return null;
   }
 
@@ -178,7 +189,11 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
   // Access suspendedTools directly (bypassing the mode check) because when messages
   // are loaded from the database, metadata.mode may not be persisted.
   const askUserSuspendMeta = metadata?.suspendedTools?.[toolName] ?? suspendedToolMetadata;
-  if (isAskUserTool(toolName) && askUserSuspendMeta?.suspendPayload && isAskUserSuspendPayload(askUserSuspendMeta.suspendPayload)) {
+  if (
+    toolName === 'ask_user' &&
+    askUserSuspendMeta?.suspendPayload &&
+    isAskUserSuspendPayload(askUserSuspendMeta.suspendPayload)
+  ) {
     return (
       <AskUserBadge
         toolCallId={toolCallId}

@@ -7037,6 +7037,7 @@ export type PostAgentsAgentIdSendToolApproval_Body = {
     | undefined;
   toolCallId: string;
   approved: boolean;
+  resumeData?: any | undefined;
   format?: string | undefined;
   messages?: any[] | undefined;
   streamOptions?: any | undefined;

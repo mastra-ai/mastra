@@ -326,4 +326,22 @@ describe('MessageRow', () => {
     expect(screen.getByText('boom went wrong')).toBeTruthy();
     expect(screen.getByText('Error')).toBeTruthy();
   });
+
+  describe('when an assistant message contains a step-start part', () => {
+    it('does not render the debug "Fallback:" text and still renders the text part', () => {
+      const { container } = renderRow(
+        baseMessage({
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [{ type: 'step-start' } as never, { type: 'text', text: 'real content' }],
+          },
+        }),
+      );
+
+      expect(screen.getByText('real content')).toBeTruthy();
+      expect(container.textContent).not.toContain('Fallback:');
+      expect(container.textContent).not.toContain('step-start');
+    });
+  });
 });

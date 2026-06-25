@@ -1,21 +1,10 @@
-import { Button, Icon, Input } from '@mastra/playground-ui';
+import { Button, Icon } from '@mastra/playground-ui';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { Check, MessageCircleQuestion, Send } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { BadgeWrapper } from './badge-wrapper';
+import type { AskUserSuspendPayload } from './types';
 import { useToolCall } from '@/services/tool-call-provider';
-
-interface AskUserOption {
-  label: string;
-  description?: string;
-}
-
-type AskUserSelectionMode = 'single_select' | 'multi_select';
-
-interface AskUserSuspendPayload {
-  question: string;
-  options?: AskUserOption[];
-  selectionMode?: AskUserSelectionMode;
-}
 
 export interface AskUserBadgeProps {
   toolCallId: string;
@@ -23,19 +12,6 @@ export interface AskUserBadgeProps {
   suspendPayload: AskUserSuspendPayload;
   result: any;
   isGenerateMode?: boolean;
-}
-
-export function isAskUserTool(toolName: string): boolean {
-  return toolName === 'ask_user';
-}
-
-export function isAskUserSuspendPayload(payload: unknown): payload is AskUserSuspendPayload {
-  return (
-    typeof payload === 'object' &&
-    payload !== null &&
-    'question' in payload &&
-    typeof (payload as AskUserSuspendPayload).question === 'string'
-  );
 }
 
 export const AskUserBadge = ({ toolCallId, suspendPayload, result }: AskUserBadgeProps) => {
@@ -96,9 +72,7 @@ export const AskUserBadge = ({ toolCallId, suspendPayload, result }: AskUserBadg
             <Icon>
               <Check className="text-accent1" />
             </Icon>
-            <span className="text-sm text-text2">
-              {typeof result === 'string' ? result : JSON.stringify(result)}
-            </span>
+            <span className="text-sm text-text2">{typeof result === 'string' ? result : JSON.stringify(result)}</span>
           </div>
         )}
 
@@ -119,9 +93,7 @@ export const AskUserBadge = ({ toolCallId, suspendPayload, result }: AskUserBadg
                   `}
                 >
                   <span className="text-sm text-text1 font-medium">{option.label}</span>
-                  {option.description && (
-                    <span className="block text-xs text-text2 mt-0.5">{option.description}</span>
-                  )}
+                  {option.description && <span className="block text-xs text-text2 mt-0.5">{option.description}</span>}
                 </button>
               );
             })}

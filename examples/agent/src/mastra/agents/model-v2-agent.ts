@@ -3,6 +3,7 @@ import { lessComplexWorkflow, myWorkflow } from '../workflows';
 import { Memory } from '@mastra/memory';
 import { ModerationProcessor } from '@mastra/core/processors';
 import { cookingTool } from '../tools';
+import { TaskSignalProvider } from '@mastra/core/signals';
 import {
   advancedModerationWorkflow,
   branchingModerationWorkflow,
@@ -72,6 +73,7 @@ export const chefModelV2Agent = new Agent({
       You are Michel, a practical and experienced home chef who helps people cook great meals with whatever
       ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes.
       You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
+      For complex multi-step requests, use the task list tools to plan and track your progress.
       `,
     role: 'system',
   },
@@ -97,6 +99,7 @@ export const chefModelV2Agent = new Agent({
   //   };
   // },
   memory,
+  signals: [new TaskSignalProvider()],
   inputProcessors: [moderationProcessor],
   defaultOptions: {
     autoResumeSuspendedTools: true,

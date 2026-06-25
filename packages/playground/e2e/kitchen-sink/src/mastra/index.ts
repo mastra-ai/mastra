@@ -24,7 +24,15 @@ await initE2EStorage();
 
 export const mastra = new Mastra({
   workflows: { complexWorkflow, lessComplexWorkflow, enumWorkflow, scheduledWorkflow, multiScheduledWorkflow },
-  agents: { weatherAgent, omAgent, omAdaptiveAgent, codeOverrideEditableAgent, codeOverrideLockedAgent, builderAgent, askUserAgent },
+  agents: {
+    weatherAgent,
+    omAgent,
+    omAdaptiveAgent,
+    codeOverrideEditableAgent,
+    codeOverrideLockedAgent,
+    builderAgent,
+    askUserAgent,
+  },
   logger: new PinoLogger({
     name: 'Mastra',
     level: 'error',

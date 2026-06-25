@@ -8204,7 +8204,16 @@ export class Agent<
       streamOptions?: AgentExecutionOptions<OUTPUT>;
     },
   ): Promise<{ accepted: true; runId: string; toolCallId?: string }> {
-    const { threadId, resourceId, approved, resumeData: customResumeData, declineContext, messages, streamOptions, ...executionOptions } = options;
+    const {
+      threadId,
+      resourceId,
+      approved,
+      resumeData: customResumeData,
+      declineContext,
+      messages,
+      streamOptions,
+      ...executionOptions
+    } = options;
 
     if (messages && approved) {
       const continuation = agentThreadStreamRuntime.continueWithMessages(
@@ -8249,7 +8258,14 @@ export class Agent<
       resourceId,
       runId,
       toolCallId: options.toolCallId,
-      resumeData: customResumeData !== undefined ? customResumeData : approved ? { approved } : declineContext ? { approved, ...declineContext } : { approved },
+      resumeData:
+        customResumeData !== undefined
+          ? customResumeData
+          : approved
+            ? { approved }
+            : declineContext
+              ? { approved, ...declineContext }
+              : { approved },
       streamOptions: {
         ...resumeOptions,
         memory: {
