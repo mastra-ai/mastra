@@ -1050,7 +1050,11 @@ export interface HarnessRequestSession<TState = unknown> {
   modeId: string;
   /** Currently-selected model ID ('' when none selected yet) */
   modelId: string;
-  /** Live session-owned harness state accessors. */
+  /**
+   * Live session-owned harness state accessors.
+   * @deprecated Prefer the top-level `getState()` / `setState()` / `updateState()`
+   * on the {@link HarnessRequestContext} instead.
+   */
   state: HarnessRequestState<TState>;
 }
 
@@ -1060,26 +1064,17 @@ export interface HarnessRequestContext<TState = unknown> {
 
   /**
    * Current harness state (read-only snapshot captured when the request context is built).
-   * @deprecated Prefer `session.state.get()` for live state reads.
+   * @deprecated Prefer `getState()` for live state reads.
    */
   state: Readonly<TState>;
 
-  /**
-   * Get the current harness state (live, not snapshot).
-   * @deprecated Prefer `session.state.get()`.
-   */
+  /** Get the current harness state (live, not snapshot). */
   getState: () => Readonly<TState>;
 
-  /**
-   * Update harness state.
-   * @deprecated Prefer `session.state.set(...)`.
-   */
+  /** Update harness state. */
   setState: (updates: Partial<TState>) => Promise<void>;
 
-  /**
-   * Update harness state from the latest state snapshot in a serialized transaction.
-   * @deprecated Prefer `session.state.update(...)`.
-   */
+  /** Update harness state from the latest state snapshot in a serialized transaction. */
   updateState?: <TResult>(updater: HarnessRequestStateUpdater<TState, TResult>) => Promise<TResult>;
 
   /** Current thread ID */
