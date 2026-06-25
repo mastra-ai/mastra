@@ -29,7 +29,41 @@ import { MCPClient } from '../client/configuration';
 import { MCPServer } from './server';
 import type { MastraPrompt, MCPServerResources, MCPServerResourceContent, MCPRequestHandlerExtra } from './types';
 
-const PORT = 9100 + Math.floor(Math.random() * 1000);
+// Helper: bind to OS-assigned port (port 0) and resolve to the actual port.
+// Avoids random-port collisions that flake tests on CI.
+const listenOnEphemeralPort = (server: http.Server): Promise<number> =>
+  new Promise<number>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, () => {
+      const address = server.address();
+      if (address && typeof address === 'object') {
+        resolve(address.port);
+      } else {
+        reject(new Error('Failed to obtain ephemeral port'));
+      }
+    });
+  });
+
+// Helper: resolve the port of a server that is already listening (e.g. started by Hono serve()).
+const getServerPort = (server: http.Server): Promise<number> =>
+  new Promise<number>((resolve, reject) => {
+    const address = server.address();
+    if (address && typeof address === 'object') {
+      resolve(address.port);
+    } else {
+      server.once('error', reject);
+      server.once('listening', () => {
+        const address = server.address();
+        if (address && typeof address === 'object') {
+          resolve(address.port);
+        } else {
+          reject(new Error('Failed to obtain ephemeral port'));
+        }
+      });
+    }
+  });
+
+let PORT: number;
 let server: MCPServer;
 let httpServer: http.Server;
 
@@ -391,7 +425,7 @@ describe('MCPServer', () => {
     let resourceTestServerInstance: MCPServer;
     let localHttpServerForResources: http.Server;
     let resourceTestInternalClient: InternalMastraMCPClient;
-    const RESOURCE_TEST_PORT = 9200 + Math.floor(Math.random() * 1000);
+    let RESOURCE_TEST_PORT: number;
 
     const mockResourceContents: Record<string, MCPServerResourceContent> = {
       'weather://current': {
@@ -464,7 +498,7 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => localHttpServerForResources.listen(RESOURCE_TEST_PORT, () => resolve()));
+      RESOURCE_TEST_PORT = await listenOnEphemeralPort(localHttpServerForResources);
 
       resourceTestInternalClient = new InternalMastraMCPClient({
         name: 'resource-test-internal-client',
@@ -738,7 +772,7 @@ describe('MCPServer', () => {
     let promptServer: MCPServer;
     let promptInternalClient: InternalMastraMCPClient;
     let promptHttpServer: http.Server;
-    const PROMPT_PORT = 9500 + Math.floor(Math.random() * 1000);
+    let PROMPT_PORT: number;
 
     let currentPrompts: (MastraPrompt & { getMessages?: (args: any) => Promise<any[]> })[] = [
       {
@@ -788,7 +822,7 @@ describe('MCPServer', () => {
           res,
         });
       });
-      await new Promise<void>(resolve => promptHttpServer.listen(PROMPT_PORT, () => resolve()));
+      PROMPT_PORT = await listenOnEphemeralPort(promptHttpServer);
       promptInternalClient = new InternalMastraMCPClient({
         name: 'prompt-test-internal-client',
         server: { url: new URL(`http://localhost:${PROMPT_PORT}/sse`) },
@@ -938,7 +972,7 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => httpServer.listen(PORT, () => resolve()));
+      PORT = await listenOnEphemeralPort(httpServer);
     });
 
     afterAll(async () => {
@@ -1054,7 +1088,7 @@ describe('MCPServer', () => {
   describe('MCPServer HTTP Transport', () => {
     let server: MCPServer;
     let client: MCPClient;
-    const PORT = 9200 + Math.floor(Math.random() * 1000);
+    let PORT: number;
     const TOKEN = `<random-token>`;
 
     beforeAll(async () => {
@@ -1096,7 +1130,7 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => httpServer.listen(PORT, () => resolve()));
+      PORT = await listenOnEphemeralPort(httpServer);
 
       client = new MCPClient({
         servers: {
@@ -1210,7 +1244,7 @@ describe('MCPServer', () => {
     let hono: Hono;
     let honoServer: ServerType;
     let client: MCPClient;
-    const PORT = 9300 + Math.floor(Math.random() * 1000);
+    let PORT: number;
 
     beforeAll(async () => {
       server = new MCPServer({
@@ -1242,7 +1276,8 @@ describe('MCPServer', () => {
         });
       });
 
-      honoServer = serve({ fetch: hono.fetch, port: PORT });
+      honoServer = serve({ fetch: hono.fetch, port: 0 });
+      PORT = await getServerPort(honoServer);
 
       // Initialize MCPClient with SSE endpoint
       client = new MCPClient({
@@ -1293,21 +1328,6 @@ describe('MCPServer', () => {
     let sessionServer: MCPServer;
     let sessionHttpServer: http.Server;
     let currentTestPort: number;
-
-    // Helper: bind to OS-assigned port (port 0) and resolve to the actual port.
-    // Avoids the random-port collisions that were flaking these tests on CI.
-    const listenOnEphemeralPort = (server: http.Server): Promise<number> =>
-      new Promise<number>((resolve, reject) => {
-        server.once('error', reject);
-        server.listen(0, () => {
-          const address = server.address();
-          if (address && typeof address === 'object') {
-            resolve(address.port);
-          } else {
-            reject(new Error('Failed to obtain ephemeral port'));
-          }
-        });
-      });
 
     afterEach(async () => {
       if (sessionHttpServer) {
@@ -2166,21 +2186,6 @@ describe('MCPServer - Elicitation', () => {
   let elicitationHttpServer: http.Server;
   let ELICITATION_PORT: number;
 
-  // Helper: bind to OS-assigned port (port 0) and resolve to the actual port.
-  // Avoids the random-port collisions that were flaking these tests on CI.
-  const listenOnEphemeralPort = (server: http.Server): Promise<number> =>
-    new Promise<number>((resolve, reject) => {
-      server.once('error', reject);
-      server.listen(0, () => {
-        const address = server.address();
-        if (address && typeof address === 'object') {
-          resolve(address.port);
-        } else {
-          reject(new Error('Failed to obtain ephemeral port'));
-        }
-      });
-    });
-
   beforeAll(async () => {
     elicitationServer = new MCPServer({
       name: 'ElicitationTestServer',
@@ -2555,7 +2560,7 @@ describe('MCPServer - Elicitation', () => {
       },
     };
 
-    const customTimeoutPort = 9600 + Math.floor(Math.random() * 1000);
+    let customTimeoutPort: number;
     const customTimeoutServer = new MCPServer({
       name: 'CustomTimeoutServer',
       version: '1.0.0',
@@ -2572,7 +2577,7 @@ describe('MCPServer - Elicitation', () => {
       });
     });
 
-    await new Promise<void>(resolve => customTimeoutHttpServer.listen(customTimeoutPort, () => resolve()));
+    customTimeoutPort = await listenOnEphemeralPort(customTimeoutHttpServer);
 
     try {
       // Create a client that responds after a delay but within the custom timeout
@@ -2634,7 +2639,7 @@ describe('MCPServer - Elicitation', () => {
 describe('MCPServer with Tool Output Schema', () => {
   let serverWithOutputSchema: MCPServer;
   let clientWithOutputSchema: MCPClient;
-  const PORT = 9600 + Math.floor(Math.random() * 1000);
+  let PORT: number;
   let httpServerWithOutputSchema: http.Server;
 
   const structuredTool: ToolsInput = {
@@ -2669,7 +2674,7 @@ describe('MCPServer with Tool Output Schema', () => {
       });
     });
 
-    await new Promise<void>(resolve => httpServerWithOutputSchema.listen(PORT, () => resolve()));
+    PORT = await listenOnEphemeralPort(httpServerWithOutputSchema);
 
     clientWithOutputSchema = new MCPClient({
       servers: {
@@ -2717,7 +2722,7 @@ describe('MCPServer - Tool Input Validation', () => {
   let validationClient: InternalMastraMCPClient;
   let httpValidationServer: ServerType;
   let tools: Record<string, Tool<any, any, any, any>>;
-  const VALIDATION_PORT = 9700 + Math.floor(Math.random() * 100);
+  let VALIDATION_PORT: number;
 
   const toolsWithValidation: ToolsInput = {
     stringTool: {
@@ -2787,8 +2792,9 @@ describe('MCPServer - Tool Input Validation', () => {
 
     httpValidationServer = serve({
       fetch: app.fetch,
-      port: VALIDATION_PORT,
+      port: 0,
     });
+    VALIDATION_PORT = await getServerPort(httpValidationServer);
 
     validationClient = new InternalMastraMCPClient({
       name: 'validation-test-client',
@@ -3068,7 +3074,7 @@ describe('MCPServer - Tool Input Validation', () => {
  * from both pre-parsed middleware (like express.json()) and raw streams.
  */
 describe('MCPServer readJsonBody compatibility', () => {
-  const READ_JSON_BODY_PORT = 9400 + Math.floor(Math.random() * 100);
+  let READ_JSON_BODY_PORT: number;
   let readJsonServer: MCPServer;
   let readJsonHttpServer: http.Server;
 
@@ -3098,9 +3104,7 @@ describe('MCPServer readJsonBody compatibility', () => {
       });
     });
 
-    await new Promise<void>(resolve => {
-      readJsonHttpServer.listen(READ_JSON_BODY_PORT, resolve);
-    });
+    READ_JSON_BODY_PORT = await listenOnEphemeralPort(readJsonHttpServer);
   });
 
   afterAll(async () => {
@@ -3131,7 +3135,7 @@ describe('MCPServer readJsonBody compatibility', () => {
   });
 
   describe('HTTP transport with pre-parsed body (simulating express.json())', () => {
-    const PREPARSED_PORT = 9500 + Math.floor(Math.random() * 100);
+    let PREPARSED_PORT: number;
     let preParsedServer: MCPServer;
     let preParsedHttpServer: http.Server;
 
@@ -3169,9 +3173,7 @@ describe('MCPServer readJsonBody compatibility', () => {
         });
       });
 
-      await new Promise<void>(resolve => {
-        preParsedHttpServer.listen(PREPARSED_PORT, resolve);
-      });
+      PREPARSED_PORT = await listenOnEphemeralPort(preParsedHttpServer);
     });
 
     afterAll(async () => {
@@ -3222,7 +3224,7 @@ describe('MCPServer readJsonBody compatibility', () => {
   });
 
   describe('SSE transport with pre-parsed body', () => {
-    const SSE_PORT = 9600 + Math.floor(Math.random() * 100);
+    let SSE_PORT: number;
     let sseServer: MCPServer;
     let sseHttpServer: http.Server;
 
@@ -3261,9 +3263,7 @@ describe('MCPServer readJsonBody compatibility', () => {
         });
       });
 
-      await new Promise<void>(resolve => {
-        sseHttpServer.listen(SSE_PORT, resolve);
-      });
+      SSE_PORT = await listenOnEphemeralPort(sseHttpServer);
     });
 
     afterAll(async () => {
@@ -3293,7 +3293,7 @@ describe('MCPServer readJsonBody compatibility', () => {
   });
 
   describe('SSE transport with raw stream (no middleware)', () => {
-    const SSE_RAW_PORT = 9700 + Math.floor(Math.random() * 100);
+    let SSE_RAW_PORT: number;
     let sseRawServer: MCPServer;
     let sseRawHttpServer: http.Server;
 
@@ -3316,9 +3316,7 @@ describe('MCPServer readJsonBody compatibility', () => {
         });
       });
 
-      await new Promise<void>(resolve => {
-        sseRawHttpServer.listen(SSE_RAW_PORT, resolve);
-      });
+      SSE_RAW_PORT = await listenOnEphemeralPort(sseRawHttpServer);
     });
 
     afterAll(async () => {
