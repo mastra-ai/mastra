@@ -1,5 +1,14 @@
 # @mastra/auth-cloud
 
+## 1.2.1-alpha.0
+
+### Patch Changes
+
+- Improved auth package builds by removing the direct core dependency from auth providers while preserving the existing public auth APIs. ([#17142](https://github.com/mastra-ai/mastra/pull/17142))
+
+- Updated dependencies [[`5c0df77`](https://github.com/mastra-ai/mastra/commit/5c0df776c40efa420f8c07a2f3ee66010296618e)]:
+  - @mastra/auth@1.1.1-alpha.0
+
 ## 1.2.0
 
 ### Minor Changes

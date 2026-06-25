@@ -1,5 +1,41 @@
 # mastra
 
+## 1.16.0-alpha.3
+
+### Minor Changes
+
+- Added a `--server-api-prefix` flag to `mastra api` so the CLI can reach a Mastra server mounted under a custom API route prefix. Previously `mastra api` always targeted `<url>/api/<route>`, so it could not talk to servers mounted under a non-default prefix (for example a `@mastra/fastify` `MastraServer` with `prefix: "/api/mastra-studio"`). This matches the `--server-api-prefix` flag that `mastra studio` already supports. ([#18457](https://github.com/mastra-ai/mastra/pull/18457))
+
+  The prefix can also be set with the `MASTRA_API_PREFIX` environment variable.
+
+  **Before** (the prefix could not be placed between the host and the route):
+
+  ```bash
+  # → GET https://example.com/api/agents → 404
+  mastra api --url https://example.com agent list
+  ```
+
+  **After**:
+
+  ```bash
+  # → GET https://example.com/api/mastra-studio/agents
+  mastra api --url https://example.com --server-api-prefix /api/mastra-studio agent list
+  ```
+
+### Patch Changes
+
+- Fixed several workflow graph issues in Studio: ([#18228](https://github.com/mastra-ai/mastra/pull/18228))
+  - **Step centering** — Selecting a step in the run timeline now pans and zooms the graph to center that step's node again.
+  - **Step-by-step (debug) mode** — The graph now automatically centers the step a paused run is waiting on, so the step about to run is always in view. Clicking a different timeline step still takes priority and focuses that step instead.
+  - **Nested graphs** — "View nested graph" on a step opens the nested workflow view again. Selecting a nested step reveals the nested flow in a side panel, and "Hide nested graph" closes it.
+  - **Conditional branch coloring** — When a conditional selects one arm, edges into the un-taken arm now stay neutral instead of incorrectly turning green.
+  - **Duplicate React keys** — Fixed graph rendering to avoid duplicate keys when a step ID and a condition ID overlap.
+  - **Agent chat workflow badge** — Fixed agent chat crashing when an agent calls a workflow tool (the embedded workflow graph was missing its step-detail and selected-step providers).
+
+- Updated dependencies [[`bf3fe49`](https://github.com/mastra-ai/mastra/commit/bf3fe49f9467dbbdb8f9eaf74e0f7971ffb19559), [`24ceaea`](https://github.com/mastra-ai/mastra/commit/24ceaea0bdd8609cabbab764380608ca6621a194), [`6ccf67b`](https://github.com/mastra-ai/mastra/commit/6ccf67bf075753754927a57bc2e1734ba2c820c5), [`825d8de`](https://github.com/mastra-ai/mastra/commit/825d8def9fa64c2bcc3d8dd6b49e09342c3ac5c7), [`ffa09e7`](https://github.com/mastra-ai/mastra/commit/ffa09e772a5c92270eabe2090fc42d45bd8ec4b7), [`461a7c5`](https://github.com/mastra-ai/mastra/commit/461a7c501449295287f4f0ee4b0b42344f39fcf8), [`4211472`](https://github.com/mastra-ai/mastra/commit/4211472a5a2bd319c60cd2e42d9109c3eef7ac1c), [`9e45902`](https://github.com/mastra-ai/mastra/commit/9e4590208e745055cecca202e2db0e5c65e17d3c), [`5c0df77`](https://github.com/mastra-ai/mastra/commit/5c0df776c40efa420f8c07a2f3ee66010296618e)]:
+  - @mastra/core@1.47.0-alpha.3
+  - @mastra/deployer@1.47.0-alpha.3
+
 ## 1.15.2-alpha.2
 
 ### Patch Changes
