@@ -381,57 +381,6 @@ function applyMcpContentToolResultOutputs(
 }
 
 /**
- * Translates `media` parts inside tool-result `output` content into the
- * `image-data`/`file-data` shape that AI SDK v6 (spec `v3`) providers consume.
- *
- * Mastra's `toModelOutput` and the vendored AI SDK v5 use `{ type: 'media' }`
- * as the authored multimodal tool-result content type. AI SDK v6 added a
- * `mapToolResultOutput` step that converts `media` -> `image-data` (for
- * `image/*` media types) or `file-data` (everything else) before handing the
- * prompt to the provider, and v6 providers (e.g. `@ai-sdk/anthropic@3`) only
- * recognize `image-data`/`file-data` — they have no `media` case. The vendored
- * v5 converter does not run that translation, so when a v6 provider consumes a
- * v5-built prompt the raw `media` part is silently dropped (image tool results
- * arrive empty).
- *
- * This ports v6's translation as a post-pass. It MUST only run for v6 (`v3`)
- * models: v5 providers (spec `v2`) accept `media` and have no
- * `image-data`/`file-data` case, so translating for them would re-break v5.
- *
- * See: https://github.com/mastra-ai/mastra/issues/17876
- */
-export function mapToolResultMediaPartsForV6(modelMessages: AIV5Type.ModelMessage[]): AIV5Type.ModelMessage[] {
-  return modelMessages.map(msg => {
-    if (msg.role !== 'tool' || typeof msg.content === 'string') return msg;
-
-    let messageModified = false;
-    const content = msg.content.map(part => {
-      if (part.type !== 'tool-result') return part;
-      const output = (part as { output?: unknown }).output as { type?: unknown; value?: unknown } | undefined;
-      if (!output || output.type !== 'content' || !Array.isArray(output.value)) return part;
-
-      let outputModified = false;
-      const value = (output.value as unknown[]).map(item => {
-        if (item == null || typeof item !== 'object') return item;
-        const contentPart = item as Record<string, unknown>;
-        if (contentPart.type !== 'media' || typeof contentPart.data !== 'string') return item;
-        outputModified = true;
-        const mediaType = typeof contentPart.mediaType === 'string' ? contentPart.mediaType : '';
-        return mediaType.startsWith('image/')
-          ? { type: 'image-data', data: contentPart.data, mediaType }
-          : { type: 'file-data', data: contentPart.data, mediaType };
-      });
-
-      if (!outputModified) return part;
-      messageModified = true;
-      return { ...part, output: { ...output, value } };
-    });
-
-    return messageModified ? ({ ...msg, content } as AIV5Type.ModelMessage) : msg;
-  });
-}
-
-/**
  * Restores `providerOptions` on assistant file parts after `convertToModelMessages`.
  *
  * The vendored AI SDK v5 `convertToModelMessages` drops `providerMetadata` from

@@ -1,4 +1,8 @@
-export { aiV4CoreMessageToV1PromptMessage, aiV5ModelMessageToV2PromptMessage } from './to-prompt';
+export {
+  aiV4CoreMessageToV1PromptMessage,
+  aiV5ModelMessageToV2PromptMessage,
+  aiV5PromptToAIV6Prompt,
+} from './to-prompt';
 export { coreContentToString, messagesAreEqual } from './utils';
 export {
   inputToMastraDBMessage,
@@ -14,6 +18,5 @@ export {
   aiV5UIMessagesToAIV5ModelMessages,
   aiV4CoreMessagesToAIV5ModelMessages,
   systemMessageToAIV4Core,
-  mapToolResultMediaPartsForV6,
 } from './output-converter';
 export { StepContentExtractor } from './step-content';

@@ -14,6 +14,7 @@ import { CacheKeyGenerator } from './cache/CacheKeyGenerator';
 import {
   aiV4CoreMessageToV1PromptMessage,
   aiV5ModelMessageToV2PromptMessage,
+  aiV5PromptToAIV6Prompt,
   coreContentToString,
   messagesAreEqual,
   inputToMastraDBMessage as convertInputToMastraDBMessage,
@@ -21,7 +22,6 @@ import {
   aiV5UIMessagesToAIV5ModelMessages as convertAIV5UIToModelMessages,
   aiV4CoreMessagesToAIV5ModelMessages as convertAIV4CoreToAIV5ModelMessages,
   systemMessageToAIV4Core,
-  mapToolResultMediaPartsForV6,
   StepContentExtractor,
 } from './conversion';
 import { TypeDetector } from './detection/TypeDetector';
@@ -543,11 +543,10 @@ export class MessageList {
     aiV6: {
       ui: () => this.toAIV6UIMessages(this.all.db()),
 
-      // Same prompt surface as aiV5.llmPrompt, but translates tool-result `media`
-      // parts to the `image-data`/`file-data` shape that AI SDK v6 (spec 'v3')
-      // providers require.
-      llmPrompt: (options?: LlmPromptOptions): Promise<LanguageModelV2Prompt> =>
-        this.#buildLlmPrompt(options, mapToolResultMediaPartsForV6),
+      // Builds the v5 prompt, then converts it to the shape AI SDK v6 (spec 'v3')
+      // providers require (tool-result `media` -> `image-data`/`file-data`).
+      llmPrompt: async (options?: LlmPromptOptions): Promise<LanguageModelV2Prompt> =>
+        aiV5PromptToAIV6Prompt(await this.all.aiV5.llmPrompt(options)),
     },
 
     /* @deprecated use list.get.all.aiV4.prompt() instead */
@@ -587,19 +586,16 @@ export class MessageList {
   };
 
   /**
-   * Shared implementation behind aiV5.llmPrompt / aiV6.llmPrompt.
+   * Builds the base LLM prompt for AI SDK v5 (spec 'v2') providers.
    *
-   * `transformModelMessages`, when provided, runs after the stored-modelOutput
-   * override and before asset download / V2 prompt mapping. aiV6 uses it to
-   * translate tool-result `media` parts into the `image-data`/`file-data` shape
-   * that v6 (spec 'v3') providers require; aiV5 omits it so `media` is preserved.
+   * `aiV5.llmPrompt` returns this directly; `aiV6.llmPrompt` chains a single
+   * v5 -> v6 conversion (`aiV5PromptToAIV6Prompt`) on top of it.
    */
   async #buildLlmPrompt(
     options: LlmPromptOptions = { downloadConcurrency: 10, downloadRetries: 3 },
-    transformModelMessages?: (messages: AIV5Type.ModelMessage[]) => AIV5Type.ModelMessage[],
   ): Promise<LanguageModelV2Prompt> {
     const promptMessages = this.getMessagesForModelPrompt();
-    let modelMessages = convertAIV5UIToModelMessages(
+    const modelMessages = convertAIV5UIToModelMessages(
       this.toAIV5UIMessages(promptMessages, { transformToolPayloads: false }),
       promptMessages,
       this.filterIncompleteToolCalls,
@@ -639,12 +635,6 @@ export class MessageList {
           }
         }
       }
-    }
-
-    // Apply the per-spec-version transform after the modelOutput override so
-    // override-injected parts are also handled.
-    if (transformModelMessages) {
-      modelMessages = transformModelMessages(modelMessages);
     }
 
     const systemMessages = convertAIV4CoreToAIV5ModelMessages(
