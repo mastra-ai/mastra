@@ -1,9 +1,7 @@
-import type { ReactNode } from 'react';
+import type { ComponentPropsWithoutRef } from 'react';
 import { cn } from '@/lib/utils';
 
-export type DataListTopProps = {
-  children: ReactNode;
-  className?: string;
+export type DataListTopProps = ComponentPropsWithoutRef<'div'> & {
   /**
    * Switch to a "leading cell" layout: drops the default gap between children
    * and the default left padding, so a leading cell (e.g. `TopSelectCell`)
@@ -13,7 +11,7 @@ export type DataListTopProps = {
   hasLeadingCell?: boolean;
 };
 
-export function DataListTop({ children, className, hasLeadingCell }: DataListTopProps) {
+export function DataListTop({ children, className, hasLeadingCell, ...props }: DataListTopProps) {
   return (
     <div
       className={cn(
@@ -21,6 +19,7 @@ export function DataListTop({ children, className, hasLeadingCell }: DataListTop
         hasLeadingCell && 'gap-0 pl-0!',
         className,
       )}
+      {...props}
     >
       {children}
     </div>

@@ -1,8 +1,6 @@
 'use client';
-
+import { Button, toast } from '@mastra/playground-ui';
 import {
-  Button,
-  toast,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -10,7 +8,7 @@ import {
   DialogDescription,
   DialogBody,
   DialogFooter,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Dialog';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useCallback, useState } from 'react';
 import type { ColumnMapping, FieldType } from '../../hooks/use-column-mapping';

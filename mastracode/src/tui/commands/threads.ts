@@ -111,6 +111,7 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
         state.ui.hideOverlay();
 
         if (thread.id === currentId) {
+          ctx.showInfo(`Switched to: ${thread.title || thread.id}`);
           resolve();
           return;
         }

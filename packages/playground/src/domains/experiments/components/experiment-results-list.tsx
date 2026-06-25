@@ -1,5 +1,7 @@
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
-import { DataList, DataListSkeleton, Tooltip, TooltipContent, TooltipTrigger, cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui';
+import { DataList, DataListSkeleton } from '@mastra/playground-ui/components/DataList';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 
 export type ExperimentResultsListProps = {
   results: DatasetExperimentResult[];

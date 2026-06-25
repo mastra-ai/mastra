@@ -1,4 +1,5 @@
-import { Collapsible, CollapsibleTrigger, CollapsibleContent, Button, JudgeIcon, Icon } from '@mastra/playground-ui';
+import { Button, JudgeIcon, Icon } from '@mastra/playground-ui';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';

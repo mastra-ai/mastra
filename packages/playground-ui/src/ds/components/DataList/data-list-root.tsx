@@ -1,7 +1,7 @@
 import { cva } from 'class-variance-authority';
 import type { CSSProperties, ReactNode, RefObject } from 'react';
 import { ScrollArea } from '@/ds/components/ScrollArea/scroll-area';
-import type { ScrollAreaMask } from '@/ds/components/ScrollArea/scroll-area';
+import type { ScrollAreaMask, ScrollAreaProps } from '@/ds/components/ScrollArea/scroll-area';
 import { cn } from '@/lib/utils';
 
 /**
@@ -16,10 +16,9 @@ export type DataListVariant = 'striped' | 'lined';
 export type DataListStickyHeaderBackground = 'tinted' | 'surface' | 'transparent';
 type DataListStickyHeaderBackgroundValue = { background: string; hoverBackground: string };
 
-export type DataListRootProps = {
+export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation' | 'mask' | 'viewportRef'> & {
   children: ReactNode;
   columns: string;
-  className?: string;
   variant?: DataListVariant;
   /**
    * Shared fill for the sticky top header and sticky row-header column.
@@ -137,6 +136,7 @@ export function DataListRoot({
   stickyHeaderBackground = 'tinted',
   mask,
   scrollRef,
+  ...props
 }: DataListRootProps) {
   const stickyHeaderColors = stickyHeaderBackgroundValues[stickyHeaderBackground];
   const gridStyle: DataListRootStyle = {
@@ -165,6 +165,7 @@ export function DataListRoot({
   // edge except the top — a top fade would fade the opaque sticky header.
   return (
     <ScrollArea
+      {...props}
       orientation="both"
       mask={getDataListMask(mask)}
       viewportRef={scrollRef}
