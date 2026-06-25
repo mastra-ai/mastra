@@ -7,10 +7,20 @@ import { Cron } from 'croner';
  * @param timezone - Optional IANA timezone (e.g. 'America/New_York').
  */
 export function validateCron(cron: string, timezone?: string): void {
+  if (typeof cron !== 'string' || cron.trim() === '') {
+    throw new Error(
+      `Invalid cron expression: expected a non-empty cron string (e.g. "0 * * * *"), but received ${cron === undefined ? 'undefined' : JSON.stringify(cron)}.`,
+    );
+  }
   // Croner throws synchronously on invalid patterns. To also validate the
   // timezone (which croner only checks lazily), compute the next run.
-  const job = new Cron(cron, { timezone });
-  job.nextRun();
+  try {
+    const job = new Cron(cron, { timezone });
+    job.nextRun();
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Invalid cron expression "${cron}": ${reason}`);
+  }
 }
 
 /**
