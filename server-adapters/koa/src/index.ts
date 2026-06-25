@@ -504,8 +504,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       const result = await route.handler(handlerParams);
       await this.sendResponse(route, ctx, result, prefix);
     } catch (error) {
-      const httpStatus =
-        error && typeof error === 'object' && 'status' in error ? (error as any).status : undefined;
+      const httpStatus = error && typeof error === 'object' && 'status' in error ? (error as any).status : undefined;
       const isClientError = typeof httpStatus === 'number' && httpStatus >= 400 && httpStatus < 500;
       if (!isClientError) {
         this.mastra.getLogger()?.error('Error calling handler', {
