@@ -72,17 +72,6 @@ const config: Config = {
 		gaId: process.env.GA_ID,
 		posthogApiKey: process.env.POSTHOG_API_KEY,
 		posthogHost: process.env.POSTHOG_HOST,
-		routeVersions: {
-			basePath: '/docs',
-			paramSegment: 2,
-			versions: [
-				{ value: 'v1', label: 'Latest Version', isDefault: true },
-				{ value: 'v0', label: 'v0' },
-			],
-			featureVersioning: {
-				'/docs/get-started/build-with-ai': 'v1',
-			},
-		},
 	},
 	plugins: [
 		[require.resolve('./src/plugins/docusaurus-plugin-learn'), {}],
@@ -109,17 +98,23 @@ const config: Config = {
 Below is an overview of all available documentation.`,
 					instances: [
 						{
-							id: 'Kitchen Sink',
-							routeBasePath: '/',
-							sidebarPath: './src/content/kitchen-sink/sidebars.js',
-							path: 'src/content/kitchen-sink',
-							condensedCategories: ['Design Tokens', 'Typography'],
-						},
-						{
 							id: 'Docs',
 							routeBasePath: '/docs',
 							sidebarPath: './src/content/docs/sidebars.js',
 							path: 'src/content/docs',
+						},
+						{
+							id: 'Models',
+							routeBasePath: '/models',
+							sidebarPath: './src/content/models/sidebars.js',
+							path: 'src/content/models',
+							condensedCategories: ['Gateways', 'Providers'],
+						},
+						{
+							id: 'Guides',
+							routeBasePath: '/guides',
+							sidebarPath: './src/content/guides/sidebars.js',
+							path: 'src/content/guides',
 						},
 						{
 							id: 'Reference',
@@ -140,12 +135,12 @@ Below is an overview of all available documentation.`,
 					{
 						label: 'Quickstart',
 						description: 'Get up and running with Mastra',
-						link: '/docs/get-started/overview',
+						link: '/guides/getting-started/quickstart',
 					},
 					{
-						label: 'Try studio',
-						description: 'Get up and running with Mastra Cloud',
-						link: '/docs/getting-started/studio',
+						label: 'Try Studio',
+						description: 'Interactive UI for building, testing, and managing agents',
+						link: '/docs/studio/overview',
 					},
 				],
 				algoliaAppId: process.env.ALGOLIA_APP_ID!,
@@ -155,15 +150,25 @@ Below is an overview of all available documentation.`,
 		[
 			'@docusaurus/plugin-content-docs',
 			{
-				id: 'kitchen-sink',
+				id: 'models',
 				beforeDefaultRehypePlugins: [shikiPlugin],
-				path: 'src/content/kitchen-sink',
-				routeBasePath: '/',
-				sidebarPath: './src/content/kitchen-sink/sidebars.js',
+				path: 'src/content/models',
+				routeBasePath: 'models',
+				sidebarPath: './src/content/models/sidebars.js',
 				remarkPlugins: SHARED_REMARK_PLUGINS,
-				admonitions: {
-					keywords: ['note', 'tip', 'info', 'caution', 'danger', 'warning', 'alpha'],
-				},
+				editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
+			},
+		],
+		[
+			'@docusaurus/plugin-content-docs',
+			{
+				id: 'guides',
+				beforeDefaultRehypePlugins: [shikiPlugin],
+				path: 'src/content/guides',
+				routeBasePath: 'guides',
+				sidebarPath: './src/content/guides/sidebars.js',
+				remarkPlugins: SHARED_REMARK_PLUGINS,
+				editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
 			},
 		],
 		[
@@ -172,10 +177,10 @@ Below is an overview of all available documentation.`,
 				id: 'reference',
 				beforeDefaultRehypePlugins: [shikiPlugin],
 				path: 'src/content/reference',
-				routeBasePath: '/reference',
+				routeBasePath: 'reference',
 				sidebarPath: './src/content/reference/sidebars.js',
 				remarkPlugins: SHARED_REMARK_PLUGINS,
-				editUrl: 'https://github.com/mastra-ai/docusaurus-mastra/tree/main/demo',
+				editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
 			},
 		],
 	],
@@ -188,21 +193,10 @@ Below is an overview of all available documentation.`,
 					path: 'src/content/docs',
 					routeBasePath: '/docs',
 					sidebarPath: './src/content/docs/sidebars.js',
-					editUrl: 'https://github.com/mastra-ai/docusaurus-mastra/tree/main/demo',
-					// The placeholder.com editUrl is a special URL which we use to hide the "Edit this page" link in the UI
-					// editUrl: 'http://placeholder.com',
-					lastVersion: 'current',
-					versions: {
-						current: {
-							label: 'v1',
-						},
-						'0.x': {
-							label: 'v0.x',
-							banner: 'unmaintained',
-						},
-					},
+					editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
 					remarkPlugins: SHARED_REMARK_PLUGINS,
 				},
+				blog: false,
 				theme: {
 					customCss: './styles.css',
 				},
@@ -210,38 +204,24 @@ Below is an overview of all available documentation.`,
 		],
 	],
 	themeConfig: {
-		image: 'img/docusaurus-social-card.jpg',
-		// Site-wide social/meta tags that Docusaurus core does not emit on its own.
-		// Core already emits og:title, og:description, og:image, og:url, og:locale,
-		// twitter:card and twitter:image; these fill the gaps flagged as incomplete
-		// Open Graph (og:type, og:site_name) and the missing Twitter title/desc.
-		// Do NOT add og:url/og:title/og:description here — core sets those per page.
+		image: 'og-image.png',
 		metadata: [
 			{ property: 'og:type', content: 'website' },
-			{ property: 'og:site_name', content: 'Mastra Docusaurus Theme' },
-			{ property: 'og:image:alt', content: 'Mastra Docusaurus Theme' },
-			{ name: 'twitter:title', content: 'Mastra Docusaurus Theme' },
-			{ name: 'twitter:description', content: 'The documentation theme for Mastra' },
+			{ property: 'og:site_name', content: 'Mastra' },
+			{ property: 'og:image:alt', content: 'Mastra' },
+			{ name: 'twitter:title', content: 'Mastra' },
+			{ name: 'twitter:description', content: 'The TypeScript Agent Framework' },
 		],
 		colorMode: {
 			respectPrefersColorScheme: true,
 		},
 		navbar: {
-			title: 'Demo',
 			logo: {
 				alt: 'Mastra',
-				src: 'img/mastra.svg',
+				src: 'mastra-wordmark.svg',
 				href: 'https://mastra.ai',
-				width: 32,
 			},
 			items: [
-				{
-					type: 'docSidebar',
-					sidebarId: 'kitchenSinkSidebar',
-					position: 'left',
-					label: 'Kitchen Sink',
-					docsPluginId: 'kitchen-sink',
-				},
 				{
 					type: 'docSidebar',
 					sidebarId: 'docsSidebar',
@@ -249,14 +229,18 @@ Below is an overview of all available documentation.`,
 					label: 'Docs',
 				},
 				{
-					to: '/models',
+					type: 'docSidebar',
+					sidebarId: 'modelsSidebar',
 					position: 'left',
 					label: 'Models',
+					docsPluginId: 'models',
 				},
 				{
-					to: '/guides',
+					type: 'docSidebar',
+					sidebarId: 'guidesSidebar',
 					position: 'left',
-					label: 'Guides & Migrations',
+					label: 'Guides',
+					docsPluginId: 'guides',
 				},
 				{
 					type: 'docSidebar',
@@ -271,6 +255,12 @@ Below is an overview of all available documentation.`,
 					label: 'Learn',
 					to: '/learn',
 					badge: 'new',
+				},
+				{
+					type: 'docSidebar',
+					sidebarId: 'platformSidebar',
+					position: 'left',
+					label: 'Platform',
 				},
 				{
 					type: 'search',
@@ -296,96 +286,3 @@ Below is an overview of all available documentation.`,
 }
 
 export default config
-
-/*
-
-	plugins: [
-		[
-			'@docusaurus/plugin-content-docs',
-			{
-				id: 'models',
-				path: 'src/content/en/models',
-				routeBasePath: 'models',
-				sidebarPath: './src/content/en/models/sidebars.js',
-				editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
-				admonitions: ADMONITIONS_CONFIG,
-				remarkPlugins: [...SHARED_REMARK_PLUGINS],
-			},
-		],
-		[
-			'@docusaurus/plugin-content-docs',
-			{
-				id: 'guides',
-				path: 'src/content/en/guides',
-				routeBasePath: 'guides',
-				sidebarPath: './src/content/en/guides/sidebars.js',
-				editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
-				admonitions: ADMONITIONS_CONFIG,
-				remarkPlugins: [...SHARED_REMARK_PLUGINS],
-			},
-		],
-		[
-			'@docusaurus/plugin-content-docs',
-			{
-				id: 'reference',
-				path: 'src/content/en/reference',
-				routeBasePath: 'reference',
-				sidebarPath: './src/content/en/reference/sidebars.js',
-				editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
-				admonitions: ADMONITIONS_CONFIG,
-				remarkPlugins: [...SHARED_REMARK_PLUGINS],
-			},
-		],
-		[
-			require.resolve('./src/plugins/docusaurus-plugin-llms-txt'),
-			{
-				siteUrl: 'https://mastra.ai',
-				siteTitle: 'Mastra',
-				siteDescription:
-					'Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack. It includes everything you need to go from early prototypes to production-ready applications. Mastra integrates with frontend and backend frameworks like React, Next.js, and Node, or you can deploy it anywhere as a standalone server.',
-				excludeRoutes: ['/404'],
-			},
-		],
-	],
-	presets: [
-		[
-			'classic',
-			{
-				docs: {
-					path: 'src/content/en/docs',
-					routeBasePath: 'docs',
-					sidebarPath: './src/content/en/docs/sidebars.js',
-					// Please change this to your repo.
-					// Remove this to remove the "edit this page" links.
-					editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
-					admonitions: ADMONITIONS_CONFIG,
-					remarkPlugins: [...SHARED_REMARK_PLUGINS],
-				},
-				blog: false,
-				theme: {
-					customCss: './custom.css',
-				},
-				sitemap: {
-					lastmod: 'date',
-					changefreq: 'weekly',
-					priority: 0.5,
-					ignorePatterns: ['/tags/**'],
-					filename: 'sitemap.xml',
-				},
-			},
-		],
-	],
-	themeConfig: {
-		image: 'img/og-image.png',
-		colorMode: {
-			respectPrefersColorScheme: true,
-		},
-		prism: {
-			// @ts-expect-error: FIXME
-			theme: prismMastraLight,
-			// @ts-expect-error: FIXME
-			darkTheme: prismMastraDark,
-			additionalLanguages: ['diff', 'bash'],
-		},
-	} satisfies ThemeConfig,
-*/

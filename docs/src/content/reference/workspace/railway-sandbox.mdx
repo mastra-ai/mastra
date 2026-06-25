@@ -5,9 +5,6 @@ packages:
   - "@mastra/railway"
 ---
 
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
-
 # RailwaySandbox
 
 Executes commands in ephemeral, isolated [Railway](https://docs.railway.com/sandboxes) sandboxes. Each sandbox is an isolated Debian Linux VM provisioned on demand through the Railway TypeScript SDK. Supports command execution with streaming output, command timeouts, configurable idle timeout, `ISOLATED`/`PRIVATE` network isolation, custom base images via the Railway template builder, forking a running sandbox, and reattaching to an existing sandbox by ID.

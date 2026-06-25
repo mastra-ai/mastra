@@ -5,8 +5,6 @@ packages:
   - "@mastra/otel-exporter"
 ---
 
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 # OtelExporter
 
 Sends traces and logs to any OpenTelemetry-compatible observability platform. Traces use the standardized GenAI semantic conventions; logs carry their original severity and message body and are correlated to traces via both the OTEL log record's native trace context and `mastra.traceId` / `mastra.spanId` attributes.

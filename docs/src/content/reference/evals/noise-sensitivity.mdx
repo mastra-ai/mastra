@@ -5,8 +5,6 @@ packages:
   - "@mastra/evals"
 ---
 
-import PropertiesTable from "@site/src/components/PropertiesTable";
-
 # Noise sensitivity scorer
 
 The `createNoiseSensitivityScorerLLM()` function creates a **CI/testing scorer** that evaluates how robust an agent is when exposed to irrelevant, distracting, or misleading information. Unlike live scorers that evaluate single production runs, this scorer requires predetermined test data including both baseline responses and noisy variations.

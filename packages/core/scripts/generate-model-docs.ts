@@ -599,10 +599,6 @@ description: "Access ${totalProviders}+ AI providers and ${totalModels}+ models 
 
 ${getGeneratedComment()}
 
-import { CardGrid, CardGridItem } from "@site/src/components/cards/card-grid";
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
-
 # Model Providers
 
 Mastra provides a unified interface for working with LLMs across multiple providers, giving you access to ${totalModels} models from ${totalProviders} providers through a single API.
@@ -1028,8 +1024,6 @@ description: "Access AI models through gateway providers with caching, rate limi
 
 ${getGeneratedComment()}
 
-import { CardGrid, CardGridItem } from "@site/src/components/cards/card-grid";
-
 # Gateway Providers
 
 Gateway providers aggregate multiple model providers and add features like caching, rate limiting, analytics, and automatic failover. Use gateways when you need observability, cost management, or simplified multi-provider access.
@@ -1084,8 +1078,6 @@ description: "Direct access to AI model providers."
 ---
 
 ${getGeneratedComment()}
-
-import { CardGrid, CardGridItem } from "@site/src/components/cards/card-grid";
 
 # Model Providers
 
