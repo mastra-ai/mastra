@@ -550,6 +550,7 @@ describe('createMastraCode', () => {
       | { initialState?: Record<string, unknown> }
       | undefined;
     expect(harnessConfig?.initialState?.projectPath).toBe(projectPath);
+    expect(harnessSetStateMock).toHaveBeenCalledWith(expect.objectContaining({ projectPath }));
   });
 
   it('uses configured configDir consistently for startup services and runtime state', async () => {
@@ -578,6 +579,7 @@ describe('createMastraCode', () => {
       | { initialState?: Record<string, unknown> }
       | undefined;
     expect(harnessConfig?.initialState?.configDir).toBe('.acme-code');
+    expect(harnessSetStateMock).toHaveBeenCalledWith(expect.objectContaining({ configDir: '.acme-code' }));
   });
 
   it('passes programmatic MCP servers into the startup manager with project and configDir', async () => {
