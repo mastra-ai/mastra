@@ -35,13 +35,25 @@ const EXPECTED_USER_SIGNAL_DELIVERY_OPTIONS = {
 };
 
 function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
+  // Mirror production wiring: state.session is the same object as
+  // harness.session. Tests pass per-session behavior under `session`
+  // (run-control, thread lifecycle, stream); only host-level behavior goes on
+  // `harness`. We link them here so a single `session` override drives both.
+  const { session: sessionOverride, harness: harnessOverride, ...rest } = overrides as any;
+  const session = {
+    followUps: { count: vi.fn(() => 0) },
+    getCurrentRunId: vi.fn(() => null),
+    stream: { isActive: vi.fn(() => false) },
+    sendSignal: vi.fn(() => ({ id: 'signal-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) })),
+    sendMessage: vi.fn().mockResolvedValue(undefined),
+    displayState: { get: vi.fn(() => ({ isRunning: false })) },
+    thread: { create: vi.fn().mockResolvedValue({ id: 'thread-new' }) },
+    mode: { switch: vi.fn().mockResolvedValue(undefined) },
+    ...(sessionOverride ?? {}),
+  };
   return {
-    session: {
-      followUps: { count: vi.fn(() => 0) },
-      getCurrentRunId: vi.fn(() => null),
-      stream: { isActive: vi.fn(() => false) },
-    },
-    harness: {},
+    session,
+    harness: { session, ...(harnessOverride ?? {}) },
     goalManager: { stopActiveTimer: vi.fn() },
     gradientAnimator: undefined,
     projectInfo: { rootPath: '.', gitBranch: 'main' } as TUIState['projectInfo'],
@@ -71,7 +83,7 @@ function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
     allShellComponents: [],
     ui: { requestRender: vi.fn() } as unknown as TUIState['ui'],
     planStartedGoalId: undefined,
-    ...overrides,
+    ...rest,
   } as unknown as TUIState;
 }
 
@@ -91,6 +103,8 @@ function createQueueContext(state: TUIState, overrides: Partial<EventHandlerCont
     queueFollowUpMessage: vi.fn(),
     renderExistingMessages: vi.fn(),
     renderClearedTasksInline: vi.fn(),
+    renderCompletedTasksInline: vi.fn(),
+    renderTaskDeltaInline: vi.fn(),
     refreshModelAuthStatus: vi.fn(),
     ...overrides,
   };
@@ -251,15 +265,12 @@ describe('MastraTUI queueing', () => {
       .fn()
       .mockReturnValue({ id: 'signal-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
     const state = createQueueState({
-      session: { getCurrentRunId: () => null, stream: { isActive: () => true } } as any,
-      harness: {
+      session: {
+        getCurrentRunId: () => null,
+        stream: { isActive: () => true },
+        displayState: { get: () => ({ isRunning: true }) },
         sendSignal,
-        session: {
-          getCurrentRunId: () => null,
-          stream: { isActive: () => true },
-          displayState: { get: () => ({ isRunning: true }) },
-        },
-      } as unknown as TUIState['harness'],
+      } as any,
       chatContainer: new Container(),
     });
     const tui = Object.create(MastraTUI.prototype) as {
@@ -287,12 +298,12 @@ describe('MastraTUI queueing', () => {
       .mockReturnValue({ id: 'signal-after-new', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
     const state = createQueueState({
       pendingNewThread: true,
-      session: { stream: { isActive: () => false } } as any,
-      harness: {
-        createThread,
+      session: {
+        stream: { isActive: () => false },
+        displayState: { get: () => ({ isRunning: false }) },
+        thread: { create: createThread },
         sendSignal,
-        session: { stream: { isActive: () => false }, displayState: { get: () => ({ isRunning: false }) } },
-      } as unknown as TUIState['harness'],
+      } as any,
       chatContainer: new Container(),
     });
     const tui = Object.create(MastraTUI.prototype) as {
@@ -322,15 +333,12 @@ describe('MastraTUI queueing', () => {
       .fn()
       .mockReturnValue({ id: 'signal-after-hook', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
     const state = createQueueState({
-      session: { getCurrentRunId: () => null, stream: { isActive: () => false } } as any,
-      harness: {
+      session: {
+        getCurrentRunId: () => null,
+        stream: { isActive: () => false },
+        displayState: { get: () => ({ isRunning: false }) },
         sendSignal,
-        session: {
-          getCurrentRunId: () => null,
-          stream: { isActive: () => false },
-          displayState: { get: () => ({ isRunning: false }) },
-        },
-      } as unknown as TUIState['harness'],
+      } as any,
       chatContainer: new Container(),
     });
     const tui = Object.create(MastraTUI.prototype) as {
@@ -358,12 +366,12 @@ describe('MastraTUI queueing', () => {
       .mockReturnValue({ id: 'signal-after-new', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
     const state = createQueueState({
       pendingNewThread: true,
-      session: { stream: { isActive: () => false } } as any,
-      harness: {
-        createThread,
+      session: {
+        stream: { isActive: () => false },
+        displayState: { get: () => ({ isRunning: false }) },
+        thread: { create: createThread },
         sendSignal,
-        session: { stream: { isActive: () => false }, displayState: { get: () => ({ isRunning: false }) } },
-      } as unknown as TUIState['harness'],
+      } as any,
       chatContainer: new Container(),
     });
     const tui = Object.create(MastraTUI.prototype) as {
@@ -398,15 +406,12 @@ describe('MastraTUI queueing', () => {
       .fn()
       .mockReturnValue({ id: 'signal-idle-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
     const state = createQueueState({
-      session: { getCurrentRunId: () => null, stream: { isActive: () => false } } as any,
-      harness: {
+      session: {
+        getCurrentRunId: () => null,
+        stream: { isActive: () => false },
+        displayState: { get: () => ({ isRunning: false }) },
         sendSignal,
-        session: {
-          getCurrentRunId: () => null,
-          stream: { isActive: () => false },
-          displayState: { get: () => ({ isRunning: false }) },
-        },
-      } as unknown as TUIState['harness'],
+      } as any,
       chatContainer: new Container(),
     });
     const tui = Object.create(MastraTUI.prototype) as {
@@ -437,15 +442,12 @@ describe('MastraTUI queueing', () => {
       .fn()
       .mockReturnValue({ id: 'signal-image-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
     const state = createQueueState({
-      session: { getCurrentRunId: () => null, stream: { isActive: () => false } } as any,
-      harness: {
+      session: {
+        getCurrentRunId: () => null,
+        stream: { isActive: () => false },
+        displayState: { get: () => ({ isRunning: false }) },
         sendSignal,
-        session: {
-          getCurrentRunId: () => null,
-          stream: { isActive: () => false },
-          displayState: { get: () => ({ isRunning: false }) },
-        },
-      } as unknown as TUIState['harness'],
+      } as any,
       chatContainer: new Container(),
     });
     const tui = Object.create(MastraTUI.prototype) as {
@@ -629,9 +631,7 @@ describe('MastraTUI queueing', () => {
     const applyEvaluation = vi.fn();
     const state = createQueueState({
       planStartedGoalId: 'plan-goal-456',
-      harness: {
-        session: { mode: { switch: switchMode } },
-      } as any,
+      session: { mode: { switch: switchMode } } as any,
       goalManager: {
         applyEvaluation,
         getGoal: vi.fn(() => ({
@@ -657,9 +657,7 @@ describe('MastraTUI queueing', () => {
     const switchMode = vi.fn().mockResolvedValue({ accepted: true });
     const state = createQueueState({
       planStartedGoalId: undefined,
-      harness: {
-        session: { mode: { switch: switchMode } },
-      } as any,
+      session: { mode: { switch: switchMode } } as any,
       goalManager: {
         applyEvaluation: vi.fn(),
         getGoal: vi.fn(() => ({
@@ -682,9 +680,7 @@ describe('MastraTUI queueing', () => {
     const switchMode = vi.fn().mockResolvedValue({ accepted: true });
     const state = createQueueState({
       planStartedGoalId: 'plan-goal-123',
-      harness: {
-        session: { mode: { switch: switchMode } },
-      } as any,
+      session: { mode: { switch: switchMode } } as any,
       goalManager: {
         applyEvaluation: vi.fn(),
         getGoal: vi.fn(() => ({
@@ -709,9 +705,7 @@ describe('MastraTUI queueing', () => {
     const switchMode = vi.fn().mockResolvedValue({ accepted: true });
     const state = createQueueState({
       planStartedGoalId: 'plan-goal-321',
-      harness: {
-        session: { mode: { switch: switchMode } },
-      } as any,
+      session: { mode: { switch: switchMode } } as any,
       goalManager: {
         applyEvaluation: vi.fn(),
         getGoal: vi.fn(() => ({
@@ -736,9 +730,7 @@ describe('MastraTUI queueing', () => {
     const switchMode = vi.fn().mockResolvedValue({ accepted: true });
     const state = createQueueState({
       planStartedGoalId: 'plan-goal-xyz',
-      harness: {
-        session: { mode: { switch: switchMode } },
-      } as any,
+      session: { mode: { switch: switchMode } } as any,
       goalManager: {
         applyEvaluation: vi.fn(),
         getGoal: vi.fn(() => ({
@@ -763,9 +755,7 @@ describe('MastraTUI queueing', () => {
     const showError = vi.fn();
     const state = createQueueState({
       planStartedGoalId: 'plan-goal-failed',
-      harness: {
-        session: { mode: { switch: switchMode } },
-      } as any,
+      session: { mode: { switch: switchMode } } as any,
       goalManager: {
         applyEvaluation: vi.fn(),
         getGoal: vi.fn(() => ({
@@ -795,9 +785,7 @@ describe('MastraTUI queueing', () => {
     const originalGoalId = 'original-goal-123';
     const state = createQueueState({
       planStartedGoalId: originalGoalId,
-      harness: {
-        session: { mode: { switch: switchMode } },
-      } as any,
+      session: { mode: { switch: switchMode } } as any,
       goalManager: {
         applyEvaluation: vi.fn(),
         getGoal: vi.fn(() => ({
@@ -822,9 +810,7 @@ describe('MastraTUI queueing', () => {
     const originalGoalId = 'original-goal-123';
     const state = createQueueState({
       planStartedGoalId: originalGoalId,
-      harness: {
-        session: { mode: { switch: switchMode } },
-      } as any,
+      session: { mode: { switch: switchMode } } as any,
       goalManager: {
         applyEvaluation: vi.fn(),
         getGoal: vi.fn(() => null),
@@ -895,8 +881,6 @@ describe('syncInitialThreadState', () => {
             { id: 'thread-2', title: 'Other thread', metadata: {} },
           ]),
         },
-      },
-      harness: {
         sendMessage: vi.fn(),
       },
       goalManager: {
@@ -914,7 +898,7 @@ describe('syncInitialThreadState', () => {
     expect(state.currentThreadTitle).toBe('PR triage');
     expect(state.goalManager.loadFromThread).toHaveBeenCalledWith(state);
     expect(state.goalManager.loadFromThreadMetadata).toHaveBeenCalledWith({ goal: persistedGoal });
-    expect(state.harness.sendMessage).not.toHaveBeenCalled();
+    expect(state.session.sendMessage).not.toHaveBeenCalled();
   });
 
   it('does not re-hydrate from legacy metadata when the durable objective load succeeds', async () => {
@@ -939,9 +923,6 @@ describe('syncInitialThreadState', () => {
           getId: vi.fn(() => 'thread-1'),
           list: vi.fn().mockResolvedValue([{ id: 'thread-1', title: 'PR triage', metadata: { goal: persistedGoal } }]),
         },
-      },
-      harness: {
-        sendMessage: vi.fn(),
       },
       goalManager: {
         // Durable ThreadState load produced an objective, so the stale legacy

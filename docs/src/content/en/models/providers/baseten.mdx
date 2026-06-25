@@ -9,7 +9,7 @@ description: "Use Baseten models with Mastra. 11 models available."
 
 Access 11 Baseten models through Mastra's model router. Authentication is handled automatically using the `BASETEN_API_KEY` environment variable.
 
-Learn more in the [Baseten documentation](https://docs.baseten.co/development/model-apis/overview).
+Learn more in the [Baseten documentation](https://docs.baseten.co).
 
 ```bash title=".env"
 BASETEN_API_KEY=your-api-key
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "baseten/MiniMaxAI/MiniMax-M2.5"
+  model: "baseten/deepseek-ai/DeepSeek-V4-Pro"
 });
 
 // Generate a response
@@ -37,7 +37,7 @@ for await (const chunk of stream) {
 
 :::info
 
-Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Baseten documentation](https://docs.baseten.co/development/model-apis/overview) for details.
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Baseten documentation](https://docs.baseten.co) for details.
 
 :::
 
@@ -46,62 +46,26 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "baseten/deepseek-ai/DeepSeek-V3-0324",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 164000,
-    "maxOutput": 131000,
-    "inputCost": 0.77,
-    "outputCost": 0.77
-  },
-  {
-    "model": "baseten/deepseek-ai/DeepSeek-V3.1",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 164000,
-    "maxOutput": 131000,
-    "inputCost": 0.5,
-    "outputCost": 1.5
-  },
-  {
     "model": "baseten/deepseek-ai/DeepSeek-V4-Pro",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 384000,
+    "contextWindow": 131000,
+    "maxOutput": 131000,
     "inputCost": 1.74,
     "outputCost": 3.48
   },
   {
-    "model": "baseten/MiniMaxAI/MiniMax-M2.5",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 204000,
-    "maxOutput": 204000,
-    "inputCost": 0.3,
-    "outputCost": 1.2
-  },
-  {
     "model": "baseten/moonshotai/Kimi-K2.5",
-    "imageInput": false,
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 8192,
+    "contextWindow": 262000,
+    "maxOutput": 262000,
     "inputCost": 0.6,
     "outputCost": 3
   },
@@ -109,11 +73,23 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "model": "baseten/moonshotai/Kimi-K2.6",
     "imageInput": true,
     "audioInput": false,
-    "videoInput": true,
+    "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 262144,
+    "contextWindow": 262000,
+    "maxOutput": 262000,
+    "inputCost": 0.95,
+    "outputCost": 4
+  },
+  {
+    "model": "baseten/moonshotai/Kimi-K2.7-Code",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262000,
+    "maxOutput": 262000,
     "inputCost": 0.95,
     "outputCost": 4
   },
@@ -124,10 +100,22 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 32678,
+    "contextWindow": 202800,
+    "maxOutput": 202800,
     "inputCost": 0.3,
     "outputCost": 0.75
+  },
+  {
+    "model": "baseten/nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 202800,
+    "maxOutput": 202800,
+    "inputCost": 0.6,
+    "outputCost": 2.4
   },
   {
     "model": "baseten/openai/gpt-oss-120b",
@@ -136,22 +124,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 128000,
+    "contextWindow": 128072,
+    "maxOutput": 128072,
     "inputCost": 0.1,
     "outputCost": 0.5
-  },
-  {
-    "model": "baseten/zai-org/GLM-4.6",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 200000,
-    "maxOutput": 200000,
-    "inputCost": 0.6,
-    "outputCost": 2.2
   },
   {
     "model": "baseten/zai-org/GLM-4.7",
@@ -160,8 +136,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 131072,
+    "contextWindow": 200000,
+    "maxOutput": 200000,
     "inputCost": 0.6,
     "outputCost": 2.2
   },
@@ -172,10 +148,34 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 202752,
-    "maxOutput": 131072,
+    "contextWindow": 202800,
+    "maxOutput": 202800,
     "inputCost": 0.95,
     "outputCost": 3.15
+  },
+  {
+    "model": "baseten/zai-org/GLM-5.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 202800,
+    "maxOutput": 202800,
+    "inputCost": 1.3,
+    "outputCost": 4.3
+  },
+  {
+    "model": "baseten/zai-org/GLM-5.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 202720,
+    "maxOutput": 202720,
+    "inputCost": 1.4,
+    "outputCost": 4.4
   }
 ]}
 />
@@ -190,7 +190,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://inference.baseten.co/v1",
-    id: "baseten/MiniMaxAI/MiniMax-M2.5",
+    id: "baseten/deepseek-ai/DeepSeek-V4-Pro",
     apiKey: process.env.BASETEN_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -208,8 +208,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "baseten/zai-org/GLM-5"
-      : "baseten/MiniMaxAI/MiniMax-M2.5";
+      ? "baseten/zai-org/GLM-5.2"
+      : "baseten/deepseek-ai/DeepSeek-V4-Pro";
   }
 });
 ```

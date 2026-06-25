@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -15,6 +14,14 @@ describe('WorkflowCancelButton', () => {
 
   it('renders an enabled cancel button while running', () => {
     render(<WorkflowCancelButton status="running" cancelMessage={null} isCancelling={false} onCancel={() => {}} />);
+
+    const button = screen.getByRole('button', { name: /cancel workflow run/i });
+    expect(button).not.toBeNull();
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('renders an enabled cancel button while paused', () => {
+    render(<WorkflowCancelButton status="paused" cancelMessage={null} isCancelling={false} onCancel={() => {}} />);
 
     const button = screen.getByRole('button', { name: /cancel workflow run/i });
     expect(button).not.toBeNull();

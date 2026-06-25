@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Harness } from '../harness';
+import { createMockWorkspace } from '../test-utils';
 
 function createSubscription() {
   return {
@@ -26,19 +27,22 @@ describe('Harness notification signals', () => {
   it('creates a thread and delegates notification signals with resource, thread, and idle stream options', async () => {
     const agent = createAgentMock();
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'harness-1',
       resourceId: 'resource-1',
       modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
     });
+    await harness.init();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
-    const result = await harness.sendNotificationSignal({
+    const result = await session.sendNotificationSignal({
       source: 'mastracode',
       kind: 'manual',
       priority: 'high',
       summary: 'Check this notification',
     });
 
-    const threadId = harness.session.thread.getId();
+    const threadId = session.thread.getId();
     expect(threadId).toBeTruthy();
     expect(result).toMatchObject({ decision: { action: 'deliver' }, record: { id: 'notification-1', threadId } });
     expect(agent.subscribeToThread).toHaveBeenCalledTimes(1);

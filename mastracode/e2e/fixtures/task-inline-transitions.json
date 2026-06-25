@@ -3,7 +3,6 @@
     {
       "match": {
         "model": "gpt-5.4-mini",
-        "endpoint": "chat",
         "userMessage": "Exercise task inline transitions through real task tools.",
         "hasToolResult": false
       },
@@ -31,14 +30,16 @@
           }
         ]
       },
-      "streamingProfile": { "ttft": 200, "tps": 30 }
+      "streamingProfile": {
+        "ttft": 200,
+        "tps": 30
+      }
     },
     {
       "match": {
         "model": "gpt-5.4-mini",
-        "endpoint": "chat",
-        "toolCallId": "call_task_inline_write",
-        "hasToolResult": true
+        "hasToolResult": true,
+        "turnIndex": 1
       },
       "response": {
         "toolCalls": [
@@ -55,9 +56,8 @@
     {
       "match": {
         "model": "gpt-5.4-mini",
-        "endpoint": "chat",
-        "toolCallId": "call_task_inline_complete",
-        "hasToolResult": true
+        "hasToolResult": true,
+        "turnIndex": 2
       },
       "response": {
         "toolCalls": [
@@ -74,9 +74,8 @@
     {
       "match": {
         "model": "gpt-5.4-mini",
-        "endpoint": "chat",
-        "toolCallId": "call_task_inline_clear",
-        "hasToolResult": true
+        "hasToolResult": true,
+        "turnIndex": 3
       },
       "response": {
         "content": "Task inline transition e2e complete."

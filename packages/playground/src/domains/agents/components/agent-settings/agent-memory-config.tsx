@@ -1,5 +1,6 @@
 import type { SemanticRecall } from '@mastra/core/memory';
-import { Skeleton, cn } from '@mastra/playground-ui';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronRight, ChevronDown } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { useMemoryConfig } from '@/domains/memory/hooks';

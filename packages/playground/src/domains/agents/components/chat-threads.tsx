@@ -1,7 +1,6 @@
 import type { StorageThreadType } from '@mastra/core/memory';
-import { AlertDialog, Icon, Skeleton } from '@mastra/playground-ui';
-import { Plus } from 'lucide-react';
-import { useState } from 'react';
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import {
   ThreadList,
   ThreadListEmpty,
@@ -9,7 +8,10 @@ import {
   ThreadListItems,
   ThreadListNewItem,
   ThreadListSeparator,
-} from '@/components/thread-list';
+} from '@mastra/playground-ui/components/ThreadList';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { Plus } from 'lucide-react';
+import { useState } from 'react';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useLinkComponent } from '@/lib/framework';
 

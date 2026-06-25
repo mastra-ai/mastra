@@ -1,4 +1,4 @@
-import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui';
+import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Info } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -15,6 +15,17 @@ interface WorkspaceTextPreviewProps {
 
 type RenderableTextKind = 'html' | 'markdown' | 'mdx';
 
+const SAFE_MARKDOWN_PROTOCOLS = new Set(['http:', 'https:', 'mailto:']);
+
+function sanitizeMarkdownUrl(url: string) {
+  try {
+    const parsedUrl = new URL(url, window.location.origin);
+    return SAFE_MARKDOWN_PROTOCOLS.has(parsedUrl.protocol) ? url : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function getFileExtension(path: string) {
   return getWorkspaceFileName(path).split('.').pop()?.toLowerCase();
 }
@@ -24,10 +35,7 @@ function getRenderableTextKind(path: string, mimeType?: string): RenderableTextK
 
   if (extension === 'html' || extension === 'htm' || mimeType === 'text/html') return 'html';
   if (extension === 'mdx' || mimeType === 'text/mdx' || mimeType === 'application/mdx') return 'mdx';
-  if (
-    extension === 'md' ||
-    mimeType === 'text/markdown'
-  ) {
+  if (extension === 'md' || mimeType === 'text/markdown') {
     return 'markdown';
   }
 
@@ -184,6 +192,7 @@ function WorkspaceMarkdownPreview({ content, isMdx = false }: { content: string;
       ) : null}
       <Markdown
         remarkPlugins={[remarkGfm]}
+        urlTransform={sanitizeMarkdownUrl}
         components={{
           a: ({ children, ...props }) => (
             <a className="underline underline-offset-2" {...props}>

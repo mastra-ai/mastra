@@ -1,4 +1,5 @@
-import { Skeleton, cn } from '@mastra/playground-ui';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useBrowserFrame, useBrowserSession } from '../../context/browser-session-context';
 import type { StreamStatus } from '../../hooks/use-browser-stream';

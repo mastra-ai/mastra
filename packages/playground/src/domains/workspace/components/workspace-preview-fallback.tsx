@@ -1,4 +1,4 @@
-import { Button } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { AlertCircle, Download, ExternalLink } from 'lucide-react';
 
 export interface WorkspacePreviewFallbackProps {

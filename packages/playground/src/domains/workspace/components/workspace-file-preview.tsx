@@ -1,4 +1,7 @@
-import { Button, CopyButton, Spinner, toast } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import {
   AlertCircle,

@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { FileReadResponse, FileStatResponse, WorkspacesListResponse } from '../../types';
 import { WorkspaceFilePreview, WorkspaceFilePreviewContent } from '../workspace-file-preview';
 import { getWorkspaceFilePreviewKind, isWorkspaceFilePreviewBinary } from '../workspace-file-preview-utils';
 import { server } from '@/test/msw-server';
@@ -157,50 +158,45 @@ describe('WorkspaceFilePreviewContent', () => {
   });
 
   it('recovers a stale artifact workspace when a single filesystem workspace can read the file', async () => {
+    const workspacesResponse: WorkspacesListResponse = {
+      workspaces: [
+        {
+          id: 'ws-current',
+          name: 'Current workspace',
+          status: 'pending',
+          source: 'agent',
+          agentId: 'chef-model-v2-agent',
+          agentName: 'Chef Agent V2 Model',
+          capabilities: {
+            hasFilesystem: true,
+            hasSandbox: false,
+            canBM25: false,
+            canVector: false,
+            canHybrid: false,
+            hasSkills: true,
+          },
+          safety: { readOnly: false },
+        },
+      ],
+    };
+    const pdfStatResponse: FileStatResponse = {
+      path: 'reports/output.pdf',
+      type: 'file',
+      size: 12,
+      mimeType: 'application/pdf',
+    };
+    const pdfReadResponse: FileReadResponse = {
+      ...pdfStatResponse,
+      content: 'JVBERi0xLjQ=',
+    };
+
     server.use(
-      http.get(`${BASE_URL}/api/workspaces`, () =>
-        HttpResponse.json({
-          workspaces: [
-            {
-              id: 'ws-current',
-              name: 'Current workspace',
-              status: 'pending',
-              source: 'agent',
-              agentId: 'chef-model-v2-agent',
-              agentName: 'Chef Agent V2 Model',
-              capabilities: {
-                hasFilesystem: true,
-                hasSandbox: false,
-                canBM25: false,
-                canVector: false,
-                canHybrid: false,
-                hasSkills: true,
-              },
-              safety: { readOnly: false },
-            },
-          ],
-        }),
-      ),
+      http.get(`${BASE_URL}/api/workspaces`, () => HttpResponse.json(workspacesResponse)),
       http.get(`${BASE_URL}/api/workspaces/ws-stale/fs/stat`, () =>
         HttpResponse.json({ error: 'No workspace filesystem configured' }, { status: 404 }),
       ),
-      http.get(`${BASE_URL}/api/workspaces/ws-current/fs/stat`, () =>
-        HttpResponse.json({
-          path: 'reports/output.pdf',
-          type: 'file',
-          size: 12,
-          mimeType: 'application/pdf',
-        }),
-      ),
-      http.get(`${BASE_URL}/api/workspaces/ws-current/fs/read`, () =>
-        HttpResponse.json({
-          path: 'reports/output.pdf',
-          content: 'JVBERi0xLjQ=',
-          type: 'file',
-          size: 12,
-          mimeType: 'application/pdf',
-        }),
-      ),
+      http.get(`${BASE_URL}/api/workspaces/ws-current/fs/stat`, () => HttpResponse.json(pdfStatResponse)),
+      http.get(`${BASE_URL}/api/workspaces/ws-current/fs/read`, () => HttpResponse.json(pdfReadResponse)),
     );
 
     renderWithMastraClient(<WorkspaceFilePreview workspaceId="ws-stale" path="reports/output.pdf" />);
@@ -212,25 +208,22 @@ describe('WorkspaceFilePreviewContent', () => {
 
   it('does not read files that exceed the inline preview size limit', async () => {
     const onRead = vi.fn();
+    const largeCsvStatResponse: FileStatResponse = {
+      path: 'exports/big.csv',
+      type: 'file',
+      size: 3 * 1024 * 1024,
+      mimeType: 'text/csv',
+    };
+    const largeCsvReadResponse: FileReadResponse = {
+      ...largeCsvStatResponse,
+      content: 'name,value\nAda,1',
+    };
 
     server.use(
-      http.get(`${BASE_URL}/api/workspaces/ws-1/fs/stat`, () =>
-        HttpResponse.json({
-          path: 'exports/big.csv',
-          type: 'file',
-          size: 3 * 1024 * 1024,
-          mimeType: 'text/csv',
-        }),
-      ),
+      http.get(`${BASE_URL}/api/workspaces/ws-1/fs/stat`, () => HttpResponse.json(largeCsvStatResponse)),
       http.get(`${BASE_URL}/api/workspaces/ws-1/fs/read`, () => {
         onRead();
-        return HttpResponse.json({
-          path: 'exports/big.csv',
-          content: 'name,value\nAda,1',
-          type: 'file',
-          size: 3 * 1024 * 1024,
-          mimeType: 'text/csv',
-        });
+        return HttpResponse.json(largeCsvReadResponse);
       }),
     );
 
@@ -275,6 +268,19 @@ describe('WorkspaceFilePreviewContent', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Code' }));
 
     expect(container.textContent).toContain('# Recipe');
+  });
+
+  it('keeps unsafe Markdown links inert while preserving safe links', () => {
+    render(
+      <WorkspaceFilePreviewContent
+        path="artifact-test.md"
+        content={'[Open docs](https://mastra.ai/docs) [Run script](javascript:alert(1))'}
+        mimeType="text/markdown"
+      />,
+    );
+
+    expect(screen.getByRole('link', { name: 'Open docs' }).getAttribute('href')).toBe('https://mastra.ai/docs');
+    expect(screen.getByText('Run script').closest('a')?.hasAttribute('href')).toBe(false);
   });
 
   it('renders MDX files as a readable preview without showing component scaffolding', () => {

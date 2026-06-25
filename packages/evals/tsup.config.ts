@@ -7,6 +7,7 @@ export default defineConfig({
     index: 'src/index.ts',
     'scorers/prebuilt/index': 'src/scorers/prebuilt/index.ts',
     'scorers/utils': 'src/scorers/utils.ts',
+    checks: 'src/checks.ts',
   },
   format: ['esm', 'cjs'],
   clean: true,

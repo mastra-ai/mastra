@@ -16,7 +16,9 @@ import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
 
-import { Harness, describeNonSuccessFinishReason } from '../harness';
+import { Harness } from '../harness';
+import { describeNonSuccessFinishReason } from '../stream-content';
+import { createMockWorkspace } from '../test-utils';
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -54,6 +56,7 @@ async function buildHarness(id: string, stream: () => ReadableStream) {
   const registeredAgent = mastra.getAgent(`agent-${id}`);
 
   const harness = new Harness({
+    workspace: createMockWorkspace(),
     id: `harness-${id}`,
     storage,
     modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
@@ -61,8 +64,9 @@ async function buildHarness(id: string, stream: () => ReadableStream) {
   });
 
   await harness.init();
-  await harness.createThread();
-  return harness;
+  const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+  await session.thread.create();
+  return { harness, session };
 }
 
 describe('describeNonSuccessFinishReason', () => {
@@ -98,7 +102,7 @@ describe('describeNonSuccessFinishReason', () => {
 
 describe('Harness: non-success finish reasons', () => {
   it('finalizes a content-filter refusal into an explicit terminal error state', async () => {
-    const harness = await buildHarness('content-filter', () =>
+    const { session } = await buildHarness('content-filter', () =>
       createFinishReasonStream('content-filter', {
         anthropic: {
           stopDetails: {
@@ -111,11 +115,11 @@ describe('Harness: non-success finish reasons', () => {
     );
 
     const events: any[] = [];
-    harness.subscribe(event => {
+    session.subscribe(event => {
       events.push(event);
     });
 
-    await harness.sendMessage({ content: 'do something blocked' });
+    await session.sendMessage({ content: 'do something blocked' });
 
     // The run must not silently complete.
     const agentEnd = events.find(e => e.type === 'agent_end');
@@ -133,14 +137,16 @@ describe('Harness: non-success finish reasons', () => {
   });
 
   it('surfaces a content-filter refusal even without provider stop details', async () => {
-    const harness = await buildHarness('content-filter-no-details', () => createFinishReasonStream('content-filter'));
+    const { session } = await buildHarness('content-filter-no-details', () =>
+      createFinishReasonStream('content-filter'),
+    );
 
     const events: any[] = [];
-    harness.subscribe(event => {
+    session.subscribe(event => {
       events.push(event);
     });
 
-    await harness.sendMessage({ content: 'do something blocked' });
+    await session.sendMessage({ content: 'do something blocked' });
 
     expect(events.find(e => e.type === 'agent_end')?.reason).toBe('error');
     const messageEnd = [...events].reverse().find(e => e.type === 'message_end');
@@ -149,14 +155,14 @@ describe('Harness: non-success finish reasons', () => {
   });
 
   it('surfaces a length finish reason as a terminal error state', async () => {
-    const harness = await buildHarness('length', () => createFinishReasonStream('length'));
+    const { session } = await buildHarness('length', () => createFinishReasonStream('length'));
 
     const events: any[] = [];
-    harness.subscribe(event => {
+    session.subscribe(event => {
       events.push(event);
     });
 
-    await harness.sendMessage({ content: 'write a very long answer' });
+    await session.sendMessage({ content: 'write a very long answer' });
 
     expect(events.find(e => e.type === 'agent_end')?.reason).toBe('error');
     const messageEnd = [...events].reverse().find(e => e.type === 'message_end');
@@ -165,7 +171,7 @@ describe('Harness: non-success finish reasons', () => {
   });
 
   it('emits an info notice when a server-side fallback model served the turn', async () => {
-    const harness = await buildHarness('fallback-served', () =>
+    const { session } = await buildHarness('fallback-served', () =>
       createFinishReasonStream('stop', {
         anthropic: {
           iterations: [
@@ -177,11 +183,11 @@ describe('Harness: non-success finish reasons', () => {
     );
 
     const events: any[] = [];
-    harness.subscribe(event => {
+    session.subscribe(event => {
       events.push(event);
     });
 
-    await harness.sendMessage({ content: 'do something borderline' });
+    await session.sendMessage({ content: 'do something borderline' });
 
     // The turn still completes normally — the fallback answered it.
     expect(events.find(e => e.type === 'agent_end')?.reason).toBe('complete');
@@ -194,14 +200,14 @@ describe('Harness: non-success finish reasons', () => {
   });
 
   it('still completes normally on a stop finish reason', async () => {
-    const harness = await buildHarness('stop', () => createFinishReasonStream('stop'));
+    const { session } = await buildHarness('stop', () => createFinishReasonStream('stop'));
 
     const events: any[] = [];
-    harness.subscribe(event => {
+    session.subscribe(event => {
       events.push(event);
     });
 
-    await harness.sendMessage({ content: 'say hi' });
+    await session.sendMessage({ content: 'say hi' });
 
     expect(events.find(e => e.type === 'agent_end')?.reason).toBe('complete');
     expect(events.some(e => e.type === 'error')).toBe(false);

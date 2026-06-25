@@ -9,7 +9,7 @@ packages:
 
 :::experimental
 
-The `Harness` feature is in alpha stage and subject to breaking changes in minor versions until it graduates from its alpha status.
+The `Harness` feature is in beta stage and subject to breaking changes in minor versions until it graduates from its beta status.
 
 :::
 
@@ -45,7 +45,7 @@ The session is organized into sub-objects, each owning one domain of per-convers
   {
     name: 'identity',
     type: 'SessionIdentity',
-    description: 'Resource identity for the conversation. See identity methods below.',
+    description: 'Stable session, owner, and resource identity for the conversation. See identity methods below.',
   },
   {
     name: 'thread',
@@ -96,6 +96,12 @@ The session is organized into sub-objects, each owning one domain of per-convers
     name: 'state',
     type: 'SessionState<TState>',
     description: 'The schema-validated, session-owned Harness state. See state methods below.',
+  },
+  {
+    name: 'browser',
+    type: 'MastraBrowser | undefined',
+    description:
+      'The browser automation instance for this session. Set at creation via createSession, or from the Harness config default. Undefined when no browser is configured.',
   },
 ]}
 />
@@ -174,7 +180,23 @@ const usage = harness.session.getTokenUsage()
 
 ## Identity
 
-`session.identity` owns the resource ID for the conversation.
+`session.identity` owns the stable identifiers for the conversation: the resource ID, a session `id`, and an `ownerId`. The `id` and `ownerId` are stable for the life of the session and do not change when the resource ID is switched. They mirror the `id` and `ownerId` fields on `SessionRecord` in storage.
+
+### `session.identity.getId()`
+
+Return the stable session identifier.
+
+```typescript
+const sessionId = harness.session.identity.getId()
+```
+
+### `session.identity.getOwnerId()`
+
+Return the stable owner identifier for the session.
+
+```typescript
+const ownerId = harness.session.identity.getOwnerId()
+```
 
 ### `session.identity.getResourceId()`
 
@@ -192,7 +214,7 @@ Return the resource ID the session was created with.
 const defaultResourceId = harness.session.identity.getDefaultResourceId()
 ```
 
-To change the resource ID, use [`harness.setResourceId()`](/reference/harness/harness-class#setresourceid-resourceid-), which also tears down the active thread.
+To change the resource ID, use [`harness.setResourceId()`](/reference/harness/harness-class#setresourceid-resourceid-), which also tears down the active thread. The session `id` and `ownerId` are not affected by resource switches.
 
 ## Thread
 
@@ -310,7 +332,7 @@ const modelId = harness.session.model.get()
 
 ### `session.model.displayName()`
 
-Return a short display name for the active model: the last segment of the model ID (for example, `__AI_SDK_ANTHROPIC_MODEL_SONNET__` from `__GATEWAY_ANTHROPIC_MODEL_SONNET__`). Returns `'unknown'` when no model is selected.
+Return a short display name for the active model: the last segment of the model ID (for example, `claude-sonnet-4` from `anthropic/claude-sonnet-4`). Returns `'unknown'` when no model is selected.
 
 ```typescript
 const name = harness.session.model.displayName()
@@ -594,6 +616,19 @@ const added = await harness.session.state.update(current => ({
   updates: { count: (current.count ?? 0) + 1 },
   result: (current.count ?? 0) + 1,
 }))
+```
+
+## Scoping tags
+
+Sessions carry scoping tags (e.g. `{ projectPath }`) seeded at creation and stamped onto every thread the session creates. Thread listings can be filtered back to the session's scope using these tags.
+
+### `getTags()`
+
+Return a copy of the session's scoping tags. Empty object when the session is unscoped.
+
+```typescript
+const tags = harness.session.getTags()
+// { projectPath: '/my/project' }
 ```
 
 ## Related

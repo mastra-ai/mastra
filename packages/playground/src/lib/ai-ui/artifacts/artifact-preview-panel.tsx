@@ -1,4 +1,4 @@
-import { useArtifactPreview } from './artifact-preview-context';
+import { useArtifactPreview } from './artifact-preview';
 import { WorkspaceFilePreview } from '@/domains/workspace/components/workspace-file-preview';
 
 export function ArtifactPreviewPanel() {

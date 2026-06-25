@@ -1,4 +1,5 @@
-import { Button, Spinner } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { AlertCircle, RotateCcw } from 'lucide-react';
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist';
 import pdfWorkerSrc from 'pdfjs-dist/build/pdf.worker.mjs?worker&url';

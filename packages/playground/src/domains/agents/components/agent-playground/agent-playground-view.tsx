@@ -1,4 +1,4 @@
-import { Txt } from '@mastra/playground-ui';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ComponentProps } from 'react';
 
 import { AgentLayout } from '../agent-layout';
@@ -6,7 +6,8 @@ import { SidebarPanel } from '../sidebar-panel';
 import { AgentPlaygroundConfig } from './agent-playground-config';
 import { AgentPlaygroundTestChat } from './agent-playground-test-chat';
 import { AgentPlaygroundVersionBar } from './agent-playground-version-bar';
-import { ArtifactPreviewProvider, useArtifactPreview } from '@/lib/ai-ui/artifacts/artifact-preview-context';
+import { useArtifactPreview } from '@/lib/ai-ui/artifacts/artifact-preview';
+import { ArtifactPreviewProvider } from '@/lib/ai-ui/artifacts/artifact-preview-context';
 import { ArtifactPreviewPanel } from '@/lib/ai-ui/artifacts/artifact-preview-panel';
 
 interface AgentPlaygroundViewProps {

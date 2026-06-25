@@ -153,7 +153,9 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
     ? (requireApprovalMetadata?.[toolName] ?? requireApprovalMetadata?.[toolCallId])
     : undefined;
 
-  const suspendedToolMetadata = suspendedTools ? suspendedTools?.[toolName] : undefined;
+  const suspendedToolMetadata = suspendedTools
+    ? (suspendedTools?.[toolName] ?? suspendedTools?.[toolCallId])
+    : undefined;
 
   const toolCalled = metadata?.mode === 'network' && metadata?.hasMoreMessages ? true : undefined;
 

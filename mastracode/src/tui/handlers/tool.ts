@@ -157,11 +157,11 @@ export function handleToolApprovalRequired(
     },
   });
 
-  // Set up Ctrl+C dismiss to decline
-  state.pendingApprovalDismiss = () => {
+  // Set up dismissal to decline
+  state.pendingApprovalDismiss = declineContext => {
     state.ui.hideOverlay();
     state.pendingApprovalDismiss = null;
-    state.session.respondToToolApproval({ decision: 'decline' });
+    state.session.respondToToolApproval({ decision: 'decline', declineContext });
   };
 
   // Show the dialog as an overlay
@@ -363,7 +363,7 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
  */
 export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: string, _argsTextDelta: string): void {
   const { state } = ctx;
-  const ds = state.harness.session.displayState.get();
+  const ds = state.session.displayState.get();
   const buffer = ds.toolInputBuffers.get(toolCallId);
   if (buffer === undefined) return;
 

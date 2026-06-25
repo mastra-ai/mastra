@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import type * as PlaygroundUi from '@mastra/playground-ui';
 import { cleanup, render } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -18,6 +17,13 @@ vi.mock('@mastra/playground-ui', async () => {
     },
   };
 });
+
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: {
+    success: (...args: unknown[]) => successMock(...args),
+    error: (...args: unknown[]) => errorMock(...args),
+  },
+}));
 
 function Harness() {
   useChannelConnectToast();

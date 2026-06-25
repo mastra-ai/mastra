@@ -1,4 +1,4 @@
-import { DataList } from '@mastra/playground-ui';
+import { DataList } from '@mastra/playground-ui/components/DataList';
 import Papa from 'papaparse';
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';

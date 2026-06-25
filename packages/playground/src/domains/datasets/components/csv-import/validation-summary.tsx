@@ -1,4 +1,4 @@
-import { Notice } from '@mastra/playground-ui';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 ('use client');
 
 export interface ValidationError {

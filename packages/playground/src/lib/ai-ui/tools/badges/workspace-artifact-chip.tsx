@@ -1,8 +1,8 @@
-import { Button } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { FileText } from 'lucide-react';
 import { useMemo } from 'react';
-import { useArtifactPreview } from '../../artifacts/artifact-preview-context';
-import type { WorkspaceArtifactRef } from '../../artifacts/artifact-preview-context';
+import { useArtifactPreview } from '../../artifacts/artifact-preview';
+import type { WorkspaceArtifactRef } from '../../artifacts/artifact-preview';
 
 interface DataMessagePart {
   type: string;

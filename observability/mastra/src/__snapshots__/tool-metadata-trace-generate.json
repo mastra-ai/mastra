@@ -361,7 +361,7 @@
                   },
                   {
                     "role": "tool",
-                    "content": "[tool: metadataTool]"
+                    "content": "[tool-result: metadataTool]"
                   }
                 ],
                 "output": {

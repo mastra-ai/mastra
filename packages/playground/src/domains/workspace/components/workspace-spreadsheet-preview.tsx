@@ -1,4 +1,5 @@
-import { Button, Spinner } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useEffect, useMemo, useState } from 'react';
 import { MAX_PREVIEW_ROWS, WorkspaceDataListPreview } from './workspace-data-list-preview';
 import { base64ToUint8Array } from './workspace-preview-binary-utils';

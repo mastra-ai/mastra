@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "neuralwatt/MiniMaxAI/MiniMax-M2.5"
+  model: "neuralwatt/Qwen/Qwen3.5-397B-A17B-FP8"
 });
 
 // Generate a response
@@ -70,6 +70,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3.6
   },
   {
+    "model": "neuralwatt/glm-5.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048560,
+    "maxOutput": 1048560,
+    "inputCost": 1.45,
+    "outputCost": 4.5
+  },
+  {
+    "model": "neuralwatt/glm-5.2-short",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 200000,
+    "inputCost": 1.45,
+    "outputCost": 4.5
+  },
+  {
     "model": "neuralwatt/kimi-k2.5-fast",
     "imageInput": true,
     "audioInput": false,
@@ -92,30 +116,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 262128,
     "inputCost": 0.69,
     "outputCost": 3.22
-  },
-  {
-    "model": "neuralwatt/MiniMaxAI/MiniMax-M2.5",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 196592,
-    "maxOutput": 196592,
-    "inputCost": 0.35,
-    "outputCost": 1.38
-  },
-  {
-    "model": "neuralwatt/mistralai/Devstral-Small-2-24B-Instruct-2512",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262128,
-    "maxOutput": 262128,
-    "inputCost": 0.12,
-    "outputCost": 0.35
   },
   {
     "model": "neuralwatt/moonshotai/Kimi-K2.5",
@@ -142,16 +142,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3.22
   },
   {
-    "model": "neuralwatt/openai/gpt-oss-20b",
-    "imageInput": false,
+    "model": "neuralwatt/moonshotai/Kimi-K2.7-Code",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 16368,
-    "maxOutput": 16368,
-    "inputCost": 0.03,
-    "outputCost": 0.16
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.95,
+    "outputCost": 4
   },
   {
     "model": "neuralwatt/Qwen/Qwen3.5-397B-A17B-FP8",
@@ -174,8 +174,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 131056,
     "maxOutput": 131056,
-    "inputCost": 0.05,
-    "outputCost": 0.1
+    "inputCost": 0.29,
+    "outputCost": 1.15
   },
   {
     "model": "neuralwatt/qwen3.5-397b-fast",
@@ -198,8 +198,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 131056,
     "maxOutput": 131056,
-    "inputCost": 0.05,
-    "outputCost": 0.1
+    "inputCost": 0.29,
+    "outputCost": 1.15
   },
   {
     "model": "neuralwatt/zai-org/GLM-5.1-FP8",
@@ -226,7 +226,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.neuralwatt.com/v1",
-    id: "neuralwatt/MiniMaxAI/MiniMax-M2.5",
+    id: "neuralwatt/Qwen/Qwen3.5-397B-A17B-FP8",
     apiKey: process.env.NEURALWATT_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -245,7 +245,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "neuralwatt/zai-org/GLM-5.1-FP8"
-      : "neuralwatt/MiniMaxAI/MiniMax-M2.5";
+      : "neuralwatt/Qwen/Qwen3.5-397B-A17B-FP8";
   }
 });
 ```

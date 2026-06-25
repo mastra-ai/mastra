@@ -1,4 +1,4 @@
-import { Spinner } from '@mastra/playground-ui';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useEffect, useState } from 'react';
 import { base64ToArrayBuffer } from './workspace-preview-binary-utils';
 import { WorkspacePreviewFallback } from './workspace-preview-fallback';

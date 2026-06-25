@@ -1,4 +1,4 @@
-import { DialogBody } from '@mastra/playground-ui';
+import { DialogBody } from '@mastra/playground-ui/components/Dialog';
 import { useFormContext } from 'react-hook-form';
 
 import { AgentImpactWarnings } from '../components/agent-edit/agent-impact-warnings';

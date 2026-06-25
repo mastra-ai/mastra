@@ -1,14 +1,15 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import { PermissionDenied, SessionExpired, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { useEffect, useMemo } from 'react';
 import type { ComponentProps } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
-import { AgentLayout } from '@/domains/agents/components/agent-layout';
+import { AgentChatShell } from '@/domains/agents/components/agent-chat-shell';
 import { AgentViewLoadingSkeleton } from '@/domains/agents/components/agent-loading-skeletons';
 import { AgentSettingsView } from '@/domains/agents/components/agent-settings/agent-settings-view';
-import { AgentViewHeader } from '@/domains/agents/components/agent-view-header';
 import { BrowserViewPanel } from '@/domains/agents/components/browser-view';
 import { ComposerRunOptions } from '@/domains/agents/components/composer-run-options';
 import '@/domains/agents/components/agent-view-transition.css';
@@ -18,12 +19,14 @@ import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-obse
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
+import { MemoryTimelineProvider } from '@/domains/agents/context/memory-timeline-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { buildAgentDefaultSettings } from '@/domains/agents/utils/agent-default-settings';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
-import { ArtifactPreviewProvider, useArtifactPreview } from '@/lib/ai-ui/artifacts/artifact-preview-context';
+import { useArtifactPreview } from '@/lib/ai-ui/artifacts/artifact-preview';
+import { ArtifactPreviewProvider } from '@/lib/ai-ui/artifacts/artifact-preview-context';
 import { ArtifactPreviewPanel } from '@/lib/ai-ui/artifacts/artifact-preview-panel';
 
 // With View Transitions support the chat/settings switch is choreographed in
@@ -31,16 +34,16 @@ import { ArtifactPreviewPanel } from '@/lib/ai-ui/artifacts/artifact-preview-pan
 // captured snapshot and double the motion, so it only serves as a fallback.
 const supportsViewTransitions = typeof document !== 'undefined' && 'startViewTransition' in document;
 
-type AgentLayoutWithArtifactsProps = Omit<
-  ComponentProps<typeof AgentLayout>,
+type AgentChatShellWithArtifactsProps = Omit<
+  ComponentProps<typeof AgentChatShell>,
   'onRightDrawerOpenChange' | 'rightDrawerLabel' | 'rightSlot'
 >;
 
-function AgentLayoutWithArtifacts(props: AgentLayoutWithArtifactsProps) {
+function AgentChatShellWithArtifacts(props: AgentChatShellWithArtifactsProps) {
   const { closeArtifact, selectedArtifact } = useArtifactPreview();
 
   return (
-    <AgentLayout
+    <AgentChatShell
       {...props}
       onRightDrawerOpenChange={open => {
         if (!open) closeArtifact();
@@ -147,25 +150,25 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
             >
               <ThreadInputProvider>
                 <ObservationalMemoryProvider>
-                  <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
-                    <ArtifactPreviewProvider>
-                      <AgentLayoutWithArtifacts
-                        agentId={agentId!}
-                        leftDrawerLabel="Open threads and memory"
-                        leftSlot={
-                          <AgentSidebar
-                            agentId={agentId!}
-                            threadId={actualThreadId!}
-                            threads={sidebarThreads}
-                            isLoading={isMemoryLoading || isThreadsLoading}
-                            memoryType={memory?.memoryType}
-                            hasMemory={isMemoryLoading || hasMemory}
-                          />
-                        }
-                        browserOverlay={<BrowserViewPanel />}
-                      >
-                        <div className="grid grid-rows-[auto_1fr] h-full min-h-0">
-                          <AgentViewHeader agentId={agentId!} view={view} />
+                  <MemoryTimelineProvider key={`memory-timeline-${agentId}-${actualThreadId}`}>
+                    <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
+                      <ArtifactPreviewProvider>
+                        <AgentChatShellWithArtifacts
+                          agentId={agentId!}
+                          view={view}
+                          leftDrawerLabel="Open threads and memory"
+                          leftSlot={
+                            <AgentSidebar
+                              agentId={agentId!}
+                              threadId={actualThreadId!}
+                              threads={sidebarThreads}
+                              isLoading={isMemoryLoading || isThreadsLoading}
+                              memoryType={memory?.memoryType}
+                              hasMemory={isMemoryLoading || hasMemory}
+                            />
+                          }
+                          browserOverlay={<BrowserViewPanel />}
+                        >
                           <div
                             key={view}
                             className={
@@ -195,10 +198,10 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
                               />
                             )}
                           </div>
-                        </div>
-                      </AgentLayoutWithArtifacts>
-                    </ArtifactPreviewProvider>
-                  </ActivatedSkillsProvider>
+                        </AgentChatShellWithArtifacts>
+                      </ArtifactPreviewProvider>
+                    </ActivatedSkillsProvider>
+                  </MemoryTimelineProvider>
                 </ObservationalMemoryProvider>
               </ThreadInputProvider>
             </BrowserSessionProvider>

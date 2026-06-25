@@ -1,22 +1,7 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-
-export interface WorkspaceArtifactRef {
-  workspaceId: string;
-  workspaceName?: string;
-  path: string;
-  name?: string;
-  mimeType?: string;
-  sourceToolCallId?: string;
-}
-
-interface ArtifactPreviewContextValue {
-  selectedArtifact: WorkspaceArtifactRef | null;
-  openArtifact: (artifact: WorkspaceArtifactRef) => void;
-  closeArtifact: () => void;
-}
-
-const ArtifactPreviewContext = createContext<ArtifactPreviewContextValue | null>(null);
+import { ArtifactPreviewContext } from './artifact-preview';
+import type { WorkspaceArtifactRef } from './artifact-preview';
 
 export function ArtifactPreviewProvider({ children }: { children: ReactNode }) {
   const [selectedArtifact, setSelectedArtifact] = useState<WorkspaceArtifactRef | null>(null);
@@ -39,14 +24,4 @@ export function ArtifactPreviewProvider({ children }: { children: ReactNode }) {
   );
 
   return <ArtifactPreviewContext.Provider value={value}>{children}</ArtifactPreviewContext.Provider>;
-}
-
-export function useArtifactPreview() {
-  const context = useContext(ArtifactPreviewContext);
-
-  if (!context) {
-    throw new Error('useArtifactPreview must be used within an ArtifactPreviewProvider');
-  }
-
-  return context;
 }

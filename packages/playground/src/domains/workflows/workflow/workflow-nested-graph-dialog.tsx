@@ -1,13 +1,13 @@
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
+import { Button } from '@mastra/playground-ui/components/Button';
 import {
-  Button,
   Dialog,
   DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Dialog';
 import { ReactFlowProvider } from '@xyflow/react';
 import { useState } from 'react';
 
@@ -29,7 +29,7 @@ export function WorkflowNestedGraphDialog({ stepName, fullStep, stepGraph }: Wor
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-4xl w-full">
+        <DialogContent className="max-w-4xl w-full z-10">
           <DialogHeader>
             <DialogTitle>{stepName} workflow</DialogTitle>
             <DialogDescription>View the nested workflow graph for this step</DialogDescription>

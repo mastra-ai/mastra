@@ -316,6 +316,107 @@ describe('MastraModelOutput', () => {
       expect(onFinishPayload?.providerMetadata).toEqual(providerMetadata);
     });
 
+    it('exposes the step providerMetadata via _getImmediateProviderMetadata for output-step processors', async () => {
+      const runId = 'test-run';
+      const providerMetadata = {
+        anthropic: { cacheReadInputTokens: 12 },
+      };
+      const messageList = new MessageList({ threadId: 'test-thread' });
+
+      const stream = createChunkStream([createStepFinishChunk(runId), createFinishChunk(runId, providerMetadata)]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      expect(output._getImmediateProviderMetadata()).toEqual(providerMetadata);
+    });
+
+    it('surfaces guardrail providerMetadata on a content-filter block where steps is empty', async () => {
+      // The RFC scenario: a Bedrock guardrail intervenes, the step finishes with
+      // reason "content-filter", the completed-steps array is empty, and the
+      // guardrail trace is only reachable through providerMetadata.
+      const runId = 'test-run';
+      const guardrailTrace = {
+        bedrock: {
+          trace: {
+            guardrail: {
+              actionReason: 'Guardrail blocked.',
+              inputAssessment: {
+                'guardrail-1': {
+                  contentPolicy: { filters: [{ type: 'PROMPT_ATTACK', action: 'BLOCKED', confidence: 'HIGH' }] },
+                },
+              },
+            },
+          },
+        },
+      };
+      const messageList = new MessageList({ threadId: 'test-thread' });
+
+      const contentFilterFinish = {
+        type: 'finish',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: {
+          id: 'finish-1',
+          output: {
+            steps: [],
+            usage: { inputTokens: 10, outputTokens: 0, totalTokens: 10 },
+          },
+          stepResult: {
+            reason: 'content-filter',
+            warnings: [],
+            isContinued: false,
+          },
+          metadata: {},
+          providerMetadata: guardrailTrace,
+          messages: { nonUser: [], all: [] },
+        },
+      } as ChunkType;
+
+      const stream = createChunkStream([contentFilterFinish]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      // No completed step recorded, but the guardrail trace is still surfaced.
+      expect(await output.steps).toHaveLength(0);
+      expect(output._getImmediateFinishReason()).toBe('content-filter');
+      expect(output._getImmediateProviderMetadata()).toEqual(guardrailTrace);
+    });
+
+    it('leaves _getImmediateProviderMetadata undefined when the step has no providerMetadata', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+
+      const stream = createChunkStream([createStepFinishChunk(runId), createFinishChunk(runId)]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      expect(output._getImmediateProviderMetadata()).toBeUndefined();
+    });
+
     it('should merge args from real tool-call into synthetic tool-call when synthetic args are empty', async () => {
       const runId = 'test-run';
       const messageList = new MessageList({ threadId: 'test-thread' });

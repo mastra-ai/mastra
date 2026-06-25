@@ -5,7 +5,10 @@ import { z } from 'zod-v4';
 
 import type { AvailableWorkspace } from './use-agent-builder-tool';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
-import { createInitialStructure, updateNodeContent } from '@/domains/agents/components/agent-cms-pages/skill-file-tree';
+import {
+  createInitialStructure,
+  updateNodeContent,
+} from '@/domains/agents/components/agent-cms-pages/skill-file-tree-utils';
 import { useCreateSkill } from '@/domains/agents/hooks/use-create-skill';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
 

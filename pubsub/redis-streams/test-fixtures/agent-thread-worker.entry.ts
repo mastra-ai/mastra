@@ -80,7 +80,7 @@ function makeStubAgent(runMs: number, runtime: AgentThreadStreamRuntime, pubsub:
 
       // Real Agent.stream registers the run with the runtime so completion
       // watchers fire and pending signals drain. The stub mirrors that.
-      runtime.registerRun(
+      void runtime.registerRun(
         agent as any,
         output as any,
         {

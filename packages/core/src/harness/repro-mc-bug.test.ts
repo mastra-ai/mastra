@@ -21,6 +21,7 @@ import type { PubSubDeliveryMode } from '../events/pubsub';
 import type { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
+import { createMockWorkspace } from './test-utils';
 import type { HarnessEvent } from './types';
 
 /** Push-only wrapper around EventEmitterPubSub — mimics mc's SignalsPubSub. */
@@ -77,6 +78,7 @@ describe('mc send-message reproduction', () => {
     });
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test-harness',
       storage,
       resourceId: 'test-resource',
@@ -86,17 +88,18 @@ describe('mc send-message reproduction', () => {
     });
 
     await harness.init();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     await harness.getMastra()?.startWorkers();
-    await harness.createThread();
+    await session.thread.create();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe((event: HarnessEvent) => {
+    session.subscribe((event: HarnessEvent) => {
       events.push(event);
     });
 
-    expect(harness.session.model.get()).toBe('anthropic/claude-opus-4-7');
+    expect(session.model.get()).toBe('anthropic/claude-opus-4-7');
 
-    await harness.sendMessage({ content: 'Hello!' });
+    await session.sendMessage({ content: 'Hello!' });
 
     const assistantEnd = events.find(
       (e): e is Extract<HarnessEvent, { type: 'message_end' }> =>
@@ -121,6 +124,7 @@ describe('mc send-message reproduction', () => {
     });
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test-harness',
       storage,
       resourceId: 'test-resource',
@@ -129,15 +133,16 @@ describe('mc send-message reproduction', () => {
     });
 
     await harness.init();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     await harness.getMastra()?.startWorkers();
-    await harness.createThread();
+    await session.thread.create();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe((event: HarnessEvent) => {
+    session.subscribe((event: HarnessEvent) => {
       events.push(event);
     });
 
-    await harness.sendMessage({ content: 'Hello!' });
+    await session.sendMessage({ content: 'Hello!' });
 
     // With the fix, the error should propagate through the subscription stream
     // and the harness should emit an error event instead of silently completing
@@ -172,6 +177,7 @@ describe('mc send-message reproduction', () => {
     });
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test-harness',
       storage,
       pubsub: pushOnlyPubSub,
@@ -182,17 +188,18 @@ describe('mc send-message reproduction', () => {
     });
 
     await harness.init();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     await harness.getMastra()?.startWorkers();
-    await harness.createThread();
+    await session.thread.create();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe((event: HarnessEvent) => {
+    session.subscribe((event: HarnessEvent) => {
       events.push(event);
     });
 
-    expect(harness.session.model.get()).toBe('anthropic/claude-opus-4-7');
+    expect(session.model.get()).toBe('anthropic/claude-opus-4-7');
 
-    await harness.sendMessage({ content: 'Hello!' });
+    await session.sendMessage({ content: 'Hello!' });
 
     const assistantEnd = events.find(
       (e): e is Extract<HarnessEvent, { type: 'message_end' }> =>

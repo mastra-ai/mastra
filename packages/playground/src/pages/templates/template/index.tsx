@@ -1,5 +1,7 @@
 import { version } from '@mastra/core/package.json';
-import { AgentIcon, MainContentLayout, ToolsIcon } from '@mastra/playground-ui';
+import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { BrainIcon, TagIcon, WorkflowIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
