@@ -403,15 +403,15 @@ importers:
         specifier: ^6.2.1
         version: 6.2.3
     devDependencies:
+      '@internal/auth':
+        specifier: workspace:*
+        version: link:../../packages/_internals/auth
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -439,16 +439,19 @@ importers:
       better-auth:
         specifier: ^1.4.18
         version: 1.6.11(@cloudflare/workers-types@4.20260511.1)(@opentelemetry/api@1.9.1)(mongodb@7.2.0(@aws-sdk/credential-providers@3.1006.0)(socks@2.8.7))(mysql2@3.22.4(@types/node@22.19.15))(pg@8.21.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vitest@4.1.8)
+      hono:
+        specifier: ^4.0.0
+        version: 4.12.25
     devDependencies:
+      '@internal/auth':
+        specifier: workspace:*
+        version: link:../../packages/_internals/auth
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -480,15 +483,15 @@ importers:
         specifier: workspace:*
         version: link:../../packages/auth
     devDependencies:
+      '@internal/auth':
+        specifier: workspace:*
+        version: link:../../packages/_internals/auth
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -516,16 +519,19 @@ importers:
       '@mastra/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      hono:
+        specifier: ^4.0.0
+        version: 4.12.25
     devDependencies:
+      '@internal/auth':
+        specifier: workspace:*
+        version: link:../../packages/_internals/auth
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -554,15 +560,15 @@ importers:
         specifier: ^13.7.0
         version: 13.9.0(encoding@0.1.13)
     devDependencies:
+      '@internal/auth':
+        specifier: workspace:*
+        version: link:../../packages/_internals/auth
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -627,6 +633,9 @@ importers:
       '@okta/okta-sdk-nodejs':
         specifier: ^8.0.0
         version: 8.1.0(encoding@0.1.13)
+      hono:
+        specifier: ^4.0.0
+        version: 4.12.25
       jose:
         specifier: ^6.2.1
         version: 6.2.3
@@ -634,15 +643,15 @@ importers:
         specifier: ^11.2.7
         version: 11.3.6
     devDependencies:
+      '@internal/auth':
+        specifier: workspace:*
+        version: link:../../packages/_internals/auth
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -667,15 +676,15 @@ importers:
 
   auth/studio:
     devDependencies:
+      '@internal/auth':
+        specifier: workspace:*
+        version: link:../../packages/_internals/auth
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -704,15 +713,15 @@ importers:
         specifier: ^2.108.0
         version: 2.108.0
     devDependencies:
+      '@internal/auth':
+        specifier: workspace:*
+        version: link:../../packages/_internals/auth
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -746,19 +755,22 @@ importers:
       '@workos/authkit-session':
         specifier: ^0.5.0
         version: 0.5.4(@workos-inc/node@8.8.0)(typescript@6.0.3)
+      hono:
+        specifier: ^4.0.0
+        version: 4.12.25
       lru-cache:
         specifier: ^11.2.7
         version: 11.3.6
     devDependencies:
+      '@internal/auth':
+        specifier: workspace:*
+        version: link:../../packages/_internals/auth
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -2979,6 +2991,49 @@ importers:
         specifier: 'catalog:'
         version: 4.4.3
 
+  packages/_internals/auth:
+    dependencies:
+      '@internal/core':
+        specifier: workspace:*
+        version: link:../../_internal-core
+      hono:
+        specifier: ^4.9.4
+        version: 4.12.25
+    devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../_config
+      '@internal/test-utils':
+        specifier: workspace:*
+        version: link:../../_test-utils
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../../_types-builder
+      '@types/node':
+        specifier: 22.19.15
+        version: 22.19.15
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 4.1.8(vitest@4.1.8)
+      '@vitest/ui':
+        specifier: 'catalog:'
+        version: 4.1.8(vitest@4.1.8)
+      eslint:
+        specifier: ^10.2.1
+        version: 10.5.0(jiti@2.7.0)
+      tsup:
+        specifier: ^8.5.1
+        version: 8.5.1(patch_hash=78092cc873f6c3c61ff4846b4b326faa7db54bb3c1506c510614d708601e2b7f)(@microsoft/api-extractor@7.58.9(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.7.0)(postcss@8.5.15)(tsx@4.22.4)(typescript@6.0.3)(yaml@2.9.0)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.8)(@vitest/ui@4.1.8)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.5(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
+
   packages/_internals/voice:
     dependencies:
       '@internal/ai-sdk-v5':
@@ -3411,15 +3466,15 @@ importers:
         specifier: ^3.2.2
         version: 3.2.2
     devDependencies:
+      '@internal/auth':
+        specifier: workspace:*
+        version: link:../_internals/auth
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../_types-builder
-      '@mastra/core':
-        specifier: workspace:*
-        version: link:../core
       '@types/jsonwebtoken':
         specifier: ^9.0.10
         version: 9.0.10
@@ -3653,6 +3708,9 @@ importers:
       '@ai-sdk/provider-v6':
         specifier: npm:@ai-sdk/provider@3.0.10
         version: '@ai-sdk/provider@3.0.10'
+      '@ai-sdk/ui-utils-v5':
+        specifier: npm:@ai-sdk/ui-utils@1.2.11
+        version: '@ai-sdk/ui-utils@1.2.11(zod@4.4.3)'
       '@isaacs/ttlcache':
         specifier: ^2.1.4
         version: 2.1.4
@@ -3813,6 +3871,9 @@ importers:
       '@internal/ai-v6':
         specifier: workspace:*
         version: link:../_vendored/ai_v6
+      '@internal/auth':
+        specifier: workspace:*
+        version: link:../_internals/auth
       '@internal/core':
         specifier: workspace:*
         version: link:../_internal-core

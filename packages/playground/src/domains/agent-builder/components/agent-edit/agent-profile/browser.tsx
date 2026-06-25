@@ -1,6 +1,6 @@
-import { Txt } from '@mastra/playground-ui';
 import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
 import { Switch } from '@mastra/playground-ui/components/Switch';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GlobeIcon } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
