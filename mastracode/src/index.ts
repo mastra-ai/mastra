@@ -822,6 +822,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   return {
     harness,
     session,
+    storage,
     mcpManager,
     hookManager,
     signalsPubSub,
