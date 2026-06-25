@@ -191,7 +191,7 @@ type BaseWorkingMemory = {
    * Not supported with template working memory `version: 'vnext'`.
    *
    * @default false
-   * @see docs/src/content/en/docs/agents/signals.mdx
+   * @see docs/src/content/docs/agents/signals.mdx
    */
   useStateSignals?: boolean;
   /** @deprecated The `use` option has been removed. Working memory always uses tool-call mode. */

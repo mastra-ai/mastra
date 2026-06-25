@@ -1054,7 +1054,7 @@ ${gatewaysList
     />`;
       }
 
-    if (g === 'mastra') {
+      if (g === 'mastra') {
         return `    <CardGridItem
       title="Mastra"
       description="Built-in Observational Memory"
@@ -1234,7 +1234,7 @@ export default sidebars;
 }
 
 async function generateDocs() {
-  const docsDir = path.join(__dirname, '..', '..', '..', 'docs', 'src', 'content', 'en', 'models');
+  const docsDir = path.join(__dirname, '..', '..', '..', 'docs', 'src', 'content', 'models');
   const providersDir = path.join(docsDir, 'providers');
   const gatewaysDir = path.join(docsDir, 'gateways');
 

@@ -537,7 +537,7 @@ src/
 
 Migration Guide Locations
 
-docs/src/content/en/guides/migrations/upgrade-to-v1/
+docs/src/content/guides/migrations/upgrade-to-v1/
 agent.mdx
 client.mdx
 evals.mdx

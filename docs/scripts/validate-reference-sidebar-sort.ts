@@ -317,7 +317,7 @@ async function main(): Promise<void> {
 	console.log(`${fixMode ? 'Fixing' : 'Validating'} reference sidebar sort order...\n`)
 
 	const scriptDir = path.dirname(fileURLToPath(import.meta.url))
-	const sidebarPath = path.resolve(scriptDir, '../src/content/en/reference/sidebars.js')
+	const sidebarPath = path.resolve(scriptDir, '../src/content/reference/sidebars.js')
 
 	try {
 		await fs.stat(sidebarPath)

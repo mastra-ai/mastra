@@ -25,9 +25,9 @@ const checkLocalFile = urlPath => {
 
   // Try different possible file locations
   const possiblePaths = [
-    path.resolve(__dirname, '../../docs/src/content/en', cleanPath + '.mdx'),
-    path.resolve(__dirname, '../../docs/src/content/en', cleanPath + '/index.mdx'),
-    path.resolve(__dirname, '../../docs/src/content/en', cleanPath, 'index.mdx'),
+    path.resolve(__dirname, '../../docs/src/content', cleanPath + '.mdx'),
+    path.resolve(__dirname, '../../docs/src/content', cleanPath + '/index.mdx'),
+    path.resolve(__dirname, '../../docs/src/content', cleanPath, 'index.mdx'),
   ];
 
   return possiblePaths.some(filePath => existsSync(filePath));

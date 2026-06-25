@@ -74,12 +74,12 @@ jobs:
           pnpm prettier --write packages/core/src/llm/model/provider-registry.json
           pnpm prettier --write packages/core/src/llm/model/provider-types.generated.d.ts
           pnpm prettier --write packages/core/src/llm/model/capabilities/
-          pnpm prettier --write docs/src/content/en/models/**/*.{mdx,ts,js}
+          pnpm prettier --write docs/src/content/models/**/*.{mdx,ts,js}
       - name: Check for changes
         id: git-check
         run: |
           git add --intent-to-add packages/core/src/llm/model/capabilities/
-          git diff --exit-code packages/core/src/llm/model/provider-registry.json packages/core/src/llm/model/provider-types.generated.d.ts packages/core/src/llm/model/capabilities/ docs/src/content/en/models/ || echo "changed=true" >> $GITHUB_OUTPUT
+          git diff --exit-code packages/core/src/llm/model/provider-registry.json packages/core/src/llm/model/provider-types.generated.d.ts packages/core/src/llm/model/capabilities/ docs/src/content/models/ || echo "changed=true" >> $GITHUB_OUTPUT
 
       - name: Create changeset
         if: steps.git-check.outputs.changed == 'true'
@@ -122,7 +122,7 @@ jobs:
           # must be staged too; otherwise they linger as unstaged/untracked
           # changes that abort the rebase below and never make it onto main.
           git add packages/core/src/llm/model/capabilities/
-          git add docs/src/content/en/models/
+          git add docs/src/content/models/
           if [ -n "${CHANGESET_FILE}" ]; then
             git add "${CHANGESET_FILE}"
           fi

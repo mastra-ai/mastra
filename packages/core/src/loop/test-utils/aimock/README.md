@@ -549,7 +549,7 @@ multi-step composition regressions that unit tests miss.
 **Final Deliverables:**
 
 - **83 scenario files** containing **179 passing tests**
-- Coverage of **20 feature categories** documented in `docs/src/content/en/docs/agents/` and `docs/src/content/en/docs/workspace/`
+- Coverage of **20 feature categories** documented in `docs/src/content/docs/agents/` and `docs/src/content/docs/workspace/`
 - **AIMock harness** (`aimock-scenario.ts`, `types.ts`) supporting complex multi-turn loops,
   approval flows, background tasks, goals, delegation, processors, memory integration,
   shared-agent storage for suspend/resume scenarios, real workspace + skills integration,

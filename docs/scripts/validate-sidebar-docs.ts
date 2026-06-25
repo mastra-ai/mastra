@@ -34,20 +34,20 @@ interface SectionConfig {
 const SECTIONS: SectionConfig[] = [
 	{
 		name: 'docs',
-		contentDir: 'src/content/en/docs',
-		sidebarPath: 'src/content/en/docs/sidebars.js',
+		contentDir: 'src/content/docs',
+		sidebarPath: 'src/content/docs/sidebars.js',
 		sidebarKey: 'docsSidebar',
 	},
 	{
 		name: 'guides',
-		contentDir: 'src/content/en/guides',
-		sidebarPath: 'src/content/en/guides/sidebars.js',
+		contentDir: 'src/content/guides',
+		sidebarPath: 'src/content/guides/sidebars.js',
 		sidebarKey: 'guidesSidebar',
 	},
 	{
 		name: 'reference',
-		contentDir: 'src/content/en/reference',
-		sidebarPath: 'src/content/en/reference/sidebars.js',
+		contentDir: 'src/content/reference',
+		sidebarPath: 'src/content/reference/sidebars.js',
 		sidebarKey: 'referenceSidebar',
 	},
 ]

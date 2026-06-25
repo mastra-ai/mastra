@@ -2,7 +2,7 @@
 /**
  * Analyzes HeadingSentenceCase violations by heading level.
  *
- * Usage: pnpm vale src/content/en/docs src/content/en/guides src/content/en/reference src/learn/content --output=line | node scripts/vale-heading-analysis.mjs [--level N]
+ * Usage: pnpm vale src/content/docs src/content/guides src/content/reference src/learn/content --output=line | node scripts/vale-heading-analysis.mjs [--level N]
  *
  * Reads Vale lint output from stdin, looks up the actual heading level
  * from each file, and groups/sorts by occurrence.
