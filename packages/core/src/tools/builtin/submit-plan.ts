@@ -4,11 +4,15 @@ import { createTool } from '../tool';
 
 /**
  * Payload carried by the native `tool-call-suspended` event when `submit_plan` pauses.
- * Hosts read this to render the plan for review with approve/reject controls.
+ *
+ * The tool only knows the `path` the agent wrote its plan to. Hosts read that file to
+ * render the plan for review with approve/reject controls and derive the title from the
+ * file's leading `# heading`. `title`/`plan` are filled in by the host, not the tool.
  */
 export interface SubmitPlanSuspendPayload {
-  title: string;
-  plan: string;
+  path: string;
+  title?: string;
+  plan?: string;
 }
 
 /**
@@ -36,40 +40,40 @@ const resumeSchema = z.object({
  * Built-in, agent-agnostic tool: submit an implementation plan for user review.
  *
  * Pausing uses the agent-native tool suspension primitive: the tool calls
- * `suspend({ title, plan })`, which makes the agent emit a `tool-call-suspended` event
- * and persist run state. The host renders the plan, collects an approve/reject decision,
- * and continues the run via `agent.resumeStream({ action, feedback })`; the tool re-runs
- * with `resumeData` set to that decision and reports it back to the model.
+ * `suspend({ path })`, which makes the agent emit a `tool-call-suspended` event and
+ * persist run state. The host reads the plan file at `path`, renders it, collects an
+ * approve/reject decision, and continues the run via `agent.resumeStream({ action,
+ * feedback })`; the tool re-runs with `resumeData` set to that decision and reports it
+ * back to the model.
  *
  * This tool is deliberately host-agnostic: it does not know about Harness modes or any
  * UI. A plain Agent (e.g. embedded in Studio or a customer app) can use it directly, and
  * a Harness can layer mode-switch behavior on top of the approval in its own response
  * handling without the tool needing to change.
  *
- * When executed without an agent `suspend` (e.g. direct invocation outside an agent run),
- * the tool returns the title as readable text so the submission is still surfaced.
- *
- * The tool no longer accepts the plan body as an argument. The agent writes the plan to a
- * markdown file (the host's working plan file) and submits only a short `title`. The host
- * reads the plan content from disk when rendering the approval UI, so the `plan` field on
- * the suspend payload is supplied by the host, not by this argument-free tool.
+ * The tool takes only the `path` to the plan file the agent wrote — never the plan body.
+ * Keeping plans as real files on disk lets the agent maintain more than one plan over time
+ * and lets the host read/diff the exact content the user reviews. When executed without an
+ * agent `suspend` (e.g. direct invocation outside an agent run), the tool returns the path
+ * as readable text so the submission is still surfaced.
  */
 export const submitPlanTool = createTool({
   id: 'submit_plan',
   description:
-    'Submit the plan you wrote to `.mastracode/plans/current-plan.md` for review. Pass only a short `title`. Write/edit the file first — do not paste the plan contents here. The user can approve, reject, or request changes. On approval, the system automatically switches to the default mode so you can implement.',
+    'Submit a plan you wrote to a markdown file for review. Pass the `path` to that file (e.g. `.mastracode/plans/add-dark-mode.md`). Write/edit the file first — do not paste the plan contents here. Reuse the same file across revisions; only create a new file for a genuinely new plan. The user can approve, reject, or request changes. On approval, the system automatically switches to the default mode so you can implement.',
   inputSchema: z.object({
-    title: z.string().optional().describe("Short title for the plan (e.g., 'Add dark mode toggle')"),
+    path: z
+      .string()
+      .describe('Path to the markdown file containing the plan (e.g. `.mastracode/plans/add-dark-mode.md`)'),
   }),
   suspendSchema: z.object({
-    title: z.string(),
-    plan: z.string(),
+    path: z.string(),
+    title: z.string().optional(),
+    plan: z.string().optional(),
   }),
   resumeSchema,
-  execute: async ({ title }, context) => {
+  execute: async ({ path }, context) => {
     try {
-      const resolvedTitle = title || 'Implementation Plan';
-
       const resumeData = context?.agent?.resumeData as SubmitPlanResumeData | undefined;
       if (resumeData !== undefined) {
         if (resumeData.action === 'approved') {
@@ -97,17 +101,17 @@ export const submitPlanTool = createTool({
 
       const suspend = context?.agent?.suspend;
       if (suspend) {
-        // The agent writes the plan to its working file; the host reads that file to
-        // render the approval UI. The tool only knows the title, so it suspends with an
-        // empty `plan` placeholder for the host to fill from disk.
-        await suspend({ title: resolvedTitle, plan: '' });
+        // The agent wrote the plan to `path`; the host reads that file to render the
+        // approval UI and derive the title. The tool only knows the path, so it suspends
+        // with empty title/plan placeholders for the host to fill from disk.
+        await suspend({ path, title: '', plan: '' });
         return;
       }
 
       // No agent context available: surface the submission as readable text so non-agent
       // execution paths still expose it to the model.
       return {
-        content: `[Plan submitted for review]\n\nTitle: ${resolvedTitle}`,
+        content: `[Plan submitted for review]\n\nPath: ${path}`,
         isError: false,
       };
     } catch (error) {
