@@ -123,7 +123,12 @@ export function useHarnessSession({
       // instead of the resource's entire (potentially huge) thread history.
       // Scope to the active project path so worktrees sharing a resourceId
       // don't bleed each other's threads into the list.
-      setThreads(await session.listThreads({ limit: THREAD_PAGE_SIZE, projectPath }));
+      setThreads(
+        await session.listThreads({
+          limit: THREAD_PAGE_SIZE,
+          tags: projectPath ? { projectPath } : undefined,
+        }),
+      );
     } catch {
       /* non-fatal */
     }
@@ -206,7 +211,12 @@ export function useHarnessSession({
       harnessRef.current = harness;
 
       try {
-        const [created, harnessModes] = await Promise.all([session.create(), harness.listModes()]);
+        const [created, harnessModes] = await Promise.all([
+          // Scope initial thread selection to the active project so worktrees
+          // sharing a resourceId each resume their own thread.
+          session.create({ tags: projectPath ? { projectPath } : undefined }),
+          harness.listModes(),
+        ]);
         if (disposed) return;
         setModes(harnessModes);
 
