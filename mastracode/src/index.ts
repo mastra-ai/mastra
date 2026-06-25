@@ -732,7 +732,17 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     agent: codeAgent,
     subagents: config?.subagents ?? [],
     gateways: [mastraCodeGateway],
-    workspace: config?.workspace ?? (args => getDynamicWorkspace(args)),
+    workspace:
+      config?.workspace ??
+      (args =>
+        getDynamicWorkspace({
+          ...args,
+          fallbackState: {
+            projectPath: project.rootPath,
+            configDir,
+            ...(homeDir ? { homeDir } : {}),
+          },
+        })),
     browser: config?.browser,
     toolCategoryResolver: getToolCategory,
     initialState: {

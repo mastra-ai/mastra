@@ -56,6 +56,25 @@ describe('getGoalJudgeTools', () => {
     }
   });
 
+  it('uses the configured fallback project path when harness state has not been seeded', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-workspace-fallback-'));
+    try {
+      const { getDynamicWorkspace } = await import('../workspace.js');
+      const requestContext = new RequestContext();
+      requestContext.set('harness', { modeId: 'build', session: { state: { get: () => ({}) } } });
+
+      const workspace = getDynamicWorkspace({
+        requestContext: requestContext as any,
+        fallbackState: { projectPath: tempDir, configDir: '.mastracode' },
+      });
+
+      expect(workspace.filesystem.basePath).toBe(tempDir);
+      expect(workspace.skills).toBeDefined();
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('returns only the read-only verification subset of workspace tools', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-goal-judge-tools-'));
     try {

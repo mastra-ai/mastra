@@ -547,10 +547,19 @@ describe('createMastraCode', () => {
     await createMastraCode({ cwd: projectPath });
 
     const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
-      | { initialState?: Record<string, unknown> }
+      | { initialState?: Record<string, unknown>; workspace?: (args: Record<string, unknown>) => unknown }
       | undefined;
     expect(harnessConfig?.initialState?.projectPath).toBe(projectPath);
     expect(harnessSetStateMock).toHaveBeenCalledWith(expect.objectContaining({ projectPath }));
+
+    const requestContext = { get: vi.fn() };
+    harnessConfig?.workspace?.({ requestContext });
+    expect(getDynamicWorkspaceMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestContext,
+        fallbackState: expect.objectContaining({ projectPath }),
+      }),
+    );
   });
 
   it('uses configured configDir consistently for startup services and runtime state', async () => {
@@ -576,10 +585,19 @@ describe('createMastraCode', () => {
     expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined);
     expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code', undefined);
     const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
-      | { initialState?: Record<string, unknown> }
+      | { initialState?: Record<string, unknown>; workspace?: (args: Record<string, unknown>) => unknown }
       | undefined;
     expect(harnessConfig?.initialState?.configDir).toBe('.acme-code');
     expect(harnessSetStateMock).toHaveBeenCalledWith(expect.objectContaining({ configDir: '.acme-code' }));
+
+    const requestContext = { get: vi.fn() };
+    harnessConfig?.workspace?.({ requestContext });
+    expect(getDynamicWorkspaceMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestContext,
+        fallbackState: expect.objectContaining({ projectPath, configDir: '.acme-code' }),
+      }),
+    );
   });
 
   it('passes programmatic MCP servers into the startup manager with project and configDir', async () => {
