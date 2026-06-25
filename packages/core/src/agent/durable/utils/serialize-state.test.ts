@@ -270,11 +270,11 @@ describe('serializeDurableOptions', () => {
   it('serialises basic scalar options', () => {
     const result = serializeDurableOptions({
       maxSteps: 10,
-      temperature: 0.7,
+      modelSettings: { temperature: 0.7 },
       requireToolApproval: true,
     });
     expect(result.maxSteps).toBe(10);
-    expect(result.temperature).toBe(0.7);
+    expect(result.modelSettings?.temperature).toBe(0.7);
     expect(result.requireToolApproval).toBe(true);
   });
 
@@ -315,7 +315,7 @@ describe('serializeDurableOptions', () => {
   it('returns all undefined when options is empty', () => {
     const result = serializeDurableOptions({});
     expect(result.maxSteps).toBeUndefined();
-    expect(result.temperature).toBeUndefined();
+    expect(result.modelSettings?.temperature).toBeUndefined();
     expect(result.toolChoice).toBeUndefined();
   });
 });
