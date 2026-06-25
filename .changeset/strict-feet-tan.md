@@ -11,7 +11,9 @@ Moved workspace and browser ownership from the Harness to individual sessions.
 - `Session` constructor now requires `workspace: Workspace` and accepts optional `browser?: MastraBrowser`
 - `HarnessConfig.workspace` no longer accepts a `WorkspaceConfig` object — pass a `Workspace` instance or a dynamic factory function
 - `createSession` overrides accept static `Workspace` / `MastraBrowser` instances only (not `DynamicArgument`)
-- Removed `Harness.getWorkspace()`, `Harness.resolveWorkspace()`, `Harness.hasWorkspace()`, `Harness.isWorkspaceReady()`, and `Harness.destroyWorkspace()` — workspace lifecycle is now driven by per-session `workspace_status_changed`, `workspace_ready`, and `workspace_error` events emitted after `workspace.init()` completes
+- Removed `Harness.destroyWorkspace()` — workspace lifecycle is now driven by per-session `workspace_status_changed`, `workspace_ready`, and `workspace_error` events emitted after `workspace.init()` completes
+- `Harness.getWorkspace()` returns the static workspace instance only (returns `undefined` for dynamic factory configs); use `resolveWorkspace({ session })` to resolve and cache a factory outside the request flow
+- `Harness.resolveWorkspace()` now requires a `session` parameter to resolve dynamic factories against the session's request context
 - The `SessionBus` replays the last workspace lifecycle event group to subscribers that attach after session creation, so late listeners always learn the current workspace status
 
 **Before:**

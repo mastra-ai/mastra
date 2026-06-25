@@ -50,6 +50,7 @@ import type {
   HarnessMessageContent,
   HarnessMode,
   HarnessRequestContext,
+  HarnessRequestStateUpdater,
   HarnessThread,
   ModelAuthStatus,
   ToolCategory,
@@ -404,16 +405,49 @@ export class Harness<TState = {}> {
     if (tags && Object.keys(tags).length > 0) {
       initialState = { ...initialState, ...tags } as TState;
     }
+    const defaultMode = this.#defaultMode;
     requestContext.set('harness', {
       harnessId: this.id,
+      state: initialState,
       getState: () => initialState,
       setState: (updates: Partial<TState>) => {
         initialState = { ...initialState, ...updates };
       },
+      updateState: (updater: HarnessRequestStateUpdater<TState, unknown>) => {
+        return Promise.resolve(updater(initialState as Readonly<TState>)).then(result => {
+          if (result.updates) {
+            initialState = { ...initialState, ...result.updates };
+          }
+          return result.result;
+        });
+      },
+      threadId: null,
+      resourceId: effectiveResourceId,
       session: {
         id,
         ownerId,
         resourceId: effectiveResourceId,
+        modeId: defaultMode.id,
+        modelId: defaultMode.defaultModelId ?? '',
+        state: {
+          get: () => initialState as Readonly<TState>,
+          set: (updates: Partial<TState>) => {
+            initialState = { ...initialState, ...updates };
+            return Promise.resolve();
+          },
+          update: <TResult>(updater: HarnessRequestStateUpdater<TState, TResult>) => {
+            return Promise.resolve(updater(initialState as Readonly<TState>)).then(result => {
+              if (result.updates) {
+                initialState = { ...initialState, ...result.updates };
+              }
+              return result.result;
+            });
+          },
+        },
+      },
+      getSubagentModelId: (params?: { agentType?: string }) => {
+        const sub = this.config.subagents?.find(s => s.id === params?.agentType);
+        return sub?.defaultModelId ?? null;
       },
     });
 
@@ -540,6 +574,43 @@ export class Harness<TState = {}> {
   isWorkspaceReady(): boolean {
     if (typeof this.workspace === 'function') return true;
     return this.workspaceInitialized && this.workspace !== undefined;
+  }
+
+  /**
+   * The Harness-level workspace, if it is a static instance. Dynamic factory
+   * workspaces are not resolved here — use {@link resolveWorkspace} to resolve
+   * a factory against a session's request context.
+   */
+  getWorkspace(): Workspace | undefined {
+    return typeof this.workspace === 'function' ? undefined : (this.workspace ?? undefined);
+  }
+
+  /**
+   * Eagerly resolve the workspace. For dynamic workspaces (factory function),
+   * this triggers resolution against the given session's request context and
+   * caches the result so {@link getWorkspace} returns it. Useful for code paths
+   * outside the request flow (e.g. slash commands).
+   */
+  async resolveWorkspace({
+    session,
+    requestContext,
+  }: {
+    session: Session<TState>;
+    requestContext?: RequestContext;
+  }): Promise<Workspace | undefined> {
+    if (typeof this.workspace !== 'function') return this.workspace ?? undefined;
+    const ctx = requestContext ?? new RequestContext();
+    ctx.set('harness', {
+      harnessId: this.id,
+      session: {
+        id: session.identity.getId(),
+        ownerId: session.identity.getOwnerId(),
+        resourceId: session.identity.getResourceId(),
+      },
+    });
+    const resolved = await this.workspace({ requestContext: ctx, mastra: this.getMastra() });
+    this.workspace = resolved;
+    return resolved ?? undefined;
   }
 
   /**

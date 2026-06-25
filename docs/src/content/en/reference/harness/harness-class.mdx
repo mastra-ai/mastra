@@ -529,6 +529,48 @@ Return the internal `Mastra` instance, or `undefined` before `init()`. Useful fo
 const mastra = harness.getMastra()
 ```
 
+#### `getWorkspace()`
+
+Return the Harness-level workspace if it is a static `Workspace` instance. Dynamic factory workspaces are not resolved here — use [`resolveWorkspace()`](#resolveworkspace-session-requestcontext-) to resolve a factory against a session's request context.
+
+```typescript
+const workspace = harness.getWorkspace()
+```
+
+#### `resolveWorkspace({ session, requestContext? })`
+
+Eagerly resolve and cache the workspace. For dynamic workspaces (factory function), this triggers the factory against the given session's request context and caches the result so `getWorkspace()` returns it. Returns the resolved workspace or `undefined` if none is configured.
+
+```typescript
+const workspace = await harness.resolveWorkspace({ session })
+```
+
+```typescript
+// With an explicit request context
+const requestContext = new RequestContext()
+const workspace = await harness.resolveWorkspace({ session, requestContext })
+```
+
+#### `hasWorkspace()`
+
+Whether a workspace is configured on this Harness (static instance or dynamic factory). Sessions without an explicit workspace override fall back to this.
+
+```typescript
+if (harness.hasWorkspace()) {
+  // ...
+}
+```
+
+#### `isWorkspaceReady()`
+
+Whether the Harness-level static workspace has been initialized. Dynamic factory workspaces are resolved and initialized per-session during `createSession`, so this returns `false` for factory configs until a session is created.
+
+```typescript
+if (harness.isWorkspaceReady()) {
+  // ...
+}
+```
+
 ### Modes
 
 #### `listModes()`
