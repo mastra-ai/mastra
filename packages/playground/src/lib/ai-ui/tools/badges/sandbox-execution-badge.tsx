@@ -1,5 +1,6 @@
-import { Button, Icon, cn } from '@mastra/playground-ui';
+import { Icon, cn } from '@mastra/playground-ui';
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { CheckIcon, ChevronUpIcon, CopyIcon, TerminalSquare } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';

@@ -1,5 +1,6 @@
-import { Txt, toast } from '@mastra/playground-ui';
+import { toast } from '@mastra/playground-ui';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { useMemo, useEffect } from 'react';
 import { parse } from 'superjson';

@@ -1,6 +1,7 @@
 import type { DatasetItem } from '@mastra/client-js';
-import { Button, Icon, toast } from '@mastra/playground-ui';
+import { Icon, toast } from '@mastra/playground-ui';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
 import { Label } from '@mastra/playground-ui/components/Label';

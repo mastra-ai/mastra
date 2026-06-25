@@ -1,19 +1,16 @@
+import { Icon, cn } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-  ScrollArea,
-  Txt,
-  Icon,
-  cn,
   Dialog,
   DialogContent,
   DialogTitle,
   DialogHeader,
   DialogDescription,
   DialogBody,
-} from '@mastra/playground-ui';
-import { Badge } from '@mastra/playground-ui/components/Badge';
+} from '@mastra/playground-ui/components/Dialog';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
 import { ChevronDown } from 'lucide-react';

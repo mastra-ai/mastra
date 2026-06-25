@@ -205,7 +205,7 @@ ${patchToolGuidance}
     sections.push(taskTools.join('\n'));
   }
 
-  // --- Plan submission tool (plan mode) ---
+  // --- Plan tools (plan mode) ---
 
   if (modeId === 'plan' && !denied.has('submit_plan')) {
     sections.push(`
@@ -214,6 +214,15 @@ ${patchToolGuidance}
 - The plan will be rendered as markdown and the user can approve, reject, or request changes.
 - On approval, the system automatically switches to the default mode so you can implement.
 - Takes two arguments: \`title\` (short descriptive title) and \`plan\` (full plan in markdown).`);
+  }
+
+  if (modeId === 'plan') {
+    sections.push(`
+**Plan file access** — Your plan lives in \`.mastracode/plans/\` with a filename derived from the title (e.g. \`add-dark-mode-toggle.md\`)
+- Use \`write_file\` to create the plan file, \`view\` to read it, and \`string_replace_lsp\` for targeted edits.
+- On first submission: write the plan to the file, then call \`submit_plan\`.
+- On revision: read the existing file, edit specific sections, re-read, then call \`submit_plan\` with updated content.
+- If a plan file already exists, you previously submitted it — read it before revising.`);
   }
 
   // --- Subagent tool (all modes) ---

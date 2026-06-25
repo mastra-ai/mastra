@@ -74,6 +74,7 @@ const sidebars = {
         { type: 'doc', id: 'ai-sdk/to-ai-sdk-v5-messages', label: 'toAISdkV5Messages()' },
         { type: 'doc', id: 'ai-sdk/with-mastra', label: 'withMastra()' },
         { type: 'doc', id: 'ai-sdk/workflow-route', label: 'workflowRoute()' },
+        { type: 'doc', id: 'ai-sdk/workflow-snapshot-to-stream', label: 'workflowSnapshotToStream()' },
       ],
     },
     {

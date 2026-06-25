@@ -1,7 +1,9 @@
 'use client';
 
 import type { DatasetItem } from '@mastra/client-js';
-import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, toast } from '@mastra/playground-ui';
+import { toast } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { useState } from 'react';

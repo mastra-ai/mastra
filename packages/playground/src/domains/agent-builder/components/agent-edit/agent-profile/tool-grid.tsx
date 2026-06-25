@@ -1,5 +1,6 @@
-import { Txt, cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { CSSProperties, ReactNode } from 'react';
 import { useAgentColor } from '../../../contexts/agent-color-context';
 import type { AgentTool } from '../../../types/agent-tool';

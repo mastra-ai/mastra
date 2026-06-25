@@ -9,6 +9,8 @@ import type {
   ToolsetsInput,
 } from '../agent/types';
 import { getErrorFromUnknown } from '../error';
+import type { MastraModelGatewayInterface } from '../llm/model/gateways';
+import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraModelConfig } from '../llm/model/shared.types';
 import type { SendNotificationSignalInput } from '../notifications';
 import type { TracingContext, TracingOptions } from '../observability';
@@ -16,6 +18,7 @@ import type { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import { safeStringify } from '../utils';
+
 import { SessionRunEngine } from './session-run-engine';
 import type { TaskItemSnapshot } from './tools';
 import { createEmptyTokenUsage, defaultDisplayState, defaultOMProgressState } from './types';
@@ -84,6 +87,11 @@ const modeModelKey = (modeId: string) => `modeModelId_${modeId}`;
  * updates the current resourceId while the default is retained so the session
  * can return to its own identity.
  *
+ * `id` is the stable identifier for this session (mirrors `SessionRecord.id` in
+ * storage) and `ownerId` is the owner of this session (mirrors
+ * `SessionRecord.ownerId`). Both are stable for the life of the session and do
+ * not change when the resourceId is switched.
+ *
  * The active thread the session is bound to lives on {@link SessionThread}, not
  * here — identity is the stable "who", the thread is the navigational "where".
  */
@@ -92,10 +100,16 @@ export class SessionIdentity {
   #resourceId: string;
   /** The resourceId the session started with, retained across resource switches. */
   readonly #defaultResourceId: string;
+  /** Stable session identifier (mirrors SessionRecord.id in storage). */
+  readonly #id: string;
+  /** Stable session owner (mirrors SessionRecord.ownerId in storage). */
+  readonly #ownerId: string;
 
-  constructor({ resourceId }: { resourceId: string }) {
+  constructor({ resourceId, id, ownerId }: { resourceId: string; id: string; ownerId: string }) {
     this.#resourceId = resourceId;
     this.#defaultResourceId = resourceId;
+    this.#id = id;
+    this.#ownerId = ownerId;
   }
 
   /** The resourceId the session currently reads/writes under. */
@@ -106,6 +120,16 @@ export class SessionIdentity {
   /** The resourceId the session started with. */
   getDefaultResourceId(): string {
     return this.#defaultResourceId;
+  }
+
+  /** The stable session identifier for this session. */
+  getId(): string {
+    return this.#id;
+  }
+
+  /** The stable owner identifier for this session. */
+  getOwnerId(): string {
+    return this.#ownerId;
   }
 
   /** Point the session at a different resourceId (the default is unchanged). */
@@ -126,7 +150,11 @@ export class SessionIdentity {
  */
 export interface ThreadDataStore {
   /** List threads for a resource (or all resources), already mapped + filtered of forked subagents unless asked. */
-  listThreads(input: { resourceId?: string; includeForkedSubagents?: boolean }): Promise<HarnessThread[]>;
+  listThreads(input: {
+    resourceId?: string;
+    includeForkedSubagents?: boolean;
+    metadata?: Record<string, unknown>;
+  }): Promise<HarnessThread[]>;
   /** Fetch a single thread by id, or null when it doesn't exist. */
   getById(input: { threadId: string }): Promise<HarnessThread | null>;
   /** List messages for a thread, newest-`limit` (returned oldest-first) or all. */
@@ -146,7 +174,12 @@ export interface ThreadDataStore {
   /** Delete a thread row by id. No-op when storage is unavailable. */
   deleteThread(input: { threadId: string }): Promise<void>;
   /** Clone a thread (and its messages) via the host's memory, returning the new thread. */
-  cloneThread(input: { sourceThreadId: string; resourceId: string; title?: string }): Promise<HarnessThread>;
+  cloneThread(input: {
+    sourceThreadId: string;
+    resourceId: string;
+    title?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<HarnessThread>;
   /** Acquire the host thread lock for a thread id. No-op when no lock is configured. */
   acquireLock(threadId: string): Promise<void>;
   /** Release the host thread lock for a thread id. No-op when no lock is configured. */
@@ -307,18 +340,57 @@ export class SessionThread {
   // ---------------------------------------------------------------------------
 
   /** List this session's threads (its own resource by default, or all resources). */
-  async list(options?: { allResources?: boolean; includeForkedSubagents?: boolean }): Promise<HarnessThread[]> {
-    if (!this.#store) return [];
-    return this.#store.listThreads({
-      resourceId: options?.allResources ? undefined : this.#getResourceId(),
+  async list(options?: {
+    allResources?: boolean;
+    includeForkedSubagents?: boolean;
+    metadata?: Record<string, unknown>;
+  }): Promise<HarnessThread[]> {
+    if (!this.#store) {
+      return [];
+    }
+    const resourceId = options?.allResources ? undefined : this.#getResourceId();
+    const threads = await this.#store.listThreads({
+      resourceId,
       includeForkedSubagents: options?.includeForkedSubagents,
+      metadata: options?.metadata,
     });
+    return threads;
   }
 
   /** Fetch a single thread by id, or null when it doesn't exist / no storage. */
   async getById({ threadId }: { threadId: string }): Promise<HarnessThread | null> {
     if (!this.#store) return null;
     return this.#store.getById({ threadId });
+  }
+
+  /** Clone a detected cross-resource project thread into this session's resource. */
+  async cloneToCurrentResource({
+    threadId,
+    expectedResourceId,
+    expectedProjectPath,
+  }: {
+    threadId: string;
+    expectedResourceId: string;
+    expectedProjectPath: string;
+  }): Promise<HarnessThread> {
+    if (!this.#store?.hasStorage()) {
+      throw new Error('Memory is not configured on this Harness');
+    }
+    const thread = await this.#store.getById({ threadId });
+    if (
+      !thread ||
+      thread.resourceId !== expectedResourceId ||
+      thread.metadata?.projectPath !== expectedProjectPath ||
+      expectedResourceId === this.#getResourceId()
+    ) {
+      throw new Error(`Thread not found: ${threadId}`);
+    }
+    return this.#cloneThread({
+      sourceThreadId: thread.id,
+      resourceId: this.#getResourceId(),
+      title: thread.title,
+      metadata: thread.metadata,
+    });
   }
 
   /**
@@ -551,25 +623,39 @@ export class SessionThread {
     title?: string;
     resourceId?: string;
   } = {}): Promise<HarnessThread> {
-    const session = this.#owner;
-    const store = this.#store;
     const sourceId = sourceThreadId ?? this.#threadId;
     if (!sourceId) {
       throw new Error('No source thread to clone');
     }
     // Only allow cloning from a source thread this session owns.
-    if (store?.hasStorage()) {
+    if (this.#store?.hasStorage()) {
       await this.#requireOwnedThread({ threadId: sourceId });
     }
+    return this.#cloneThread({
+      sourceThreadId: sourceId,
+      resourceId: resourceId ?? this.#owner.identity.getResourceId(),
+      title,
+    });
+  }
+
+  async #cloneThread({
+    sourceThreadId,
+    resourceId,
+    title,
+    metadata,
+  }: {
+    sourceThreadId: string;
+    resourceId: string;
+    title?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<HarnessThread> {
+    const session = this.#owner;
+    const store = this.#store;
     if (!store) {
       throw new Error('Memory is not configured on this Harness');
     }
 
-    const clonedThread = await store.cloneThread({
-      sourceThreadId: sourceId,
-      resourceId: resourceId ?? session.identity.getResourceId(),
-      title,
-    });
+    const clonedThread = await store.cloneThread({ sourceThreadId, resourceId, title, metadata });
 
     // Acquire lock on new thread before releasing old one
     const oldThreadId = this.#threadId;
@@ -1512,7 +1598,7 @@ class SessionOMRole {
   #setState: ((updates: Record<string, unknown>) => void) | undefined;
   #setSetting: ((args: { key: string; value: unknown }) => Promise<void>) | undefined;
   #omConfig: HarnessOMConfig | undefined;
-  #resolveModel: ((modelId: string) => MastraModelConfig) | undefined;
+  #gateways: MastraModelGatewayInterface[] | undefined;
 
   constructor(config: SessionOMRoleConfig, bus: SessionBus) {
     this.#config = config;
@@ -1525,13 +1611,13 @@ class SessionOMRole {
     setState: (updates: Record<string, unknown>) => void;
     setSetting: (args: { key: string; value: unknown }) => Promise<void>;
     omConfig?: HarnessOMConfig;
-    resolveModel?: (modelId: string) => MastraModelConfig;
+    gateways?: MastraModelGatewayInterface[];
   }): void {
     this.#getState = wiring.getState;
     this.#setState = wiring.setState;
     this.#setSetting = wiring.setSetting;
     this.#omConfig = wiring.omConfig;
-    this.#resolveModel = wiring.resolveModel;
+    this.#gateways = wiring.gateways;
   }
 
   /** This role's model id from session state, falling back to `omConfig`. */
@@ -1546,11 +1632,16 @@ class SessionOMRole {
     return (typeof fromState === 'number' ? fromState : undefined) ?? this.#config.defaultThreshold(this.#omConfig);
   }
 
-  /** Resolve this role's model id to a model instance, or undefined when unset. */
+  /**
+   * Resolve this role's model id to a model instance via the configured
+   * gateways, or undefined when unset. The bare model id string is routed
+   * through {@link ModelRouterLanguageModel}, which selects the matching
+   * gateway (or the built-in defaults) and resolves provider auth.
+   */
   resolvedModel(): MastraModelConfig | undefined {
     const modelId = this.modelId();
-    if (!modelId || !this.#resolveModel) return undefined;
-    return this.#resolveModel(modelId);
+    if (!modelId) return undefined;
+    return new ModelRouterLanguageModel(modelId as `${string}/${string}`, this.#gateways);
   }
 
   /** Switch this role's model: update session state, persist, and emit. */
@@ -1605,7 +1696,7 @@ class SessionOM {
     setState: (updates: Record<string, unknown>) => void;
     setSetting: (args: { key: string; value: unknown }) => Promise<void>;
     omConfig?: HarnessOMConfig;
-    resolveModel?: (modelId: string) => MastraModelConfig;
+    gateways?: MastraModelGatewayInterface[];
   }): void {
     this.observer.setWiring(options);
     this.reflector.setWiring(options);
@@ -2463,8 +2554,18 @@ export class Session<TState = unknown> {
   /** The session-owned Harness state domain. */
   readonly state: HarnessRequestState<TState>;
 
-  constructor({ resourceId, state }: { resourceId: string; state?: SessionStateOptions<TState> }) {
-    this.identity = new SessionIdentity({ resourceId });
+  constructor({
+    resourceId,
+    state,
+    id,
+    ownerId,
+  }: {
+    resourceId: string;
+    state?: SessionStateOptions<TState>;
+    id: string;
+    ownerId: string;
+  }) {
+    this.identity = new SessionIdentity({ resourceId, id, ownerId });
     this.thread = new SessionThread(() => this.identity.getResourceId());
     this.displayState = new SessionDisplayState({
       getTokenUsage: () => this.getTokenUsage(),

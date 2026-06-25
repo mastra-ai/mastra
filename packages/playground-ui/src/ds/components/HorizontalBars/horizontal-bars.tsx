@@ -1,6 +1,7 @@
-import type { ElementType, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { ScrollArea } from '@/ds/components/ScrollArea/scroll-area';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
+import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
 type Segment = { label: string; color: string };
@@ -31,7 +32,7 @@ export function HorizontalBars({
    *  `className`, `aria-label`, and `children`. Defaults to a plain `<a>` element;
    *  consumers using a router should pass an adapter that maps `href` to their
    *  navigation primitive (e.g. react-router `<Link to={href} />`). */
-  LinkComponent?: ElementType;
+  LinkComponent?: LinkComponent;
 }) {
   const sorted = [...data].sort((a, b) => {
     const totalB = b.values.reduce((s, v) => s + v, 0);

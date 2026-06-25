@@ -1,6 +1,9 @@
 import { Agent } from '@mastra/core/agent';
 import type { ModelRouterModelId } from '@mastra/core/llm';
+import { Memory } from '@mastra/memory';
 import { MODEL_TOKENS } from '../../../../../docs/src/plugins/remark-model-tokens/models';
+import { previewScorers } from '../scorers/preview-scorers';
+import { storage } from '../store';
 import { previewStatusTool } from '../tools/preview-status';
 
 function resolvePreviewModel() {
@@ -28,5 +31,20 @@ Use the preview status tool when a reviewer asks about preview health, routing, 
   model,
   tools: {
     previewStatusTool,
+  },
+  // Memory is enabled (history only, no semantic recall) so the chat thread
+  // sidebar reports memory as available and the seeded threads show up. Live
+  // chats also persist to the same shared in-memory store.
+  memory: new Memory({
+    storage,
+    options: {
+      lastMessages: 20,
+      semanticRecall: false,
+    },
+  }),
+  // Deterministic scorers so live runs produce scores without an LLM judge.
+  scorers: {
+    'answer-relevance': { scorer: previewScorers['answer-relevance'] },
+    'tone-quality': { scorer: previewScorers['tone-quality'] },
   },
 });
