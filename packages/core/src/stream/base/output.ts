@@ -1389,6 +1389,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     }
 
     this.#consumptionStarted = true;
+    // NOTE: onError is bound to the FIRST caller only. Later callers share this
+    // promise and do not get their own onError invoked (and the shared promise
+    // always resolves, so a later caller passing a rethrowing onError — e.g.
+    // getFullOutput — won't observe an error raised by the first caller's drain).
+    // This matches prior behavior, where later callers early-returned and ran no
+    // onError at all. A proper fix is to register per-caller error handlers and
+    // fan the drain error out to all of them; deferred as a follow-up.
     this.#consumeStreamPromise = (async () => {
       try {
         await consumeStream({
