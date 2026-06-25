@@ -773,12 +773,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   await harness.getMastra()?.startWorkers();
   const session = await harness.createSession({ id: sessionId, ownerId });
   activeSession = session;
-  await session.state.set({
-    projectPath: project.rootPath,
-    projectName: project.name,
-    gitBranch: project.gitBranch,
-    configDir,
-  });
 
   // Sync hookManager session ID on thread changes
   if (hookManager) {
