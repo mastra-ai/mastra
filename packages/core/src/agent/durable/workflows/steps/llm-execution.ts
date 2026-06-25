@@ -414,37 +414,46 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const trackedStream = modelSpanTracker?.wrapStream(stepBoundaryStream) ?? stepBoundaryStream;
 
             try {
-              for await (let chunk of trackedStream) {
-                if (!chunk) continue;
+              for await (const rawChunk of trackedStream) {
+                if (!rawChunk) continue;
 
                 // Enrich tool-related chunks with the in-process payload transform
                 // policy (mirrors the non-durable agentic-execution layer). The
                 // policy lives on the run registry; serializable `targets` shadow
                 // travels with the workflow input. No-op for non-tool chunks or
                 // when no policy is configured for this run.
-                if (registryEntry?.toolPayloadTransform || registryEntry?.tools) {
-                  chunk = await applyToolPayloadTransformToChunk(chunk, {
-                    policy: registryEntry?.toolPayloadTransform,
-                    tools: registryEntry?.tools,
-                    logger: logger as any,
-                  });
-                }
+                //
+                // IMPORTANT: the transformed chunk is only used for client-facing
+                // emission. Internal tool-call state (args persisted into
+                // `toolCalls`, downstream tool execution) MUST be built from the
+                // untransformed `rawChunk` so display-layer redactions/rewrites
+                // do not leak into actual tool inputs.
+                const clientChunk =
+                  registryEntry?.toolPayloadTransform || registryEntry?.tools
+                    ? await applyToolPayloadTransformToChunk(rawChunk, {
+                        policy: registryEntry?.toolPayloadTransform,
+                        tools: registryEntry?.tools,
+                        logger: logger as any,
+                      })
+                    : rawChunk;
 
                 // Forward every chunk to the client ('finish' was rewritten to 'step-finish' above).
                 if (pubsub) {
-                  await emitChunkEvent(pubsub, runId, chunk);
+                  await emitChunkEvent(pubsub, runId, clientChunk);
                 }
 
-                // Process different chunk types
-                switch (chunk.type) {
+                // Process different chunk types — always from the raw chunk so
+                // internal state (tool args, finish reason, usage, metadata) is
+                // never affected by display-layer transforms.
+                switch (rawChunk.type) {
                   case 'text-delta': {
-                    const payload = chunk.payload as TextDeltaPayload;
+                    const payload = rawChunk.payload as TextDeltaPayload;
                     textDeltas.push(payload.text);
                     break;
                   }
 
                   case 'tool-call': {
-                    const payload = chunk.payload as ToolCallPayload;
+                    const payload = rawChunk.payload as ToolCallPayload;
                     toolCalls.push({
                       toolCallId: payload.toolCallId,
                       toolName: payload.toolName,
@@ -458,7 +467,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   }
 
                   case 'step-finish': {
-                    const payload = chunk.payload as any;
+                    const payload = rawChunk.payload as any;
                     // The terminal chunk (rewritten from 'finish' above) carries finishReason
                     // in stepResult.reason and usage in output.usage.
                     finishReason = payload.stepResult?.reason || payload.finishReason || 'stop';
@@ -467,7 +476,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   }
 
                   case 'response-metadata': {
-                    const payload = chunk.payload as any;
+                    const payload = rawChunk.payload as any;
                     responseMetadata = {
                       id: payload.id,
                       timestamp: payload.timestamp,
@@ -478,7 +487,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   }
 
                   case 'error': {
-                    const payload = chunk.payload as any;
+                    const payload = rawChunk.payload as any;
                     const errorMessage = payload?.error?.message || payload?.message || 'LLM execution error';
                     const errorObj = new Error(errorMessage);
                     // DON'T emit error event here - we might have fallback models to try
@@ -498,15 +507,21 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               }
 
               // If this error was triggered by abortSignal cancellation, surface an
-              // abort event to the client so onAbort callbacks fire. The downstream
-              // error path still runs to close the stream. We deliberately avoid
-              // matching on arbitrary error message text (e.g. /abort/i) because that
-              // can fire for retryable provider errors whose message happens to mention
-              // "abort"; we only trust the canonical AbortError name or an actual
-              // aborted signal.
+              // abort event to the client so onAbort callbacks fire and bail out
+              // of the entire fallback/retry flow — a confirmed abort should not
+              // trigger retries on the same model nor fall through to other
+              // models. We deliberately avoid matching on arbitrary error message
+              // text (e.g. /abort/i) because that can fire for retryable provider
+              // errors whose message happens to mention "abort"; we only trust
+              // the canonical AbortError name or an actual aborted signal.
               const isAbort = executionAbortSignal?.aborted === true || errorObj.name === 'AbortError';
-              if (isAbort && pubsub) {
-                await emitAbortEvent(pubsub, runId, { steps: [] });
+              if (isAbort) {
+                if (pubsub) {
+                  await emitAbortEvent(pubsub, runId, { steps: [] });
+                }
+                // Re-throw so the outer fallback catch also bypasses retry /
+                // processAPIError and terminates the step cleanly.
+                throw errorObj;
               }
 
               lastError = errorObj;
@@ -634,6 +649,19 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             return output;
           } catch (error) {
             lastError = error instanceof Error ? error : new Error(String(error));
+
+            // Confirmed aborts bypass all retry / fallback / processAPIError
+            // handling — the user (or upstream caller) explicitly cancelled the
+            // run and we must terminate immediately rather than burning more
+            // attempts or paying for fallback model calls. Re-derive the signal
+            // from the registry (the inner try-scoped `executionAbortSignal` is
+            // out of scope here).
+            const outerRegistryEntry = globalRunRegistry.get(runId);
+            const outerAbortSignal = (outerRegistryEntry as any)?.abortSignal ?? abortSignal;
+            const isAbort = outerAbortSignal?.aborted === true || lastError.name === 'AbortError';
+            if (isAbort) {
+              throw lastError;
+            }
 
             const modelId = modelEntry.config.modelId;
             logger?.error?.(`Error executing model ${modelId}, attempt ${attempt + 1}/${maxRetries + 1}`, {
