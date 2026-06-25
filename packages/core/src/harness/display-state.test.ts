@@ -1452,6 +1452,11 @@ describe('display_state_changed emission', () => {
     session.subscribe((event: HarnessEvent) => {
       events.push(event);
     });
+    // createSession emits workspace lifecycle events (workspace_status_changed,
+    // workspace_ready) during session creation, before this subscriber attaches.
+    // The bus replays them to late subscribers — clear them so the tests below
+    // only observe events they emit themselves.
+    events.length = 0;
   });
 
   it('emits display_state_changed after every non-display_state_changed event', () => {

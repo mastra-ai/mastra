@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
+import { createMockWorkspace } from './test-utils';
 import type { HarnessEvent } from './types';
 
 function createHarness(
@@ -15,6 +16,7 @@ function createHarness(
   });
 
   return new Harness({
+    workspace: createMockWorkspace(),
     id: 'test-harness',
     resourceId: options.resourceId,
     storage,
@@ -78,6 +80,7 @@ describe('Harness.createSession — cross-session isolation', () => {
       model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
     });
     const harness = new Harness<{ counter: number }>({
+      workspace: createMockWorkspace(),
       id: 'test-harness',
       storage,
       initialState: { counter: 0 },

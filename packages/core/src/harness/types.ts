@@ -10,7 +10,7 @@ import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage/base';
 import type { GoalEvaluationPayload } from '../stream/types';
 import type { DynamicArgument } from '../types';
-import type { Workspace, WorkspaceConfig, WorkspaceStatus } from '../workspace';
+import type { Workspace, WorkspaceStatus } from '../workspace';
 import type { TaskItemSnapshot } from './tools';
 
 // =============================================================================
@@ -261,11 +261,11 @@ export interface HarnessConfig<TState = {}> {
 
   /**
    * Workspace configuration.
-   * Accepts a pre-constructed Workspace instance, a WorkspaceConfig for
-   * Harness to construct internally, or a dynamic factory function that
-   * receives the request context and returns a Workspace per-request.
+   * Accepts a pre-constructed Workspace instance or a dynamic factory
+   * function that receives the request context and returns a Workspace
+   * per-request.
    */
-  workspace?: DynamicArgument<Workspace | undefined> | WorkspaceConfig;
+  workspace?: DynamicArgument<Workspace | undefined>;
 
   /**
    * Browser automation configuration.

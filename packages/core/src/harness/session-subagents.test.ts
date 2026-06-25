@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
+import { createMockWorkspace } from './test-utils';
 import type { HarnessEvent } from './types';
 
 async function createSession(options: { storage: InMemoryStore; onEvent?: (event: HarnessEvent) => void }) {
@@ -13,6 +14,7 @@ async function createSession(options: { storage: InMemoryStore; onEvent?: (event
   });
 
   const harness = new Harness({
+    workspace: createMockWorkspace(),
     id: 'test-harness',
     storage: options.storage,
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
