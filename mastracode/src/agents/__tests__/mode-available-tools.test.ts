@@ -4,9 +4,14 @@ import { MC_TOOLS } from '../../tool-names.js';
 import { buildMode } from '../modes/build.js';
 import { fastMode } from '../modes/explore.js';
 import { planMode } from '../modes/plan.js';
+import { EXPLORE_MODE_AVAILABLE_TOOLS, PLAN_MODE_AVAILABLE_TOOLS } from '../tool-availability.js';
 
 describe('mode availableTools configuration', () => {
   describe('plan mode', () => {
+    it('uses the shared plan availableTools allowlist', () => {
+      expect(planMode.availableTools).toEqual([...PLAN_MODE_AVAILABLE_TOOLS]);
+    });
+
     it('declares a unified availableTools allowlist', () => {
       expect(planMode.availableTools).toBeDefined();
       expect(Array.isArray(planMode.availableTools)).toBe(true);
@@ -46,6 +51,10 @@ describe('mode availableTools configuration', () => {
   });
 
   describe('explore (fast) mode', () => {
+    it('uses the shared explore availableTools allowlist', () => {
+      expect(fastMode.availableTools).toEqual([...EXPLORE_MODE_AVAILABLE_TOOLS]);
+    });
+
     it('declares a unified availableTools allowlist', () => {
       expect(fastMode.availableTools).toBeDefined();
       expect(Array.isArray(fastMode.availableTools)).toBe(true);

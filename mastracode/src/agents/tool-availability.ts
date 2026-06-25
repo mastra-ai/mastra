@@ -1,0 +1,45 @@
+import type { WorkspaceToolsConfig } from '@mastra/core/workspace';
+import { MC_TOOLS, TOOL_NAME_OVERRIDES } from '../tool-names.js';
+
+export const MASTRACODE_WORKSPACE_TOOLS: WorkspaceToolsConfig = {
+  ...TOOL_NAME_OVERRIDES,
+};
+
+export const PLAN_MODE_AVAILABLE_TOOLS: readonly string[] = [
+  // Read-only exploration tools
+  MC_TOOLS.VIEW,
+  MC_TOOLS.FIND_FILES,
+  MC_TOOLS.SEARCH_CONTENT,
+  MC_TOOLS.FILE_STAT,
+  MC_TOOLS.LSP_INSPECT,
+  // Plan file writing (restricted to .mastracode/plans/ by workspace paths)
+  MC_TOOLS.WRITE_FILE,
+  MC_TOOLS.STRING_REPLACE_LSP,
+  // Plan delivery tools
+  'ask_user',
+  'submit_plan',
+  // Task tools for plan-stage tracking
+  'task_write',
+  'task_update',
+  'task_complete',
+  'task_check',
+  // Notification access
+  MC_TOOLS.NOTIFICATION_INBOX,
+];
+
+export const EXPLORE_MODE_AVAILABLE_TOOLS: readonly string[] = [
+  MC_TOOLS.VIEW,
+  MC_TOOLS.FIND_FILES,
+  MC_TOOLS.SEARCH_CONTENT,
+  MC_TOOLS.FILE_STAT,
+  MC_TOOLS.LSP_INSPECT,
+  'ask_user',
+];
+
+export const GOAL_JUDGE_READONLY_TOOLS: readonly string[] = [
+  MC_TOOLS.VIEW,
+  MC_TOOLS.SEARCH_CONTENT,
+  MC_TOOLS.FIND_FILES,
+  MC_TOOLS.FILE_STAT,
+  MC_TOOLS.LSP_INSPECT,
+];

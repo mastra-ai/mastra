@@ -7,12 +7,12 @@ import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { Workspace, LocalFilesystem, LocalSandbox, createWorkspaceTools } from '@mastra/core/workspace';
-import type { LSPConfig, WorkspaceToolsConfig } from '@mastra/core/workspace';
+import type { LSPConfig } from '@mastra/core/workspace';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { loadSettings } from '../onboarding/settings.js';
 import type { MastraCodeState } from '../schema';
-import { MC_TOOLS, TOOL_NAME_OVERRIDES } from '../tool-names.js';
 import { getPlansDir } from '../utils/plans.js';
+import { GOAL_JUDGE_READONLY_TOOLS, MASTRACODE_WORKSPACE_TOOLS } from './tool-availability.js';
 
 // =============================================================================
 // Sandbox Environment
@@ -147,9 +147,7 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
   // All modes share the same workspace tool configuration.  Per-mode tool
   // visibility is enforced at LLM-call time via `availableTools` /
   // `activeTools` on the Harness, not by mutating workspace capabilities.
-  const workspaceTools: WorkspaceToolsConfig = {
-    ...TOOL_NAME_OVERRIDES,
-  };
+  const workspaceTools = MASTRACODE_WORKSPACE_TOOLS;
 
   // Reuse existing workspace if already registered (preserves ProcessManager state)
   let existing: Workspace<LocalFilesystem, LocalSandbox> | undefined;
@@ -190,21 +188,6 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
     lsp: lspConfig,
   });
 }
-
-/**
- * Read-only workspace tools the goal judge is allowed to call to verify the
- * agent's work. Mirrors the original (pre-native-goal) MastraCode judge, which
- * could inspect the workspace before deciding `done`/`continue`/`waiting`
- * instead of grading the assistant's prose alone. Strictly read-only: no write,
- * edit, delete, mkdir, or command-execution tools.
- */
-const GOAL_JUDGE_READONLY_TOOLS: readonly string[] = [
-  MC_TOOLS.VIEW,
-  MC_TOOLS.SEARCH_CONTENT,
-  MC_TOOLS.FIND_FILES,
-  MC_TOOLS.FILE_STAT,
-  MC_TOOLS.LSP_INSPECT,
-];
 
 /**
  * Resolver for the agent's `goal.tools` config. Builds the request's workspace
