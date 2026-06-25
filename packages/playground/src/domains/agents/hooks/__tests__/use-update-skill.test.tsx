@@ -25,6 +25,10 @@ vi.mock('@mastra/playground-ui', async importOriginal => {
   };
 });
 
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: { success: toastSuccess, error: toastError },
+}));
+
 const BASE_URL = 'http://localhost:4111';
 
 const wrapper = () => {

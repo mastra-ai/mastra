@@ -1,5 +1,5 @@
-import { Icon } from '@mastra/playground-ui';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Loader2, StopCircle } from 'lucide-react';
 
 export interface WorkflowCancelButtonProps {

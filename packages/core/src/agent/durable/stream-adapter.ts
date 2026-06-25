@@ -14,6 +14,8 @@ import type {
   AgentFinishEventData,
   AgentErrorEventData,
   AgentSuspendedEventData,
+  AgentAbortEventData,
+  AgentIterationCompleteEventData,
 } from './types';
 
 /**
@@ -52,6 +54,10 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   onError?: (error: Error) => void | Promise<void>;
   /** Callback when workflow suspends */
   onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
+  /** Callback when execution is aborted via abortSignal */
+  onAbort?: (data: AgentAbortEventData) => void | Promise<void>;
+  /** Callback fired after each agentic-loop iteration */
+  onIterationComplete?: (data: AgentIterationCompleteEventData) => void | Promise<void>;
   /** Optional logger for structured logging */
   logger?: IMastraLogger;
 }
@@ -91,6 +97,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     onFinish,
     onError,
     onSuspended,
+    onAbort,
+    onIterationComplete,
     logger,
   } = options;
 
@@ -210,6 +218,28 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           const data = streamEvent.data as AgentSuspendedEventData;
           await onSuspended?.(data);
           // Don't close the stream on suspend - it can be resumed
+          break;
+        }
+
+        case AgentStreamEventTypes.ABORT: {
+          const data = streamEvent.data as AgentAbortEventData;
+          try {
+            await onAbort?.(data);
+          } catch (callbackError) {
+            logError(`[DurableAgentStream] onAbort callback error:`, callbackError);
+          }
+          // Abort closes the stream — the run will not continue.
+          safeClose(controller);
+          break;
+        }
+
+        case AgentStreamEventTypes.ITERATION_COMPLETE: {
+          const data = streamEvent.data as AgentIterationCompleteEventData;
+          try {
+            await onIterationComplete?.(data);
+          } catch (callbackError) {
+            logError(`[DurableAgentStream] onIterationComplete callback error:`, callbackError);
+          }
           break;
         }
 
@@ -377,6 +407,32 @@ export async function emitErrorEvent(pubsub: PubSub, runId: string, error: Error
 export async function emitSuspendedEvent(pubsub: PubSub, runId: string, data: AgentSuspendedEventData): Promise<void> {
   await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.SUSPENDED,
+    runId,
+    data,
+  });
+}
+
+/**
+ * Helper to emit an abort event to pubsub
+ */
+export async function emitAbortEvent(pubsub: PubSub, runId: string, data: AgentAbortEventData): Promise<void> {
+  await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+    type: AgentStreamEventTypes.ABORT,
+    runId,
+    data,
+  });
+}
+
+/**
+ * Helper to emit an iteration-complete event to pubsub
+ */
+export async function emitIterationCompleteEvent(
+  pubsub: PubSub,
+  runId: string,
+  data: AgentIterationCompleteEventData,
+): Promise<void> {
+  await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+    type: AgentStreamEventTypes.ITERATION_COMPLETE,
     runId,
     data,
   });

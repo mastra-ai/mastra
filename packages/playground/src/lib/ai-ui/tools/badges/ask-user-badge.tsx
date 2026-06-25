@@ -1,8 +1,9 @@
-import { Icon, cn } from '@mastra/playground-ui';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check, MessageCircleQuestion, Send } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import type { AskUserResult, AskUserSuspendPayload } from './types';

@@ -1,6 +1,6 @@
-import { Icon } from '@mastra/playground-ui';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Plus, Database, BookOpen } from 'lucide-react';
 
 export interface EmptyDatasetsTableProps {

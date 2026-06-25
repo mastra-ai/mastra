@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { toast } from '@mastra/playground-ui';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -29,6 +29,10 @@ vi.mock('@mastra/playground-ui', () => {
     toast: { error: vi.fn(), success: vi.fn() },
   };
 });
+
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: { error: vi.fn(), success: vi.fn() },
+}));
 
 vi.mock('@uiw/react-codemirror', () => ({
   default: ({ value, onChange }: { value?: string; onChange?: (value: string) => void }) => (

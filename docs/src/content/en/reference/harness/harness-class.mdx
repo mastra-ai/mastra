@@ -172,6 +172,13 @@ await harness.sendMessage({ content: 'Hello!' })
             isOptional: true,
           },
           {
+            name: 'availableTools',
+            type: 'string[]',
+            description:
+              "Per-mode tool visibility allowlist. When set, only tools whose final exposed names appear in this list are visible to the model and executable during this mode's runs. `undefined` = all tools visible; `[]` = no tools. Per-tool and per-category `deny` rules take precedence over this list. Workspace tools use the same list — reference them by exposed names (`view`, `write_file`, etc.).",
+            isOptional: true,
+          },
+          {
             name: 'agent',
             type: 'Agent',
             description:

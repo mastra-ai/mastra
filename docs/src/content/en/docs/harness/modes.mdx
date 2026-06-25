@@ -88,6 +88,27 @@ const buildMode = { id: 'build', additionalTools: { deployTool } }
 
 You can't set both `tools` and `additionalTools` on the same mode.
 
+### Restricting tool visibility
+
+`tools` and `additionalTools` control which tools are **added** to a mode's run — they don't hide the backing agent's own tools. To restrict which of those tools the model can actually see and call, set `availableTools`:
+
+```typescript title="src/mastra/harness.ts"
+const reviewMode = {
+  id: 'review',
+  name: 'Review',
+  // Only these tools are visible to the model in this mode.
+  availableTools: ['view', 'find_files', 'search_content'],
+}
+```
+
+`availableTools` is a per-mode visibility allowlist that matches each tool by its final exposed name:
+
+- **`undefined`** (default): no mode-level restriction — every tool is visible.
+- **`[]`**: no tools are available for this mode.
+- A denied tool stays hidden even if it appears in the list. Per-tool and per-category `deny` rules in your permission config always take precedence.
+
+Workspace tools use the same list as every other tool — reference them by their exposed names (`view`, `write_file`, `find_files`, etc.). Visibility is enforced at LLM-call time, so the model never sees — and can't attempt to call — a tool outside the allowlist.
+
 ### Mode transitions
 
 A mode can declare a `transitionsTo` target. When the `submit_plan` built-in tool runs in that mode, the Harness transitions to the target mode on approval:

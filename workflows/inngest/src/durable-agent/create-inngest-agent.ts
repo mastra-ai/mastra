@@ -538,7 +538,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           provider: workflowInput.modelConfig.provider,
           streaming: true,
           parameters: {
-            temperature: workflowInput.options?.temperature,
+            temperature: workflowInput.options?.modelSettings?.temperature,
           },
         },
       });

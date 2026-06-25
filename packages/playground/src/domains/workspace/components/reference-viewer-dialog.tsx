@@ -1,6 +1,6 @@
-import { Icon } from '@mastra/playground-ui';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { FileText, X, Copy, Check } from 'lucide-react';
 
 export interface ReferenceViewerDialogProps {
