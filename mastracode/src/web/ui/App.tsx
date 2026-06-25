@@ -100,6 +100,11 @@ export default function App() {
 
   const onComposerKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (showSuggestions) {
+      // `activeSuggestion` is reset by an effect that runs after render, so it
+      // can momentarily point past a shrunk `suggestions` list. Clamp here so we
+      // never dereference an out-of-range index.
+      const safeIndex = Math.min(activeSuggestion, suggestions.length - 1);
+      const current = suggestions[safeIndex];
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         setActiveSuggestion(i => (i + 1) % suggestions.length);
@@ -110,20 +115,20 @@ export default function App() {
         return;
       } else if (e.key === 'Tab') {
         e.preventDefault();
-        applyCommand(suggestions[activeSuggestion]!.name);
+        if (current) applyCommand(current.name);
         return;
       } else if (e.key === 'Enter' && !e.shiftKey) {
         // If the draft already names a complete command exactly, let Enter submit
         // it (runs no-arg commands like /yolo). Otherwise complete the highlighted
         // suggestion so the user can type its args.
-        const exact = draft.slice(1) === suggestions[activeSuggestion]!.name && suggestions.length === 1;
+        const exact = !!current && draft.slice(1) === current.name && suggestions.length === 1;
         if (exact) {
           e.preventDefault();
           onSubmit(e);
           return;
         }
         e.preventDefault();
-        applyCommand(suggestions[activeSuggestion]!.name);
+        if (current) applyCommand(current.name);
         return;
       } else if (e.key === 'Escape') {
         e.preventDefault();

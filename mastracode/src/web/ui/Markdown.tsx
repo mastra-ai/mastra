@@ -37,6 +37,16 @@ hljs.registerLanguage('html', xml);
 hljs.registerLanguage('yaml', yaml);
 hljs.registerLanguage('yml', yaml);
 
+/** Escape HTML special characters so text can't inject markup. */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const marked = new Marked({
   breaks: true,
   gfm: true,
@@ -47,11 +57,20 @@ marked.use({
   renderer: {
     code({ text, lang }) {
       const language = lang && hljs.getLanguage(lang) ? lang : undefined;
+      // hljs.highlight/highlightAuto return HTML-escaped, token-wrapped output.
       const highlighted = language ? hljs.highlight(text, { language }).value : hljs.highlightAuto(text).value;
       return `<pre class="code-block"><code class="hljs${language ? ` language-${language}` : ''}">${highlighted}</code></pre>`;
     },
     codespan({ text }) {
-      return `<code class="inline-code">${text}</code>`;
+      // marked does not escape custom-renderer text, so escape it ourselves to
+      // prevent inline code like `<img onerror=...>` from injecting markup.
+      return `<code class="inline-code">${escapeHtml(text)}</code>`;
+    },
+    // Neutralize raw inline/block HTML in the markdown source: render it as
+    // visible escaped text instead of live markup. Agent output should not be
+    // able to inject arbitrary HTML/script into the page.
+    html({ text }) {
+      return escapeHtml(text);
     },
   },
 });
@@ -63,8 +82,9 @@ interface MarkdownProps {
 
 /**
  * Renders a markdown string as formatted HTML with syntax-highlighted code
- * blocks. Content comes from our own agent (not arbitrary user input), so
- * `dangerouslySetInnerHTML` is acceptable here.
+ * blocks. Agent output can contain attacker-influenced text (file contents,
+ * tool output, web pages), so raw HTML is neutralized and code spans are
+ * escaped before being injected via `dangerouslySetInnerHTML`.
  */
 export function Markdown({ children, className }: MarkdownProps) {
   const html = useMemo(() => {

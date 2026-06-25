@@ -54,7 +54,17 @@ export function loadProjects(): Project[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    return JSON.parse(raw) as Project[];
+    const parsed: unknown = JSON.parse(raw);
+    // Guard against non-array payloads (a stray object/string would otherwise
+    // pass the cast and break consumers that call array methods).
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (p): p is Project =>
+        !!p &&
+        typeof p === 'object' &&
+        typeof (p as Project).id === 'string' &&
+        typeof (p as Project).path === 'string',
+    );
   } catch {
     return [];
   }

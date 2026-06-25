@@ -14,13 +14,21 @@ describe('web scenario: model-switch', () => {
       description: 'Switch model (model_changed updates state), then send a prompt.',
       aimockFixture: 'model-switch.json',
       run: async ({ driver }) => {
-        // The default model is gpt-5.4-mini; switch to a different model ID.
-        // Note: the model ID just needs to be syntactically valid — AIMock
-        // matches on the fixture model field, so the response still comes.
-        await driver.switchMode('build'); // ensure we're in a known mode first
-        await waitFor(() => driver.state().modeId === 'build', 'mode to be build');
+        // Switch the session model and assert the change is reflected in session
+        // state (driven by the `model_changed` event). The agent's underlying
+        // model stays pointed at AIMock, so the request still matches the fixture
+        // — this verifies the model-switch control path, not the LLM backend.
+        const before = driver.state().modelId;
+        await driver.switchModel('anthropic/claude-sonnet-4');
+        await waitFor(
+          () => driver.state().modelId === 'anthropic/claude-sonnet-4',
+          'session model to update to the switched model',
+        );
+        if (before === 'anthropic/claude-sonnet-4') {
+          throw new Error('model did not change: it was already the target model');
+        }
 
-        // Verify chat still works after the session is in a good state
+        // Chat still works after switching the model.
         await driver.submit('Hello after model switch');
         await driver.waitForText("I'm responding after the model switch");
       },

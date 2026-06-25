@@ -37,6 +37,8 @@ export interface ScenarioDriver {
   steer: (text: string) => Promise<void>;
   abort: () => Promise<void>;
   switchMode: (modeId: string) => Promise<void>;
+  /** Switch the session model. */
+  switchModel: (modelId: string) => Promise<void>;
   /** Wait for a pending tool-approval prompt and return it. */
   waitForApproval: (timeoutMs?: number) => Promise<ApprovalPrompt>;
   approve: (approved: boolean) => Promise<void>;
@@ -130,6 +132,7 @@ export async function createDriver(opts: {
     },
     abort: () => session.abort(),
     switchMode: modeId => session.switchMode(modeId),
+    switchModel: modelId => session.switchModel(modelId),
     waitForApproval: timeoutMs =>
       waitFor(
         () => state.entries.find(e => e.kind === 'approval') as ApprovalPrompt | undefined,

@@ -20,6 +20,12 @@ export interface WebServerOptions extends MastraCodeConfig {
   /** Port to listen on. Default 4111. */
   port?: number;
   /**
+   * Hostname/interface to bind to. Defaults to `127.0.0.1` (loopback only) so
+   * the dev server is not exposed on the local network. Set to `0.0.0.0` to
+   * bind all interfaces (only do this behind your own auth/network controls).
+   */
+  hostname?: string;
+  /**
    * Directory containing the built web UI (index.html + assets). When present,
    * the server serves it as static files. Omit during dev (Vite serves the UI
    * and proxies /api here).
@@ -49,7 +55,8 @@ export interface WebServer {
  */
 export async function startWebServer(options: WebServerOptions = {}): Promise<WebServer> {
   const port = options.port ?? 4111;
-  const { port: _p, uiDir, fsRoot, ...mastraCodeConfig } = options;
+  const hostname = options.hostname ?? '127.0.0.1';
+  const { port: _p, hostname: _h, uiDir, fsRoot, ...mastraCodeConfig } = options;
 
   // Build the full production harness (agents, modes, tools, memory, OM, MCP,
   // providers, observability) — identical to the terminal app — and register it
@@ -89,7 +96,7 @@ export async function startWebServer(options: WebServerOptions = {}): Promise<We
     app.get('*', serveStatic({ path: relativeFromCwd(join(resolvedUiDir, 'index.html')) }));
   }
 
-  const server = serve({ fetch: app.fetch, port });
+  const server = serve({ fetch: app.fetch, port, hostname });
 
   return {
     port,

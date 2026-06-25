@@ -72,12 +72,18 @@ function CopyButton({ text }: { text: string }) {
       className="copy-btn"
       title="Copy"
       aria-label="Copy"
-      onClick={e => {
+      onClick={async e => {
         e.stopPropagation();
-        void navigator.clipboard?.writeText(text);
-        setCopied(true);
-        toast('Copied to clipboard', 'success');
-        setTimeout(() => setCopied(false), 1200);
+        try {
+          if (!navigator.clipboard) throw new Error('Clipboard API unavailable');
+          await navigator.clipboard.writeText(text);
+          setCopied(true);
+          toast('Copied to clipboard', 'success');
+          setTimeout(() => setCopied(false), 1200);
+        } catch {
+          // Only report success when the write actually succeeded.
+          toast('Could not copy to clipboard', 'error');
+        }
       }}
     >
       {copied ? <span className="copy-ok">Copied</span> : <CopyIcon />}

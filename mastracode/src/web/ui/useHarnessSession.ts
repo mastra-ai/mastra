@@ -149,21 +149,47 @@ export function useHarnessSession({
 
     const MAX_RETRIES = 10;
     const MAX_DELAY_MS = 30_000;
+    // Backoff attempt counter, shared across reconnects so it can be reset to 0
+    // after any successful (re)connection rather than growing unbounded.
+    let attempt = 0;
 
-    async function subscribe(session: Session, isReconnect: boolean, attempt = 0): Promise<void> {
+    function scheduleReconnect(session: Session): void {
+      if (disposed) return;
+      attempt += 1;
+      if (attempt > MAX_RETRIES) {
+        setStatus('error');
+        return;
+      }
+      const delay = Math.min(1000 * Math.pow(2, attempt - 1), MAX_DELAY_MS);
+      reconnectTimer = setTimeout(() => void subscribe(session, true), delay);
+    }
+
+    async function subscribe(session: Session, isReconnect: boolean): Promise<void> {
       if (disposed) return;
 
       if (isReconnect) {
         setStatus('reconnecting');
-        // Re-sync authoritative state (events missed during disconnect are lost).
+        // Re-sync authoritative state and re-hydrate the thread history. Events
+        // streamed during the disconnect are lost, so reload the persisted
+        // messages instead of wiping the transcript to empty.
         try {
           const state = await session.state();
           if (disposed) return;
+          const threadId = state.threadId;
+          const messages = threadId
+            ? await session.listMessages(threadId).catch(() => {
+                // History reload failed — fall back to a state-only hydrate
+                // (empty transcript) rather than failing the whole reconnect.
+                return [];
+              })
+            : [];
+          if (disposed) return;
           dispatch({
-            type: 'reset',
+            type: 'hydrate',
+            messages,
             modeId: state.modeId,
             modelId: state.modelId,
-            threadId: state.threadId,
+            threadId,
             omProgress: state.omProgress,
             usage: state.tokenUsage,
           });
@@ -178,28 +204,18 @@ export function useHarnessSession({
           onError: () => {
             unsubscribe?.();
             unsubscribe = undefined;
-            if (disposed) return;
-
-            const nextAttempt = attempt + 1;
-            if (nextAttempt > MAX_RETRIES) {
-              setStatus('error');
-              return;
-            }
-            const delay = Math.min(1000 * Math.pow(2, attempt), MAX_DELAY_MS);
-            reconnectTimer = setTimeout(() => void subscribe(session, true, nextAttempt), delay);
+            scheduleReconnect(session);
           },
         });
         unsubscribe = sub.unsubscribe;
-        if (!disposed) setStatus('ready');
-      } catch {
-        if (disposed) return;
-        const nextAttempt = attempt + 1;
-        if (nextAttempt > MAX_RETRIES) {
-          setStatus('error');
-          return;
+        if (!disposed) {
+          // Connection established — clear the backoff so a future disconnect
+          // starts a fresh retry sequence instead of continuing to grow.
+          attempt = 0;
+          setStatus('ready');
         }
-        const delay = Math.min(1000 * Math.pow(2, attempt), MAX_DELAY_MS);
-        reconnectTimer = setTimeout(() => void subscribe(session, true, nextAttempt), delay);
+      } catch {
+        scheduleReconnect(session);
       }
     }
 

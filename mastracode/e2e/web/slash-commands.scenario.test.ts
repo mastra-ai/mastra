@@ -82,9 +82,10 @@ describe('slash commands (reducer-level)', () => {
     });
 
     expect(state.entries).toHaveLength(1);
-    if (state.entries[0].kind === 'notice') {
-      expect(state.entries[0].level).toBe('error');
-      expect(state.entries[0].text).toContain('/foo');
-    }
+    const entry = state.entries[0];
+    expect(entry.kind).toBe('notice');
+    if (entry.kind !== 'notice') throw new Error('expected a notice entry');
+    expect(entry.level).toBe('error');
+    expect(entry.text).toContain('/foo');
   });
 });

@@ -1,4 +1,4 @@
-import { readdir, stat } from 'node:fs/promises';
+import { readdir, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve, sep } from 'node:path';
 
@@ -49,17 +49,35 @@ function isWithinRoot(candidate: string, root: string): boolean {
 }
 
 /**
+ * Resolve a path's real location (following symlinks) and confirm it stays
+ * within `root`. Returns the real path when confined, or `null` when it escapes
+ * the root or does not exist. Used so a symlink inside the root that points
+ * outside it cannot be browsed or selected.
+ */
+async function realPathWithinRoot(candidate: string, root: string): Promise<string | null> {
+  try {
+    const real = await realpath(candidate);
+    return isWithinRoot(real, root) ? real : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * List the directories inside `requestedPath`, confined to `root`. An absent or
  * out-of-root path is clamped to the root, so the worst a malicious client can
  * do is browse within the allowed root.
  */
 export async function listDirectory(root: string, requestedPath?: string): Promise<DirectoryListing> {
-  const resolvedRoot = resolveFsRoot(root);
+  // Resolve the root through symlinks so all confinement checks compare real
+  // paths; a symlink that escapes the root is then reliably detectable.
+  const resolvedRoot = (await realPathWithinRoot(resolveFsRoot(root), resolveFsRoot(root))) ?? resolveFsRoot(root);
 
   let target = resolvedRoot;
   if (requestedPath && requestedPath.trim()) {
     const candidate = isAbsolute(requestedPath) ? resolve(requestedPath) : resolve(resolvedRoot, requestedPath);
-    target = isWithinRoot(candidate, resolvedRoot) ? candidate : resolvedRoot;
+    // Follow symlinks and re-confirm the real target stays within the root.
+    target = (await realPathWithinRoot(candidate, resolvedRoot)) ?? resolvedRoot;
   }
 
   // Confirm the target is a real directory; fall back to root otherwise.
@@ -74,16 +92,15 @@ export async function listDirectory(root: string, requestedPath?: string): Promi
   const entries: DirectoryEntry[] = [];
   for (const dirent of dirents) {
     if (dirent.name.startsWith('.')) continue; // skip dotfiles/dirs
+    const entryPath = join(target, dirent.name);
     let isDir = dirent.isDirectory();
-    // Resolve symlinks to directories so they're browsable too.
-    if (!isDir && dirent.isSymbolicLink()) {
-      try {
-        isDir = (await stat(join(target, dirent.name))).isDirectory();
-      } catch {
-        isDir = false;
-      }
+    if (dirent.isSymbolicLink()) {
+      // Only surface symlinks whose real target is a directory inside the root,
+      // so a link pointing outside the root can't be browsed or selected.
+      const real = await realPathWithinRoot(entryPath, resolvedRoot);
+      isDir = real ? (await stat(real).catch(() => null))?.isDirectory() === true : false;
     }
-    if (isDir) entries.push({ name: dirent.name, path: join(target, dirent.name) });
+    if (isDir) entries.push({ name: dirent.name, path: entryPath });
   }
   entries.sort((a, b) => a.name.localeCompare(b.name));
 
@@ -143,11 +160,17 @@ export function mountFsRoutes(app: Hono<any>, options: { root?: string } = {}): 
     }
   });
 
-  app.get('/api/web/project/resolve', c => {
+  app.get('/api/web/project/resolve', async c => {
     const path = c.req.query('path');
     if (!path) return c.json({ error: 'Missing required query param: path' }, 400);
+    // Confine resolution to the browsable root (following symlinks), so this
+    // endpoint can't be used to probe arbitrary filesystem paths. The web UI
+    // only ever resolves directories the user picked via the root-confined
+    // browser, so legitimate requests are always within the root.
+    const confined = await realPathWithinRoot(isAbsolute(path) ? resolve(path) : resolve(root, path), root);
+    if (!confined) return c.json({ error: 'Path is outside the browsable root' }, 403);
     try {
-      return c.json(resolveProject(path));
+      return c.json(resolveProject(confined));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return c.json({ error: message }, 500);

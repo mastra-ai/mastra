@@ -40,10 +40,14 @@ describe('web scenario: steer-abort', () => {
 
         await driver.abort();
 
-        // After abort, the run is no longer active — we can submit again
-        // (verifies the abort didn't leave the session in a broken state)
-        const state = driver.state();
-        expect(state.entries.length).toBeGreaterThan(0);
+        // Abort must drive the run to idle (not left "running" forever).
+        await driver.waitForIdle();
+        expect(driver.state().running).toBe(false);
+
+        // The session must still be usable after an abort: a fresh prompt streams
+        // a new response (proves abort didn't leave the session broken).
+        await driver.submit('Focus on the internet era instead');
+        await driver.waitForText('ARPANET');
       },
     });
   });

@@ -22,21 +22,25 @@ describe('web scenario: mode-model-persistence', () => {
         await driver.waitForText('acknowledged');
         await driver.waitForIdle();
 
-        // Switch to plan mode.
+        // Switch both mode and model.
         await driver.switchMode('plan');
-        // Wait for the mode_changed event.
+        await driver.switchModel('anthropic/claude-sonnet-4');
+
+        // Wait for the mode_changed + model_changed events to land.
         const start = Date.now();
-        while (driver.state().modeId !== 'plan') {
-          if (Date.now() - start > 5000) throw new Error('timeout waiting for mode plan');
+        while (driver.state().modeId !== 'plan' || driver.state().modelId !== 'anthropic/claude-sonnet-4') {
+          if (Date.now() - start > 5000) throw new Error('timeout waiting for mode/model to update');
           await new Promise(r => setTimeout(r, 25));
         }
         expect(driver.state().modeId).toBe('plan');
+        expect(driver.state().modelId).toBe('anthropic/claude-sonnet-4');
 
-        // Re-read state via the API to confirm persistence.
+        // Re-read state via the API to confirm BOTH switches persisted.
         const client = driver.getClient();
         const session = client.getHarness('code').session('web-scenario-mode-model-persistence');
         const state = await session.state();
         expect(state.modeId).toBe('plan');
+        expect(state.modelId).toBe('anthropic/claude-sonnet-4');
       },
     });
   });
