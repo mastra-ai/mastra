@@ -207,8 +207,6 @@ async function showGoalActionModal(ctx: SlashCommandContext): Promise<void> {
 }
 
 export async function handleJudgeCommand(ctx: SlashCommandContext): Promise<void> {
-  const wasPaused = ctx.state.goalManager.getGoal()?.status === 'paused';
-
   const defaults = await promptForJudgeDefaults(ctx, 'Judge settings unchanged.');
   if (!defaults) return;
 
@@ -218,8 +216,9 @@ export async function handleJudgeCommand(ctx: SlashCommandContext): Promise<void
     defaults.maxTurns,
   );
   if (activeGoal) {
-    const suffix = wasPaused && activeGoal.status === 'active' ? 'Goal resumed.' : 'Current goal updated.';
-    ctx.showInfo(`Judge defaults set: ${defaults.judgeModelId}, ${defaults.maxTurns} max attempts. ${suffix}`);
+    ctx.showInfo(
+      `Judge defaults set: ${defaults.judgeModelId}, ${defaults.maxTurns} max attempts. Current goal updated.`,
+    );
     return;
   }
 

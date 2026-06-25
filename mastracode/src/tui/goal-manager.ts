@@ -162,11 +162,9 @@ export class GoalManager {
    */
   async updateJudgeDefaults(state: TUIState, judgeModelId: string, maxTurns: number): Promise<GoalState | null> {
     if (!this.record) return null;
-    // When the user updates judge settings on a paused goal (e.g. switching to
-    // a working model after hitting a rate limit), resume the goal so it does
-    // not stay stuck. Completed goals are left as-is.
-    const wasPaused = this.record.status === 'paused';
-    const targetStatus = this.record.status === 'done' ? 'done' : 'active';
+    // Preserve the current goal status so updating judge settings does not
+    // accidentally pause or resume the goal.
+    const currentStatus = this.record.status;
     const threadId = state.session.thread.getId();
     const agent = this.getAgent(state);
     if (agent && threadId) {
@@ -174,25 +172,19 @@ export class GoalManager {
         threadId,
         ...(judgeModelId ? { judgeModelId } : {}),
         maxRuns: maxTurns,
-        status: targetStatus,
+        status: currentStatus,
       });
       if (updated) {
         this.record = { ...updated, id: this.record.id };
-        if (wasPaused && targetStatus === 'active') {
-          this.record.pausedReason = undefined;
-          this.startActiveTimer();
-        }
       }
     } else {
       this.record = {
         ...this.record,
         ...(judgeModelId ? { judgeModelId } : {}),
         maxRuns: maxTurns,
-        status: targetStatus,
-        pausedReason: targetStatus === 'active' ? undefined : this.record.pausedReason,
+        status: currentStatus,
         updatedAt: Date.now(),
       };
-      if (wasPaused && targetStatus === 'active') this.startActiveTimer();
     }
     return this.getGoal();
   }
