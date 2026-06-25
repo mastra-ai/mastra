@@ -2,16 +2,16 @@ import { describe, it, expect, vi, beforeAll } from 'vitest';
 
 import { AgentChannels } from '../agent-channels';
 import { getChatModule } from '../chat-lazy';
+import { ChatChannelOutputProcessor, CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '../output-processor';
 
 // ---------------------------------------------------------------------------
 // Test harness
 // ---------------------------------------------------------------------------
 //
-// `consumeAgentStream` is the heart of the channels rendering pipeline: it
-// turns an `AsyncIterable<AgentChunkType>` (from `agent.subscribeToThread()`)
-// into a sequence of platform calls (`chatThread.post()`, `startTyping()`,
-// `adapter.editMessage()`, ...). These tests drive it directly with canned
-// chunk streams and assert against a flat recording of every platform call.
+// The channels rendering pipeline routes agent stream chunks to the chat
+// platform via `ChatChannelOutputProcessor`. These tests drive the processor
+// directly with canned chunks and assert against a flat recording of every
+// platform call (`chatThread.post()`, `startTyping()`, `adapter.editMessage()`).
 
 type Call =
   | { kind: 'post'; arg: unknown }
@@ -60,10 +60,6 @@ function createRecording() {
   return { calls, adapter, chatThread };
 }
 
-async function* chunkStream(chunks: any[]): AsyncIterable<any> {
-  for (const c of chunks) yield c;
-}
-
 function makeChannels(
   opts: {
     streaming?: boolean | { updateIntervalMs?: number };
@@ -101,7 +97,29 @@ async function drive(
   chatThread: any,
   approvalContext?: { toolCallId: string; messageId: string },
 ) {
-  await (channels as any).consumeAgentStream(chunkStream(chunks), chatThread, 'test', approvalContext);
+  const render = (channels as any)._buildRenderContext(chatThread, 'test', approvalContext);
+  const processor = new ChatChannelOutputProcessor();
+  const requestContext = new Map<string, unknown>();
+  requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, render);
+  const state: Record<string, unknown> = {};
+
+  // The output processor needs a terminal chunk (step-finish with
+  // isContinued !== true, or error) to close the queue and flush.
+  // Auto-append one if the test chunks don't already end with a terminal.
+  const last = chunks[chunks.length - 1];
+  const hasTerminal =
+    last && ((last.type === 'step-finish' && last.payload?.stepResult?.isContinued !== true) || last.type === 'error');
+  const effective = hasTerminal
+    ? chunks
+    : [...chunks, { type: 'step-finish', payload: { stepResult: { isContinued: false } } }];
+
+  for (const chunk of effective) {
+    await processor.processOutputStream({
+      part: chunk,
+      state,
+      requestContext: { get: (key: string) => requestContext.get(key) } as any,
+    } as any);
+  }
 }
 
 // Drain a StreamingPlan's underlying iterable so we can assert on the
@@ -118,7 +136,7 @@ async function drainStreamingPlan(plan: any): Promise<Array<string | Record<stri
 // Tests
 // ---------------------------------------------------------------------------
 
-describe('consumeAgentStream', () => {
+describe('ChatChannelOutputProcessor', () => {
   beforeAll(async () => {
     // Card/CardText etc. are looked up via chatModule() at call time, so we
     // need to prime the lazy import before the consumer runs.
@@ -215,9 +233,9 @@ describe('consumeAgentStream', () => {
         channels,
         [
           { type: 'text-delta', payload: { text: 'first' } },
-          { type: 'step-finish', payload: {} },
+          { type: 'step-finish', payload: { stepResult: { isContinued: true } } },
           { type: 'text-delta', payload: { text: 'second' } },
-          { type: 'step-finish', payload: {} },
+          { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
           { type: 'finish', payload: {} },
         ],
         chatThread,
@@ -932,13 +950,20 @@ describe('consumeAgentStream', () => {
 
     it('resets typing status between runs so the next run re-emits its first status', async () => {
       const { channels, calls, chatThread } = makeChannels({ streaming: false });
+      // First run:
       await drive(
         channels,
         [
           { type: 'text-delta', payload: { text: 'first' } },
           { type: 'step-finish', payload: {} },
           { type: 'finish', payload: {} },
-          // Next run on same subscription:
+        ],
+        chatThread,
+      );
+      // Second run (separate output-processor invocation, like a real second message):
+      await drive(
+        channels,
+        [
           { type: 'text-delta', payload: { text: 'second' } },
           { type: 'step-finish', payload: {} },
           { type: 'finish', payload: {} },
@@ -1434,11 +1459,19 @@ describe('consumeAgentStream', () => {
 
     it('posts a friendly error message on error chunks and resets state', async () => {
       const { channels, calls, chatThread } = makeChannels({ streaming: false });
+      // First run errors:
       await drive(
         channels,
         [
           { type: 'text-delta', payload: { text: 'partial' } },
           { type: 'error', payload: { error: new Error('boom') } },
+        ],
+        chatThread,
+      );
+      // Recovery run (separate output-processor invocation):
+      await drive(
+        channels,
+        [
           { type: 'text-delta', payload: { text: 'recovery' } },
           { type: 'step-finish', payload: {} },
           { type: 'finish', payload: {} },

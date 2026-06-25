@@ -1,5 +1,6 @@
-import { Popover, PopoverTrigger, PopoverContent, Txt } from '@mastra/playground-ui';
+import { Txt } from '@mastra/playground-ui';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { Plus, X } from 'lucide-react';
 import { useState, useRef } from 'react';
 
