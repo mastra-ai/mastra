@@ -840,3 +840,53 @@ describe('WorkflowsPG step result updates', () => {
     }
   });
 });
+
+describe('WorkflowsPG updateWorkflowState', () => {
+  it('merges options into the snapshot in place and returns the updated snapshot', async () => {
+    const pool = createTestPool();
+    const workflows = new WorkflowsPG({ pool });
+    const workflowName = `state-merge-${Date.now()}`;
+    const runId = `run-${Date.now()}`;
+
+    try {
+      await workflows.init();
+      await workflows.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: { status: 'running', context: { input: { x: 1 } } } as any,
+      });
+
+      const updated = await workflows.updateWorkflowState({
+        workflowName,
+        runId,
+        opts: { status: 'suspended', suspendedPaths: { 'step-1': [0] } } as any,
+      });
+
+      expect(updated).toBeDefined();
+      expect(updated!.status).toBe('suspended');
+      expect((updated as any).suspendedPaths).toEqual({ 'step-1': [0] });
+      expect((updated as any).context.input).toEqual({ x: 1 });
+    } finally {
+      await pool.query(`DELETE FROM mastra_workflow_snapshot WHERE workflow_name = $1`, [workflowName]);
+      await pool.end();
+    }
+  });
+
+  it('returns undefined for a non-existent run', async () => {
+    const pool = createTestPool();
+    const workflows = new WorkflowsPG({ pool });
+
+    try {
+      await workflows.init();
+      const result = await workflows.updateWorkflowState({
+        workflowName: 'nonexistent',
+        runId: 'nonexistent',
+        opts: { status: 'suspended' } as any,
+      });
+
+      expect(result).toBeUndefined();
+    } finally {
+      await pool.end();
+    }
+  });
+});

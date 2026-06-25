@@ -1846,7 +1846,13 @@ function toToolResultRefMarker(toolCallId: string) {
 }
 
 function getToolResultRefId(value: unknown): string | undefined {
-  if (value && typeof value === 'object' && TOOL_RESULT_REF_KEY in value) {
+  if (
+    value &&
+    typeof value === 'object' &&
+    TOOL_RESULT_REF_KEY in value &&
+    Object.keys(value).length === 1 &&
+    typeof (value as Record<string, unknown>)[TOOL_RESULT_REF_KEY] === 'string'
+  ) {
     return (value as Record<string, string>)[TOOL_RESULT_REF_KEY];
   }
   return undefined;
@@ -1958,7 +1964,7 @@ export function serializeBufferedSteps<OUTPUT>(
     const boundary = prev.length;
     const extendsPrev =
       messages.length >= boundary &&
-      (boundary === 0 || JSON.stringify(messages[boundary - 1]) === JSON.stringify(prev[boundary - 1]));
+      (boundary === 0 || prev.every((prevMsg, i) => JSON.stringify(prevMsg) === JSON.stringify(messages[i])));
     const slimmed: LLMStepResult<OUTPUT> = {
       ...slimStepToolResults(step, toolResultRefs),
       request: {},

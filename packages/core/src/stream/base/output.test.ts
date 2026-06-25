@@ -925,6 +925,22 @@ describe('buffered step serialization', () => {
     expect(restored[1]!.response.messages).toEqual([replaced]);
   });
 
+  it('rejects a diverging prefix even when the boundary message matches', () => {
+    const a = m('a');
+    const b = m('b');
+    const x = m('x');
+    const c = m('c');
+    const steps = [makeStep([a, b]), makeStep([x, b, c])];
+
+    const serialized = serializeBufferedSteps(steps);
+    // Second step's prefix diverges (a replaced by x), so full history is stored
+    expect(serialized[1]!.response.messagesDeltaFrom).toBeUndefined();
+    expect(serialized[1]!.response.messages).toEqual([x, b, c]);
+
+    const restored = deserializeBufferedSteps(serialized);
+    expect(restored[1]!.response.messages).toEqual([x, b, c]);
+  });
+
   it('passes legacy snapshots through unchanged', () => {
     const m1 = m('one');
     const m2 = m('two');
@@ -1010,6 +1026,25 @@ describe('tool result deduplication in serialized state', () => {
 
     const [restored] = deserializeBufferedSteps(structuredClone([slimStep!]) as any, refs);
     expect(restored!.toolResults[0]!.payload.result).toEqual(bigResult);
+  });
+
+  it('ignores user payloads that coincidentally contain __toolResultRef', () => {
+    const userResult = { __toolResultRef: 'call-1', extra: 'user-data' };
+    const refs = collectToolResultRefs([makeDbMessage('call-1', bigResult)]);
+    const step = {
+      toolResults: [makeToolResultChunk('call-1', userResult)],
+      dynamicToolResults: [],
+      staticToolResults: [],
+      content: [],
+      response: { messages: [] },
+    } as any;
+
+    const [slimStep] = serializeBufferedSteps([step], refs);
+    // Not treated as a ref marker because it has extra keys
+    expect(slimStep!.toolResults[0]!.payload.result).toEqual(userResult);
+
+    const [restored] = deserializeBufferedSteps(structuredClone([slimStep!]) as any, refs);
+    expect(restored!.toolResults[0]!.payload.result).toEqual(userResult);
   });
 
   it('keeps payloads that do not match the message list copy', () => {
