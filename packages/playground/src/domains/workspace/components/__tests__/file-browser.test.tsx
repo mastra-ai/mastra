@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { FileEntry } from '../../types';
@@ -53,7 +54,8 @@ function getTreeItemById(id: string) {
 }
 
 describe('FileBrowser', () => {
-  it('renders a recursive root tree without breadcrumb or parent-directory navigation', () => {
+  describe('when recursive workspace entries are rendered', () => {
+    it('renders a recursive root tree without breadcrumb or parent-directory navigation', () => {
     renderFileBrowser();
 
     expect(screen.queryByLabelText('Workspace root')).toBeNull();
@@ -120,15 +122,15 @@ describe('FileBrowser', () => {
     ).toBeNull();
   });
 
-  it('creates a folder at the workspace root from the header action', () => {
+  it('creates a folder at the workspace root from the header action', async () => {
+    const user = userEvent.setup();
     const onCreateDirectory = vi.fn();
 
     renderFileBrowser({ onCreateDirectory });
 
-    fireEvent.click(screen.getByRole('button', { name: /create folder at workspace root/i }));
-
-    fireEvent.change(screen.getByLabelText('Folder name'), { target: { value: 'packages' } });
-    fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
+    await user.click(screen.getByRole('button', { name: /create folder at workspace root/i }));
+    await user.type(screen.getByLabelText('Folder name'), 'packages');
+    await user.click(screen.getByRole('button', { name: /^create$/i }));
 
     expect(onCreateDirectory).toHaveBeenCalledWith('packages');
   });
@@ -183,7 +185,10 @@ describe('FileBrowser', () => {
     expect(screen.getByRole('button', { name: /close search/i })).not.toBeNull();
   });
 
-  it('lazily loads folder children on expand and keeps folders collapsed by default', () => {
+  });
+
+  describe('when folders are loaded lazily', () => {
+    it('lazily loads folder children on expand and keeps folders collapsed by default', () => {
     const onLoadFolder = vi.fn();
     renderFileBrowser({
       entries: [{ name: 'src', type: 'directory' }],
@@ -200,23 +205,30 @@ describe('FileBrowser', () => {
     expect(onLoadFolder).toHaveBeenCalledWith('src');
   });
 
-  it('creates directories inside the selected folder tree item', () => {
+  });
+
+  describe('when directory creation is available', () => {
+    it('creates directories inside the selected folder tree item', async () => {
+    const user = userEvent.setup();
     const onCreateDirectory = vi.fn();
 
     renderFileBrowser({ onCreateDirectory });
 
     expect(screen.queryByRole('button', { name: /^create directory$/i })).toBeNull();
-    fireEvent.click(
+    await user.click(
       within(getTreeItemById('src/components')).getByRole('button', { name: /create folder in components/i }),
     );
 
-    fireEvent.change(screen.getByLabelText('Folder name'), { target: { value: 'docs' } });
-    fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
+    await user.type(screen.getByLabelText('Folder name'), 'docs');
+    await user.click(screen.getByRole('button', { name: /^create$/i }));
 
     expect(onCreateDirectory).toHaveBeenCalledWith('src/components/docs');
   });
 
-  it('opens delete confirmation for nested entries without navigating or selecting', () => {
+  });
+
+  describe('when delete actions are available', () => {
+    it('opens delete confirmation for nested entries without navigating or selecting', () => {
     const onDelete = vi.fn();
     const { onNavigate, onFileSelect } = renderFileBrowser({ onDelete });
 
@@ -227,14 +239,20 @@ describe('FileBrowser', () => {
     expect(onFileSelect).not.toHaveBeenCalled();
   });
 
-  it('marks the selected path as selected in the tree', () => {
+  });
+
+  describe('when a path is selected', () => {
+    it('marks the selected path as selected in the tree', () => {
     renderFileBrowser({ selectedPath: 'README.md' });
 
     expect(getTreeItemById('README.md').getAttribute('aria-selected')).toBe('true');
     expect(getTreeItemById('src').getAttribute('aria-selected')).toBeNull();
   });
 
-  it('expands a skill folder on click without selecting a file (rich view lives on SKILL.md)', () => {
+  });
+
+  describe('when a skill folder is present', () => {
+    it('expands a skill folder on click without selecting a file (rich view lives on SKILL.md)', () => {
     const { onFileSelect } = renderFileBrowser({
       skillPaths: new Set(['.agents/skills/code-review']),
     });
@@ -248,7 +266,10 @@ describe('FileBrowser', () => {
     expect(onFileSelect).not.toHaveBeenCalled();
   });
 
-  it('renders mount error metadata for mount entries', () => {
+  });
+
+  describe('when a mount entry errors', () => {
+    it('renders mount error metadata for mount entries', () => {
     renderFileBrowser({
       entries: [
         {
@@ -267,5 +288,6 @@ describe('FileBrowser', () => {
 
     expect(screen.getByText('S3')).not.toBeNull();
     expect(getTreeItemById('cloud-drive')).not.toBeNull();
+    });
   });
 });

@@ -19,7 +19,8 @@ const baseSkill: Skill = {
 };
 
 describe('SkillDetail overview', () => {
-  it('shows the skills.sh install command for skills installed from skills.sh', () => {
+  describe('when skill metadata is rendered', () => {
+    it('shows the skills.sh install command for skills installed from skills.sh', () => {
     render(<SkillDetail skill={{ ...baseSkill, skillsShSource: { owner: 'acme', repo: 'skills' } }} />);
 
     expect(screen.getByText('npx skills add acme/skills/code-review')).not.toBeNull();
@@ -37,5 +38,6 @@ describe('SkillDetail overview', () => {
 
     expect(screen.getByText('Invalid')).not.toBeNull();
     expect(screen.getByText('No description provided.')).not.toBeNull();
+  });
   });
 });

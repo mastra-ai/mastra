@@ -1,4 +1,7 @@
-import { Badge, CopyButton, MarkdownRenderer, SkillIcon } from '@mastra/playground-ui';
+import { SkillIcon } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import {
   FileText,
   Code,

@@ -1,14 +1,14 @@
 import {
-  Badge,
   DataList as EntityList,
   DataListSkeleton as EntityListSkeleton,
   AgentIcon,
   WorkspacesIcon,
   truncateString,
 } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { useMemo } from 'react';
-import { useLinkComponent } from '@/lib/framework';
 import type { WorkspaceItem } from '../types';
+import { useLinkComponent } from '@/lib/framework';
 
 export interface WorkspacesListProps {
   workspaces: WorkspaceItem[];

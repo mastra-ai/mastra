@@ -22,7 +22,8 @@ const wrapper = () => {
 describe('useStoredWorkspaces', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('lists stored workspaces and forwards pagination + authorId params', async () => {
+  describe('when stored workspaces are requested', () => {
+    it('lists stored workspaces and forwards pagination + authorId params', async () => {
     let receivedUrl: URL | undefined;
     server.use(
       http.get(`${BASE_URL}/api/stored/workspaces`, ({ request }) => {
@@ -64,5 +65,6 @@ describe('useStoredWorkspaces', () => {
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(onFetch).not.toHaveBeenCalled();
     expect(result.current.fetchStatus).toBe('idle');
+  });
   });
 });

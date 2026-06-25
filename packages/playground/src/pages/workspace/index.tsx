@@ -1,20 +1,20 @@
 import {
   AgentIcon,
-  Badge,
   Button,
   CollapsiblePanel,
-  ErrorState,
   NoDataPageLayout,
   PageLayout,
   PanelSeparator,
-  PermissionDenied,
-  SessionExpired,
-  Skeleton,
-  Spinner,
   is401UnauthorizedError,
   is403ForbiddenError,
   toast,
 } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { FileText, Wand2, Search, X } from 'lucide-react';
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Group, Panel, useDefaultLayout } from 'react-resizable-panels';
@@ -231,8 +231,11 @@ export default function Workspace() {
   const hasSkills = workspaceInfo?.capabilities?.hasSkills ?? false;
   const canBM25 = workspaceInfo?.capabilities?.canBM25 ?? false;
   const canVector = workspaceInfo?.capabilities?.canVector ?? false;
-  // Check if the selected workspace is read-only
-  const isReadOnly = selectedWorkspace?.safety?.readOnly ?? false;
+  // Check if the selected workspace is read-only. Prefer the authoritative
+  // by-id info response (always loaded on this page for `effectiveWorkspaceId`)
+  // over the workspaces list entry, which can be missing or stale on a
+  // deep-link to `/workspaces/:id`.
+  const isReadOnly = workspaceInfo?.safety?.readOnly ?? selectedWorkspace?.safety?.readOnly ?? false;
 
   // Can manage skills (install/remove/check/update) if we have filesystem and not read-only
   // None of these operations require sandbox - all are done via GitHub API + filesystem
@@ -289,7 +292,7 @@ export default function Workspace() {
         },
       );
     },
-    [effectiveWorkspaceId, installSkill, refetchSkills],
+    [effectiveWorkspaceId, installSkill, refetchFiles, refetchSkills],
   );
 
   const handleUpdateSkill = useCallback(

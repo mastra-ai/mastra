@@ -1,4 +1,5 @@
-import { Searchbar, SkillIcon } from '@mastra/playground-ui';
+import { SkillIcon } from '@mastra/playground-ui';
+import { Searchbar } from '@mastra/playground-ui/components/Searchbar';
 import { Loader2, FileText, FolderOpen } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';

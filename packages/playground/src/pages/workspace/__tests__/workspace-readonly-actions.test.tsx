@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { ListWorkspacesResponse, WorkspaceInfoResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
@@ -9,12 +10,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import Workspace from '../index';
 import {
-  codeReviewSkillDetails,
-  configuredSkills,
-  skillFileContent,
-  skillsFsListing,
-  skillsSearchWorkspaceInfo,
-  skillsSearchWorkspacesList,
+  gatingFsListing,
+  gatingSkills,
+  gatingWorkspaceWritableList,
+  listWithoutGatingWorkspace,
+  readOnlyGatingWorkspaceInfo,
+  writableGatingWorkspaceInfo,
 } from './fixtures/workspace-editor';
 import { LinkComponentProvider } from '@/lib/framework';
 import type { LinkComponentProps, LinkComponentProviderProps } from '@/lib/framework';
@@ -69,21 +70,16 @@ const paths = {
   experimentLink: (experimentId: string) => `/experiments/${experimentId}`,
 } satisfies LinkComponentProviderProps['paths'];
 
-const useSkillsWorkspaceHandlers = () => {
+const useGatingHandlers = (list: ListWorkspacesResponse, info: WorkspaceInfoResponse) => {
   server.use(
-    http.get(`${BASE_URL}/api/workspaces`, () => HttpResponse.json(skillsSearchWorkspacesList)),
-    http.get(`${BASE_URL}/api/workspaces/skills-ws`, () => HttpResponse.json(skillsSearchWorkspaceInfo)),
-    http.get(`${BASE_URL}/api/workspaces/skills-ws/skills`, () => HttpResponse.json(configuredSkills)),
-    http.get(`${BASE_URL}/api/workspaces/skills-ws/fs/list`, () => HttpResponse.json(skillsFsListing)),
-    http.get(`${BASE_URL}/api/workspaces/skills-ws/fs/read`, () => HttpResponse.json(skillFileContent)),
-    // Skill details endpoint backing the overview pane.
-    http.get(`${BASE_URL}/api/workspaces/skills-ws/skills/code-review`, () =>
-      HttpResponse.json(codeReviewSkillDetails),
-    ),
+    http.get(`${BASE_URL}/api/workspaces`, () => HttpResponse.json(list)),
+    http.get(`${BASE_URL}/api/workspaces/gating-ws`, () => HttpResponse.json(info)),
+    http.get(`${BASE_URL}/api/workspaces/gating-ws/skills`, () => HttpResponse.json(gatingSkills)),
+    http.get(`${BASE_URL}/api/workspaces/gating-ws/fs/list`, () => HttpResponse.json(gatingFsListing)),
   );
 };
 
-const renderEditor = (initialEntry: string) => {
+const renderEditor = () => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createMemoryRouter(
     [
@@ -100,7 +96,7 @@ const renderEditor = (initialEntry: string) => {
         children: [{ path: 'workspaces/:workspaceId', element: <Workspace />, handle: navHandle('/workspaces') }],
       },
     ],
-    { initialEntries: [initialEntry] },
+    { initialEntries: ['/workspaces/gating-ws'] },
   );
 
   return render(
@@ -116,28 +112,65 @@ const renderEditor = (initialEntry: string) => {
 
 afterEach(() => cleanup());
 
-describe('Workspace skill overview pane', () => {
-  describe('when the workspace has installed skill fixtures', () => {
-    it('renders the rich skill view when a skill SKILL.md is opened', async () => {
-    useSkillsWorkspaceHandlers();
+describe('WorkspacePage read-only gating', () => {
+  describe('when the by-id workspace info reports read-only and the list omits the workspace', () => {
+    it('does not render the create directory action', async () => {
+      useGatingHandlers(listWithoutGatingWorkspace, readOnlyGatingWorkspaceInfo);
 
-    renderEditor('/workspaces/skills-ws?file=.agents/skills/code-review/SKILL.md');
+      renderEditor();
 
-    // The skill name renders as the overview heading (the rich pane, not the file viewer).
-    expect(await screen.findByRole('heading', { name: 'code-review' })).not.toBeNull();
-    // The empty preview state is replaced by the overview.
-    await waitFor(() => expect(screen.queryByText('Select a file to preview its contents')).toBeNull());
-    // The plain file viewer's copy-content action is NOT shown for a skill's SKILL.md.
-    expect(screen.queryByLabelText('Copy to clipboard')).toBeNull();
+      // The file tree renders once fs/list resolves.
+      expect(await screen.findByText('README.md')).not.toBeNull();
+      await waitFor(() =>
+        expect(screen.queryByLabelText('Create folder at workspace root')).toBeNull(),
+      );
+    });
+
+    it('does not render the delete action', async () => {
+      useGatingHandlers(listWithoutGatingWorkspace, readOnlyGatingWorkspaceInfo);
+
+      renderEditor();
+
+      expect(await screen.findByText('README.md')).not.toBeNull();
+      await waitFor(() => expect(screen.queryByLabelText('Delete README.md')).toBeNull());
+    });
+
+    it('does not render the add skill action', async () => {
+      useGatingHandlers(listWithoutGatingWorkspace, readOnlyGatingWorkspaceInfo);
+
+      renderEditor();
+
+      expect(await screen.findByText('README.md')).not.toBeNull();
+      await waitFor(() => expect(screen.queryByLabelText('Add skill')).toBeNull());
+    });
   });
 
-  it('opens a non-skill file in the plain file viewer, not the rich view', async () => {
-    useSkillsWorkspaceHandlers();
+  describe('when the by-id workspace info reports writable', () => {
+    it('renders create directory, delete, and add skill actions', async () => {
+      useGatingHandlers(listWithoutGatingWorkspace, writableGatingWorkspaceInfo);
 
-    renderEditor('/workspaces/skills-ws?file=README.md');
+      renderEditor();
 
-    // A regular file shows the file viewer (its copy-content action).
-    expect(await screen.findByLabelText('Copy to clipboard')).not.toBeNull();
+      // Wait for the file tree to resolve before asserting the write controls.
+      expect(await screen.findByText('README.md')).not.toBeNull();
+      expect(await screen.findByLabelText('Create folder at workspace root')).not.toBeNull();
+      expect(await screen.findByLabelText('Add skill')).not.toBeNull();
+      expect(await screen.findByLabelText('Delete README.md')).not.toBeNull();
+    });
   });
+
+  describe('when the by-id workspace info reports read-only but the list says writable', () => {
+    it('does not render the create/write actions', async () => {
+      useGatingHandlers(gatingWorkspaceWritableList, readOnlyGatingWorkspaceInfo);
+
+      renderEditor();
+
+      expect(await screen.findByText('README.md')).not.toBeNull();
+      await waitFor(() => {
+        expect(screen.queryByLabelText('Create folder at workspace root')).toBeNull();
+        expect(screen.queryByLabelText('Delete README.md')).toBeNull();
+        expect(screen.queryByLabelText('Add skill')).toBeNull();
+      });
+    });
   });
 });

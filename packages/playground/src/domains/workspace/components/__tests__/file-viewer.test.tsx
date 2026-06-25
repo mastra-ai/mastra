@@ -9,7 +9,8 @@ afterEach(() => cleanup());
 const markdown = '# Hello Heading\n\nSome body copy.';
 
 describe('FileViewer markdown rendering', () => {
-  it('renders markdown formatted by default with the Rendered toggle active', async () => {
+  describe('when markdown content is loaded', () => {
+    it('renders markdown formatted by default with the Rendered toggle active', async () => {
     render(<FileViewer path="docs/README.md" content={markdown} isLoading={false} mimeType="text/markdown" />);
 
     // The markdown is rendered (heading becomes real text), not shown as raw source.
@@ -45,5 +46,6 @@ describe('FileViewer markdown rendering', () => {
     // …but the raw frontmatter keys are not dumped into the rendered output.
     expect(screen.queryByText(/description: A test skill/)).toBeNull();
     expect(screen.queryByText(/name: find-skills/)).toBeNull();
+  });
   });
 });

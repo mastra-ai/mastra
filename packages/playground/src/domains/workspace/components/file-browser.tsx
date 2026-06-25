@@ -7,14 +7,14 @@ import {
   AmazonIcon,
   AzureIcon,
   GoogleIcon,
-  Tree,
-  CodeEditor,
-  Input,
-  MarkdownRenderer,
   SkillIcon,
 } from '@mastra/playground-ui';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
+import { Tree } from '@mastra/playground-ui/components/Tree';
 import {
   File,
   Folder,
