@@ -303,7 +303,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             // Get messages for LLM (using async llmPrompt for proper format conversion)
             const llmPromptForModel =
-              currentModel.specificationVersion === 'v3'
+              currentModel.specificationVersion === 'v3' || currentModel.specificationVersion === 'v4'
                 ? messageList.get.all.aiV6.llmPrompt
                 : messageList.get.all.aiV5.llmPrompt;
             const inputMessages = (await llmPromptForModel()) as LanguageModelV2Prompt;
