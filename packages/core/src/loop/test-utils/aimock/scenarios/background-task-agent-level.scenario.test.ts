@@ -61,6 +61,53 @@ describeForAllEngines(
         toolName: 'plain-work',
       });
     });
+
+    it('delivers the background-task-started chunk to the onChunk callback', async () => {
+      const plainTool = createTool({
+        id: 'plain-work',
+        description: 'Performs work (no tool-level opt-in)',
+        inputSchema: z.object({ topic: z.string() }),
+        outputSchema: z.object({ summary: z.string() }),
+        execute: async ({ topic }) => {
+          await new Promise(resolve => setTimeout(resolve, 10));
+          return { summary: `Summary of ${topic}` };
+        },
+      });
+
+      const onChunkTypes: string[] = [];
+      let startedChunkPayload: any;
+
+      await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Research quantum',
+        tools: { 'plain-work': plainTool },
+        agentBackgroundTasks: { tools: { 'plain-work': true } },
+        stopWhen: stepCountIs(3),
+        backgroundTasks: { enabled: true },
+        defaultOptions: {
+          onChunk: (chunk: any) => {
+            onChunkTypes.push(chunk.type);
+            if (chunk.type === 'background-task-started') {
+              startedChunkPayload = chunk.payload;
+            }
+          },
+        },
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            { toolCalls: [{ id: 'call_plain', name: 'plain-work', arguments: { topic: 'quantum' } }] },
+          );
+          llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Agent-level background dispatch worked.' });
+        },
+      });
+
+      // tool-call-step writes the chunk straight to the controller, so it bypasses
+      // the model-stream loop that normally invokes onChunk — the step must fire
+      // onChunk itself for the lifecycle chunk to reach the callback.
+      expect(onChunkTypes).toContain('background-task-started');
+      expect(startedChunkPayload).toMatchObject({ toolName: 'plain-work' });
+    });
   },
   { skip: ['durable'] },
 );

@@ -1241,8 +1241,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               // bubbles up through the AI-SDK-v5 tool builder and gets
               // wrapped as `TOOL_EXECUTION_FAILED: Invalid state:
               // Controller is already closed`.
-              safeEnqueue(controller, {
-                type: 'background-task-started' as any,
+              const backgroundTaskStartedChunk = {
+                type: 'background-task-started' as const,
                 runId,
                 from: ChunkFrom.AGENT,
                 payload: {
@@ -1250,7 +1250,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   toolName: inputData.toolName,
                   toolCallId: inputData.toolCallId,
                 },
-              });
+              };
+              safeEnqueue(controller, backgroundTaskStartedChunk as any);
+              // tool-call-step writes straight to the stream controller, bypassing
+              // the model-stream loop in llm-execution-step that invokes onChunk.
+              // Fire it here so consumers observing the agent stream via onChunk
+              // receive the structured `background-task-started` lifecycle chunk.
+              await options?.onChunk?.(backgroundTaskStartedChunk as any);
 
               // Return placeholder result so the LLM can continue
               return {
