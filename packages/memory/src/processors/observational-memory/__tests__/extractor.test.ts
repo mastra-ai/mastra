@@ -234,12 +234,15 @@ describe('Extractor', () => {
       memory,
     });
 
+    expect(resolved?.mode).toBe('structured');
     expect(resolved?.instructions).toContain('Working memory JSON schema:');
+    expect(resolved?.schema.parse({ location: 'Toronto' })).toEqual({ location: 'Toronto' });
+    expect(buildExtractorOutputSections([resolved!])).toBe('');
 
     const result = await applyExtractorHooks({
       source: 'observer',
       extractors: [resolved!],
-      values: { 'working-memory': '{"location":"Toronto"}' },
+      values: { 'working-memory': { location: 'Toronto' } },
       threadId: 'thread-1',
       resourceId: 'resource-1',
       memory,

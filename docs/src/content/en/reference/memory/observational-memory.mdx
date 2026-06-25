@@ -448,7 +448,7 @@ const memory = new Memory({
 - Schema-backed extractors add a follow-up model call. The call uses the same temporary in-memory Observer or Reflector thread so providers that support prompt caching can reuse the shared prompt prefix.
 - Schema-less extractors are inline string extractors emitted directly in the Observer or Reflector output.
 - Dynamic extractor functions receive runtime context, including `source`, `threadId`, `resourceId`, `mainAgent`, `memory`, and `requestContext` when available.
-- `WorkingMemoryExtractor` uses the normal extractor pipeline to update working memory through the active `Memory` instance. It returns `undefined` from `onExtracted`, so the working memory payload isn't duplicated under OM extracted metadata.
+- `WorkingMemoryExtractor` uses the normal extractor pipeline to update working memory through the active `Memory` instance. It uses structured extraction when working memory has a JSON schema and returns `undefined` from `onExtracted`, so the working memory payload isn't duplicated under OM extracted metadata.
 - Extraction failures are reported in OM marker data and do not discard other successful extracted values.
 
 ## Examples

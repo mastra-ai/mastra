@@ -268,7 +268,7 @@ const memory = new Memory({
 })
 ```
 
-`WorkingMemoryExtractor` uses the normal extractor pipeline. It reads the active working memory template or schema, writes updates through the memory instance, and doesn't duplicate the value under OM extracted metadata.
+`WorkingMemoryExtractor` uses the normal extractor pipeline. It reads the active working memory template or schema, uses structured extraction when working memory has a JSON schema, writes updates through the memory instance, and doesn't duplicate the value under OM extracted metadata.
 
 Use `onExtracted` to normalize or react to custom extracted values before they are persisted:
 

@@ -1,12 +1,17 @@
 import { parseMemoryRequestContext } from '@mastra/core/memory';
+import { z } from 'zod';
 
 import type { Memory } from '../..';
 import { deepMergeWorkingMemory } from '../../tools/working-memory';
 import { Extractor } from './extractor';
 import type { ExtractorRuntimeContext } from './extractor';
 
-function parseJsonObject(value: string | null | undefined): Record<string, unknown> | null {
+function parseJsonObject(value: unknown): Record<string, unknown> | null {
   if (!value) return null;
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  if (typeof value !== 'string') return null;
   try {
     const parsed = JSON.parse(value);
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
@@ -79,12 +84,16 @@ function buildWorkingMemoryInstructions(details: Awaited<ReturnType<typeof getWo
     .join('\n\n');
 }
 
-export class WorkingMemoryExtractor extends Extractor<string> {
+export class WorkingMemoryExtractor extends Extractor<string | Record<string, unknown>> {
   constructor() {
     super({
       name: 'Working Memory',
       includePreviousExtraction: false,
       instructions: async context => buildWorkingMemoryInstructions(await getWorkingMemoryDetails(context)),
+      schema: async context => {
+        const details = await getWorkingMemoryDetails(context);
+        return details.usesSchema ? z.record(z.string(), z.unknown()) : undefined;
+      },
       onExtracted: async ({ current, memory, threadId, resourceId, requestContext }) => {
         if (!memory) {
           throw new Error('Working memory extractor requires an active Memory instance.');
@@ -96,7 +105,7 @@ export class WorkingMemoryExtractor extends Extractor<string> {
           throw new Error('Working memory is not enabled for this memory instance.');
         }
 
-        let workingMemory = current;
+        let workingMemory = typeof current === 'string' ? current : (JSON.stringify(current) ?? '');
         if (config.workingMemory.schema) {
           const existing = parseJsonObject(await memory.getWorkingMemory({ threadId, resourceId, memoryConfig }));
           const update = parseJsonObject(current);
