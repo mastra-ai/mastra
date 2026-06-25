@@ -1,6 +1,6 @@
 {
   "name": "@mastra/next",
-  "version": "0.2.1-alpha.1",
+  "version": "0.2.1-alpha.2",
   "description": "Mastra Next.js server adapter — drop your Mastra instance into a Next.js app",
   "type": "module",
   "main": "dist/index.js",

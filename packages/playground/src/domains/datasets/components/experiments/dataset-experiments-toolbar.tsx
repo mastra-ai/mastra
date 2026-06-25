@@ -1,6 +1,6 @@
 'use client';
 
-import { Button } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Chip } from '@mastra/playground-ui/components/Chip';
 import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';

@@ -7,6 +7,7 @@ import type {
   WorkspaceFsReadResponse,
   WorkspaceInfoResponse,
 } from '@mastra/client-js';
+import type { SkillsShListResponse } from '@/domains/workspace/types';
 
 export const workspacesList: ListWorkspacesResponse = {
   workspaces: [
@@ -362,6 +363,14 @@ export const gatingSkills: ListSkillsResponse = {
     },
   ],
   isSkillsConfigured: true,
+};
+
+// Popular skills.sh list fetched by the Add Skill dialog (writable path).
+export const gatingPopularSkills: SkillsShListResponse = {
+  skills: [],
+  count: 0,
+  limit: 10,
+  offset: 0,
 };
 
 // Full skill details returned by `getSkill().details()` for the overview pane.

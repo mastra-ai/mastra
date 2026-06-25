@@ -1,16 +1,15 @@
 import {
   AgentIcon,
-  Button,
   CollapsiblePanel,
-  NoDataPageLayout,
-  PageLayout,
   PanelSeparator,
   is401UnauthorizedError,
   is403ForbiddenError,
   toast,
 } from '@mastra/playground-ui';
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';

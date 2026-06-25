@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import Workspace from '../index';
 import {
   gatingFsListing,
+  gatingPopularSkills,
   gatingSkills,
   gatingWorkspaceWritableList,
   listWithoutGatingWorkspace,
@@ -76,6 +77,7 @@ const useGatingHandlers = (list: ListWorkspacesResponse, info: WorkspaceInfoResp
     http.get(`${BASE_URL}/api/workspaces/gating-ws`, () => HttpResponse.json(info)),
     http.get(`${BASE_URL}/api/workspaces/gating-ws/skills`, () => HttpResponse.json(gatingSkills)),
     http.get(`${BASE_URL}/api/workspaces/gating-ws/fs/list`, () => HttpResponse.json(gatingFsListing)),
+    http.get(`${BASE_URL}/api/workspaces/gating-ws/skills-sh/popular`, () => HttpResponse.json(gatingPopularSkills)),
   );
 };
 

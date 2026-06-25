@@ -1,4 +1,5 @@
-import { Button, cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { SelectFieldBlock, TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { ArrowRightIcon, PackageOpenIcon } from 'lucide-react';

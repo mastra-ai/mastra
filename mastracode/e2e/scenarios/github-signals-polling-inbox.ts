@@ -18,6 +18,8 @@ const prFixture = {
   checkName: 'E2E Tests / GitHub Signals polling inbox',
 };
 
+const CURRENT_RESOURCE_ID = 'mc-e2e-github-polling-inbox-current-resource';
+
 const threadFixture = {
   resourceId: 'mc-e2e-github-polling-inbox-resource',
   threadId: 'thread-mc-e2e-github-polling-inbox',
@@ -102,6 +104,7 @@ export const githubSignalsPollingInboxScenario = {
     );
 
     const now = new Date('2026-06-12T09:01:00.000Z');
+    const currentResourceMetadata = { projectPath: context.projectDir };
     const metadata = {
       projectPath: context.projectDir,
       mastra: {
@@ -138,7 +141,9 @@ export const githubSignalsPollingInboxScenario = {
     });
     const sql = `
 insert into mastra_threads (id, resourceId, title, metadata, createdAt, updatedAt)
-values (${sqlString(threadFixture.threadId)}, ${sqlString(threadFixture.resourceId)}, ${sqlString(threadFixture.title)}, ${sqlString(JSON.stringify(metadata))}, ${sqlString(now.toISOString())}, ${sqlString(now.toISOString())});
+values
+  ('thread-github-polling-inbox-current-resource', ${sqlString(CURRENT_RESOURCE_ID)}, 'Current resource startup thread', ${sqlString(JSON.stringify(currentResourceMetadata))}, ${sqlString(now.toISOString())}, ${sqlString(now.toISOString())}),
+  (${sqlString(threadFixture.threadId)}, ${sqlString(threadFixture.resourceId)}, ${sqlString(threadFixture.title)}, ${sqlString(JSON.stringify(metadata))}, ${sqlString(now.toISOString())}, ${sqlString(now.toISOString())});
 insert into mastra_messages (id, thread_id, content, role, type, createdAt, resourceId)
 values
   ('msg-github-polling-inbox-user', ${sqlString(threadFixture.threadId)}, ${sqlString(userContent)}, 'user', 'v2', ${sqlString(now.toISOString())}, ${sqlString(threadFixture.resourceId)}),
@@ -156,6 +161,7 @@ values
     return {
       GITCRAWL_DB_PATH: dbPath,
       MASTRACODE_GITCRAWL_BIN: mockGitcrawlPath,
+      MASTRA_RESOURCE_ID: CURRENT_RESOURCE_ID,
       MC_E2E_DB_PATH: join(projectDir, '..', 'mastra.db'),
     };
   },

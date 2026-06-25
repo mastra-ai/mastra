@@ -1,4 +1,5 @@
-import { ScrollArea, transitions, cn } from '@mastra/playground-ui';
+import { transitions, cn } from '@mastra/playground-ui';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { useToolkits } from '../hooks/use-toolkits';
 

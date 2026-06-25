@@ -1,5 +1,6 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import { Button, WorkflowIcon } from '@mastra/playground-ui';
+import { WorkflowIcon } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 
 import { useContext, useEffect } from 'react';
@@ -9,7 +10,13 @@ import { LoadingBadge } from './loading-badge';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
-import { WorkflowGraph, WorkflowRunContext, WorkflowRunProvider } from '@/domains/workflows';
+import {
+  WorkflowGraph,
+  WorkflowRunContext,
+  WorkflowRunProvider,
+  WorkflowSelectedStepProvider,
+  WorkflowStepDetailProvider,
+} from '@/domains/workflows';
 import type { WorkflowRunStreamResult } from '@/domains/workflows/context/workflow-run-context';
 import { useWorkflow } from '@/hooks';
 import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
@@ -133,7 +140,11 @@ const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExt
       </div>
 
       <div className="rounded-md overflow-hidden h-[60vh] w-full">
-        <WorkflowGraph workflowId={workflowId} workflow={workflow!} />
+        <WorkflowSelectedStepProvider>
+          <WorkflowStepDetailProvider>
+            <WorkflowGraph workflowId={workflowId} workflow={workflow!} />
+          </WorkflowStepDetailProvider>
+        </WorkflowSelectedStepProvider>
       </div>
     </>
   );
