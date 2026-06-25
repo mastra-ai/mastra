@@ -18,9 +18,6 @@ title: 'Deploy Mastra to $PLATFORM | Deployment'
 description: 'Learn how to deploy a Mastra application to $PLATFORM'
 ---
 
-import Steps from '@site/src/components/Steps';
-import StepItem from '@site/src/components/StepItem';
-
 # Deploy Mastra to $PLATFORM
 
 One or two sentences on what the deployer does and how it works. Link to the platform docs.

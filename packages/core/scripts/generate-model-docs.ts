@@ -450,30 +450,6 @@ function getLogoClass(): string {
   return `inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200`;
 }
 
-/**
- * Check if a provider has a React logo component
- */
-function hasLogoComponent(providerId: string): boolean {
-  const providersWithComponents = ['netlify'];
-  return providersWithComponents.includes(providerId);
-}
-
-/**
- * Get the logo component import statement for a provider
- */
-function getLogoComponentImport(providerId: string): string {
-  const componentName = providerId.charAt(0).toUpperCase() + providerId.slice(1) + 'Logo';
-  return `import { ${componentName} } from '@site/src/components/logos/${componentName}';`;
-}
-
-/**
- * Get the logo component JSX for a provider
- */
-function getLogoComponentJSX(providerId: string): string {
-  const componentName = providerId.charAt(0).toUpperCase() + providerId.slice(1) + 'Logo';
-  return `<${componentName} className="inline w-8 h-8 mr-2 align-middle" />`;
-}
-
 function generateGatewayPage(
   gatewayName: string,
   providers: ProviderInfo[],
@@ -522,14 +498,7 @@ ${allModels.map(m => `| \`${m}\` |`).join('\n')}
 `
       : '';
 
-  // Generate logo markup - use component if available, otherwise use img tag
-  const logoImport = hasLogoComponent(gatewayName)
-    ? `${getLogoComponentImport(gatewayName)}
-`
-    : '';
-  const logoMarkup = hasLogoComponent(gatewayName)
-    ? getLogoComponentJSX(gatewayName)
-    : `<img src="${getLogoUrl(gatewayName)}" alt="${displayName} logo" className="${getLogoClass()}" />`;
+  const logoMarkup = `<img src="${getLogoUrl(gatewayName)}" alt="${displayName} logo" className="${getLogoClass()}" />`;
 
   return `---
 title: "${displayName} | Models"
@@ -537,8 +506,6 @@ description: "Use AI models through ${displayName}."
 ---
 
 ${getGeneratedComment()}
-
-${logoImport}
 
 # ${logoMarkup}${displayName}
 
