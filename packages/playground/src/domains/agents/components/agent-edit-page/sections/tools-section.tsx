@@ -1,6 +1,6 @@
-import { ToolsIcon } from '@mastra/playground-ui';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { Control } from 'react-hook-form';

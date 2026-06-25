@@ -1,5 +1,5 @@
-import { Icon } from '@mastra/playground-ui';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Check, X } from 'lucide-react';
 import { useToolCall } from '@/services/tool-call-provider';
 

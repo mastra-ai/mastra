@@ -1,5 +1,5 @@
-import { Icon } from '@mastra/playground-ui';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
 export type SectionHeaderProps = {

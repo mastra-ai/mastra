@@ -1,4 +1,7 @@
-import { AgentIcon, GithubIcon, McpServerIcon, ToolsIcon } from '@mastra/playground-ui';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
+import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
+import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { NetworkIcon, WorkflowIcon } from 'lucide-react';
 import { getRepoName } from './shared';

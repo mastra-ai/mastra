@@ -1,10 +1,10 @@
 'use client';
 
 import type { ClientScoreRowData } from '@mastra/client-js';
-import { TraceIcon } from '@mastra/playground-ui';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
+import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { ChevronsDownUpIcon, ChevronsUpDownIcon, GaugeIcon, ReceiptText } from 'lucide-react';
 import { useState } from 'react';
 
