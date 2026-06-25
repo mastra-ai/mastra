@@ -1,4 +1,5 @@
-import { Txt, toSigFigs } from '@mastra/playground-ui';
+import { toSigFigs } from '@mastra/playground-ui';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEffect, useState } from 'react';
 
 interface ClockProps {

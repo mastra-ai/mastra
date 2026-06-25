@@ -43,6 +43,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import Breadcrumb exports from @mastra/playground-ui/components/Breadcrumb.',
   },
   {
+    importNames: ['Button', 'ButtonProps'],
+    message: 'Import Button exports from @mastra/playground-ui/components/Button.',
+  },
+  {
     importNames: [
       'ButtonsGroup',
       'ButtonsGroupProps',
@@ -534,6 +538,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
   {
     importNames: ['Textarea', 'TextareaProps'],
     message: 'Import Textarea exports from @mastra/playground-ui/components/Textarea.',
+  },
+  {
+    importNames: ['Txt'],
+    message: 'Import Txt from @mastra/playground-ui/components/Txt.',
   },
   {
     importNames: ['ThemeProvider', 'useTheme', 'ThemeProviderProps', 'Theme', 'ResolvedTheme', 'ThemeContextValue'],
