@@ -1,7 +1,8 @@
-import { Button, ScrollArea, Txt, Icon, toast, cn } from '@mastra/playground-ui';
+import { Button, Txt, Icon, toast, cn } from '@mastra/playground-ui';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { useMastraClient } from '@mastra/react';

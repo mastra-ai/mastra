@@ -1,6 +1,7 @@
-import { ScrollArea, Txt, Icon } from '@mastra/playground-ui';
+import { Txt, Icon } from '@mastra/playground-ui';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Label } from '@mastra/playground-ui/components/Label';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Searchbar } from '@mastra/playground-ui/components/Searchbar';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Calculator, CheckCircle2, Loader2 } from 'lucide-react';

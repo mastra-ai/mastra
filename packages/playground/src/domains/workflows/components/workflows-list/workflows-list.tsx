@@ -1,5 +1,9 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import { DataList as EntityList, DataListSkeleton as EntityListSkeleton, truncateString } from '@mastra/playground-ui';
+import { truncateString } from '@mastra/playground-ui';
+import {
+  DataList as EntityList,
+  DataListSkeleton as EntityListSkeleton,
+} from '@mastra/playground-ui/components/DataList';
 import { useMemo } from 'react';
 import { useLinkComponent } from '@/lib/framework';
 

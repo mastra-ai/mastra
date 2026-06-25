@@ -1,4 +1,5 @@
-import { Collapsible, CollapsibleTrigger, CollapsibleContent, WorkflowIcon } from '@mastra/playground-ui';
+import { WorkflowIcon } from '@mastra/playground-ui';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';

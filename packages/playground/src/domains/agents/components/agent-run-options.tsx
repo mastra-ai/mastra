@@ -1,4 +1,5 @@
-import { ScrollArea, Txt } from '@mastra/playground-ui';
+import { Txt } from '@mastra/playground-ui';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 
 import { AgentRequestContextRunOptionsBody } from './request-context-run-options';
 import { TracingRunOptions } from '@/domains/observability/components/tracing-run-options';

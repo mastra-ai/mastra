@@ -1,14 +1,6 @@
-import {
-  Button,
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-  Icon,
-  RuleBuilder,
-  countLeafRules,
-  cn,
-} from '@mastra/playground-ui';
+import { Button, Icon, RuleBuilder, countLeafRules, cn } from '@mastra/playground-ui';
 import type { JsonSchema, RuleGroup } from '@mastra/playground-ui';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { ChevronRight, Ruler, Trash2 } from 'lucide-react';
 import { useState } from 'react';

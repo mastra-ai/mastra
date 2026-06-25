@@ -1,7 +1,8 @@
-import { Button, DataList, Txt, Icon, toast, cn } from '@mastra/playground-ui';
+import { Button, Txt, Icon, toast, cn } from '@mastra/playground-ui';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { Column, Columns } from '@mastra/playground-ui/components/Columns';
+import { DataList } from '@mastra/playground-ui/components/DataList';
 import {
   Dialog,
   DialogContent,

@@ -1,4 +1,5 @@
-import { Button, DataList, DataListSkeleton, Icon, SkillIcon } from '@mastra/playground-ui';
+import { Button, Icon, SkillIcon } from '@mastra/playground-ui';
+import { DataList, DataListSkeleton } from '@mastra/playground-ui/components/DataList';
 import { AlertTriangle, BookOpen, Plus } from 'lucide-react';
 import type { SkillMetadata } from '../types';
 import { SkillRemoveButton, SkillUpdateButton } from './skill-actions';
