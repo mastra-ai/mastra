@@ -1,13 +1,14 @@
+import type { TimeTravelParams } from '@mastra/client-js';
 import type { WorkflowRunStatus } from '@mastra/core/workflows';
+import { Button } from '@mastra/playground-ui/components/Button';
 import {
-  Button,
   Dialog,
   DialogContent,
   DialogTitle,
   DialogHeader,
   DialogDescription,
   DialogBody,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Dialog';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import {
   AlertCircleIcon,
@@ -95,15 +96,12 @@ export const WorkflowStepActionBar = ({
     if (previousSteps.length > 1) {
       return {
         hasMultiSteps: true,
-        input: previousSteps.reduce(
-          (acc, stepId) => {
-            if (result?.steps?.[stepId]?.status === 'success') {
-              acc[stepId] = result?.steps?.[stepId].output;
-            }
-            return acc;
-          },
-          {} as Record<string, any>,
-        ),
+        input: previousSteps.reduce<Record<string, unknown>>((acc, stepId) => {
+          if (result?.steps?.[stepId]?.status === 'success') {
+            acc[stepId] = result?.steps?.[stepId].output;
+          }
+          return acc;
+        }, {}),
       };
     }
 
@@ -141,24 +139,24 @@ export const WorkflowStepActionBar = ({
   };
 
   const handleRunMapStep = (isContinueRun?: boolean) => {
+    if (!stepKey || !stepPayload) return;
+
     const payload = {
       runId: prevRunId,
       workflowId,
-      step: stepKey as string,
+      step: stepKey,
       inputData: stepPayload?.hasMultiSteps ? undefined : stepPayload?.input,
       requestContext: requestContext,
       ...(isContinueRun ? { perStep: false } : {}),
       ...(stepPayload?.hasMultiSteps
         ? {
-            context: Object.keys(stepPayload.input)?.reduce(
-              (acc, stepId) => {
-                acc[stepId] = {
-                  output: stepPayload.input[stepId],
-                };
-                return acc;
-              },
-              {} as Record<string, any>,
-            ),
+            context: Object.keys(stepPayload.input)?.reduce<NonNullable<TimeTravelParams['context']>>((acc, stepId) => {
+              acc[stepId] = {
+                status: 'success',
+                output: stepPayload.input[stepId],
+              };
+              return acc;
+            }, {}),
           }
         : {}),
     };

@@ -1,5 +1,6 @@
-import { Button, Icon } from '@mastra/playground-ui';
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 
 import { ArrowRightIcon } from 'lucide-react';
 import { useWatch } from 'react-hook-form';

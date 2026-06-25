@@ -16,6 +16,7 @@ import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 
 import { Harness } from '../harness';
+import { createMockWorkspace } from '../test-utils';
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -91,6 +92,7 @@ describe('Harness: tool suspension and resumption', () => {
     const streamSpy = vi.spyOn(registeredAgent, 'stream');
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test-harness-default-model-settings',
       storage,
       modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
@@ -149,6 +151,7 @@ describe('Harness: tool suspension and resumption', () => {
     const registeredAgent = mastra.getAgent('test-agent');
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test-harness',
       storage,
       modes: [
@@ -225,6 +228,7 @@ describe('Harness: tool suspension and resumption', () => {
     const registeredAgent = mastra.getAgent('test-agent-ds');
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test-harness-ds',
       storage,
       modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
@@ -288,6 +292,7 @@ describe('Harness: tool suspension and resumption', () => {
     const registeredAgent = mastra.getAgent('test-agent-resume');
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test-harness-resume',
       storage,
       modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
@@ -373,6 +378,7 @@ describe('Harness: tool suspension and resumption', () => {
     const registeredAgent = mastra.getAgent('test-agent-yolo-resume');
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test-harness-yolo-resume',
       storage,
       modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
@@ -451,6 +457,7 @@ describe('Harness: tool suspension and resumption', () => {
     const sendStreamResumeSpy = vi.spyOn(registeredAgent, 'sendStreamResume');
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test-harness-budget-resume',
       storage,
       modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],

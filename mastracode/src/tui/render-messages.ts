@@ -9,6 +9,7 @@ import type { HarnessMessage, HarnessMessageContent, TaskItemInput, TaskItemSnap
 import { assignTaskIds, parseSubagentMeta } from '@mastra/core/harness';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { TASKS_STATE_ID } from '@mastra/core/tools';
+import { getPlanFilename } from '../utils/plans.js';
 import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
@@ -901,23 +902,32 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             ) {
               resultText = (toolResult.result as any).content;
             }
-            const isApproved = resultText.toLowerCase().includes('approved');
-            // Extract feedback if rejected with feedback
+            // The approved result starts with "Plan approved." while rejected
+            // results start with "Plan was not approved" — a naive `includes`
+            // would match both since "not approved" still contains "approved".
+            const isApproved = resultText.startsWith('Plan approved');
+            // Extract feedback if rejected with inline feedback
             let feedback: string | undefined;
-            if (!isApproved && resultText.includes('Feedback:')) {
-              const feedbackMatch = resultText.match(/Feedback:\s*(.+)/);
-              feedback = feedbackMatch?.[1];
+            if (!isApproved && resultText.includes('not approved')) {
+              const feedbackMatch = resultText.match(/User feedback:\s*(.+?)(?:\n|$)/);
+              // Use extracted feedback or a generic marker so PlanResultComponent
+              // renders "Changes requested" (it checks truthiness of feedback).
+              feedback = feedbackMatch?.[1] || 'Revision requested';
             }
 
             if (args?.title && args?.plan) {
               const planResult = new PlanResultComponent({
                 title: args.title,
                 plan: args.plan,
+                planFilename: getPlanFilename(args.title),
                 isApproved,
                 feedback,
               });
               state.chatContainer.addChild(planResult);
               replacedWithInline = true;
+              // Restore previousPlanSnapshot so that if the agent resubmits after
+              // a restart, the diff can be computed against the last known plan.
+              state.previousPlanSnapshot = { title: args.title, plan: args.plan };
             }
           }
 

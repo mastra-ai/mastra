@@ -1,12 +1,13 @@
 'use client';
 
 import type { DatasetItem, DatasetItemToolMock } from '@mastra/client-js';
-import { Button, toast } from '@mastra/playground-ui';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { format } from 'date-fns/format';
 import {
   BracesIcon,

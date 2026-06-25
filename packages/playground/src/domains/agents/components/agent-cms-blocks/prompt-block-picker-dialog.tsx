@@ -1,14 +1,14 @@
 import {
-  Txt,
-  cn,
   Dialog,
   DialogContent,
   DialogHeader,
   DialogBody,
   DialogTitle,
   DialogDescription,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Dialog';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { FileText, Search } from 'lucide-react';
 import { useState } from 'react';
 

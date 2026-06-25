@@ -4,14 +4,14 @@ import {
   EntityDescription,
   EntityIcon,
   EntityName,
-  Txt,
-  Icon,
-  McpServerIcon,
-  ToolsIcon,
-  cn,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Entity';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Switch } from '@mastra/playground-ui/components/Switch';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
+import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import type { TryConnectMcpMutation } from '../../hooks/use-try-connect-mcp';
 
 interface MCPClientToolPreviewProps {

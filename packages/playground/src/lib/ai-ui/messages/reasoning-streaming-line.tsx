@@ -1,5 +1,5 @@
-import { Txt } from '@mastra/playground-ui';
 import { Shimmer } from '@mastra/playground-ui/components/Shimmer';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Loader2 } from 'lucide-react';
 
 export interface ReasoningStreamingLineProps {

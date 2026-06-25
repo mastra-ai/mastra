@@ -8,7 +8,7 @@ import type {
   WorkflowRuns,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import type { Pool, RowDataPacket } from 'mysql2/promise';
+import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import type { StoreOperationsMySQL } from '../operations';
 import { generateTableSQL } from '../operations';
 import { formatTableName, parseDateTime, quoteIdentifier, transformToSqlValue } from '../utils';
@@ -65,7 +65,13 @@ export class WorkflowsMySQL extends WorkflowsStorage {
    * Exports DDL statements for all managed tables.
    */
   static getExportDDL(): string[] {
-    return [generateTableSQL({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT] })];
+    return [
+      generateTableSQL({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+        compositePrimaryKey: ['workflow_name', 'run_id'],
+      }),
+    ];
   }
 
   constructor({
@@ -288,6 +294,19 @@ export class WorkflowsMySQL extends WorkflowsStorage {
     const updatedAtValue = updatedAt ?? now;
     try {
       const tableName = formatTableName(TABLE_WORKFLOW_SNAPSHOT);
+      const [updateResult] = await this.pool.execute<ResultSetHeader>(
+        `UPDATE ${tableName}
+         SET ${quoteIdentifier('resourceId', 'column name')} = ?,
+             ${quoteIdentifier('snapshot', 'column name')} = ?,
+             ${quoteIdentifier('updatedAt', 'column name')} = ?
+         WHERE ${quoteIdentifier('workflow_name', 'column name')} = ? AND ${quoteIdentifier('run_id', 'column name')} = ?`,
+        [resourceId ?? null, JSON.stringify(snapshot), transformToSqlValue(updatedAtValue), workflowName, runId],
+      );
+
+      if (updateResult.affectedRows > 0) {
+        return;
+      }
+
       await this.pool.execute(
         `INSERT INTO ${tableName} (${quoteIdentifier('workflow_name', 'column name')}, ${quoteIdentifier('run_id', 'column name')}, ${quoteIdentifier('resourceId', 'column name')}, ${quoteIdentifier('snapshot', 'column name')}, ${quoteIdentifier('createdAt', 'column name')}, ${quoteIdentifier('updatedAt', 'column name')})
          VALUES (?, ?, ?, ?, ?, ?)

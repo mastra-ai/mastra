@@ -2,9 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
+import { createMockWorkspace } from './test-utils';
 import type { HarnessEvent } from './types';
 
-function createHarness(storage: InMemoryStore) {
+function createHarness(
+  storage: InMemoryStore,
+  options: { resourceId?: string; initialState?: Record<string, unknown> } = {},
+) {
   const agent = new Agent({
     name: 'test-agent',
     instructions: 'You are a test agent.',
@@ -12,8 +16,11 @@ function createHarness(storage: InMemoryStore) {
   });
 
   return new Harness({
+    workspace: createMockWorkspace(),
     id: 'test-harness',
+    resourceId: options.resourceId,
     storage,
+    initialState: options.initialState,
     modes: [
       { id: 'build', name: 'Build', default: true, agent, defaultModelId: 'openai/gpt-4o' },
       { id: 'plan', name: 'Plan', agent, defaultModelId: 'anthropic/claude-sonnet-4' },
@@ -73,6 +80,7 @@ describe('Harness.createSession — cross-session isolation', () => {
       model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
     });
     const harness = new Harness<{ counter: number }>({
+      workspace: createMockWorkspace(),
       id: 'test-harness',
       storage,
       initialState: { counter: 0 },
@@ -109,6 +117,45 @@ describe('Harness.createSession — cross-session isolation', () => {
 
     expect(aEvents.some(e => e.type === 'mode_changed')).toBe(true);
     expect(bEvents.some(e => e.type === 'mode_changed')).toBe(false);
+  });
+
+  it('does not auto-claim a matching projectPath thread from another resource', async () => {
+    const storage = new InMemoryStore();
+    const projectPath = '/tmp/mastra-project';
+
+    const oldHarness = createHarness(storage, { resourceId: 'old-resource', initialState: { projectPath } });
+    await oldHarness.init();
+    const oldSession = await oldHarness.createSession();
+    const oldThreadId = oldSession.thread.requireId();
+
+    const currentHarness = createHarness(storage, { resourceId: 'current-resource', initialState: { projectPath } });
+    await currentHarness.init();
+    const currentSession = await currentHarness.createSession();
+
+    expect(currentSession.thread.requireId()).not.toBe(oldThreadId);
+    await expect(currentSession.thread.switch({ threadId: oldThreadId })).rejects.toThrow(
+      `Thread not found: ${oldThreadId}`,
+    );
+    expect(await storage.stores.memory.getThreadById({ threadId: oldThreadId })).toMatchObject({
+      id: oldThreadId,
+      resourceId: 'old-resource',
+    });
+  });
+
+  it('resumes the matching projectPath thread from the same resource', async () => {
+    const storage = new InMemoryStore();
+    const projectPath = '/tmp/mastra-project';
+    const harness = createHarness(storage, { resourceId: 'current-resource', initialState: { projectPath } });
+    await harness.init();
+
+    const first = await harness.createSession();
+    const threadId = first.thread.requireId();
+
+    const restartedHarness = createHarness(storage, { resourceId: 'current-resource', initialState: { projectPath } });
+    await restartedHarness.init();
+    const restarted = await restartedHarness.createSession();
+
+    expect(restarted.thread.requireId()).toBe(threadId);
   });
 });
 
@@ -170,6 +217,51 @@ describe('Harness session — cross-resource thread ownership', () => {
     const aThreadId = a.thread.requireId();
 
     await expect(b.thread.clone({ sourceThreadId: aThreadId })).rejects.toThrow(`Thread not found: ${aThreadId}`);
+  });
+
+  it('only clones a cross-resource thread when the detected resource and project path still match', async () => {
+    const storage = new InMemoryStore();
+    const projectPath = '/tmp/mastra-project';
+    const oldHarness = createHarness(storage, { resourceId: 'old-resource', initialState: { projectPath } });
+    await oldHarness.init();
+    const oldSession = await oldHarness.createSession();
+    const oldThreadId = oldSession.thread.requireId();
+
+    const currentHarness = createHarness(storage, { resourceId: 'current-resource', initialState: { projectPath } });
+    await currentHarness.init();
+    const currentSession = await currentHarness.createSession();
+
+    await expect(
+      currentSession.thread.cloneToCurrentResource({
+        threadId: oldThreadId,
+        expectedResourceId: 'another-resource',
+        expectedProjectPath: projectPath,
+      }),
+    ).rejects.toThrow(`Thread not found: ${oldThreadId}`);
+
+    await expect(
+      currentSession.thread.cloneToCurrentResource({
+        threadId: oldThreadId,
+        expectedResourceId: 'old-resource',
+        expectedProjectPath: '/tmp/other-project',
+      }),
+    ).rejects.toThrow(`Thread not found: ${oldThreadId}`);
+
+    const clonedThread = await currentSession.thread.cloneToCurrentResource({
+      threadId: oldThreadId,
+      expectedResourceId: 'old-resource',
+      expectedProjectPath: projectPath,
+    });
+
+    expect(await storage.stores.memory.getThreadById({ threadId: oldThreadId })).toMatchObject({
+      id: oldThreadId,
+      resourceId: 'old-resource',
+    });
+    expect(clonedThread).toMatchObject({
+      resourceId: 'current-resource',
+      metadata: { projectPath },
+    });
+    expect(clonedThread.id).not.toBe(oldThreadId);
   });
 
   it('still allows the owning resource to switch, list, and delete its own thread', async () => {

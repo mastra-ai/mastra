@@ -1,5 +1,36 @@
 # @mastra/otel-bridge
 
+## 1.4.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`bf3fe49`](https://github.com/mastra-ai/mastra/commit/bf3fe49f9467dbbdb8f9eaf74e0f7971ffb19559), [`24ceaea`](https://github.com/mastra-ai/mastra/commit/24ceaea0bdd8609cabbab764380608ca6621a194), [`e1f272d`](https://github.com/mastra-ai/mastra/commit/e1f272d2bf1963c0ccb060f34b103b0b780bbff0), [`6ccf67b`](https://github.com/mastra-ai/mastra/commit/6ccf67bf075753754927a57bc2e1734ba2c820c5), [`825d8de`](https://github.com/mastra-ai/mastra/commit/825d8def9fa64c2bcc3d8dd6b49e09342c3ac5c7), [`ffa09e7`](https://github.com/mastra-ai/mastra/commit/ffa09e772a5c92270eabe2090fc42d45bd8ec4b7), [`461a7c5`](https://github.com/mastra-ai/mastra/commit/461a7c501449295287f4f0ee4b0b42344f39fcf8), [`4211472`](https://github.com/mastra-ai/mastra/commit/4211472a5a2bd319c60cd2e42d9109c3eef7ac1c), [`9e45902`](https://github.com/mastra-ai/mastra/commit/9e4590208e745055cecca202e2db0e5c65e17d3c), [`5c0df77`](https://github.com/mastra-ai/mastra/commit/5c0df776c40efa420f8c07a2f3ee66010296618e)]:
+  - @mastra/core@1.47.0-alpha.3
+  - @mastra/observability@1.15.2-alpha.0
+  - @mastra/otel-exporter@1.3.2-alpha.0
+
+## 1.4.0-alpha.0
+
+### Minor Changes
+
+- Added `tracerProvider` and `loggerProvider` options to `OtelBridgeConfig`, allowing spans and logs to be routed to non-global OpenTelemetry providers. ([#18185](https://github.com/mastra-ai/mastra/pull/18185))
+
+  ```ts
+  import { OtelBridge } from '@mastra/otel-bridge';
+
+  const bridge = new OtelBridge({
+    tracerProvider: myLangfuseTracerProvider,
+    loggerProvider: myCustomLoggerProvider,
+  });
+  ```
+
+  Both fields are optional and default to the global provider when omitted — no breaking changes.
+
+### Patch Changes
+
+- Updated dependencies [[`7f9ae70`](https://github.com/mastra-ai/mastra/commit/7f9ae70826b047e5a66218f9e92f20e54a2d791f), [`1505c07`](https://github.com/mastra-ai/mastra/commit/1505c07603f6346bae12aa82f140e8b88ffea9ab), [`e940f09`](https://github.com/mastra-ai/mastra/commit/e940f099ef5d18b403e6f2b4937e086a4da857b1)]:
+  - @mastra/core@1.46.1-alpha.1
+
 ## 1.3.1
 
 ### Patch Changes

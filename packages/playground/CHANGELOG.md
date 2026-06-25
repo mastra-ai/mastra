@@ -1,5 +1,53 @@
 # @internal/playground
 
+## 1.16.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`462a769`](https://github.com/mastra-ai/mastra/commit/462a769da61850862ca1be3d74134d33078ee6a7), [`f328049`](https://github.com/mastra-ai/mastra/commit/f3280498c324afd2a8d36cd828f5b9f94a2dddc1), [`e545228`](https://github.com/mastra-ai/mastra/commit/e54522856934a5dc030b7b6385771e3548020d59), [`cd01ee3`](https://github.com/mastra-ai/mastra/commit/cd01ee32dc036e70d70bf164f0d7a608c73d307e)]:
+  - @mastra/core@1.47.0-alpha.4
+  - @mastra/playground-ui@37.0.0-alpha.4
+  - @mastra/client-js@1.28.0-alpha.4
+  - @mastra/react@1.1.2-alpha.4
+
+## 1.16.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`bf3fe49`](https://github.com/mastra-ai/mastra/commit/bf3fe49f9467dbbdb8f9eaf74e0f7971ffb19559), [`24ceaea`](https://github.com/mastra-ai/mastra/commit/24ceaea0bdd8609cabbab764380608ca6621a194), [`712e7e0`](https://github.com/mastra-ai/mastra/commit/712e7e01f46504dadaf8025fc0d79a8e2d5f3c75), [`9e45902`](https://github.com/mastra-ai/mastra/commit/9e4590208e745055cecca202e2db0e5c65e17d3c), [`6ccf67b`](https://github.com/mastra-ai/mastra/commit/6ccf67bf075753754927a57bc2e1734ba2c820c5), [`825d8de`](https://github.com/mastra-ai/mastra/commit/825d8def9fa64c2bcc3d8dd6b49e09342c3ac5c7), [`76e8987`](https://github.com/mastra-ai/mastra/commit/76e89871e8a30eaa43ed64863d10eb6cf52ff9b6), [`ffa09e7`](https://github.com/mastra-ai/mastra/commit/ffa09e772a5c92270eabe2090fc42d45bd8ec4b7), [`461a7c5`](https://github.com/mastra-ai/mastra/commit/461a7c501449295287f4f0ee4b0b42344f39fcf8), [`4211472`](https://github.com/mastra-ai/mastra/commit/4211472a5a2bd319c60cd2e42d9109c3eef7ac1c), [`9e45902`](https://github.com/mastra-ai/mastra/commit/9e4590208e745055cecca202e2db0e5c65e17d3c), [`5c0df77`](https://github.com/mastra-ai/mastra/commit/5c0df776c40efa420f8c07a2f3ee66010296618e)]:
+  - @mastra/core@1.47.0-alpha.3
+  - @mastra/playground-ui@37.0.0-alpha.3
+  - @mastra/client-js@1.28.0-alpha.3
+  - @mastra/ai-sdk@1.6.0-alpha.0
+  - @mastra/react@1.1.2-alpha.3
+
+## 1.15.2-alpha.2
+
+### Patch Changes
+
+- Fixed Studio dropping a code-defined agent's tools when saving. A code agent that doesn't set an `editor` config is fully editable, but Studio was leaving the tools out of the save request, so tool changes (and description overrides) were silently discarded. Studio now sends the edited tools for these agents, matching the fields the server actually persists. ([#18404](https://github.com/mastra-ai/mastra/pull/18404))
+
+- Move the Memory Studio (timeline, flamegraph, and observational-memory detail) into the agent chat view as an opt-in panel. ([#18272](https://github.com/mastra-ai/mastra/pull/18272))
+  - The standalone Memory nav entry, `/memory` routes, and the separate thread/chat list are removed; the studio is now opened from the chat view and shown inside the Memory sidepanel, with the agent layout's left resizable panel expanding when the detail opens. Clicking the flamegraph timeline drives a replay cursor that highlights the matching observational-memory record. Marker types are imported from `@mastra/memory` instead of being redeclared in the UI so the studio stays in sync with the stream format.
+  - `MemoryStudioPanel` gains an optional `contextWindow` prop so callers can supply authoritative message/observation token counts and thresholds; when provided these take precedence over values re-derived from message markers, keeping the panel's MESSAGES/OBSERVATIONS readout in sync with the observational-memory sidebar (marker-derived values remain the fallback for standalone usage).
+  - `MemoryStudioPanel` now shows both Messages and Observations progress bars, matching the collapsed memory sidebar. The FlameGraph zoom range is lifted into the panel and filters the observation list: collapsing the range hides out-of-range observations and "Reset zoom" restores the full list. `FlameGraph` gains optional controlled `zoomRange`/`onZoomRangeChange` props (uncontrolled usage is unchanged).
+
+- Updated dependencies [[`86623c1`](https://github.com/mastra-ai/mastra/commit/86623c1adf7d22de32cc916dda17f4155184db36), [`7c9dd77`](https://github.com/mastra-ai/mastra/commit/7c9dd77bd18cb8dc72797e25f1a0fbdc71a11347), [`d763590`](https://github.com/mastra-ai/mastra/commit/d763590cf147273276b485263209f2cf5ff7319b), [`47c5c7b`](https://github.com/mastra-ai/mastra/commit/47c5c7b2b3cd8efc3ecb408029771d6083f5bf6c), [`9990965`](https://github.com/mastra-ai/mastra/commit/999096571635a83b42ef40841fd7028cfa630779), [`c0ffa3c`](https://github.com/mastra-ai/mastra/commit/c0ffa3c897ccd326de880df734740a7f0681a18f), [`0504bf5`](https://github.com/mastra-ai/mastra/commit/0504bf5e8cffc571a4b343326178de371e6f859b), [`c5df3f1`](https://github.com/mastra-ai/mastra/commit/c5df3f155750c3d78666dc699fd26941dd5d24e7), [`5afe423`](https://github.com/mastra-ai/mastra/commit/5afe423e4badf040f1b0d4525183a856fcb8146e), [`86623c1`](https://github.com/mastra-ai/mastra/commit/86623c1adf7d22de32cc916dda17f4155184db36), [`8c9f1c0`](https://github.com/mastra-ai/mastra/commit/8c9f1c0361d89066f9bcd14a2f69e761b01766c8), [`a368407`](https://github.com/mastra-ai/mastra/commit/a368407010c8c1b34d349a2ad1506f5b01ed9301)]:
+  - @mastra/core@1.47.0-alpha.2
+  - @mastra/playground-ui@36.1.0-alpha.2
+  - @mastra/client-js@1.27.1-alpha.2
+  - @mastra/react@1.1.2-alpha.2
+
+## 1.15.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`7f9ae70`](https://github.com/mastra-ai/mastra/commit/7f9ae70826b047e5a66218f9e92f20e54a2d791f), [`667be96`](https://github.com/mastra-ai/mastra/commit/667be96ac5ddfc1983afb430cc3b72b89f91051b), [`2a67d9b`](https://github.com/mastra-ai/mastra/commit/2a67d9bf70e17da28df39de3436d697ca25bf120), [`1505c07`](https://github.com/mastra-ai/mastra/commit/1505c07603f6346bae12aa82f140e8b88ffea9ab), [`e940f09`](https://github.com/mastra-ai/mastra/commit/e940f099ef5d18b403e6f2b4937e086a4da857b1)]:
+  - @mastra/core@1.46.1-alpha.1
+  - @mastra/playground-ui@36.1.0-alpha.1
+  - @mastra/client-js@1.27.1-alpha.1
+  - @mastra/react@1.1.2-alpha.1
+
 ## 1.15.2-alpha.0
 
 ### Patch Changes

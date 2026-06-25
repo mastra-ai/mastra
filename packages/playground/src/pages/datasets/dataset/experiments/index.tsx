@@ -1,4 +1,5 @@
-import { Button, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';

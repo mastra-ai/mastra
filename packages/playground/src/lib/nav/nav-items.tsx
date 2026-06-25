@@ -1,21 +1,19 @@
-import {
-  AgentIcon,
-  DatasetsIcon,
-  ExperimentsIcon,
-  HomeIcon,
-  LogsIcon,
-  McpServerIcon,
-  MetricsIcon,
-  ProcessorIcon,
-  PromptIcon,
-  RequestContextIcon,
-  ScorersIcon,
-  SettingsIcon,
-  ToolsIcon,
-  TraceIcon,
-  WorkflowIcon,
-  WorkspacesIcon,
-} from '@mastra/playground-ui';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
+import { ExperimentsIcon } from '@mastra/playground-ui/icons/ExperimentsIcon';
+import { HomeIcon } from '@mastra/playground-ui/icons/HomeIcon';
+import { LogsIcon } from '@mastra/playground-ui/icons/LogsIcon';
+import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
+import { MetricsIcon } from '@mastra/playground-ui/icons/MetricsIcon';
+import { ProcessorIcon } from '@mastra/playground-ui/icons/ProcessorIcon';
+import { PromptIcon } from '@mastra/playground-ui/icons/PromptIcon';
+import { RequestContextIcon } from '@mastra/playground-ui/icons/RequestContextIcon';
+import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
+import { SettingsIcon } from '@mastra/playground-ui/icons/SettingsIcon';
+import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
+import { WorkspacesIcon } from '@mastra/playground-ui/icons/WorkspacesIcon';
 import { BookIcon, LayoutGrid } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 

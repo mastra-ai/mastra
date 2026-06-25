@@ -41,6 +41,15 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   requestContext?: AgentExecutionOptions<OUTPUT>['requestContext'];
   /** Maximum number of steps to run */
   maxSteps?: number;
+  /**
+   * Conditions for stopping execution (e.g., step count, token limit).
+   *
+   * The predicate is non-serializable, so it's parked on the in-process run
+   * registry and evaluated by the durable loop on every iteration. Cross-process
+   * durable engines (e.g. Inngest after a worker restart) cannot recover the
+   * closure and degrade to `maxSteps` only.
+   */
+  stopWhen?: AgentExecutionOptions<OUTPUT>['stopWhen'];
   /** Additional tool sets that can be used for this execution */
   toolsets?: AgentExecutionOptions<OUTPUT>['toolsets'];
   /** Client-side tools available during execution */
@@ -51,8 +60,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   activeTools?: AgentExecutionOptions<OUTPUT>['activeTools'];
   /** Model-specific settings like temperature */
   modelSettings?: AgentExecutionOptions<OUTPUT>['modelSettings'];
-  /** Require approval for all tool calls */
-  requireToolApproval?: boolean;
+  /** Require approval for tool calls. Boolean (gate all / none) or a per-call function policy. */
+  requireToolApproval?: AgentExecutionOptions<OUTPUT>['requireToolApproval'];
   /** Automatically resume suspended tools */
   autoResumeSuspendedTools?: boolean;
   /** Maximum number of tool calls to execute concurrently */
@@ -75,6 +84,37 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   onError?: (error: Error) => void | Promise<void>;
   /** Callback when workflow suspends (e.g., for tool approval) */
   onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
+  /** Callback when execution is aborted via abortSignal */
+  onAbort?: AgentExecutionOptions<OUTPUT>['onAbort'];
+  /** Callback fired after each agentic-loop iteration */
+  onIterationComplete?: AgentExecutionOptions<OUTPUT>['onIterationComplete'];
+  /** Additional system message appended after context but before user messages. */
+  system?: AgentExecutionOptions<OUTPUT>['system'];
+  /** When true, background tasks are disabled for this run. */
+  disableBackgroundTasks?: AgentExecutionOptions<OUTPUT>['disableBackgroundTasks'];
+  /** Tracing options forwarded to the agent/model spans. */
+  tracingOptions?: AgentExecutionOptions<OUTPUT>['tracingOptions'];
+  /** Per-call actor signal forwarded to FGA checks and tool execution. */
+  actor?: AgentExecutionOptions<OUTPUT>['actor'];
+  /**
+   * Per-invocation tool payload transform policy. The closure rides on the
+   * in-process run registry; only the JSON-safe `targets` shadow is serialized
+   * for cross-process engines.
+   */
+  transform?: AgentExecutionOptions<OUTPUT>['transform'];
+  /**
+   * Per-step preparation hook. Closure-only: stored on the in-process run
+   * registry and invoked as a `PrepareStepProcessor` at the start of every
+   * iteration. Cross-process resumes lose the hook.
+   */
+  prepareStep?: AgentExecutionOptions<OUTPUT>['prepareStep'];
+  /**
+   * Per-call `isTaskComplete` policy. Scorer instances and `onComplete` are
+   * closure-only and live on the in-process run registry; the JSON-safe
+   * primitives (`strategy`, `timeout`, `parallel`, `suppressFeedback`,
+   * `scorerNames`) are serialized for cross-process observability.
+   */
+  isTaskComplete?: AgentExecutionOptions<OUTPUT>['isTaskComplete'];
   /**
    * When set, `stream()` delegates to the idle-loop wrapper that keeps the
    * outer stream open across background-task continuations — the same
@@ -307,6 +347,16 @@ export class DurableAgent<
       // Caching explicitly disabled
       this.#cachingPubsub = this.#innerPubsub;
       this.#resolvedCache = null;
+    } else if (this.#innerPubsub instanceof CachingPubSub) {
+      // The inner pubsub already provides caching/replay. This happens when the
+      // user passes a CachingPubSub to `new Mastra({ pubsub })`: on registration
+      // the agent adopts mastra.pubsub as its inner transport. Wrapping it again
+      // in a second CachingPubSub that shares the same cache would store every
+      // event twice (once per layer, with consecutive indices), so observe()/
+      // replay would deliver the buffered prefix doubled (issue #18148). Reuse
+      // the existing instance instead of double-wrapping.
+      this.#cachingPubsub = this.#innerPubsub;
+      this.#resolvedCache = this.#cacheConfig ?? this.#mastra?.serverCache ?? null;
     } else {
       // Resolve cache: user-provided > mastra's cache > default InMemoryServerCache
       const resolvedCache = this.#cacheConfig ?? this.#mastra?.serverCache ?? new InMemoryServerCache();
@@ -625,6 +675,18 @@ export class DurableAgent<
         scheduleAutoCleanup();
       },
       onSuspended: options?.onSuspended,
+      onAbort: async data => {
+        try {
+          await (options?.onAbort as ((event: any) => void | Promise<void>) | undefined)?.(data);
+        } finally {
+          scheduleAutoCleanup();
+        }
+      },
+      onIterationComplete: options?.onIterationComplete
+        ? async data => {
+            await (options.onIterationComplete as (ctx: any) => void | Promise<void>)?.(data);
+          }
+        : undefined,
     });
 
     // 4. Wait for subscription to be ready, then execute workflow

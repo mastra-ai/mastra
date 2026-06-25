@@ -1,5 +1,5 @@
 import type * as PlaygroundUi from '@mastra/playground-ui';
-import { TooltipProvider } from '@mastra/playground-ui';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
@@ -20,6 +20,10 @@ vi.mock('@mastra/playground-ui', async () => {
     usePlaygroundStore: () => ({ requestContext: undefined }),
   };
 });
+
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
 
 // The chat composer mounts an SSE-driven builder agent which we don't want to
 // boot in the autosave test. Stub it with a minimal shell — the form is the

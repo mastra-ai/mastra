@@ -1,6 +1,6 @@
 import type { CreateStoredAgentParams } from '@mastra/client-js';
 import type { AgentEditorConfig } from '@mastra/core/agent';
-import { toast } from '@mastra/playground-ui';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useEffectEvent, useMemo, useState } from 'react';
@@ -61,15 +61,22 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
   //   editor unset (undefined)   → owned — legacy default: an editor-unset code agent is fully editable
   //   editor === true            → not owned (a bare boolean is not an object, so `.instructions` is unset)
   //   editor.instructions === true → owned
-  // The missing `undefined` case was the bug: the old `=== true`-only check made an editor-unset
-  // code agent send an empty instructions array on save, wiping the prompt.
+  // Server semantics for tools mirror this:
+  //   editor unset (undefined)   → owned (membership + descriptions)
+  //   editor.tools === true      → owned (membership + descriptions)
+  //   editor.tools === { description: true } → owns tool descriptions only
+  // The missing `undefined` case was the bug (for both instructions and tools): the old
+  // `=== true`-only checks made an editor-unset code agent send an empty instructions array and
+  // drop tool edits on save, wiping changes the server would have kept.
   const ownsInstructions =
     !isCodeAgentOverride ||
     editorConfig === undefined ||
     (editorConfig !== false && editorConfig?.instructions === true);
-  const ownsTools = !isCodeAgentOverride || (editorConfig !== false && editorConfig?.tools === true);
+  const ownsTools =
+    !isCodeAgentOverride || editorConfig === undefined || (editorConfig !== false && editorConfig?.tools === true);
   const ownsToolDescriptions =
     !isCodeAgentOverride ||
+    editorConfig === undefined ||
     (editorConfig !== false &&
       (editorConfig?.tools === true ||
         (typeof editorConfig?.tools === 'object' && editorConfig.tools.description === true)));

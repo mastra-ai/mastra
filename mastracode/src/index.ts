@@ -40,13 +40,7 @@ import {
 
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
-import {
-  createMastraCodeGateway,
-  createMastraCodeModelCatalogProvider,
-  getDynamicModel,
-  getGoalJudgeModel,
-  resolveModel,
-} from './agents/model.js';
+import { createMastraCodeGateway, getDynamicModel, getGoalJudgeModel, resolveModel } from './agents/model.js';
 import { buildMode } from './agents/modes/build.js';
 import { fastMode } from './agents/modes/explore.js';
 import { planMode } from './agents/modes/plan.js';
@@ -75,6 +69,7 @@ import {
   saveSettings,
 } from './onboarding/settings.js';
 import { getToolCategory } from './permissions.js';
+import { PlanRejectionAbortProcessor } from './processors/plan-rejection-abort.js';
 import { setAuthStorage } from './providers/claude-max.js';
 import { setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
@@ -551,6 +546,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       tools: getGoalJudgeTools,
     },
     inputProcessors: [
+      new PlanRejectionAbortProcessor(),
       new AgentsMDInjector({
         getIgnoredInstructionPaths: ({ requestContext }) => {
           const harnessContext = requestContext?.get('harness') as
@@ -736,6 +732,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     agent: codeAgent,
     subagents: config?.subagents ?? [],
     gateways: [mastraCodeGateway],
+    workspace: config?.workspace ?? (args => getDynamicWorkspace(args)),
+    browser: config?.browser,
     toolCategoryResolver: getToolCategory,
     initialState: {
       projectPath: project.rootPath,
@@ -748,12 +746,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       // with MCP/hooks/storage which were already initialized with this value.
       configDir,
     },
-    workspace: config?.workspace ?? (args => getDynamicWorkspace(args)),
-    browser: config?.browser,
     modes,
     heartbeatHandlers,
-    resolveModel,
-    customModelCatalogProvider: createMastraCodeModelCatalogProvider(mastraCodeGateway),
     modelUseCountProvider: () => loadSettings().modelUseCounts,
     modelUseCountTracker: modelId => {
       try {

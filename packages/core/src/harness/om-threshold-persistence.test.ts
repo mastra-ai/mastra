@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
+import { createMockWorkspace } from './test-utils';
 
 function createHarness(storage: InMemoryStore, initialState: Record<string, unknown> = {}) {
   const agent = new Agent({
@@ -11,6 +12,7 @@ function createHarness(storage: InMemoryStore, initialState: Record<string, unkn
   });
 
   return new Harness({
+    workspace: createMockWorkspace(),
     id: 'test-harness',
     storage,
     initialState: initialState as any,

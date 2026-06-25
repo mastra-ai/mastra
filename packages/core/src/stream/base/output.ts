@@ -201,6 +201,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #toolResults: LLMStepResult<OUTPUT>['toolResults'] = [];
   #warnings: LLMStepResult<OUTPUT>['warnings'] = [];
   #finishReason: LLMStepResult<OUTPUT>['finishReason'] = undefined;
+  /**
+   * Provider-specific metadata captured from the most recent step `finish`
+   * chunk (e.g. AWS Bedrock guardrail trace under
+   * `providerMetadata.bedrock.trace`). Exposed via {@link _getImmediateProviderMetadata}
+   * so output-step processors can attribute content-filter blocks, for which
+   * the completed-steps array is empty.
+   */
+  #stepProviderMetadata: ProviderMetadata | undefined = undefined;
   #request: LLMStepResult<OUTPUT>['request'] = {};
   #usageCount: LLMStepResult<OUTPUT>['usage'] = {
     inputTokens: undefined,
@@ -809,6 +817,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               // We can preserve finish metadata from whichever shape the upstream SDK emitted,
               // but we cannot reconstruct providerMetadata if the provider omitted it entirely.
               const finalProviderMetadata = chunk.payload.metadata?.providerMetadata ?? chunk.payload.providerMetadata;
+
+              // Retain the step providerMetadata so output-step processors can
+              // read it (e.g. to attribute a Bedrock guardrail content-filter
+              // block to the responsible policy). The completed-steps array is
+              // empty on such blocks, so this is the only carrier of the trace.
+              if (finalProviderMetadata) {
+                self.#stepProviderMetadata = finalProviderMetadata;
+              }
 
               // Check if this is a tripwire case - set tripwire data
               // This can happen when max retries is exceeded or a processor triggers a tripwire
@@ -1598,6 +1614,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   /** @internal */
   _getImmediateFinishReason() {
     return this.#finishReason;
+  }
+  /** @internal */
+  _getImmediateProviderMetadata() {
+    return this.#stepProviderMetadata;
   }
   /** @internal  */
   _getBaseStream() {
