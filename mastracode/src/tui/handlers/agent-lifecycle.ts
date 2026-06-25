@@ -143,8 +143,14 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
     state.gradientAnimator.fadeOut();
   }
 
-  // Update streaming message to show it was interrupted
-  if (state.streamingComponent && state.streamingMessage) {
+  // A plan "Request Changes" abort ends the run intentionally; clear any
+  // streaming state without surfacing an "Interrupted" error so the user can
+  // type revision feedback against a clean transcript.
+  if (state.planRejectionAbort) {
+    state.streamingComponent = undefined;
+    state.streamingMessage = undefined;
+  } else if (state.streamingComponent && state.streamingMessage) {
+    // Update streaming message to show it was interrupted
     state.streamingMessage.stopReason = 'aborted';
     state.streamingMessage.errorMessage = 'Interrupted';
     state.streamingComponent.updateContent(state.streamingMessage);
@@ -155,6 +161,7 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
     showError(state, 'Interrupted');
   }
   state.userInitiatedAbort = false;
+  state.planRejectionAbort = false;
   if (state.activeGoalJudge) {
     removeJudgeComponent(state, state.activeGoalJudge.component);
     state.activeGoalJudge = undefined;

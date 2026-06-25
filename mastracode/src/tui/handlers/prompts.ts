@@ -3,7 +3,7 @@
  * tool_suspended (ask_user / request_access / submit_plan).
  */
 import type { AskUserSelectionMode } from '@mastra/core/tools';
-import { savePlanToDisk, savePlanSnapshot, getPlanFilename } from '../../utils/plans.js';
+import { approveCurrentPlan, getCurrentPlanFilename, readCurrentPlan } from '../../utils/plans.js';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { PlanApprovalInlineComponent } from '../components/plan-approval-inline.js';
@@ -257,11 +257,26 @@ async function approvePlan(ctx: EventHandlerContext, toolCallId: string, title: 
       approvedAt: new Date().toISOString(),
     },
   });
-  savePlanToDisk({
-    title,
-    plan,
-    resourceId: state.session.identity.getResourceId(),
-  }).catch(() => {});
+
+  // Archive the working plan: move + rename current-plan.md to a stable local
+  // <slug>.md, copy to the global plans archive, and delete current-plan.md so
+  // the next plan in this branch starts fresh.
+  const projectPath = (state.session.state.get() as any)?.projectPath as string | undefined;
+  const threadId = getSessionThreadId(state);
+  if (projectPath && threadId) {
+    await approveCurrentPlan({
+      title,
+      projectPath,
+      resourceId: state.session.identity.getResourceId(),
+      threadId,
+    }).catch(() => {});
+  }
+
+  // Reset in-memory plan state to a neutral baseline so the next plan re-creates
+  // current-plan.md and does not diff against the now-archived plan.
+  state.previousPlanSnapshot = undefined;
+  state.lastSubmitPlanComponent = undefined;
+
   await state.session.respondToToolSuspension({
     toolCallId,
     resumeData: { action: 'approved' },
@@ -272,46 +287,88 @@ function formatPlanGoalObjective(title: string, plan: string): string {
   return `# ${title}\n\n${plan}`;
 }
 
+function getSessionThreadId(state: TUIState): string | undefined {
+  const thread = (state.session as any).thread;
+  const threadId = thread?.getId?.() ?? (state.session.state.get() as any)?.threadId;
+  return typeof threadId === 'string' ? threadId : undefined;
+}
+
+/**
+ * Decide whether a diff is worth showing over the full plan. If more than 50%
+ * of the new plan's lines changed, the diff is no clearer than just rendering
+ * the full plan, so fall back to the full plan.
+ */
+export function shouldShowDiff(previousPlan: string, plan: string): boolean {
+  if (!previousPlan || previousPlan === plan) return false;
+
+  const oldLines = previousPlan.split('\n');
+  const newLines = plan.split('\n');
+  const maxLines = Math.max(oldLines.length, newLines.length);
+
+  let changed = 0;
+  for (let i = 0; i < maxLines; i++) {
+    if (oldLines[i] !== newLines[i]) changed++;
+  }
+
+  return changed / newLines.length <= 0.5;
+}
+
 export async function handlePlanApproval(
   ctx: EventHandlerContext,
   toolCallId: string,
   title: string,
-  plan: string,
+  _plan: string,
 ): Promise<void> {
   const { state } = ctx;
 
-  // Snapshot current plan for diff display on resubmission
-  const previousPlan = state.previousPlanSnapshot?.plan;
-
-  // Save a snapshot of this submission and write to local plans dir
-  state.previousPlanSnapshot = { title, plan };
+  // The submit_plan tool no longer carries the plan body — it lives in the
+  // single working file. Read the real content from disk so the approval UI
+  // renders and diffs the actual plan.
   const projectPath = (state.session.state.get() as any)?.projectPath as string | undefined;
-  if (projectPath) {
-    savePlanSnapshot({ title, plan, projectPath }).catch(() => {});
+  const threadId = getSessionThreadId(state);
+  const current = projectPath && threadId ? await readCurrentPlan(projectPath, threadId) : undefined;
+  if (projectPath && (!threadId || !current)) {
+    state.previousPlanSnapshot = undefined;
+  }
+  const plan = current?.plan ?? _plan ?? '';
+  const resolvedTitle = title || current?.title || 'Implementation Plan';
+
+  // Previous plan content is only valid for revisions of the same active plan.
+  // If the working file disappeared or the title changed, render the full plan
+  // instead of diffing against a stale snapshot from another plan lifecycle.
+  const snapshot = state.previousPlanSnapshot;
+  const snapshotPlan = snapshot?.title === resolvedTitle ? snapshot.plan : undefined;
+  const previousPlan = snapshotPlan && shouldShowDiff(snapshotPlan, plan) ? snapshotPlan : undefined;
+
+  // Snapshot this submission so the next resubmission of the same plan can diff
+  // against it. If a project path exists but current-plan.md is missing, do not
+  // seed diff history from stale suspension data.
+  if (current || !projectPath) {
+    state.previousPlanSnapshot = { title: resolvedTitle, plan };
   }
 
   return new Promise(resolve => {
-    const planFilename = getPlanFilename(title);
+    const planFilename = threadId ? getCurrentPlanFilename(threadId) : 'current-plan.md';
     const approvalOptions = {
       toolCallId,
-      title,
+      title: resolvedTitle,
       plan,
       planFilename,
       previousPlan,
       onApprove: async () => {
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
-        await approvePlan(ctx, toolCallId, title, plan);
+        await approvePlan(ctx, toolCallId, resolvedTitle, plan);
         resolve();
       },
       onGoal: async () => {
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
-        await approvePlan(ctx, toolCallId, title, plan);
+        await approvePlan(ctx, toolCallId, resolvedTitle, plan);
 
         // `approvePlan` waits for plan mode to idle before `startGoal` sends
         // the canonical goal reminder, so this starts a fresh build-mode run.
-        const objective = formatPlanGoalObjective(title, plan);
+        const objective = formatPlanGoalObjective(resolvedTitle, plan);
         await ctx.startGoal(objective, 'Goal cancelled.');
 
         const goal = state.goalManager.getGoal();
@@ -321,17 +378,30 @@ export async function handlePlanApproval(
 
         resolve();
       },
-      onReject: async () => {
+      onReject: () => {
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
-        // Resume the tool with a rejection so the result is persisted in thread
-        // history. The PlanRejectionAbortProcessor detects the rejection tool
-        // result and aborts from within the agentic loop — preventing any
-        // additional LLM call without a timing gap.
-        await state.session.respondToToolSuspension({
-          toolCallId,
-          resumeData: { action: 'rejected' },
-        });
+        // Resume the tool with a rejection so the rejection result is persisted
+        // in thread history (the next run sees it for context). For submit_plan,
+        // respondToToolSuspension resolves at the resumed tool's `tool_end`
+        // boundary — i.e. once the rejection result has been emitted and the
+        // suspension dropped — but BEFORE the follow-up LLM step runs. We await
+        // that boundary, then abort the run host-side so the model never gets to
+        // generate trailing text. This is deterministic and does not race the
+        // in-loop PlanRejectionAbortProcessor (which remains as a backstop). The
+        // planRejectionAbort flag suppresses the "Interrupted" abort UI so the
+        // transcript stays clean for the user's revision feedback.
+        void (async () => {
+          try {
+            await state.session.respondToToolSuspension({
+              toolCallId,
+              resumeData: { action: 'rejected' },
+            });
+          } finally {
+            state.planRejectionAbort = true;
+            state.session.abort();
+          }
+        })();
         resolve();
       },
     };
@@ -371,6 +441,6 @@ export async function handlePlanApproval(
     state.chatContainer.invalidate();
     state.ui.setFocus(approvalComponent);
 
-    ctx.notify('plan_approval', `Plan "${title}" requires approval`);
+    ctx.notify('plan_approval', `Plan "${resolvedTitle}" requires approval`);
   });
 }

@@ -1,6 +1,13 @@
 import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
+const PLAN_REQUEST_CHANGES_THREAD_ID = 'thread-e2e-plan-request-changes';
+
+function createPlanRequestChangesIdGenerator(): () => string {
+  let count = 0;
+  return () => (++count === 2 ? PLAN_REQUEST_CHANGES_THREAD_ID : `plan-request-changes-id-${count}`);
+}
+
 export const planApprovalRequestChangesScenario: McE2eScenario = {
   name: 'plan-approval-request-changes',
   description:
@@ -8,6 +15,8 @@ export const planApprovalRequestChangesScenario: McE2eScenario = {
   testName: 'requests changes on an AIMock-driven plan, shows diff on resubmission, then approves',
   useOpenAIModel: true,
   aimockFixture: 'plan-approval-request-changes.json',
+  inProcessApp: ({ startMastraCodeApp }) =>
+    startMastraCodeApp({ config: { idGenerator: createPlanRequestChangesIdGenerator() } }),
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
     await (expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })) as any).toBeVisible();

@@ -19,7 +19,7 @@ import {
 } from '@earendil-works/pi-tui';
 import type { Component, Focusable, SelectItem, TUI } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
-import { getPlanFilename } from '../../utils/plans.js';
+import { CURRENT_PLAN_FILENAME } from '../../utils/plans.js';
 import { BOX_INDENT, theme, getSelectListTheme, getMarkdownTheme, mastra } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 
@@ -223,7 +223,7 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     const partial = args as { title?: unknown; plan?: unknown };
     if (typeof partial.title === 'string') {
       this.planTitle = partial.title || 'Untitled plan';
-      this.planFilename = getPlanFilename(this.planTitle);
+      this.planFilename = CURRENT_PLAN_FILENAME;
     }
     if (typeof partial.plan === 'string') {
       this.planContent = partial.plan;

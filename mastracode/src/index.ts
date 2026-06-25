@@ -169,6 +169,8 @@ export interface MastraCodeConfig {
   settingsPath?: string;
   /** Initial state overrides (yolo, thinkingLevel, etc.) */
   initialState?: Partial<MastraCodeState>;
+  /** Override id generation for threads/messages. Primarily useful for deterministic tests. */
+  idGenerator?: HarnessConfig<MastraCodeState>['idGenerator'];
   /** Override heartbeat handlers. Default: gateway-sync */
   heartbeatHandlers?: HeartbeatHandler[];
   /** Override the workspace. Default: local filesystem + local sandbox based on detected project */
@@ -734,6 +736,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     gateways: [mastraCodeGateway],
     workspace: config?.workspace ?? (args => getDynamicWorkspace(args)),
     browser: config?.browser,
+    idGenerator: config?.idGenerator,
     toolCategoryResolver: getToolCategory,
     initialState: {
       projectPath: project.rootPath,

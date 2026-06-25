@@ -281,6 +281,12 @@ export interface TUIState {
   lastCtrlCTime: number;
   /** Track user-initiated aborts (Ctrl+C/Esc) vs system aborts */
   userInitiatedAbort: boolean;
+  /**
+   * Set when the run is aborted because the user clicked "Request Changes" on a
+   * plan approval. Suppresses the "Interrupted" abort UI so the rejection ends
+   * cleanly and the user can type revision feedback.
+   */
+  planRejectionAbort: boolean;
 
   // ── Cleanup ───────────────────────────────────────────────────────────
   unsubscribe?: () => void;
@@ -387,6 +393,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     // Abort tracking
     lastCtrlCTime: 0,
     userInitiatedAbort: false,
+    planRejectionAbort: false,
   };
   editor.getModeColor = () => {
     if (result.activeGoalJudge) {

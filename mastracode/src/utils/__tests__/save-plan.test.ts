@@ -1,11 +1,19 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { describe, it, expect, afterEach, afterAll } from 'vitest';
-import { savePlanToDisk, savePlanSnapshot, getPlanFilename } from '../plans.js';
+import {
+  savePlanToDisk,
+  getPlanFilename,
+  getCurrentPlanFilename,
+  getCurrentPlanPath,
+  readCurrentPlan,
+  approveCurrentPlan,
+} from '../plans.js';
 
 const projectRoot = path.resolve(import.meta.dirname, '../../..');
 const tmpDir = path.join(projectRoot, '.test-tmp-plans');
 const tmpProjectPath = path.join(projectRoot, '.test-tmp-project');
+const TEST_THREAD_ID = 'thread-test-save-plan';
 
 afterEach(() => {
   if (fs.existsSync(tmpDir)) {
@@ -148,72 +156,94 @@ describe('savePlanToDisk', () => {
   });
 });
 
-describe('savePlanSnapshot', () => {
-  it('writes a title-based filename to the local project plans dir', async () => {
-    const filename = await savePlanSnapshot({
+function writeCurrentPlan(content: string, threadId = TEST_THREAD_ID): void {
+  const filePath = getCurrentPlanPath(tmpProjectPath, threadId);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, content, 'utf-8');
+}
+
+describe('getCurrentPlanPath', () => {
+  it('points to the thread-scoped working plan file', () => {
+    expect(getCurrentPlanPath(tmpProjectPath, TEST_THREAD_ID)).toBe(
+      path.join(tmpProjectPath, '.mastracode', 'plans', getCurrentPlanFilename(TEST_THREAD_ID)),
+    );
+  });
+});
+
+describe('readCurrentPlan', () => {
+  it('returns undefined when the working file does not exist', async () => {
+    expect(await readCurrentPlan(tmpProjectPath, TEST_THREAD_ID)).toBeUndefined();
+  });
+
+  it('parses the leading heading as the title and the rest as the body', async () => {
+    writeCurrentPlan('# My plan\n\nStep 1\nStep 2\n');
+
+    const result = await readCurrentPlan(tmpProjectPath, TEST_THREAD_ID);
+    expect(result).toEqual({ title: 'My plan', plan: 'Step 1\nStep 2' });
+  });
+
+  it('returns an empty title when there is no leading heading', async () => {
+    writeCurrentPlan('Just a body with no heading\n');
+
+    const result = await readCurrentPlan(tmpProjectPath, TEST_THREAD_ID);
+    expect(result).toEqual({ title: '', plan: 'Just a body with no heading' });
+  });
+});
+
+describe('approveCurrentPlan', () => {
+  it('archives current-plan.md to a slugified local file and deletes the working file', async () => {
+    writeCurrentPlan('# My plan\n\nStep 1\nStep 2\n');
+
+    const filename = await approveCurrentPlan({
       title: 'My plan',
-      plan: 'Step 1\nStep 2',
       projectPath: tmpProjectPath,
-    });
-
-    expect(filename).toBe('my-plan.md');
-    const filePath = path.join(tmpProjectPath, '.mastracode', 'plans', 'my-plan.md');
-    expect(fs.existsSync(filePath)).toBe(true);
-
-    const content = fs.readFileSync(filePath, 'utf-8');
-    expect(content).toContain('# My plan');
-    expect(content).toContain('Step 1');
-    expect(content).toContain('Step 2');
-  });
-
-  it('overwrites the snapshot on resubmission with the same title', async () => {
-    await savePlanSnapshot({
-      title: 'Plan v1',
-      plan: 'Original content',
-      projectPath: tmpProjectPath,
-    });
-
-    await savePlanSnapshot({
-      title: 'Plan v1',
-      plan: 'Updated content',
-      projectPath: tmpProjectPath,
-    });
-
-    const filePath = path.join(tmpProjectPath, '.mastracode', 'plans', 'plan-v1.md');
-    const content = fs.readFileSync(filePath, 'utf-8');
-    expect(content).toContain('# Plan v1');
-    expect(content).toContain('Updated content');
-    expect(content).not.toContain('Original content');
-  });
-
-  it('creates separate files for different plan titles', async () => {
-    await savePlanSnapshot({
-      title: 'Plan A',
-      plan: 'Content A',
-      projectPath: tmpProjectPath,
-    });
-
-    await savePlanSnapshot({
-      title: 'Plan B',
-      plan: 'Content B',
-      projectPath: tmpProjectPath,
-    });
-
-    const plansDir = path.join(tmpProjectPath, '.mastracode', 'plans');
-    expect(fs.existsSync(path.join(plansDir, 'plan-a.md'))).toBe(true);
-    expect(fs.existsSync(path.join(plansDir, 'plan-b.md'))).toBe(true);
-  });
-
-  it('respects plansDir override', async () => {
-    await savePlanSnapshot({
-      title: 'Custom dir plan',
-      plan: 'Custom location.',
-      projectPath: tmpProjectPath,
+      resourceId: 'resource-1',
+      threadId: TEST_THREAD_ID,
       plansDir: tmpDir,
     });
 
-    const filePath = path.join(tmpDir, 'custom-dir-plan.md');
-    expect(fs.existsSync(filePath)).toBe(true);
+    expect(filename).toBe('my-plan.md');
+
+    const archivePath = path.join(tmpProjectPath, '.mastracode', 'plans', 'my-plan.md');
+    expect(fs.existsSync(archivePath)).toBe(true);
+    const archived = fs.readFileSync(archivePath, 'utf-8');
+    expect(archived).toContain('# My plan');
+    expect(archived).toContain('Step 1');
+
+    // Working file is deleted so the next plan starts fresh.
+    expect(fs.existsSync(getCurrentPlanPath(tmpProjectPath, TEST_THREAD_ID))).toBe(false);
+
+    // Global archive (timestamped) was written under the resource dir.
+    const resourceDir = path.join(tmpDir, 'resource-1');
+    expect(fs.existsSync(resourceDir)).toBe(true);
+    const globalFiles = fs.readdirSync(resourceDir);
+    expect(globalFiles.some(f => f.endsWith('-my-plan.md'))).toBe(true);
+  });
+
+  it('uses the title from the file when no title is provided', async () => {
+    writeCurrentPlan('# File title\n\nBody\n');
+
+    const filename = await approveCurrentPlan({
+      title: '',
+      projectPath: tmpProjectPath,
+      resourceId: 'resource-2',
+      threadId: TEST_THREAD_ID,
+      plansDir: tmpDir,
+    });
+
+    expect(filename).toBe('file-title.md');
+  });
+
+  it('returns undefined when there is no working plan file', async () => {
+    const filename = await approveCurrentPlan({
+      title: 'Anything',
+      projectPath: tmpProjectPath,
+      resourceId: 'resource-3',
+      threadId: TEST_THREAD_ID,
+      plansDir: tmpDir,
+    });
+
+    expect(filename).toBeUndefined();
   });
 });
 

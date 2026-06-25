@@ -9,7 +9,7 @@ import type { HarnessMessage, HarnessMessageContent, TaskItemInput, TaskItemSnap
 import { assignTaskIds, parseSubagentMeta } from '@mastra/core/harness';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { TASKS_STATE_ID } from '@mastra/core/tools';
-import { getPlanFilename } from '../utils/plans.js';
+import { getCurrentPlanFilename, readCurrentPlan } from '../utils/plans.js';
 import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
@@ -889,7 +889,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
 
           // If this was submit_plan, show the plan with approval status
           if (content.name === 'submit_plan' && toolResult?.type === 'tool_result') {
-            const args = content.args as { title?: string; plan?: string } | undefined;
+            const args = content.args as { title?: string } | undefined;
             // Result could be a string or an object with content property
             let resultText = '';
             if (typeof toolResult.result === 'string') {
@@ -915,11 +915,21 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
               feedback = feedbackMatch?.[1] || 'Revision requested';
             }
 
-            if (args?.title && args?.plan) {
+            if (args?.title) {
+              // The plan body lives in the single working file, not in the tool
+              // args. Recover it from disk when it still exists (pending/rejected);
+              // after approval the file is archived and removed, so fall back to an
+              // empty body but still render the title + status.
+              const sessionState = state.session.state.get() as any;
+              const projectPath = sessionState?.projectPath as string | undefined;
+              const threadId = (state.session as any).thread?.getId?.() ?? sessionState?.threadId;
+              const recovered =
+                projectPath && typeof threadId === 'string' ? await readCurrentPlan(projectPath, threadId) : undefined;
+              const planBody = recovered?.plan ?? '';
               const planResult = new PlanResultComponent({
                 title: args.title,
-                plan: args.plan,
-                planFilename: getPlanFilename(args.title),
+                plan: planBody,
+                planFilename: typeof threadId === 'string' ? getCurrentPlanFilename(threadId) : 'current-plan.md',
                 isApproved,
                 feedback,
               });
@@ -927,7 +937,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
               replacedWithInline = true;
               // Restore previousPlanSnapshot so that if the agent resubmits after
               // a restart, the diff can be computed against the last known plan.
-              state.previousPlanSnapshot = { title: args.title, plan: args.plan };
+              state.previousPlanSnapshot = { title: args.title, plan: planBody };
             }
           }
 

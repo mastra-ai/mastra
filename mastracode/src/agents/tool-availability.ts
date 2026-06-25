@@ -1,8 +1,98 @@
-import type { WorkspaceToolsConfig } from '@mastra/core/workspace';
+import path from 'node:path';
+import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
+import type { WorkspaceToolHookContext, WorkspaceToolsConfig } from '@mastra/core/workspace';
 import { MC_TOOLS, TOOL_NAME_OVERRIDES } from '../tool-names.js';
+import { getCurrentPlanPath } from '../utils/plans.js';
+
+const PLAN_MODE_WRITE_TOOL_NAMES = new Set<string>([
+  WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
+  WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE,
+]);
+
+function getRequestContextValue(requestContext: unknown, key: string): unknown {
+  if (!requestContext) return undefined;
+  if (typeof (requestContext as { get?: unknown }).get === 'function') {
+    return (requestContext as { get: (key: string) => unknown }).get(key);
+  }
+  return (requestContext as Record<string, unknown>)[key];
+}
+
+/**
+ * Subset of the real `HarnessRequestContext` shape (see
+ * packages/core/src/harness/types.ts). The mode is a string property
+ * (`session.modeId`), thread id is top-level (`threadId`), and live state is
+ * read via `session.state.get()`.
+ */
+interface PlanModeGuardHarness {
+  threadId?: unknown;
+  session?: {
+    modeId?: unknown;
+    state?: { get?: () => unknown };
+  };
+}
+
+function getHarnessContext(context: unknown): PlanModeGuardHarness | undefined {
+  const requestContext = (context as { requestContext?: unknown } | undefined)?.requestContext;
+  const harness = getRequestContextValue(requestContext, 'harness');
+  return harness && typeof harness === 'object' ? (harness as PlanModeGuardHarness) : undefined;
+}
+
+function getHarnessState(harness: PlanModeGuardHarness | undefined): Record<string, unknown> | undefined {
+  const state = harness?.session?.state?.get?.();
+  return state && typeof state === 'object' ? (state as Record<string, unknown>) : undefined;
+}
+
+function getHarnessModeId(harness: PlanModeGuardHarness | undefined): string | undefined {
+  const modeId = harness?.session?.modeId ?? getHarnessState(harness)?.modeId;
+  return typeof modeId === 'string' ? modeId : undefined;
+}
+
+function getHarnessProjectPath(harness: PlanModeGuardHarness | undefined): string | undefined {
+  const projectPath = getHarnessState(harness)?.projectPath;
+  return typeof projectPath === 'string' ? projectPath : undefined;
+}
+
+function getHarnessThreadId(harness: PlanModeGuardHarness | undefined): string | undefined {
+  const threadId = harness?.threadId ?? getHarnessState(harness)?.threadId;
+  return typeof threadId === 'string' ? threadId : undefined;
+}
+
+function getToolInputPath(input: unknown): string | undefined {
+  const toolPath = (input as { path?: unknown } | undefined)?.path;
+  return typeof toolPath === 'string' ? toolPath : undefined;
+}
+
+export function guardPlanModePlanFileWrites({ workspaceToolName, input, context }: WorkspaceToolHookContext) {
+  if (!PLAN_MODE_WRITE_TOOL_NAMES.has(workspaceToolName)) return;
+
+  const harness = getHarnessContext(context);
+  if (getHarnessModeId(harness) !== 'plan') return;
+
+  const projectPath = getHarnessProjectPath(harness);
+  const threadId = getHarnessThreadId(harness);
+  const inputPath = getToolInputPath(input);
+  if (!projectPath || !threadId || !inputPath) {
+    return {
+      proceed: false as const,
+      output: 'Plan mode can only edit the thread-scoped current-plan.md file.',
+    };
+  }
+
+  const targetPath = path.resolve(getCurrentPlanPath(projectPath, threadId));
+  const requestedPath = path.resolve(projectPath, inputPath);
+  if (requestedPath === targetPath) return;
+
+  return {
+    proceed: false as const,
+    output: `Plan mode can only edit the thread-scoped current-plan.md file. Refusing to edit ${inputPath}.`,
+  };
+}
 
 export const MASTRACODE_WORKSPACE_TOOLS: WorkspaceToolsConfig = {
   ...TOOL_NAME_OVERRIDES,
+  hooks: {
+    beforeToolCall: guardPlanModePlanFileWrites,
+  },
 };
 
 export const PLAN_MODE_AVAILABLE_TOOLS: readonly string[] = [
@@ -12,9 +102,8 @@ export const PLAN_MODE_AVAILABLE_TOOLS: readonly string[] = [
   MC_TOOLS.SEARCH_CONTENT,
   MC_TOOLS.FILE_STAT,
   MC_TOOLS.LSP_INSPECT,
-  // Plan file writing (visibility gated by availableTools; the shared workspace
-  // is mode-agnostic and does not path-restrict these — plan-mode instructions
-  // scope writes to .mastracode/plans/)
+  // Plan file writing. Tool hooks enforce that these can only mutate
+  // the thread-scoped current-plan.md while the session is in plan mode.
   MC_TOOLS.WRITE_FILE,
   MC_TOOLS.STRING_REPLACE_LSP,
   // Plan delivery tools

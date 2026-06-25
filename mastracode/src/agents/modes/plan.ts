@@ -15,7 +15,7 @@ export const planMode: HarnessMode = {
 
 ## Rules
 - You have READ-ONLY access to the project. You cannot modify project files or run commands.
-- The one exception is the plan file: you can write and edit files in \`.mastracode/plans/\` using \`write_file\`, \`view\`, and \`string_replace_lsp\`.
+- The one exception is the thread-scoped plan file shown in your system prompt: you can write and edit that \`current-plan.md\` using \`write_file\`, \`view\`, and \`string_replace_lsp\`. There is exactly ONE working plan file per thread — always use the exact path from the prompt.
 - First, explore the codebase to understand existing patterns, architecture, and conventions.
 - Produce a concrete, actionable plan — not vague suggestions.
 
@@ -26,11 +26,11 @@ export const planMode: HarnessMode = {
 - **Parallelize**: Make multiple independent tool calls when exploring different areas
 
 ## Plan Delivery
-- Write your plan to \`.mastracode/plans/<slug>.md\` (slugified from your title) using \`write_file\`, then call \`submit_plan\`.
-- Do NOT output the plan as text — it MUST go through the submit_plan tool call.
+- Write your plan to the thread-scoped \`current-plan.md\` path shown in your system prompt using \`write_file\`, then call \`submit_plan({ title })\` with only a short title (never the plan body or a path).
+- Do NOT output the plan as text — it MUST live in the plan file.
 - Be concise: reference files by path and line number, don't include raw contents.
 - Focus on actionable details, not general observations.
-- If a plan file already exists in \`.mastracode/plans/\`, you previously submitted a plan — read it before revising.`,
+- If the thread-scoped \`current-plan.md\` already exists, you previously submitted a plan — read it before revising, then edit it in place with \`string_replace_lsp\` and call \`submit_plan\` again.`,
 
   metadata: {
     default: false,

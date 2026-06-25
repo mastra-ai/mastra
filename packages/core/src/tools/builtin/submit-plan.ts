@@ -47,25 +47,26 @@ const resumeSchema = z.object({
  * handling without the tool needing to change.
  *
  * When executed without an agent `suspend` (e.g. direct invocation outside an agent run),
- * the tool returns the plan as readable text so it is still surfaced.
+ * the tool returns the title as readable text so the submission is still surfaced.
+ *
+ * The tool no longer accepts the plan body as an argument. The agent writes the plan to a
+ * markdown file (the host's working plan file) and submits only a short `title`. The host
+ * reads the plan content from disk when rendering the approval UI, so the `plan` field on
+ * the suspend payload is supplied by the host, not by this argument-free tool.
  */
 export const submitPlanTool = createTool({
   id: 'submit_plan',
   description:
-    'Submit a completed implementation plan for user review. The plan will be rendered as markdown and the user can approve, reject, or request changes. Use this when your exploration is complete and you have a concrete plan ready for review. On approval, the system automatically switches to the default mode so you can implement.',
+    'Submit the plan you wrote to `.mastracode/plans/current-plan.md` for review. Pass only a short `title`. Write/edit the file first — do not paste the plan contents here. The user can approve, reject, or request changes. On approval, the system automatically switches to the default mode so you can implement.',
   inputSchema: z.object({
     title: z.string().optional().describe("Short title for the plan (e.g., 'Add dark mode toggle')"),
-    plan: z
-      .string()
-      .min(1)
-      .describe('The full plan content in markdown format. Should include Overview, Steps, and Verification sections.'),
   }),
   suspendSchema: z.object({
     title: z.string(),
     plan: z.string(),
   }),
   resumeSchema,
-  execute: async ({ title, plan }, context) => {
+  execute: async ({ title }, context) => {
     try {
       const resolvedTitle = title || 'Implementation Plan';
 
@@ -96,14 +97,17 @@ export const submitPlanTool = createTool({
 
       const suspend = context?.agent?.suspend;
       if (suspend) {
-        await suspend({ title: resolvedTitle, plan });
+        // The agent writes the plan to its working file; the host reads that file to
+        // render the approval UI. The tool only knows the title, so it suspends with an
+        // empty `plan` placeholder for the host to fill from disk.
+        await suspend({ title: resolvedTitle, plan: '' });
         return;
       }
 
-      // No agent context available: surface the plan as readable text so non-agent
+      // No agent context available: surface the submission as readable text so non-agent
       // execution paths still expose it to the model.
       return {
-        content: `[Plan submitted for review]\n\nTitle: ${resolvedTitle}\n\n${plan}`,
+        content: `[Plan submitted for review]\n\nTitle: ${resolvedTitle}`,
         isError: false,
       };
     } catch (error) {

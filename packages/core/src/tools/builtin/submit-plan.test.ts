@@ -15,15 +15,17 @@ function makeAgentContext(overrides: Record<string, any> = {}) {
 }
 
 describe('submitPlanTool (native suspend)', () => {
-  it('suspends with the plan payload when no resumeData is present', async () => {
+  it('suspends with a title-only payload (plan filled by the host) when no resumeData is present', async () => {
     const ctx = makeAgentContext();
 
-    const result = await (submitPlanTool as any).execute({ title: 'Ship it', plan: '# Plan\nDo the thing' }, ctx);
+    const result = await (submitPlanTool as any).execute({ title: 'Ship it' }, ctx);
 
     expect(ctx.agent.suspend).toHaveBeenCalledTimes(1);
+    // The plan body lives in the host's working file; the tool suspends with an
+    // empty `plan` placeholder for the host to fill from disk.
     expect((ctx.agent.suspend as any).mock.calls[0][0]).toEqual({
       title: 'Ship it',
-      plan: '# Plan\nDo the thing',
+      plan: '',
     });
     // suspend short-circuits the step; the tool returns no output.
     expect(result).toBeUndefined();
@@ -32,18 +34,18 @@ describe('submitPlanTool (native suspend)', () => {
   it('defaults the title when omitted', async () => {
     const ctx = makeAgentContext();
 
-    await (submitPlanTool as any).execute({ plan: '# Plan' }, ctx);
+    await (submitPlanTool as any).execute({}, ctx);
 
     expect((ctx.agent.suspend as any).mock.calls[0][0]).toEqual({
       title: 'Implementation Plan',
-      plan: '# Plan',
+      plan: '',
     });
   });
 
   it('reports approval back to the model from resumeData', async () => {
     const ctx = makeAgentContext({ resumeData: { action: 'approved' } });
 
-    const result = await (submitPlanTool as any).execute({ title: 'Ship it', plan: '# Plan' }, ctx);
+    const result = await (submitPlanTool as any).execute({ title: 'Ship it' }, ctx);
 
     expect(ctx.agent.suspend).not.toHaveBeenCalled();
     expect(result).toEqual({
@@ -55,7 +57,7 @@ describe('submitPlanTool (native suspend)', () => {
   it('reports rejection with feedback back to the model from resumeData', async () => {
     const ctx = makeAgentContext({ resumeData: { action: 'rejected', feedback: 'Add tests' } });
 
-    const result = await (submitPlanTool as any).execute({ title: 'Ship it', plan: '# Plan' }, ctx);
+    const result = await (submitPlanTool as any).execute({ title: 'Ship it' }, ctx);
 
     expect(result.isError).toBe(false);
     expect(result.content).toContain('The user wants revisions.');
@@ -65,7 +67,7 @@ describe('submitPlanTool (native suspend)', () => {
   it('tells the model to stop and wait when rejected without feedback', async () => {
     const ctx = makeAgentContext({ resumeData: { action: 'rejected' } });
 
-    const result = await (submitPlanTool as any).execute({ title: 'Ship it', plan: '# Plan' }, ctx);
+    const result = await (submitPlanTool as any).execute({ title: 'Ship it' }, ctx);
 
     expect(result.isError).toBe(false);
     expect(result.content).toContain('not approved');
@@ -75,13 +77,10 @@ describe('submitPlanTool (native suspend)', () => {
   });
 
   it('falls back to readable text when no agent suspend is available', async () => {
-    const result = await (submitPlanTool as any).execute(
-      { title: 'Ship it', plan: '# Plan' },
-      { requestContext: undefined },
-    );
+    const result = await (submitPlanTool as any).execute({ title: 'Ship it' }, { requestContext: undefined });
 
     expect(result).toEqual({
-      content: '[Plan submitted for review]\n\nTitle: Ship it\n\n# Plan',
+      content: '[Plan submitted for review]\n\nTitle: Ship it',
       isError: false,
     });
   });
