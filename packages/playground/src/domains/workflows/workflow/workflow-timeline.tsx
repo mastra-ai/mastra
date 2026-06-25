@@ -1,5 +1,7 @@
-import { Button, CheckIcon, CrossIcon, Icon, Txt, cn } from '@mastra/playground-ui';
+import { CheckIcon, CrossIcon, Icon, cn } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog } from '@mastra/playground-ui/components/Dialog';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useAutoscroll } from '@mastra/playground-ui/hooks/use-autoscroll';
 import {
   ChevronDown,
@@ -27,6 +29,7 @@ const StepStatusIcon = ({ status }: { status: Step['status'] }) => (
     {status === 'failed' && <CrossIcon className="text-accent2" />}
     {status === 'suspended' && <CirclePause className="text-accent3" />}
     {status === 'waiting' && <HourglassIcon className="text-accent5" />}
+    {status === 'skipped' && <HourglassIcon className="text-icon3" />}
     {status === 'running' && <Loader2 className="text-accent6 animate-spin" />}
   </Icon>
 );
@@ -36,6 +39,7 @@ const BAR_TINT: Record<Step['status'], string> = {
   failed: 'bg-accent2',
   suspended: 'bg-accent3',
   waiting: 'bg-accent5',
+  skipped: 'bg-border1',
   running: 'bg-accent6',
 };
 

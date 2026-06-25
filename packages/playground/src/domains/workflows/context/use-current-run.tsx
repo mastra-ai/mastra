@@ -1,3 +1,4 @@
+import type { WorkflowStepStatus } from '@mastra/core/workflows';
 import { useContext } from 'react';
 import { WorkflowRunContext } from './workflow-run-context';
 
@@ -24,12 +25,14 @@ export type ForeachProgress = {
   iterationOutput?: any;
 };
 
+type StepStatus = Extract<WorkflowStepStatus, 'running' | 'success' | 'failed' | 'suspended' | 'waiting' | 'skipped'>;
+
 export type Step = {
   error?: any;
   tripwire?: TripwireData;
   startedAt: number;
   endedAt?: number;
-  status: 'running' | 'success' | 'failed' | 'suspended' | 'waiting';
+  status: StepStatus;
   output?: any;
   input?: any;
   resumeData?: any;

@@ -110,6 +110,31 @@ describe('api command executor', () => {
     });
   });
 
+  it('routes requests through --server-api-prefix', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([{ id: 'agent-1' }]));
+
+    const program = new Command();
+    registerApiCommand(program);
+
+    await program.parseAsync([
+      'node',
+      'mastra',
+      'api',
+      '--url',
+      'https://example.com',
+      '--server-api-prefix',
+      '/api/mastra-studio',
+      'agent',
+      'list',
+    ]);
+
+    expect(fetchMock).toHaveBeenCalledWith('https://example.com/api/mastra-studio/agents', {
+      method: 'GET',
+      headers: {},
+      signal: expect.any(AbortSignal),
+    });
+  });
+
   it('runs an agent with JSON body and writes concise normalized output', async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse({

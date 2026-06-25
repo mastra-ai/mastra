@@ -1,7 +1,9 @@
-import { Button, PageHeadingContext, Toaster } from '@mastra/playground-ui';
+import { Toaster } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { ErrorBoundary } from '@mastra/playground-ui/components/ErrorBoundary';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainSidebar, MainSidebarProvider, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { PageHeadingContext } from '@mastra/playground-ui/components/PageLayout';
 import { ThemeProvider } from '@mastra/playground-ui/components/ThemeProvider';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { Search } from 'lucide-react';

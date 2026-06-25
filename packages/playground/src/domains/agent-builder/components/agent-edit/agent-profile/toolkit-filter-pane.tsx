@@ -1,6 +1,8 @@
-import { ScrollArea, Txt, cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { memo, useMemo, useState } from 'react';
 import { useToolkits } from '../../../../tool-providers/hooks/use-toolkits';
 import { useAgentColor } from '../../../contexts/agent-color-context';

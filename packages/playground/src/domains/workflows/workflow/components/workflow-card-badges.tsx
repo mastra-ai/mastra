@@ -19,7 +19,7 @@ export const WorkflowCardBadges = ({ indicators, className }: WorkflowCardIndica
         const IndicatorIcon = indicator.icon;
 
         return (
-          <Tooltip key={indicator.id}>
+          <Tooltip key={`badge-${indicator.id}`}>
             <TooltipTrigger asChild>
               <span
                 role="img"
