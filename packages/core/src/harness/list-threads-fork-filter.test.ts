@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
+import { createMockWorkspace } from './test-utils';
 
 function createHarness(resourceId: string) {
   const agent = new Agent({
@@ -11,6 +12,7 @@ function createHarness(resourceId: string) {
   });
 
   return new Harness({
+    workspace: createMockWorkspace(),
     id: 'test-harness',
     storage: new InMemoryStore(),
     resourceId,

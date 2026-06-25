@@ -3,6 +3,7 @@ import { Harness } from '@mastra/core/harness';
 import { Mastra } from '@mastra/core/mastra';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
+import { Workspace } from '@mastra/core/workspace';
 import { LibSQLStore } from '@mastra/libsql';
 import { describe, it, expect, vi } from 'vitest';
 import z from 'zod';
@@ -101,6 +102,7 @@ describe('tool approval with LibSQLStore via Harness', () => {
     const harness = new Harness({
       id: 'test-harness',
       storage,
+      workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
       modes: [
         {
           id: 'default',

@@ -16,6 +16,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { AgentsMDInjector } from '@mastra/core/processors';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
+import { Workspace } from '@mastra/core/workspace';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
@@ -187,6 +188,7 @@ function createHarnessWithAgent(opts: {
   const harness = new Harness({
     id: 'test-harness',
     storage,
+    workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
     modes: [
       {
         id: 'default',
@@ -568,6 +570,7 @@ function createHarnessWithModels(opts: {
   const harness = new Harness({
     id: 'test-harness',
     storage,
+    workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
     modes: [
       {
         id: 'default',
@@ -1386,6 +1389,7 @@ describe('headless mode — thread control', () => {
       id: 'test-harness',
       storage,
       memory,
+      workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
       modes: [
         {
           id: 'default',
