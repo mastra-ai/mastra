@@ -1,8 +1,9 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
 import type { WorkflowRunStatus } from '@mastra/core/workflows';
-import { ScrollArea, Txt, Icon, WorkflowIcon, toast } from '@mastra/playground-ui';
+import { Txt, Icon, WorkflowIcon, toast } from '@mastra/playground-ui';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Loader2 } from 'lucide-react';

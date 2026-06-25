@@ -1,12 +1,6 @@
-import {
-  Button,
-  NoDataPageLayout,
-  PageLayout,
-  Txt,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
+import { Button, Txt, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { ArrowLeftIcon, PauseIcon, PlayIcon } from 'lucide-react';

@@ -1,9 +1,10 @@
-import { Button, ScrollArea, Icon, AgentIcon, ToolsIcon, VariablesIcon } from '@mastra/playground-ui';
+import { Button, Icon, AgentIcon, ToolsIcon, VariablesIcon } from '@mastra/playground-ui';
 import type { JsonSchema } from '@mastra/playground-ui';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { JSONSchemaForm, jsonSchemaToFields } from '@mastra/playground-ui/components/JSONSchemaForm';
 import type { SchemaField } from '@mastra/playground-ui/components/JSONSchemaForm';
 import { Label } from '@mastra/playground-ui/components/Label';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tabs, TabList, Tab, TabContent } from '@mastra/playground-ui/components/Tabs';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';

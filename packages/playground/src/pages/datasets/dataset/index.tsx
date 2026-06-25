@@ -1,15 +1,10 @@
-import {
-  Button,
-  PageLayout,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-  is404NotFoundError,
-} from '@mastra/playground-ui';
+import { Button, is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';

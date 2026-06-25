@@ -1,6 +1,7 @@
-import { ScrollArea, Txt, cn } from '@mastra/playground-ui';
+import { Txt, cn } from '@mastra/playground-ui';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Searchbar, SearchbarWrapper } from '@mastra/playground-ui/components/Searchbar';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { useState } from 'react';

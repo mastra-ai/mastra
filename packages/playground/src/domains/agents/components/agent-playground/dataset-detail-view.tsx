@@ -1,8 +1,9 @@
-import { Button, ScrollArea, Txt, Icon, toast, cn } from '@mastra/playground-ui';
+import { Button, Txt, Icon, toast, cn } from '@mastra/playground-ui';
 import { Chip } from '@mastra/playground-ui/components/Chip';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { useQueryClient } from '@tanstack/react-query';
