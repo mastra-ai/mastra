@@ -5746,7 +5746,8 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
-      "resourceId"
+      "resourceId",
+      "tags"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -5777,7 +5778,8 @@ export const API_ROUTE_METADATA = {
       "resourceId"
     ],
     "queryParams": [
-      "limit"
+      "limit",
+      "tags"
     ],
     "bodyParams": [],
     "hasQuery": true,
