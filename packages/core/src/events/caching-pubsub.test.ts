@@ -264,6 +264,42 @@ describe('CachingPubSub', () => {
       expect(boundaryEvents).toHaveLength(1);
     });
 
+    it('should not duplicate an event published while the subscription is being established', async () => {
+      // Regression for #18148: a subscriber attaches with replay while the
+      // producer is still publishing. The event published in the window between
+      // inner.subscribe() and getHistory() is delivered BOTH live (via the inner
+      // pubsub) AND via cache replay. Dedup must collapse it to a single
+      // delivery even though the inner pubsub regenerates event.id.
+      const topic = 'replay-race-topic';
+      const received: string[] = [];
+
+      // Pre-fill history before any subscriber exists.
+      await cachingPubsub.publish(topic, { type: 'chunk', runId: 'r1', data: { c: '0' } });
+      await cachingPubsub.publish(topic, { type: 'chunk', runId: 'r1', data: { c: '1' } });
+
+      // Force the race: publish "2" exactly between inner.subscribe() and
+      // getHistory(), so it lands in both the live stream and the replayed history.
+      const realGetHistory = cachingPubsub.getHistory.bind(cachingPubsub);
+      let raced = false;
+      vi.spyOn(cachingPubsub, 'getHistory').mockImplementation(async (t: string, offset?: number) => {
+        if (!raced) {
+          raced = true;
+          await cachingPubsub.publish(topic, { type: 'chunk', runId: 'r1', data: { c: '2' } });
+        }
+        return realGetHistory(t, offset);
+      });
+
+      await cachingPubsub.subscribeWithReplay(topic, (event: Event) => {
+        received.push((event.data as { c: string }).c);
+      });
+
+      const counts = received.reduce<Record<string, number>>((acc, c) => {
+        acc[c] = (acc[c] ?? 0) + 1;
+        return acc;
+      }, {});
+      expect(counts).toEqual({ '0': 1, '1': 1, '2': 1 });
+    });
+
     it('should handle empty cache gracefully', async () => {
       const topic = 'empty-topic';
       const callback = vi.fn();
@@ -277,6 +313,38 @@ describe('CachingPubSub', () => {
       await cachingPubsub.publish(topic, { type: 'first-event', runId: 'run-1', data: {} });
 
       expect(callback).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('subscribeFromOffset', () => {
+    it('should not duplicate an event published while the subscription is being established', async () => {
+      // Regression for #18148, offset variant: same replay/live race as
+      // subscribeWithReplay, but attaching from a specific index.
+      const topic = 'offset-race-topic';
+      const received: string[] = [];
+
+      await cachingPubsub.publish(topic, { type: 'chunk', runId: 'r1', data: { c: '0' } });
+      await cachingPubsub.publish(topic, { type: 'chunk', runId: 'r1', data: { c: '1' } });
+
+      const realGetHistory = cachingPubsub.getHistory.bind(cachingPubsub);
+      let raced = false;
+      vi.spyOn(cachingPubsub, 'getHistory').mockImplementation(async (t: string, offset?: number) => {
+        if (!raced) {
+          raced = true;
+          await cachingPubsub.publish(topic, { type: 'chunk', runId: 'r1', data: { c: '2' } });
+        }
+        return realGetHistory(t, offset);
+      });
+
+      await cachingPubsub.subscribeFromOffset(topic, 0, (event: Event) => {
+        received.push((event.data as { c: string }).c);
+      });
+
+      const counts = received.reduce<Record<string, number>>((acc, c) => {
+        acc[c] = (acc[c] ?? 0) + 1;
+        return acc;
+      }, {});
+      expect(counts).toEqual({ '0': 1, '1': 1, '2': 1 });
     });
   });
 

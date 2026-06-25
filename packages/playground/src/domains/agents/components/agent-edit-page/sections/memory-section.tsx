@@ -1,9 +1,9 @@
-import { MemoryIcon } from '@mastra/playground-ui';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
+import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { Controller, useWatch } from 'react-hook-form';

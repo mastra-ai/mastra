@@ -1,4 +1,3 @@
-import { MemoryIcon } from '@mastra/playground-ui';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Entity, EntityContent, EntityName, EntityDescription } from '@mastra/playground-ui/components/Entity';
@@ -7,6 +6,7 @@ import { Label } from '@mastra/playground-ui/components/Label';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
+import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
 import { Controller, useWatch } from 'react-hook-form';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';

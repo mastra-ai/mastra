@@ -1,5 +1,5 @@
 import type { DatasetItemToolMock } from '@mastra/client-js';
-import { is401UnauthorizedError, is403ForbiddenError, toast } from '@mastra/playground-ui';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
@@ -11,6 +11,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { TextAndIcon } from '@mastra/playground-ui/components/Text';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { format } from 'date-fns';
 import {
   ArrowRightToLineIcon,

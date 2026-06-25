@@ -29,6 +29,10 @@ vi.mock('@mastra/playground-ui', async () => {
   };
 });
 
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
+
 // Stub heavy chat panels to keep this focused on header/layout/redirect logic.
 vi.mock('@/domains/agent-builder/components/agent-edit/conversation-panel', () => ({
   ConversationPanelChat: () => <div data-testid="stub-conversation-panel" />,

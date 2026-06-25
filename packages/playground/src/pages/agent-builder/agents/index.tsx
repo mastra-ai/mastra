@@ -1,5 +1,5 @@
 import type { ListStoredAgentsParams } from '@mastra/client-js';
-import { AgentIcon, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
@@ -8,6 +8,7 @@ import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { PlusIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
