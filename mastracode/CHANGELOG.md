@@ -1,5 +1,597 @@
 # mastracode
 
+## 0.25.1-alpha.2
+
+### Patch Changes
+
+- Fixed thread auto-resume selecting the wrong thread in git worktrees by scoping startup selection to threads tagged with the current project path. When Mastra Code detects a matching project thread on a different resource after resourceId drift, it now prompts before cloning and resuming that thread under the current resource; accepting the prompt leaves the old thread untouched and loads the clone, while declining starts fresh and leaves the old resource untouched. ([#18333](https://github.com/mastra-ai/mastra/pull/18333))
+
+- Resolve all Harness models through gateways. The Harness now builds its available-models catalog, model auth status, mode agents, Observational Memory models, and subagents from the gateways you register, instead of the separate `resolveModel`, `customModelCatalogProvider`, and `modelAuthChecker` config hooks. Removed those three options from `HarnessConfig` (and the `ModelAuthChecker` type) — register a gateway via `gateways` instead. ([#18382](https://github.com/mastra-ai/mastra/pull/18382))
+
+  `listAvailableModels()` and `getCurrentModelAuthStatus()` are now sourced entirely from gateways: model discovery comes from each gateway's `fetchProviders()` (a network call for gateways like models.dev and Netlify), and auth status is resolved through the same gateway chain the model router uses at run time (`resolveAuth()`, falling back to `getApiKey()`). There is no static provider-registry fallback — everything the model picker shows comes from a gateway.
+
+  The gateway-chain operations shared by `ModelRouterLanguageModel` and the Harness (gateway merging, model→gateway selection, auth resolution, provider/model listing) are now centralized in a new `GatewayManager` class exported from `@mastra/core`. Both consumers delegate to it, eliminating duplicated logic. `defaultGateways` is still re-exported from the same paths for backward compatibility.
+
+- Improved plan mode UX: "Request changes" stops the agent via processor-based abort and lets you provide revision feedback via chat. Plan resubmissions show a diff of what changed. Plans save to title-derived filenames (e.g. `add-dark-mode.md`) for multi-plan support. Plan filename displayed in TUI header. ([#18323](https://github.com/mastra-ai/mastra/pull/18323))
+
+- Updated dependencies [[`86623c1`](https://github.com/mastra-ai/mastra/commit/86623c1adf7d22de32cc916dda17f4155184db36), [`7c9dd77`](https://github.com/mastra-ai/mastra/commit/7c9dd77bd18cb8dc72797e25f1a0fbdc71a11347), [`9990965`](https://github.com/mastra-ai/mastra/commit/999096571635a83b42ef40841fd7028cfa630779), [`c0ffa3c`](https://github.com/mastra-ai/mastra/commit/c0ffa3c897ccd326de880df734740a7f0681a18f), [`0504bf5`](https://github.com/mastra-ai/mastra/commit/0504bf5e8cffc571a4b343326178de371e6f859b), [`26f54af`](https://github.com/mastra-ai/mastra/commit/26f54afb5dbfbbb02d4d09bec4bd7c5029751767), [`5afe423`](https://github.com/mastra-ai/mastra/commit/5afe423e4badf040f1b0d4525183a856fcb8146e), [`86623c1`](https://github.com/mastra-ai/mastra/commit/86623c1adf7d22de32cc916dda17f4155184db36), [`8c9f1c0`](https://github.com/mastra-ai/mastra/commit/8c9f1c0361d89066f9bcd14a2f69e761b01766c8)]:
+  - @mastra/core@1.47.0-alpha.2
+  - @mastra/pg@1.14.2-alpha.0
+
+## 0.25.1-alpha.1
+
+### Patch Changes
+
+- MastraCode now passes a deterministic session `id` and `ownerId` to the Harness session. The session id is derived from the project resource ID and is stable across restarts for the same project directory. The owner id is derived from the machine hostname and project root path, tying the session to the local machine. ([#18372](https://github.com/mastra-ai/mastra/pull/18372))
+
+- Expand `${VAR}`, `${VAR:-default}`, and bare `$VAR` references in MCP server HTTP headers. Header values such as `"x-api-key": "${MY_API_KEY}"` in `mcp.json` are now resolved from the environment when the config is loaded, instead of being sent verbatim. This matches how Claude Code reads `.mcp.json` and lets header-authenticated HTTP servers pull secrets from the environment. ([#18240](https://github.com/mastra-ai/mastra/pull/18240))
+
+- Updated dependencies [[`7f9ae70`](https://github.com/mastra-ai/mastra/commit/7f9ae70826b047e5a66218f9e92f20e54a2d791f), [`1505c07`](https://github.com/mastra-ai/mastra/commit/1505c07603f6346bae12aa82f140e8b88ffea9ab), [`e940f09`](https://github.com/mastra-ai/mastra/commit/e940f099ef5d18b403e6f2b4937e086a4da857b1)]:
+  - @mastra/core@1.46.1-alpha.1
+  - @mastra/memory@1.21.2-alpha.0
+
+## 0.25.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`fbeda0c`](https://github.com/mastra-ai/mastra/commit/fbeda0c0f35def07e6837936dd3a003b2b7c5172), [`fbeda0c`](https://github.com/mastra-ai/mastra/commit/fbeda0c0f35def07e6837936dd3a003b2b7c5172), [`307573b`](https://github.com/mastra-ai/mastra/commit/307573b9ff3149b70c79540dbc86f1319b180f29)]:
+  - @mastra/core@1.46.1-alpha.0
+  - @mastra/github-signals@0.2.2-alpha.0
+
+## 0.25.0
+
+### Minor Changes
+
+- Added ACP server mode for `mastracode`. ([#18231](https://github.com/mastra-ai/mastra/pull/18231))
+
+  You can now connect ACP-compatible editors and clients to `mastracode` over stdio. This lets clients start sessions, send prompts, and receive streamed responses.
+
+  **Example**
+
+  ```bash
+  mastracode --acp
+  ```
+
+- Added automatic OpenAI subscription support for Stagehand browser automation. When a user has an active OpenAI subscription (authenticated via /login), Stagehand now uses the subscription credentials for its AI operations (act/extract/observe) instead of requiring a separate OPENAI_API_KEY. ([#18233](https://github.com/mastra-ai/mastra/pull/18233))
+
+### Patch Changes
+
+- Removed the deprecated `Harness.getState()` and `Harness.setState()` compatibility wrappers, along with the unused private `updateState`. Harness state has lived on the session for a while; these were thin proxies marked `@deprecated`. ([#18200](https://github.com/mastra-ai/mastra/pull/18200))
+
+  **Before**
+
+  ```typescript
+  const state = harness.getState();
+  await harness.setState({ count: 1 });
+  ```
+
+  **After**
+
+  ```typescript
+  const state = harness.session.state.get();
+  await harness.session.state.set({ count: 1 });
+  ```
+
+  This does not affect the tool-facing harness context, which continues to expose `state` / `getState` / `setState` / `updateState` alongside `session.state`.
+
+  `mastracode` is updated to set browser settings via `session.state.set()`.
+
+- Moved the observational-memory model accessors off the Harness onto `session.om`. Reading and switching the observer/reflector models and reading observation/reflection thresholds now live on the session, next to the state they read and write. ([#18200](https://github.com/mastra-ai/mastra/pull/18200))
+
+  **Before**
+
+  ```typescript
+  const observer = harness.getObserverModelId();
+  await harness.switchObserverModel({ modelId: 'openai/gpt-4o' });
+  ```
+
+  **After**
+
+  ```typescript
+  const observer = harness.session.om.observer.modelId();
+  await harness.session.om.observer.switchModel({ modelId: 'openai/gpt-4o' });
+  ```
+
+  The accessors are grouped by role under `session.om.observer` and `session.om.reflector`, each exposing `modelId()`, `threshold()`, `resolvedModel()`, and `switchModel({ modelId })`.
+
+  Removed `Harness.getObserverModelId`, `getReflectorModelId`, `getObservationThreshold`, `getReflectionThreshold`, `getResolvedObserverModel`, `getResolvedReflectorModel`, `switchObserverModel`, and `switchReflectorModel`.
+
+  `mastracode` is updated to consume the new API: the `/om` command and status line now read and switch observer/reflector models via `session.om`.
+
+- Moved the run-control surface off the Harness onto the `Session`. Sending messages and signals, steering, following up, aborting, responding to tool suspensions, and saving system reminders now live on the session that owns the run state they drive, instead of being delegated through the Harness. This is the final step of the single-session extraction series and a prerequisite for the upcoming multi-session (`createSession`) work: every per-session operation now lives on `Session`, while the Harness retains only genuinely shared machinery (agent, config builders, storage/lock gateway), which it injects into each session via the `SessionMachinery` provider. ([#18213](https://github.com/mastra-ai/mastra/pull/18213))
+
+  **Before**
+
+  ```typescript
+  await harness.sendMessage({ content: 'hello' });
+  harness.sendSignal({ content: 'steer the run' });
+  harness.abort();
+  await harness.respondToToolSuspension({ toolCallId, approved: true });
+  ```
+
+  **After**
+
+  ```typescript
+  const session = await harness.createSession();
+  await session.sendMessage({ content: 'hello' });
+  session.sendSignal({ content: 'steer the run' });
+  session.abort();
+  await session.respondToToolSuspension({ toolCallId, approved: true });
+  ```
+
+  Removed `Harness.sendMessage`, `Harness.sendSignal`, `Harness.sendNotificationSignal`, `Harness.steer`, `Harness.followUp`, `Harness.abort`, `Harness.respondToToolSuspension`, `Harness.saveSystemReminderMessage`, and `Harness.waitForCurrentThreadStreamIdle`. The `Session` reaches Harness-owned machinery through the injected `SessionMachinery` provider, so the heavy run loop is still constructed and owned by the Harness while being parameterized by the session it runs on.
+
+  `mastracode` is updated to consume the new API: the TUI run loop, slash-command dispatch, goal lifecycle, prompt handlers, and headless entry points all drive run-control through the session returned by `harness.createSession()`.
+
+- The Harness event bus now lives on the Session. Each `Session` owns its own listeners and emit pipeline (`session.subscribe()` / internal `session.emit()`), so events emitted on one session are delivered only to that session's subscribers — never to another session's. This is the isolation foundation for serving a single Harness to multiple concurrent sessions (e.g. one Harness backing many channel threads). ([#18213](https://github.com/mastra-ai/mastra/pull/18213))
+
+  Breaking (Harness is under active development): `Harness.subscribe()` is removed. Subscribe on the session instead:
+
+  ```diff
+  - harness.subscribe(listener)
+  + harness.session.subscribe(listener)
+  ```
+
+  Session subsystems (mode/model/om/permissions/subagents/state) no longer receive an injected `emit` callback — they emit directly to their session's bus. `mastracode` is updated to subscribe via `harness.session.subscribe()`.
+
+- Replaced `Harness.switchModel()` with `harness.session.model.switch()`. Model switching now lives on the session, alongside the active mode/model state it already owns. ([#18197](https://github.com/mastra-ai/mastra/pull/18197))
+
+  **Before**
+
+  ```typescript
+  await harness.switchModel({ modelId: 'openai/gpt-5' });
+  ```
+
+  **After**
+
+  ```typescript
+  await harness.session.model.switch({ modelId: 'openai/gpt-5' });
+  ```
+
+- Replaced `Harness.switchMode()` with `harness.session.mode.switch()`. Switching modes now lives on the session, alongside the active mode/model state it already owns. ([#18197](https://github.com/mastra-ai/mastra/pull/18197))
+
+  **Before**
+
+  ```typescript
+  await harness.switchMode({ modeId: 'build' });
+  ```
+
+  **After**
+
+  ```typescript
+  await harness.session.mode.switch({ modeId: 'build' });
+  ```
+
+  `mastracode` is updated to consume the new API: the TUI and headless callers now invoke `harness.session.mode.switch()` instead of the removed `harness.switchMode()`.
+
+- Restored task list progress and history rendering behavior in Mastra Code. ([#18248](https://github.com/mastra-ai/mastra/pull/18248))
+
+- Made the Harness a pure factory + shared-resource owner and removed its singleton session. The Harness no longer holds a `#session` field or exposes a `harness.session` getter; instead, callers create fully isolated sessions via `harness.createSession()`. Each session owns its own mode, model, state, thread, run-control, event bus, and stream engine, so a single Harness can now serve many concurrent sessions (e.g. one per user/thread in a server or channel adapter) without cross-session state or event leakage. ([#18213](https://github.com/mastra-ai/mastra/pull/18213))
+
+  `harness.createSession({ resourceId? })` constructs and wires a new `Session`, replays the current workspace status onto it, and selects or creates its thread before returning. Harness methods that previously read the singleton session are now parameterized by an explicit `session` argument (`setResourceId`, `getKnownResourceIds`, `getCurrentModelAuthStatus`, `loadOMProgress`, `getObservationalMemoryRecord`, `destroy`). `harness.init()` is now idempotent, so repeated calls reuse the same initialization instead of rebuilding internal state.
+
+  **Before**
+
+  ```typescript
+  const harness = new Harness(config);
+  await harness.init();
+  const session = harness.session; // singleton
+  await session.sendMessage({ content: 'hello' });
+  ```
+
+  **After**
+
+  ```typescript
+  const harness = new Harness(config);
+  await harness.init();
+  const session = await harness.createSession({ resourceId });
+  await session.sendMessage({ content: 'hello' });
+
+  // A second, fully isolated session from the same Harness:
+  const other = await harness.createSession({ resourceId: otherUser });
+  ```
+
+  Removed `harness.session`, `harness.getSession()`, the singleton `#session` field, and the deprecated `harness.subscribe`/`harness.emit`/`harness.memory` delegators.
+
+  `mastracode` is updated to consume the new API: composition roots call `createSession()` once at startup and store the result on `state.session`, and all per-session operations flow through that session object.
+
+- Added a public ACP export so workflows can import the ACP agent with `import { MastraCodeAcpAgent } from 'mastracode/acp'`. ([#18367](https://github.com/mastra-ai/mastra/pull/18367))
+
+- MastraCode now automatically retries transient ECONNRESET model stream failures with exponential backoff. Dropped provider sockets recover without manual intervention using a global policy of 2 retries with delays of 1000ms, 2000ms, and 4000ms (capped at 30000ms), applied to all model calls independent of model-pack settings. ([#18370](https://github.com/mastra-ai/mastra/pull/18370))
+
+- Exported isBadRequestError matcher for detecting transient HTTP 400 errors that can be retried ([#18384](https://github.com/mastra-ai/mastra/pull/18384))
+
+- Migrate TUI thread operations to the session-scoped `session.thread.*` APIs following the core thread lifecycle migration. ([#18213](https://github.com/mastra-ai/mastra/pull/18213))
+
+- Added automatic retry (once) for transient OpenAI Bad Request (400) errors that occur during service degradation ([#18384](https://github.com/mastra-ai/mastra/pull/18384))
+
+- Resolve notification stream options from the target resource's session (falling back to the active session's model, then the mode default) so a woken GitHub-signal notification always has a model to run with. ([#18213](https://github.com/mastra-ai/mastra/pull/18213))
+
+- Moved the tool-permission rule accessors off the Harness onto `session.permissions`. Reading and writing the persisted per-category / per-tool approval policies now lives on the session, next to the state it reads and writes. ([#18200](https://github.com/mastra-ai/mastra/pull/18200))
+
+  **Before**
+
+  ```typescript
+  const rules = harness.getPermissionRules();
+  harness.setPermissionForCategory({ category: 'execute', policy: 'ask' });
+  harness.setPermissionForTool({ toolName: 'dangerous_tool', policy: 'deny' });
+  ```
+
+  **After**
+
+  ```typescript
+  const rules = harness.session.permissions.getRules();
+  await harness.session.permissions.setForCategory({ category: 'execute', policy: 'ask' });
+  await harness.session.permissions.setForTool({ toolName: 'dangerous_tool', policy: 'deny' });
+  ```
+
+  Removed `Harness.getPermissionRules`, `Harness.setPermissionForCategory`, and `Harness.setPermissionForTool`. The setters now return a promise that resolves once the change is persisted to session state, so callers that read the rules back can await the write. Tool-category resolution stays on the harness as `harness.getToolCategory()` since it reads harness config rather than session state.
+
+  `mastracode` is updated to consume the new API: the `/permissions` command reads and sets policies via `session.permissions`.
+
+- Replaced `Harness.getModelName()` and `Harness.getFullModelId()` with session accessors. The full model id is read via the existing `harness.session.model.get()`, and the short display name moves to a new `harness.session.model.displayName()`. ([#18200](https://github.com/mastra-ai/mastra/pull/18200))
+
+  **Before**
+
+  ```typescript
+  const name = harness.getModelName();
+  const fullId = harness.getFullModelId();
+  ```
+
+  **After**
+
+  ```typescript
+  const name = harness.session.model.displayName();
+  const fullId = harness.session.model.get();
+  ```
+
+  `mastracode` is updated to consume the new API: the TUI status line and message renderer now read the model id via `harness.session.model.get()`.
+
+- Fix Stagehand AI ops (`observe`, `act`, `extract`) failing with `Bad Request` (HTTP 400) when the user is signed in to OpenAI Codex OAuth. ([#18399](https://github.com/mastra-ai/mastra/pull/18399))
+
+  Stagehand drives its browser actions through AI SDK's non-streaming `generateText`, but Codex's `/responses` backend only accepts streamed requests and replies with Server-Sent Events. The previous integration routed Stagehand traffic to Codex by rewriting the request URL inside a custom `fetch`, but did not translate between the streaming and non-streaming shapes — so every Stagehand AI call was rejected by Codex.
+
+  MastraCode now configures Stagehand with proper AI SDK provider options (`baseURL`, `headers`, `middleware`) and a dedicated `buildCodexStagehandFetch` that:
+  - Injects (and refreshes) the Codex OAuth bearer per call
+  - Forces `stream: true` on the outgoing request body
+  - Aggregates the SSE response into the non-streaming JSON shape `@ai-sdk/openai`'s Responses parser expects
+
+  The shared OAuth-bearer-refresh logic is extracted into a `getCodexBearer` helper used by both the main agent fetch and the Stagehand fetch.
+
+  `observe`, `act`, and `extract` now work end-to-end against Codex OAuth using a Codex-compatible OpenAI model, with no `OPENAI_API_KEY` required.
+
+- Fixed ACP server mode so sessions can start, receive prompts, and handle tool approvals after the Harness session changes. ([#18367](https://github.com/mastra-ai/mastra/pull/18367))
+
+- Fixed Mastra Code steering display so messages wait for runtime acceptance, blocked inputs are shown as blocked instead of chat, abort cleanup removes pending steering without duplicating output, and plan approvals continue correctly in same-mode and cross-mode flows. ([#18183](https://github.com/mastra-ai/mastra/pull/18183))
+
+- Fixed thread loading in worktrees to only show threads explicitly tagged for the current worktree path, preventing threads from other worktrees or the main repo from being incorrectly loaded on startup ([#18332](https://github.com/mastra-ai/mastra/pull/18332))
+
+- Moved the subagent model accessors off the Harness onto `session.subagents.model`. Reading and setting the global or per-`agentType` subagent model now lives on the session, next to the state it reads and writes, and is grouped under `session.subagents` to leave room for future subagent settings. ([#18200](https://github.com/mastra-ai/mastra/pull/18200))
+
+  **Before**
+
+  ```typescript
+  const modelId = harness.getSubagentModelId({ agentType: 'explore' });
+  await harness.setSubagentModelId({ modelId: 'anthropic/claude-sonnet-4', agentType: 'explore' });
+  ```
+
+  **After**
+
+  ```typescript
+  const modelId = harness.session.subagents.model.get({ agentType: 'explore' });
+  await harness.session.subagents.model.set({ modelId: 'anthropic/claude-sonnet-4', agentType: 'explore' });
+  ```
+
+  `get()` prefers the per-`agentType` value, then the global subagent model, returning `null` when neither is set. `set()` persists to thread settings and emits a `subagent_model_changed` event. Removed `Harness.getSubagentModelId` and `Harness.setSubagentModelId`.
+
+  `mastracode` is updated to consume the new API: the `/subagents` command, model-pack activation, and startup model restoration read and set subagent models via `session.subagents.model`.
+
+- Updated dependencies [[`5bd72d2`](https://github.com/mastra-ai/mastra/commit/5bd72d255f45b5ea8ab342643bd463814a980a24), [`1cc9ee1`](https://github.com/mastra-ai/mastra/commit/1cc9ee1ba51db53020a735626d33017a60b4b5b3), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`b4a43c7`](https://github.com/mastra-ai/mastra/commit/b4a43c705c961d24c9888690ae84451ca1630197), [`65f255a`](https://github.com/mastra-ai/mastra/commit/65f255a38667beb6ceeadabfa9eb5059bfec8298), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`30ebaf0`](https://github.com/mastra-ai/mastra/commit/30ebaf07bed5f4d30f2f257836c15d1bf7e40aae), [`5704634`](https://github.com/mastra-ai/mastra/commit/5704634b22133167dea337a942a34f57aaa3fa14), [`5c4e9a4`](https://github.com/mastra-ai/mastra/commit/5c4e9a4cfb2216bb3ea7f8988ad3727f3b92bb3a), [`4a88c6e`](https://github.com/mastra-ai/mastra/commit/4a88c6e2bdce316f8d7551b4ec3449b0b06fc71c), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`25961e3`](https://github.com/mastra-ai/mastra/commit/25961e3260ff3b1464637af8fcdb36210551c39f), [`6a1428a`](https://github.com/mastra-ai/mastra/commit/6a1428a23133fc070fc6c1caa08d28f3ba4fe5ff), [`87a17ef`](https://github.com/mastra-ai/mastra/commit/87a17efbd725aca6639febdc5e69e2abb3048689), [`e11ff30`](https://github.com/mastra-ai/mastra/commit/e11ff301408bf1731dca2fb7fbfcd8c819500a35), [`7794d71`](https://github.com/mastra-ai/mastra/commit/7794d71872c68733a30e028dfb7b1705daf6c5d2), [`9d2c946`](https://github.com/mastra-ai/mastra/commit/9d2c946d0859e90ae4bcec5beeb1da7398d2ad1e), [`c0eda2b`](https://github.com/mastra-ai/mastra/commit/c0eda2bcd91a228427314b12c91d8b147f3a739f), [`7b29f33`](https://github.com/mastra-ai/mastra/commit/7b29f332a357a83e555f29e718e5f2fab9979943), [`c0eda2b`](https://github.com/mastra-ai/mastra/commit/c0eda2bcd91a228427314b12c91d8b147f3a739f), [`b13925b`](https://github.com/mastra-ai/mastra/commit/b13925bfa91aa8700f56fa54a9ce707ee7e4ba62), [`f1ec385`](https://github.com/mastra-ai/mastra/commit/f1ec385386f62b1a0847ec5353ae2bb169d1c3d9), [`e14986f`](https://github.com/mastra-ai/mastra/commit/e14986f6e5478d6384d04ff9a7f9a79a46a8b529), [`24912b1`](https://github.com/mastra-ai/mastra/commit/24912b1f855d29ec36af4ef4bde1f7417e20cdf5), [`bf94ec6`](https://github.com/mastra-ai/mastra/commit/bf94ec68192d9f16e46ef7e5ac36370aeeddf35d), [`a29f371`](https://github.com/mastra-ai/mastra/commit/a29f371aef629ac8562661524a497127e93b5131), [`7686216`](https://github.com/mastra-ai/mastra/commit/7686216f37e74568feddec17cef3c3d24e10e60a), [`6075e17`](https://github.com/mastra-ai/mastra/commit/6075e173c4f11b889df5a592e0a708d6307220eb), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`073f910`](https://github.com/mastra-ai/mastra/commit/073f910481e7d94b95ba3830f96531774ae95d33), [`0be490f`](https://github.com/mastra-ai/mastra/commit/0be490fabb538c5a7de796ea0aff7d04a0bea1f3), [`0be490f`](https://github.com/mastra-ai/mastra/commit/0be490fabb538c5a7de796ea0aff7d04a0bea1f3), [`ebbe1d3`](https://github.com/mastra-ai/mastra/commit/ebbe1d31a965a3adb0e728758f326b8122b4b55f), [`974f614`](https://github.com/mastra-ai/mastra/commit/974f614e083bd68278536f94453f7b320b86a3c7), [`25961e3`](https://github.com/mastra-ai/mastra/commit/25961e3260ff3b1464637af8fcdb36210551c39f), [`3818814`](https://github.com/mastra-ai/mastra/commit/38188149ce454c4403fe9fcbdf73b735c68d36be), [`25d1854`](https://github.com/mastra-ai/mastra/commit/25d18545337e615f3fc573ddbfc0c413157bd148), [`975c59a`](https://github.com/mastra-ai/mastra/commit/975c59ae363ee275fc55062392e1ffd2cbccbd53), [`1f97ce5`](https://github.com/mastra-ai/mastra/commit/1f97ce5695463bebb4eaacf501da6fb403e20885), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`7f51548`](https://github.com/mastra-ai/mastra/commit/7f515481213780be7047cef00640b9d35f3d545c), [`64f58c0`](https://github.com/mastra-ai/mastra/commit/64f58c04e78b40137497d47f781e897e416f22a5), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`42b13ad`](https://github.com/mastra-ai/mastra/commit/42b13ad9d92a9d72ea6e96a8c87bf83797167eac), [`ebbe1d3`](https://github.com/mastra-ai/mastra/commit/ebbe1d31a965a3adb0e728758f326b8122b4b55f), [`d95f394`](https://github.com/mastra-ai/mastra/commit/d95f394fd24c8411886930d727679c4d5252aa26), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`b89fbd1`](https://github.com/mastra-ai/mastra/commit/b89fbd15bfdceeee469651c81133f70cc22a6fb9), [`cff28df`](https://github.com/mastra-ai/mastra/commit/cff28df33476e41c9538cf9dba7fc8013d69ebb1), [`8e25a78`](https://github.com/mastra-ai/mastra/commit/8e25a78e0597575f0b0729bae8c5e190c84869b5), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`f3f0c9d`](https://github.com/mastra-ai/mastra/commit/f3f0c9d7c878db5a13177871ce3523a14f14b311), [`a5b22d3`](https://github.com/mastra-ai/mastra/commit/a5b22d314d62a68d801886a8d3d0eb6c089473db), [`31be1cf`](https://github.com/mastra-ai/mastra/commit/31be1cf5f2a7b5eef12f6123a40653b4d8115c16), [`31be1cf`](https://github.com/mastra-ai/mastra/commit/31be1cf5f2a7b5eef12f6123a40653b4d8115c16), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858)]:
+  - @mastra/core@1.46.0
+  - @mastra/pg@1.14.1
+  - @mastra/github-signals@0.2.1
+  - @mastra/libsql@1.14.1
+  - @mastra/memory@1.21.1
+  - @mastra/observability@1.15.1
+  - @mastra/mcp@1.12.0
+
+## 0.25.0-alpha.5
+
+### Patch Changes
+
+- Exported isBadRequestError matcher for detecting transient HTTP 400 errors that can be retried ([#18384](https://github.com/mastra-ai/mastra/pull/18384))
+
+- Added automatic retry (once) for transient OpenAI Bad Request (400) errors that occur during service degradation ([#18384](https://github.com/mastra-ai/mastra/pull/18384))
+
+- Fix Stagehand AI ops (`observe`, `act`, `extract`) failing with `Bad Request` (HTTP 400) when the user is signed in to OpenAI Codex OAuth. ([#18399](https://github.com/mastra-ai/mastra/pull/18399))
+
+  Stagehand drives its browser actions through AI SDK's non-streaming `generateText`, but Codex's `/responses` backend only accepts streamed requests and replies with Server-Sent Events. The previous integration routed Stagehand traffic to Codex by rewriting the request URL inside a custom `fetch`, but did not translate between the streaming and non-streaming shapes — so every Stagehand AI call was rejected by Codex.
+
+  MastraCode now configures Stagehand with proper AI SDK provider options (`baseURL`, `headers`, `middleware`) and a dedicated `buildCodexStagehandFetch` that:
+  - Injects (and refreshes) the Codex OAuth bearer per call
+  - Forces `stream: true` on the outgoing request body
+  - Aggregates the SSE response into the non-streaming JSON shape `@ai-sdk/openai`'s Responses parser expects
+
+  The shared OAuth-bearer-refresh logic is extracted into a `getCodexBearer` helper used by both the main agent fetch and the Stagehand fetch.
+
+  `observe`, `act`, and `extract` now work end-to-end against Codex OAuth using a Codex-compatible OpenAI model, with no `OPENAI_API_KEY` required.
+
+- Updated dependencies [[`3818814`](https://github.com/mastra-ai/mastra/commit/38188149ce454c4403fe9fcbdf73b735c68d36be)]:
+  - @mastra/core@1.46.0-alpha.5
+
+## 0.25.0-alpha.4
+
+### Patch Changes
+
+- Restored task list progress and history rendering behavior in Mastra Code. ([#18248](https://github.com/mastra-ai/mastra/pull/18248))
+
+- MastraCode now automatically retries transient ECONNRESET model stream failures with exponential backoff. Dropped provider sockets recover without manual intervention using a global policy of 2 retries with delays of 1000ms, 2000ms, and 4000ms (capped at 30000ms), applied to all model calls independent of model-pack settings. ([#18370](https://github.com/mastra-ai/mastra/pull/18370))
+
+- Updated dependencies [[`5c4e9a4`](https://github.com/mastra-ai/mastra/commit/5c4e9a4cfb2216bb3ea7f8988ad3727f3b92bb3a), [`25961e3`](https://github.com/mastra-ai/mastra/commit/25961e3260ff3b1464637af8fcdb36210551c39f), [`7b29f33`](https://github.com/mastra-ai/mastra/commit/7b29f332a357a83e555f29e718e5f2fab9979943), [`24912b1`](https://github.com/mastra-ai/mastra/commit/24912b1f855d29ec36af4ef4bde1f7417e20cdf5), [`7686216`](https://github.com/mastra-ai/mastra/commit/7686216f37e74568feddec17cef3c3d24e10e60a), [`25961e3`](https://github.com/mastra-ai/mastra/commit/25961e3260ff3b1464637af8fcdb36210551c39f), [`975c59a`](https://github.com/mastra-ai/mastra/commit/975c59ae363ee275fc55062392e1ffd2cbccbd53), [`d95f394`](https://github.com/mastra-ai/mastra/commit/d95f394fd24c8411886930d727679c4d5252aa26), [`f3f0c9d`](https://github.com/mastra-ai/mastra/commit/f3f0c9d7c878db5a13177871ce3523a14f14b311)]:
+  - @mastra/core@1.46.0-alpha.4
+  - @mastra/libsql@1.14.1-alpha.1
+  - @mastra/pg@1.14.1-alpha.1
+
+## 0.25.0-alpha.3
+
+### Patch Changes
+
+- Added a public ACP export so workflows can import the ACP agent with `import { MastraCodeAcpAgent } from 'mastracode/acp'`. ([#18367](https://github.com/mastra-ai/mastra/pull/18367))
+
+- Fixed ACP server mode so sessions can start, receive prompts, and handle tool approvals after the Harness session changes. ([#18367](https://github.com/mastra-ai/mastra/pull/18367))
+
+- Updated dependencies [[`b4a43c7`](https://github.com/mastra-ai/mastra/commit/b4a43c705c961d24c9888690ae84451ca1630197), [`65f255a`](https://github.com/mastra-ai/mastra/commit/65f255a38667beb6ceeadabfa9eb5059bfec8298), [`4a88c6e`](https://github.com/mastra-ai/mastra/commit/4a88c6e2bdce316f8d7551b4ec3449b0b06fc71c), [`87a17ef`](https://github.com/mastra-ai/mastra/commit/87a17efbd725aca6639febdc5e69e2abb3048689), [`e11ff30`](https://github.com/mastra-ai/mastra/commit/e11ff301408bf1731dca2fb7fbfcd8c819500a35), [`9d2c946`](https://github.com/mastra-ai/mastra/commit/9d2c946d0859e90ae4bcec5beeb1da7398d2ad1e), [`f1ec385`](https://github.com/mastra-ai/mastra/commit/f1ec385386f62b1a0847ec5353ae2bb169d1c3d9), [`e14986f`](https://github.com/mastra-ai/mastra/commit/e14986f6e5478d6384d04ff9a7f9a79a46a8b529), [`0be490f`](https://github.com/mastra-ai/mastra/commit/0be490fabb538c5a7de796ea0aff7d04a0bea1f3), [`0be490f`](https://github.com/mastra-ai/mastra/commit/0be490fabb538c5a7de796ea0aff7d04a0bea1f3), [`974f614`](https://github.com/mastra-ai/mastra/commit/974f614e083bd68278536f94453f7b320b86a3c7), [`25d1854`](https://github.com/mastra-ai/mastra/commit/25d18545337e615f3fc573ddbfc0c413157bd148), [`42b13ad`](https://github.com/mastra-ai/mastra/commit/42b13ad9d92a9d72ea6e96a8c87bf83797167eac), [`cff28df`](https://github.com/mastra-ai/mastra/commit/cff28df33476e41c9538cf9dba7fc8013d69ebb1), [`31be1cf`](https://github.com/mastra-ai/mastra/commit/31be1cf5f2a7b5eef12f6123a40653b4d8115c16), [`31be1cf`](https://github.com/mastra-ai/mastra/commit/31be1cf5f2a7b5eef12f6123a40653b4d8115c16)]:
+  - @mastra/pg@1.14.1-alpha.0
+  - @mastra/core@1.46.0-alpha.3
+  - @mastra/libsql@1.14.1-alpha.0
+  - @mastra/observability@1.15.1-alpha.0
+  - @mastra/memory@1.21.1-alpha.1
+
+## 0.25.0-alpha.2
+
+### Minor Changes
+
+- Added ACP server mode for `mastracode`. ([#18231](https://github.com/mastra-ai/mastra/pull/18231))
+
+  You can now connect ACP-compatible editors and clients to `mastracode` over stdio. This lets clients start sessions, send prompts, and receive streamed responses.
+
+  **Example**
+
+  ```bash
+  mastracode --acp
+  ```
+
+### Patch Changes
+
+- Fixed Mastra Code steering display so messages wait for runtime acceptance, blocked inputs are shown as blocked instead of chat, abort cleanup removes pending steering without duplicating output, and plan approvals continue correctly in same-mode and cross-mode flows. ([#18183](https://github.com/mastra-ai/mastra/pull/18183))
+
+- Fixed thread loading in worktrees to only show threads explicitly tagged for the current worktree path, preventing threads from other worktrees or the main repo from being incorrectly loaded on startup ([#18332](https://github.com/mastra-ai/mastra/pull/18332))
+
+- Updated dependencies [[`6a1428a`](https://github.com/mastra-ai/mastra/commit/6a1428a23133fc070fc6c1caa08d28f3ba4fe5ff), [`7f51548`](https://github.com/mastra-ai/mastra/commit/7f515481213780be7047cef00640b9d35f3d545c)]:
+  - @mastra/core@1.46.0-alpha.2
+
+## 0.25.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`7794d71`](https://github.com/mastra-ai/mastra/commit/7794d71872c68733a30e028dfb7b1705daf6c5d2)]:
+  - @mastra/core@1.46.0-alpha.1
+
+## 0.25.0-alpha.0
+
+### Minor Changes
+
+- Added automatic OpenAI subscription support for Stagehand browser automation. When a user has an active OpenAI subscription (authenticated via /login), Stagehand now uses the subscription credentials for its AI operations (act/extract/observe) instead of requiring a separate OPENAI_API_KEY. ([#18233](https://github.com/mastra-ai/mastra/pull/18233))
+
+### Patch Changes
+
+- Removed the deprecated `Harness.getState()` and `Harness.setState()` compatibility wrappers, along with the unused private `updateState`. Harness state has lived on the session for a while; these were thin proxies marked `@deprecated`. ([#18200](https://github.com/mastra-ai/mastra/pull/18200))
+
+  **Before**
+
+  ```typescript
+  const state = harness.getState();
+  await harness.setState({ count: 1 });
+  ```
+
+  **After**
+
+  ```typescript
+  const state = harness.session.state.get();
+  await harness.session.state.set({ count: 1 });
+  ```
+
+  This does not affect the tool-facing harness context, which continues to expose `state` / `getState` / `setState` / `updateState` alongside `session.state`.
+
+  `mastracode` is updated to set browser settings via `session.state.set()`.
+
+- Moved the observational-memory model accessors off the Harness onto `session.om`. Reading and switching the observer/reflector models and reading observation/reflection thresholds now live on the session, next to the state they read and write. ([#18200](https://github.com/mastra-ai/mastra/pull/18200))
+
+  **Before**
+
+  ```typescript
+  const observer = harness.getObserverModelId();
+  await harness.switchObserverModel({ modelId: 'openai/gpt-4o' });
+  ```
+
+  **After**
+
+  ```typescript
+  const observer = harness.session.om.observer.modelId();
+  await harness.session.om.observer.switchModel({ modelId: 'openai/gpt-4o' });
+  ```
+
+  The accessors are grouped by role under `session.om.observer` and `session.om.reflector`, each exposing `modelId()`, `threshold()`, `resolvedModel()`, and `switchModel({ modelId })`.
+
+  Removed `Harness.getObserverModelId`, `getReflectorModelId`, `getObservationThreshold`, `getReflectionThreshold`, `getResolvedObserverModel`, `getResolvedReflectorModel`, `switchObserverModel`, and `switchReflectorModel`.
+
+  `mastracode` is updated to consume the new API: the `/om` command and status line now read and switch observer/reflector models via `session.om`.
+
+- Moved the run-control surface off the Harness onto the `Session`. Sending messages and signals, steering, following up, aborting, responding to tool suspensions, and saving system reminders now live on the session that owns the run state they drive, instead of being delegated through the Harness. This is the final step of the single-session extraction series and a prerequisite for the upcoming multi-session (`createSession`) work: every per-session operation now lives on `Session`, while the Harness retains only genuinely shared machinery (agent, config builders, storage/lock gateway), which it injects into each session via the `SessionMachinery` provider. ([#18213](https://github.com/mastra-ai/mastra/pull/18213))
+
+  **Before**
+
+  ```typescript
+  await harness.sendMessage({ content: 'hello' });
+  harness.sendSignal({ content: 'steer the run' });
+  harness.abort();
+  await harness.respondToToolSuspension({ toolCallId, approved: true });
+  ```
+
+  **After**
+
+  ```typescript
+  const session = await harness.createSession();
+  await session.sendMessage({ content: 'hello' });
+  session.sendSignal({ content: 'steer the run' });
+  session.abort();
+  await session.respondToToolSuspension({ toolCallId, approved: true });
+  ```
+
+  Removed `Harness.sendMessage`, `Harness.sendSignal`, `Harness.sendNotificationSignal`, `Harness.steer`, `Harness.followUp`, `Harness.abort`, `Harness.respondToToolSuspension`, `Harness.saveSystemReminderMessage`, and `Harness.waitForCurrentThreadStreamIdle`. The `Session` reaches Harness-owned machinery through the injected `SessionMachinery` provider, so the heavy run loop is still constructed and owned by the Harness while being parameterized by the session it runs on.
+
+  `mastracode` is updated to consume the new API: the TUI run loop, slash-command dispatch, goal lifecycle, prompt handlers, and headless entry points all drive run-control through the session returned by `harness.createSession()`.
+
+- The Harness event bus now lives on the Session. Each `Session` owns its own listeners and emit pipeline (`session.subscribe()` / internal `session.emit()`), so events emitted on one session are delivered only to that session's subscribers — never to another session's. This is the isolation foundation for serving a single Harness to multiple concurrent sessions (e.g. one Harness backing many channel threads). ([#18213](https://github.com/mastra-ai/mastra/pull/18213))
+
+  Breaking (Harness is under active development): `Harness.subscribe()` is removed. Subscribe on the session instead:
+
+  ```diff
+  - harness.subscribe(listener)
+  + harness.session.subscribe(listener)
+  ```
+
+  Session subsystems (mode/model/om/permissions/subagents/state) no longer receive an injected `emit` callback — they emit directly to their session's bus. `mastracode` is updated to subscribe via `harness.session.subscribe()`.
+
+- Replaced `Harness.switchModel()` with `harness.session.model.switch()`. Model switching now lives on the session, alongside the active mode/model state it already owns. ([#18197](https://github.com/mastra-ai/mastra/pull/18197))
+
+  **Before**
+
+  ```typescript
+  await harness.switchModel({ modelId: 'openai/gpt-5' });
+  ```
+
+  **After**
+
+  ```typescript
+  await harness.session.model.switch({ modelId: 'openai/gpt-5' });
+  ```
+
+- Replaced `Harness.switchMode()` with `harness.session.mode.switch()`. Switching modes now lives on the session, alongside the active mode/model state it already owns. ([#18197](https://github.com/mastra-ai/mastra/pull/18197))
+
+  **Before**
+
+  ```typescript
+  await harness.switchMode({ modeId: 'build' });
+  ```
+
+  **After**
+
+  ```typescript
+  await harness.session.mode.switch({ modeId: 'build' });
+  ```
+
+  `mastracode` is updated to consume the new API: the TUI and headless callers now invoke `harness.session.mode.switch()` instead of the removed `harness.switchMode()`.
+
+- Made the Harness a pure factory + shared-resource owner and removed its singleton session. The Harness no longer holds a `#session` field or exposes a `harness.session` getter; instead, callers create fully isolated sessions via `harness.createSession()`. Each session owns its own mode, model, state, thread, run-control, event bus, and stream engine, so a single Harness can now serve many concurrent sessions (e.g. one per user/thread in a server or channel adapter) without cross-session state or event leakage. ([#18213](https://github.com/mastra-ai/mastra/pull/18213))
+
+  `harness.createSession({ resourceId? })` constructs and wires a new `Session`, replays the current workspace status onto it, and selects or creates its thread before returning. Harness methods that previously read the singleton session are now parameterized by an explicit `session` argument (`setResourceId`, `getKnownResourceIds`, `getCurrentModelAuthStatus`, `loadOMProgress`, `getObservationalMemoryRecord`, `destroy`). `harness.init()` is now idempotent, so repeated calls reuse the same initialization instead of rebuilding internal state.
+
+  **Before**
+
+  ```typescript
+  const harness = new Harness(config);
+  await harness.init();
+  const session = harness.session; // singleton
+  await session.sendMessage({ content: 'hello' });
+  ```
+
+  **After**
+
+  ```typescript
+  const harness = new Harness(config);
+  await harness.init();
+  const session = await harness.createSession({ resourceId });
+  await session.sendMessage({ content: 'hello' });
+
+  // A second, fully isolated session from the same Harness:
+  const other = await harness.createSession({ resourceId: otherUser });
+  ```
+
+  Removed `harness.session`, `harness.getSession()`, the singleton `#session` field, and the deprecated `harness.subscribe`/`harness.emit`/`harness.memory` delegators.
+
+  `mastracode` is updated to consume the new API: composition roots call `createSession()` once at startup and store the result on `state.session`, and all per-session operations flow through that session object.
+
+- Migrate TUI thread operations to the session-scoped `session.thread.*` APIs following the core thread lifecycle migration. ([#18213](https://github.com/mastra-ai/mastra/pull/18213))
+
+- Resolve notification stream options from the target resource's session (falling back to the active session's model, then the mode default) so a woken GitHub-signal notification always has a model to run with. ([#18213](https://github.com/mastra-ai/mastra/pull/18213))
+
+- Moved the tool-permission rule accessors off the Harness onto `session.permissions`. Reading and writing the persisted per-category / per-tool approval policies now lives on the session, next to the state it reads and writes. ([#18200](https://github.com/mastra-ai/mastra/pull/18200))
+
+  **Before**
+
+  ```typescript
+  const rules = harness.getPermissionRules();
+  harness.setPermissionForCategory({ category: 'execute', policy: 'ask' });
+  harness.setPermissionForTool({ toolName: 'dangerous_tool', policy: 'deny' });
+  ```
+
+  **After**
+
+  ```typescript
+  const rules = harness.session.permissions.getRules();
+  await harness.session.permissions.setForCategory({ category: 'execute', policy: 'ask' });
+  await harness.session.permissions.setForTool({ toolName: 'dangerous_tool', policy: 'deny' });
+  ```
+
+  Removed `Harness.getPermissionRules`, `Harness.setPermissionForCategory`, and `Harness.setPermissionForTool`. The setters now return a promise that resolves once the change is persisted to session state, so callers that read the rules back can await the write. Tool-category resolution stays on the harness as `harness.getToolCategory()` since it reads harness config rather than session state.
+
+  `mastracode` is updated to consume the new API: the `/permissions` command reads and sets policies via `session.permissions`.
+
+- Replaced `Harness.getModelName()` and `Harness.getFullModelId()` with session accessors. The full model id is read via the existing `harness.session.model.get()`, and the short display name moves to a new `harness.session.model.displayName()`. ([#18200](https://github.com/mastra-ai/mastra/pull/18200))
+
+  **Before**
+
+  ```typescript
+  const name = harness.getModelName();
+  const fullId = harness.getFullModelId();
+  ```
+
+  **After**
+
+  ```typescript
+  const name = harness.session.model.displayName();
+  const fullId = harness.session.model.get();
+  ```
+
+  `mastracode` is updated to consume the new API: the TUI status line and message renderer now read the model id via `harness.session.model.get()`.
+
+- Moved the subagent model accessors off the Harness onto `session.subagents.model`. Reading and setting the global or per-`agentType` subagent model now lives on the session, next to the state it reads and writes, and is grouped under `session.subagents` to leave room for future subagent settings. ([#18200](https://github.com/mastra-ai/mastra/pull/18200))
+
+  **Before**
+
+  ```typescript
+  const modelId = harness.getSubagentModelId({ agentType: 'explore' });
+  await harness.setSubagentModelId({ modelId: 'anthropic/claude-sonnet-4', agentType: 'explore' });
+  ```
+
+  **After**
+
+  ```typescript
+  const modelId = harness.session.subagents.model.get({ agentType: 'explore' });
+  await harness.session.subagents.model.set({ modelId: 'anthropic/claude-sonnet-4', agentType: 'explore' });
+  ```
+
+  `get()` prefers the per-`agentType` value, then the global subagent model, returning `null` when neither is set. `set()` persists to thread settings and emits a `subagent_model_changed` event. Removed `Harness.getSubagentModelId` and `Harness.setSubagentModelId`.
+
+  `mastracode` is updated to consume the new API: the `/subagents` command, model-pack activation, and startup model restoration read and set subagent models via `session.subagents.model`.
+
+- Updated dependencies [[`5bd72d2`](https://github.com/mastra-ai/mastra/commit/5bd72d255f45b5ea8ab342643bd463814a980a24), [`1cc9ee1`](https://github.com/mastra-ai/mastra/commit/1cc9ee1ba51db53020a735626d33017a60b4b5b3), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`30ebaf0`](https://github.com/mastra-ai/mastra/commit/30ebaf07bed5f4d30f2f257836c15d1bf7e40aae), [`5704634`](https://github.com/mastra-ai/mastra/commit/5704634b22133167dea337a942a34f57aaa3fa14), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`c0eda2b`](https://github.com/mastra-ai/mastra/commit/c0eda2bcd91a228427314b12c91d8b147f3a739f), [`c0eda2b`](https://github.com/mastra-ai/mastra/commit/c0eda2bcd91a228427314b12c91d8b147f3a739f), [`b13925b`](https://github.com/mastra-ai/mastra/commit/b13925bfa91aa8700f56fa54a9ce707ee7e4ba62), [`bf94ec6`](https://github.com/mastra-ai/mastra/commit/bf94ec68192d9f16e46ef7e5ac36370aeeddf35d), [`a29f371`](https://github.com/mastra-ai/mastra/commit/a29f371aef629ac8562661524a497127e93b5131), [`6075e17`](https://github.com/mastra-ai/mastra/commit/6075e173c4f11b889df5a592e0a708d6307220eb), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`073f910`](https://github.com/mastra-ai/mastra/commit/073f910481e7d94b95ba3830f96531774ae95d33), [`ebbe1d3`](https://github.com/mastra-ai/mastra/commit/ebbe1d31a965a3adb0e728758f326b8122b4b55f), [`1f97ce5`](https://github.com/mastra-ai/mastra/commit/1f97ce5695463bebb4eaacf501da6fb403e20885), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`64f58c0`](https://github.com/mastra-ai/mastra/commit/64f58c04e78b40137497d47f781e897e416f22a5), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`ebbe1d3`](https://github.com/mastra-ai/mastra/commit/ebbe1d31a965a3adb0e728758f326b8122b4b55f), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`b89fbd1`](https://github.com/mastra-ai/mastra/commit/b89fbd15bfdceeee469651c81133f70cc22a6fb9), [`8e25a78`](https://github.com/mastra-ai/mastra/commit/8e25a78e0597575f0b0729bae8c5e190c84869b5), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`a5b22d3`](https://github.com/mastra-ai/mastra/commit/a5b22d314d62a68d801886a8d3d0eb6c089473db), [`417baae`](https://github.com/mastra-ai/mastra/commit/417baae40b995db5819c845036947f0c27dc1c00), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858), [`74955f9`](https://github.com/mastra-ai/mastra/commit/74955f9120cde8b1d8ce4399232b4033236be858)]:
+  - @mastra/core@1.46.0-alpha.0
+  - @mastra/github-signals@0.2.1-alpha.0
+  - @mastra/memory@1.21.1-alpha.0
+  - @mastra/mcp@1.12.0-alpha.0
+
 ## 0.24.0
 
 ### Minor Changes

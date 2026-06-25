@@ -18,6 +18,8 @@ const prFixture = {
   checkName: 'E2E Tests / GitHub Signals polling inbox',
 };
 
+const CURRENT_RESOURCE_ID = 'mc-e2e-github-polling-inbox-current-resource';
+
 const threadFixture = {
   resourceId: 'mc-e2e-github-polling-inbox-resource',
   threadId: 'thread-mc-e2e-github-polling-inbox',
@@ -102,6 +104,7 @@ export const githubSignalsPollingInboxScenario = {
     );
 
     const now = new Date('2026-06-12T09:01:00.000Z');
+    const currentResourceMetadata = { projectPath: context.projectDir };
     const metadata = {
       projectPath: context.projectDir,
       mastra: {
@@ -138,7 +141,9 @@ export const githubSignalsPollingInboxScenario = {
     });
     const sql = `
 insert into mastra_threads (id, resourceId, title, metadata, createdAt, updatedAt)
-values (${sqlString(threadFixture.threadId)}, ${sqlString(threadFixture.resourceId)}, ${sqlString(threadFixture.title)}, ${sqlString(JSON.stringify(metadata))}, ${sqlString(now.toISOString())}, ${sqlString(now.toISOString())});
+values
+  ('thread-github-polling-inbox-current-resource', ${sqlString(CURRENT_RESOURCE_ID)}, 'Current resource startup thread', ${sqlString(JSON.stringify(currentResourceMetadata))}, ${sqlString(now.toISOString())}, ${sqlString(now.toISOString())}),
+  (${sqlString(threadFixture.threadId)}, ${sqlString(threadFixture.resourceId)}, ${sqlString(threadFixture.title)}, ${sqlString(JSON.stringify(metadata))}, ${sqlString(now.toISOString())}, ${sqlString(now.toISOString())});
 insert into mastra_messages (id, thread_id, content, role, type, createdAt, resourceId)
 values
   ('msg-github-polling-inbox-user', ${sqlString(threadFixture.threadId)}, ${sqlString(userContent)}, 'user', 'v2', ${sqlString(now.toISOString())}, ${sqlString(threadFixture.resourceId)}),
@@ -156,6 +161,7 @@ values
     return {
       GITCRAWL_DB_PATH: dbPath,
       MASTRACODE_GITCRAWL_BIN: mockGitcrawlPath,
+      MASTRA_RESOURCE_ID: CURRENT_RESOURCE_ID,
       MC_E2E_DB_PATH: join(projectDir, '..', 'mastra.db'),
     };
   },
@@ -243,19 +249,14 @@ values
     await runtime.waitForScreenText(/medium · pull-request-ci-recovered · delivered/i, terminal, 60_000);
 
     terminal.submit('Read the GitHub polling notification from the inbox.');
-    await runtime.waitForScreenText(/GitHub polling inbox notification read completed/i, terminal, 30_000);
+    await runtime.waitForScreenText(/Read the GitHub polling notification from the inbox\./i, terminal, 8_000);
     await runtime.waitForScreenText(/mastra-ai\/mastra#17640 CI recovered/i, terminal, 30_000);
-    terminal.submit(
-      `!sqlite3 "$MC_E2E_DB_PATH" "select 'GITHUB_POLLING_INBOX_STATUS=' || status || ':' || kind from mastra_notifications where source='github' order by createdAt desc limit 1;"`,
-    );
-    await runtime.waitForScreenText(
-      /GITHUB_POLLING_INBOX_STATUS=(seen|pending):pull-request-ci-recovered/i,
-      terminal,
-      8_000,
-    );
+    await runtime.waitForScreenText(/"markedSeen": 1/i, terminal, 30_000);
 
+    await terminal.flushInput?.();
+    await runtime.waitForScreenText(/│ ›/i, terminal, 15_000);
     terminal.submit('/new');
-    await runtime.waitForScreenText(/Ready for new conversation/i, terminal, 8_000);
+    await runtime.waitForScreenText(/│ ›/i, terminal, 15_000);
     terminal.submit('/threads');
     await runtime.waitForScreenText(/E2E GitHub polling inbox fixture/i, terminal, 8_000);
     await runtime.waitForScreenText(/mc-e2e-github-polling-inbox-resource/i, terminal, 8_000);

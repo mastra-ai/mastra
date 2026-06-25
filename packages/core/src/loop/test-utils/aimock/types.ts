@@ -53,13 +53,25 @@ export interface LoopScenarioResult {
 }
 
 /**
- * Options for {@link runLoopScenario}. Mirrors the ergonomics of mastracode's
- * AIMock scenarios (`fixtures` builder + behavioral assertions) but targets the
- * core agentic loop through `Agent`/`loop()` instead of the TUI.
+ * Execution engine variant for loop scenarios.
+ * - `'normal'` — default direct engine (no env var, regular Agent).
+ * - `'evented'` — evented workflow engine via `MASTRA_EVENTED_EXECUTION=true`.
+ * - `'durable'` — durable execution via `createDurableAgent` wrapper.
  */
+export type EngineVariant = 'normal' | 'evented' | 'durable';
+
+/** All supported engine variants for parameterised test runs. */
+export const ALL_ENGINE_VARIANTS: readonly EngineVariant[] = ['normal', 'evented', 'durable'] as const;
+
 export interface RunLoopScenarioOptions {
   /** Active AIMock handle for the current suite (from {@link useLoopScenarioAimock}). */
   llm: LLMock;
+  /**
+   * Execution engine variant. Defaults to `'normal'`.
+   * - `'evented'` sets `MASTRA_EVENTED_EXECUTION=true` for the run.
+   * - `'durable'` wraps the agent with `createDurableAgent`.
+   */
+  engine?: EngineVariant;
   /**
    * Imperatively script the per-turn model responses on the AIMock instance,
    * e.g. `llm.onMessage(...)`, `llm.onToolCall(...)`, `llm.onTurn(...)`.
@@ -77,6 +89,8 @@ export interface RunLoopScenarioOptions {
   };
   /** Tools available to the loop. Tool ids must match the scripted tool-call names. */
   tools?: ToolsInput;
+  /** Signal providers registered on the Agent constructor. */
+  signals?: AgentConfig['signals'];
   /**
    * System instructions for the agent. May be a static string or a
    * `DynamicArgument` function `({ requestContext }) => string` to exercise

@@ -470,7 +470,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     // from route path/method unless explicitly set or route is public
     const requestContext = ctx.state.requestContext;
     // Check if any auth is configured (studio or server) for RBAC
-    const hasAuth = this.mastra.getStudio()?.auth || this.mastra.getServer()?.auth;
+    const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
     if (hasAuth) {
       const hasPermission = await loadHasPermission();
       if (hasPermission) {
@@ -504,11 +504,15 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       const result = await route.handler(handlerParams);
       await this.sendResponse(route, ctx, result, prefix);
     } catch (error) {
-      this.mastra.getLogger()?.error('Error calling handler', {
-        error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
-        path: route.path,
-        method: route.method,
-      });
+      const httpStatus = error && typeof error === 'object' && 'status' in error ? (error as any).status : undefined;
+      const isClientError = typeof httpStatus === 'number' && httpStatus >= 400 && httpStatus < 500;
+      if (!isClientError) {
+        this.mastra.getLogger()?.error('Error calling handler', {
+          error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          path: route.path,
+          method: route.method,
+        });
+      }
       // Attach status code to the error for upstream middleware
       if (error && typeof error === 'object') {
         if (!('status' in error)) {
@@ -941,7 +945,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
           const requestContext = ctx.state.requestContext;
           // Check if any auth is configured (studio or server) for RBAC
-          const hasAuth = server.mastra.getStudio()?.auth || server.mastra.getServer()?.auth;
+          const hasAuth = server.mastra.getStudio?.()?.auth || server.mastra.getServer()?.auth;
           if (hasAuth) {
             const hasPermission = await loadHasPermission();
             if (hasPermission) {

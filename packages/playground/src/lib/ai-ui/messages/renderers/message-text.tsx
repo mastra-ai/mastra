@@ -1,4 +1,8 @@
-import { Badge, Icon, MarkdownRenderer, Notice, cn } from '@mastra/playground-ui';
+import { Icon } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { CheckCircleIcon, ChevronUpIcon } from 'lucide-react';
 import { useState } from 'react';
 

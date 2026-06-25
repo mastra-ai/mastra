@@ -102,6 +102,7 @@ export default defineConfig({
         '@internal/voice',
         'hono',
         'hono-openapi',
+        '@internal/auth',
       ]),
     );
 

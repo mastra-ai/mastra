@@ -2,21 +2,22 @@
  * TUI setup: keyboard shortcuts, layout building, autocomplete, key handlers.
  */
 import { execFileSync } from 'node:child_process';
-import fs from 'node:fs';
 
 import { CombinedAutocompleteProvider, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SlashCommand } from '@earendil-works/pi-tui';
 import type { HarnessEventListener } from '@mastra/core/harness';
-
 import { getUserId } from '../utils/project.js';
 import { loadCustomCommands } from '../utils/slash-command-loader.js';
 import { ThreadLockError } from '../utils/thread-lock.js';
 import { isUserInvocable } from './commands/skill-filters.js';
 import { renderBanner } from './components/banner.js';
 import { IdleCounterComponent } from './components/idle-counter.js';
+import { SimpleProgressComponent } from './components/simple-progress.js';
 import { TaskProgressComponent } from './components/task-progress.js';
 import { showError, showInfo } from './display.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
+import { askModalQuestion } from './modal-question.js';
+import { showModalOverlay } from './overlay.js';
 import type { TUIState } from './state.js';
 import { updateStatusLine } from './status-line.js';
 import { theme } from './theme.js';
@@ -48,13 +49,13 @@ export function setupKeyboardShortcuts(
     }
 
     if (state.pendingApprovalDismiss) {
-      // Dismiss active approval dialog and abort
+      // Dismiss active approval dialogs by declining the gated tool. Do not abort
+      // the run: the decline is delivered through the normal approval resume path.
       state.pendingApprovalDismiss();
       state.activeInlinePlanApproval = undefined;
       state.activeInlineQuestion = undefined;
       state.pendingInlineQuestions.length = 0;
-      state.userInitiatedAbort = true;
-      state.session.abort();
+      return;
     } else if (state.session.run.isRunning() || state.session.suspensions.hasPending()) {
       // Clean up active inline components on abort. suspensions.hasPending() covers
       // the case where the run is parked in a tool suspend() (e.g. ask_user) —
@@ -544,16 +545,20 @@ export function setupKeyHandlers(
 // =============================================================================
 
 export function subscribeToHarness(state: TUIState, handleEvent: (event: any) => Promise<void>): void {
-  const listener: HarnessEventListener = async event => {
-    try {
-      await handleEvent(event);
-    } catch (err) {
-      // Log but don't crash — individual event errors shouldn't kill the process
-      const msg = err instanceof Error ? err.message : String(err);
-      const stack = err instanceof Error ? err.stack : undefined;
-      process.stderr.write(`[event error] ${event.type}: ${msg}\n`);
-      if (stack) process.stderr.write(stack + '\n');
-    }
+  let eventQueue = Promise.resolve();
+  const listener: HarnessEventListener = event => {
+    eventQueue = eventQueue.then(async () => {
+      try {
+        await handleEvent(event);
+      } catch (err) {
+        // Log but don't crash — individual event errors shouldn't kill the process
+        const msg = err instanceof Error ? err.message : String(err);
+        const stack = err instanceof Error ? err.stack : undefined;
+        process.stderr.write(`[event error] ${event.type}: ${msg}\n`);
+        if (stack) process.stderr.write(stack + '\n');
+      }
+    });
+    return eventQueue;
   };
   state.unsubscribe = state.session.subscribe(listener);
 }
@@ -573,25 +578,77 @@ export function updateTerminalTitle(state: TUIState): void {
 // =============================================================================
 
 export async function promptForThreadSelection(state: TUIState): Promise<void> {
-  const allThreads = await state.session.thread.list();
-
-  // Filter to threads matching the current working directory.
   const currentPath = state.projectInfo.rootPath;
-  let dirCreatedAt: Date | undefined;
-  try {
-    const stat = fs.statSync(currentPath);
-    dirCreatedAt = stat.birthtime;
-  } catch {
-    // fall through – treat all untagged threads as candidates
-  }
-  const threads = allThreads.filter(t => {
+  const currentResourceId = state.session.identity.getResourceId();
+
+  const allThreads = await state.session.thread.list();
+  const activeThreadId = state.session.thread.getId();
+
+  // Filter to threads explicitly tagged for the current working directory.
+  const taggedThreads = allThreads.filter(t => {
     const threadPath = t.metadata?.projectPath as string | undefined;
-    if (threadPath) return threadPath === currentPath;
-    if (dirCreatedAt) return t.createdAt >= dirCreatedAt;
-    return true;
+    return !!threadPath && threadPath === currentPath;
   });
+  const threads: typeof taggedThreads = [];
+  for (const thread of taggedThreads) {
+    const isActiveBlankThread = thread.id === activeThreadId && !thread.title;
+    if (isActiveBlankThread) {
+      const messages = await state.session.thread.listMessages({ threadId: thread.id, limit: 1 });
+      if (messages.length === 0) continue;
+    }
+    threads.push(thread);
+  }
 
   if (threads.length === 0) {
+    const driftCandidates = (
+      await state.session.thread.list({
+        allResources: true,
+        metadata: { projectPath: currentPath },
+      })
+    ).filter(t => t.resourceId !== currentResourceId);
+    const [thread] = [...driftCandidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+
+    if (thread) {
+      const answer = await askModalQuestion(state.ui, {
+        question: [
+          'This directory is tagged on a different resource.',
+          '',
+          `Project: ${currentPath}`,
+          `Thread: ${thread.title || thread.id}`,
+          `Old resource: ${thread.resourceId}`,
+          `Current resource: ${currentResourceId}`,
+          '',
+          'Clone this thread into the current resource and resume the clone?',
+        ].join('\n'),
+        options: [{ label: 'Clone and resume' }, { label: 'Start fresh' }],
+        selectedOptionLabel: 'Clone and resume',
+        allowCustomResponse: false,
+        overlay: { widthPercent: 80, maxHeight: '70%' },
+      });
+
+      if (answer === 'Clone and resume') {
+        const progress = new SimpleProgressComponent({ showElapsed: false, showPercentage: false });
+        progress.start('Cloning thread into the current resource...');
+        showModalOverlay(state.ui, progress, { widthPercent: 70, maxHeight: '40%', minHeightPercent: 0.35 });
+        state.ui.requestRender();
+
+        try {
+          await new Promise(resolve => setTimeout(resolve, 50));
+          progress.updateStatus('Loading cloned thread...');
+          state.ui.requestRender();
+          await state.session.thread.cloneToCurrentResource({
+            threadId: thread.id,
+            expectedResourceId: thread.resourceId,
+            expectedProjectPath: currentPath,
+          });
+        } finally {
+          state.ui.hideOverlay();
+          state.ui.requestRender();
+        }
+        return;
+      }
+    }
+
     // No existing threads for this path - defer creation until first message
     state.pendingNewThread = true;
     return;
@@ -600,28 +657,7 @@ export async function promptForThreadSelection(state: TUIState): Promise<void> {
   // Sort by most recent
   const sortedThreads = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 
-  // If there's only one thread, auto-resume it directly
-  if (sortedThreads.length === 1) {
-    const thread = sortedThreads[0]!;
-    try {
-      await state.session.thread.switch({ threadId: thread.id });
-      if (!thread.metadata?.projectPath) {
-        await state.session.thread.setSetting({ key: 'projectPath', value: currentPath });
-      }
-      return;
-    } catch (error) {
-      if (error instanceof ThreadLockError) {
-        // Thread is locked by another process — silently start a new thread.
-        // The lock prompt only appears when the user intentionally picks a
-        // locked thread from the /threads selector.
-        state.pendingNewThread = true;
-        return;
-      }
-      throw error;
-    }
-  }
-
-  // Multiple threads — try each in order until one is unlocked
+  // Try each in order until one is unlocked
   for (const thread of sortedThreads) {
     try {
       await state.session.thread.switch({ threadId: thread.id });

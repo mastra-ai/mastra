@@ -32,8 +32,24 @@ const workspace = new Workspace({
 
 const memory = new Memory({
   options: {
-    workingMemory: {
-      enabled: true,
+    observationalMemory: {
+      model: 'openai/gpt-5.4-mini',
+      observation: {
+        messageTokens: 3000,
+        // Buffer every 5k tokens (runs in background)
+        bufferTokens: 1000,
+        // Activate to retain 30% of threshold
+        bufferActivation: 0.7,
+        // Force synchronous observation at 1.5x threshold
+        blockAfter: 1.5,
+      },
+      reflection: {
+        observationTokens: 6000,
+        // Start background reflection at 50% of threshold
+        bufferActivation: 0.5,
+        // Force synchronous reflection at 1.2x threshold
+        blockAfter: 1.2,
+      },
     },
   },
 });

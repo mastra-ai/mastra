@@ -37,7 +37,12 @@
  */
 
 import type { Agent, AgentExecutionOptions } from '@mastra/core/agent';
-import { prepareForDurableExecution, createDurableAgentStream, emitErrorEvent } from '@mastra/core/agent/durable';
+import {
+  prepareForDurableExecution,
+  createDurableAgentStream,
+  emitErrorEvent,
+  runDurableStreamUntilIdle,
+} from '@mastra/core/agent/durable';
 import type {
   AgentFinishEventData,
   AgentStepFinishEventData,
@@ -130,6 +135,16 @@ export interface InngestAgentStreamOptions<OUTPUT = undefined> {
   onError?: (error: Error) => void | Promise<void>;
   /** Callback when workflow suspends */
   onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
+  /**
+   * When set, `stream()` delegates to the idle-loop wrapper that keeps the
+   * outer stream open across background-task continuations.
+   *
+   * Pass `true` for default idle timeout (5 min), or `{ maxIdleMs }` to
+   * customise.
+   */
+  untilIdle?: boolean | { maxIdleMs?: number };
+  /** @internal */
+  _skipBgTaskWait?: boolean;
 }
 
 /**
@@ -356,6 +371,12 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   // Track mastra instance - can be set later when registered with Mastra
   let mastra: Mastra | undefined = mastraOption;
 
+  // Active untilIdle wrappers keyed by scope (threadId|resourceId)
+  const activeStreamUntilIdle = new Map<string, () => void>();
+
+  // Late-bound reference to the proxy so stream() can pass it to runDurableStreamUntilIdle
+  let proxyRef: InngestAgent<TOutput> | undefined;
+
   // Create the durable workflow for this agent
   // Mastra's addWorkflow handles deduplication, so creating multiple times is fine
   const workflow = createInngestDurableAgenticWorkflow({ inngest });
@@ -460,6 +481,16 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     },
 
     async stream(messages, streamOptions): Promise<InngestAgentStreamResult<TOutput>> {
+      // Delegate to the idle-loop wrapper when `untilIdle` is set.
+      if (streamOptions?.untilIdle) {
+        const { untilIdle, ...rest } = streamOptions;
+        const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
+        return runDurableStreamUntilIdle<TOutput>(proxyRef as any, messages, { ...rest, maxIdleMs } as any, {
+          activeStreams: activeStreamUntilIdle,
+          bgManager: mastra?.backgroundTaskManager,
+        }) as Promise<InngestAgentStreamResult<TOutput>>;
+      }
+
       // 1. Prepare for durable execution
       const preparation = await prepareForDurableExecution<TOutput>({
         agent: agent as Agent<string, any, TOutput>,
@@ -507,7 +538,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           provider: workflowInput.modelConfig.provider,
           streaming: true,
           parameters: {
-            temperature: workflowInput.options?.temperature,
+            temperature: workflowInput.options?.modelSettings?.temperature,
           },
         },
       });
@@ -721,7 +752,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   // Use a Proxy to forward any unknown property/method calls to the underlying agent
   // This ensures the InngestAgent has all Agent methods (getMemory, etc.) while
   // overriding stream() to use durable execution
-  return new Proxy(inngestAgent, {
+  const result = new Proxy(inngestAgent, {
     get(target, prop, receiver) {
       // First check if the property exists on our InngestAgent object
       if (prop in target) {
@@ -738,6 +769,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       return prop in target || prop in agent;
     },
   }) as InngestAgent<TOutput>;
+
+  // Assign the late-bound reference so stream()'s untilIdle path can use it
+  proxyRef = result;
+  return result;
 }
 
 // =============================================================================

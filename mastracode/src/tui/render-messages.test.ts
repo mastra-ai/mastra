@@ -669,10 +669,10 @@ describe('renderExistingMessages task tools', () => {
     expect(listActiveMessages).toHaveBeenCalledWith({ limit: 200 });
     expect(updateTasks).toHaveBeenCalledWith(expectedTasks);
     expect(setState).toHaveBeenCalledWith({ tasks: expectedTasks });
-    expect(visibleChildren(state)).toHaveLength(39);
+    expect(visibleChildren(state)).toHaveLength(40);
   });
 
-  it('renders no inline receipt when replaying repeated complete patches that finish the list', async () => {
+  it('renders inline receipts when replaying repeated complete patches that finish the list', async () => {
     const messages: HarnessMessage[] = [
       {
         id: 'assistant-1',
@@ -748,12 +748,14 @@ describe('renderExistingMessages task tools', () => {
 
     await renderExistingMessages(state);
 
-    // A fully-completed list leaves no inline receipt in the transcript.
-    expect(visibleChildren(state)).toHaveLength(0);
+    const rendered = visibleChildren(state).map(component => component.render(100).join('\n'));
+    expect(rendered).toHaveLength(3);
+    expect(rendered.join('\n')).toContain('Write tests');
+    expect(rendered.join('\n')).toContain('Tasks');
     expect(state.allToolComponents.map(component => (component as any).toolName)).toEqual([]);
   });
 
-  it('renders no inline receipt when replaying repeated completed task writes', async () => {
+  it('renders completed task receipts when replaying repeated completed task writes', async () => {
     const completedTasks = [{ id: 'tests', content: 'Write tests', status: 'completed', activeForm: 'Writing tests' }];
     const messages: HarnessMessage[] = [
       {
@@ -806,8 +808,9 @@ describe('renderExistingMessages task tools', () => {
 
     await renderExistingMessages(state);
 
-    // A fully-completed list leaves no inline receipt in the transcript.
-    expect(visibleChildren(state)).toHaveLength(0);
+    const rendered = visibleChildren(state).map(component => component.render(100).join('\n'));
+    expect(rendered).toHaveLength(2);
+    expect(rendered.join('\n')).toContain('Write tests');
     expect(state.allToolComponents.map(component => (component as any).toolName)).toEqual([]);
   });
 
@@ -838,5 +841,82 @@ describe('renderExistingMessages task tools', () => {
     expect(updateTasks).not.toHaveBeenCalled();
     expect(setState).not.toHaveBeenCalled();
     expect(restoreDisplayTasks).not.toHaveBeenCalled();
+  });
+});
+
+describe('renderExistingMessages submit_plan approval status', () => {
+  it('renders rejected plan as "Changes requested", not "Approved"', async () => {
+    const state = createState();
+    (state.session.thread.listActiveMessages as any).mockResolvedValue([
+      {
+        id: 'msg-1',
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool_call',
+            id: 'call-1',
+            name: 'submit_plan',
+            args: { title: 'My Plan', plan: 'Step 1\nStep 2' },
+          },
+          {
+            type: 'tool_result',
+            id: 'call-1',
+            result: {
+              content:
+                'Plan was not approved. The user wants revisions.\n\nUser feedback: Add more tests\n\nPlease revise the plan based on the feedback and submit again with submit_plan.',
+            },
+            isError: false,
+          },
+        ],
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+    ]);
+
+    await renderExistingMessages(state);
+
+    const rendered = visibleChildren(state)
+      .map(c => (c as any).render?.(120) ?? [])
+      .flat()
+      .join('\n');
+    // Should NOT contain "Approved" — the plan was rejected
+    expect(rendered).not.toContain('Approved');
+    // Should contain "Changes requested"
+    expect(rendered).toContain('Changes requested');
+    // Should restore previousPlanSnapshot for future diff computation
+    expect(state.previousPlanSnapshot).toEqual({ title: 'My Plan', plan: 'Step 1\nStep 2' });
+  });
+
+  it('renders approved plan as "Approved"', async () => {
+    const state = createState();
+    (state.session.thread.listActiveMessages as any).mockResolvedValue([
+      {
+        id: 'msg-1',
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool_call',
+            id: 'call-1',
+            name: 'submit_plan',
+            args: { title: 'My Plan', plan: 'Step 1\nStep 2' },
+          },
+          {
+            type: 'tool_result',
+            id: 'call-1',
+            result: { content: 'Plan approved. Proceed with implementation following the approved plan.' },
+            isError: false,
+          },
+        ],
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+    ]);
+
+    await renderExistingMessages(state);
+
+    const rendered = visibleChildren(state)
+      .map(c => (c as any).render?.(120) ?? [])
+      .flat()
+      .join('\n');
+    expect(rendered).toContain('Approved');
+    expect(rendered).not.toContain('Changes requested');
   });
 });

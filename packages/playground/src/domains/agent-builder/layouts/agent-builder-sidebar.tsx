@@ -1,5 +1,8 @@
-import { AgentIcon, LogoWithoutText, MainSidebar, cn, useMainSidebar } from '@mastra/playground-ui';
-import type { NavLink } from '@mastra/playground-ui';
+import { AgentIcon } from '@mastra/playground-ui';
+import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
+import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import type { NavLink } from '@mastra/playground-ui/components/MainSidebar';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Blocks, LibraryIcon, ServerCogIcon, StarIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLocation } from 'react-router';

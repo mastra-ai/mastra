@@ -1,4 +1,6 @@
-import { Txt, Icon, cn } from '@mastra/playground-ui';
+import { Icon } from '@mastra/playground-ui';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
 
 export type SectionHeaderProps = {
   title: React.ReactNode;

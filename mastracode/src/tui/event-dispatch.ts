@@ -148,6 +148,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       // Clear per-thread ephemeral state first so renderExistingMessages
       // and other downstream observers see clean state.
       await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+      state.previousPlanSnapshot = undefined;
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
         state.ui.requestRender();
@@ -206,6 +207,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       }
       // Clear per-thread ephemeral state so new threads start clean.
       await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+      state.previousPlanSnapshot = undefined;
       if (state.taskProgress) {
         state.taskProgress.updateTasks([]);
       }
@@ -360,14 +362,13 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
           state.taskToolInsertIndex = -1;
         }
 
-        // When every task is completed the pinned list hides itself (the agent
-        // narrates completion), so we don't leave a redundant completed-task
-        // receipt in the transcript that reads like a second live list. We only
-        // render an inline receipt when the list is explicitly cleared.
         const previousTasks = state.session.displayState.get().previousTasks;
-        if (previousTasks.length > 0 && (!tasks || tasks.length === 0)) {
-          // Tasks were cleared
+        if (tasks?.length > 0 && tasks.every(task => task.status === 'completed')) {
+          ectx.renderCompletedTasksInline(tasks, insertIndex);
+        } else if (previousTasks.length > 0 && (!tasks || tasks.length === 0)) {
           ectx.renderClearedTasksInline(previousTasks, insertIndex);
+        } else if (tasks?.length > 0) {
+          ectx.renderTaskDeltaInline(previousTasks, tasks, insertIndex);
         }
 
         state.ui.requestRender();

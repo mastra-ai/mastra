@@ -1,5 +1,7 @@
-import { JSONSchemaForm, jsonSchemaToFields, ScrollArea } from '@mastra/playground-ui';
-import type { JsonSchema, SchemaField } from '@mastra/playground-ui';
+import type { JsonSchema } from '@mastra/playground-ui';
+import { JSONSchemaForm, jsonSchemaToFields } from '@mastra/playground-ui/components/JSONSchemaForm';
+import type { SchemaField } from '@mastra/playground-ui/components/JSONSchemaForm';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Plus, PlusIcon } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';

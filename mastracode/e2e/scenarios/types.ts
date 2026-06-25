@@ -5,12 +5,14 @@ import type { MastraTUIOptions } from '../../src/tui/index.js';
 
 export type ScenarioName =
   | 'startup'
+  | 'abort-followup'
   | 'branch-context-long-name'
   | 'active-signal-followup'
   | 'autocomplete-wrapping-navigation'
   | 'api-key-delete-env'
   | 'api-key-multi-provider-delete'
   | 'api-key-prompt'
+  | 'api-key-reopen-stored'
   | 'ask-user-advanced-prompts'
   | 'automated-chat'
   | 'browser-active-pending-status'
@@ -50,6 +52,7 @@ export type ScenarioName =
   | 'openai-strict-schema'
   | 'plan-approval-goal-handoff'
   | 'plan-approval-handoff'
+  | 'plan-approval-request-changes'
   | 'persistent-goal-commands'
   | 'persistent-goal-judge-decision'
   | 'persistent-goal-reload'
@@ -117,13 +120,18 @@ export type ScenarioName =
   | 'thread-history'
   | 'tool-history-reload'
   | 'tool-schema-compat'
+  | 'tool-suspension-same-run-resume'
   | 'update-command-prompt'
   | 'update-startup-prompt'
   | 'web-search-rendering'
   | 'workspace-commands'
   | 'workspace-plan-mode-tools'
   | 'workspace-tool-names'
-  | 'workspace-tool-output-rendering';
+  | 'workspace-tool-output-rendering'
+  | 'worktree-cross-thread-resume'
+  | 'worktree-thread-scoping'
+  | 'resourceid-drift-prompt-accept'
+  | 'resourceid-drift-prompt-decline';
 
 export type McE2eTerminal = {
   getByText: (text: string | RegExp, options?: { full?: boolean; strict?: boolean }) => any;

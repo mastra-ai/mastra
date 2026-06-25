@@ -1,7 +1,9 @@
+import { abortFollowupScenario } from './abort-followup.js';
 import { activeSignalFollowupScenario } from './active-signal-followup.js';
 import { apiKeyDeleteEnvScenario } from './api-key-delete-env.js';
 import { apiKeyMultiProviderDeleteScenario } from './api-key-multi-provider-delete.js';
 import { apiKeyPromptScenario } from './api-key-prompt.js';
+import { apiKeyReopenStoredScenario } from './api-key-reopen-stored.js';
 import { askUserAdvancedPromptsScenario } from './ask-user-advanced-prompts.js';
 import { autocompleteWrappingNavigationScenario } from './autocomplete-wrapping-navigation.js';
 import { automatedChatScenario } from './automated-chat.js';
@@ -69,6 +71,7 @@ import { persistentGoalJudgeDecisionScenario } from './persistent-goal-judge-dec
 import { persistentGoalReloadScenario } from './persistent-goal-reload.js';
 import { planApprovalGoalHandoffScenario } from './plan-approval-goal-handoff.js';
 import { planApprovalHandoffScenario } from './plan-approval-handoff.js';
+import { planApprovalRequestChangesScenario } from './plan-approval-request-changes.js';
 import { processShortcutsScenario } from './process-shortcuts.js';
 import { promptContextInstructionsScenario } from './prompt-context-instructions.js';
 import { promptQueueInterleaveScenario } from './prompt-queue-interleave.js';
@@ -78,6 +81,8 @@ import { quietSettingsScenario } from './quiet-settings.js';
 import { quietToolHistoryParityScenario } from './quiet-tool-history-parity.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
 import { requestAccessModalScenario } from './request-access-modal.js';
+import { resourceidDriftPromptAcceptScenario } from './resourceid-drift-prompt-accept.js';
+import { resourceidDriftPromptDeclineScenario } from './resourceid-drift-prompt-decline.js';
 import { settingsApiKeysNavigationScenario } from './settings-api-keys-navigation.js';
 import { settingsStartupModelRestoreScenario } from './settings-startup-model-restore.js';
 import { setupCompletionPersistenceScenario } from './setup-completion-persistence.js';
@@ -110,6 +115,7 @@ import { taskPromptContextNextTurnScenario } from './task-prompt-context-next-tu
 import { threadHistoryScenario } from './thread-history.js';
 import { toolHistoryReloadScenario } from './tool-history-reload.js';
 import { toolSchemaCompatScenario } from './tool-schema-compat.js';
+import { toolSuspensionSameRunResumeScenario } from './tool-suspension-same-run-resume.js';
 import type { McE2eScenario, ScenarioName } from './types.js';
 import { updateCommandPromptScenario } from './update-command-prompt.js';
 import { updateStartupPromptScenario } from './update-startup-prompt.js';
@@ -119,17 +125,21 @@ import { workspaceCommandsScenario } from './workspace-commands.js';
 import { workspacePlanModeToolsScenario } from './workspace-plan-mode-tools.js';
 import { workspaceToolNamesScenario } from './workspace-tool-names.js';
 import { workspaceToolOutputRenderingScenario } from './workspace-tool-output-rendering.js';
+import { worktreeCrossThreadResumeScenario } from './worktree-cross-thread-resume.js';
+import { worktreeThreadScopingScenario } from './worktree-thread-scoping.js';
 
 export type { McE2eScenario, McE2eScenarioRuntime, ScenarioName } from './types.js';
 
 export const scenarios: Record<ScenarioName, McE2eScenario> = {
   startup: startupScenario,
+  'abort-followup': abortFollowupScenario,
   'branch-context-long-name': branchContextLongNameScenario,
   'active-signal-followup': activeSignalFollowupScenario,
   'autocomplete-wrapping-navigation': autocompleteWrappingNavigationScenario,
   'api-key-delete-env': apiKeyDeleteEnvScenario,
   'api-key-multi-provider-delete': apiKeyMultiProviderDeleteScenario,
   'api-key-prompt': apiKeyPromptScenario,
+  'api-key-reopen-stored': apiKeyReopenStoredScenario,
   'ask-user-advanced-prompts': askUserAdvancedPromptsScenario,
   'automated-chat': automatedChatScenario,
   'browser-active-pending-status': browserActivePendingStatusScenario,
@@ -196,6 +206,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'persistent-goal-reload': persistentGoalReloadScenario,
   'plan-approval-goal-handoff': planApprovalGoalHandoffScenario,
   'plan-approval-handoff': planApprovalHandoffScenario,
+  'plan-approval-request-changes': planApprovalRequestChangesScenario,
   'process-shortcuts': processShortcutsScenario,
   'provider-history-compat': providerHistoryCompatScenario,
   'provider-history-rejection-retry': providerHistoryRejectionRetryScenario,
@@ -236,6 +247,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'thread-history': threadHistoryScenario,
   'tool-history-reload': toolHistoryReloadScenario,
   'tool-schema-compat': toolSchemaCompatScenario,
+  'tool-suspension-same-run-resume': toolSuspensionSameRunResumeScenario,
   'update-command-prompt': updateCommandPromptScenario,
   'update-startup-prompt': updateStartupPromptScenario,
   'web-search-rendering': webSearchRenderingScenario,
@@ -243,6 +255,10 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'workspace-plan-mode-tools': workspacePlanModeToolsScenario,
   'workspace-tool-names': workspaceToolNamesScenario,
   'workspace-tool-output-rendering': workspaceToolOutputRenderingScenario,
+  'resourceid-drift-prompt-accept': resourceidDriftPromptAcceptScenario,
+  'resourceid-drift-prompt-decline': resourceidDriftPromptDeclineScenario,
+  'worktree-cross-thread-resume': worktreeCrossThreadResumeScenario,
+  'worktree-thread-scoping': worktreeThreadScopingScenario,
 };
 
 export function getScenario(name: ScenarioName): McE2eScenario {

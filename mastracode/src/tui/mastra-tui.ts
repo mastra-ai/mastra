@@ -56,7 +56,9 @@ import {
   addUserMessage,
   removePendingUserMessage,
   renderClearedTasksInline,
+  renderCompletedTasksInline,
   renderExistingMessages,
+  renderTaskDeltaInline,
 } from './render-messages.js';
 import {
   setupKeyboardShortcuts,
@@ -99,6 +101,11 @@ const USER_SIGNAL_DELIVERY_OPTIONS: {
 } = {
   ifActive: { attributes: { delivery: 'while-active' } },
   ifIdle: { attributes: { delivery: 'message' } },
+};
+
+const USER_MESSAGE_APPROVAL_INTERRUPT = {
+  reason: 'interrupted_by_user_message',
+  message: 'The pending tool approval was declined because the user sent a new message.',
 };
 
 /** How often to recheck for updates during a long-running session (ms). */
@@ -461,6 +468,10 @@ export class MastraTUI {
 
     const send = () => {
       this.clearIdleCounter();
+      if (hasActiveRun) {
+        this.state.pendingApprovalDismiss?.(USER_MESSAGE_APPROVAL_INTERRUPT);
+      }
+
       const signal = this.state.session.sendSignal({
         content: this.createUserSignalContent(content, images),
         ...USER_SIGNAL_DELIVERY_OPTIONS,
@@ -557,9 +568,6 @@ export class MastraTUI {
     await this.state.harness.init();
     await this.state.harness.getMastra()?.startWorkers();
 
-    // Check for existing threads and prompt for resume
-    await promptForThreadSelection(this.state);
-
     // Load custom slash commands
     await loadCustomSlashCommands(this.state);
 
@@ -579,6 +587,12 @@ export class MastraTUI {
       doubleCtrlCMs: MastraTUI.DOUBLE_CTRL_C_MS,
     });
 
+    // Start the UI before thread selection so resource-drift prompts can render.
+    this.state.ui.start();
+
+    // Check for existing threads and prompt for resume
+    await promptForThreadSelection(this.state);
+
     // Subscribe to harness events
     subscribeToHarness(this.state, event => this.handleEvent(event));
     // Restore escape-as-cancel setting from persisted state
@@ -596,8 +610,6 @@ export class MastraTUI {
     // promptForThreadSelection fired before we subscribed above.
     await syncInitialThreadState(this.state);
 
-    // Start the UI
-    this.state.ui.start();
     this.state.isInitialized = true;
 
     // Start MCP connections now that the TUI owns the terminal.
@@ -1093,6 +1105,10 @@ export class MastraTUI {
       renderExistingMessages: () => this.renderExistingMessagesAndSeedIdleCounter(),
       renderClearedTasksInline: (clearedTasks, insertIndex) =>
         renderClearedTasksInline(this.state, clearedTasks, insertIndex),
+      renderCompletedTasksInline: (completedTasks, insertIndex) =>
+        renderCompletedTasksInline(this.state, completedTasks, insertIndex),
+      renderTaskDeltaInline: (previousTasks, nextTasks, insertIndex) =>
+        renderTaskDeltaInline(this.state, previousTasks, nextTasks, insertIndex),
       refreshModelAuthStatus: () => this.refreshModelAuthStatus(),
     };
   }

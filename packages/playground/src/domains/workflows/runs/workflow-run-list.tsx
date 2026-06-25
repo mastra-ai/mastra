@@ -1,8 +1,17 @@
-import { AlertDialog, Icon, Skeleton, Spinner, Txt } from '@mastra/playground-ui';
+import { Icon } from '@mastra/playground-ui';
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import {
+  ThreadList,
+  ThreadListEmpty,
+  ThreadListItem,
+  ThreadListItems,
+} from '@mastra/playground-ui/components/ThreadList';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { formatDate } from 'date-fns';
 import { useState } from 'react';
 import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
-import { ThreadList, ThreadListEmpty, ThreadListItem, ThreadListItems } from '@/components/thread-list';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useDeleteWorkflowRun, useWorkflowRuns } from '@/hooks/use-workflow-runs';
 import { useLinkComponent } from '@/lib/framework';
@@ -82,7 +91,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
 
                   return (
                     <ThreadListItem
-                      key={run.runId}
+                      key={`run-${run.runId}`}
                       as={Link}
                       to={paths.workflowRunLink(workflowId, run.runId)}
                       isActive={isActiveRun}

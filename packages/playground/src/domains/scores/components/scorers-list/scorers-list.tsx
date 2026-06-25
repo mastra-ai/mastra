@@ -1,5 +1,10 @@
 import type { GetScorerResponse } from '@mastra/client-js';
-import { Chip, DataList as EntityList, DataListSkeleton as EntityListSkeleton, AgentIcon } from '@mastra/playground-ui';
+import { AgentIcon } from '@mastra/playground-ui';
+import { Chip } from '@mastra/playground-ui/components/Chip';
+import {
+  DataList as EntityList,
+  DataListSkeleton as EntityListSkeleton,
+} from '@mastra/playground-ui/components/DataList';
 import { WorkflowIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLinkComponent } from '@/lib/framework';

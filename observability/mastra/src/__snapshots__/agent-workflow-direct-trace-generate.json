@@ -428,7 +428,7 @@
                   },
                   {
                     "role": "tool",
-                    "content": "[tool: workflow-simpleWorkflow]"
+                    "content": { "__any__": "string" }
                   }
                 ],
                 "output": {

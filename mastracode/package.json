@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.24.0",
+  "version": "0.25.1-alpha.2",
   "description": "",
   "type": "module",
   "files": [
@@ -42,6 +42,16 @@
         "default": "./dist/tui.cjs"
       }
     },
+    "./acp": {
+      "import": {
+        "types": "./dist/acp.d.ts",
+        "default": "./dist/acp.js"
+      },
+      "require": {
+        "types": "./dist/acp.d.ts",
+        "default": "./dist/acp.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -60,6 +70,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
+    "@agentclientprotocol/sdk": "^0.21.0",
     "@ai-sdk/anthropic": "^3.0.82",
     "@ai-sdk/openai": "^3.0.63",
     "@ai-sdk/openai-compatible": "^2.0.47",

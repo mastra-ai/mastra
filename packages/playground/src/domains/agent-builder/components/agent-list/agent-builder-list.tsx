@@ -1,5 +1,8 @@
 import type { StoredAgentResponse } from '@mastra/client-js';
-import { Avatar, EmptyState, Icon, Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui';
+import { Icon } from '@mastra/playground-ui';
+import { Avatar } from '@mastra/playground-ui/components/Avatar';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { LockIcon, SearchIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { FavoriteButton } from './favorite-button';

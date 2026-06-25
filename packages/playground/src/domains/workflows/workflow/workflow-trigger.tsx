@@ -1,6 +1,12 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
 import type { WorkflowRunStatus } from '@mastra/core/workflows';
-import { ScrollArea, Skeleton, Txt, Icon, Badge, WorkflowIcon, toast, Switch, CopyButton } from '@mastra/playground-ui';
+import { Icon, WorkflowIcon, toast } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Switch } from '@mastra/playground-ui/components/Switch';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Loader2 } from 'lucide-react';
 import { useState, useEffect, useContext, useRef } from 'react';
 import { WorkflowRequestContextDialog } from '../components/workflow-request-context-dialog';
@@ -10,6 +16,7 @@ import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useSuspendedSteps, useWorkflowSchemas } from './use-workflow-trigger';
 import { WorkflowCancelButton } from './workflow-cancel-button';
+import { WorkflowDebugStepControls } from './workflow-debug-step-controls';
 import { WorkflowJsonDialog } from './workflow-json-dialog';
 import { WorkflowTriggerForm } from './workflow-trigger-form';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
@@ -236,6 +243,10 @@ export function WorkflowTrigger({
   const { zodSchemaToUse, hasStateSchema } = useWorkflowSchemas(workflow);
 
   const hasFinished = ['success', 'failed', 'canceled', 'bailed'].includes(streamResultToUse?.status ?? '');
+  // A run only reaches the 'paused' status when it was started in per-step (debug) mode, so a
+  // paused run always exposes the step controls — including when viewing a paused run directly
+  // on its :runId page, where the in-memory debugMode flag starts out false.
+  const isPausedDebug = streamResultToUse?.status === 'paused';
 
   const handleExecuteWorkflow = async (data: any) => {
     try {
@@ -337,8 +348,8 @@ export function WorkflowTrigger({
                 setPayload(data);
                 void handleExecuteWorkflow(data);
               }}
-              isViewingRun={!!paramsRunId || hasFinished}
-              isReadOnly={!!paramsRunId || hasFinished || isSuspendedSteps}
+              isViewingRun={!!paramsRunId || hasFinished || isPausedDebug}
+              isReadOnly={!!paramsRunId || hasFinished || isSuspendedSteps || isPausedDebug}
               disableSubmit={isSuspendedSteps}
               isProcessorWorkflow={workflow?.isProcessorWorkflow}
               collapsible={false}
@@ -387,10 +398,16 @@ export function WorkflowTrigger({
           </div>
         )}
 
-        {(result?.status === 'running' || isSuspendedSteps) && (
+        {isPausedDebug && (
+          <div className="px-5 pb-4 pt-3">
+            <WorkflowDebugStepControls isStreaming={isStreamingWorkflow} />
+          </div>
+        )}
+
+        {(streamResultToUse?.status === 'running' || isSuspendedSteps || isPausedDebug) && (
           <div data-testid="workflow-cancel-action" className="px-5 pb-4 pt-3">
             <WorkflowCancelButton
-              status={isSuspendedSteps ? 'suspended' : result?.status}
+              status={isSuspendedSteps ? 'suspended' : streamResultToUse?.status}
               cancelMessage={cancelResponse?.message ?? null}
               isCancelling={isCancellingWorkflowRun}
               onCancel={handleCancelWorkflowRun}
