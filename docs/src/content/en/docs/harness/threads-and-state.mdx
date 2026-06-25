@@ -138,6 +138,8 @@ The resource ID is part of a conversation's identity, so you read it from the Se
 const resourceId = harness.session.identity.getResourceId()
 ```
 
+The session also has a stable `id` and `ownerId` (read with `session.identity.getId()` and `session.identity.getOwnerId()`). Unlike the resource ID, these don't change when you switch resources — see [Session identity](/docs/harness/session#identity) for details.
+
 ## Related
 
 - [Harness overview](/docs/harness/overview)

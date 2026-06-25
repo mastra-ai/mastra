@@ -1,11 +1,10 @@
 // @vitest-environment jsdom
-import type * as PlaygroundUi from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { Children, isValidElement } from 'react';
-import type { PropsWithChildren } from 'react';
+import type { ChangeEvent, PropsWithChildren } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AddTraceMocksToItemDialog } from '../add-trace-mocks-to-item-dialog';
@@ -23,9 +22,7 @@ const BASE_URL = 'http://localhost:4111';
 // Thin stubs for heavy playground-ui primitives (Radix Select / SideDialog / CodeMirror
 // editor) so the test stays deterministic in jsdom. The real client, React Query, data
 // hooks and the dialog's own logic all run unmocked against MSW.
-vi.mock('@mastra/playground-ui', async importOriginal => {
-  const actual = await importOriginal<typeof PlaygroundUi>();
-
+vi.mock('@mastra/playground-ui/components/Select', () => {
   type SelectStubProps = PropsWithChildren<{
     value?: string;
     onValueChange?: (v: string) => void;
@@ -40,10 +37,6 @@ vi.mock('@mastra/playground-ui', async importOriginal => {
   );
 
   return {
-    ...actual,
-    CodeEditor: ({ value, onChange }: { value?: string; onChange?: (v: string) => void }) => (
-      <textarea data-testid="code-editor" value={value ?? ''} onChange={e => onChange?.(e.target.value)} />
-    ),
     // Render a native <select> seeded from SelectItem options so tests can choose by value.
     Select: ({ value, onValueChange, disabled, children }: SelectStubProps) => (
       <select
@@ -62,6 +55,16 @@ vi.mock('@mastra/playground-ui', async importOriginal => {
     SelectItem,
   };
 });
+
+vi.mock('@uiw/react-codemirror', () => ({
+  default: ({ value, onChange }: { value?: string; onChange?: (value: string) => void }) => (
+    <textarea
+      data-testid="code-editor"
+      value={value ?? ''}
+      onChange={(event: ChangeEvent<HTMLTextAreaElement>) => onChange?.(event.target.value)}
+    />
+  ),
+}));
 
 vi.mock('@mastra/playground-ui/components/SideDialog', () => ({
   SideDialog: Object.assign(

@@ -1,4 +1,5 @@
-import { Button, Icon } from '@mastra/playground-ui';
+import { Icon } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { FileText, X, Copy, Check } from 'lucide-react';
 

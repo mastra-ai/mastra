@@ -1,17 +1,11 @@
 'use client';
 
 import type { DatasetItemToolMock } from '@mastra/client-js';
-import {
-  Button,
-  CodeEditor,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogBody,
-  Label,
-  toast,
-} from '@mastra/playground-ui';
+import { toast } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
+import { Label } from '@mastra/playground-ui/components/Label';
 import { useState } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 

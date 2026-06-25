@@ -1,5 +1,150 @@
 # @mastra/core
 
+## 1.47.0-alpha.2
+
+### Minor Changes
+
+- Resolve all Harness models through gateways. The Harness now builds its available-models catalog, model auth status, mode agents, Observational Memory models, and subagents from the gateways you register, instead of the separate `resolveModel`, `customModelCatalogProvider`, and `modelAuthChecker` config hooks. Removed those three options from `HarnessConfig` (and the `ModelAuthChecker` type) — register a gateway via `gateways` instead. ([#18382](https://github.com/mastra-ai/mastra/pull/18382))
+
+  `listAvailableModels()` and `getCurrentModelAuthStatus()` are now sourced entirely from gateways: model discovery comes from each gateway's `fetchProviders()` (a network call for gateways like models.dev and Netlify), and auth status is resolved through the same gateway chain the model router uses at run time (`resolveAuth()`, falling back to `getApiKey()`). There is no static provider-registry fallback — everything the model picker shows comes from a gateway.
+
+  The gateway-chain operations shared by `ModelRouterLanguageModel` and the Harness (gateway merging, model→gateway selection, auth resolution, provider/model listing) are now centralized in a new `GatewayManager` class exported from `@mastra/core`. Both consumers delegate to it, eliminating duplicated logic. `defaultGateways` is still re-exported from the same paths for backward compatibility.
+
+- **Gates and verdict for `runEvals`** ([#18394](https://github.com/mastra-ai/mastra/pull/18394))
+
+  New optional `gates` field accepts scorers that must score 1.0 for the run to pass. Scorers can now use a `{ scorer, threshold }` form to set pass/fail thresholds. `threshold` accepts a number (minimum) or `{ min, max }` for range-based checks (e.g. hallucination where high = bad). The result includes `verdict`, `gateResults`, and `thresholdResults`. Fully backward compatible.
+
+  ```ts
+  import { runEvals } from '@mastra/core/evals';
+  import { checks } from '@mastra/evals/checks';
+
+  const result = await runEvals({
+    data: [{ input: 'What is the weather?' }],
+    target: weatherAgent,
+    gates: [checks.calledTool('get_weather')],
+    scorers: [
+      { scorer: faithfulnessScorer, threshold: 0.7 },
+      { scorer: hallucinationScorer, threshold: { max: 0.3 } },
+    ],
+  });
+
+  result.verdict; // 'passed' | 'scored' | 'failed'
+  ```
+
+- Added `waitUntil` support for channels so background agent runs survive serverless responses. ([#17832](https://github.com/mastra-ai/mastra/pull/17832))
+
+  Without `waitUntil`, the runtime freezes the invocation as soon as the webhook response returns, killing the agent run mid-flight and leaving the user with no reply.
+
+  **Auto-detected (no config needed):**
+  - **Cloudflare Workers** — reads `c.executionCtx.waitUntil`
+  - **Netlify Functions** — reads `c.env.context.waitUntil`
+
+  **Requires explicit config:**
+
+  Vercel needs a `waitUntil` function passed directly because it exposes `waitUntil` via AsyncLocalStorage, not the request context. AWS Lambda doesn't need `waitUntil` — it waits for the event loop to drain naturally.
+
+  ```ts
+  import { waitUntil } from '@vercel/functions';
+  import { SlackProvider } from '@mastra/slack';
+
+  new SlackProvider({ waitUntil });
+  ```
+
+  ```ts
+  new Agent({
+    channels: {
+      adapters: { slack: createSlackAdapter({ ... }) },
+      waitUntil,
+    },
+  });
+  ```
+
+  For runtimes where `waitUntil` lives on the request context but isn't covered by the default, pass `resolveWaitUntil: (c) => fn | undefined` instead.
+
+  ```ts
+  new Agent({
+    channels: {
+      adapters: { slack: createSlackAdapter({ ... }) },
+      resolveWaitUntil: c => c.var.runtime?.waitUntil,
+    },
+  });
+  ```
+
+  Resolution order: `waitUntil` → `resolveWaitUntil(c)` → core default.
+
+### Patch Changes
+
+- Fixed channel rendering on serverless runtimes (Vercel, AWS Lambda, Cloudflare Workers, Netlify). ([#17832](https://github.com/mastra-ai/mastra/pull/17832))
+
+  **No more duplicate replies.** On serverless, the same webhook event can be processed by multiple concurrent invocations. Previously each one rendered the agent reply independently, producing duplicate messages. Now only the invocation that wins the run lease renders — losers resolve cleanly without posting.
+
+  **Runs no longer get killed mid-flight.** The channel handler now keeps the serverless invocation alive until the agent run finishes, instead of returning immediately and relying on a background subscription that gets frozen.
+
+  **Multi-step replies fully render.** Agents that make multiple LLM calls per run (e.g. tool use → follow-up) now render every step's text instead of only the first.
+
+  **Tool approval buttons now appear on all rendering paths.** Previously, tool approval prompts (approve/deny buttons) could fail to render when using output processors. Fixed by routing `tool-call-approval` chunks through the output processor pipeline.
+
+  **Tool approval and decline use the same rendering path as regular messages.** Approval and decline actions now flow through the per-run output processor instead of a separate subscription-based path, making rendering consistent across all message types.
+
+  **User output processors now run before channel rendering.** User-configured output processors (e.g. PII redaction, translation) now transform chunks before the channel renders them to the platform, instead of after.
+
+  **Concurrency strategy switched to `concurrent`.** The chat-sdk queue lock could get stuck in frozen serverless invocations. Ordering is now handled by the signals/lease layer, removing the stale-lock failure mode.
+
+- Update provider registry and model documentation with latest models and providers ([`7c9dd77`](https://github.com/mastra-ai/mastra/commit/7c9dd77bd18cb8dc72797e25f1a0fbdc71a11347))
+
+- Plan rejection now returns distinct tool results for inline-feedback vs. chat-based revision paths, enabling the TUI to stop the agent and wait for user chat messages. ([#18323](https://github.com/mastra-ai/mastra/pull/18323))
+
+- Fixed thread auto-resume selecting the wrong thread in git worktrees by scoping startup selection to threads tagged with the current project path. When Mastra Code detects a matching project thread on a different resource after resourceId drift, it now prompts before cloning and resuming that thread under the current resource; accepting the prompt leaves the old thread untouched and loads the clone, while declining starts fresh and leaves the old resource untouched. ([#18333](https://github.com/mastra-ai/mastra/pull/18333))
+
+- Fixed semantic recall not injecting recalled messages into the prompt when chatting through Studio. User messages sent through the agent signal pipeline (used by the Studio playground) were stored as signal rows and skipped when extracting the recall query, so recalled context never reached the model even though retrieval worked and the same request succeeded via the HTTP API. Fixes [#17797](https://github.com/mastra-ai/mastra/issues/17797) ([#17818](https://github.com/mastra-ai/mastra/pull/17818))
+
+## 1.46.1-alpha.1
+
+### Patch Changes
+
+- Forward the parent `abortSignal` to delegated subagents so that aborting a supervisor's `stream()` or `generate()` call cancels in-flight subagents instead of letting them run to completion. ([#17561](https://github.com/mastra-ai/mastra/pull/17561))
+
+  Previously, calling `AbortController.abort()` on a supervisor only stopped the supervisor itself: each delegated subagent kept looping and calling its own tools and the LLM for several seconds after the abort, because the delegation tool dropped the parent's `abortSignal`. The signal is now propagated to every delegation path (`stream`, `generate`, `resumeStream`, `resumeGenerate`, and the legacy variants).
+
+  ```typescript
+  const controller = new AbortController();
+
+  const stream = await supervisor.stream('Research AI trends', {
+    abortSignal: controller.signal,
+  });
+
+  // Now also cancels any in-flight subagents, not just the supervisor
+  controller.abort();
+  ```
+
+  Fixes #14820.
+
+- Added stable session `id` and `ownerId` to Harness sessions. `SessionIdentity` now exposes `getId()` and `getOwnerId()`, and `harness.createSession()` accepts `id` and `ownerId` to set them. These identifiers are stable for the life of the session — they do not change when the resource ID is switched — and are surfaced in the harness request context session snapshot. ([#18372](https://github.com/mastra-ai/mastra/pull/18372))
+
+  **Breaking change:** `id` and `ownerId` are now **required** on both `harness.createSession()` and the `Session`/`SessionIdentity` constructors. There are no defaults.
+
+  ```typescript
+  // Before
+  const session = new Session({ resourceId: 'my-resource' });
+  const session = await harness.createSession();
+
+  // After
+  const session = new Session({
+    resourceId: 'my-resource',
+    id: 'my-session-id',
+    ownerId: 'my-owner-id',
+  });
+  const session = await harness.createSession({
+    id: 'my-session-id',
+    ownerId: 'my-owner-id',
+  });
+
+  session.identity.getId(); // 'my-session-id'
+  session.identity.getOwnerId(); // 'my-owner-id'
+  ```
+
+- Removed experimental flag from retrieval-mode observational memory. The retrieval API is now stable. ([#18324](https://github.com/mastra-ai/mastra/pull/18324))
+
 ## 1.46.1-alpha.0
 
 ### Patch Changes

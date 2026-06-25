@@ -1,5 +1,14 @@
 # @mastra/redis
 
+## 1.2.1-alpha.0
+
+### Patch Changes
+
+- `nodeRedisPreset` now adapts the three list operations (`llen`, `rpush`, `lrange`) to their camelCase forms on `node-redis` v4+ clients (`lLen`, `rPush`, `lRange`). Extends the same adapter pattern already used for `set` and `scan`. ioredis and Upstash users are unaffected (defaults remain lowercase, matching their APIs). ([#18408](https://github.com/mastra-ai/mastra/pull/18408))
+
+- Updated dependencies [[`7f9ae70`](https://github.com/mastra-ai/mastra/commit/7f9ae70826b047e5a66218f9e92f20e54a2d791f), [`1505c07`](https://github.com/mastra-ai/mastra/commit/1505c07603f6346bae12aa82f140e8b88ffea9ab), [`e940f09`](https://github.com/mastra-ai/mastra/commit/e940f099ef5d18b403e6f2b4937e086a4da857b1)]:
+  - @mastra/core@1.46.1-alpha.1
+
 ## 1.2.0
 
 ### Minor Changes

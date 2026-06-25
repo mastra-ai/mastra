@@ -1,6 +1,6 @@
 import type { AutoFormFieldProps } from '@autoform/react';
-import { Txt } from '@mastra/playground-ui';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import React from 'react';
 
 export const BooleanField: React.FC<AutoFormFieldProps> = ({ field, label, id, inputProps }) => (

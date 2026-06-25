@@ -1,16 +1,14 @@
+import { Icon } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import {
-  Button,
   Dialog,
   DialogBody,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  Icon,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Dialog';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { SlidersHorizontal } from 'lucide-react';
 import { useState } from 'react';
 import { WorkflowTracingRunOptions } from './workflow-tracing-run-options';

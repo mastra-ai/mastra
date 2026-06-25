@@ -1,21 +1,16 @@
 import type { DatasetItemToolMock } from '@mastra/client-js';
-import {
-  Button,
-  ButtonsGroup,
-  MainContentContent,
-  MainContentLayout,
-  PermissionDenied,
-  SessionExpired,
-  TextAndIcon,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-  toast,
-} from '@mastra/playground-ui';
+import { is401UnauthorizedError, is403ForbiddenError, toast } from '@mastra/playground-ui';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Column, Columns } from '@mastra/playground-ui/components/Columns';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { format } from 'date-fns';
 import {
   ArrowRightToLineIcon,

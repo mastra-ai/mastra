@@ -161,9 +161,35 @@
     "@mastra/vercel": "1.1.1"
   },
   "changesets": [
+    "agent-channels-serverless",
+    "automated-provider-registry-20260624-184624",
+    "blue-buckets-enjoy",
+    "bright-heads-carry",
+    "cuddly-teams-stay",
+    "empty-trains-burn",
     "fancy-planets-train",
+    "fix-code-agent-tools-clear",
+    "flat-turkeys-happen",
+    "gentle-banks-ask",
     "gentle-falcons-push",
+    "gentle-logs-pause",
     "green-birds-knock",
-    "serialize-evented-wflows-followup"
+    "humble-garlics-thank",
+    "mastracode-session-identity",
+    "mcp-header-env-expansion",
+    "otel-bridge-custom-providers",
+    "pgvector-numeric-filter-mixed-type",
+    "plan-mode-ux-redesign",
+    "redis-list-op-aliases",
+    "salty-sites-show",
+    "serialize-evented-wflows-followup",
+    "slack-provider-wait-until",
+    "soft-signals-move",
+    "soft-walls-think",
+    "stable-session-id-owner",
+    "tough-months-battle",
+    "voyage-context-4-embedding",
+    "wet-teeth-hammer",
+    "yellow-taxes-begin"
   ]
 }

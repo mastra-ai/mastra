@@ -1,4 +1,6 @@
-import { Badge, Button, Icon } from '@mastra/playground-ui';
+import { Icon } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
 
 import { ArrowRightIcon } from 'lucide-react';
 import { AgentStepContainer } from './agent-step-container';

@@ -78,9 +78,18 @@ export const submitPlanTool = createTool({
           };
         }
 
-        const feedback = resumeData.feedback ? `\n\nUser feedback: ${resumeData.feedback}` : '';
+        if (resumeData.feedback) {
+          return {
+            content: `Plan was not approved. The user wants revisions.\n\nUser feedback: ${resumeData.feedback}\n\nPlease revise the plan based on the feedback and submit again with submit_plan.`,
+            isError: false,
+          };
+        }
+
+        // No inline feedback — the user will provide revision instructions in
+        // their next chat message. Stop and wait for it.
         return {
-          content: `Plan was not approved. The user wants revisions.${feedback}\n\nPlease revise the plan based on the feedback and submit again with submit_plan.`,
+          content:
+            'Plan was not approved. The user will send revision instructions in their next message. Stop now and wait for the user to provide feedback before revising the plan.',
           isError: false,
         };
       }

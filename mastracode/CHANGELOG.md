@@ -1,5 +1,35 @@
 # mastracode
 
+## 0.25.1-alpha.2
+
+### Patch Changes
+
+- Fixed thread auto-resume selecting the wrong thread in git worktrees by scoping startup selection to threads tagged with the current project path. When Mastra Code detects a matching project thread on a different resource after resourceId drift, it now prompts before cloning and resuming that thread under the current resource; accepting the prompt leaves the old thread untouched and loads the clone, while declining starts fresh and leaves the old resource untouched. ([#18333](https://github.com/mastra-ai/mastra/pull/18333))
+
+- Resolve all Harness models through gateways. The Harness now builds its available-models catalog, model auth status, mode agents, Observational Memory models, and subagents from the gateways you register, instead of the separate `resolveModel`, `customModelCatalogProvider`, and `modelAuthChecker` config hooks. Removed those three options from `HarnessConfig` (and the `ModelAuthChecker` type) — register a gateway via `gateways` instead. ([#18382](https://github.com/mastra-ai/mastra/pull/18382))
+
+  `listAvailableModels()` and `getCurrentModelAuthStatus()` are now sourced entirely from gateways: model discovery comes from each gateway's `fetchProviders()` (a network call for gateways like models.dev and Netlify), and auth status is resolved through the same gateway chain the model router uses at run time (`resolveAuth()`, falling back to `getApiKey()`). There is no static provider-registry fallback — everything the model picker shows comes from a gateway.
+
+  The gateway-chain operations shared by `ModelRouterLanguageModel` and the Harness (gateway merging, model→gateway selection, auth resolution, provider/model listing) are now centralized in a new `GatewayManager` class exported from `@mastra/core`. Both consumers delegate to it, eliminating duplicated logic. `defaultGateways` is still re-exported from the same paths for backward compatibility.
+
+- Improved plan mode UX: "Request changes" stops the agent via processor-based abort and lets you provide revision feedback via chat. Plan resubmissions show a diff of what changed. Plans save to title-derived filenames (e.g. `add-dark-mode.md`) for multi-plan support. Plan filename displayed in TUI header. ([#18323](https://github.com/mastra-ai/mastra/pull/18323))
+
+- Updated dependencies [[`86623c1`](https://github.com/mastra-ai/mastra/commit/86623c1adf7d22de32cc916dda17f4155184db36), [`7c9dd77`](https://github.com/mastra-ai/mastra/commit/7c9dd77bd18cb8dc72797e25f1a0fbdc71a11347), [`9990965`](https://github.com/mastra-ai/mastra/commit/999096571635a83b42ef40841fd7028cfa630779), [`c0ffa3c`](https://github.com/mastra-ai/mastra/commit/c0ffa3c897ccd326de880df734740a7f0681a18f), [`0504bf5`](https://github.com/mastra-ai/mastra/commit/0504bf5e8cffc571a4b343326178de371e6f859b), [`26f54af`](https://github.com/mastra-ai/mastra/commit/26f54afb5dbfbbb02d4d09bec4bd7c5029751767), [`5afe423`](https://github.com/mastra-ai/mastra/commit/5afe423e4badf040f1b0d4525183a856fcb8146e), [`86623c1`](https://github.com/mastra-ai/mastra/commit/86623c1adf7d22de32cc916dda17f4155184db36), [`8c9f1c0`](https://github.com/mastra-ai/mastra/commit/8c9f1c0361d89066f9bcd14a2f69e761b01766c8)]:
+  - @mastra/core@1.47.0-alpha.2
+  - @mastra/pg@1.14.2-alpha.0
+
+## 0.25.1-alpha.1
+
+### Patch Changes
+
+- MastraCode now passes a deterministic session `id` and `ownerId` to the Harness session. The session id is derived from the project resource ID and is stable across restarts for the same project directory. The owner id is derived from the machine hostname and project root path, tying the session to the local machine. ([#18372](https://github.com/mastra-ai/mastra/pull/18372))
+
+- Expand `${VAR}`, `${VAR:-default}`, and bare `$VAR` references in MCP server HTTP headers. Header values such as `"x-api-key": "${MY_API_KEY}"` in `mcp.json` are now resolved from the environment when the config is loaded, instead of being sent verbatim. This matches how Claude Code reads `.mcp.json` and lets header-authenticated HTTP servers pull secrets from the environment. ([#18240](https://github.com/mastra-ai/mastra/pull/18240))
+
+- Updated dependencies [[`7f9ae70`](https://github.com/mastra-ai/mastra/commit/7f9ae70826b047e5a66218f9e92f20e54a2d791f), [`1505c07`](https://github.com/mastra-ai/mastra/commit/1505c07603f6346bae12aa82f140e8b88ffea9ab), [`e940f09`](https://github.com/mastra-ai/mastra/commit/e940f099ef5d18b403e6f2b4937e086a4da857b1)]:
+  - @mastra/core@1.46.1-alpha.1
+  - @mastra/memory@1.21.2-alpha.0
+
 ## 0.25.1-alpha.0
 
 ### Patch Changes

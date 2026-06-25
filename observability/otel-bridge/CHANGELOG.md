@@ -1,5 +1,27 @@
 # @mastra/otel-bridge
 
+## 1.4.0-alpha.0
+
+### Minor Changes
+
+- Added `tracerProvider` and `loggerProvider` options to `OtelBridgeConfig`, allowing spans and logs to be routed to non-global OpenTelemetry providers. ([#18185](https://github.com/mastra-ai/mastra/pull/18185))
+
+  ```ts
+  import { OtelBridge } from '@mastra/otel-bridge';
+
+  const bridge = new OtelBridge({
+    tracerProvider: myLangfuseTracerProvider,
+    loggerProvider: myCustomLoggerProvider,
+  });
+  ```
+
+  Both fields are optional and default to the global provider when omitted — no breaking changes.
+
+### Patch Changes
+
+- Updated dependencies [[`7f9ae70`](https://github.com/mastra-ai/mastra/commit/7f9ae70826b047e5a66218f9e92f20e54a2d791f), [`1505c07`](https://github.com/mastra-ai/mastra/commit/1505c07603f6346bae12aa82f140e8b88ffea9ab), [`e940f09`](https://github.com/mastra-ai/mastra/commit/e940f099ef5d18b403e6f2b4937e086a4da857b1)]:
+  - @mastra/core@1.46.1-alpha.1
+
 ## 1.3.1
 
 ### Patch Changes

@@ -1,5 +1,8 @@
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
-import { Badge, Txt, CheckIcon, CrossIcon, Icon, cn } from '@mastra/playground-ui';
+import { CheckIcon, CrossIcon, Icon } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
 import { CircleDashed, HourglassIcon, Loader2, PauseIcon, ShieldAlert } from 'lucide-react';

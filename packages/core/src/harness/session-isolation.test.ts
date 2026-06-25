@@ -4,7 +4,10 @@ import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
 import type { HarnessEvent } from './types';
 
-function createHarness(storage: InMemoryStore) {
+function createHarness(
+  storage: InMemoryStore,
+  options: { resourceId?: string; initialState?: Record<string, unknown> } = {},
+) {
   const agent = new Agent({
     name: 'test-agent',
     instructions: 'You are a test agent.',
@@ -13,7 +16,9 @@ function createHarness(storage: InMemoryStore) {
 
   return new Harness({
     id: 'test-harness',
+    resourceId: options.resourceId,
     storage,
+    initialState: options.initialState,
     modes: [
       { id: 'build', name: 'Build', default: true, agent, defaultModelId: 'openai/gpt-4o' },
       { id: 'plan', name: 'Plan', agent, defaultModelId: 'anthropic/claude-sonnet-4' },
@@ -26,8 +31,8 @@ describe('Harness.createSession — cross-session isolation', () => {
     const harness = createHarness(new InMemoryStore());
     await harness.init();
 
-    const a = await harness.createSession({ resourceId: 'user-a' });
-    const b = await harness.createSession({ resourceId: 'user-b' });
+    const a = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
+    const b = await harness.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
 
     expect(a.thread.getId()).toBeDefined();
     expect(b.thread.getId()).toBeDefined();
@@ -38,8 +43,8 @@ describe('Harness.createSession — cross-session isolation', () => {
     const harness = createHarness(new InMemoryStore());
     await harness.init();
 
-    const a = await harness.createSession({ resourceId: 'user-a' });
-    const b = await harness.createSession({ resourceId: 'user-b' });
+    const a = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
+    const b = await harness.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
 
     expect(a.mode.get()).toBe('build');
     expect(b.mode.get()).toBe('build');
@@ -55,8 +60,8 @@ describe('Harness.createSession — cross-session isolation', () => {
     const harness = createHarness(new InMemoryStore());
     await harness.init();
 
-    const a = await harness.createSession({ resourceId: 'user-a' });
-    const b = await harness.createSession({ resourceId: 'user-b' });
+    const a = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
+    const b = await harness.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
 
     await a.model.switch({ modelId: 'cerebras/zai-glm-4.7' });
 
@@ -80,8 +85,8 @@ describe('Harness.createSession — cross-session isolation', () => {
     });
     await harness.init();
 
-    const a = await harness.createSession({ resourceId: 'user-a' });
-    const b = await harness.createSession({ resourceId: 'user-b' });
+    const a = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
+    const b = await harness.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
 
     await a.state.set({ counter: 5 });
 
@@ -93,8 +98,8 @@ describe('Harness.createSession — cross-session isolation', () => {
     const harness = createHarness(new InMemoryStore());
     await harness.init();
 
-    const a = await harness.createSession({ resourceId: 'user-a' });
-    const b = await harness.createSession({ resourceId: 'user-b' });
+    const a = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
+    const b = await harness.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
 
     const aEvents: HarnessEvent[] = [];
     const bEvents: HarnessEvent[] = [];
@@ -109,6 +114,45 @@ describe('Harness.createSession — cross-session isolation', () => {
 
     expect(aEvents.some(e => e.type === 'mode_changed')).toBe(true);
     expect(bEvents.some(e => e.type === 'mode_changed')).toBe(false);
+  });
+
+  it('does not auto-claim a matching projectPath thread from another resource', async () => {
+    const storage = new InMemoryStore();
+    const projectPath = '/tmp/mastra-project';
+
+    const oldHarness = createHarness(storage, { resourceId: 'old-resource', initialState: { projectPath } });
+    await oldHarness.init();
+    const oldSession = await oldHarness.createSession();
+    const oldThreadId = oldSession.thread.requireId();
+
+    const currentHarness = createHarness(storage, { resourceId: 'current-resource', initialState: { projectPath } });
+    await currentHarness.init();
+    const currentSession = await currentHarness.createSession();
+
+    expect(currentSession.thread.requireId()).not.toBe(oldThreadId);
+    await expect(currentSession.thread.switch({ threadId: oldThreadId })).rejects.toThrow(
+      `Thread not found: ${oldThreadId}`,
+    );
+    expect(await storage.stores.memory.getThreadById({ threadId: oldThreadId })).toMatchObject({
+      id: oldThreadId,
+      resourceId: 'old-resource',
+    });
+  });
+
+  it('resumes the matching projectPath thread from the same resource', async () => {
+    const storage = new InMemoryStore();
+    const projectPath = '/tmp/mastra-project';
+    const harness = createHarness(storage, { resourceId: 'current-resource', initialState: { projectPath } });
+    await harness.init();
+
+    const first = await harness.createSession();
+    const threadId = first.thread.requireId();
+
+    const restartedHarness = createHarness(storage, { resourceId: 'current-resource', initialState: { projectPath } });
+    await restartedHarness.init();
+    const restarted = await restartedHarness.createSession();
+
+    expect(restarted.thread.requireId()).toBe(threadId);
   });
 });
 
@@ -172,6 +216,51 @@ describe('Harness session — cross-resource thread ownership', () => {
     await expect(b.thread.clone({ sourceThreadId: aThreadId })).rejects.toThrow(`Thread not found: ${aThreadId}`);
   });
 
+  it('only clones a cross-resource thread when the detected resource and project path still match', async () => {
+    const storage = new InMemoryStore();
+    const projectPath = '/tmp/mastra-project';
+    const oldHarness = createHarness(storage, { resourceId: 'old-resource', initialState: { projectPath } });
+    await oldHarness.init();
+    const oldSession = await oldHarness.createSession();
+    const oldThreadId = oldSession.thread.requireId();
+
+    const currentHarness = createHarness(storage, { resourceId: 'current-resource', initialState: { projectPath } });
+    await currentHarness.init();
+    const currentSession = await currentHarness.createSession();
+
+    await expect(
+      currentSession.thread.cloneToCurrentResource({
+        threadId: oldThreadId,
+        expectedResourceId: 'another-resource',
+        expectedProjectPath: projectPath,
+      }),
+    ).rejects.toThrow(`Thread not found: ${oldThreadId}`);
+
+    await expect(
+      currentSession.thread.cloneToCurrentResource({
+        threadId: oldThreadId,
+        expectedResourceId: 'old-resource',
+        expectedProjectPath: '/tmp/other-project',
+      }),
+    ).rejects.toThrow(`Thread not found: ${oldThreadId}`);
+
+    const clonedThread = await currentSession.thread.cloneToCurrentResource({
+      threadId: oldThreadId,
+      expectedResourceId: 'old-resource',
+      expectedProjectPath: projectPath,
+    });
+
+    expect(await storage.stores.memory.getThreadById({ threadId: oldThreadId })).toMatchObject({
+      id: oldThreadId,
+      resourceId: 'old-resource',
+    });
+    expect(clonedThread).toMatchObject({
+      resourceId: 'current-resource',
+      metadata: { projectPath },
+    });
+    expect(clonedThread.id).not.toBe(oldThreadId);
+  });
+
   it('still allows the owning resource to switch, list, and delete its own thread', async () => {
     const harness = createHarness(new InMemoryStore());
     await harness.init();
@@ -194,8 +283,8 @@ describe('Harness session registry', () => {
     const harness = createHarness(new InMemoryStore());
     await harness.init();
 
-    const a = await harness.createSession({ resourceId: 'user-a' });
-    const b = await harness.createSession({ resourceId: 'user-b' });
+    const a = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
+    const b = await harness.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
 
     expect(await harness.getSessionByResource('user-a')).toBe(a);
     expect(await harness.getSessionByResource('user-b')).toBe(b);
@@ -206,8 +295,8 @@ describe('Harness session registry', () => {
     const harness = createHarness(new InMemoryStore());
     await harness.init();
 
-    const first = await harness.createSession({ resourceId: 'user-a' });
-    const second = await harness.createSession({ resourceId: 'user-a' });
+    const first = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
+    const second = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
 
     expect(second).toBe(first);
   });
@@ -216,7 +305,7 @@ describe('Harness session registry', () => {
     const harness = createHarness(new InMemoryStore());
     await harness.init();
 
-    const a = await harness.createSession({ resourceId: 'user-a' });
+    const a = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
     harness.setResourceId(a, { resourceId: 'user-a-renamed' });
 
     expect(await harness.getSessionByResource('user-a-renamed')).toBe(a);

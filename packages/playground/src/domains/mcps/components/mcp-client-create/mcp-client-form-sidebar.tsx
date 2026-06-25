@@ -1,16 +1,10 @@
-import {
-  Button,
-  Input,
-  Label,
-  ScrollArea,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  Spinner,
-  Icon,
-} from '@mastra/playground-ui';
+import { Icon } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Check, PlusIcon, XIcon } from 'lucide-react';
 import { Controller, useWatch } from 'react-hook-form';

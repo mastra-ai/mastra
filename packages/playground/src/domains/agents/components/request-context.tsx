@@ -1,24 +1,12 @@
 import { jsonLanguage } from '@codemirror/lang-json';
-import {
-  Button,
-  useCodemirrorTheme,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-  Icon,
-  cn,
-  formatJSON,
-  isValidJson,
-  toast,
-} from '@mastra/playground-ui';
+import { Icon, formatJSON, isValidJson, toast } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import CodeMirror from '@uiw/react-codemirror';
 import { Braces, CopyIcon, ExternalLink, X } from 'lucide-react';
 import type { ReactNode } from 'react';
