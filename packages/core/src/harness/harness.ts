@@ -523,6 +523,26 @@ export class Harness<TState = {}> {
   }
 
   /**
+   * Whether a workspace is configured on this Harness (static instance, dynamic
+   * factory, or config object). Sessions without an explicit workspace override
+   * fall back to this.
+   */
+  hasWorkspace(): boolean {
+    return this.workspace !== undefined;
+  }
+
+  /**
+   * Whether the Harness-level static workspace has been initialized. Dynamic
+   * factory workspaces are resolved and initialized per-session during
+   * `createSession`, so this returns `false` for factory configs until a
+   * session is created.
+   */
+  isWorkspaceReady(): boolean {
+    if (typeof this.workspace === 'function') return true;
+    return this.workspaceInitialized && this.workspace !== undefined;
+  }
+
+  /**
    * Register this Harness on a parent Mastra. Called by Mastra during
    * construction when a harness is passed in its config. Once registered, the
    * Harness uses the parent Mastra (its storage, agents, gateways, and
