@@ -18,6 +18,7 @@ import { InMemoryStore } from '../../storage/mock';
 import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 import { Harness } from '../harness';
+import { createMockWorkspace } from '../test-utils';
 import type { HarnessMode } from '../types';
 
 vi.setConfig({ testTimeout: 30_000 });
@@ -124,6 +125,7 @@ async function setupHarness({
     storage,
     agent: registeredAgent,
     modes,
+    workspace: createMockWorkspace(),
     ...(toolCategoryResolver && { toolCategoryResolver }),
     ...(initialState && { initialState: initialState as any }),
   });
