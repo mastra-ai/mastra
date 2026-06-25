@@ -568,6 +568,7 @@ function Notice({ entry }: { entry: NoticeEntry }) {
 export function StatusLine({
   status,
   modeId,
+  modeName,
   modelId,
   running,
   followUpCount,
@@ -579,6 +580,7 @@ export function StatusLine({
 }: {
   status: string;
   modeId?: string;
+  modeName?: string;
   modelId?: string;
   running: boolean;
   followUpCount?: number;
@@ -596,7 +598,9 @@ export function StatusLine({
 
   return (
     <div className="status-line">
-      <span className="badge badge-mode">{modeId ?? '—'}</span>
+      <span className="badge badge-mode" data-mode={modeId}>
+        {modeName ?? modeId ?? '—'}
+      </span>
       <span className="status-model">{modelId ? lastSegment(modelId) : 'no model'}</span>
 
       {showMsg && (

@@ -51,6 +51,24 @@ export function LogoMark({ size = 24, className }: IconProps) {
   );
 }
 
+/** The "MASTRA CODE" wordmark in half-block ASCII art, mirroring the TUI
+ *  banner. Shared by the empty-state hero and the header brand mark; the
+ *  `compact` variant renders the smaller single-scale version used in the nav. */
+const WORDMARK_ART = `█▀▄▀█ ▄▀█ █▀ ▀█▀ █▀█ ▄▀█   █▀▀ █▀█ █▀▄ █▀▀
+█ ▀ █ █▀█ ▀█  █  █▀▄ █▀█   █   █ █ █ █ █▀▀
+▀   ▀ ▀ ▀ ▀▀  ▀  ▀ ▀ ▀ ▀   ▀▀▀ ▀▀▀ ▀▀  ▀▀▀`;
+
+export function Wordmark({ className, compact }: { className?: string; compact?: boolean }) {
+  return (
+    <pre
+      className={`banner-wordmark${compact ? ' wordmark-compact' : ''}${className ? ` ${className}` : ''}`}
+      aria-label="Mastra Code"
+    >
+      {WORDMARK_ART}
+    </pre>
+  );
+}
+
 export const ChevronIcon = ({ size = 14, className }: IconProps) => svg(<path d="M9 6l6 6-6 6" />, size, className);
 
 export const ArrowDownIcon = ({ size = 16, className }: IconProps) =>

@@ -177,7 +177,9 @@ body::before {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 18px;
+  height: 56px;
+  box-sizing: border-box;
+  padding: 0 18px;
   border-bottom: 1px solid var(--border);
   background: color-mix(in oklch, var(--bg-surface) 75%, transparent);
   backdrop-filter: blur(12px);
@@ -273,101 +275,81 @@ body::before {
 }
 
 .transcript-empty {
-  margin: auto;
-  max-width: 560px;
+  margin: auto auto;
+  max-width: 720px;
   width: 100%;
-  text-align: center;
-  color: var(--fg-dim);
-  font-size: 14px;
-  line-height: 1.6;
-  padding: 32px 24px;
-}
-.empty-icon {
-  display: grid;
-  place-items: center;
-  margin-bottom: 10px;
-  color: var(--accent);
-  filter: drop-shadow(0 6px 18px var(--accent-soft));
-  animation: floatIn 0.45s ease-out;
-}
-.empty-title {
-  margin: 0 0 4px;
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  color: var(--fg);
-}
-.empty-sub {
-  margin: 0 0 18px;
-  font-size: 13px;
-}
-.empty-suggestions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
   text-align: left;
-}
-.suggestion {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-surface2);
-  color: var(--fg);
-  cursor: pointer;
-  transition:
-    border-color 0.14s,
-    background 0.14s,
-    transform 0.1s;
-}
-.suggestion:hover {
-  border-color: color-mix(in oklch, var(--accent) 40%, var(--border));
-  background: var(--bg-surface3);
-  transform: translateY(-1px);
-}
-.suggestion-main {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-.suggestion-label {
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--fg);
-}
-.suggestion-text {
-  font-size: 12px;
-  color: var(--fg-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.suggestion-arrow {
-  flex-shrink: 0;
-  color: var(--fg-muted);
-  opacity: 0;
-  transform: translateX(-4px);
-  transition:
-    opacity 0.14s,
-    transform 0.14s,
-    color 0.14s;
-}
-.suggestion:hover .suggestion-arrow {
-  opacity: 1;
-  transform: translateX(0);
-  color: var(--accent);
-}
-@media (max-width: 768px) {
-  .empty-suggestions {
-    grid-template-columns: 1fr;
-  }
+  color: var(--fg-dim);
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: 1.55;
+  padding: 40px 28px;
 }
 
+/* ASCII block-letter wordmark, mirroring the TUI banner. The half-block glyphs
+   (▀ ▄ █) only interlock when each row is exactly one em tall (no leading) and
+   the font renders box-drawing chars at a uniform cell — force both. */
+.banner-wordmark {
+  /* Menlo/DejaVu render the block + half-block glyphs (█ ▀ ▄) at a single fixed
+     cell, so columns line up; SF Mono substitutes them at a different advance
+     width, which shears the rows. Keep this stack ordered accordingly. */
+  font-family: Menlo, 'DejaVu Sans Mono', 'Liberation Mono', Consolas, monospace;
+  font-weight: 400;
+  font-size: clamp(9px, 1.7vw, 15px);
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: pre;
+  overflow-x: auto;
+  tab-size: 1;
+  margin: 0 0 22px;
+  background: linear-gradient(
+    100deg,
+    color-mix(in oklch, var(--accent) 70%, black) 0%,
+    var(--accent) 55%,
+    color-mix(in oklch, var(--accent) 55%, white) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 4px 18px var(--accent-soft));
+  animation: floatIn 0.45s ease-out;
+}
+
+/* Compact brand variant: small enough that the 3 rows fit a narrow sidebar. */
+.banner-wordmark.wordmark-compact {
+  margin: 0;
+  font-size: 5.5px;
+  line-height: 1;
+  overflow: visible;
+  filter: none;
+  animation: none;
+  flex-shrink: 0;
+}
+.sidebar-wordmark {
+  padding: 2px 0;
+}
+  margin: 0 0 18px;
+  display: grid;
+  gap: 2px;
+}
+.banner-row {
+  display: flex;
+  gap: 8px;
+}
+.banner-row dt {
+  color: var(--fg-muted);
+  min-width: 96px;
+}
+.banner-row dd {
+  margin: 0;
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+
+.banner-ready {
+  margin: 0 0 24px;
+  color: var(--fg-dim);
+}
 .composer {
   position: relative;
   display: flex;
@@ -520,29 +502,56 @@ body::before {
   font-size: 12px;
 }
 
+/* Mode tabs mirror the TUI status line: a solid filled badge in each mode's
+   color when active, quiet monospace labels when not. No pills, no dots. */
 .mode-btn {
-  padding: 5px 14px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--bg-surface2);
-  color: var(--fg-dim);
+  --mode-accent: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--fg-muted);
+  font-family: var(--mono);
   font-size: 12px;
   font-weight: 500;
+  line-height: 1.4;
   cursor: pointer;
-  transition: all 0.16s ease;
+  transition:
+    color 0.14s ease,
+    background 0.14s ease;
 }
 
 .mode-btn:hover {
-  background: var(--bg-surface3);
   color: var(--fg);
-  border-color: var(--border-strong);
+  background: var(--bg-surface2);
 }
+
 .mode-btn.active {
-  background: var(--fg);
-  color: var(--bg);
+  background: var(--mode-accent);
+  color: var(--mode-fg, #fff);
   border-color: transparent;
-  font-weight: 600;
+  font-weight: 700;
 }
+.mode-btn.active:hover {
+  background: var(--mode-accent);
+}
+
+/* Per-mode accent colors (fall back to brand green for unknown modes). The
+   active label sits on a solid fill, so use dark text on the lighter accents. */
+.mode-btn[data-mode='build'] {
+  --mode-accent: var(--accent);
+  --mode-fg: #07140c;
+} /* green */
+.mode-btn[data-mode='plan'] {
+  --mode-accent: oklch(0.72 0.15 280);
+  --mode-fg: #fff;
+} /* purple */
+.mode-btn[data-mode='fast'] {
+  --mode-accent: var(--accent-2);
+  --mode-fg: #1c1305;
+} /* amber — "Explore" mode (id: fast) */
 
 .thread-btn {
   padding: 4px 12px;
@@ -1246,11 +1255,29 @@ body::before {
 .status-goal svg {
   color: var(--accent);
 }
-.badge-mode {
-  text-transform: capitalize;
-  background: var(--accent-soft);
-  color: var(--accent);
-  border-color: color-mix(in oklch, var(--accent) 30%, transparent);
+/* Solid filled mode badge, matching the header mode tabs. Keyed by data-mode
+   so each mode wears the same color in the status line as in the tab. */
+.badge.badge-mode {
+  --mode-accent: var(--accent);
+  --mode-fg: #07140c;
+  font-family: var(--mono);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--mode-accent);
+  color: var(--mode-fg);
+  font-weight: 700;
+}
+.badge.badge-mode[data-mode='build'] {
+  --mode-accent: var(--accent);
+  --mode-fg: #07140c;
+}
+.badge.badge-mode[data-mode='plan'] {
+  --mode-accent: oklch(0.72 0.15 280);
+  --mode-fg: #fff;
+}
+.badge.badge-mode[data-mode='fast'] {
+  --mode-accent: var(--accent-2);
+  --mode-fg: #1c1305;
 }
 
 /* ── Status line ────────────────────────────────────────────────────────── */
@@ -1616,12 +1643,13 @@ body::before {
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 14px 14px 12px;
+  height: 56px;
+  box-sizing: border-box;
+  padding: 0 14px;
   font-weight: 700;
   font-size: 14px;
   letter-spacing: -0.01em;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 4px;
 }
 .sidebar-brand-name {
   color: var(--fg);
@@ -2967,7 +2995,7 @@ body::before {
   flex-shrink: 0;
 }
 .shortcuts-keys kbd {
-  font-family: var(--font-mono);
+  font-family: var(--mono);
   font-size: 11px;
   line-height: 1;
   color: var(--fg-dim);

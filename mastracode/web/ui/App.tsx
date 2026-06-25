@@ -15,6 +15,7 @@ import {
   SendIcon,
   StopIcon,
   SunIcon,
+  Wordmark,
 } from './icons';
 import {
   loadProjects,
@@ -32,89 +33,6 @@ import { applyDensity, applyTheme, loadDensity, loadTheme, saveDensity, saveThem
 import type { Density, Theme } from './theme';
 import { useToast } from './toast';
 import { useHarnessSession } from './useHarnessSession';
-
-interface SuggestedPrompt {
-  label: string;
-  desc: string;
-  prompt: string;
-}
-
-/** Starter prompts shown in an empty thread, keyed by mode. */
-const PROMPTS_DEFAULT: SuggestedPrompt[] = [
-  {
-    label: 'Explore',
-    desc: 'Tour the codebase',
-    prompt: 'Give me a high-level tour of this codebase — key directories and how they fit together.',
-  },
-  {
-    label: 'Explain',
-    desc: 'How a request flows',
-    prompt: 'Explain what the main entry point does and how a request flows through it.',
-  },
-  {
-    label: 'Find',
-    desc: 'Error-handling patterns',
-    prompt: 'Find where errors are handled and summarize the patterns used.',
-  },
-  {
-    label: 'Improve',
-    desc: 'Suggest improvements',
-    prompt: 'Suggest three concrete improvements to code quality or structure, with reasons.',
-  },
-];
-
-const PROMPTS_PLAN: SuggestedPrompt[] = [
-  {
-    label: 'Plan',
-    desc: 'Draft a feature plan',
-    prompt: 'Draft a step-by-step plan to add a new feature, including the files to touch.',
-  },
-  {
-    label: 'Investigate',
-    desc: 'Map the components',
-    prompt: 'Investigate how a request flows through this codebase and map the key components.',
-  },
-  {
-    label: 'Assess',
-    desc: 'Risks & trade-offs',
-    prompt: 'Assess the main risks and trade-offs before changing the core architecture.',
-  },
-  {
-    label: 'Compare',
-    desc: 'Weigh two approaches',
-    prompt: 'Compare two approaches for solving a problem here and recommend one with reasons.',
-  },
-];
-
-const PROMPTS_BUILD: SuggestedPrompt[] = [
-  {
-    label: 'Implement',
-    desc: 'Ship a small change',
-    prompt: 'Implement a small, well-scoped improvement and run the relevant checks.',
-  },
-  {
-    label: 'Fix',
-    desc: 'Find & fix a bug',
-    prompt: 'Find a bug or rough edge in this codebase and fix it with a test.',
-  },
-  {
-    label: 'Refactor',
-    desc: 'Clean up for clarity',
-    prompt: 'Refactor a messy area for clarity without changing behavior, then verify.',
-  },
-  {
-    label: 'Test',
-    desc: 'Cover an untested area',
-    prompt: 'Add tests for an undertested module and make sure they pass.',
-  },
-];
-
-/** Pick the starter prompts that fit the active mode. */
-function promptsForMode(modeId: string | undefined): SuggestedPrompt[] {
-  if (modeId === 'plan') return PROMPTS_PLAN;
-  if (modeId === 'build') return PROMPTS_BUILD;
-  return PROMPTS_DEFAULT;
-}
 
 export default function App() {
   const { toast } = useToast();
@@ -610,6 +528,7 @@ export default function App() {
                 <button
                   key={m.id}
                   className={`mode-btn ${transcript.modeId === m.id ? 'active' : ''}`}
+                  data-mode={m.id}
                   onClick={() => void session.switchMode(m.id)}
                 >
                   {m.name ?? m.id}
@@ -667,30 +586,30 @@ export default function App() {
             <div className="transcript" ref={threadRef}>
               {transcript.entries.length === 0 && (
                 <div className="transcript-empty">
-                  <div className="empty-icon">
-                    <LogoMark size={32} />
-                  </div>
-                  <h3 className="empty-title">Working in {activeProject.name}</h3>
-                  <p className="empty-sub">Ask the agent to read, write, or run code — or start with one of these:</p>
-                  <div className="empty-suggestions">
-                    {promptsForMode(transcript.modeId).map(s => (
-                      <button
-                        key={s.label}
-                        type="button"
-                        className="suggestion"
-                        onClick={() => {
-                          setDraft(s.prompt);
-                          inputRef.current?.focus();
-                        }}
-                      >
-                        <span className="suggestion-main">
-                          <span className="suggestion-label">{s.label}</span>
-                          <span className="suggestion-text">{s.desc}</span>
-                        </span>
-                        <ChevronIcon size={14} className="suggestion-arrow" />
-                      </button>
-                    ))}
-                  </div>
+                  <Wordmark />
+                  <dl className="banner-meta">
+                    <div className="banner-row">
+                      <dt>Project</dt>
+                      <dd>{activeProject.name}</dd>
+                    </div>
+                    {activeProject.resourceId && (
+                      <div className="banner-row">
+                        <dt>Resource ID</dt>
+                        <dd>{activeProject.resourceId}</dd>
+                      </div>
+                    )}
+                    {activeProject.gitBranch && (
+                      <div className="banner-row">
+                        <dt>Branch</dt>
+                        <dd>{activeProject.gitBranch}</dd>
+                      </div>
+                    )}
+                    <div className="banner-row">
+                      <dt>Workspace</dt>
+                      <dd>{activeProject.path}</dd>
+                    </div>
+                  </dl>
+                  <p className="banner-ready">Ready for new conversation</p>
                 </div>
               )}
               <Transcript entries={transcript.entries} onApprove={onApprove} onRespond={onRespond} />
@@ -772,6 +691,7 @@ export default function App() {
             <StatusLine
               status={status}
               modeId={transcript.modeId}
+              modeName={modes.find(m => m.id === transcript.modeId)?.name}
               modelId={transcript.modelId}
               running={busy}
               followUpCount={transcript.followUpCount}

@@ -1,7 +1,7 @@
 import type { HarnessThreadInfo } from '@mastra/client-js';
 import { useEffect, useRef, useState } from 'react';
 
-import { CloseIcon, EllipsisIcon, FolderIcon, LogoMark, PlusIcon } from './icons';
+import { CloseIcon, EllipsisIcon, FolderIcon, PlusIcon, Wordmark } from './icons';
 import type { Project } from './projects';
 
 const MAX_THREADS = 5;
@@ -98,8 +98,7 @@ export function Sidebar({
     <div className="sidebar">
       {/* ── Brand ─────────────────────────────────────────────────────── */}
       <div className="sidebar-brand">
-        <LogoMark size={22} className="logo-mark" />
-        <span className="sidebar-brand-name">MastraCode</span>
+        <Wordmark compact className="sidebar-wordmark" />
       </div>
 
       {/* ── Project switcher (opens the app-level Projects modal) ─────── */}
