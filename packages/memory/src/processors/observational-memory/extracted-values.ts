@@ -1,8 +1,8 @@
 import type { ProcessorContext } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 
-import type { Extractor, ExtractorSource } from './extractor';
-import { isBuiltInExtractorSlug } from './extractor';
+import type { BuiltInExtractorSlug, Extractor, ExtractorSource } from './extractor';
+import { BUILT_IN_EXTRACTOR_SLUGS, isBuiltInExtractorSlug } from './extractor';
 
 export interface ExtractedValueMetadata {
   currentTask?: string;
@@ -21,6 +21,18 @@ export interface ExtractedBuiltInValues {
   suggestedContinuation?: string;
   threadTitle?: string;
 }
+
+type BuiltInMetadataField = Exclude<keyof ExtractedValueMetadata, 'extracted'>;
+type ExtractedBuiltInField = keyof ExtractedBuiltInValues;
+
+const BUILT_IN_METADATA_FIELDS: Record<
+  BuiltInExtractorSlug,
+  { metadataField: BuiltInMetadataField; builtInField: ExtractedBuiltInField }
+> = {
+  'current-task': { metadataField: 'currentTask', builtInField: 'currentTask' },
+  'suggested-response': { metadataField: 'suggestedResponse', builtInField: 'suggestedContinuation' },
+  'thread-title': { metadataField: 'threadTitle', builtInField: 'threadTitle' },
+};
 
 function isPresentExtractedValue(value: unknown): boolean {
   return value !== undefined && value !== null && value !== '';
@@ -55,19 +67,21 @@ export function mergeExtractionFailures(
   return failures.length > 0 ? failures : undefined;
 }
 
+function readBuiltInMetadataValues(metadata: ExtractedValueMetadata): Partial<Record<BuiltInExtractorSlug, unknown>> {
+  const values: Partial<Record<BuiltInExtractorSlug, unknown>> = {};
+  for (const slug of BUILT_IN_EXTRACTOR_SLUGS) {
+    const { metadataField } = BUILT_IN_METADATA_FIELDS[slug]!;
+    values[slug] = metadata[metadataField];
+  }
+  return values;
+}
+
 export function getPriorExtractedValues(metadata?: ExtractedValueMetadata): Record<string, unknown> | undefined {
   if (!metadata) {
     return undefined;
   }
 
-  return mergeExtractedValues(
-    {
-      'current-task': metadata.currentTask,
-      'suggested-response': metadata.suggestedResponse,
-      'thread-title': metadata.threadTitle,
-    },
-    metadata.extracted,
-  );
+  return mergeExtractedValues(readBuiltInMetadataValues(metadata), metadata.extracted);
 }
 
 function renderExtractedValue(value: unknown): string {
@@ -100,11 +114,12 @@ function getStringExtractedValue(values: Record<string, unknown> | undefined, sl
 }
 
 export function getBuiltInExtractedValues(values?: Record<string, unknown>): ExtractedBuiltInValues {
-  return {
-    currentTask: getStringExtractedValue(values, 'current-task'),
-    suggestedContinuation: getStringExtractedValue(values, 'suggested-response'),
-    threadTitle: getStringExtractedValue(values, 'thread-title'),
-  };
+  const builtIns: ExtractedBuiltInValues = {};
+  for (const slug of BUILT_IN_EXTRACTOR_SLUGS) {
+    const { builtInField } = BUILT_IN_METADATA_FIELDS[slug]!;
+    builtIns[builtInField] = getStringExtractedValue(values, slug);
+  }
+  return builtIns;
 }
 
 export function filterUserExtractedValues(values?: Record<string, unknown>): Record<string, unknown> | undefined {
@@ -119,12 +134,12 @@ export function filterUserExtractedValues(values?: Record<string, unknown>): Rec
 
 export function buildThreadMetadataFromExtractedValues(values?: Record<string, unknown>): ExtractedValueMetadata {
   const builtIns = getBuiltInExtractedValues(values);
-  return {
-    currentTask: builtIns.currentTask,
-    suggestedResponse: builtIns.suggestedContinuation,
-    threadTitle: builtIns.threadTitle,
-    extracted: filterUserExtractedValues(values),
-  };
+  const metadata: ExtractedValueMetadata = { extracted: filterUserExtractedValues(values) };
+  for (const slug of BUILT_IN_EXTRACTOR_SLUGS) {
+    const { metadataField, builtInField } = BUILT_IN_METADATA_FIELDS[slug]!;
+    metadata[metadataField] = builtIns[builtInField];
+  }
+  return metadata;
 }
 
 export async function applyExtractorHooks(opts: {
