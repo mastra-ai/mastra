@@ -2,4 +2,6 @@
 "@mastra/core": patch
 ---
 
-Consolidate OSS dataset domain types. Introduces `DatasetItemPayload` (the 7-field user-supplied portion of a dataset item) as the canonical base; `AddDatasetItemInput`, `UpdateDatasetItemInput`, and `BatchInsertItemsInput.items` now derive from it instead of repeating the same field list. `Dataset.addItem`, `addItems`, `updateItem`, and `update` use the canonical exported types instead of inline anonymous shapes. Export hygiene only — no runtime behavior change.
+Added `DatasetItemPayload`, a new exported type describing the user-supplied fields of a dataset item.
+
+Dataset item inputs (`AddDatasetItemInput`, `UpdateDatasetItemInput`, and batch insert items) now share this type, so they stay consistent automatically. This is a type-only change with no runtime behavior change.
