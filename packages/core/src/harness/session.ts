@@ -83,7 +83,7 @@ const modeModelKey = (modeId: string) => `modeModelId_${modeId}`;
  * skipped when stamping tags onto a thread and excluded when reading tags
  * back out of thread metadata.
  */
-export function isReservedThreadMetadataKey(key: string): boolean {
+function isReservedThreadMetadataKey(key: string): boolean {
   return (
     key === 'currentModelId' ||
     key === MODE_ID_KEY ||

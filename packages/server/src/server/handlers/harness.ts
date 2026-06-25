@@ -1,5 +1,4 @@
 import type { Agent } from '@mastra/core/agent';
-import { isReservedThreadMetadataKey } from '@mastra/core/harness';
 import type { Harness, Session } from '@mastra/core/harness';
 import { z } from 'zod/v4';
 
@@ -17,6 +16,28 @@ import { handleError } from './error';
  * session bound to a `resourceId` (get-or-create, so reconnects resume rather
  * than fork the conversation).
  */
+
+/**
+ * Internal thread-metadata keys that `Session.loadMetadata()` reads back as
+ * runtime bookkeeping (selected model/mode, observer/reflector config, token
+ * usage). They share the flat thread `metadata` bag with user-provided session
+ * scoping tags, so they must never be treated as tags here.
+ *
+ * Mirrors core's `isReservedThreadMetadataKey`; kept local because importing the
+ * value from `@mastra/core` would exceed this package's peer-dependency floor.
+ */
+function isReservedThreadMetadataKey(key: string): boolean {
+  return (
+    key === 'currentModelId' ||
+    key === 'currentModeId' ||
+    key === 'observerModelId' ||
+    key === 'reflectorModelId' ||
+    key === 'observationThreshold' ||
+    key === 'reflectionThreshold' ||
+    key === 'tokenUsage' ||
+    key.startsWith('modeModelId_')
+  );
+}
 
 function getHarnessOrThrow(
   mastra: { getHarness: (id: string) => Harness<any> | undefined },
@@ -657,8 +678,8 @@ export const LIST_HARNESS_THREADS_ROUTE = createRoute({
       // e.g. `projectPath`) with internal session bookkeeping that
       // `Session.loadMetadata()` reads back (selected model/mode, observer/
       // reflector config, token usage). Return only the string-valued scoping
-      // tags, using core's shared reserved-key predicate so internal keys never
-      // leak out as "tags" or become matchable via the `tags` filter.
+      // tags, skipping reserved internal keys so they never leak out as "tags"
+      // or become matchable via the `tags` filter.
       const getTags = (t: { metadata?: unknown }): Record<string, string> => {
         const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
         const result: Record<string, string> = {};

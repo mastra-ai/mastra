@@ -1,5 +1,5 @@
 export { Harness } from './harness';
-export { Session, isReservedThreadMetadataKey } from './session';
+export { Session } from './session';
 export {
   askUserTool,
   assignTaskIds,
