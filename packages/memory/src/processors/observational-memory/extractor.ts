@@ -3,7 +3,6 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { z } from 'zod';
 
 type ExtractorMode = 'inline' | 'structured';
-export type ExtractorInjectionBehaviour = 'carry-forward' | 'none';
 export type ExtractorSource = 'observer' | 'reflector';
 
 export interface ExtractorOnExtractedContext<T = unknown> {
@@ -25,8 +24,8 @@ export interface ExtractorConfig<T = unknown> {
   instructions: string;
   /** Zod schema used for structured extraction. Omit to extract an inline string value from the observer/reflector output. */
   schema?: z.ZodType<T>;
-  /** Whether the previous value should be shown to the extractor prompt. */
-  injectionBehaviour?: ExtractorInjectionBehaviour;
+  /** Whether the previous extraction should be shown to the extractor prompt. Defaults to true. */
+  includePreviousExtraction?: boolean;
   /** Optional lifecycle hook invoked after a value is parsed and before it is persisted. */
   onExtracted?: (context: ExtractorOnExtractedContext<T>) => Promise<T | void | undefined> | T | void | undefined;
 }
@@ -82,7 +81,7 @@ export class Extractor<T = unknown> {
   readonly instructions: string;
   readonly schema: z.ZodType<T>;
   readonly mode: ExtractorMode;
-  readonly injectionBehaviour: ExtractorInjectionBehaviour;
+  readonly includePreviousExtraction: boolean;
   readonly onExtracted?: ExtractorConfig<T>['onExtracted'];
   /** @internal */
   readonly internal: boolean;
@@ -108,7 +107,7 @@ export class Extractor<T = unknown> {
     this.instructions = instructions;
     this.schema = (config.schema ?? z.string()) as z.ZodType<T>;
     this.mode = internal || !config.schema ? 'inline' : 'structured';
-    this.injectionBehaviour = config.injectionBehaviour ?? 'carry-forward';
+    this.includePreviousExtraction = config.includePreviousExtraction ?? true;
     this.onExtracted = config.onExtracted;
     this.internal = internal;
   }
@@ -292,7 +291,7 @@ export function buildExtractorPriorLines(
 
   const lines: string[] = [];
   for (const extractor of extractors) {
-    if (extractor.injectionBehaviour === 'none') {
+    if (!extractor.includePreviousExtraction) {
       continue;
     }
     const value = priorExtractedValues[extractor.slug];

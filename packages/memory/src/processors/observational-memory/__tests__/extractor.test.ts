@@ -23,7 +23,7 @@ describe('Extractor', () => {
 
     expect(extractor.slug).toBe('project-status');
     expect(extractor.mode).toBe('inline');
-    expect(extractor.injectionBehaviour).toBe('carry-forward');
+    expect(extractor.includePreviousExtraction).toBe(true);
     expect(extractor.schema.parse('active')).toBe('active');
   });
 
@@ -140,9 +140,9 @@ describe('Extractor', () => {
     expect(parsed.failures).toEqual([]);
   });
 
-  it('builds carry-forward prompt sections only for opted-in extractors with values', () => {
-    const keep = new Extractor({ name: 'Keep', instructions: 'Keep it.', injectionBehaviour: 'carry-forward' });
-    const skip = new Extractor({ name: 'Skip', instructions: 'Skip it.', injectionBehaviour: 'none' });
+  it('builds previous extraction prompt sections only for opted-in extractors with values', () => {
+    const keep = new Extractor({ name: 'Keep', instructions: 'Keep it.' });
+    const skip = new Extractor({ name: 'Skip', instructions: 'Skip it.', includePreviousExtraction: false });
 
     expect(buildExtractorPriorLines([keep, skip], { keep: 'previous', skip: 'hidden' })).toEqual([
       '<keep>\nprevious\n</keep>',

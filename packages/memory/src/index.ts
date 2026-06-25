@@ -56,7 +56,6 @@ export {
 export {
   Extractor,
   type ExtractorConfig,
-  type ExtractorInjectionBehaviour,
   type ExtractorOnExtractedContext,
   type ExtractorSource,
 } from './processors/observational-memory';

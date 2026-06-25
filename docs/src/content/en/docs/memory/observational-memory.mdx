@@ -228,13 +228,13 @@ new Extractor({
 })
 ```
 
-By default, OM carries previous extracted values forward into later extraction prompts. Set `injectionBehaviour: 'none'` for values that should only come from the current OM run.
+By default, OM includes the previous extraction in later extraction prompts. Set `includePreviousExtraction: false` for values that should only come from the current OM run.
 
 ```typescript title="src/mastra/agents/agent.ts"
 new Extractor({
   name: 'Latest blocker',
   instructions: 'Extract only the latest blocker mentioned in this conversation window.',
-  injectionBehaviour: 'none',
+  includePreviousExtraction: false,
 })
 ```
 

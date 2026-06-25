@@ -99,7 +99,7 @@ export function buildExtractedValueContextSections(
 
   const injectableSlugs = new Set(
     extractors
-      .filter(extractor => !isBuiltInExtractorSlug(extractor.slug) && extractor.injectionBehaviour !== 'none')
+      .filter(extractor => !isBuiltInExtractorSlug(extractor.slug) && extractor.includePreviousExtraction)
       .map(extractor => extractor.slug),
   );
 

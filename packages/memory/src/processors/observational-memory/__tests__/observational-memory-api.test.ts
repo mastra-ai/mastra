@@ -284,7 +284,7 @@ describe('observe()', () => {
       const userInfo = new Extractor({
         name: 'User info',
         instructions: 'Information about the user: name/location/work/etc',
-        injectionBehaviour: 'none',
+        includePreviousExtraction: false,
         onExtracted,
       });
       const extractOm = createOM(storage, {

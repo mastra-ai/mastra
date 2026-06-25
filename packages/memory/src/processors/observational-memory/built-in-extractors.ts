@@ -26,7 +26,6 @@ export function createCurrentTaskExtractor(): Extractor<string> {
       name: 'current-task',
       instructions: currentTaskInstructions,
       schema: z.string(),
-      injectionBehaviour: 'carry-forward',
     },
     true,
   );
@@ -38,7 +37,6 @@ export function createSuggestedResponseExtractor(): Extractor<string> {
       name: 'suggested-response',
       instructions: suggestedResponseInstructions,
       schema: z.string(),
-      injectionBehaviour: 'carry-forward',
     },
     true,
   );
@@ -50,7 +48,6 @@ export function createThreadTitleExtractor(): Extractor<string> {
       name: 'thread-title',
       instructions: threadTitleInstructions,
       schema: z.string(),
-      injectionBehaviour: 'carry-forward',
     },
     true,
   );

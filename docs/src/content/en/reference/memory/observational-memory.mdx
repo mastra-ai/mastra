@@ -421,12 +421,12 @@ const memory = new Memory({
     isOptional: true,
   },
   {
-    name: 'injectionBehaviour',
-    type: "'carry-forward' | 'none'",
+    name: 'includePreviousExtraction',
+    type: 'boolean',
     description:
-      'Controls whether the previous value is shown to the extractor on future OM runs. Use `carry-forward` for values that should persist until updated.',
+      'Controls whether the previous extraction is shown to the extractor on future OM runs. Set to `false` for values that should only come from the current OM run.',
     isOptional: true,
-    defaultValue: "'carry-forward'",
+    defaultValue: 'true',
   },
   {
     name: 'onExtracted',
