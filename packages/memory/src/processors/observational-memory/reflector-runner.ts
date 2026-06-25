@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import type { MessageList } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
+import type { MastraMemory } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -41,6 +42,7 @@ import {
 } from './reflector-agent';
 import type { CompressionLevel } from './reflector-agent';
 import { withRetry } from './retry';
+import { createTemporaryOmMemoryContext } from './temporary-memory';
 import { getMaxThreshold } from './thresholds';
 import type { TokenCounter } from './token-counter';
 import { withOmTracingSpan } from './tracing';
@@ -241,12 +243,13 @@ export class ReflectorRunner {
     this.mastra = mastra;
   }
 
-  private createAgent(model: ConcreteReflectionModel): Agent {
+  private createAgent(model: ConcreteReflectionModel, memory?: MastraMemory): Agent {
     const agent = new Agent({
       id: 'observational-memory-reflector',
       name: 'Reflector',
       instructions: buildReflectorSystemPrompt(this.reflectionConfig.instruction, this.reflectionConfig.extractors),
       model,
+      ...(memory ? { memory } : {}),
     });
     if (this.mastra) {
       agent.__registerMastra(this.mastra);
@@ -315,18 +318,21 @@ export class ReflectorRunner {
   }> {
     const originalTokens = this.tokenCounter.countObservations(observations);
     const resolvedModel = model ? { model } : this.resolveModel(originalTokens);
-    const agent = this.createAgent(resolvedModel.model);
-    const internalRequestContext = withOmInternalThreadId(requestContext, agent.id);
-    const targetThreshold = observationTokensThreshold ?? getMaxThreshold(this.reflectionConfig.observationTokens);
-
-    let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
     const activeExtractors = skipContinuationHints
       ? this.reflectionConfig.extractors.filter(
           extractor => extractor.slug !== 'current-task' && extractor.slug !== 'suggested-response',
         )
       : this.reflectionConfig.extractors;
-    let resultText = '';
+    const structuredExtractors = activeExtractors.filter(extractor => extractor.mode === 'structured');
+    const temporaryMemory =
+      structuredExtractors.length > 0 ? await createTemporaryOmMemoryContext('structured-reflector') : undefined;
+    const agent = temporaryMemory
+      ? this.createAgent(resolvedModel.model, temporaryMemory.memory)
+      : this.createAgent(resolvedModel.model);
+    const internalRequestContext = withOmInternalThreadId(requestContext, agent.id);
+    const targetThreshold = observationTokensThreshold ?? getMaxThreshold(this.reflectionConfig.observationTokens);
 
+    let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
     const startLevel: CompressionLevel = compressionStartLevel ?? 0;
     let currentLevel: CompressionLevel = startLevel;
     const maxLevel: CompressionLevel = Math.min(MAX_COMPRESSION_LEVEL, startLevel + 3) as CompressionLevel;
@@ -380,6 +386,7 @@ export class ReflectorRunner {
                     ...this.reflectionConfig.modelSettings,
                   },
                   providerOptions: this.reflectionConfig.providerOptions as any,
+                  ...(temporaryMemory ? { memory: temporaryMemory.options } : {}),
                   ...(abortSignal ? { abortSignal } : {}),
                   ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                   ...childObservabilityContext,
@@ -424,7 +431,6 @@ export class ReflectorRunner {
         `[OM:callReflector] attempt #${attemptNumber} returned: textLen=${result.text?.length}, textPreview="${result.text?.slice(0, 120)}...", inputTokens=${result.usage?.inputTokens ?? result.totalUsage?.inputTokens}, outputTokens=${result.usage?.outputTokens ?? result.totalUsage?.outputTokens}`,
       );
 
-      resultText = result.text;
       const usage = result.totalUsage ?? result.usage;
       if (usage) {
         totalUsage.inputTokens += usage.inputTokens ?? 0;
@@ -495,21 +501,7 @@ export class ReflectorRunner {
       agent,
       source: 'reflector',
       extractors: activeExtractors,
-      sourceMessages: [
-        {
-          role: 'user',
-          content: buildReflectorPrompt(
-            observations,
-            manualPrompt,
-            currentLevel,
-            skipContinuationHints,
-            activeExtractors,
-            priorExtractedValues,
-          ),
-        },
-      ],
-      sourceOutput: resultText,
-      observations: parsed.observations,
+      memory: temporaryMemory?.options,
       priorExtractedValues,
       requestContext,
       observabilityContext,

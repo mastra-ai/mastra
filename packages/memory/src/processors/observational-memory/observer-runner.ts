@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { modelSupportsAttachments } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
+import type { MastraMemory } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
@@ -21,6 +22,7 @@ import {
   parseMultiThreadObserverOutput,
 } from './observer-agent';
 import { withRetry } from './retry';
+import { createTemporaryOmMemoryContext } from './temporary-memory';
 import type { TokenCounter } from './token-counter';
 import { withOmTracingSpan } from './tracing';
 import type { ResolvedObservationConfig } from './types';
@@ -98,7 +100,7 @@ export class ObserverRunner {
     this.mastra = mastra;
   }
 
-  private createAgent(model: ConcreteObservationModel, isMultiThread = false): Agent {
+  private createAgent(model: ConcreteObservationModel, isMultiThread = false, memory?: MastraMemory): Agent {
     const agent = new Agent({
       id: isMultiThread ? 'multi-thread-observer' : 'observational-memory-observer',
       name: isMultiThread ? 'multi-thread-observer' : 'Observer',
@@ -109,6 +111,7 @@ export class ObserverRunner {
         this.observationConfig.extractors ?? [],
       ),
       model,
+      ...(memory ? { memory } : {}),
     });
     if (this.mastra) {
       agent.__registerMastra(this.mastra);
@@ -203,12 +206,17 @@ export class ObserverRunner {
   }> {
     const inputTokens = this.tokenCounter.countMessages(messagesToObserve);
     const resolvedModel = options?.model ? { model: options.model } : this.resolveModel(inputTokens);
-    const agent = this.createAgent(resolvedModel.model);
-    const internalRequestContext = withOmInternalThreadId(options?.requestContext, agent.id);
     const activeExtractors = filterObserverExtractors(
       this.observationConfig.extractors,
       options?.skipContinuationHints,
     );
+    const structuredExtractors = activeExtractors.filter(extractor => extractor.mode === 'structured');
+    const temporaryMemory =
+      structuredExtractors.length > 0 ? await createTemporaryOmMemoryContext('structured-observer') : undefined;
+    const agent = temporaryMemory
+      ? this.createAgent(resolvedModel.model, false, temporaryMemory.memory)
+      : this.createAgent(resolvedModel.model);
+    const internalRequestContext = withOmInternalThreadId(options?.requestContext, agent.id);
 
     const attachmentFilter = this.resolveAttachmentFilter(resolvedModel.model, options?.requestContext);
 
@@ -251,6 +259,7 @@ export class ObserverRunner {
                 const streamResult = await agent.stream(observerMessages, {
                   modelSettings: { ...this.observationConfig.modelSettings },
                   providerOptions: this.observationConfig.providerOptions as any,
+                  ...(temporaryMemory ? { memory: temporaryMemory.options } : {}),
                   ...(abortSignal ? { abortSignal } : {}),
                   ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                   ...childObservabilityContext,
@@ -281,9 +290,7 @@ export class ObserverRunner {
       agent,
       source: 'observer',
       extractors: activeExtractors,
-      sourceMessages: observerMessages,
-      sourceOutput: result.text,
-      observations: parsed.observations,
+      memory: temporaryMemory?.options,
       priorExtractedValues: options?.priorExtractedValues,
       requestContext: options?.requestContext,
       observabilityContext: options?.observabilityContext,
@@ -367,9 +374,52 @@ export class ObserverRunner {
       0,
     );
     const resolvedModel = model ? { model } : this.resolveModel(inputTokens);
+    const activeExtractors = this.observationConfig.extractors ?? [];
+    const structuredExtractors = activeExtractors.filter(extractor => extractor.mode === 'structured');
+
+    if (structuredExtractors.length > 0) {
+      const results = new Map<
+        string,
+        {
+          observations: string;
+          currentTask?: string;
+          suggestedContinuation?: string;
+          threadTitle?: string;
+          extractedValues?: Record<string, unknown>;
+          extractionFailures?: Array<{ slug: string; error: string }>;
+        }
+      >();
+      let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+      for (const threadId of threadOrder) {
+        const threadResult = await this.call(existingObservations, messagesByThread.get(threadId) ?? [], abortSignal, {
+          requestContext,
+          observabilityContext,
+          priorCurrentTask: priorMetadataByThread?.get(threadId)?.currentTask,
+          priorSuggestedResponse: priorMetadataByThread?.get(threadId)?.suggestedResponse,
+          priorThreadTitle: priorMetadataByThread?.get(threadId)?.threadTitle,
+          priorExtractedValues: priorMetadataByThread?.get(threadId)?.extracted,
+          model: resolvedModel.model,
+        });
+        results.set(threadId, {
+          observations: threadResult.observations,
+          currentTask: threadResult.currentTask,
+          suggestedContinuation: threadResult.suggestedContinuation,
+          threadTitle: threadResult.threadTitle,
+          extractedValues: threadResult.extractedValues,
+          extractionFailures: threadResult.extractionFailures,
+        });
+        if (threadResult.usage) {
+          totalUsage.inputTokens += threadResult.usage.inputTokens ?? 0;
+          totalUsage.outputTokens += threadResult.usage.outputTokens ?? 0;
+          totalUsage.totalTokens += threadResult.usage.totalTokens ?? 0;
+        }
+      }
+      return { results, usage: totalUsage };
+    }
+
+    let temporaryMemory: Awaited<ReturnType<typeof createTemporaryOmMemoryContext>> | undefined;
     const agent = this.createAgent(resolvedModel.model, true);
     const internalRequestContext = withOmInternalThreadId(requestContext, agent.id);
-    const activeExtractors = this.observationConfig.extractors ?? [];
 
     const multiThreadAttachmentFilter = this.resolveAttachmentFilter(resolvedModel.model, requestContext);
 
@@ -421,6 +471,7 @@ export class ObserverRunner {
                 const streamResult = await agent.stream(observerMessages, {
                   modelSettings: { ...this.observationConfig.modelSettings },
                   providerOptions: this.observationConfig.providerOptions as any,
+                  ...(temporaryMemory ? { memory: temporaryMemory.options } : {}),
                   ...(abortSignal ? { abortSignal } : {}),
                   ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                   ...childObservabilityContext,
@@ -447,41 +498,7 @@ export class ObserverRunner {
       }
     }
 
-    const structuredExtractionResults = await Promise.all(
-      Array.from(parsed.threads, async ([threadId, threadResult]) => {
-        const threadMessages = messagesByThread.get(threadId) ?? [];
-        const threadSourceOutput = `<observations>\n<thread id="${threadId}">\n${threadResult.rawOutput ?? threadResult.observations}\n</thread>\n</observations>`;
-        const structuredExtraction = await extractStructuredValues({
-          agent,
-          source: 'observer',
-          extractors: activeExtractors,
-          sourceMessages: [
-            {
-              role: 'user',
-              content: buildMultiThreadObserverTaskPrompt(
-                existingObservations,
-                [threadId],
-                priorMetadataByThread,
-                undefined,
-                this.observationConfig.threadTitle,
-                activeExtractors,
-              ),
-            },
-            buildMultiThreadObserverHistoryMessage(new Map([[threadId, threadMessages]]), [threadId], {
-              attachmentFilter: multiThreadAttachmentFilter,
-            }),
-          ],
-          sourceOutput: threadSourceOutput,
-          observations: threadResult.observations,
-          priorExtractedValues: priorMetadataByThread?.get(threadId)?.extracted,
-          requestContext,
-          observabilityContext,
-          abortSignal,
-        });
-        return [threadId, structuredExtraction] as const;
-      }),
-    );
-    const structuredExtractionByThread = new Map(structuredExtractionResults);
+    const structuredExtractionByThread = new Map<string, Awaited<ReturnType<typeof extractStructuredValues>>>();
 
     const aggregatedExtractedValues = mergeExtractedValues(
       ...Array.from(parsed.threads, ([threadId, threadResult]) =>

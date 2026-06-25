@@ -6035,31 +6035,29 @@ describe('Resource Scope Observation Flow', () => {
 
   it('isolates structured extraction source output per thread in multi-thread observation', async () => {
     const structuredPrompts: string[] = [];
-    const observerOutput = `<observations>
-<thread id="thread-1">
-- thread-1-secret priority alpha
-</thread>
-<thread id="thread-2">
-- thread-2-secret priority beta
-</thread>
-</observations>`;
     const model = new MockLanguageModelV2({
-      doStream: async () => ({
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start', warnings: [] },
-          { type: 'response-metadata', id: 'obs-1', modelId: 'mock-observer', timestamp: new Date() },
-          { type: 'text-start', id: 'text-1' },
-          { type: 'text-delta', id: 'text-1', delta: observerOutput },
-          { type: 'text-end', id: 'text-1' },
-          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 } },
-        ]),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-      }),
+      doStream: async ({ prompt }: { prompt: unknown }) => {
+        const promptText = JSON.stringify(prompt);
+        const observerOutput = promptText.includes('Thread one')
+          ? `<observations>\n- thread-1-secret priority alpha\n</observations>`
+          : `<observations>\n- thread-2-secret priority beta\n</observations>`;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'obs-1', modelId: 'mock-observer', timestamp: new Date() },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: observerOutput },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 } },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
       doGenerate: async ({ prompt }: { prompt: unknown }) => {
         const promptText = JSON.stringify(prompt);
         structuredPrompts.push(promptText);
-        const priority = promptText.includes('thread-1') ? 'alpha' : 'beta';
+        const priority = promptText.includes('thread-1-secret') ? 'alpha' : 'beta';
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
           finishReason: 'stop',

@@ -160,8 +160,6 @@ describe('Extractor', () => {
       agent,
       source: 'observer',
       extractors: [priority, profile],
-      sourceMessages: [],
-      sourceOutput: '<observations>Keep the original observation.</observations>',
     });
 
     expect(result.values).toEqual({});
@@ -171,7 +169,7 @@ describe('Extractor', () => {
     ]);
   });
 
-  it('uses memory-backed history for structured extraction follow-up calls', async () => {
+  it('uses a direct extraction-only prompt for structured observer follow-up calls', async () => {
     const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
     let prompt = '';
     const agent = new Agent({
@@ -196,14 +194,50 @@ describe('Extractor', () => {
       agent,
       source: 'observer',
       extractors: [priority],
-      sourceMessages: [{ role: 'user', content: 'The priority is high.' }],
-      sourceOutput: '<observations>User priority is high.</observations>',
     });
 
     expect(result.values).toEqual({ priority: 'high' });
-    expect(prompt).toContain('The priority is high.');
-    expect(prompt).toContain('<observations>User priority is high.</observations>');
-    expect(prompt).toContain('Extract the configured Observational Memory values');
+    expect(prompt).toContain('Extract structured data from the observations you made.');
+    expect(prompt).toContain('Do not write observations, XML, markdown, or explanatory text.');
+    expect(prompt).not.toContain('previous assistant message');
+    expect(prompt).not.toContain('## Source Output');
+    expect(prompt).not.toContain('## Parsed Observations');
+    expect(prompt).not.toContain('<observations>');
+    expect(prompt).not.toContain('<thread-title>');
+  });
+
+  it('uses direct reflection wording for structured reflector follow-up calls', async () => {
+    const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
+    let prompt = '';
+    const agent = new Agent({
+      id: 'structured-reflection-extraction-test',
+      name: 'Structured Reflection Extraction Test',
+      instructions: 'Extract values.',
+      model: new MockLanguageModelV2({
+        doGenerate: async ({ prompt: modelPrompt }) => {
+          prompt = JSON.stringify(modelPrompt);
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            content: [{ type: 'text', text: '{"priority":"high"}' }],
+            warnings: [],
+          };
+        },
+      }),
+    });
+
+    const result = await extractStructuredValues({
+      agent,
+      source: 'reflector',
+      extractors: [priority],
+    });
+
+    expect(result.values).toEqual({ priority: 'high' });
+    expect(prompt).toContain('Extract structured data from the reflection you made.');
+    expect(prompt).not.toContain('previous assistant message');
+    expect(prompt).not.toContain('## Source Output');
+    expect(prompt).not.toContain('## Parsed Observations');
   });
 
   it('applies user hooks, validates returned values, and records hook failures', async () => {
