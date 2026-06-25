@@ -1,6 +1,5 @@
 import type { DatePreset, DateRange } from '@mastra/playground-ui';
 import {
-  Button,
   DateRangeSelector,
   MetricsProvider,
   applyMetricsPropertyFilterTokens,
@@ -21,6 +20,7 @@ import {
   useServiceNames,
   useTags,
 } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
 import { MetricsFlexGrid } from '@mastra/playground-ui/components/MetricsFlexGrid';

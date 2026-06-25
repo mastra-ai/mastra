@@ -1,6 +1,7 @@
 import type { UpdateStoredPromptBlockParams } from '@mastra/client-js';
-import { Button, toast } from '@mastra/playground-ui';
+import { toast } from '@mastra/playground-ui';
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';

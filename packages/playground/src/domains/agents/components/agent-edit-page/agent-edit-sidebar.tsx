@@ -1,5 +1,6 @@
-import { Button, Icon, AgentIcon, ToolsIcon, VariablesIcon } from '@mastra/playground-ui';
+import { Icon, AgentIcon, ToolsIcon, VariablesIcon } from '@mastra/playground-ui';
 import type { JsonSchema } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { JSONSchemaForm, jsonSchemaToFields } from '@mastra/playground-ui/components/JSONSchemaForm';
 import type { SchemaField } from '@mastra/playground-ui/components/JSONSchemaForm';

@@ -1,4 +1,4 @@
-import { Button } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
