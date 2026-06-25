@@ -50,25 +50,25 @@ import { MastraCompositeStore } from '@mastra/core/storage'
 import { Observability, MastraStorageExporter, SensitiveDataFilter } from '@mastra/observability'
 
 export const mastra = new Mastra({
-  storage: new MastraCompositeStore({
-    id: 'composite-storage',
-    default: new LibSQLStore({
-      id: 'mastra-storage',
-      url: 'file:./mastra.db',
-    }),
-    domains: {
-      observability: await new DuckDBStore().getStore('observability'),
-    },
-  }),
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'mastra',
-        exporters: [new MastraStorageExporter()],
-        spanOutputProcessors: [new SensitiveDataFilter()],
-      },
-    },
-  }),
+	storage: new MastraCompositeStore({
+		id: 'composite-storage',
+		default: new LibSQLStore({
+			id: 'mastra-storage',
+			url: 'file:./mastra.db',
+		}),
+		domains: {
+			observability: await new DuckDBStore().getStore('observability'),
+		},
+	}),
+	observability: new Observability({
+		configs: {
+			default: {
+				serviceName: 'mastra',
+				exporters: [new MastraStorageExporter()],
+				spanOutputProcessors: [new SensitiveDataFilter()],
+			},
+		},
+	}),
 })
 ```
 

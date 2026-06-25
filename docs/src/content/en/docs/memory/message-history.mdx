@@ -40,10 +40,10 @@ import { Mastra } from '@mastra/core'
 import { LibSQLStore } from '@mastra/libsql'
 
 export const mastra = new Mastra({
-  storage: new LibSQLStore({
-    id: 'mastra-storage',
-    url: 'file:./mastra.db',
-  }),
+	storage: new LibSQLStore({
+		id: 'mastra-storage',
+		url: 'file:./mastra.db',
+	}),
 })
 ```
 
@@ -54,12 +54,12 @@ import { Memory } from '@mastra/memory'
 import { Agent } from '@mastra/core/agent'
 
 export const agent = new Agent({
-  id: 'test-agent',
-  memory: new Memory({
-    options: {
-      lastMessages: 10,
-    },
-  }),
+	id: 'test-agent',
+	memory: new Memory({
+		options: {
+			lastMessages: 10,
+		},
+	}),
 })
 ```
 
@@ -69,14 +69,14 @@ When you call the agent, messages are automatically saved to the database. You c
   <TabItem value="generate" label=".generate()">
     ```typescript
     await agent.generate('Hello', {
-      memory: {
-        thread: {
-          id: 'thread-123',
-          title: 'Support conversation',
-          metadata: { category: 'billing' },
-        },
-        resource: 'user-456',
-      },
+    	memory: {
+    		thread: {
+    			id: 'thread-123',
+    			title: 'Support conversation',
+    			metadata: { category: 'billing' },
+    		},
+    		resource: 'user-456',
+    	},
     })
     ```
   </TabItem>
@@ -84,14 +84,14 @@ When you call the agent, messages are automatically saved to the database. You c
   <TabItem value="stream" label=".stream()">
     ```typescript
     await agent.stream('Hello', {
-      memory: {
-        thread: {
-          id: 'thread-123',
-          title: 'Support conversation',
-          metadata: { category: 'billing' },
-        },
-        resource: 'user-456',
-      },
+    	memory: {
+    		thread: {
+    			id: 'thread-123',
+    			title: 'Support conversation',
+    			metadata: { category: 'billing' },
+    		},
+    		resource: 'user-456',
+    	},
     })
     ```
   </TabItem>
@@ -139,8 +139,8 @@ Use [`listThreads()`](/reference/memory/listThreads) to retrieve threads for a r
 
 ```typescript
 const result = await memory.listThreads({
-  filter: { resourceId: 'user-123' },
-  perPage: false,
+	filter: { resourceId: 'user-123' },
+	perPage: false,
 })
 ```
 
@@ -148,9 +148,9 @@ Paginate through threads:
 
 ```typescript
 const result = await memory.listThreads({
-  filter: { resourceId: 'user-123' },
-  page: 0,
-  perPage: 10,
+	filter: { resourceId: 'user-123' },
+	page: 0,
+	perPage: 10,
 })
 
 console.log(result.threads) // thread objects
@@ -161,11 +161,11 @@ You can also filter by metadata and control sort order:
 
 ```typescript
 const result = await memory.listThreads({
-  filter: {
-    resourceId: 'user-123',
-    metadata: { status: 'active' },
-  },
-  orderBy: { field: 'createdAt', direction: 'DESC' },
+	filter: {
+		resourceId: 'user-123',
+		metadata: { status: 'active' },
+	},
+	orderBy: { field: 'createdAt', direction: 'DESC' },
 })
 ```
 
@@ -183,8 +183,8 @@ Basic recall returns all messages from a thread:
 
 ```typescript
 const { messages } = await memory.recall({
-  threadId: 'thread-123',
-  perPage: false,
+	threadId: 'thread-123',
+	perPage: false,
 })
 ```
 
@@ -192,9 +192,9 @@ Paginate through messages:
 
 ```typescript
 const { messages } = await memory.recall({
-  threadId: 'thread-123',
-  page: 0,
-  perPage: 50,
+	threadId: 'thread-123',
+	page: 0,
+	perPage: 50,
 })
 ```
 
@@ -202,13 +202,13 @@ Filter by date range:
 
 ```typescript
 const { messages } = await memory.recall({
-  threadId: 'thread-123',
-  filter: {
-    dateRange: {
-      start: new Date('2025-01-01'),
-      end: new Date('2025-06-01'),
-    },
-  },
+	threadId: 'thread-123',
+	filter: {
+		dateRange: {
+			start: new Date('2025-01-01'),
+			end: new Date('2025-06-01'),
+		},
+	},
 })
 ```
 
@@ -216,8 +216,8 @@ Fetch a single message by ID:
 
 ```typescript
 const { messages } = await memory.recall({
-  threadId: 'thread-123',
-  include: [{ id: 'msg-123' }],
+	threadId: 'thread-123',
+	include: [{ id: 'msg-123' }],
 })
 ```
 
@@ -225,15 +225,15 @@ Fetch multiple messages by ID with surrounding context:
 
 ```typescript
 const { messages } = await memory.recall({
-  threadId: 'thread-123',
-  include: [
-    { id: 'msg-123' },
-    {
-      id: 'msg-456',
-      withPreviousMessages: 3,
-      withNextMessages: 1,
-    },
-  ],
+	threadId: 'thread-123',
+	include: [
+		{ id: 'msg-123' },
+		{
+			id: 'msg-456',
+			withPreviousMessages: 3,
+			withNextMessages: 1,
+		},
+	],
 })
 ```
 
@@ -241,11 +241,11 @@ Search by meaning (see [Semantic recall](/docs/memory/semantic-recall) for setup
 
 ```typescript
 const { messages } = await memory.recall({
-  threadId: 'thread-123',
-  vectorSearchString: 'project deadline discussion',
-  threadConfig: {
-    semanticRecall: true,
-  },
+	threadId: 'thread-123',
+	vectorSearchString: 'project deadline discussion',
+	threadConfig: {
+		semanticRecall: true,
+	},
 })
 ```
 
@@ -259,8 +259,8 @@ Thread cloning creates a copy of an existing thread with its messages. This is u
 
 ```typescript
 const { thread, clonedMessages } = await memory.cloneThread({
-  sourceThreadId: 'thread-123',
-  title: 'Branched conversation',
+	sourceThreadId: 'thread-123',
+	title: 'Branched conversation',
 })
 ```
 

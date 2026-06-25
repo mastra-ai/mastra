@@ -65,30 +65,30 @@ import { Harness } from '@mastra/core/harness'
 import { LibSQLStore } from '@mastra/libsql'
 
 const agent = new Agent({
-  name: 'assistant',
-  instructions: 'Help the user plan and complete tasks.',
-  model: '__GATEWAY_OPENAI_MODEL__',
+	name: 'assistant',
+	instructions: 'Help the user plan and complete tasks.',
+	model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 const harness = new Harness({
-  id: 'my-agent',
-  agent,
-  storage: new LibSQLStore({ url: 'file:./data.db' }),
-  modes: [
-    {
-      id: 'plan',
-      name: 'Plan',
-      metadata: { default: true },
-      instructions: 'Reason about changes before making them.',
-    },
-    { id: 'build', name: 'Build', instructions: 'Implement the approved plan.' },
-  ],
+	id: 'my-agent',
+	agent,
+	storage: new LibSQLStore({ url: 'file:./data.db' }),
+	modes: [
+		{
+			id: 'plan',
+			name: 'Plan',
+			metadata: { default: true },
+			instructions: 'Reason about changes before making them.',
+		},
+		{ id: 'build', name: 'Build', instructions: 'Implement the approved plan.' },
+	],
 })
 
 harness.subscribe(event => {
-  if (event.type === 'message_update') {
-    console.log(event.message)
-  }
+	if (event.type === 'message_update') {
+		console.log(event.message)
+	}
 })
 
 await harness.init()

@@ -83,12 +83,12 @@ await server.init()
 
 // Routes
 app.get('/', (_req: Request, res: Response) => {
-  res.json({ message: 'Hello, World!' })
+	res.json({ message: 'Hello, World!' })
 })
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`)
+	console.log(`Server is running on http://localhost:${PORT}`)
 })
 ```
 

@@ -13,7 +13,7 @@ The following reference covers all supported options in Mastra. You initialize a
 import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
-  // Your options...
+	// Your options...
 })
 ```
 
@@ -32,14 +32,14 @@ import { Mastra } from '@mastra/core'
 import { Agent } from '@mastra/core/agent'
 
 export const mastra = new Mastra({
-  agents: {
-    weatherAgent: new Agent({
-      id: 'weather-agent',
-      name: 'Weather Agent',
-      instructions: 'You help with weather information',
-      model: '__GATEWAY_OPENAI_MODEL__',
-    }),
-  },
+	agents: {
+		weatherAgent: new Agent({
+			id: 'weather-agent',
+			name: 'Weather Agent',
+			instructions: 'You help with weather information',
+			model: '__GATEWAY_OPENAI_MODEL__',
+		}),
+	},
 })
 ```
 
@@ -56,158 +56,158 @@ import { Mastra } from '@mastra/core'
 import { LibSQLStore } from '@mastra/libsql'
 
 export const mastra = new Mastra({
-  storage: new LibSQLStore({
-    id: 'mastra-storage',
-    url: 'file:./mastra.db',
-  }),
-  backgroundTasks: {
-    enabled: true,
-    globalConcurrency: 10,
-    perAgentConcurrency: 5,
-    backpressure: 'queue',
-    defaultTimeoutMs: 300_000,
-  },
+	storage: new LibSQLStore({
+		id: 'mastra-storage',
+		url: 'file:./mastra.db',
+	}),
+	backgroundTasks: {
+		enabled: true,
+		globalConcurrency: 10,
+		perAgentConcurrency: 5,
+		backpressure: 'queue',
+		defaultTimeoutMs: 300_000,
+	},
 })
 ```
 
 <PropertiesTable
   content={[
-  {
-    name: 'enabled',
-    type: 'boolean',
-    defaultValue: 'false',
-    description:
-      'Whether the background task manager is available. The manager only initializes when this is true and a storage backend is configured. This is a feature-availability switch — it does not opt any tool into background dispatch. Tools must opt in at the tool or agent layer (see the Background tasks guide).',
-  },
-  {
-    name: 'globalConcurrency',
-    type: 'number',
-    isOptional: true,
-    defaultValue: '10',
-    description: 'Maximum number of background tasks running concurrently across all agents.',
-  },
-  {
-    name: 'perAgentConcurrency',
-    type: 'number',
-    isOptional: true,
-    defaultValue: '5',
-    description: 'Maximum number of background tasks running concurrently for a single agent.',
-  },
-  {
-    name: 'backpressure',
-    type: "'queue' | 'reject' | 'fallback-sync'",
-    isOptional: true,
-    defaultValue: "'queue'",
-    description:
-      "Behavior when a concurrency limit is reached. 'queue' waits for a slot, 'reject' throws on enqueue, 'fallback-sync' runs the tool synchronously in the agentic loop instead.",
-  },
-  {
-    name: 'defaultTimeoutMs',
-    type: 'number',
-    isOptional: true,
-    defaultValue: '300000',
-    description: 'Default per-task timeout in milliseconds. Can be overridden per-tool or per-call.',
-  },
-  {
-    name: 'defaultRetries',
-    type: 'RetryConfig',
-    isOptional: true,
-    description: 'Default retry policy applied to tasks that fail.',
-    properties: [
-      {
-        parameters: [
-          {
-            name: 'maxRetries',
-            type: 'number',
-            isOptional: true,
-            defaultValue: '0',
-            description: 'Maximum retry attempts before the task is marked failed.',
-          },
-          {
-            name: 'retryDelayMs',
-            type: 'number',
-            isOptional: true,
-            defaultValue: '1000',
-            description: 'Delay between retries in milliseconds.',
-          },
-          {
-            name: 'backoffMultiplier',
-            type: 'number',
-            isOptional: true,
-            defaultValue: '2',
-            description: 'Multiplier applied to retryDelayMs on each subsequent attempt.',
-          },
-          {
-            name: 'maxRetryDelayMs',
-            type: 'number',
-            isOptional: true,
-            defaultValue: '30000',
-            description: 'Upper bound on the retry delay regardless of backoff.',
-          },
-          {
-            name: 'retryableErrors',
-            type: '(error: Error) => boolean',
-            isOptional: true,
-            description: 'Predicate that decides whether a given error should be retried. Default: retry all errors.',
-          },
-        ],
-      },
-    ],
-  },
-  {
-    name: 'cleanup',
-    type: 'CleanupConfig',
-    isOptional: true,
-    description: 'Controls how long task records are kept and how often the cleanup process runs.',
-    properties: [
-      {
-        parameters: [
-          {
-            name: 'completedTtlMs',
-            type: 'number',
-            isOptional: true,
-            defaultValue: '3600000',
-            description: 'How long to keep completed task records, in milliseconds. Default: 1 hour.',
-          },
-          {
-            name: 'failedTtlMs',
-            type: 'number',
-            isOptional: true,
-            defaultValue: '86400000',
-            description: 'How long to keep failed task records, in milliseconds. Default: 24 hours.',
-          },
-          {
-            name: 'cleanupIntervalMs',
-            type: 'number',
-            isOptional: true,
-            defaultValue: '60000',
-            description: 'How often the cleanup process runs, in milliseconds. Default: 1 minute.',
-          },
-        ],
-      },
-    ],
-  },
-  {
-    name: 'waitTimeoutMs',
-    type: 'number',
-    isOptional: true,
-    description:
-      'How long the agentic loop waits for a background task to complete before moving on. If a task has not finished within this time, the loop proceeds without setting isContinued. Default: undefined (do not wait). Can be overridden per-agent or per-tool.',
-  },
-  {
-    name: 'onTaskComplete',
-    type: '(task: BackgroundTask) => void | Promise<void>',
-    isOptional: true,
-    description:
-      'Global callback invoked when any background task completes successfully. Fires in addition to per-tool and per-agent callbacks.',
-  },
-  {
-    name: 'onTaskFailed',
-    type: '(task: BackgroundTask) => void | Promise<void>',
-    isOptional: true,
-    description:
-      'Global callback invoked when any background task fails. Fires in addition to per-tool and per-agent callbacks.',
-  },
+	{
+		name: 'enabled',
+		type: 'boolean',
+		defaultValue: 'false',
+		description:
+			'Whether the background task manager is available. The manager only initializes when this is true and a storage backend is configured. This is a feature-availability switch — it does not opt any tool into background dispatch. Tools must opt in at the tool or agent layer (see the Background tasks guide).',
+	},
+	{
+		name: 'globalConcurrency',
+		type: 'number',
+		isOptional: true,
+		defaultValue: '10',
+		description: 'Maximum number of background tasks running concurrently across all agents.',
+	},
+	{
+		name: 'perAgentConcurrency',
+		type: 'number',
+		isOptional: true,
+		defaultValue: '5',
+		description: 'Maximum number of background tasks running concurrently for a single agent.',
+	},
+	{
+		name: 'backpressure',
+		type: "'queue' | 'reject' | 'fallback-sync'",
+		isOptional: true,
+		defaultValue: "'queue'",
+		description:
+			"Behavior when a concurrency limit is reached. 'queue' waits for a slot, 'reject' throws on enqueue, 'fallback-sync' runs the tool synchronously in the agentic loop instead.",
+	},
+	{
+		name: 'defaultTimeoutMs',
+		type: 'number',
+		isOptional: true,
+		defaultValue: '300000',
+		description: 'Default per-task timeout in milliseconds. Can be overridden per-tool or per-call.',
+	},
+	{
+		name: 'defaultRetries',
+		type: 'RetryConfig',
+		isOptional: true,
+		description: 'Default retry policy applied to tasks that fail.',
+		properties: [
+			{
+				parameters: [
+					{
+						name: 'maxRetries',
+						type: 'number',
+						isOptional: true,
+						defaultValue: '0',
+						description: 'Maximum retry attempts before the task is marked failed.',
+					},
+					{
+						name: 'retryDelayMs',
+						type: 'number',
+						isOptional: true,
+						defaultValue: '1000',
+						description: 'Delay between retries in milliseconds.',
+					},
+					{
+						name: 'backoffMultiplier',
+						type: 'number',
+						isOptional: true,
+						defaultValue: '2',
+						description: 'Multiplier applied to retryDelayMs on each subsequent attempt.',
+					},
+					{
+						name: 'maxRetryDelayMs',
+						type: 'number',
+						isOptional: true,
+						defaultValue: '30000',
+						description: 'Upper bound on the retry delay regardless of backoff.',
+					},
+					{
+						name: 'retryableErrors',
+						type: '(error: Error) => boolean',
+						isOptional: true,
+						description: 'Predicate that decides whether a given error should be retried. Default: retry all errors.',
+					},
+				],
+			},
+		],
+	},
+	{
+		name: 'cleanup',
+		type: 'CleanupConfig',
+		isOptional: true,
+		description: 'Controls how long task records are kept and how often the cleanup process runs.',
+		properties: [
+			{
+				parameters: [
+					{
+						name: 'completedTtlMs',
+						type: 'number',
+						isOptional: true,
+						defaultValue: '3600000',
+						description: 'How long to keep completed task records, in milliseconds. Default: 1 hour.',
+					},
+					{
+						name: 'failedTtlMs',
+						type: 'number',
+						isOptional: true,
+						defaultValue: '86400000',
+						description: 'How long to keep failed task records, in milliseconds. Default: 24 hours.',
+					},
+					{
+						name: 'cleanupIntervalMs',
+						type: 'number',
+						isOptional: true,
+						defaultValue: '60000',
+						description: 'How often the cleanup process runs, in milliseconds. Default: 1 minute.',
+					},
+				],
+			},
+		],
+	},
+	{
+		name: 'waitTimeoutMs',
+		type: 'number',
+		isOptional: true,
+		description:
+			'How long the agentic loop waits for a background task to complete before moving on. If a task has not finished within this time, the loop proceeds without setting isContinued. Default: undefined (do not wait). Can be overridden per-agent or per-tool.',
+	},
+	{
+		name: 'onTaskComplete',
+		type: '(task: BackgroundTask) => void | Promise<void>',
+		isOptional: true,
+		description:
+			'Global callback invoked when any background task completes successfully. Fires in addition to per-tool and per-agent callbacks.',
+	},
+	{
+		name: 'onTaskFailed',
+		type: '(task: BackgroundTask) => void | Promise<void>',
+		isOptional: true,
+		description:
+			'Global callback invoked when any background task fails. Fires in addition to per-tool and per-agent callbacks.',
+	},
 ]}
 />
 
@@ -224,7 +224,7 @@ import { Mastra } from '@mastra/core'
 import { NetlifyDeployer } from '@mastra/deployer-netlify'
 
 export const mastra = new Mastra({
-  deployer: new NetlifyDeployer(),
+	deployer: new NetlifyDeployer(),
 })
 ```
 
@@ -242,11 +242,11 @@ This is used internally by Mastra's workflow engine. Most users won't need to co
 import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
-  events: {
-    'my-topic': async event => {
-      console.log('Event received:', event)
-    },
-  },
+	events: {
+		'my-topic': async event => {
+			console.log('Event received:', event)
+		},
+	},
 })
 ```
 
@@ -263,9 +263,9 @@ import { Mastra } from '@mastra/core'
 import { MyPrivateGateway } from './gateways'
 
 export const mastra = new Mastra({
-  gateways: {
-    private: new MyPrivateGateway(),
-  },
+	gateways: {
+		private: new MyPrivateGateway(),
+	},
 })
 ```
 
@@ -297,17 +297,17 @@ import { v4 as uuid } from '@lukeed/uuid'
 import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
-  idGenerator: context => {
-    if (context?.idType === 'message' && context?.threadId) {
-      return `msg-${context.threadId}-${uuid()}`
-    }
+	idGenerator: context => {
+		if (context?.idType === 'message' && context?.threadId) {
+			return `msg-${context.threadId}-${uuid()}`
+		}
 
-    if (context?.idType === 'run' && context?.source && context?.entityId) {
-      return `${context.source}-run-${context.entityId}-${uuid()}`
-    }
+		if (context?.idType === 'run' && context?.source && context?.entityId) {
+			return `${context.source}-run-${context.entityId}-${uuid()}`
+		}
 
-    return uuid()
-  },
+		return uuid()
+	},
 })
 ```
 
@@ -325,7 +325,7 @@ import { Mastra } from '@mastra/core'
 import { PinoLogger } from '@mastra/loggers'
 
 export const mastra = new Mastra({
-  logger: new PinoLogger({ name: 'MyApp', level: 'debug' }),
+	logger: new PinoLogger({ name: 'MyApp', level: 'debug' }),
 })
 ```
 
@@ -342,15 +342,15 @@ import { Mastra } from '@mastra/core'
 import { MCPServer } from '@mastra/mcp'
 
 const mcpServer = new MCPServer({
-  id: 'my-mcp-server',
-  name: 'My MCP Server',
-  version: '1.0.0',
+	id: 'my-mcp-server',
+	name: 'My MCP Server',
+	version: '1.0.0',
 })
 
 export const mastra = new Mastra({
-  mcpServers: {
-    myServer: mcpServer,
-  },
+	mcpServers: {
+		myServer: mcpServer,
+	},
 })
 ```
 
@@ -374,17 +374,17 @@ import { Memory } from '@mastra/memory'
 import { LibSQLStore } from '@mastra/libsql'
 
 export const mastra = new Mastra({
-  storage: new LibSQLStore({
-    id: 'mastra-storage',
-    url: ':memory:',
-  }),
-  memory: {
-    chatMemory: new Memory({
-      options: {
-        lastMessages: 20,
-      },
-    }),
-  },
+	storage: new LibSQLStore({
+		id: 'mastra-storage',
+		url: ':memory:',
+	}),
+	memory: {
+		chatMemory: new Memory({
+			options: {
+				lastMessages: 20,
+			},
+		}),
+	},
 })
 ```
 
@@ -402,18 +402,18 @@ import { LibSQLStore } from '@mastra/libsql'
 import { Observability, MastraStorageExporter } from '@mastra/observability'
 
 export const mastra = new Mastra({
-  storage: new LibSQLStore({
-    id: 'mastra-storage',
-    url: 'file:./mastra.db',
-  }),
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'my-app',
-        exporters: [new MastraStorageExporter()],
-      },
-    },
-  }),
+	storage: new LibSQLStore({
+		id: 'mastra-storage',
+		url: 'file:./mastra.db',
+	}),
+	observability: new Observability({
+		configs: {
+			default: {
+				serviceName: 'my-app',
+				exporters: [new MastraStorageExporter()],
+			},
+		},
+	}),
 })
 ```
 
@@ -436,12 +436,12 @@ import { Mastra } from '@mastra/core'
 import { ModerationProcessor } from '@mastra/core/processors'
 
 export const mastra = new Mastra({
-  processors: {
-    moderation: new ModerationProcessor({
-      model: '__GATEWAY_OPENAI_MODEL_MINI__',
-      categories: ['hate', 'harassment', 'violence'],
-    }),
-  },
+	processors: {
+		moderation: new ModerationProcessor({
+			model: '__GATEWAY_OPENAI_MODEL_MINI__',
+			categories: ['hate', 'harassment', 'violence'],
+		}),
+	},
 })
 ```
 
@@ -461,7 +461,7 @@ import { Mastra } from '@mastra/core'
 import { CustomPubSub } from './pubsub'
 
 export const mastra = new Mastra({
-  pubsub: new CustomPubSub(),
+	pubsub: new CustomPubSub(),
 })
 ```
 
@@ -484,9 +484,9 @@ import { Mastra } from '@mastra/core'
 import { createToxicityScorer } from '@mastra/evals/scorers/prebuilt'
 
 export const mastra = new Mastra({
-  scorers: {
-    toxicity: createToxicityScorer({ model: '__GATEWAY_OPENAI_MODEL_MINI__' }),
-  },
+	scorers: {
+		toxicity: createToxicityScorer({ model: '__GATEWAY_OPENAI_MODEL_MINI__' }),
+	},
 })
 ```
 
@@ -503,10 +503,10 @@ import { Mastra } from '@mastra/core'
 import { LibSQLStore } from '@mastra/libsql'
 
 export const mastra = new Mastra({
-  storage: new LibSQLStore({
-    id: 'mastra-storage',
-    url: 'file:./mastra.db',
-  }),
+	storage: new LibSQLStore({
+		id: 'mastra-storage',
+		url: 'file:./mastra.db',
+	}),
 })
 ```
 
@@ -528,20 +528,20 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 const weatherTool = createTool({
-  id: 'get-weather',
-  description: 'Fetches weather for a city',
-  inputSchema: z.object({
-    city: z.string(),
-  }),
-  execute: async () => {
-    return { temperature: 20, conditions: 'Sunny' }
-  },
+	id: 'get-weather',
+	description: 'Fetches weather for a city',
+	inputSchema: z.object({
+		city: z.string(),
+	}),
+	execute: async () => {
+		return { temperature: 20, conditions: 'Sunny' }
+	},
 })
 
 export const mastra = new Mastra({
-  tools: {
-    weather: weatherTool,
-  },
+	tools: {
+		weather: weatherTool,
+	},
 })
 ```
 
@@ -562,9 +562,9 @@ import { Mastra } from '@mastra/core'
 import { OpenAIVoice } from '@mastra/voice-openai'
 
 export const mastra = new Mastra({
-  tts: {
-    openai: new OpenAIVoice(),
-  },
+	tts: {
+		openai: new OpenAIVoice(),
+	},
 })
 ```
 
@@ -585,12 +585,12 @@ import { Mastra } from '@mastra/core'
 import { PineconeVector } from '@mastra/pinecone'
 
 export const mastra = new Mastra({
-  vectors: {
-    pinecone: new PineconeVector({
-      id: 'pinecone-vector',
-      apiKey: process.env.PINECONE_API_KEY,
-    }),
-  },
+	vectors: {
+		pinecone: new PineconeVector({
+			id: 'pinecone-vector',
+			apiKey: process.env.PINECONE_API_KEY,
+		}),
+	},
 })
 ```
 
@@ -607,9 +607,9 @@ import { Mastra } from '@mastra/core'
 import { testWorkflow } from './workflows/test-workflow'
 
 export const mastra = new Mastra({
-  workflows: {
-    testWorkflow,
-  },
+	workflows: {
+		testWorkflow,
+	},
 })
 ```
 
@@ -626,11 +626,11 @@ import { Mastra } from '@mastra/core'
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
 })
 
 const mastra = new Mastra({
-  workspace,
+	workspace,
 })
 ```
 
@@ -655,9 +655,9 @@ Here's an overview of what the different values mean:
 import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
-  bundler: {
-    externals: ['some-package', 'another-package'],
-  },
+	bundler: {
+		externals: ['some-package', 'another-package'],
+	},
 })
 ```
 
@@ -672,9 +672,9 @@ Enables source map generation for the bundled output.
 import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
-  bundler: {
-    sourcemap: true,
-  },
+	bundler: {
+		sourcemap: true,
+	},
 })
 ```
 
@@ -695,9 +695,9 @@ Mastra also resolves `tsconfig.json` `baseUrl` and `paths` aliases during build.
 import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
-  bundler: {
-    transpilePackages: ['@my-org/shared-utils'],
-  },
+	bundler: {
+		transpilePackages: ['@my-org/shared-utils'],
+	},
 })
 ```
 
@@ -716,16 +716,16 @@ import { Mastra } from '@mastra/core'
 import { registerApiRoute } from '@mastra/core/server'
 
 export const mastra = new Mastra({
-  server: {
-    apiRoutes: [
-      registerApiRoute('/my-custom-route', {
-        method: 'GET',
-        handler: async c => {
-          return c.json({ message: 'Custom route' })
-        },
-      }),
-    ],
-  },
+	server: {
+		apiRoutes: [
+			registerApiRoute('/my-custom-route', {
+				method: 'GET',
+				handler: async c => {
+					return c.json({ message: 'Custom route' })
+				},
+			}),
+		],
+	},
 })
 ```
 
@@ -742,12 +742,12 @@ import { Mastra } from '@mastra/core'
 import { MastraJwtAuth } from '@mastra/auth'
 
 export const mastra = new Mastra({
-  server: {
-    auth: new MastraJwtAuth({
-      secret: process.env.MASTRA_JWT_SECRET,
-      mapUserToResourceId: user => user.id,
-    }),
-  },
+	server: {
+		auth: new MastraJwtAuth({
+			secret: process.env.MASTRA_JWT_SECRET,
+			mapUserToResourceId: user => user.id,
+		}),
+	},
 })
 ```
 
@@ -764,9 +764,9 @@ Maximum request body size in bytes. Increase this limit if your application need
 import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
-  server: {
-    bodySizeLimit: 10 * 1024 * 1024, // 10mb
-  },
+	server: {
+		bodySizeLimit: 10 * 1024 * 1024, // 10mb
+	},
 })
 ```
 
@@ -786,11 +786,11 @@ MCP transport options applied to all MCP HTTP and SSE routes. Use this to enable
 import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
-  server: {
-    mcpOptions: {
-      serverless: true,
-    },
-  },
+	server: {
+		mcpOptions: {
+			serverless: true,
+		},
+	},
 })
 ```
 
@@ -808,13 +808,13 @@ Build-time configuration for server features. These options control development 
 import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
-  server: {
-    build: {
-      swaggerUI: true,
-      apiReqLogs: true,
-      openAPIDocs: true,
-    },
-  },
+	server: {
+		build: {
+			swaggerUI: true,
+			apiReqLogs: true,
+			openAPIDocs: true,
+		},
+	},
 })
 ```
 
@@ -837,14 +837,14 @@ CORS (Cross-Origin Resource Sharing) configuration for the server. Set to `false
 import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
-  server: {
-    cors: {
-      origin: ['https://example.com'],
-      allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowHeaders: ['Content-Type', 'Authorization'],
-      credentials: false,
-    },
-  },
+	server: {
+		cors: {
+			origin: ['https://example.com'],
+			allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+			allowHeaders: ['Content-Type', 'Authorization'],
+			credentials: false,
+		},
+	},
 })
 ```
 
@@ -859,9 +859,9 @@ Host address the Mastra development server binds to. If the `MASTRA_HOST` enviro
 import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
-  server: {
-    host: '0.0.0.0',
-  },
+	server: {
+		host: '0.0.0.0',
+	},
 })
 ```
 
@@ -876,12 +876,12 @@ import { Mastra } from '@mastra/core'
 import fs from 'node:fs'
 
 export const mastra = new Mastra({
-  server: {
-    https: {
-      key: fs.readFileSync('path/to/key.pem'),
-      cert: fs.readFileSync('path/to/cert.pem'),
-    },
-  },
+	server: {
+		https: {
+			key: fs.readFileSync('path/to/key.pem'),
+			cert: fs.readFileSync('path/to/cert.pem'),
+		},
+	},
 })
 ```
 
@@ -897,20 +897,20 @@ Visit the [Middleware documentation](/docs/server/middleware) to learn more.
 import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
-  server: {
-    middleware: [
-      {
-        handler: async (c, next) => {
-          const authHeader = c.req.header('Authorization')
-          if (!authHeader) {
-            return new Response('Unauthorized', { status: 401 })
-          }
-          await next()
-        },
-        path: '/api/*',
-      },
-    ],
-  },
+	server: {
+		middleware: [
+			{
+				handler: async (c, next) => {
+					const authHeader = c.req.header('Authorization')
+					if (!authHeader) {
+						return new Response('Unauthorized', { status: 401 })
+					}
+					await next()
+				},
+				path: '/api/*',
+			},
+		],
+	},
 })
 ```
 
@@ -927,19 +927,19 @@ import { Mastra } from '@mastra/core'
 import * as Sentry from '@sentry/node'
 
 export const mastra = new Mastra({
-  server: {
-    onError: (err, c) => {
-      Sentry.captureException(err)
+	server: {
+		onError: (err, c) => {
+			Sentry.captureException(err)
 
-      return c.json(
-        {
-          error: err.message,
-          timestamp: new Date().toISOString(),
-        },
-        500,
-      )
-    },
-  },
+			return c.json(
+				{
+					error: err.message,
+					timestamp: new Date().toISOString(),
+				},
+				500,
+			)
+		},
+	},
 })
 ```
 
@@ -961,19 +961,19 @@ The `context` parameter indicates which part of the request failed validation:
 import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
-  server: {
-    onValidationError: (error, context) => ({
-      status: 422,
-      body: {
-        ok: false,
-        errors: error.issues.map(i => ({
-          path: i.path.join('.'),
-          message: i.message,
-        })),
-        source: context,
-      },
-    }),
-  },
+	server: {
+		onValidationError: (error, context) => ({
+			status: 422,
+			body: {
+				ok: false,
+				errors: error.issues.map(i => ({
+					path: i.path.join('.'),
+					message: i.message,
+				})),
+				source: context,
+			},
+		}),
+	},
 })
 ```
 
@@ -990,9 +990,9 @@ Port the Mastra development server binds to. If the `PORT` environment variable 
 import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
-  server: {
-    port: 8080,
-  },
+	server: {
+		port: 8080,
+	},
 })
 ```
 
@@ -1009,9 +1009,9 @@ This is useful when integrating with existing applications, using authentication
 import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
-  server: {
-    studioBase: '/my-mastra-studio',
-  },
+	server: {
+		studioBase: '/my-mastra-studio',
+	},
 })
 ```
 
@@ -1031,8 +1031,8 @@ Request timeout in milliseconds. Requests that exceed this duration will be term
 import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
-  server: {
-    timeout: 30000, // 30 seconds
-  },
+	server: {
+		timeout: 30000, // 30 seconds
+	},
 })
 ```

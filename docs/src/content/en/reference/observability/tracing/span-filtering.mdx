@@ -25,22 +25,22 @@ import { Observability, MastraStorageExporter } from '@mastra/observability'
 import { LangfuseExporter } from '@mastra/langfuse'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'my-app',
-        exporters: [new MastraStorageExporter(), new LangfuseExporter()],
-        excludeSpanTypes: [SpanType.MODEL_CHUNK, SpanType.MODEL_STEP],
-        spanFilter: span => {
-          if (span.type === SpanType.TOOL_CALL && span.attributes?.success) {
-            return false
-          }
+	observability: new Observability({
+		configs: {
+			default: {
+				serviceName: 'my-app',
+				exporters: [new MastraStorageExporter(), new LangfuseExporter()],
+				excludeSpanTypes: [SpanType.MODEL_CHUNK, SpanType.MODEL_STEP],
+				spanFilter: span => {
+					if (span.type === SpanType.TOOL_CALL && span.attributes?.success) {
+						return false
+					}
 
-          return true
-        },
-      },
-    },
-  }),
+					return true
+				},
+			},
+		},
+	}),
 })
 ```
 
@@ -48,20 +48,20 @@ export const mastra = new Mastra({
 
 <PropertiesTable
   content={[
-  {
-    name: 'excludeSpanTypes',
-    type: 'SpanType[]',
-    description:
-      'Drops spans by type before processors and spanFilter run. Use this for broad, low-overhead filtering.',
-    isOptional: true,
-  },
-  {
-    name: 'spanFilter',
-    type: '(span: AnyExportedSpan) => boolean',
-    description:
-      'Receives the exported span and returns true to keep it or false to drop it. Use this when filtering depends on attributes, metadata, timing, or entity identifiers.',
-    isOptional: true,
-  },
+	{
+		name: 'excludeSpanTypes',
+		type: 'SpanType[]',
+		description:
+			'Drops spans by type before processors and spanFilter run. Use this for broad, low-overhead filtering.',
+		isOptional: true,
+	},
+	{
+		name: 'spanFilter',
+		type: '(span: AnyExportedSpan) => boolean',
+		description:
+			'Receives the exported span and returns true to keep it or false to drop it. Use this when filtering depends on attributes, metadata, timing, or entity identifiers.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -85,10 +85,10 @@ When filtering depends on the exported span contents, use `spanFilter`.
 import { SpanType } from '@mastra/core/observability'
 
 spanFilter: span => {
-  if (span.type === SpanType.MODEL_CHUNK) return false
-  if (span.type === SpanType.TOOL_CALL && span.attributes?.success) return false
+	if (span.type === SpanType.MODEL_CHUNK) return false
+	if (span.type === SpanType.TOOL_CALL && span.attributes?.success) return false
 
-  return true
+	return true
 }
 ```
 

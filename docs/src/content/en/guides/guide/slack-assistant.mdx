@@ -29,16 +29,16 @@ import { Agent } from '@mastra/core/agent'
 import { createSlackAdapter } from '@chat-adapter/slack'
 
 export const slackAgent = new Agent({
-  id: 'slack-agent',
-  name: 'Slack Agent',
-  instructions:
-    'You are a helpful assistant. Answer questions, help with tasks, and have natural conversations.',
-  model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
-  channels: {
-    adapters: {
-      slack: createSlackAdapter(),
-    },
-  },
+	id: 'slack-agent',
+	name: 'Slack Agent',
+	instructions:
+		'You are a helpful assistant. Answer questions, help with tasks, and have natural conversations.',
+	model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
+	channels: {
+		adapters: {
+			slack: createSlackAdapter(),
+		},
+	},
 })
 ```
 
@@ -52,8 +52,8 @@ import { Mastra } from '@mastra/core'
 import { slackAgent } from './agents/slack-agent'
 
 export const mastra = new Mastra({
-  // highlight-next-line
-  agents: { slackAgent },
+	// highlight-next-line
+	agents: { slackAgent },
 })
 ```
 

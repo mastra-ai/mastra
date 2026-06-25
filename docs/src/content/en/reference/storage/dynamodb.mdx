@@ -54,21 +54,21 @@ import { DynamoDBStore } from '@mastra/dynamodb'
 
 // Initialize the DynamoDB storage
 const storage = new DynamoDBStore({
-  id: 'dynamodb', // Unique identifier for this storage instance
-  config: {
-    tableName: 'mastra-single-table', // Name of your DynamoDB table
-    region: 'us-east-1', // Optional: AWS region, defaults to 'us-east-1'
-    // endpoint: "http://localhost:8000", // Optional: For local DynamoDB
-    // credentials: { accessKeyId: "YOUR_ACCESS_KEY", secretAccessKey: "YOUR_SECRET_KEY" } // Optional
-  },
+	id: 'dynamodb', // Unique identifier for this storage instance
+	config: {
+		tableName: 'mastra-single-table', // Name of your DynamoDB table
+		region: 'us-east-1', // Optional: AWS region, defaults to 'us-east-1'
+		// endpoint: "http://localhost:8000", // Optional: For local DynamoDB
+		// credentials: { accessKeyId: "YOUR_ACCESS_KEY", secretAccessKey: "YOUR_SECRET_KEY" } // Optional
+	},
 })
 
 // Example: Initialize Memory with DynamoDB storage
 const memory = new Memory({
-  storage,
-  options: {
-    lastMessages: 10,
-  },
+	storage,
+	options: {
+		lastMessages: 10,
+	},
 })
 ```
 
@@ -88,15 +88,15 @@ For local development, you can use [DynamoDB Local](https://docs.aws.amazon.com/
    import { DynamoDBStore } from '@mastra/dynamodb'
 
    const storage = new DynamoDBStore({
-     id: 'dynamodb-local',
-     config: {
-       tableName: 'mastra-single-table', // Ensure this table is created in your local DynamoDB
-       region: 'localhost', // Can be any string for local, 'localhost' is common
-       endpoint: 'http://localhost:8000',
-       // For DynamoDB Local, credentials are not typically required unless configured.
-       // If you've configured local credentials:
-       // credentials: { accessKeyId: "fakeMyKeyId", secretAccessKey: "fakeSecretAccessKey" }
-     },
+   	id: 'dynamodb-local',
+   	config: {
+   		tableName: 'mastra-single-table', // Ensure this table is created in your local DynamoDB
+   		region: 'localhost', // Can be any string for local, 'localhost' is common
+   		endpoint: 'http://localhost:8000',
+   		// For DynamoDB Local, credentials are not typically required unless configured.
+   		// If you've configured local credentials:
+   		// credentials: { accessKeyId: "fakeMyKeyId", secretAccessKey: "fakeSecretAccessKey" }
+   	},
    })
    ```
 
@@ -106,44 +106,44 @@ For local development, you can use [DynamoDB Local](https://docs.aws.amazon.com/
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Unique identifier for this storage instance.',
-    isOptional: false,
-  },
-  {
-    name: 'config.tableName',
-    type: 'string',
-    description: 'The name of your DynamoDB table.',
-    isOptional: false,
-  },
-  {
-    name: 'config.region',
-    type: 'string',
-    description: "AWS region. Defaults to 'us-east-1'. For local development, can be set to 'localhost' or similar.",
-    isOptional: true,
-  },
-  {
-    name: 'config.endpoint',
-    type: 'string',
-    description: "Custom endpoint for DynamoDB (e.g., 'http://localhost:8000' for local development).",
-    isOptional: true,
-  },
-  {
-    name: 'config.credentials',
-    type: 'object',
-    description:
-      'AWS credentials object with `accessKeyId` and `secretAccessKey`. If not provided, the AWS SDK will attempt to source credentials from environment variables, IAM roles (e.g., for EC2/Lambda), or the shared AWS credentials file.',
-    isOptional: true,
-  },
-  {
-    name: 'config.ttl',
-    type: 'object',
-    description:
-      "TTL (Time To Live) configuration for automatic data expiration. Configure per entity type: thread, message, trace, eval, workflow_snapshot, resource, score. Each entity config includes: enabled (boolean), attributeName (string, default: 'ttl'), defaultTtlSeconds (number).",
-    isOptional: true,
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Unique identifier for this storage instance.',
+		isOptional: false,
+	},
+	{
+		name: 'config.tableName',
+		type: 'string',
+		description: 'The name of your DynamoDB table.',
+		isOptional: false,
+	},
+	{
+		name: 'config.region',
+		type: 'string',
+		description: "AWS region. Defaults to 'us-east-1'. For local development, can be set to 'localhost' or similar.",
+		isOptional: true,
+	},
+	{
+		name: 'config.endpoint',
+		type: 'string',
+		description: "Custom endpoint for DynamoDB (e.g., 'http://localhost:8000' for local development).",
+		isOptional: true,
+	},
+	{
+		name: 'config.credentials',
+		type: 'object',
+		description:
+			'AWS credentials object with `accessKeyId` and `secretAccessKey`. If not provided, the AWS SDK will attempt to source credentials from environment variables, IAM roles (e.g., for EC2/Lambda), or the shared AWS credentials file.',
+		isOptional: true,
+	},
+	{
+		name: 'config.ttl',
+		type: 'object',
+		description:
+			"TTL (Time To Live) configuration for automatic data expiration. Configure per entity type: thread, message, trace, eval, workflow_snapshot, resource, score. Each entity config includes: enabled (boolean), attributeName (string, default: 'ttl'), defaultTtlSeconds (number).",
+		isOptional: true,
+	},
 ]}
 />
 
@@ -167,33 +167,33 @@ To use TTL, you must:
 import { DynamoDBStore } from '@mastra/dynamodb'
 
 const storage = new DynamoDBStore({
-  name: 'dynamodb',
-  config: {
-    tableName: 'mastra-single-table',
-    region: 'us-east-1',
-    ttl: {
-      // Messages expire after 30 days
-      message: {
-        enabled: true,
-        defaultTtlSeconds: 30 * 24 * 60 * 60, // 30 days
-      },
-      // Threads expire after 90 days
-      thread: {
-        enabled: true,
-        defaultTtlSeconds: 90 * 24 * 60 * 60, // 90 days
-      },
-      // Traces expire after 7 days with custom attribute name
-      trace: {
-        enabled: true,
-        attributeName: 'expiresAt', // Custom TTL attribute
-        defaultTtlSeconds: 7 * 24 * 60 * 60, // 7 days
-      },
-      // Workflow snapshots don't expire
-      workflow_snapshot: {
-        enabled: false,
-      },
-    },
-  },
+	name: 'dynamodb',
+	config: {
+		tableName: 'mastra-single-table',
+		region: 'us-east-1',
+		ttl: {
+			// Messages expire after 30 days
+			message: {
+				enabled: true,
+				defaultTtlSeconds: 30 * 24 * 60 * 60, // 30 days
+			},
+			// Threads expire after 90 days
+			thread: {
+				enabled: true,
+				defaultTtlSeconds: 90 * 24 * 60 * 60, // 90 days
+			},
+			// Traces expire after 7 days with custom attribute name
+			trace: {
+				enabled: true,
+				attributeName: 'expiresAt', // Custom TTL attribute
+				defaultTtlSeconds: 7 * 24 * 60 * 60, // 7 days
+			},
+			// Workflow snapshots don't expire
+			workflow_snapshot: {
+				enabled: false,
+			},
+		},
+	},
 })
 ```
 
@@ -217,26 +217,26 @@ Each entity type accepts the following configuration:
 
 <PropertiesTable
   content={[
-  {
-    name: 'enabled',
-    type: 'boolean',
-    description: 'Whether TTL is enabled for this entity type.',
-    isOptional: false,
-  },
-  {
-    name: 'attributeName',
-    type: 'string',
-    description:
-      "The DynamoDB attribute name to use for TTL. Must match the TTL attribute configured on your DynamoDB table. Defaults to 'ttl'.",
-    isOptional: true,
-  },
-  {
-    name: 'defaultTtlSeconds',
-    type: 'number',
-    description:
-      'Default TTL in seconds from item creation time. Items will be automatically deleted by DynamoDB after this duration.',
-    isOptional: true,
-  },
+	{
+		name: 'enabled',
+		type: 'boolean',
+		description: 'Whether TTL is enabled for this entity type.',
+		isOptional: false,
+	},
+	{
+		name: 'attributeName',
+		type: 'string',
+		description:
+			"The DynamoDB attribute name to use for TTL. Must match the TTL attribute configured on your DynamoDB table. Defaults to 'ttl'.",
+		isOptional: true,
+	},
+	{
+		name: 'defaultTtlSeconds',
+		type: 'number',
+		description:
+			'Default TTL in seconds from item creation time. Items will be automatically deleted by DynamoDB after this duration.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -272,27 +272,27 @@ The IAM role or user executing the code needs appropriate permissions to interac
 
 ```json
 {
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "dynamodb:DescribeTable",
-        "dynamodb:GetItem",
-        "dynamodb:PutItem",
-        "dynamodb:UpdateItem",
-        "dynamodb:DeleteItem",
-        "dynamodb:Query",
-        "dynamodb:Scan",
-        "dynamodb:BatchGetItem",
-        "dynamodb:BatchWriteItem"
-      ],
-      "Resource": [
-        "arn:aws:dynamodb:${YOUR_AWS_REGION}:${YOUR_AWS_ACCOUNT_ID}:table/${YOUR_TABLE_NAME}",
-        "arn:aws:dynamodb:${YOUR_AWS_REGION}:${YOUR_AWS_ACCOUNT_ID}:table/${YOUR_TABLE_NAME}/index/*"
-      ]
-    }
-  ]
+	"Version": "2012-10-17",
+	"Statement": [
+		{
+			"Effect": "Allow",
+			"Action": [
+				"dynamodb:DescribeTable",
+				"dynamodb:GetItem",
+				"dynamodb:PutItem",
+				"dynamodb:UpdateItem",
+				"dynamodb:DeleteItem",
+				"dynamodb:Query",
+				"dynamodb:Scan",
+				"dynamodb:BatchGetItem",
+				"dynamodb:BatchWriteItem"
+			],
+			"Resource": [
+				"arn:aws:dynamodb:${YOUR_AWS_REGION}:${YOUR_AWS_ACCOUNT_ID}:table/${YOUR_TABLE_NAME}",
+				"arn:aws:dynamodb:${YOUR_AWS_REGION}:${YOUR_AWS_ACCOUNT_ID}:table/${YOUR_TABLE_NAME}/index/*"
+			]
+		}
+	]
 }
 ```
 

@@ -25,17 +25,17 @@ import { weatherAgent } from '../agents'
 import { faithfulnessScorer } from '../scorers'
 
 const result = await runEvals({
-  data: [{ input: 'What is the weather in Brooklyn?' }],
-  target: weatherAgent,
+	data: [{ input: 'What is the weather in Brooklyn?' }],
+	target: weatherAgent,
 
-  // Gates: must all score 1.0 or the run fails
-  gates: [checks.calledTool('get_weather'), checks.noToolErrors()],
+	// Gates: must all score 1.0 or the run fails
+	gates: [checks.calledTool('get_weather'), checks.noToolErrors()],
 
-  // Scorers: tracked with optional thresholds
-  scorers: [
-    { scorer: faithfulnessScorer, threshold: 0.7 },
-    checks.includes('Brooklyn'), // no threshold = tracked only
-  ],
+	// Scorers: tracked with optional thresholds
+	scorers: [
+		{ scorer: faithfulnessScorer, threshold: 0.7 },
+		checks.includes('Brooklyn'), // no threshold = tracked only
+	],
 })
 
 console.log(result.verdict) // 'passed' | 'scored' | 'failed'
@@ -60,10 +60,10 @@ import { runEvals } from '@mastra/core/evals'
 import { checks } from '@mastra/evals/checks'
 
 const result = await runEvals({
-  data: [{ input: 'What is the weather?' }],
-  target: weatherAgent,
-  gates: [checks.calledTool('get_weather')],
-  scorers: [qualityScorer],
+	data: [{ input: 'What is the weather?' }],
+	target: weatherAgent,
+	gates: [checks.calledTool('get_weather')],
+	scorers: [qualityScorer],
 })
 
 // result.gateResults: [{ id: 'check-called-tool', passed: true, score: 1 }]
@@ -90,14 +90,14 @@ Use `max` for scorers where a high score is bad (e.g., hallucination, toxicity).
 import { runEvals } from '@mastra/core/evals'
 
 const result = await runEvals({
-  data: [{ input: 'Explain quantum computing' }],
-  target: myAgent,
-  scorers: [
-    { scorer: faithfulnessScorer, threshold: 0.7 }, // min threshold (number shorthand)
-    { scorer: hallucinationScorer, threshold: { max: 0.3 } }, // max threshold — high score = bad
-    { scorer: verbosityScorer, threshold: { min: 0.3, max: 0.8 } }, // range threshold
-    toneScorer, // bare scorer, no threshold — tracked only
-  ],
+	data: [{ input: 'Explain quantum computing' }],
+	target: myAgent,
+	scorers: [
+		{ scorer: faithfulnessScorer, threshold: 0.7 }, // min threshold (number shorthand)
+		{ scorer: hallucinationScorer, threshold: { max: 0.3 } }, // max threshold — high score = bad
+		{ scorer: verbosityScorer, threshold: { min: 0.3, max: 0.8 } }, // range threshold
+		toneScorer, // bare scorer, no threshold — tracked only
+	],
 })
 
 // result.thresholdResults:
@@ -119,25 +119,25 @@ import { runEvals } from '@mastra/core/evals'
 import { checks } from '@mastra/evals/checks'
 
 const result = await runEvals({
-  data: testDataset,
-  target: myAgent,
-  gates: [checks.calledTool('search'), checks.noToolErrors()],
-  scorers: [{ scorer: faithfulnessScorer, threshold: 0.7 }],
+	data: testDataset,
+	target: myAgent,
+	gates: [checks.calledTool('search'), checks.noToolErrors()],
+	scorers: [{ scorer: faithfulnessScorer, threshold: 0.7 }],
 })
 
 if (result.verdict === 'failed') {
-  console.error(
-    'Gate failures:',
-    result.gateResults?.filter(g => !g.passed),
-  )
-  process.exit(1)
+	console.error(
+		'Gate failures:',
+		result.gateResults?.filter(g => !g.passed),
+	)
+	process.exit(1)
 }
 
 if (result.verdict === 'scored') {
-  console.warn(
-    'Threshold misses:',
-    result.thresholdResults?.filter(t => !t.passed),
-  )
+	console.warn(
+		'Threshold misses:',
+		result.thresholdResults?.filter(t => !t.passed),
+	)
 }
 ```
 

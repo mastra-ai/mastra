@@ -8,29 +8,29 @@ Add this workflow to your file:
 
 ```typescript
 export const conditionalWorkflow = createWorkflow({
-  id: 'conditional-workflow',
-  description: 'Content processing with conditional branching',
-  inputSchema: z.object({
-    content: z.string(),
-    type: z.enum(['article', 'blog', 'social']).default('article'),
-  }),
-  outputSchema: z.object({
-    processedContent: z.string(),
-    processingType: z.string(),
-    recommendations: z.array(z.string()),
-  }),
+	id: 'conditional-workflow',
+	description: 'Content processing with conditional branching',
+	inputSchema: z.object({
+		content: z.string(),
+		type: z.enum(['article', 'blog', 'social']).default('article'),
+	}),
+	outputSchema: z.object({
+		processedContent: z.string(),
+		processingType: z.string(),
+		recommendations: z.array(z.string()),
+	}),
 })
-  .then(assessContentStep)
-  .branch([
-    // Branch 1: Short and simple content
-    [async ({ inputData }) => inputData.category === 'short' && inputData.complexity === 'simple', quickProcessingStep],
-    // Branch 2: Everything else
-    [
-      async ({ inputData }) => !(inputData.category === 'short' && inputData.complexity === 'simple'),
-      generalProcessingStep,
-    ],
-  ])
-  .commit()
+	.then(assessContentStep)
+	.branch([
+		// Branch 1: Short and simple content
+		[async ({ inputData }) => inputData.category === 'short' && inputData.complexity === 'simple', quickProcessingStep],
+		// Branch 2: Everything else
+		[
+			async ({ inputData }) => !(inputData.category === 'short' && inputData.complexity === 'simple'),
+			generalProcessingStep,
+		],
+	])
+	.commit()
 ```
 
 ## Understanding the Conditions

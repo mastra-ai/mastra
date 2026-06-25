@@ -46,10 +46,10 @@ import { Mastra } from '@mastra/core'
 import { MastraEditor } from '@mastra/editor'
 
 export const mastra = new Mastra({
-  agents: {
-    /* your existing agents */
-  },
-  editor: new MastraEditor(),
+	agents: {
+		/* your existing agents */
+	},
+	editor: new MastraEditor(),
 })
 ```
 
@@ -79,12 +79,12 @@ import { Mastra } from '@mastra/core'
 import { MastraEditor } from '@mastra/editor'
 
 export const mastra = new Mastra({
-  agents: {
-    /* your existing agents */
-  },
-  editor: new MastraEditor({
-    source: 'code',
-  }),
+	agents: {
+		/* your existing agents */
+	},
+	editor: new MastraEditor({
+		source: 'code',
+	}),
 })
 ```
 
@@ -118,11 +118,11 @@ if (!editor) throw new Error('Editor is not registered on Mastra')
 
 // Create a stored agent override for an existing code-defined agent
 await editor.agent.create({
-  id: 'support-agent',
-  instructions: 'You are a friendly support agent for Acme Inc.',
-  tools: {
-    search_kb: { description: 'Search the Acme knowledge base' },
-  },
+	id: 'support-agent',
+	instructions: 'You are a friendly support agent for Acme Inc.',
+	tools: {
+		search_kb: { description: 'Search the Acme knowledge base' },
+	},
 })
 ```
 
@@ -134,9 +134,9 @@ import { mastra } from '../mastra'
 const editor = mastra.getEditor()!
 
 await editor.agent.update({
-  id: 'support-agent',
-  instructions:
-    "You are a friendly support agent for Acme Inc. Always respond in the user's language.",
+	id: 'support-agent',
+	instructions:
+		"You are a friendly support agent for Acme Inc. Always respond in the user's language.",
 })
 ```
 
@@ -195,9 +195,9 @@ Use the `editor` field on a code-defined agent to control which fields the edito
 import { Agent } from '@mastra/core/agent'
 
 export const supportAgent = new Agent({
-  name: 'support-agent',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  editor: { instructions: true, tools: { description: true } },
+	name: 'support-agent',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	editor: { instructions: true, tools: { description: true } },
 })
 ```
 
@@ -254,12 +254,12 @@ const agent = mastra.getAgentById('support-agent')
 
 // Load the latest draft
 const agent = mastra.getAgentById('support-agent', {
-  status: 'draft',
+	status: 'draft',
 })
 
 // Load a specific version
 const agent = mastra.getAgentById('support-agent', {
-  versionId: 'abc-123',
+	versionId: 'abc-123',
 })
 ```
 
@@ -299,14 +299,14 @@ import { Mastra } from '@mastra/core'
 import { MastraEditor } from '@mastra/editor'
 
 export const mastra = new Mastra({
-  agents: { supervisor, researchAgent, writerAgent },
-  editor: new MastraEditor(),
-  versions: {
-    agents: {
-      'research-agent': { status: 'published' },
-      'writer-agent': { versionId: 'abc-123' },
-    },
-  },
+	agents: { supervisor, researchAgent, writerAgent },
+	editor: new MastraEditor(),
+	versions: {
+		agents: {
+			'research-agent': { status: 'published' },
+			'writer-agent': { versionId: 'abc-123' },
+		},
+	},
 })
 ```
 
@@ -316,11 +316,11 @@ Override versions for a single call to `generate()` or `stream()`. These take pr
 
 ```typescript title="src/routes/experiment.ts"
 const result = await supervisor.generate('Research and write an article about AI safety', {
-  versions: {
-    agents: {
-      'research-agent': { versionId: 'draft-456' },
-    },
-  },
+	versions: {
+		agents: {
+			'research-agent': { versionId: 'draft-456' },
+		},
+	},
 })
 ```
 

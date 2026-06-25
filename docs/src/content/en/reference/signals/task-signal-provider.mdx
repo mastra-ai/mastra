@@ -20,11 +20,11 @@ import { Agent } from '@mastra/core/agent'
 import { TaskSignalProvider } from '@mastra/core/signals'
 
 const agent = new Agent({
-  name: 'coder',
-  instructions: '...',
-  model,
-  memory,
-  signals: [new TaskSignalProvider()],
+	name: 'coder',
+	instructions: '...',
+	model,
+	memory,
+	signals: [new TaskSignalProvider()],
 })
 ```
 
@@ -40,11 +40,11 @@ Task tracking requires a memory-backed thread (`threadId` + `resourceId`). Witho
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: "'task-signals'",
-    description: 'Stable identifier for the provider instance.',
-  },
+	{
+		name: 'id',
+		type: "'task-signals'",
+		description: 'Stable identifier for the provider instance.',
+	},
 ]}
 />
 

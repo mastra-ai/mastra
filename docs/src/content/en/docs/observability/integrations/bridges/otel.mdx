@@ -85,16 +85,16 @@ import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-base'
 import { W3CTraceContextPropagator } from '@opentelemetry/core'
 
 const sdk = new NodeSDK({
-  serviceName: 'my-service',
-  spanProcessors: [
-    new BatchSpanProcessor(
-      new OTLPTraceExporter({
-        url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318/v1/traces',
-      }),
-    ),
-  ],
-  instrumentations: [getNodeAutoInstrumentations()],
-  textMapPropagator: new W3CTraceContextPropagator(),
+	serviceName: 'my-service',
+	spanProcessors: [
+		new BatchSpanProcessor(
+			new OTLPTraceExporter({
+				url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318/v1/traces',
+			}),
+		),
+	],
+	instrumentations: [getNodeAutoInstrumentations()],
+	textMapPropagator: new W3CTraceContextPropagator(),
 })
 
 sdk.start()
@@ -112,17 +112,17 @@ import { Observability } from '@mastra/observability'
 import { OtelBridge } from '@mastra/otel-bridge'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'my-service',
-        bridge: new OtelBridge(),
-      },
-    },
-  }),
-  agents: {
-    /* your agents */
-  },
+	observability: new Observability({
+		configs: {
+			default: {
+				serviceName: 'my-service',
+				bridge: new OtelBridge(),
+			},
+		},
+	}),
+	agents: {
+		/* your agents */
+	},
 })
 ```
 
@@ -138,12 +138,12 @@ import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http'
 import { BatchLogRecordProcessor } from '@opentelemetry/sdk-logs'
 
 const sdk = new NodeSDK({
-  // ...trace config as usual
-  logRecordProcessor: new BatchLogRecordProcessor(
-    new OTLPLogExporter({
-      url: process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || 'http://localhost:4318/v1/logs',
-    }),
-  ),
+	// ...trace config as usual
+	logRecordProcessor: new BatchLogRecordProcessor(
+		new OTLPLogExporter({
+			url: process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT || 'http://localhost:4318/v1/logs',
+		}),
+	),
 })
 ```
 
@@ -203,9 +203,9 @@ Tags help you categorize and filter traces in your OTEL backend. Add tags when e
 
 ```typescript
 const result = await agent.generate('Hello', {
-  tracingOptions: {
-    tags: ['production', 'experiment-v2', 'user-request'],
-  },
+	tracingOptions: {
+		tags: ['production', 'experiment-v2', 'user-request'],
+	},
 })
 ```
 

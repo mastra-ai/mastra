@@ -11,12 +11,12 @@ Update your Mastra configuration to include your new workflow workflows:
 import { contentWorkflow, aiContentWorkflow, parallelAnalysisWorkflow } from './workflows/content-workflow'
 
 export const mastra = new Mastra({
-  workflows: {
-    contentWorkflow,
-    aiContentWorkflow,
-    parallelAnalysisWorkflow, // Add the parallel workflow
-  },
-  // ... rest of configuration
+	workflows: {
+		contentWorkflow,
+		aiContentWorkflow,
+		parallelAnalysisWorkflow, // Add the parallel workflow
+	},
+	// ... rest of configuration
 })
 ```
 

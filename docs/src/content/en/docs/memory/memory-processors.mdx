@@ -29,7 +29,7 @@ Retrieves message history and persists new messages.
 
 ```typescript
 memory: new Memory({
-  lastMessages: 10,
+	lastMessages: 10,
 })
 ```
 
@@ -53,17 +53,17 @@ import { LibSQLStore } from '@mastra/libsql'
 import { openai } from '@ai-sdk/openai'
 
 const agent = new Agent({
-  id: 'test-agent',
-  name: 'Test Agent',
-  instructions: 'You are a helpful assistant',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  memory: new Memory({
-    storage: new LibSQLStore({
-      id: 'memory-store',
-      url: 'file:memory.db',
-    }),
-    lastMessages: 10, // MessageHistory processor automatically added
-  }),
+	id: 'test-agent',
+	name: 'Test Agent',
+	instructions: 'You are a helpful assistant',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	memory: new Memory({
+		storage: new LibSQLStore({
+			id: 'memory-store',
+			url: 'file:memory.db',
+		}),
+		lastMessages: 10, // MessageHistory processor automatically added
+	}),
 })
 ```
 
@@ -75,9 +75,9 @@ Retrieves semantically relevant messages based on the current input and creates 
 
 ```typescript
 memory: new Memory({
-  semanticRecall: { enabled: true },
-  vector: myVectorStore,
-  embedder: myEmbedder,
+	semanticRecall: { enabled: true },
+	vector: myVectorStore,
+	embedder: myEmbedder,
 })
 ```
 
@@ -104,24 +104,24 @@ import { OpenAIEmbedder } from '@mastra/openai'
 import { openai } from '@ai-sdk/openai'
 
 const agent = new Agent({
-  name: 'semantic-agent',
-  instructions: 'You are a helpful assistant with semantic memory',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  memory: new Memory({
-    storage: new LibSQLStore({
-      id: 'memory-store',
-      url: 'file:memory.db',
-    }),
-    vector: new PineconeVector({
-      id: 'memory-vector',
-      apiKey: process.env.PINECONE_API_KEY!,
-    }),
-    embedder: new OpenAIEmbedder({
-      model: 'text-embedding-3-small',
-      apiKey: process.env.OPENAI_API_KEY!,
-    }),
-    semanticRecall: { enabled: true }, // SemanticRecall processor automatically added
-  }),
+	name: 'semantic-agent',
+	instructions: 'You are a helpful assistant with semantic memory',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	memory: new Memory({
+		storage: new LibSQLStore({
+			id: 'memory-store',
+			url: 'file:memory.db',
+		}),
+		vector: new PineconeVector({
+			id: 'memory-vector',
+			apiKey: process.env.PINECONE_API_KEY!,
+		}),
+		embedder: new OpenAIEmbedder({
+			model: 'text-embedding-3-small',
+			apiKey: process.env.OPENAI_API_KEY!,
+		}),
+		semanticRecall: { enabled: true }, // SemanticRecall processor automatically added
+	}),
 })
 ```
 
@@ -133,7 +133,7 @@ Manages working memory state across conversations.
 
 ```typescript
 memory: new Memory({
-  workingMemory: { enabled: true },
+	workingMemory: { enabled: true },
 })
 ```
 
@@ -157,16 +157,16 @@ import { LibSQLStore } from '@mastra/libsql'
 import { openai } from '@ai-sdk/openai'
 
 const agent = new Agent({
-  name: 'working-memory-agent',
-  instructions: 'You are an assistant with working memory',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  memory: new Memory({
-    storage: new LibSQLStore({
-      id: 'memory-store',
-      url: 'file:memory.db',
-    }),
-    workingMemory: { enabled: true }, // WorkingMemory processor automatically added
-  }),
+	name: 'working-memory-agent',
+	instructions: 'You are an assistant with working memory',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	memory: new Memory({
+		storage: new LibSQLStore({
+			id: 'memory-store',
+			url: 'file:memory.db',
+		}),
+		workingMemory: { enabled: true }, // WorkingMemory processor automatically added
+	}),
 })
 ```
 
@@ -184,22 +184,22 @@ import { openai } from '@ai-sdk/openai'
 
 // Custom MessageHistory with different configuration
 const customMessageHistory = new MessageHistory({
-  storage: new LibSQLStore({ id: 'memory-store', url: 'file:memory.db' }),
-  lastMessages: 20,
+	storage: new LibSQLStore({ id: 'memory-store', url: 'file:memory.db' }),
+	lastMessages: 20,
 })
 
 const agent = new Agent({
-  name: 'custom-memory-agent',
-  instructions: 'You are a helpful assistant',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  memory: new Memory({
-    storage: new LibSQLStore({ id: 'memory-store', url: 'file:memory.db' }),
-    lastMessages: 10, // This would normally add MessageHistory(10)
-  }),
-  inputProcessors: [
-    customMessageHistory, // Your custom one is used instead
-    new TokenLimiter({ limit: 4000 }), // Runs after your custom MessageHistory
-  ],
+	name: 'custom-memory-agent',
+	instructions: 'You are a helpful assistant',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	memory: new Memory({
+		storage: new LibSQLStore({ id: 'memory-store', url: 'file:memory.db' }),
+		lastMessages: 10, // This would normally add MessageHistory(10)
+	}),
+	inputProcessors: [
+		customMessageHistory, // Your custom one is used instead
+		new TokenLimiter({ limit: 4000 }), // Runs after your custom MessageHistory
+	],
 })
 ```
 
@@ -248,30 +248,30 @@ import { openai } from '@ai-sdk/openai'
 
 // Output guardrail that blocks inappropriate content
 const contentBlocker = {
-  id: 'content-blocker',
-  processOutputResult: async ({ messages, abort }) => {
-    const hasInappropriateContent = messages.some(msg => containsBadContent(msg))
-    if (hasInappropriateContent) {
-      abort('Content blocked by guardrail')
-    }
-    return messages
-  },
+	id: 'content-blocker',
+	processOutputResult: async ({ messages, abort }) => {
+		const hasInappropriateContent = messages.some(msg => containsBadContent(msg))
+		if (hasInappropriateContent) {
+			abort('Content blocked by guardrail')
+		}
+		return messages
+	},
 }
 
 const agent = new Agent({
-  name: 'safe-agent',
-  instructions: 'You are a helpful assistant',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  memory: new Memory({ lastMessages: 10 }),
-  // Your guardrail runs BEFORE memory saves
-  outputProcessors: [contentBlocker],
+	name: 'safe-agent',
+	instructions: 'You are a helpful assistant',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	memory: new Memory({ lastMessages: 10 }),
+	// Your guardrail runs BEFORE memory saves
+	outputProcessors: [contentBlocker],
 })
 
 // If the guardrail aborts, nothing is saved to memory
 const result = await agent.generate('Hello')
 if (result.tripwire) {
-  console.log('Blocked:', result.tripwire.reason)
-  // Memory is empty - no messages were persisted
+	console.log('Blocked:', result.tripwire.reason)
+	// Memory is empty - no messages were persisted
 }
 ```
 
@@ -287,23 +287,23 @@ Input guardrails run **after** memory processors load history. If a guardrail ab
 ```typescript
 // Input guardrail that validates user input
 const inputValidator = {
-  id: 'input-validator',
-  processInput: async ({ messages, abort }) => {
-    const lastUserMessage = messages.findLast(m => m.role === 'user')
-    if (isInvalidInput(lastUserMessage)) {
-      abort('Invalid input detected')
-    }
-    return messages
-  },
+	id: 'input-validator',
+	processInput: async ({ messages, abort }) => {
+		const lastUserMessage = messages.findLast(m => m.role === 'user')
+		if (isInvalidInput(lastUserMessage)) {
+			abort('Invalid input detected')
+		}
+		return messages
+	},
 }
 
 const agent = new Agent({
-  name: 'validated-agent',
-  instructions: 'You are a helpful assistant',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  memory: new Memory({ lastMessages: 10 }),
-  // Your guardrail runs AFTER memory loads history
-  inputProcessors: [inputValidator],
+	name: 'validated-agent',
+	instructions: 'You are a helpful assistant',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	memory: new Memory({ lastMessages: 10 }),
+	// Your guardrail runs AFTER memory loads history
+	inputProcessors: [inputValidator],
 })
 ```
 

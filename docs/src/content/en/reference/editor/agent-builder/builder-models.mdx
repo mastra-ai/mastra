@@ -18,20 +18,20 @@ See [Model policy](/docs/agent-builder/model-policy) for concepts and worked exa
 import { MastraEditor } from '@mastra/editor'
 
 new MastraEditor({
-  builder: {
-    enabled: true,
-    configuration: {
-      agent: {
-        models: {
-          allowed: [
-            { provider: 'openai', modelId: 'gpt-5.4-mini' },
-            { provider: 'openai', modelId: 'gpt-5.4' },
-            { provider: 'anthropic', modelId: 'claude-opus-4-7' },
-          ],
-        },
-      },
-    },
-  },
+	builder: {
+		enabled: true,
+		configuration: {
+			agent: {
+				models: {
+					allowed: [
+						{ provider: 'openai', modelId: 'gpt-5.4-mini' },
+						{ provider: 'openai', modelId: 'gpt-5.4' },
+						{ provider: 'anthropic', modelId: 'claude-opus-4-7' },
+					],
+				},
+			},
+		},
+	},
 })
 ```
 
@@ -39,83 +39,83 @@ new MastraEditor({
 
 <PropertiesTable
   content={[
-  {
-    name: 'allowed',
-    type: 'ProviderModelEntry[]',
-    isOptional: true,
-    description:
-      'Allowlist of providers and models. Omit to allow every registered model. When non-empty, only the listed entries are selectable in the Builder.',
-    properties: [
-      {
-        type: 'KnownProviderEntry',
-        parameters: [
-          {
-            name: 'provider',
-            type: 'Provider',
-            description: 'Provider id from the generated provider registry (for example, `openai`, `anthropic`).',
-          },
-          {
-            name: 'modelId',
-            type: 'ModelForProvider<Provider>',
-            isOptional: true,
-            description: 'Specific model id for that provider. Omit to allow every model under the provider.',
-          },
-        ],
-      },
-      {
-        type: 'CustomProviderEntry',
-        parameters: [
-          {
-            name: 'kind',
-            type: "'custom'",
-            description: 'Discriminant marking this entry as a gateway or self-hosted provider not in the registry.',
-          },
-          {
-            name: 'provider',
-            type: 'string',
-            description: 'Provider id for the custom provider.',
-          },
-          {
-            name: 'modelId',
-            type: 'string',
-            isOptional: true,
-            description: 'Specific model id under the custom provider. Omit to allow every model under it.',
-          },
-        ],
-      },
-    ],
-  },
-  {
-    name: 'default',
-    type: 'DefaultModelEntry',
-    isOptional: true,
-    description:
-      'Pre-selected model on new-agent create. Same shape as `ProviderModelEntry`, but `modelId` is required. Must satisfy the `allowed` list when set.',
-    properties: [
-      {
-        type: 'DefaultModelEntry',
-        parameters: [
-          {
-            name: 'provider',
-            type: 'Provider | string',
-            description:
-              "Provider id. Use a `Provider` literal for known providers, or any `string` with `kind: 'custom'`.",
-          },
-          {
-            name: 'modelId',
-            type: 'string',
-            description: 'Required model id. Points at a specific model, not a whole provider.',
-          },
-          {
-            name: 'kind',
-            type: "'custom'",
-            isOptional: true,
-            description: "Set to `custom` when targeting a provider that isn't in the generated registry.",
-          },
-        ],
-      },
-    ],
-  },
+	{
+		name: 'allowed',
+		type: 'ProviderModelEntry[]',
+		isOptional: true,
+		description:
+			'Allowlist of providers and models. Omit to allow every registered model. When non-empty, only the listed entries are selectable in the Builder.',
+		properties: [
+			{
+				type: 'KnownProviderEntry',
+				parameters: [
+					{
+						name: 'provider',
+						type: 'Provider',
+						description: 'Provider id from the generated provider registry (for example, `openai`, `anthropic`).',
+					},
+					{
+						name: 'modelId',
+						type: 'ModelForProvider<Provider>',
+						isOptional: true,
+						description: 'Specific model id for that provider. Omit to allow every model under the provider.',
+					},
+				],
+			},
+			{
+				type: 'CustomProviderEntry',
+				parameters: [
+					{
+						name: 'kind',
+						type: "'custom'",
+						description: 'Discriminant marking this entry as a gateway or self-hosted provider not in the registry.',
+					},
+					{
+						name: 'provider',
+						type: 'string',
+						description: 'Provider id for the custom provider.',
+					},
+					{
+						name: 'modelId',
+						type: 'string',
+						isOptional: true,
+						description: 'Specific model id under the custom provider. Omit to allow every model under it.',
+					},
+				],
+			},
+		],
+	},
+	{
+		name: 'default',
+		type: 'DefaultModelEntry',
+		isOptional: true,
+		description:
+			'Pre-selected model on new-agent create. Same shape as `ProviderModelEntry`, but `modelId` is required. Must satisfy the `allowed` list when set.',
+		properties: [
+			{
+				type: 'DefaultModelEntry',
+				parameters: [
+					{
+						name: 'provider',
+						type: 'Provider | string',
+						description:
+							"Provider id. Use a `Provider` literal for known providers, or any `string` with `kind: 'custom'`.",
+					},
+					{
+						name: 'modelId',
+						type: 'string',
+						description: 'Required model id. Points at a specific model, not a whole provider.',
+					},
+					{
+						name: 'kind',
+						type: "'custom'",
+						isOptional: true,
+						description: "Set to `custom` when targeting a provider that isn't in the generated registry.",
+					},
+				],
+			},
+		],
+	},
 ]}
 />
 

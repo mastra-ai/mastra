@@ -8,33 +8,33 @@ Add this new workflow to your file:
 
 ```typescript
 export const aiContentWorkflow = createWorkflow({
-  id: 'ai-content-workflow',
-  description: 'AI-enhanced content processing with analysis',
-  inputSchema: z.object({
-    content: z.string(),
-    type: z.enum(['article', 'blog', 'social']).default('article'),
-  }),
-  outputSchema: z.object({
-    content: z.string(),
-    type: z.string(),
-    wordCount: z.number(),
-    metadata: z.object({
-      readingTime: z.number(),
-      difficulty: z.enum(['easy', 'medium', 'hard']),
-      processedAt: z.string(),
-    }),
-    summary: z.string(),
-    aiAnalysis: z.object({
-      score: z.number(),
-      feedback: z.string(),
-    }),
-  }),
+	id: 'ai-content-workflow',
+	description: 'AI-enhanced content processing with analysis',
+	inputSchema: z.object({
+		content: z.string(),
+		type: z.enum(['article', 'blog', 'social']).default('article'),
+	}),
+	outputSchema: z.object({
+		content: z.string(),
+		type: z.string(),
+		wordCount: z.number(),
+		metadata: z.object({
+			readingTime: z.number(),
+			difficulty: z.enum(['easy', 'medium', 'hard']),
+			processedAt: z.string(),
+		}),
+		summary: z.string(),
+		aiAnalysis: z.object({
+			score: z.number(),
+			feedback: z.string(),
+		}),
+	}),
 })
-  .then(validateContentStep)
-  .then(enhanceContentStep)
-  .then(generateSummaryStep)
-  .then(aiAnalysisStep)
-  .commit()
+	.then(validateContentStep)
+	.then(enhanceContentStep)
+	.then(generateSummaryStep)
+	.then(aiAnalysisStep)
+	.commit()
 ```
 
 ## Registering the New Workflow
@@ -47,12 +47,12 @@ import { contentWorkflow, aiContentWorkflow } from './workflows/content-workflow
 import { contentAgent } from './agents/content-agent'
 
 export const mastra = new Mastra({
-  workflows: {
-    contentWorkflow,
-    aiContentWorkflow, // Add the AI-enhanced version
-  },
-  agents: { contentAgent },
-  // ... rest of configuration
+	workflows: {
+		contentWorkflow,
+		aiContentWorkflow, // Add the AI-enhanced version
+	},
+	agents: { contentAgent },
+	// ... rest of configuration
 })
 ```
 

@@ -17,13 +17,13 @@ Deletes multiple items from the dataset in a single bulk operation.
 import { Mastra } from '@mastra/core'
 
 const mastra = new Mastra({
-  /* storage config */
+	/* storage config */
 })
 
 const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 
 await dataset.deleteItems({
-  itemIds: ['item-1', 'item-2', 'item-3'],
+	itemIds: ['item-1', 'item-2', 'item-3'],
 })
 ```
 
@@ -31,11 +31,11 @@ await dataset.deleteItems({
 
 <PropertiesTable
   content={[
-  {
-    name: 'itemIds',
-    type: 'string[]',
-    description: 'Array of item IDs to delete.',
-  },
+	{
+		name: 'itemIds',
+		type: 'string[]',
+		description: 'Array of item IDs to delete.',
+	},
 ]}
 />
 
@@ -43,10 +43,10 @@ await dataset.deleteItems({
 
 <PropertiesTable
   content={[
-  {
-    name: 'result',
-    type: 'Promise<void>',
-    description: 'Resolves when all items are deleted.',
-  },
+	{
+		name: 'result',
+		type: 'Promise<void>',
+		description: 'Resolves when all items are deleted.',
+	},
 ]}
 />

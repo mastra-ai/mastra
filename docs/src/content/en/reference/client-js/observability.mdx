@@ -23,20 +23,20 @@ Retrieve a paginated list of trace root spans with optional filtering:
 
 ```typescript
 const traces = await mastraClient.getTraces({
-  pagination: {
-    page: 1,
-    perPage: 20,
-    dateRange: {
-      start: new Date('2024-01-01'),
-      end: new Date('2024-01-31'),
-    },
-  },
-  filters: {
-    name: 'weather-agent', // Filter by trace name
-    spanType: 'agent', // Filter by span type
-    entityId: 'weather-agent-id', // Filter by entity ID
-    entityType: 'agent', // Filter by entity type
-  },
+	pagination: {
+		page: 1,
+		perPage: 20,
+		dateRange: {
+			start: new Date('2024-01-01'),
+			end: new Date('2024-01-31'),
+		},
+	},
+	filters: {
+		name: 'weather-agent', // Filter by trace name
+		spanType: 'agent', // Filter by span type
+		entityId: 'weather-agent-id', // Filter by entity ID
+		entityType: 'agent', // Filter by entity type
+	},
 })
 
 console.log(`Found ${traces.spans.length} root spans`)
@@ -52,11 +52,11 @@ Score specific traces using registered scorers for evaluation:
 
 ```typescript
 const result = await mastraClient.score({
-  scorerName: 'answer-relevancy',
-  targets: [
-    { traceId: 'trace-1', spanId: 'span-1' }, // Score specific span
-    { traceId: 'trace-2' }, // Score specific span which defaults to the parent span
-  ],
+	scorerName: 'answer-relevancy',
+	targets: [
+		{ traceId: 'trace-1', spanId: 'span-1' }, // Score specific span
+		{ traceId: 'trace-2' }, // Score specific span which defaults to the parent span
+	],
 })
 ```
 
@@ -66,10 +66,10 @@ Retrieve scores for a specific span within a trace:
 
 ```typescript
 const scores = await mastraClient.listScoresBySpan({
-  traceId: 'trace-123',
-  spanId: 'span-456',
-  page: 1,
-  perPage: 20,
+	traceId: 'trace-123',
+	spanId: 'span-456',
+	page: 1,
+	perPage: 20,
 })
 ```
 

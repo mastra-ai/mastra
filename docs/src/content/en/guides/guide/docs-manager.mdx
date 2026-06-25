@@ -29,15 +29,15 @@ import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 
 // highlight-start
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({
-    basePath: resolve(import.meta.dirname, '../../workspace'),
-  }),
+	filesystem: new LocalFilesystem({
+		basePath: resolve(import.meta.dirname, '../../workspace'),
+	}),
 })
 // highlight-end
 
 export const mastra = new Mastra({
-  // highlight-next-line
-  workspace,
+	// highlight-next-line
+	workspace,
 })
 ```
 
@@ -96,9 +96,9 @@ Now it's time to create the documentation manager agent. This agent will have in
 import { Agent } from '@mastra/core/agent'
 
 export const docsManager = new Agent({
-  id: 'docs-manager',
-  name: 'Docs Manager',
-  instructions: `You are a documentation manager that creates and maintains markdown docs.
+	id: 'docs-manager',
+	name: 'Docs Manager',
+	instructions: `You are a documentation manager that creates and maintains markdown docs.
 
 When creating new docs:
 1. Ask for topic and target audience
@@ -116,7 +116,7 @@ When updating existing docs:
 
 Use kebab-case naming for files (getting-started.md).
 Always explain what you're creating and why.`,
-  model: '__GATEWAY_OPENAI_MODEL__',
+	model: '__GATEWAY_OPENAI_MODEL__',
 })
 ```
 
@@ -130,15 +130,15 @@ import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 import { docsManager } from './agents/docs-manager'
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({
-    basePath: resolve(import.meta.dirname, '../../workspace'),
-  }),
+	filesystem: new LocalFilesystem({
+		basePath: resolve(import.meta.dirname, '../../workspace'),
+	}),
 })
 
 export const mastra = new Mastra({
-  workspace,
-  // highlight-next-line
-  agents: { docsManager },
+	workspace,
+	// highlight-next-line
+	agents: { docsManager },
 })
 ```
 
@@ -182,9 +182,9 @@ Create a config file:
 ```typescript
 // auth.config.ts
 export const authConfig = {
-  provider: 'oauth',
-  clientId: process.env.AUTH_CLIENT_ID,
-  secret: process.env.AUTH_SECRET,
+	provider: 'oauth',
+	clientId: process.env.AUTH_CLIENT_ID,
+	secret: process.env.AUTH_SECRET,
 }
 ```
 
@@ -197,7 +197,7 @@ import { authConfig } from './auth.config'
 const auth = createAuth(authConfig)
 
 app.get('/protected', auth.requireAuth(), (req, res) => {
-  res.json({ user: req.user })
+	res.json({ user: req.user })
 })
 ```
 ````

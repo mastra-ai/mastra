@@ -14,31 +14,31 @@ import { LibSQLStore, LibSQLVector } from '@mastra/libsql'
 
 // Create a comprehensive memory configuration
 const memory = new Memory({
-  storage: new LibSQLStore({
-    id: 'learning-memory-storage',
-    url: 'file:../../memory.db', // relative path from the `.mastra/output` directory
-  }),
-  vector: new LibSQLVector({
-    url: 'file:../../vector.db', // relative path from the `.mastra/output` directory
-  }),
-  embedder: 'openai/text-embedding-3-small',
-  options: {
-    // Conversation history configuration
-    lastMessages: 20, // Include the last 20 messages in the context
+	storage: new LibSQLStore({
+		id: 'learning-memory-storage',
+		url: 'file:../../memory.db', // relative path from the `.mastra/output` directory
+	}),
+	vector: new LibSQLVector({
+		url: 'file:../../vector.db', // relative path from the `.mastra/output` directory
+	}),
+	embedder: 'openai/text-embedding-3-small',
+	options: {
+		// Conversation history configuration
+		lastMessages: 20, // Include the last 20 messages in the context
 
-    // Semantic recall configuration
-    semanticRecall: {
-      topK: 3, // Retrieve 3 most similar messages
-      messageRange: {
-        before: 2, // Include 2 messages before each match
-        after: 1, // Include 1 message after each match
-      },
-    },
+		// Semantic recall configuration
+		semanticRecall: {
+			topK: 3, // Retrieve 3 most similar messages
+			messageRange: {
+				before: 2, // Include 2 messages before each match
+				after: 1, // Include 1 message after each match
+			},
+		},
 
-    // Working memory configuration
-    workingMemory: {
-      enabled: true,
-      template: `
+		// Working memory configuration
+		workingMemory: {
+			enabled: true,
+			template: `
 # User Profile
 
 ## Personal Info
@@ -66,8 +66,8 @@ const memory = new Memory({
 - Open Questions:
 - Action Items:
 `,
-    },
-  },
+		},
+	},
 })
 ```
 

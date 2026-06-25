@@ -34,15 +34,15 @@ import { Workspace } from '@mastra/core/workspace'
 import { BlaxelSandbox } from '@mastra/blaxel'
 
 const workspace = new Workspace({
-  sandbox: new BlaxelSandbox(),
+	sandbox: new BlaxelSandbox(),
 })
 
 const agent = new Agent({
-  id: 'code-agent',
-  name: 'Code Agent',
-  instructions: 'You are a coding assistant working in this workspace.',
-  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
-  workspace,
+	id: 'code-agent',
+	name: 'Code Agent',
+	instructions: 'You are a coding assistant working in this workspace.',
+	model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+	workspace,
 })
 ```
 
@@ -52,12 +52,12 @@ Use a custom Docker image with additional memory:
 
 ```typescript
 const workspace = new Workspace({
-  sandbox: new BlaxelSandbox({
-    image: 'node:20-slim',
-    memory: 8192,
-    region: 'auto',
-    timeout: '10m',
-  }),
+	sandbox: new BlaxelSandbox({
+		image: 'node:20-slim',
+		memory: 8192,
+		region: 'auto',
+		timeout: '10m',
+	}),
 })
 ```
 
@@ -65,68 +65,68 @@ const workspace = new Workspace({
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Unique identifier for this sandbox instance.',
-    isOptional: true,
-    defaultValue: 'Auto-generated',
-  },
-  {
-    name: 'image',
-    type: 'string',
-    description:
-      'Docker image to use for the sandbox. Debian-based images support both S3 and GCS mounts. Alpine-based images support S3 mounts only.',
-    isOptional: true,
-    defaultValue: "'blaxel/ts-app:latest'",
-  },
-  {
-    name: 'memory',
-    type: 'number',
-    description: 'Memory allocation in MB.',
-    isOptional: true,
-    defaultValue: '4096',
-  },
-  {
-    name: 'timeout',
-    type: 'string',
-    description: "Execution timeout as a duration string (e.g. '5m', '1h'). Maps to the Blaxel sandbox TTL.",
-    isOptional: true,
-  },
-  {
-    name: 'region',
-    type: 'string',
-    description:
-      "Blaxel region where the sandbox should be created. Use 'auto' to choose a region automatically, or set a concrete region like 'us-pdx-1'.",
-    isOptional: true,
-    defaultValue: "process.env.BL_REGION || 'auto'",
-  },
-  {
-    name: 'env',
-    type: 'Record<string, string>',
-    description: 'Environment variables to set in the sandbox.',
-    isOptional: true,
-  },
-  {
-    name: 'labels',
-    type: 'Record<string, string>',
-    description: 'Custom labels for the sandbox.',
-    isOptional: true,
-  },
-  {
-    name: 'runtimes',
-    type: 'SandboxRuntime[]',
-    description:
-      "Supported runtimes. Valid values: 'node', 'python', 'bash', 'ruby', 'go', 'rust', 'java', 'cpp', 'r'.",
-    isOptional: true,
-    defaultValue: "['node', 'python', 'bash']",
-  },
-  {
-    name: 'ports',
-    type: "Array<{ name?: string; target: number; protocol?: 'HTTP' | 'TCP' | 'UDP' }>",
-    description: 'Ports to expose from the sandbox.',
-    isOptional: true,
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Unique identifier for this sandbox instance.',
+		isOptional: true,
+		defaultValue: 'Auto-generated',
+	},
+	{
+		name: 'image',
+		type: 'string',
+		description:
+			'Docker image to use for the sandbox. Debian-based images support both S3 and GCS mounts. Alpine-based images support S3 mounts only.',
+		isOptional: true,
+		defaultValue: "'blaxel/ts-app:latest'",
+	},
+	{
+		name: 'memory',
+		type: 'number',
+		description: 'Memory allocation in MB.',
+		isOptional: true,
+		defaultValue: '4096',
+	},
+	{
+		name: 'timeout',
+		type: 'string',
+		description: "Execution timeout as a duration string (e.g. '5m', '1h'). Maps to the Blaxel sandbox TTL.",
+		isOptional: true,
+	},
+	{
+		name: 'region',
+		type: 'string',
+		description:
+			"Blaxel region where the sandbox should be created. Use 'auto' to choose a region automatically, or set a concrete region like 'us-pdx-1'.",
+		isOptional: true,
+		defaultValue: "process.env.BL_REGION || 'auto'",
+	},
+	{
+		name: 'env',
+		type: 'Record<string, string>',
+		description: 'Environment variables to set in the sandbox.',
+		isOptional: true,
+	},
+	{
+		name: 'labels',
+		type: 'Record<string, string>',
+		description: 'Custom labels for the sandbox.',
+		isOptional: true,
+	},
+	{
+		name: 'runtimes',
+		type: 'SandboxRuntime[]',
+		description:
+			"Supported runtimes. Valid values: 'node', 'python', 'bash', 'ruby', 'go', 'rust', 'java', 'cpp', 'r'.",
+		isOptional: true,
+		defaultValue: "['node', 'python', 'bash']",
+	},
+	{
+		name: 'ports',
+		type: "Array<{ name?: string; target: number; protocol?: 'HTTP' | 'TCP' | 'UDP' }>",
+		description: 'Ports to expose from the sandbox.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -134,38 +134,38 @@ const workspace = new Workspace({
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Sandbox instance identifier.',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: "'BlaxelSandbox'",
-  },
-  {
-    name: 'provider',
-    type: 'string',
-    description: "'blaxel'",
-  },
-  {
-    name: 'status',
-    type: 'ProviderStatus',
-    description: "'pending' | 'initializing' | 'running' | 'stopped' | 'error'",
-  },
-  {
-    name: 'instance',
-    type: 'SandboxInstance',
-    description:
-      'The underlying Blaxel SandboxInstance for direct access to Blaxel APIs. Throws SandboxNotReadyError if the sandbox has not been started.',
-  },
-  {
-    name: 'processes',
-    type: 'BlaxelProcessManager',
-    description:
-      'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Sandbox instance identifier.',
+	},
+	{
+		name: 'name',
+		type: 'string',
+		description: "'BlaxelSandbox'",
+	},
+	{
+		name: 'provider',
+		type: 'string',
+		description: "'blaxel'",
+	},
+	{
+		name: 'status',
+		type: 'ProviderStatus',
+		description: "'pending' | 'initializing' | 'running' | 'stopped' | 'error'",
+	},
+	{
+		name: 'instance',
+		type: 'SandboxInstance',
+		description:
+			'The underlying Blaxel SandboxInstance for direct access to Blaxel APIs. Throws SandboxNotReadyError if the sandbox has not been started.',
+	},
+	{
+		name: 'processes',
+		type: 'BlaxelProcessManager',
+		description:
+			'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
+	},
 ]}
 />
 
@@ -179,8 +179,8 @@ await sandbox.start()
 
 // Spawn a background process
 const handle = await sandbox.processes.spawn('node server.js', {
-  env: { PORT: '3000' },
-  onStdout: data => console.log(data),
+	env: { PORT: '3000' },
+	onStdout: data => console.log(data),
 })
 
 // Interact with the process
@@ -206,15 +206,15 @@ import { S3Filesystem } from '@mastra/s3'
 import { BlaxelSandbox } from '@mastra/blaxel'
 
 const workspace = new Workspace({
-  mounts: {
-    '/data': new S3Filesystem({
-      bucket: 'my-bucket',
-      region: 'us-east-1',
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    }),
-  },
-  sandbox: new BlaxelSandbox(),
+	mounts: {
+		'/data': new S3Filesystem({
+			bucket: 'my-bucket',
+			region: 'us-east-1',
+			accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+			secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+		}),
+	},
+	sandbox: new BlaxelSandbox(),
 })
 ```
 
@@ -226,12 +226,12 @@ import { GCSFilesystem } from '@mastra/gcs'
 import { BlaxelSandbox } from '@mastra/blaxel'
 
 const workspace = new Workspace({
-  mounts: {
-    '/data': new GCSFilesystem({
-      bucket: 'my-bucket',
-      credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY!),
-    }),
-  },
-  sandbox: new BlaxelSandbox(),
+	mounts: {
+		'/data': new GCSFilesystem({
+			bucket: 'my-bucket',
+			credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY!),
+		}),
+	},
+	sandbox: new BlaxelSandbox(),
 })
 ```

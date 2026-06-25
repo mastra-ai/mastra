@@ -17,15 +17,15 @@ import { Mastra } from '@mastra/core'
 import { MastraEditor } from '@mastra/editor'
 
 const mastra = new Mastra({
-  editor: new MastraEditor(),
+	editor: new MastraEditor(),
 })
 
 const editor = mastra.getEditor()
 
 const agent = await editor?.agent.create({
-  id: 'support-agent',
-  name: 'Support Agent',
-  instructions: 'Help customers with their questions.',
+	id: 'support-agent',
+	name: 'Support Agent',
+	instructions: 'Help customers with their questions.',
 })
 ```
 
@@ -37,11 +37,11 @@ This method doesn't accept any parameters.
 
 <PropertiesTable
   content={[
-  {
-    name: 'editor',
-    type: 'MastraEditor | undefined',
-    description: 'The configured editor instance, or undefined if no editor has been configured.',
-  },
+	{
+		name: 'editor',
+		type: 'MastraEditor | undefined',
+		description: 'The configured editor instance, or undefined if no editor has been configured.',
+	},
 ]}
 />
 

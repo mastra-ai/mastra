@@ -24,10 +24,10 @@ To use STT in Mastra, you need to provide a `listeningModel` when initializing t
 
 ```typescript
 const voice = new OpenAIVoice({
-  listeningModel: {
-    name: 'whisper-1',
-    apiKey: process.env.OPENAI_API_KEY,
-  },
+	listeningModel: {
+		name: 'whisper-1',
+		apiKey: process.env.OPENAI_API_KEY,
+	},
 })
 
 // If using default settings the configuration can be simplified to:
@@ -64,23 +64,23 @@ import { getMicrophoneStream } from '@mastra/node-audio'
 const voice = new OpenAIVoice()
 
 const agent = new Agent({
-  id: 'voice-agent',
-  name: 'Voice Agent',
-  instructions: 'You are a voice assistant that provides recommendations based on user input.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  voice,
+	id: 'voice-agent',
+	name: 'Voice Agent',
+	instructions: 'You are a voice assistant that provides recommendations based on user input.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	voice,
 })
 
 const audioStream = getMicrophoneStream() // Assume this function gets audio input
 
 const transcript = await agent.voice.listen(audioStream, {
-  filetype: 'm4a', // Optional: specify the audio file type
+	filetype: 'm4a', // Optional: specify the audio file type
 })
 
 console.log(`User said: ${transcript}`)
 
 const { text } = await agent.generate(
-  `Based on what the user said, provide them a recommendation: ${transcript}`,
+	`Based on what the user said, provide them a recommendation: ${transcript}`,
 )
 
 console.log(`Recommendation: ${text}`)

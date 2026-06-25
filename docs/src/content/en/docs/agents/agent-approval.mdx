@@ -27,31 +27,31 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 const deleteTool = createTool({
-  id: 'delete-record',
-  description: 'Delete a record by ID',
-  inputSchema: z.object({ id: z.string() }),
-  outputSchema: z.object({ deleted: z.boolean() }),
-  requireApproval: true,
-  execute: async ({ id }) => {
-    await db.delete(id)
-    return { deleted: true }
-  },
+	id: 'delete-record',
+	description: 'Delete a record by ID',
+	inputSchema: z.object({ id: z.string() }),
+	outputSchema: z.object({ deleted: z.boolean() }),
+	requireApproval: true,
+	execute: async ({ id }) => {
+		await db.delete(id)
+		return { deleted: true }
+	},
 })
 
 const agent = new Agent({
-  id: 'my-agent',
-  name: 'My Agent',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
-  tools: { deleteTool },
+	id: 'my-agent',
+	name: 'My Agent',
+	model: '__GATEWAY_OPENAI_MODEL_MINI__',
+	tools: { deleteTool },
 })
 
 const stream = await agent.stream('Delete record abc-123')
 
 for await (const chunk of stream.fullStream) {
-  if (chunk.type === 'tool-call-approval') {
-    const approved = await agent.approveToolCall({ runId: stream.runId })
-    for await (const c of approved.textStream) process.stdout.write(c)
-  }
+	if (chunk.type === 'tool-call-approval') {
+		const approved = await agent.approveToolCall({ runId: stream.runId })
+		for await (const c of approved.textStream) process.stdout.write(c)
+	}
 }
 ```
 
@@ -80,22 +80,22 @@ The stream emits a `tool-call-approval` chunk containing the `toolCallId`, `tool
 
 ```typescript
 const stream = await agent.stream("What's the weather in London?", {
-  requireToolApproval: true,
+	requireToolApproval: true,
 })
 
 for await (const chunk of stream.fullStream) {
-  if (chunk.type === 'tool-call-approval') {
-    console.log('Tool:', chunk.payload.toolName)
-    console.log('Args:', chunk.payload.args)
+	if (chunk.type === 'tool-call-approval') {
+		console.log('Tool:', chunk.payload.toolName)
+		console.log('Args:', chunk.payload.args)
 
-    // Approve
-    const approved = await agent.approveToolCall({ runId: stream.runId })
-    for await (const c of approved.textStream) process.stdout.write(c)
+		// Approve
+		const approved = await agent.approveToolCall({ runId: stream.runId })
+		for await (const c of approved.textStream) process.stdout.write(c)
 
-    // Or decline
-    const declined = await agent.declineToolCall({ runId: stream.runId })
-    for await (const c of declined.textStream) process.stdout.write(c)
-  }
+		// Or decline
+		const declined = await agent.declineToolCall({ runId: stream.runId })
+		for await (const c of declined.textStream) process.stdout.write(c)
+	}
 }
 ```
 
@@ -105,7 +105,7 @@ Instead of a boolean, `requireToolApproval` accepts a function that decides per 
 
 ```typescript
 const stream = await agent.stream('Clean up old records', {
-  requireToolApproval: ({ toolName }) => /^delete_/.test(toolName),
+	requireToolApproval: ({ toolName }) => /^delete_/.test(toolName),
 })
 ```
 
@@ -135,24 +135,24 @@ Tool approval also works with `generate()` for non-streaming use cases. When a t
 
 ```typescript
 const output = await agent.generate('Find user John', {
-  requireToolApproval: true,
+	requireToolApproval: true,
 })
 
 if (output.finishReason === 'suspended') {
-  console.log('Tool requires approval:', output.suspendPayload.toolName)
+	console.log('Tool requires approval:', output.suspendPayload.toolName)
 
-  // Approve
-  const result = await agent.approveToolCallGenerate({
-    runId: output.runId,
-    toolCallId: output.suspendPayload.toolCallId,
-  })
-  console.log('Final result:', result.text)
+	// Approve
+	const result = await agent.approveToolCallGenerate({
+		runId: output.runId,
+		toolCallId: output.suspendPayload.toolCallId,
+	})
+	console.log('Final result:', result.text)
 
-  // Or decline
-  const result = await agent.declineToolCallGenerate({
-    runId: output.runId,
-    toolCallId: output.suspendPayload.toolCallId,
-  })
+	// Or decline
+	const result = await agent.declineToolCallGenerate({
+		runId: output.runId,
+		toolCallId: output.suspendPayload.toolCallId,
+	})
 }
 ```
 
@@ -180,24 +180,24 @@ Set `requireApproval: true` on a tool definition. The tool pauses before executi
 
 ```typescript title="src/mastra/tools/test-tool.ts"
 export const testTool = createTool({
-  id: 'test-tool',
-  description: 'Fetches weather for a location',
-  inputSchema: z.object({
-    location: z.string(),
-  }),
-  outputSchema: z.object({
-    weather: z.string(),
-  }),
-  resumeSchema: z.object({
-    approved: z.boolean(),
-  }),
-  execute: async inputData => {
-    const response = await fetch(`https://wttr.in/${inputData.location}?format=3`)
-    const weather = await response.text()
+	id: 'test-tool',
+	description: 'Fetches weather for a location',
+	inputSchema: z.object({
+		location: z.string(),
+	}),
+	outputSchema: z.object({
+		weather: z.string(),
+	}),
+	resumeSchema: z.object({
+		approved: z.boolean(),
+	}),
+	execute: async inputData => {
+		const response = await fetch(`https://wttr.in/${inputData.location}?format=3`)
+		const weather = await response.text()
 
-    return { weather }
-  },
-  requireApproval: true,
+		return { weather }
+	},
+	requireApproval: true,
 })
 ```
 
@@ -207,18 +207,18 @@ When `requireApproval` is `true`, the stream emits `tool-call-approval` chunks t
 const stream = await agent.stream("What's the weather in London?")
 
 for await (const chunk of stream.fullStream) {
-  if (chunk.type === 'tool-call-approval') {
-    console.log('Approval required for:', chunk.payload.toolName)
-  }
+	if (chunk.type === 'tool-call-approval') {
+		console.log('Approval required for:', chunk.payload.toolName)
+	}
 }
 
 const handleApproval = async () => {
-  const approvedStream = await agent.approveToolCall({ runId: stream.runId })
+	const approvedStream = await agent.approveToolCall({ runId: stream.runId })
 
-  for await (const chunk of approvedStream.textStream) {
-    process.stdout.write(chunk)
-  }
-  process.stdout.write('\n')
+	for await (const chunk of approvedStream.textStream) {
+		process.stdout.write(chunk)
+	}
+	process.stdout.write('\n')
 }
 ```
 
@@ -228,32 +228,32 @@ With this approach, neither the agent nor the tool uses `requireApproval`. Inste
 
 ```typescript title="src/mastra/tools/test-tool-b.ts"
 export const testToolB = createTool({
-  id: 'test-tool-b',
-  description: 'Fetches weather for a location',
-  inputSchema: z.object({
-    location: z.string(),
-  }),
-  outputSchema: z.object({
-    weather: z.string(),
-  }),
-  resumeSchema: z.object({
-    approved: z.boolean(),
-  }),
-  suspendSchema: z.object({
-    reason: z.string(),
-  }),
-  execute: async (inputData, context) => {
-    const { resumeData: { approved } = {}, suspend } = context?.agent ?? {}
+	id: 'test-tool-b',
+	description: 'Fetches weather for a location',
+	inputSchema: z.object({
+		location: z.string(),
+	}),
+	outputSchema: z.object({
+		weather: z.string(),
+	}),
+	resumeSchema: z.object({
+		approved: z.boolean(),
+	}),
+	suspendSchema: z.object({
+		reason: z.string(),
+	}),
+	execute: async (inputData, context) => {
+		const { resumeData: { approved } = {}, suspend } = context?.agent ?? {}
 
-    if (!approved) {
-      return suspend?.({ reason: 'Approval required.' })
-    }
+		if (!approved) {
+			return suspend?.({ reason: 'Approval required.' })
+		}
 
-    const response = await fetch(`https://wttr.in/${inputData.location}?format=3`)
-    const weather = await response.text()
+		const response = await fetch(`https://wttr.in/${inputData.location}?format=3`)
+		const weather = await response.text()
 
-    return { weather }
-  },
+		return { weather }
+	},
 })
 ```
 
@@ -263,18 +263,18 @@ With this approach the stream includes a `tool-call-suspended` chunk, and the `s
 const stream = await agent.stream("What's the weather in London?")
 
 for await (const chunk of stream.fullStream) {
-  if (chunk.type === 'tool-call-suspended') {
-    console.log(chunk.payload.suspendPayload)
-  }
+	if (chunk.type === 'tool-call-suspended') {
+		console.log(chunk.payload.suspendPayload)
+	}
 }
 
 const handleResume = async () => {
-  const resumedStream = await agent.resumeStream({ approved: true }, { runId: stream.runId })
+	const resumedStream = await agent.resumeStream({ approved: true }, { runId: stream.runId })
 
-  for await (const chunk of resumedStream.textStream) {
-    process.stdout.write(chunk)
-  }
-  process.stdout.write('\n')
+	for await (const chunk of resumedStream.textStream) {
+		process.stdout.write(chunk)
+	}
+	process.stdout.write('\n')
 }
 ```
 
@@ -287,15 +287,15 @@ import { Agent } from '@mastra/core/agent'
 import { Memory } from '@mastra/memory'
 
 const agent = new Agent({
-  id: 'my-agent',
-  name: 'My Agent',
-  instructions: 'You are a helpful assistant',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
-  tools: { weatherTool },
-  memory: new Memory(),
-  defaultOptions: {
-    autoResumeSuspendedTools: true,
-  },
+	id: 'my-agent',
+	name: 'My Agent',
+	instructions: 'You are a helpful assistant',
+	model: '__GATEWAY_OPENAI_MODEL_MINI__',
+	tools: { weatherTool },
+	memory: new Memory(),
+	defaultOptions: {
+		autoResumeSuspendedTools: true,
+	},
 })
 ```
 
@@ -306,34 +306,34 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 const weatherTool = createTool({
-  id: 'weather-tool',
-  description: 'Fetches weather for a city',
-  inputSchema: z.object({
-    city: z.string(),
-  }),
-  outputSchema: z.object({
-    weather: z.string(),
-  }),
-  suspendSchema: z.object({
-    message: z.string(),
-  }),
-  resumeSchema: z.object({
-    city: z.string(),
-  }),
-  execute: async (inputData, context) => {
-    const { resumeData, suspend } = context?.agent ?? {}
+	id: 'weather-tool',
+	description: 'Fetches weather for a city',
+	inputSchema: z.object({
+		city: z.string(),
+	}),
+	outputSchema: z.object({
+		weather: z.string(),
+	}),
+	suspendSchema: z.object({
+		message: z.string(),
+	}),
+	resumeSchema: z.object({
+		city: z.string(),
+	}),
+	execute: async (inputData, context) => {
+		const { resumeData, suspend } = context?.agent ?? {}
 
-    // If no city provided, ask the user
-    if (!inputData.city && !resumeData?.city) {
-      return suspend?.({ message: 'What city do you want to know the weather for?' })
-    }
+		// If no city provided, ask the user
+		if (!inputData.city && !resumeData?.city) {
+			return suspend?.({ message: 'What city do you want to know the weather for?' })
+		}
 
-    const city = resumeData?.city ?? inputData.city
-    const response = await fetch(`https://wttr.in/${city}?format=3`)
-    const weather = await response.text()
+		const city = resumeData?.city ?? inputData.city
+		const response = await fetch(`https://wttr.in/${city}?format=3`)
+		const weather = await response.text()
 
-    return { weather: `${city}: ${weather}` }
-  },
+		return { weather: `${city}: ${weather}` }
+	},
 })
 ```
 
@@ -341,15 +341,15 @@ const weatherTool = createTool({
 const stream = await agent.stream("What's the weather like?")
 
 for await (const chunk of stream.fullStream) {
-  if (chunk.type === 'tool-call-suspended') {
-    console.log(chunk.payload.suspendPayload)
-  }
+	if (chunk.type === 'tool-call-suspended') {
+		console.log(chunk.payload.suspendPayload)
+	}
 }
 
 // User sends follow-up on the same thread
 const resumedStream = await agent.stream('San Francisco')
 for await (const chunk of resumedStream.textStream) {
-  process.stdout.write(chunk)
+	process.stdout.write(chunk)
 }
 ```
 
@@ -403,70 +403,70 @@ import { Memory } from '@mastra/memory'
 import { z } from 'zod'
 
 const findUserTool = createTool({
-  id: 'find-user',
-  description: 'Finds user by ID in the database',
-  inputSchema: z.object({
-    userId: z.string(),
-  }),
-  outputSchema: z.object({
-    user: z.object({
-      id: z.string(),
-      name: z.string(),
-      email: z.string(),
-    }),
-  }),
-  // highlight-next-line
-  requireApproval: true,
-  execute: async input => {
-    const user = await database.findUser(input.userId)
-    return { user }
-  },
+	id: 'find-user',
+	description: 'Finds user by ID in the database',
+	inputSchema: z.object({
+		userId: z.string(),
+	}),
+	outputSchema: z.object({
+		user: z.object({
+			id: z.string(),
+			name: z.string(),
+			email: z.string(),
+		}),
+	}),
+	// highlight-next-line
+	requireApproval: true,
+	execute: async input => {
+		const user = await database.findUser(input.userId)
+		return { user }
+	},
 })
 
 const dataAgent = new Agent({
-  id: 'data-agent',
-  name: 'Data Agent',
-  description: 'Handles database queries and user data retrieval',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
-  tools: { findUserTool },
+	id: 'data-agent',
+	name: 'Data Agent',
+	description: 'Handles database queries and user data retrieval',
+	model: '__GATEWAY_OPENAI_MODEL_MINI__',
+	tools: { findUserTool },
 })
 
 const supervisorAgent = new Agent({
-  id: 'supervisor',
-  name: 'Supervisor Agent',
-  instructions: `You coordinate data retrieval tasks.
+	id: 'supervisor',
+	name: 'Supervisor Agent',
+	instructions: `You coordinate data retrieval tasks.
     Delegate to data-agent for user lookups.`,
-  model: '__GATEWAY_OPENAI_MODEL__',
-  agents: { dataAgent },
-  memory: new Memory(),
+	model: '__GATEWAY_OPENAI_MODEL__',
+	agents: { dataAgent },
+	memory: new Memory(),
 })
 
 const stream = await supervisorAgent.stream('Find user with ID 12345')
 
 for await (const chunk of stream.fullStream) {
-  // highlight-next-line
-  if (chunk.type === 'tool-call-approval') {
-    console.log('Tool requires approval:', chunk.payload.toolName)
-    console.log('Arguments:', chunk.payload.args)
+	// highlight-next-line
+	if (chunk.type === 'tool-call-approval') {
+		console.log('Tool requires approval:', chunk.payload.toolName)
+		console.log('Arguments:', chunk.payload.args)
 
-    // Approve the tool call
-    // highlight-start
-    const resumeStream = await supervisorAgent.approveToolCall({
-      runId: stream.runId,
-      toolCallId: chunk.payload.toolCallId,
-    })
-    //highlight-end
+		// Approve the tool call
+		// highlight-start
+		const resumeStream = await supervisorAgent.approveToolCall({
+			runId: stream.runId,
+			toolCallId: chunk.payload.toolCallId,
+		})
+		//highlight-end
 
-    for await (const resumeChunk of resumeStream.textStream) {
-      process.stdout.write(resumeChunk)
-    }
+		for await (const resumeChunk of resumeStream.textStream) {
+			process.stdout.write(resumeChunk)
+		}
 
-    // To decline instead, use:
-    const declineStream = await supervisorAgent.declineToolCall({
-      runId: stream.runId,
-      toolCallId: chunk.payload.toolCallId,
-    })
-  }
+		// To decline instead, use:
+		const declineStream = await supervisorAgent.declineToolCall({
+			runId: stream.runId,
+			toolCallId: chunk.payload.toolCallId,
+		})
+	}
 }
 ```
 
@@ -476,48 +476,48 @@ Tools can also use [`suspend()`](#approval-using-suspend) to pause execution and
 
 ```typescript title="src/mastra/tools/conditional-tool.ts"
 const conditionalTool = createTool({
-  id: 'conditional-operation',
-  description: 'Performs an operation that may require confirmation',
-  inputSchema: z.object({
-    operation: z.string(),
-  }),
-  suspendSchema: z.object({
-    message: z.string(),
-  }),
-  resumeSchema: z.object({
-    confirmed: z.boolean(),
-  }),
-  execute: async (input, context) => {
-    const { resumeData } = context?.agent ?? {}
+	id: 'conditional-operation',
+	description: 'Performs an operation that may require confirmation',
+	inputSchema: z.object({
+		operation: z.string(),
+	}),
+	suspendSchema: z.object({
+		message: z.string(),
+	}),
+	resumeSchema: z.object({
+		confirmed: z.boolean(),
+	}),
+	execute: async (input, context) => {
+		const { resumeData } = context?.agent ?? {}
 
-    if (!resumeData?.confirmed) {
-      return context?.agent?.suspend({
-        message: `Confirm: ${input.operation}?`,
-      })
-    }
+		if (!resumeData?.confirmed) {
+			return context?.agent?.suspend({
+				message: `Confirm: ${input.operation}?`,
+			})
+		}
 
-    // Proceed with operation
-    return await performOperation(input.operation)
-  },
+		// Proceed with operation
+		return await performOperation(input.operation)
+	},
 })
 ```
 
 ```typescript
 // When using this tool through a subagent in supervisor agents
 for await (const chunk of stream.fullStream) {
-  if (chunk.type === 'tool-call-suspended') {
-    console.log('Tool suspended:', chunk.payload.suspendPayload.message)
+	if (chunk.type === 'tool-call-suspended') {
+		console.log('Tool suspended:', chunk.payload.suspendPayload.message)
 
-    // Resume with confirmation
-    const resumeStream = await supervisorAgent.resumeStream(
-      { confirmed: true },
-      { runId: stream.runId },
-    )
+		// Resume with confirmation
+		const resumeStream = await supervisorAgent.resumeStream(
+			{ confirmed: true },
+			{ runId: stream.runId },
+		)
 
-    for await (const resumeChunk of resumeStream.textStream) {
-      process.stdout.write(resumeChunk)
-    }
-  }
+		for await (const resumeChunk of resumeStream.textStream) {
+			process.stdout.write(resumeChunk)
+		}
+	}
 }
 ```
 
@@ -527,19 +527,19 @@ Tool approval propagation also works with `generate()` in supervisor agents:
 
 ```typescript
 const output = await supervisorAgent.generate('Find user with ID 12345', {
-  maxSteps: 10,
+	maxSteps: 10,
 })
 
 if (output.finishReason === 'suspended') {
-  console.log('Tool requires approval:', output.suspendPayload.toolName)
+	console.log('Tool requires approval:', output.suspendPayload.toolName)
 
-  // Approve
-  const result = await supervisorAgent.approveToolCallGenerate({
-    runId: output.runId,
-    toolCallId: output.suspendPayload.toolCallId,
-  })
+	// Approve
+	const result = await supervisorAgent.approveToolCallGenerate({
+		runId: output.runId,
+		toolCallId: output.suspendPayload.toolCallId,
+	})
 
-  console.log('Final result:', result.text)
+	console.log('Final result:', result.text)
 }
 ```
 

@@ -45,9 +45,9 @@ In development:
 import { Inngest } from 'inngest'
 
 export const inngest = new Inngest({
-  id: 'mastra',
-  baseUrl: 'http://localhost:8288',
-  isDev: true,
+	id: 'mastra',
+	baseUrl: 'http://localhost:8288',
+	isDev: true,
 })
 ```
 
@@ -57,7 +57,7 @@ In production:
 import { Inngest } from 'inngest'
 
 export const inngest = new Inngest({
-  id: 'mastra',
+	id: 'mastra',
 })
 ```
 
@@ -76,7 +76,7 @@ When `INNGEST_DEV` is set, you can drop `isDev` and `baseUrl` from the client:
 import { Inngest } from 'inngest'
 
 export const inngest = new Inngest({
-  id: 'mastra',
+	id: 'mastra',
 })
 ```
 
@@ -100,16 +100,16 @@ const { createWorkflow, createStep } = init(inngest)
 
 // Step: Increment the counter value
 const incrementStep = createStep({
-  id: 'increment',
-  inputSchema: z.object({
-    value: z.number(),
-  }),
-  outputSchema: z.object({
-    value: z.number(),
-  }),
-  execute: async ({ inputData }) => {
-    return { value: inputData.value + 1 }
-  },
+	id: 'increment',
+	inputSchema: z.object({
+		value: z.number(),
+	}),
+	outputSchema: z.object({
+		value: z.number(),
+	}),
+	execute: async ({ inputData }) => {
+		return { value: inputData.value + 1 }
+	},
 })
 ```
 
@@ -120,13 +120,13 @@ Compose the steps into a workflow using the `dountil` loop pattern. The `createW
 ```ts title="src/mastra/workflows/index.ts"
 // workflow that is registered as a function on inngest server
 const workflow = createWorkflow({
-  id: 'increment-workflow',
-  inputSchema: z.object({
-    value: z.number(),
-  }),
-  outputSchema: z.object({
-    value: z.number(),
-  }),
+	id: 'increment-workflow',
+	inputSchema: z.object({
+		value: z.number(),
+	}),
+	outputSchema: z.object({
+		value: z.number(),
+	}),
 }).then(incrementStep)
 
 workflow.commit()
@@ -146,20 +146,20 @@ import { inngest } from './inngest'
 import { PinoLogger } from '@mastra/loggers'
 
 export const mastra = new Mastra({
-  workflows: { incrementWorkflow },
-  server: {
-    host: '0.0.0.0',
-    apiRoutes: [
-      {
-        path: '/inngest/api',
-        method: 'ALL',
-        createHandler: async ({ mastra }) => {
-          return serve({ mastra, inngest })
-        },
-      },
-    ],
-  },
-  logger: new PinoLogger({ name: 'Mastra', level: 'info' }),
+	workflows: { incrementWorkflow },
+	server: {
+		host: '0.0.0.0',
+		apiRoutes: [
+			{
+				path: '/inngest/api',
+				method: 'ALL',
+				createHandler: async ({ mastra }) => {
+					return serve({ mastra, inngest })
+				},
+			},
+		],
+	},
+	logger: new PinoLogger({ name: 'Mastra', level: 'info' }),
 })
 ```
 
@@ -189,11 +189,11 @@ The path is `/inngest/api`, not `/api/inngest`. Mastra reserves the `/api` prefi
 
    ```json
    {
-     "data": {
-       "inputData": {
-         "value": 5
-       }
-     }
+   	"data": {
+   		"inputData": {
+   			"value": 5
+   		}
+   	}
    }
    ```
 
@@ -219,13 +219,13 @@ Before you begin, make sure you have:
    import { VercelDeployer } from '@mastra/deployer-vercel'
 
    export const mastra = new Mastra({
-     deployer: new VercelDeployer({
-       teamSlug: 'your_team_slug',
-       projectName: 'your_project_name',
-       // you can get your vercel token from the vercel dashboard by clicking on the user icon in the top right corner
-       // and then clicking on "Account Settings" and then clicking on "Tokens" on the left sidebar.
-       token: process.env.VERCEL_TOKEN,
-     }),
+   	deployer: new VercelDeployer({
+   		teamSlug: 'your_team_slug',
+   		projectName: 'your_project_name',
+   		// you can get your vercel token from the vercel dashboard by clicking on the user icon in the top right corner
+   		// and then clicking on "Account Settings" and then clicking on "Tokens" on the left sidebar.
+   		token: process.env.VERCEL_TOKEN,
+   	}),
    })
    ```
 
@@ -253,11 +253,11 @@ Before you begin, make sure you have:
 
    ```json
    {
-     "data": {
-       "inputData": {
-         "value": 5
-       }
-     }
+   	"data": {
+   		"inputData": {
+   			"value": 5
+   		}
+   	}
    }
    ```
 
@@ -276,23 +276,23 @@ import { inngest } from '../inngest'
 
 // Define custom Inngest functions
 export const customEmailFunction = inngest.createFunction(
-  { id: 'send-welcome-email' },
-  { event: 'user/registered' },
-  async ({ event }) => {
-    // Custom email logic here
-    console.log(`Sending welcome email to ${event.data.email}`)
-    return { status: 'email_sent' }
-  },
+	{ id: 'send-welcome-email' },
+	{ event: 'user/registered' },
+	async ({ event }) => {
+		// Custom email logic here
+		console.log(`Sending welcome email to ${event.data.email}`)
+		return { status: 'email_sent' }
+	},
 )
 
 export const customWebhookFunction = inngest.createFunction(
-  { id: 'process-webhook' },
-  { event: 'webhook/received' },
-  async ({ event }) => {
-    // Custom webhook processing
-    console.log(`Processing webhook: ${event.data.type}`)
-    return { processed: true }
-  },
+	{ id: 'process-webhook' },
+	{ event: 'webhook/received' },
+	async ({ event }) => {
+		// Custom webhook processing
+		console.log(`Processing webhook: ${event.data.type}`)
+		return { processed: true }
+	},
 )
 ```
 
@@ -309,24 +309,24 @@ import { customEmailFunction, customWebhookFunction } from './inngest/custom-fun
 import { PinoLogger } from '@mastra/loggers'
 
 export const mastra = new Mastra({
-  workflows: { incrementWorkflow },
-  server: {
-    host: '0.0.0.0',
-    apiRoutes: [
-      {
-        path: '/inngest/api',
-        method: 'ALL',
-        createHandler: async ({ mastra }) => {
-          return serve({
-            mastra,
-            inngest,
-            functions: [customEmailFunction, customWebhookFunction],
-          })
-        },
-      },
-    ],
-  },
-  logger: new PinoLogger({ name: 'Mastra', level: 'info' }),
+	workflows: { incrementWorkflow },
+	server: {
+		host: '0.0.0.0',
+		apiRoutes: [
+			{
+				path: '/inngest/api',
+				method: 'ALL',
+				createHandler: async ({ mastra }) => {
+					return serve({
+						mastra,
+						inngest,
+						functions: [customEmailFunction, customWebhookFunction],
+					})
+				},
+			},
+		],
+	},
+	logger: new PinoLogger({ name: 'Mastra', level: 'info' }),
 })
 ```
 
@@ -377,9 +377,9 @@ const fastify = Fastify()
 const handler = createServe(fastifyAdapter)({ mastra, inngest })
 
 fastify.route({
-  method: ['GET', 'POST', 'PUT'],
-  url: '/inngest/api',
-  handler,
+	method: ['GET', 'POST', 'PUT'],
+	url: '/inngest/api',
+	handler,
 })
 
 fastify.listen({ port: 3000 })
@@ -458,8 +458,8 @@ import { incrementWorkflow } from './workflows'
 import { PinoLogger } from '@mastra/loggers'
 
 export const mastra = new Mastra({
-  workflows: { incrementWorkflow },
-  logger: new PinoLogger({ name: 'Mastra', level: 'info' }),
+	workflows: { incrementWorkflow },
+	logger: new PinoLogger({ name: 'Mastra', level: 'info' }),
 })
 ```
 
@@ -469,10 +469,10 @@ import { mastra } from './mastra'
 import { inngest } from './mastra/inngest'
 
 await connect({
-  mastra,
-  inngest,
-  instanceId: process.env.INNGEST_CONNECT_INSTANCE_ID,
-  maxWorkerConcurrency: Number(process.env.INNGEST_CONNECT_MAX_WORKER_CONCURRENCY ?? 10),
+	mastra,
+	inngest,
+	instanceId: process.env.INNGEST_CONNECT_INSTANCE_ID,
+	maxWorkerConcurrency: Number(process.env.INNGEST_CONNECT_MAX_WORKER_CONCURRENCY ?? 10),
 })
 ```
 
@@ -507,16 +507,16 @@ import { serve } from '@mastra/inngest'
 import { inngest } from './inngest'
 
 export const mastra = new Mastra({
-  server: {
-    apiPrefix: '/_mastra',
-    apiRoutes: [
-      {
-        path: '/api/inngest',
-        method: 'ALL',
-        createHandler: async ({ mastra }) => serve({ mastra, inngest }),
-      },
-    ],
-  },
+	server: {
+		apiPrefix: '/_mastra',
+		apiRoutes: [
+			{
+				path: '/api/inngest',
+				method: 'ALL',
+				createHandler: async ({ mastra }) => serve({ mastra, inngest }),
+			},
+		],
+	},
 })
 ```
 
@@ -536,15 +536,15 @@ Control how many workflow instances can run simultaneously:
 
 ```ts
 const workflow = createWorkflow({
-  id: 'user-processing-workflow',
-  inputSchema: z.object({ userId: z.string() }),
-  outputSchema: z.object({ result: z.string() }),
-  steps: [processUserStep],
-  // Limit to 10 concurrent executions, scoped by user ID
-  concurrency: {
-    limit: 10,
-    key: 'event.data.userId',
-  },
+	id: 'user-processing-workflow',
+	inputSchema: z.object({ userId: z.string() }),
+	outputSchema: z.object({ result: z.string() }),
+	steps: [processUserStep],
+	// Limit to 10 concurrent executions, scoped by user ID
+	concurrency: {
+		limit: 10,
+		key: 'event.data.userId',
+	},
 })
 ```
 
@@ -554,15 +554,15 @@ Limit the number of workflow executions within a time period:
 
 ```ts
 const workflow = createWorkflow({
-  id: 'api-sync-workflow',
-  inputSchema: z.object({ endpoint: z.string() }),
-  outputSchema: z.object({ status: z.string() }),
-  steps: [apiSyncStep],
-  // Maximum 1000 executions per hour
-  rateLimit: {
-    period: '1h',
-    limit: 1000,
-  },
+	id: 'api-sync-workflow',
+	inputSchema: z.object({ endpoint: z.string() }),
+	outputSchema: z.object({ status: z.string() }),
+	steps: [apiSyncStep],
+	// Maximum 1000 executions per hour
+	rateLimit: {
+		period: '1h',
+		limit: 1000,
+	},
 })
 ```
 
@@ -572,16 +572,16 @@ Ensure minimum time between workflow executions:
 
 ```ts
 const workflow = createWorkflow({
-  id: 'email-notification-workflow',
-  inputSchema: z.object({ organizationId: z.string(), message: z.string() }),
-  outputSchema: z.object({ sent: z.boolean() }),
-  steps: [sendEmailStep],
-  // Only one execution per 10 seconds per organization
-  throttle: {
-    period: '10s',
-    limit: 1,
-    key: 'event.data.organizationId',
-  },
+	id: 'email-notification-workflow',
+	inputSchema: z.object({ organizationId: z.string(), message: z.string() }),
+	outputSchema: z.object({ sent: z.boolean() }),
+	steps: [sendEmailStep],
+	// Only one execution per 10 seconds per organization
+	throttle: {
+		period: '10s',
+		limit: 1,
+		key: 'event.data.organizationId',
+	},
 })
 ```
 
@@ -591,15 +591,15 @@ Delay execution until no new events arrive within a time window:
 
 ```ts
 const workflow = createWorkflow({
-  id: 'search-index-workflow',
-  inputSchema: z.object({ documentId: z.string() }),
-  outputSchema: z.object({ indexed: z.boolean() }),
-  steps: [indexDocumentStep],
-  // Wait 5 seconds of no updates before indexing
-  debounce: {
-    period: '5s',
-    key: 'event.data.documentId',
-  },
+	id: 'search-index-workflow',
+	inputSchema: z.object({ documentId: z.string() }),
+	outputSchema: z.object({ indexed: z.boolean() }),
+	steps: [indexDocumentStep],
+	// Wait 5 seconds of no updates before indexing
+	debounce: {
+		period: '5s',
+		key: 'event.data.documentId',
+	},
 })
 ```
 
@@ -609,17 +609,17 @@ Set execution priority for workflows:
 
 ```ts
 const workflow = createWorkflow({
-  id: 'order-processing-workflow',
-  inputSchema: z.object({
-    orderId: z.string(),
-    priority: z.number().optional(),
-  }),
-  outputSchema: z.object({ processed: z.boolean() }),
-  steps: [processOrderStep],
-  // Higher priority orders execute first
-  priority: {
-    run: 'event.data.priority ?? 50',
-  },
+	id: 'order-processing-workflow',
+	inputSchema: z.object({
+		orderId: z.string(),
+		priority: z.number().optional(),
+	}),
+	outputSchema: z.object({ processed: z.boolean() }),
+	steps: [processOrderStep],
+	// Higher priority orders execute first
+	priority: {
+		run: 'event.data.priority ?? 50',
+	},
 })
 ```
 
@@ -629,30 +629,30 @@ Multiple flow control options can be combined in a single workflow:
 
 ```ts
 const workflow = createWorkflow({
-  id: 'comprehensive-workflow',
-  inputSchema: z.object({
-    userId: z.string(),
-    organizationId: z.string(),
-    priority: z.number().optional(),
-  }),
-  outputSchema: z.object({ result: z.string() }),
-  steps: [comprehensiveStep],
-  concurrency: {
-    limit: 5,
-    key: 'event.data.userId',
-  },
-  rateLimit: {
-    period: '1m',
-    limit: 100,
-  },
-  throttle: {
-    period: '10s',
-    limit: 1,
-    key: 'event.data.organizationId',
-  },
-  priority: {
-    run: 'event.data.priority ?? 0',
-  },
+	id: 'comprehensive-workflow',
+	inputSchema: z.object({
+		userId: z.string(),
+		organizationId: z.string(),
+		priority: z.number().optional(),
+	}),
+	outputSchema: z.object({ result: z.string() }),
+	steps: [comprehensiveStep],
+	concurrency: {
+		limit: 5,
+		key: 'event.data.userId',
+	},
+	rateLimit: {
+		period: '1m',
+		limit: 100,
+	},
+	throttle: {
+		period: '10s',
+		limit: 1,
+		key: 'event.data.organizationId',
+	},
+	priority: {
+		run: 'event.data.priority ?? 0',
+	},
 })
 ```
 
@@ -668,12 +668,12 @@ Configure a workflow to run on a schedule by adding a `cron` property:
 
 ```ts
 const workflow = createWorkflow({
-  id: 'daily-report-workflow',
-  inputSchema: z.object({ reportType: z.string() }),
-  outputSchema: z.object({ generated: z.boolean() }),
-  steps: [generateReportStep],
-  // Run daily at midnight
-  cron: '0 0 * * *',
+	id: 'daily-report-workflow',
+	inputSchema: z.object({ reportType: z.string() }),
+	outputSchema: z.object({ generated: z.boolean() }),
+	steps: [generateReportStep],
+	// Run daily at midnight
+	cron: '0 0 * * *',
 })
 ```
 
@@ -721,19 +721,19 @@ You can provide static input data that will be used for each scheduled execution
 
 ```ts
 const workflow = createWorkflow({
-  id: 'scheduled-data-sync',
-  inputSchema: z.object({
-    source: z.string(),
-    destination: z.string(),
-  }),
-  outputSchema: z.object({ synced: z.boolean() }),
-  steps: [syncDataStep],
-  cron: '0 */6 * * *', // Every 6 hours
-  // Input data provided to each scheduled run
-  inputData: {
-    source: 'production-db',
-    destination: 'analytics-warehouse',
-  },
+	id: 'scheduled-data-sync',
+	inputSchema: z.object({
+		source: z.string(),
+		destination: z.string(),
+	}),
+	outputSchema: z.object({ synced: z.boolean() }),
+	steps: [syncDataStep],
+	cron: '0 */6 * * *', // Every 6 hours
+	// Input data provided to each scheduled run
+	inputData: {
+		source: 'production-db',
+		destination: 'analytics-warehouse',
+	},
 })
 ```
 
@@ -743,22 +743,22 @@ You can also set an initial state for scheduled workflow runs:
 
 ```ts
 const workflow = createWorkflow({
-  id: 'scheduled-aggregation',
-  inputSchema: z.object({ date: z.string() }),
-  outputSchema: z.object({ aggregated: z.boolean() }),
-  stateSchema: z.object({
-    processedCount: z.number(),
-    lastProcessedDate: z.string(),
-  }),
-  steps: [aggregateDataStep],
-  cron: '0 0 * * *', // Daily at midnight
-  inputData: {
-    date: new Date().toISOString().split('T')[0], // Today's date
-  },
-  initialState: {
-    processedCount: 0,
-    lastProcessedDate: '',
-  },
+	id: 'scheduled-aggregation',
+	inputSchema: z.object({ date: z.string() }),
+	outputSchema: z.object({ aggregated: z.boolean() }),
+	stateSchema: z.object({
+		processedCount: z.number(),
+		lastProcessedDate: z.string(),
+	}),
+	steps: [aggregateDataStep],
+	cron: '0 0 * * *', // Daily at midnight
+	inputData: {
+		date: new Date().toISOString().split('T')[0], // Today's date
+	},
+	initialState: {
+		processedCount: 0,
+		lastProcessedDate: '',
+	},
 })
 ```
 
@@ -768,23 +768,23 @@ Cron scheduling can be combined with flow control options:
 
 ```ts
 const workflow = createWorkflow({
-  id: 'scheduled-api-sync',
-  inputSchema: z.object({ endpoint: z.string() }),
-  outputSchema: z.object({ synced: z.boolean() }),
-  steps: [syncApiStep],
-  cron: '*/30 * * * *', // Every 30 minutes
-  inputData: {
-    endpoint: 'https://api.example.com/data',
-  },
-  // Limit concurrent executions even for scheduled runs
-  concurrency: {
-    limit: 5,
-  },
-  // Rate limit scheduled executions
-  rateLimit: {
-    period: '1h',
-    limit: 100,
-  },
+	id: 'scheduled-api-sync',
+	inputSchema: z.object({ endpoint: z.string() }),
+	outputSchema: z.object({ synced: z.boolean() }),
+	steps: [syncApiStep],
+	cron: '*/30 * * * *', // Every 30 minutes
+	inputData: {
+		endpoint: 'https://api.example.com/data',
+	},
+	// Limit concurrent executions even for scheduled runs
+	concurrency: {
+		limit: 5,
+	},
+	// Rate limit scheduled executions
+	rateLimit: {
+		period: '1h',
+		limit: 100,
+	},
 })
 ```
 

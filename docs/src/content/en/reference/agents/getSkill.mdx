@@ -17,9 +17,9 @@ import { agent } from '../mastra/agents'
 const skill = await agent.getSkill('code-review')
 
 if (skill) {
-  console.log(skill.name) // "code-review"
-  console.log(skill.description) // "Use when reviewing code changes."
-  console.log(skill.instructions) // Full markdown instructions
+	console.log(skill.name) // "code-review"
+	console.log(skill.description) // "Use when reviewing code changes."
+	console.log(skill.instructions) // Full markdown instructions
 }
 ```
 
@@ -27,30 +27,30 @@ if (skill) {
 
 <PropertiesTable
   content={[
-  {
-    name: 'skillName',
-    type: 'string',
-    description: 'The name of the skill to retrieve.',
-  },
-  {
-    name: 'options',
-    type: 'object',
-    isOptional: true,
-    description: 'Options for skill resolution.',
-    properties: [
-      {
-        type: 'object',
-        parameters: [
-          {
-            name: 'requestContext',
-            type: 'RequestContext',
-            isOptional: true,
-            description: 'Request context passed to dynamic skill resolvers.',
-          },
-        ],
-      },
-    ],
-  },
+	{
+		name: 'skillName',
+		type: 'string',
+		description: 'The name of the skill to retrieve.',
+	},
+	{
+		name: 'options',
+		type: 'object',
+		isOptional: true,
+		description: 'Options for skill resolution.',
+		properties: [
+			{
+				type: 'object',
+				parameters: [
+					{
+						name: 'requestContext',
+						type: 'RequestContext',
+						isOptional: true,
+						description: 'Request context passed to dynamic skill resolvers.',
+					},
+				],
+			},
+		],
+	},
 ]}
 />
 
@@ -62,18 +62,18 @@ Returns the `Skill` object if found, or `null` if no skill with that name exists
 
 ```typescript
 interface Skill {
-  name: string
-  description: string
-  instructions: string
-  path: string
-  source: { type: string; projectPath: string }
-  references: string[]
-  scripts: string[]
-  assets: string[]
-  license?: string
-  compatibility?: string[]
-  'user-invocable'?: boolean
-  metadata?: Record<string, unknown>
+	name: string
+	description: string
+	instructions: string
+	path: string
+	source: { type: string; projectPath: string }
+	references: string[]
+	scripts: string[]
+	assets: string[]
+	license?: string
+	compatibility?: string[]
+	'user-invocable'?: boolean
+	metadata?: Record<string, unknown>
 }
 ```
 

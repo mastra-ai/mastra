@@ -41,7 +41,7 @@ Conditions are functions that examine the input data:
 ```typescript
 // Example condition function
 ;async ({ inputData }) => {
-  return inputData.wordCount < 50
+	return inputData.wordCount < 50
 }
 ```
 

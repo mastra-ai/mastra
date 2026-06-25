@@ -31,8 +31,8 @@ You should see output like:
 
 ```json
 {
-  "content": "Machine learning is revolutionizing healthcare by enabling faster diagnoses and personalized treatments.",
-  "type": "article"
+	"content": "Machine learning is revolutionizing healthcare by enabling faster diagnoses and personalized treatments.",
+	"type": "article"
 }
 ```
 

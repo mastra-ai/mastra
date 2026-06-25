@@ -56,9 +56,9 @@ import { MastraAuthFirebase } from '@mastra/auth-firebase'
 
 // Automatically uses FIREBASE_SERVICE_ACCOUNT and FIRESTORE_DATABASE_ID env vars
 export const mastra = new Mastra({
-  server: {
-    auth: new MastraAuthFirebase(),
-  },
+	server: {
+		auth: new MastraAuthFirebase(),
+	},
 })
 ```
 
@@ -69,12 +69,12 @@ import { Mastra } from '@mastra/core'
 import { MastraAuthFirebase } from '@mastra/auth-firebase'
 
 export const mastra = new Mastra({
-  server: {
-    auth: new MastraAuthFirebase({
-      serviceAccount: '/path/to/service-account.json',
-      databaseId: 'your-database-id',
-    }),
-  },
+	server: {
+		auth: new MastraAuthFirebase({
+			serviceAccount: '/path/to/service-account.json',
+			databaseId: 'your-database-id',
+		}),
+	},
 })
 ```
 
@@ -109,10 +109,10 @@ To customize user authorization, provide a custom `authorizeUser` function:
 import { MastraAuthFirebase } from '@mastra/auth-firebase'
 
 const firebaseAuth = new MastraAuthFirebase({
-  authorizeUser: async user => {
-    // Custom authorization logic
-    return user.email?.endsWith('@yourcompany.com') || false
-  },
+	authorizeUser: async user => {
+		// Custom authorization logic
+		return user.email?.endsWith('@yourcompany.com') || false
+	},
 })
 ```
 
@@ -135,9 +135,9 @@ import { initializeApp } from 'firebase/app'
 import { getAuth, GoogleAuthProvider } from 'firebase/auth'
 
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+	apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+	authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+	projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
 }
 
 const app = initializeApp(firebaseConfig)
@@ -154,32 +154,32 @@ import { signInWithPopup, signOut, User } from 'firebase/auth'
 import { auth, googleProvider } from './firebase'
 
 export const signInWithGoogle = async () => {
-  try {
-    const result = await signInWithPopup(auth, googleProvider)
-    return result.user
-  } catch (error) {
-    console.error('Error signing in:', error)
-    throw error
-  }
+	try {
+		const result = await signInWithPopup(auth, googleProvider)
+		return result.user
+	} catch (error) {
+		console.error('Error signing in:', error)
+		throw error
+	}
 }
 
 export const getIdToken = async (user: User) => {
-  try {
-    const idToken = await user.getIdToken()
-    return idToken
-  } catch (error) {
-    console.error('Error getting ID token:', error)
-    throw error
-  }
+	try {
+		const idToken = await user.getIdToken()
+		return idToken
+	} catch (error) {
+		console.error('Error getting ID token:', error)
+		throw error
+	}
 }
 
 export const signOutUser = async () => {
-  try {
-    await signOut(auth)
-  } catch (error) {
-    console.error('Error signing out:', error)
-    throw error
-  }
+	try {
+		await signOut(auth)
+	} catch (error) {
+		console.error('Error signing out:', error)
+		throw error
+	}
 }
 ```
 
@@ -197,12 +197,12 @@ When `auth` is enabled, all requests made with `MastraClient` must include a val
 import { MastraClient } from '@mastra/client-js'
 
 export const createMastraClient = (idToken: string) => {
-  return new MastraClient({
-    baseUrl: 'https://<mastra-api-url>',
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-    },
-  })
+	return new MastraClient({
+		baseUrl: 'https://<mastra-api-url>',
+		headers: {
+			Authorization: `Bearer ${idToken}`,
+		},
+	})
 }
 ```
 
@@ -229,25 +229,25 @@ Once `MastraClient` is configured with the Firebase ID token, you can send authe
     import { getIdToken } from '../lib/auth'
 
     export const TestAgent = () => {
-      const [user] = useAuthState(auth)
+    	const [user] = useAuthState(auth)
 
-      async function handleClick() {
-        if (!user) return
+    	async function handleClick() {
+    		if (!user) return
 
-        const token = await getIdToken(user)
-        const client = createMastraClient(token)
+    		const token = await getIdToken(user)
+    		const client = createMastraClient(token)
 
-        const weatherAgent = client.getAgent('weatherAgent')
-        const response = await weatherAgent.generate("What's the weather like in New York")
+    		const weatherAgent = client.getAgent('weatherAgent')
+    		const response = await weatherAgent.generate("What's the weather like in New York")
 
-        console.log({ response })
-      }
+    		console.log({ response })
+    	}
 
-      return (
-        <button onClick={handleClick} disabled={!user}>
-          Test Agent
-        </button>
-      )
+    	return (
+    		<button onClick={handleClick} disabled={!user}>
+    			Test Agent
+    		</button>
+    	)
     }
     ```
   </TabItem>
@@ -260,35 +260,35 @@ Once `MastraClient` is configured with the Firebase ID token, you can send authe
 
     // Initialize Firebase Admin
     admin.initializeApp({
-      credential: admin.credential.cert({
-        // Your service account credentials
-      }),
+    	credential: admin.credential.cert({
+    		// Your service account credentials
+    	}),
     })
 
     const app = express()
     app.use(express.json())
 
     app.post('/generate', async (req, res) => {
-      try {
-        const { idToken } = req.body
+    	try {
+    		const { idToken } = req.body
 
-        // Verify the token
-        await admin.auth().verifyIdToken(idToken)
+    		// Verify the token
+    		await admin.auth().verifyIdToken(idToken)
 
-        const mastra = new MastraClient({
-          baseUrl: 'http://localhost:4111',
-          headers: {
-            Authorization: `Bearer ${idToken}`,
-          },
-        })
+    		const mastra = new MastraClient({
+    			baseUrl: 'http://localhost:4111',
+    			headers: {
+    				Authorization: `Bearer ${idToken}`,
+    			},
+    		})
 
-        const weatherAgent = mastra.getAgent('weatherAgent')
-        const response = await weatherAgent.generate("What's the weather like in Nairobi")
+    		const weatherAgent = mastra.getAgent('weatherAgent')
+    		const response = await weatherAgent.generate("What's the weather like in Nairobi")
 
-        res.json({ response: response.text })
-      } catch (error) {
-        res.status(401).json({ error: 'Unauthorized' })
-      }
+    		res.json({ response: response.text })
+    	} catch (error) {
+    		res.status(401).json({ error: 'Unauthorized' })
+    	}
     })
     ```
   </TabItem>

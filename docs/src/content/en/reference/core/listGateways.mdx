@@ -15,10 +15,10 @@ Returns a record of all registered gateways, indexed by their registration keys.
 import { Mastra } from '@mastra/core'
 
 const mastra = new Mastra({
-  gateways: {
-    myGateway: new MyCustomGateway(),
-    anotherGateway: new AnotherGateway(),
-  },
+	gateways: {
+		myGateway: new MyCustomGateway(),
+		anotherGateway: new AnotherGateway(),
+	},
 })
 
 const gateways = mastra.listGateways()
@@ -26,7 +26,7 @@ console.log(Object.keys(gateways)) // ['myGateway', 'anotherGateway']
 
 // Iterate over all gateways
 for (const [key, gateway] of Object.entries(gateways)) {
-  console.log(`${key}: ${gateway.name}`)
+	console.log(`${key}: ${gateway.name}`)
 }
 ```
 
@@ -38,11 +38,11 @@ None.
 
 <PropertiesTable
   content={[
-  {
-    name: 'gateways',
-    type: 'Record<string, MastraModelGateway>',
-    description: 'A record of gateway instances indexed by registration key',
-  },
+	{
+		name: 'gateways',
+		type: 'Record<string, MastraModelGateway>',
+		description: 'A record of gateway instances indexed by registration key',
+	},
 ]}
 />
 

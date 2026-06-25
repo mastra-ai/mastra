@@ -46,12 +46,12 @@ All factory functions accept `BrightDataClientOptions` from `@brightdata/sdk`:
 
 <PropertiesTable
   content={[
-  {
-    name: 'apiKey',
-    type: 'string',
-    description: 'Bright Data API token. Falls back to the `BRIGHTDATA_API_TOKEN` environment variable.',
-    isOptional: true,
-  },
+	{
+		name: 'apiKey',
+		type: 'string',
+		description: 'Bright Data API token. Falls back to the `BRIGHTDATA_API_TOKEN` environment variable.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -86,23 +86,23 @@ const searchTool = createBrightDataSearchTool()
 
 <PropertiesTable
   content={[
-  {
-    name: 'query',
-    type: 'string',
-    description: 'The search query.',
-  },
-  {
-    name: 'country',
-    type: 'string',
-    description: 'Two-letter country code for geo-targeted results (for example, `us` or `gb`).',
-    isOptional: true,
-  },
-  {
-    name: 'start',
-    type: 'number',
-    description: 'Result offset for pagination. For example, `10` returns the second page of 10 results.',
-    isOptional: true,
-  },
+	{
+		name: 'query',
+		type: 'string',
+		description: 'The search query.',
+	},
+	{
+		name: 'country',
+		type: 'string',
+		description: 'Two-letter country code for geo-targeted results (for example, `us` or `gb`).',
+		isOptional: true,
+	},
+	{
+		name: 'start',
+		type: 'number',
+		description: 'Result offset for pagination. For example, `10` returns the second page of 10 results.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -110,32 +110,32 @@ const searchTool = createBrightDataSearchTool()
 
 <PropertiesTable
   content={[
-  {
-    name: 'query',
-    type: 'string',
-    description: 'The original search query.',
-  },
-  {
-    name: 'results',
-    type: 'SearchResult[]',
-    description: 'Organic search results. Entries missing a link or title are filtered out.',
-    properties: [
-      {
-        type: 'SearchResult',
-        parameters: [
-          { name: 'link', type: 'string', description: 'Result URL.' },
-          { name: 'title', type: 'string', description: 'Result title.' },
-          { name: 'description', type: 'string', description: 'Result snippet.' },
-        ],
-      },
-    ],
-  },
-  {
-    name: 'currentPage',
-    type: 'number',
-    description:
-      'Page number returned by the SERP API. Defaults to `1` when the upstream response omits or returns a non-positive value.',
-  },
+	{
+		name: 'query',
+		type: 'string',
+		description: 'The original search query.',
+	},
+	{
+		name: 'results',
+		type: 'SearchResult[]',
+		description: 'Organic search results. Entries missing a link or title are filtered out.',
+		properties: [
+			{
+				type: 'SearchResult',
+				parameters: [
+					{ name: 'link', type: 'string', description: 'Result URL.' },
+					{ name: 'title', type: 'string', description: 'Result title.' },
+					{ name: 'description', type: 'string', description: 'Result snippet.' },
+				],
+			},
+		],
+	},
+	{
+		name: 'currentPage',
+		type: 'number',
+		description:
+			'Page number returned by the SERP API. Defaults to `1` when the upstream response omits or returns a non-positive value.',
+	},
 ]}
 />
 
@@ -155,11 +155,11 @@ const fetchTool = createBrightDataFetchTool()
 
 <PropertiesTable
   content={[
-  {
-    name: 'url',
-    type: 'string',
-    description: 'The URL to fetch. Must be a valid HTTP or HTTPS URL.',
-  },
+	{
+		name: 'url',
+		type: 'string',
+		description: 'The URL to fetch. Must be a valid HTTP or HTTPS URL.',
+	},
 ]}
 />
 
@@ -167,16 +167,16 @@ const fetchTool = createBrightDataFetchTool()
 
 <PropertiesTable
   content={[
-  {
-    name: 'url',
-    type: 'string',
-    description: 'The input URL.',
-  },
-  {
-    name: 'content',
-    type: 'string',
-    description: 'Page content as Markdown.',
-  },
+	{
+		name: 'url',
+		type: 'string',
+		description: 'The input URL.',
+	},
+	{
+		name: 'content',
+		type: 'string',
+		description: 'Page content as Markdown.',
+	},
 ]}
 />
 
@@ -191,15 +191,15 @@ import { createBrightDataTools } from '@mastra/brightdata'
 const { webSearch, webFetch } = createBrightDataTools()
 
 const agent = new Agent({
-  id: 'research-agent',
-  name: 'Research Agent',
-  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
-  instructions:
-    'You are a research assistant. Use the search tool to find relevant pages, then use the fetch tool to read full Markdown content from the best results.',
-  tools: {
-    webSearch,
-    webFetch,
-  },
+	id: 'research-agent',
+	name: 'Research Agent',
+	model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+	instructions:
+		'You are a research assistant. Use the search tool to find relevant pages, then use the fetch tool to read full Markdown content from the best results.',
+	tools: {
+		webSearch,
+		webFetch,
+	},
 })
 ```
 

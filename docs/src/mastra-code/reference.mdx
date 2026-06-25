@@ -13,15 +13,15 @@ The `createMastraCode()` factory function bootstraps Mastra Code and returns a c
 import { createMastraCode } from 'mastracode'
 
 const {
-  harness,
-  mcpManager,
-  hookManager,
-  authStorage,
-  resolveModel,
-  storageWarning,
-  builtinPacks,
-  builtinOmPacks,
-  effectiveDefaults,
+	harness,
+	mcpManager,
+	hookManager,
+	authStorage,
+	resolveModel,
+	storageWarning,
+	builtinPacks,
+	builtinOmPacks,
+	effectiveDefaults,
 } = createMastraCode(options)
 ```
 
@@ -118,13 +118,13 @@ Tool permission configuration.
 
 ```typescript
 interface PermissionRules {
-  categories: {
-    read: 'allow' | 'ask' | 'deny'
-    edit: 'allow' | 'ask' | 'deny'
-    execute: 'allow' | 'ask' | 'deny'
-    mcp: 'allow' | 'ask' | 'deny'
-  }
-  tools: Record<string, 'allow' | 'ask' | 'deny'>
+	categories: {
+		read: 'allow' | 'ask' | 'deny'
+		edit: 'allow' | 'ask' | 'deny'
+		execute: 'allow' | 'ask' | 'deny'
+		mcp: 'allow' | 'ask' | 'deny'
+	}
+	tools: Record<string, 'allow' | 'ask' | 'deny'>
 }
 ```
 
@@ -153,12 +153,12 @@ import { MastraTUI } from 'mastracode/tui'
 const { harness, mcpManager, hookManager, authStorage } = await createMastraCode()
 
 const tui = new MastraTUI({
-  harness,
-  hookManager,
-  authStorage,
-  mcpManager,
-  appName: 'My Agent',
-  version: '1.0.0',
+	harness,
+	hookManager,
+	authStorage,
+	mcpManager,
+	appName: 'My Agent',
+	version: '1.0.0',
 })
 
 tui.run()
@@ -183,16 +183,16 @@ tui.run()
 import { createMastraCode } from 'mastracode'
 
 const { harness } = await createMastraCode({
-  cwd: '/path/to/project',
+	cwd: '/path/to/project',
 })
 
 await harness.init()
 await harness.selectOrCreateThread()
 
 harness.subscribe(event => {
-  if (event.type === 'message_update') {
-    console.log(event.message.content)
-  }
+	if (event.type === 'message_update') {
+		console.log(event.message.content)
+	}
 })
 
 await harness.sendMessage({ content: 'Explain the auth module' })
@@ -205,23 +205,23 @@ import { createMastraCode } from 'mastracode'
 import { Agent } from '@mastra/core/agent'
 
 const reviewAgent = new Agent({
-  id: 'review-agent',
-  name: 'Review Agent',
-  instructions: 'You are a code review specialist.',
-  model: 'anthropic/claude-sonnet-4-6',
+	id: 'review-agent',
+	name: 'Review Agent',
+	instructions: 'You are a code review specialist.',
+	model: 'anthropic/claude-sonnet-4-6',
 })
 
 const { harness } = await createMastraCode({
-  modes: [
-    {
-      id: 'review',
-      name: 'Review',
-      default: true,
-      defaultModelId: 'anthropic/claude-sonnet-4-6',
-      color: '#f59e0b',
-      agent: reviewAgent,
-    },
-  ],
+	modes: [
+		{
+			id: 'review',
+			name: 'Review',
+			default: true,
+			defaultModelId: 'anthropic/claude-sonnet-4-6',
+			color: '#f59e0b',
+			agent: reviewAgent,
+		},
+	],
 })
 ```
 
@@ -233,19 +233,19 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 const deployTool = createTool({
-  id: 'deploy',
-  description: 'Deploy the current branch to staging',
-  inputSchema: z.object({
-    environment: z.enum(['staging', 'production']),
-  }),
-  execute: async ({ environment }) => {
-    // Deploy logic here
-    return { content: `Deployed to ${environment}` }
-  },
+	id: 'deploy',
+	description: 'Deploy the current branch to staging',
+	inputSchema: z.object({
+		environment: z.enum(['staging', 'production']),
+	}),
+	execute: async ({ environment }) => {
+		// Deploy logic here
+		return { content: `Deployed to ${environment}` }
+	},
 })
 
 const { harness } = await createMastraCode({
-  extraTools: { deploy: deployTool },
+	extraTools: { deploy: deployTool },
 })
 ```
 
@@ -255,10 +255,10 @@ const { harness } = await createMastraCode({
 import { createMastraCode } from 'mastracode'
 
 const { harness } = await createMastraCode({
-  storage: {
-    url: 'libsql://my-db.turso.io',
-    authToken: process.env.TURSO_AUTH_TOKEN,
-  },
+	storage: {
+		url: 'libsql://my-db.turso.io',
+		authToken: process.env.TURSO_AUTH_TOKEN,
+	},
 })
 ```
 
@@ -268,17 +268,17 @@ const { harness } = await createMastraCode({
 import { createMastraCode } from 'mastracode'
 
 const { harness } = await createMastraCode({
-  initialState: {
-    yolo: false,
-    permissionRules: {
-      categories: {
-        read: 'allow',
-        edit: 'ask',
-        execute: 'ask',
-        mcp: 'deny',
-      },
-      tools: {},
-    },
-  },
+	initialState: {
+		yolo: false,
+		permissionRules: {
+			categories: {
+				read: 'allow',
+				edit: 'ask',
+				execute: 'ask',
+				mcp: 'deny',
+			},
+			tools: {},
+		},
+	},
 })
 ```

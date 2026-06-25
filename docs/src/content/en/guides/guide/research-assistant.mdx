@@ -78,23 +78,23 @@ Let's define the agent's behavior, connect it to your Mastra project, and create
 
     // Create a tool for semantic search over the paper embeddings
     const vectorQueryTool = createVectorQueryTool({
-      vectorStoreName: 'libSqlVector',
-      indexName: 'papers',
-      model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+    	vectorStoreName: 'libSqlVector',
+    	indexName: 'papers',
+    	model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
     })
 
     export const researchAgent = new Agent({
-      id: 'research-agent',
-      name: 'Research Assistant',
-      instructions: `You are a helpful research assistant that analyzes academic papers and technical documents.
+    	id: 'research-agent',
+    	name: 'Research Assistant',
+    	instructions: `You are a helpful research assistant that analyzes academic papers and technical documents.
         Use the provided vector query tool to find relevant information from your knowledge base,
         and provide accurate, well-supported answers based on the retrieved content.
         Focus on the specific content available in the tool and acknowledge if you cannot find sufficient information to answer a question.
         Base your responses only on the content provided, not on general knowledge.`,
-      model: '__GATEWAY_OPENAI_MODEL__',
-      tools: {
-        vectorQueryTool,
-      },
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	tools: {
+    		vectorQueryTool,
+    	},
     })
     ```
   </StepItem>
@@ -114,12 +114,12 @@ Let's define the agent's behavior, connect it to your Mastra project, and create
     import { LibSQLVector } from '@mastra/libsql'
 
     const libSqlVector = new LibSQLVector({
-      id: 'research-vectors',
-      url: 'file:/Users/your-name/guides/research-assistant/vector.db',
+    	id: 'research-vectors',
+    	url: 'file:/Users/your-name/guides/research-assistant/vector.db',
     })
 
     export const mastra = new Mastra({
-      vectors: { libSqlVector },
+    	vectors: { libSqlVector },
     })
     ```
 
@@ -143,13 +143,13 @@ Let's define the agent's behavior, connect it to your Mastra project, and create
     import { researchAgent } from './agents/researchAgent'
 
     const libSqlVector = new LibSQLVector({
-      id: 'research-vectors',
-      url: 'file:/Users/your-name/guides/research-assistant/vector.db',
+    	id: 'research-vectors',
+    	url: 'file:/Users/your-name/guides/research-assistant/vector.db',
     })
 
     export const mastra = new Mastra({
-      agents: { researchAgent },
-      vectors: { libSqlVector },
+    	agents: { researchAgent },
+    	vectors: { libSqlVector },
     })
     ```
   </StepItem>
@@ -176,10 +176,10 @@ In the following steps you'll fetch the research paper, split it into smaller ch
     // Create document and chunk it
     const doc = MDocument.fromText(paperText)
     const chunks = await doc.chunk({
-      strategy: 'recursive',
-      maxSize: 512,
-      overlap: 50,
-      separators: ['\n\n', '\n', ' '],
+    	strategy: 'recursive',
+    	maxSize: 512,
+    	overlap: 50,
+    	separators: ['\n\n', '\n', ' '],
     })
 
     console.log('Number of chunks:', chunks.length)
@@ -229,16 +229,16 @@ In the following steps you'll fetch the research paper, split it into smaller ch
     // Create document and chunk it
     const doc = MDocument.fromText(paperText)
     const chunks = await doc.chunk({
-      strategy: 'recursive',
-      maxSize: 512,
-      overlap: 50,
-      separators: ['\n\n', '\n', ' '],
+    	strategy: 'recursive',
+    	maxSize: 512,
+    	overlap: 50,
+    	separators: ['\n\n', '\n', ' '],
     })
 
     // Generate embeddings
     const { embeddings } = await embedMany({
-      model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
-      values: chunks.map(chunk => chunk.text),
+    	model: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+    	values: chunks.map(chunk => chunk.text),
     })
 
     // Get the vector store instance from Mastra
@@ -246,18 +246,18 @@ In the following steps you'll fetch the research paper, split it into smaller ch
 
     // Create an index for paper chunks
     await vectorStore.createIndex({
-      indexName: 'papers',
-      dimension: 1536,
+    	indexName: 'papers',
+    	dimension: 1536,
     })
 
     // Store embeddings
     await vectorStore.upsert({
-      indexName: 'papers',
-      vectors: embeddings,
-      metadata: chunks.map(chunk => ({
-        text: chunk.text,
-        source: 'transformer-paper',
-      })),
+    	indexName: 'papers',
+    	vectors: embeddings,
+    	metadata: chunks.map(chunk => ({
+    		text: chunk.text,
+    		source: 'transformer-paper',
+    	})),
     })
     ```
 

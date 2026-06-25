@@ -13,40 +13,40 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 ```typescript
 interface ObservabilityRegistryConfig {
-  default?: { enabled?: boolean }
-  configs?: Record<string, Omit<ObservabilityInstanceConfig, 'name'> | ObservabilityInstance>
-  configSelector?: ConfigSelector
-  sensitiveDataFilter?: boolean | SensitiveDataFilterOptions
+	default?: { enabled?: boolean }
+	configs?: Record<string, Omit<ObservabilityInstanceConfig, 'name'> | ObservabilityInstance>
+	configSelector?: ConfigSelector
+	sensitiveDataFilter?: boolean | SensitiveDataFilterOptions
 }
 ```
 
 <PropertiesTable
   content={[
-  {
-    name: 'default',
-    type: '{ enabled?: boolean }',
-    description: 'Enable default configuration with MastraStorageExporter and MastraPlatformExporter',
-    required: false,
-  },
-  {
-    name: 'configs',
-    type: "Record<string, Omit<ObservabilityInstanceConfig, 'name'> | ObservabilityInstance>",
-    description: 'Named observability instance configurations or pre-instantiated instances',
-    required: false,
-  },
-  {
-    name: 'configSelector',
-    type: 'ConfigSelector',
-    description: 'Runtime configuration selector function',
-    required: false,
-  },
-  {
-    name: 'sensitiveDataFilter',
-    type: 'boolean | SensitiveDataFilterOptions',
-    description:
-      'Controls whether a [SensitiveDataFilter](/reference/observability/tracing/processors/sensitive-data-filter) is auto-applied to every configured instance. Defaults to `true`. Pass `false` to opt out, or pass a `SensitiveDataFilterOptions` object to customize fields, redaction token, or redaction style. If a config already includes a `SensitiveDataFilter` in `spanOutputProcessors`, it is not duplicated. Pre-instantiated instances are not modified.',
-    required: false,
-  },
+	{
+		name: 'default',
+		type: '{ enabled?: boolean }',
+		description: 'Enable default configuration with MastraStorageExporter and MastraPlatformExporter',
+		required: false,
+	},
+	{
+		name: 'configs',
+		type: "Record<string, Omit<ObservabilityInstanceConfig, 'name'> | ObservabilityInstance>",
+		description: 'Named observability instance configurations or pre-instantiated instances',
+		required: false,
+	},
+	{
+		name: 'configSelector',
+		type: 'ConfigSelector',
+		description: 'Runtime configuration selector function',
+		required: false,
+	},
+	{
+		name: 'sensitiveDataFilter',
+		type: 'boolean | SensitiveDataFilterOptions',
+		description:
+			'Controls whether a [SensitiveDataFilter](/reference/observability/tracing/processors/sensitive-data-filter) is auto-applied to every configured instance. Defaults to `true`. Pass `false` to opt out, or pass a `SensitiveDataFilterOptions` object to customize fields, redaction token, or redaction style. If a config already includes a `SensitiveDataFilter` in `spanOutputProcessors`, it is not duplicated. Pre-instantiated instances are not modified.',
+		required: false,
+	},
 ]}
 />
 
@@ -54,142 +54,142 @@ interface ObservabilityRegistryConfig {
 
 ```typescript
 interface ObservabilityInstanceConfig {
-  name: string
-  serviceName: string
-  sampling?: SamplingStrategy
-  exporters?: ObservabilityExporter[]
-  spanOutputProcessors?: SpanOutputProcessor[]
-  includeInternalSpans?: boolean
-  excludeSpanTypes?: SpanType[]
-  spanFilter?: (span: AnyExportedSpan) => boolean
-  requestContextKeys?: string[]
-  serializationOptions?: SerializationOptions
-  logging?: { enabled?: boolean; level?: LogLevel }
+	name: string
+	serviceName: string
+	sampling?: SamplingStrategy
+	exporters?: ObservabilityExporter[]
+	spanOutputProcessors?: SpanOutputProcessor[]
+	includeInternalSpans?: boolean
+	excludeSpanTypes?: SpanType[]
+	spanFilter?: (span: AnyExportedSpan) => boolean
+	requestContextKeys?: string[]
+	serializationOptions?: SerializationOptions
+	logging?: { enabled?: boolean; level?: LogLevel }
 }
 ```
 
 <PropertiesTable
   content={[
-  {
-    name: 'name',
-    type: 'string',
-    description: 'Configuration identifier',
-    required: true,
-  },
-  {
-    name: 'serviceName',
-    type: 'string',
-    description: 'Service name in traces',
-    required: true,
-  },
-  {
-    name: 'sampling',
-    type: 'SamplingStrategy',
-    description: 'Sampling configuration (defaults to ALWAYS)',
-    required: false,
-  },
-  {
-    name: 'exporters',
-    type: 'ObservabilityExporter[]',
-    description: 'Trace data exporters',
-    required: false,
-  },
-  {
-    name: 'spanOutputProcessors',
-    type: 'SpanOutputProcessor[]',
-    description: 'Span output processors',
-    required: false,
-  },
-  {
-    name: 'includeInternalSpans',
-    type: 'boolean',
-    description: 'Include spans internal to Mastra operations',
-    required: false,
-  },
-  {
-    name: 'excludeSpanTypes',
-    type: 'SpanType[]',
-    description:
-      'Span types to exclude from export. Useful for reducing noise and costs in per-span billing platforms. See the [Span filtering reference](/reference/observability/tracing/span-filtering) for details.',
-    required: false,
-  },
-  {
-    name: 'spanFilter',
-    type: '(span: AnyExportedSpan) => boolean',
-    description:
-      'Filter function to control which spans are exported. Return true to keep, false to drop. Runs after excludeSpanTypes and spanOutputProcessors. See the [Span filtering reference](/reference/observability/tracing/span-filtering) for details.',
-    required: false,
-  },
-  {
-    name: 'requestContextKeys',
-    type: 'string[]',
-    description: 'RequestContext keys to extract as metadata (supports dot notation)',
-    required: false,
-  },
-  {
-    name: 'serializationOptions',
-    type: 'SerializationOptions',
-    description: 'Options for controlling serialization of span data (input/output/attributes)',
-    required: false,
-    properties: [
-      {
-        type: 'SerializationOptions',
-        parameters: [
-          {
-            name: 'maxStringLength',
-            type: 'number',
-            description: 'Maximum length for string values (default: 1024)',
-            isOptional: true,
-          },
-          {
-            name: 'maxDepth',
-            type: 'number',
-            description: 'Maximum depth for nested objects (default: 6)',
-            isOptional: true,
-          },
-          {
-            name: 'maxArrayLength',
-            type: 'number',
-            description: 'Maximum number of items in arrays (default: 50)',
-            isOptional: true,
-          },
-          {
-            name: 'maxObjectKeys',
-            type: 'number',
-            description: 'Maximum number of keys in objects (default: 50)',
-            isOptional: true,
-          },
-        ],
-      },
-    ],
-  },
-  {
-    name: 'logging',
-    type: '{ enabled?: boolean; level?: LogLevel }',
-    description:
-      'Controls log forwarding to observability storage. See [Logging to observability storage](/docs/observability/logging#logging-to-observability-storage) for details.',
-    required: false,
-    properties: [
-      {
-        type: '{ enabled?: boolean; level?: LogLevel }',
-        parameters: [
-          {
-            name: 'enabled',
-            type: 'boolean',
-            description: 'Set to false to disable log forwarding to observability storage (default: true)',
-            isOptional: true,
-          },
-          {
-            name: 'level',
-            type: 'LogLevel',
-            description:
-              "Minimum log level to forward. One of 'debug', 'info', 'warn', 'error', 'fatal' (default: 'debug')",
-            isOptional: true,
-          },
-        ],
-      },
-    ],
-  },
+	{
+		name: 'name',
+		type: 'string',
+		description: 'Configuration identifier',
+		required: true,
+	},
+	{
+		name: 'serviceName',
+		type: 'string',
+		description: 'Service name in traces',
+		required: true,
+	},
+	{
+		name: 'sampling',
+		type: 'SamplingStrategy',
+		description: 'Sampling configuration (defaults to ALWAYS)',
+		required: false,
+	},
+	{
+		name: 'exporters',
+		type: 'ObservabilityExporter[]',
+		description: 'Trace data exporters',
+		required: false,
+	},
+	{
+		name: 'spanOutputProcessors',
+		type: 'SpanOutputProcessor[]',
+		description: 'Span output processors',
+		required: false,
+	},
+	{
+		name: 'includeInternalSpans',
+		type: 'boolean',
+		description: 'Include spans internal to Mastra operations',
+		required: false,
+	},
+	{
+		name: 'excludeSpanTypes',
+		type: 'SpanType[]',
+		description:
+			'Span types to exclude from export. Useful for reducing noise and costs in per-span billing platforms. See the [Span filtering reference](/reference/observability/tracing/span-filtering) for details.',
+		required: false,
+	},
+	{
+		name: 'spanFilter',
+		type: '(span: AnyExportedSpan) => boolean',
+		description:
+			'Filter function to control which spans are exported. Return true to keep, false to drop. Runs after excludeSpanTypes and spanOutputProcessors. See the [Span filtering reference](/reference/observability/tracing/span-filtering) for details.',
+		required: false,
+	},
+	{
+		name: 'requestContextKeys',
+		type: 'string[]',
+		description: 'RequestContext keys to extract as metadata (supports dot notation)',
+		required: false,
+	},
+	{
+		name: 'serializationOptions',
+		type: 'SerializationOptions',
+		description: 'Options for controlling serialization of span data (input/output/attributes)',
+		required: false,
+		properties: [
+			{
+				type: 'SerializationOptions',
+				parameters: [
+					{
+						name: 'maxStringLength',
+						type: 'number',
+						description: 'Maximum length for string values (default: 1024)',
+						isOptional: true,
+					},
+					{
+						name: 'maxDepth',
+						type: 'number',
+						description: 'Maximum depth for nested objects (default: 6)',
+						isOptional: true,
+					},
+					{
+						name: 'maxArrayLength',
+						type: 'number',
+						description: 'Maximum number of items in arrays (default: 50)',
+						isOptional: true,
+					},
+					{
+						name: 'maxObjectKeys',
+						type: 'number',
+						description: 'Maximum number of keys in objects (default: 50)',
+						isOptional: true,
+					},
+				],
+			},
+		],
+	},
+	{
+		name: 'logging',
+		type: '{ enabled?: boolean; level?: LogLevel }',
+		description:
+			'Controls log forwarding to observability storage. See [Logging to observability storage](/docs/observability/logging#logging-to-observability-storage) for details.',
+		required: false,
+		properties: [
+			{
+				type: '{ enabled?: boolean; level?: LogLevel }',
+				parameters: [
+					{
+						name: 'enabled',
+						type: 'boolean',
+						description: 'Set to false to disable log forwarding to observability storage (default: true)',
+						isOptional: true,
+					},
+					{
+						name: 'level',
+						type: 'LogLevel',
+						description:
+							"Minimum log level to forward. One of 'debug', 'info', 'warn', 'error', 'fatal' (default: 'debug')",
+						isOptional: true,
+					},
+				],
+			},
+		],
+	},
 ]}
 />
 
@@ -197,18 +197,18 @@ interface ObservabilityInstanceConfig {
 
 ```typescript
 type SamplingStrategy =
-  | { type: 'always' }
-  | { type: 'never' }
-  | { type: 'ratio'; probability: number }
-  | { type: 'custom'; sampler: (options?: TracingOptions) => boolean }
+	| { type: 'always' }
+	| { type: 'never' }
+	| { type: 'ratio'; probability: number }
+	| { type: 'custom'; sampler: (options?: TracingOptions) => boolean }
 ```
 
 ## `ConfigSelector`
 
 ```typescript
 type ConfigSelector = (
-  options: ConfigSelectorOptions,
-  availableConfigs: ReadonlyMap<string, ObservabilityInstance>,
+	options: ConfigSelectorOptions,
+	availableConfigs: ReadonlyMap<string, ObservabilityInstance>,
 ) => string | undefined
 ```
 
@@ -216,7 +216,7 @@ type ConfigSelector = (
 
 ```typescript
 interface ConfigSelectorOptions {
-  requestContext?: RequestContext
+	requestContext?: RequestContext
 }
 ```
 

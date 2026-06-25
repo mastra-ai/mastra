@@ -11,17 +11,17 @@ import { LibSQLStore } from '@mastra/libsql'
 import { financialAgent } from './agents/financial-agent'
 
 export const mastra = new Mastra({
-  agents: {
-    financialAgent,
-  },
-  storage: new LibSQLStore({
-    id: 'learning-memory-storage',
-    url: ':memory:',
-  }),
-  logger: new PinoLogger({
-    name: 'Mastra',
-    level: 'info',
-  }),
+	agents: {
+		financialAgent,
+	},
+	storage: new LibSQLStore({
+		id: 'learning-memory-storage',
+		url: ':memory:',
+	}),
+	logger: new PinoLogger({
+		name: 'Mastra',
+		level: 'info',
+	}),
 })
 ```
 

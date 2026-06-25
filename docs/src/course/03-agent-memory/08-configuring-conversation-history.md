@@ -9,25 +9,25 @@ import { LibSQLStore } from '@mastra/libsql'
 
 // Create a memory instance with custom conversation history settings
 const memory = new Memory({
-  storage: new LibSQLStore({
-    url: 'file:../../memory.db',
-  }),
-  options: {
-    lastMessages: 20, // Include the last 20 messages in the context instead of the default 10
-  },
+	storage: new LibSQLStore({
+		url: 'file:../../memory.db',
+	}),
+	options: {
+		lastMessages: 20, // Include the last 20 messages in the context instead of the default 10
+	},
 })
 
 // Create an agent with the configured memory
 export const memoryAgent = new Agent({
-  name: 'MemoryAgent',
-  instructions: `
+	name: 'MemoryAgent',
+	instructions: `
     You are a helpful assistant with memory capabilities.
     You can remember previous conversations and user preferences.
     When a user shares information about themselves, acknowledge it and remember it for future reference.
     If asked about something mentioned earlier in the conversation, recall it accurately.
   `,
-  model: 'openai/gpt-5.4',
-  memory: memory,
+	model: 'openai/gpt-5.4',
+	memory: memory,
 })
 ```
 

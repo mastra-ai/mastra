@@ -42,24 +42,24 @@ import { LibSQLStore, LibSQLVector } from '@mastra/libsql'
 import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
 
 const agent = new Agent({
-  id: 'support-agent',
-  name: 'SupportAgent',
-  instructions: 'You are a helpful support agent.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  memory: new Memory({
-    storage: new LibSQLStore({
-      id: 'agent-storage',
-      url: 'file:./local.db',
-    }),
-    vector: new LibSQLVector({
-      id: 'agent-vector',
-      url: 'file:./local.db',
-    }),
-    embedder: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
-    options: {
-      semanticRecall: true,
-    },
-  }),
+	id: 'support-agent',
+	name: 'SupportAgent',
+	instructions: 'You are a helpful support agent.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	memory: new Memory({
+		storage: new LibSQLStore({
+			id: 'agent-storage',
+			url: 'file:./local.db',
+		}),
+		vector: new LibSQLVector({
+			id: 'agent-vector',
+			url: 'file:./local.db',
+		}),
+		embedder: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+		options: {
+			semanticRecall: true,
+		},
+	}),
 })
 ```
 
@@ -72,17 +72,17 @@ const memory = await agent.getMemory()
 
 // Basic recall - similar to listMessages
 const { messages } = await memory!.recall({
-  threadId: 'thread-123',
-  perPage: 50,
+	threadId: 'thread-123',
+	perPage: 50,
 })
 
 // Semantic recall - find messages by meaning
 const { messages: relevantMessages } = await memory!.recall({
-  threadId: 'thread-123',
-  vectorSearchString: 'What did we discuss about the project deadline?',
-  threadConfig: {
-    semanticRecall: true,
-  },
+	threadId: 'thread-123',
+	vectorSearchString: 'What did we discuss about the project deadline?',
+	threadConfig: {
+		semanticRecall: true,
+	},
 })
 ```
 
@@ -96,21 +96,21 @@ import { Agent } from '@mastra/core/agent'
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql'
 
 const agent = new Agent({
-  memory: new Memory({
-    // this is the default storage db if omitted
-    storage: new LibSQLStore({
-      id: 'agent-storage',
-      url: 'file:./local.db',
-    }),
-    // this is the default vector db if omitted
-    vector: new LibSQLVector({
-      id: 'agent-vector',
-      url: 'file:./local.db',
-    }),
-    options: {
-      semanticRecall: true,
-    },
-  }),
+	memory: new Memory({
+		// this is the default storage db if omitted
+		storage: new LibSQLStore({
+			id: 'agent-storage',
+			url: 'file:./local.db',
+		}),
+		// this is the default vector db if omitted
+		vector: new LibSQLVector({
+			id: 'agent-vector',
+			url: 'file:./local.db',
+		}),
+		options: {
+			semanticRecall: true,
+		},
+	}),
 })
 ```
 
@@ -145,16 +145,16 @@ The following options control semantic recall behavior:
 
 ```typescript {5-9}
 const agent = new Agent({
-  memory: new Memory({
-    options: {
-      semanticRecall: {
-        topK: 3, // Retrieve 3 similar messages
-        messageRange: 2, // Include 2 messages before and after each match
-        scope: 'resource', // Search all threads for this resource
-        filter: { projectId: { $eq: 'project-a' } },
-      },
-    },
-  }),
+	memory: new Memory({
+		options: {
+			semanticRecall: {
+				topK: 3, // Retrieve 3 similar messages
+				messageRange: 2, // Include 2 messages before and after each match
+				scope: 'resource', // Search all threads for this resource
+				filter: { projectId: { $eq: 'project-a' } },
+			},
+		},
+	}),
 })
 ```
 
@@ -170,17 +170,17 @@ The `filter` option restricts semantic recall results to messages with matching 
 
 ```typescript {5-10}
 const agent = new Agent({
-  memory: new Memory({
-    options: {
-      semanticRecall: {
-        scope: 'resource',
-        filter: {
-          projectId: { $eq: 'project-a' },
-          category: { $in: ['work', 'personal'] },
-        },
-      },
-    },
-  }),
+	memory: new Memory({
+		options: {
+			semanticRecall: {
+				scope: 'resource',
+				filter: {
+					projectId: { $eq: 'project-a' },
+					category: { $in: ['work', 'personal'] },
+				},
+			},
+		},
+	}),
 })
 ```
 
@@ -204,21 +204,21 @@ The following example demonstrates metadata filters for common use cases:
 ```typescript
 // Filter by project
 const options = {
-  semanticRecall: { filter: { projectId: { $eq: 'my-project' } } },
+	semanticRecall: { filter: { projectId: { $eq: 'my-project' } } },
 }
 
 // Filter by multiple categories
 const options = {
-  semanticRecall: { filter: { category: { $in: ['work', 'research'] } } },
+	semanticRecall: { filter: { category: { $in: ['work', 'research'] } } },
 }
 
 // Filter by project and priority
 const options = {
-  semanticRecall: {
-    filter: {
-      $and: [{ projectId: { $eq: 'project-a' } }, { priority: { $gte: 3 } }],
-    },
-  },
+	semanticRecall: {
+		filter: {
+			$and: [{ projectId: { $eq: 'project-a' } }, { priority: { $gte: 3 } }],
+		},
+	},
 }
 ```
 
@@ -236,12 +236,12 @@ import { Agent } from '@mastra/core/agent'
 import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
 
 const agent = new Agent({
-  memory: new Memory({
-    embedder: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
-    options: {
-      semanticRecall: true,
-    },
-  }),
+	memory: new Memory({
+		embedder: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+		options: {
+			semanticRecall: true,
+		},
+	}),
 })
 ```
 
@@ -257,12 +257,12 @@ import { Memory } from '@mastra/memory'
 import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
 
 const agent = new Agent({
-  memory: new Memory({
-    embedder: new ModelRouterEmbeddingModel({
-      providerId: 'openrouter',
-      modelId: 'openai/text-embedding-3-small',
-    }),
-  }),
+	memory: new Memory({
+		embedder: new ModelRouterEmbeddingModel({
+			providerId: 'openrouter',
+			modelId: 'openai/text-embedding-3-small',
+		}),
+	}),
 })
 ```
 
@@ -278,9 +278,9 @@ import { Agent } from '@mastra/core/agent'
 import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
 
 const agent = new Agent({
-  memory: new Memory({
-    embedder: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
-  }),
+	memory: new Memory({
+		embedder: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+	}),
 })
 ```
 
@@ -300,9 +300,9 @@ import { Agent } from '@mastra/core/agent'
 import { fastembed } from '@mastra/fastembed'
 
 const agent = new Agent({
-  memory: new Memory({
-    embedder: fastembed,
-  }),
+	memory: new Memory({
+		embedder: fastembed,
+	}),
 })
 ```
 
@@ -317,28 +317,28 @@ import { Memory } from '@mastra/memory'
 import { PgStore, PgVector } from '@mastra/pg'
 
 const agent = new Agent({
-  memory: new Memory({
-    storage: new PgStore({
-      id: 'agent-storage',
-      connectionString: process.env.DATABASE_URL,
-    }),
-    vector: new PgVector({
-      id: 'agent-vector',
-      connectionString: process.env.DATABASE_URL,
-    }),
-    options: {
-      semanticRecall: {
-        topK: 5,
-        messageRange: 2,
-        indexConfig: {
-          type: 'hnsw', // Use HNSW for better performance
-          metric: 'dotproduct', // Best for OpenAI embeddings
-          m: 16, // Number of bi-directional links (default: 16)
-          efConstruction: 64, // Size of candidate list during construction (default: 64)
-        },
-      },
-    },
-  }),
+	memory: new Memory({
+		storage: new PgStore({
+			id: 'agent-storage',
+			connectionString: process.env.DATABASE_URL,
+		}),
+		vector: new PgVector({
+			id: 'agent-vector',
+			connectionString: process.env.DATABASE_URL,
+		}),
+		options: {
+			semanticRecall: {
+				topK: 5,
+				messageRange: 2,
+				indexConfig: {
+					type: 'hnsw', // Use HNSW for better performance
+					metric: 'dotproduct', // Best for OpenAI embeddings
+					m: 16, // Number of bi-directional links (default: 16)
+					efConstruction: 64, // Size of candidate list during construction (default: 64)
+				},
+			},
+		},
+	}),
 })
 ```
 

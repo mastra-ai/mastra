@@ -47,33 +47,33 @@ import { LocalSandbox } from '@mastra/core/workspace'
 import { z } from 'zod'
 
 const getTopProducts = createTool({
-  id: 'getTopProducts',
-  description: 'Get top selling products',
-  inputSchema: z.object({ limit: z.number() }),
-  outputSchema: z.object({
-    products: z.array(z.object({ id: z.string(), name: z.string(), totalSales: z.number() })),
-  }),
-  execute: async ({ limit }) => fetchTopProducts(limit),
+	id: 'getTopProducts',
+	description: 'Get top selling products',
+	inputSchema: z.object({ limit: z.number() }),
+	outputSchema: z.object({
+		products: z.array(z.object({ id: z.string(), name: z.string(), totalSales: z.number() })),
+	}),
+	execute: async ({ limit }) => fetchTopProducts(limit),
 })
 
 const getProductRatings = createTool({
-  id: 'getProductRatings',
-  description: 'Get ratings for a product',
-  inputSchema: z.object({ productId: z.string() }),
-  outputSchema: z.object({ ratings: z.array(z.object({ score: z.number() })) }),
-  execute: async ({ productId }) => fetchRatings(productId),
+	id: 'getProductRatings',
+	description: 'Get ratings for a product',
+	inputSchema: z.object({ productId: z.string() }),
+	outputSchema: z.object({ ratings: z.array(z.object({ score: z.number() })) }),
+	execute: async ({ productId }) => fetchRatings(productId),
 })
 
 const { tool, instructions } = createCodeMode({
-  tools: { getTopProducts, getProductRatings },
-  sandbox: new LocalSandbox(), // required; runs on the host — see "How it works"
+	tools: { getTopProducts, getProductRatings },
+	sandbox: new LocalSandbox(), // required; runs on the host — see "How it works"
 })
 
 const agent = new Agent({
-  name: 'shop-assistant',
-  instructions: ['You are a helpful shopping assistant.', instructions],
-  model: '__GATEWAY_OPENAI_MODEL__',
-  tools: { execute_typescript: tool },
+	name: 'shop-assistant',
+	instructions: ['You are a helpful shopping assistant.', instructions],
+	model: '__GATEWAY_OPENAI_MODEL__',
+	tools: { execute_typescript: tool },
 })
 ```
 
@@ -82,16 +82,16 @@ Asked "What are the top 5 products and the average rating for each?", the model 
 ```typescript
 const top = await external_getTopProducts({ limit: 5 })
 const ratings = await Promise.all(
-  top.products.map(p => external_getProductRatings({ productId: p.id })),
+	top.products.map(p => external_getProductRatings({ productId: p.id })),
 )
 return top.products.map((product, i) => {
-  const scores = ratings[i].ratings.map(r => r.score)
-  const avg = scores.reduce((sum, s) => sum + s, 0) / scores.length
-  return {
-    name: product.name,
-    sales: product.totalSales,
-    averageRating: Math.round(avg * 100) / 100,
-  }
+	const scores = ratings[i].ratings.map(r => r.score)
+	const avg = scores.reduce((sum, s) => sum + s, 0) / scores.length
+	return {
+		name: product.name,
+		sales: product.totalSales,
+		averageRating: Math.round(avg * 100) / 100,
+	}
 })
 ```
 
@@ -116,22 +116,22 @@ Give each tool a distinct `id` so their ids don't collide, and add each tool's i
 
 ```typescript
 const sales = createCodeMode({
-  id: 'sales_code',
-  tools: { listRecentOrders, getCustomer },
-  sandbox,
+	id: 'sales_code',
+	tools: { listRecentOrders, getCustomer },
+	sandbox,
 })
 
 const inventory = createCodeMode({
-  id: 'inventory_code',
-  tools: { listProducts, getSupplier },
-  sandbox,
+	id: 'inventory_code',
+	tools: { listProducts, getSupplier },
+	sandbox,
 })
 
 const agent = new Agent({
-  name: 'ops-assistant',
-  instructions: ['You are an ops assistant.', sales.instructions, inventory.instructions],
-  model: '__GATEWAY_OPENAI_MODEL__',
-  tools: { sales_code: sales.tool, inventory_code: inventory.tool },
+	name: 'ops-assistant',
+	instructions: ['You are an ops assistant.', sales.instructions, inventory.instructions],
+	model: '__GATEWAY_OPENAI_MODEL__',
+	tools: { sales_code: sales.tool, inventory_code: inventory.tool },
 })
 ```
 

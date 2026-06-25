@@ -22,8 +22,8 @@ npm install @mastra/mssql@latest
 import { MSSQLStore } from '@mastra/mssql'
 
 const storage = new MSSQLStore({
-  id: 'mssql-storage',
-  connectionString: process.env.DATABASE_URL,
+	id: 'mssql-storage',
+	connectionString: process.env.DATABASE_URL,
 })
 ```
 
@@ -31,19 +31,19 @@ const storage = new MSSQLStore({
 
 <PropertiesTable
   content={[
-  {
-    name: 'connectionString',
-    type: 'string',
-    description:
-      'MSSQL connection string (e.g., Server=localhost,1433;Database=mydb;User Id=sa;Password=password;Encrypt=true;TrustServerCertificate=true)',
-    isOptional: false,
-  },
-  {
-    name: 'schemaName',
-    type: 'string',
-    description: 'The name of the schema you want the storage to use. Will use the default schema if not provided.',
-    isOptional: true,
-  },
+	{
+		name: 'connectionString',
+		type: 'string',
+		description:
+			'MSSQL connection string (e.g., Server=localhost,1433;Database=mydb;User Id=sa;Password=password;Encrypt=true;TrustServerCertificate=true)',
+		isOptional: false,
+	},
+	{
+		name: 'schemaName',
+		type: 'string',
+		description: 'The name of the schema you want the storage to use. Will use the default schema if not provided.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -56,38 +56,38 @@ import { MSSQLStore } from '@mastra/mssql'
 
 // Using a connection string only
 const store1 = new MSSQLStore({
-  id: 'mssql-storage-1',
-  connectionString:
-    'Server=localhost,1433;Database=mydb;User Id=sa;Password=password;Encrypt=true;TrustServerCertificate=true',
+	id: 'mssql-storage-1',
+	connectionString:
+		'Server=localhost,1433;Database=mydb;User Id=sa;Password=password;Encrypt=true;TrustServerCertificate=true',
 })
 
 // Using a connection string with a custom schema name
 const store2 = new MSSQLStore({
-  id: 'mssql-storage-2',
-  connectionString:
-    'Server=localhost,1433;Database=mydb;User Id=sa;Password=password;Encrypt=true;TrustServerCertificate=true',
-  schemaName: 'custom_schema', // optional
+	id: 'mssql-storage-2',
+	connectionString:
+		'Server=localhost,1433;Database=mydb;User Id=sa;Password=password;Encrypt=true;TrustServerCertificate=true',
+	schemaName: 'custom_schema', // optional
 })
 
 // Using individual connection parameters
 const store4 = new MSSQLStore({
-  id: 'mssql-storage-3',
-  server: 'localhost',
-  port: 1433,
-  database: 'mydb',
-  user: 'user',
-  password: 'password',
+	id: 'mssql-storage-3',
+	server: 'localhost',
+	port: 1433,
+	database: 'mydb',
+	user: 'user',
+	password: 'password',
 })
 
 // Individual parameters with schemaName
 const store5 = new MSSQLStore({
-  id: 'mssql-storage-4',
-  server: 'localhost',
-  port: 1433,
-  database: 'mydb',
-  user: 'user',
-  password: 'password',
-  schemaName: 'custom_schema', // optional
+	id: 'mssql-storage-4',
+	server: 'localhost',
+	port: 1433,
+	database: 'mydb',
+	user: 'user',
+	password: 'password',
+	schemaName: 'custom_schema', // optional
 })
 ```
 
@@ -114,11 +114,11 @@ import { Mastra } from '@mastra/core'
 import { MSSQLStore } from '@mastra/mssql'
 
 const storage = new MSSQLStore({
-  connectionString: process.env.DATABASE_URL,
+	connectionString: process.env.DATABASE_URL,
 })
 
 const mastra = new Mastra({
-  storage, // init() is called automatically
+	storage, // init() is called automatically
 })
 ```
 
@@ -128,8 +128,8 @@ If you're using storage directly without Mastra, you must call `init()` explicit
 import { MSSQLStore } from '@mastra/mssql'
 
 const storage = new MSSQLStore({
-  id: 'mssql-storage',
-  connectionString: process.env.DATABASE_URL,
+	id: 'mssql-storage',
+	connectionString: process.env.DATABASE_URL,
 })
 
 // Required when using storage directly

@@ -15,15 +15,15 @@ The `.observeStream()` method opens a new `ReadableStream` to a workflow run tha
 const run = await workflow.createRun()
 
 run.stream({
-  inputData: {
-    value: 'initial data',
-  },
+	inputData: {
+		value: 'initial data',
+	},
 })
 
 const stream = await run.observeStream()
 
 for await (const chunk of stream) {
-  console.log(chunk)
+	console.log(chunk)
 }
 ```
 

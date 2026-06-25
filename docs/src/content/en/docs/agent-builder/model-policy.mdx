@@ -20,20 +20,20 @@ The model policy controls which providers and models Builder-created agents can 
 import { MastraEditor } from '@mastra/editor'
 
 new MastraEditor({
-  builder: {
-    enabled: true,
-    configuration: {
-      agent: {
-        models: {
-          allowed: [
-            { provider: 'openai', modelId: 'gpt-5.4-mini' },
-            { provider: 'openai', modelId: 'gpt-5.4' },
-            { provider: 'anthropic', modelId: 'claude-opus-4-7' },
-          ],
-        },
-      },
-    },
-  },
+	builder: {
+		enabled: true,
+		configuration: {
+			agent: {
+				models: {
+					allowed: [
+						{ provider: 'openai', modelId: 'gpt-5.4-mini' },
+						{ provider: 'openai', modelId: 'gpt-5.4' },
+						{ provider: 'anthropic', modelId: 'claude-opus-4-7' },
+					],
+				},
+			},
+		},
+	},
 })
 ```
 

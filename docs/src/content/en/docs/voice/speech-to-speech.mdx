@@ -25,9 +25,9 @@ STS enables continuous bidirectional audio communication through listening to ev
 
 ```typescript
 const voice = new OpenAIRealtimeVoice({
-  apiKey: 'your-openai-api-key',
-  model: 'gpt-5.1-realtime',
-  speaker: 'alloy', // Default voice
+	apiKey: 'your-openai-api-key',
+	model: 'gpt-5.1-realtime',
+	speaker: 'alloy', // Default voice
 })
 
 // If using default settings the configuration can be simplified to:
@@ -42,11 +42,11 @@ import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime'
 import { playAudio, getMicrophoneStream } from '@mastra/node-audio'
 
 const agent = new Agent({
-  id: 'agent',
-  name: 'OpenAI Realtime Agent',
-  instructions: `You are a helpful assistant with real-time voice capabilities.`,
-  model: '__GATEWAY_OPENAI_MODEL__',
-  voice: new OpenAIRealtimeVoice(),
+	id: 'agent',
+	name: 'OpenAI Realtime Agent',
+	instructions: `You are a helpful assistant with real-time voice capabilities.`,
+	model: '__GATEWAY_OPENAI_MODEL__',
+	voice: new OpenAIRealtimeVoice(),
 })
 
 // Connect to the voice service
@@ -54,7 +54,7 @@ await agent.voice.connect()
 
 // Listen for agent audio responses
 agent.voice.on('speaker', ({ audio }) => {
-  playAudio(audio)
+	playAudio(audio)
 })
 
 // Initiate the conversation
@@ -75,32 +75,32 @@ import { GeminiLiveVoice } from '@mastra/voice-google-gemini-live'
 import { playAudio, getMicrophoneStream } from '@mastra/node-audio'
 
 const agent = new Agent({
-  id: 'agent',
-  name: 'Gemini Live Agent',
-  instructions: 'You are a helpful assistant with real-time voice capabilities.',
-  // Model used for text generation; voice provider handles realtime audio
-  model: '__GATEWAY_OPENAI_MODEL__',
-  voice: new GeminiLiveVoice({
-    apiKey: process.env.GOOGLE_API_KEY,
-    model: 'gemini-2.0-flash-exp',
-    speaker: 'Puck',
-    debug: true,
-    // Vertex AI option:
-    // vertexAI: true,
-    // project: 'your-gcp-project',
-    // location: 'us-central1',
-    // serviceAccountKeyFile: '/path/to/service-account.json',
-  }),
+	id: 'agent',
+	name: 'Gemini Live Agent',
+	instructions: 'You are a helpful assistant with real-time voice capabilities.',
+	// Model used for text generation; voice provider handles realtime audio
+	model: '__GATEWAY_OPENAI_MODEL__',
+	voice: new GeminiLiveVoice({
+		apiKey: process.env.GOOGLE_API_KEY,
+		model: 'gemini-2.0-flash-exp',
+		speaker: 'Puck',
+		debug: true,
+		// Vertex AI option:
+		// vertexAI: true,
+		// project: 'your-gcp-project',
+		// location: 'us-central1',
+		// serviceAccountKeyFile: '/path/to/service-account.json',
+	}),
 })
 
 await agent.voice.connect()
 
 agent.voice.on('speaker', ({ audio }) => {
-  playAudio(audio)
+	playAudio(audio)
 })
 
 agent.voice.on('writing', ({ role, text }) => {
-  console.log(`${role}: ${text}`)
+	console.log(`${role}: ${text}`)
 })
 
 await agent.voice.speak('How can I help you today?')
@@ -122,28 +122,28 @@ import { NovaSonicVoice } from '@mastra/voice-aws-nova-sonic'
 import { playAudio, getMicrophoneStream } from '@mastra/node-audio'
 
 const agent = new Agent({
-  id: 'agent',
-  name: 'Nova Sonic Agent',
-  instructions: 'You are a helpful assistant with real-time voice capabilities.',
-  // Model used for text generation; voice provider handles realtime audio
-  model: '__GATEWAY_OPENAI_MODEL__',
-  voice: new NovaSonicVoice({
-    region: 'us-east-1',
-    speaker: 'matthew',
-    // Static credentials are optional. The default AWS credential provider
-    // chain is used when none are passed.
-  }),
+	id: 'agent',
+	name: 'Nova Sonic Agent',
+	instructions: 'You are a helpful assistant with real-time voice capabilities.',
+	// Model used for text generation; voice provider handles realtime audio
+	model: '__GATEWAY_OPENAI_MODEL__',
+	voice: new NovaSonicVoice({
+		region: 'us-east-1',
+		speaker: 'matthew',
+		// Static credentials are optional. The default AWS credential provider
+		// chain is used when none are passed.
+	}),
 })
 
 await agent.voice.connect()
 
 // Assistant audio is emitted as 16-bit PCM on the `speaking` event
 agent.voice.on('speaking', ({ audioData }) => {
-  if (audioData) playAudio(audioData)
+	if (audioData) playAudio(audioData)
 })
 
 agent.voice.on('writing', ({ role, text }) => {
-  console.log(`${role}: ${text}`)
+	console.log(`${role}: ${text}`)
 })
 
 await agent.voice.speak('How can I help you today?')
@@ -166,33 +166,33 @@ import { InworldRealtimeVoice } from '@mastra/voice-inworld'
 import { playAudio, getMicrophoneStream } from '@mastra/node-audio'
 
 const agent = new Agent({
-  id: 'agent',
-  name: 'Inworld Realtime Agent',
-  instructions: 'You are a helpful assistant with real-time voice capabilities.',
-  // Model used for text generation; voice provider handles realtime audio
-  model: '__GATEWAY_OPENAI_MODEL__',
-  voice: new InworldRealtimeVoice({
-    apiKey: process.env.INWORLD_API_KEY,
-    model: 'inworld/models/gemma-4-26b-a4b-it',
-    speaker: 'Sarah',
-    // Typed Inworld realtime knobs (semantic VAD, playback speed, etc.)
-    // session: {
-    //   audio: {
-    //     output: { speed: 1.1 },
-    //     input: { turn_detection: { type: 'semantic_vad', eagerness: 'high' } },
-    //   },
-    // },
-  }),
+	id: 'agent',
+	name: 'Inworld Realtime Agent',
+	instructions: 'You are a helpful assistant with real-time voice capabilities.',
+	// Model used for text generation; voice provider handles realtime audio
+	model: '__GATEWAY_OPENAI_MODEL__',
+	voice: new InworldRealtimeVoice({
+		apiKey: process.env.INWORLD_API_KEY,
+		model: 'inworld/models/gemma-4-26b-a4b-it',
+		speaker: 'Sarah',
+		// Typed Inworld realtime knobs (semantic VAD, playback speed, etc.)
+		// session: {
+		//   audio: {
+		//     output: { speed: 1.1 },
+		//     input: { turn_detection: { type: 'semantic_vad', eagerness: 'high' } },
+		//   },
+		// },
+	}),
 })
 
 await agent.voice.connect()
 
 agent.voice.on('speaker', stream => {
-  playAudio(stream)
+	playAudio(stream)
 })
 
 agent.voice.on('writing', ({ role, text }) => {
-  console.log(`${role}: ${text}`)
+	console.log(`${role}: ${text}`)
 })
 
 await agent.voice.speak('How can I help you today?')

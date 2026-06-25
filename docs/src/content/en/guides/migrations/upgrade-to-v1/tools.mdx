@@ -168,9 +168,9 @@ const result = await getUserTool.execute({})
 
 // Type-safe check for validation errors
 if ('error' in result && result.error) {
-  console.error('Validation failed:', result.message)
-  console.error('Details:', result.validationErrors)
-  return
+	console.error('Validation failed:', result.message)
+	console.error('Details:', result.validationErrors)
+	return
 }
 
 // TypeScript knows result is valid here

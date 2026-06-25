@@ -40,69 +40,69 @@ constructor(options: MastraServerOptions<TApp>)
 
 <PropertiesTable
   content={[
-  {
-    name: 'app',
-    type: 'TApp',
-    description: 'Framework app instance',
-    isOptional: false,
-  },
-  {
-    name: 'mastra',
-    type: 'Mastra',
-    description: 'Mastra instance',
-    isOptional: false,
-  },
-  {
-    name: 'prefix',
-    type: 'string',
-    description: 'Route path prefix (e.g., `/api/v2`)',
-    isOptional: true,
-    defaultValue: "''",
-  },
-  {
-    name: 'openapiPath',
-    type: 'string',
-    description: 'Path to serve OpenAPI spec',
-    isOptional: true,
-    defaultValue: "''",
-  },
-  {
-    name: 'bodyLimitOptions',
-    type: 'BodyLimitOptions',
-    description: 'Request body size limits',
-    isOptional: true,
-  },
-  {
-    name: 'streamOptions',
-    type: 'StreamOptions',
-    description: 'Stream redaction config',
-    isOptional: true,
-    defaultValue: '{ redact: true }',
-  },
-  {
-    name: 'customRouteAuthConfig',
-    type: 'Map<string, boolean>',
-    description: 'Per-route auth overrides',
-    isOptional: true,
-  },
-  {
-    name: 'tools',
-    type: 'Record<string, Tool>',
-    description: 'Available tools for the server',
-    isOptional: true,
-  },
-  {
-    name: 'taskStore',
-    type: 'InMemoryTaskStore',
-    description: 'Task store for A2A (Agent-to-Agent) operations',
-    isOptional: true,
-  },
-  {
-    name: 'mcpOptions',
-    type: 'MCPOptions',
-    description: 'MCP transport options for serverless environments',
-    isOptional: true,
-  },
+	{
+		name: 'app',
+		type: 'TApp',
+		description: 'Framework app instance',
+		isOptional: false,
+	},
+	{
+		name: 'mastra',
+		type: 'Mastra',
+		description: 'Mastra instance',
+		isOptional: false,
+	},
+	{
+		name: 'prefix',
+		type: 'string',
+		description: 'Route path prefix (e.g., `/api/v2`)',
+		isOptional: true,
+		defaultValue: "''",
+	},
+	{
+		name: 'openapiPath',
+		type: 'string',
+		description: 'Path to serve OpenAPI spec',
+		isOptional: true,
+		defaultValue: "''",
+	},
+	{
+		name: 'bodyLimitOptions',
+		type: 'BodyLimitOptions',
+		description: 'Request body size limits',
+		isOptional: true,
+	},
+	{
+		name: 'streamOptions',
+		type: 'StreamOptions',
+		description: 'Stream redaction config',
+		isOptional: true,
+		defaultValue: '{ redact: true }',
+	},
+	{
+		name: 'customRouteAuthConfig',
+		type: 'Map<string, boolean>',
+		description: 'Per-route auth overrides',
+		isOptional: true,
+	},
+	{
+		name: 'tools',
+		type: 'Record<string, Tool>',
+		description: 'Available tools for the server',
+		isOptional: true,
+	},
+	{
+		name: 'taskStore',
+		type: 'InMemoryTaskStore',
+		description: 'Task store for A2A (Agent-to-Agent) operations',
+		isOptional: true,
+	},
+	{
+		name: 'mcpOptions',
+		type: 'MCPOptions',
+		description: 'MCP transport options for serverless environments',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -280,8 +280,8 @@ protected mergeRequestContext(options: {
 
 ```typescript
 interface BodyLimitOptions {
-  maxSize: number
-  onError: (error: unknown) => unknown
+	maxSize: number
+	onError: (error: unknown) => unknown
 }
 ```
 
@@ -289,7 +289,7 @@ interface BodyLimitOptions {
 
 ```typescript
 interface StreamOptions {
-  redact?: boolean
+	redact?: boolean
 }
 ```
 
@@ -297,8 +297,8 @@ interface StreamOptions {
 
 ```typescript
 interface MCPOptions {
-  serverless?: boolean
-  sessionIdGenerator?: () => string
+	serverless?: boolean
+	sessionIdGenerator?: () => string
 }
 ```
 
@@ -314,39 +314,39 @@ import { MastraServer, ServerRoute } from '@mastra/server/server-adapter'
 import type { Mastra } from '@mastra/core'
 
 export class MyServer extends MastraServer<MyApp, MyRequest, MyResponse> {
-  registerContextMiddleware(): void {
-    this.app.use('*', (req, res, next) => {
-      res.locals.mastra = this.mastra
-      next()
-    })
-  }
+	registerContextMiddleware(): void {
+		this.app.use('*', (req, res, next) => {
+			res.locals.mastra = this.mastra
+			next()
+		})
+	}
 
-  registerAuthMiddleware(): void {
-    const auth = this.mastra.getServer()?.auth
-    if (!auth) return
-    // Register global auth middleware, or leave this empty and
-    // enforce auth when routes are registered.
-  }
+	registerAuthMiddleware(): void {
+		const auth = this.mastra.getServer()?.auth
+		if (!auth) return
+		// Register global auth middleware, or leave this empty and
+		// enforce auth when routes are registered.
+	}
 
-  async registerRoute(app, route, { prefix }) {
-    // Implement route registration
-  }
+	async registerRoute(app, route, { prefix }) {
+		// Implement route registration
+	}
 
-  async getParams(route, request) {
-    return {
-      urlParams: request.params,
-      queryParams: request.query,
-      body: request.body,
-    }
-  }
+	async getParams(route, request) {
+		return {
+			urlParams: request.params,
+			queryParams: request.query,
+			body: request.body,
+		}
+	}
 
-  async sendResponse(route, response, result) {
-    return response.json(result)
-  }
+	async sendResponse(route, response, result) {
+		return response.json(result)
+	}
 
-  async stream(route, response, result) {
-    // Implement streaming
-  }
+	async stream(route, response, result) {
+		// Implement streaming
+	}
 }
 ```
 

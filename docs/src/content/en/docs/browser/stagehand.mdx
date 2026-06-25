@@ -33,16 +33,16 @@ import { Agent } from '@mastra/core/agent'
 import { StagehandBrowser } from '@mastra/stagehand'
 
 const browser = new StagehandBrowser({
-  headless: false,
-  model: '__GATEWAY_OPENAI_MODEL__',
+	headless: false,
+	model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 export const stagehandAgent = new Agent({
-  id: 'stagehand-agent',
-  name: 'Stagehand Agent',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  browser,
-  instructions: `You are a web automation assistant.
+	id: 'stagehand-agent',
+	name: 'Stagehand Agent',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	browser,
+	instructions: `You are a web automation assistant.
 
 Use stagehand tools to interact with pages:
 - stagehand_navigate to go to URLs
@@ -73,9 +73,9 @@ The tool returns structured data based on page content:
 
 ```json
 {
-  "name": "Widget Pro",
-  "price": "$29.99",
-  "availability": "In Stock"
+	"name": "Widget Pro",
+	"price": "$29.99",
+	"availability": "In Stock"
 }
 ```
 
@@ -89,9 +89,9 @@ Returns a list of available actions:
 
 ```json
 [
-  { "action": "Press 'Sign In' button", "element": "button" },
-  { "action": "Type in 'Email' field", "element": "input" },
-  { "action": "Open 'Forgot Password' link", "element": "a" }
+	{ "action": "Press 'Sign In' button", "element": "button" },
+	{ "action": "Type in 'Email' field", "element": "input" },
+	{ "action": "Open 'Forgot Password' link", "element": "a" }
 ]
 ```
 
@@ -103,8 +103,8 @@ Use screenshots when you need to visually inspect the page — for example, eval
 
 ```typescript
 const browser = new StagehandBrowser({
-  headless: false,
-  model: '__GATEWAY_OPENAI_MODEL__',
+	headless: false,
+	model: '__GATEWAY_OPENAI_MODEL__',
 })
 ```
 
@@ -112,9 +112,9 @@ To disable the screenshot tool for models that don't support vision, use `exclud
 
 ```typescript
 const browser = new StagehandBrowser({
-  headless: false,
-  model: '__GATEWAY_OPENAI_MODEL__',
-  excludeTools: ['stagehand_screenshot'],
+	headless: false,
+	model: '__GATEWAY_OPENAI_MODEL__',
+	excludeTools: ['stagehand_screenshot'],
 })
 ```
 
@@ -124,10 +124,10 @@ Stagehand has native Browserbase integration for cloud browser infrastructure:
 
 ```typescript
 const browser = new StagehandBrowser({
-  env: 'BROWSERBASE',
-  apiKey: process.env.BROWSERBASE_API_KEY,
-  projectId: process.env.BROWSERBASE_PROJECT_ID,
-  model: '__GATEWAY_OPENAI_MODEL__',
+	env: 'BROWSERBASE',
+	apiKey: process.env.BROWSERBASE_API_KEY,
+	projectId: process.env.BROWSERBASE_PROJECT_ID,
+	model: '__GATEWAY_OPENAI_MODEL__',
 })
 ```
 
@@ -143,11 +143,11 @@ Stagehand can opt into alpha browser recording tools:
 
 ```typescript
 const browser = new StagehandBrowser({
-  headless: false,
-  model: '__GATEWAY_OPENAI_MODEL__',
-  recording: {
-    outputDir: './browser-recordings',
-  },
+	headless: false,
+	model: '__GATEWAY_OPENAI_MODEL__',
+	recording: {
+		outputDir: './browser-recordings',
+	},
 })
 ```
 

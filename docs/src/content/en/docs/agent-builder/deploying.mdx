@@ -39,10 +39,10 @@ import { Mastra } from '@mastra/core/mastra'
 import { LibSQLStore } from '@mastra/libsql'
 
 new Mastra({
-  storage: new LibSQLStore({
-    url: process.env.DATABASE_URL!,
-    authToken: process.env.DATABASE_AUTH_TOKEN,
-  }),
+	storage: new LibSQLStore({
+		url: process.env.DATABASE_URL!,
+		authToken: process.env.DATABASE_AUTH_TOKEN,
+	}),
 })
 ```
 
@@ -61,34 +61,34 @@ import { s3FilesystemProvider } from '@mastra/s3'
 import { e2bSandboxProvider } from '@mastra/e2b'
 
 new Mastra({
-  editor: new MastraEditor({
-    filesystems: { [s3FilesystemProvider.id]: s3FilesystemProvider },
-    sandboxes: { [e2bSandboxProvider.id]: e2bSandboxProvider },
-    builder: {
-      enabled: true,
-      configuration: {
-        agent: {
-          workspace: {
-            type: 'inline',
-            config: {
-              name: 'builder-workspace',
-              filesystem: {
-                provider: s3FilesystemProvider.id,
-                config: {
-                  bucket: process.env.S3_BUCKET!,
-                  region: process.env.S3_REGION!,
-                },
-              },
-              sandbox: {
-                provider: e2bSandboxProvider.id,
-                config: { apiKey: process.env.E2B_API_KEY! },
-              },
-            },
-          },
-        },
-      },
-    },
-  }),
+	editor: new MastraEditor({
+		filesystems: { [s3FilesystemProvider.id]: s3FilesystemProvider },
+		sandboxes: { [e2bSandboxProvider.id]: e2bSandboxProvider },
+		builder: {
+			enabled: true,
+			configuration: {
+				agent: {
+					workspace: {
+						type: 'inline',
+						config: {
+							name: 'builder-workspace',
+							filesystem: {
+								provider: s3FilesystemProvider.id,
+								config: {
+									bucket: process.env.S3_BUCKET!,
+									region: process.env.S3_REGION!,
+								},
+							},
+							sandbox: {
+								provider: e2bSandboxProvider.id,
+								config: { apiKey: process.env.E2B_API_KEY! },
+							},
+						},
+					},
+				},
+			},
+		},
+	}),
 })
 ```
 

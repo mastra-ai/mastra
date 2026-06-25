@@ -38,8 +38,8 @@ import { Mastra } from '@mastra/core'
 import { VercelDeployer } from '@mastra/deployer-vercel'
 
 export const mastra = new Mastra({
-  // highlight-next-line
-  deployer: new VercelDeployer(),
+	// highlight-next-line
+	deployer: new VercelDeployer(),
 })
 ```
 
@@ -86,10 +86,10 @@ import { Mastra } from '@mastra/core'
 import { VercelDeployer } from '@mastra/deployer-vercel'
 
 export const mastra = new Mastra({
-  deployer: new VercelDeployer({
-    // highlight-next-line
-    studio: true,
-  }),
+	deployer: new VercelDeployer({
+		// highlight-next-line
+		studio: true,
+	}),
 })
 ```
 
@@ -112,14 +112,14 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { mastra } from '../src/mastra'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const { message } = req.body
-  const agent = mastra.getAgent('myAgent')
-  const result = await agent.generate([{ role: 'user', content: message }])
+	const { message } = req.body
+	const agent = mastra.getAgent('myAgent')
+	const result = await agent.generate([{ role: 'user', content: message }])
 
-  const observability = mastra.getObservability()
-  await observability?.flush()
+	const observability = mastra.getObservability()
+	await observability?.flush()
 
-  return res.json(result)
+	return res.json(result)
 }
 ```
 

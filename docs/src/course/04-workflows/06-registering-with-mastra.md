@@ -11,11 +11,11 @@ Open your `src/mastra/index.ts` file and add your workflow:
 import { contentWorkflow } from './workflows/content-workflow'
 
 export const mastra = new Mastra({
-  // Register your workflow here
-  workflows: {
-    contentWorkflow,
-  },
-  // ...Existing code
+	// Register your workflow here
+	workflows: {
+		contentWorkflow,
+	},
+	// ...Existing code
 })
 ```
 

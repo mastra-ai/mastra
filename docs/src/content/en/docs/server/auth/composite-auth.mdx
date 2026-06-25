@@ -35,32 +35,32 @@ import { MastraAuthClerk } from '@mastra/auth-clerk'
 
 // API key users
 type ApiKeyUser = {
-  id: string
-  name: string
-  type: 'api-key'
+	id: string
+	name: string
+	type: 'api-key'
 }
 
 const apiKeyAuth = new SimpleAuth<ApiKeyUser>({
-  tokens: {
-    'sk-integration-key-123': {
-      id: 'integration-1',
-      name: 'CI/CD Pipeline',
-      type: 'api-key',
-    },
-  },
+	tokens: {
+		'sk-integration-key-123': {
+			id: 'integration-1',
+			name: 'CI/CD Pipeline',
+			type: 'api-key',
+		},
+	},
 })
 
 // Clerk users (from web app)
 const clerkAuth = new MastraAuthClerk({
-  publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
-  secretKey: process.env.CLERK_SECRET_KEY,
-  jwksUri: process.env.CLERK_JWKS_URI,
+	publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+	secretKey: process.env.CLERK_SECRET_KEY,
+	jwksUri: process.env.CLERK_JWKS_URI,
 })
 
 export const mastra = new Mastra({
-  server: {
-    auth: new CompositeAuth([apiKeyAuth, clerkAuth]),
-  },
+	server: {
+		auth: new CompositeAuth([apiKeyAuth, clerkAuth]),
+	},
 })
 ```
 
@@ -93,14 +93,14 @@ The order of providers matters. Place the most common authentication method firs
 ```typescript
 // If most requests use Clerk, put it first
 new CompositeAuth([
-  clerkAuth, // Checked first (most common)
-  apiKeyAuth, // Checked second (less common)
+	clerkAuth, // Checked first (most common)
+	apiKeyAuth, // Checked second (less common)
 ])
 
 // If most requests use API keys, put it first
 new CompositeAuth([
-  apiKeyAuth, // Checked first (most common)
-  clerkAuth, // Checked second (less common)
+	apiKeyAuth, // Checked first (most common)
+	clerkAuth, // Checked second (less common)
 ])
 ```
 
@@ -114,20 +114,20 @@ import { MastraAuthClerk } from '@mastra/auth-clerk'
 import { MastraAuthAuth0 } from '@mastra/auth-auth0'
 
 const clerkAuth = new MastraAuthClerk({
-  publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
-  secretKey: process.env.CLERK_SECRET_KEY,
-  jwksUri: process.env.CLERK_JWKS_URI,
+	publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+	secretKey: process.env.CLERK_SECRET_KEY,
+	jwksUri: process.env.CLERK_JWKS_URI,
 })
 
 const auth0Auth = new MastraAuthAuth0({
-  domain: process.env.AUTH0_DOMAIN,
-  audience: process.env.AUTH0_AUDIENCE,
+	domain: process.env.AUTH0_DOMAIN,
+	audience: process.env.AUTH0_AUDIENCE,
 })
 
 export const mastra = new Mastra({
-  server: {
-    auth: new CompositeAuth([clerkAuth, auth0Auth]),
-  },
+	server: {
+		auth: new CompositeAuth([clerkAuth, auth0Auth]),
+	},
 })
 ```
 
@@ -142,24 +142,24 @@ import { MastraAuthClerk } from '@mastra/auth-clerk'
 
 // Legacy JWT auth (existing clients)
 const legacyAuth = new MastraJwtAuth({
-  secret: process.env.JWT_SECRET,
+	secret: process.env.JWT_SECRET,
 })
 
 // New Clerk auth (new clients)
 const clerkAuth = new MastraAuthClerk({
-  publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
-  secretKey: process.env.CLERK_SECRET_KEY,
-  jwksUri: process.env.CLERK_JWKS_URI,
+	publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+	secretKey: process.env.CLERK_SECRET_KEY,
+	jwksUri: process.env.CLERK_JWKS_URI,
 })
 
 // Support both during migration
 export const mastra = new Mastra({
-  server: {
-    auth: new CompositeAuth([
-      clerkAuth, // New auth method (preferred)
-      legacyAuth, // Legacy support
-    ]),
-  },
+	server: {
+		auth: new CompositeAuth([
+			clerkAuth, // New auth method (preferred)
+			legacyAuth, // Legacy support
+		]),
+	},
 })
 ```
 
@@ -172,19 +172,19 @@ import { CompositeAuth, SimpleAuth } from '@mastra/core/server'
 import { MyCustomAuth } from './my-custom-auth'
 
 const apiKeyAuth = new SimpleAuth({
-  tokens: {
-    'sk-key-123': { id: 'user-1', name: 'API User' },
-  },
+	tokens: {
+		'sk-key-123': { id: 'user-1', name: 'API User' },
+	},
 })
 
 const customAuth = new MyCustomAuth({
-  apiUrl: process.env.CUSTOM_AUTH_URL,
+	apiUrl: process.env.CUSTOM_AUTH_URL,
 })
 
 export const mastra = new Mastra({
-  server: {
-    auth: new CompositeAuth([apiKeyAuth, customAuth]),
-  },
+	server: {
+		auth: new CompositeAuth([apiKeyAuth, customAuth]),
+	},
 })
 ```
 
@@ -211,25 +211,25 @@ When providers return different user types, use a discriminated union:
 
 ```typescript
 type ApiKeyUser = {
-  type: 'api-key'
-  id: string
-  name: string
+	type: 'api-key'
+	id: string
+	name: string
 }
 
 type ClerkUser = {
-  type: 'clerk'
-  sub: string
-  email: string
+	type: 'clerk'
+	sub: string
+	email: string
 }
 
 type User = ApiKeyUser | ClerkUser
 
 // In your application code
 function handleUser(user: User) {
-  if (user.type === 'api-key') {
-    console.log('API key user:', user.name)
-  } else {
-    console.log('Clerk user:', user.email)
-  }
+	if (user.type === 'api-key') {
+		console.log('API key user:', user.name)
+	} else {
+		console.log('Clerk user:', user.email)
+	}
 }
 ```

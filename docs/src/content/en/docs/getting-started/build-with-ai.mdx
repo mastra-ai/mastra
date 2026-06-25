@@ -101,13 +101,13 @@ If there are no specific instructions for your tool below, you may be able to ad
 
 ```json title="mcp.json"
 {
-  "mcpServers": {
-    "mastra": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@mastra/mcp-docs-server@latest"]
-    }
-  }
+	"mcpServers": {
+		"mastra": {
+			"type": "stdio",
+			"command": "npx",
+			"args": ["-y", "@mastra/mcp-docs-server@latest"]
+		}
+	}
 }
 ```
 
@@ -166,12 +166,12 @@ Google Antigravity is an agent-first development platform that supports MCP serv
 
    ```json
    {
-     "mcpServers": {
-       "mastra-docs": {
-         "command": "npx",
-         "args": ["-y", "@mastra/mcp-docs-server"]
-       }
-     }
+   	"mcpServers": {
+   		"mastra-docs": {
+   			"command": "npx",
+   			"args": ["-y", "@mastra/mcp-docs-server"]
+   		}
+   	}
    }
    ```
 
@@ -197,13 +197,13 @@ The MCP server will appear in Antigravity's MCP Store, where you can manage its 
 
    ```json title=".vscode/mcp.json"
    {
-     "servers": {
-       "mastra": {
-         "type": "stdio",
-         "command": "npx",
-         "args": ["-y", "@mastra/mcp-docs-server@latest"]
-       }
-     }
+   	"servers": {
+   		"mastra": {
+   			"type": "stdio",
+   			"command": "npx",
+   			"args": ["-y", "@mastra/mcp-docs-server@latest"]
+   		}
+   	}
    }
    ```
 
@@ -233,12 +233,12 @@ After starting the MCP server, select the tools button in the Copilot pane to se
 
    ```json title="~/.codeium/windsurf/mcp_config.json"
    {
-     "mcpServers": {
-       "mastra": {
-         "command": "npx",
-         "args": ["-y", "@mastra/mcp-docs-server@latest"]
-       }
-     }
+   	"mcpServers": {
+   		"mastra": {
+   			"command": "npx",
+   			"args": ["-y", "@mastra/mcp-docs-server@latest"]
+   		}
+   	}
    }
    ```
 
@@ -252,14 +252,14 @@ You can define MCP servers in your [OpenCode configuration](https://opencode.ai/
 
 ```json title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "mastra": {
-      "type": "local",
-      "command": ["npx", "-y", "@mastra/mcp-docs-server@latest"],
-      "enabled": true
-    }
-  }
+	"$schema": "https://opencode.ai/config.json",
+	"mcp": {
+		"mastra": {
+			"type": "local",
+			"command": ["npx", "-y", "@mastra/mcp-docs-server@latest"],
+			"enabled": true
+		}
+	}
 }
 ```
 
@@ -272,12 +272,12 @@ You can define MCP servers in your [OpenCode configuration](https://opencode.ai/
 
 ```json title="~/.config/zed/settings.json"
 {
-  "context_servers": {
-    "Mastra": {
-      "command": "npx",
-      "args": ["-y", "@mastra/mcp-docs-server@latest"]
-    }
-  }
+	"context_servers": {
+		"Mastra": {
+			"command": "npx",
+			"args": ["-y", "@mastra/mcp-docs-server@latest"]
+		}
+	}
 }
 ```
 

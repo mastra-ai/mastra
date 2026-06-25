@@ -18,9 +18,9 @@ import { MastraEditor } from '@mastra/editor'
 import { s3BlobStoreProvider } from '@mastra/s3'
 
 new MastraEditor({
-  blobStores: {
-    [s3BlobStoreProvider.id]: s3BlobStoreProvider,
-  },
+	blobStores: {
+		[s3BlobStoreProvider.id]: s3BlobStoreProvider,
+	},
 })
 ```
 
@@ -28,34 +28,34 @@ new MastraEditor({
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Unique provider identifier (for example, `"storage"`, `"s3"`).',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: 'Human-readable name for UI display.',
-  },
-  {
-    name: 'description',
-    type: 'string',
-    description: 'Short description.',
-    isOptional: true,
-  },
-  {
-    name: 'configSchema',
-    type: 'Record<string, unknown>',
-    description: 'JSON Schema describing provider-specific configuration. Used by the UI to render config forms.',
-    isOptional: true,
-  },
-  {
-    name: 'createBlobStore',
-    type: '(config: TConfig) => BlobStore | Promise<BlobStore>',
-    description:
-      'Create a runtime `BlobStore` instance from the stored config. Called when the editor resolves a blob store via `MastraEditor.resolveBlobStore(providerId, config)`.',
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Unique provider identifier (for example, `"storage"`, `"s3"`).',
+	},
+	{
+		name: 'name',
+		type: 'string',
+		description: 'Human-readable name for UI display.',
+	},
+	{
+		name: 'description',
+		type: 'string',
+		description: 'Short description.',
+		isOptional: true,
+	},
+	{
+		name: 'configSchema',
+		type: 'Record<string, unknown>',
+		description: 'JSON Schema describing provider-specific configuration. Used by the UI to render config forms.',
+		isOptional: true,
+	},
+	{
+		name: 'createBlobStore',
+		type: '(config: TConfig) => BlobStore | Promise<BlobStore>',
+		description:
+			'Create a runtime `BlobStore` instance from the stored config. Called when the editor resolves a blob store via `MastraEditor.resolveBlobStore(providerId, config)`.',
+	},
 ]}
 />
 
@@ -65,20 +65,20 @@ new MastraEditor({
 import type { BlobStore, BlobStoreProvider } from '@mastra/core/editor'
 
 export const myBlobStoreProvider: BlobStoreProvider<{ bucket: string; region: string }> = {
-  id: 'my-blob-store',
-  name: 'My Blob Store',
-  description: 'Object-store-backed blob storage.',
-  configSchema: {
-    type: 'object',
-    required: ['bucket', 'region'],
-    properties: {
-      bucket: { type: 'string' },
-      region: { type: 'string' },
-    },
-  },
-  async createBlobStore(config): Promise<BlobStore> {
-    return createMyBlobStore({ bucket: config.bucket, region: config.region })
-  },
+	id: 'my-blob-store',
+	name: 'My Blob Store',
+	description: 'Object-store-backed blob storage.',
+	configSchema: {
+		type: 'object',
+		required: ['bucket', 'region'],
+		properties: {
+			bucket: { type: 'string' },
+			region: { type: 'string' },
+		},
+	},
+	async createBlobStore(config): Promise<BlobStore> {
+		return createMyBlobStore({ bucket: config.bucket, region: config.region })
+	},
 }
 ```
 

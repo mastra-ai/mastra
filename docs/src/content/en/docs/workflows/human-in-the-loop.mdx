@@ -20,46 +20,46 @@ import { createWorkflow, createStep } from '@mastra/core/workflows'
 import { z } from 'zod'
 
 const step1 = createStep({
-  id: 'step-1',
-  inputSchema: z.object({
-    userEmail: z.string(),
-  }),
-  outputSchema: z.object({
-    output: z.string(),
-  }),
-  resumeSchema: z.object({
-    approved: z.boolean(),
-  }),
-  suspendSchema: z.object({
-    reason: z.string(),
-  }),
-  execute: async ({ inputData, resumeData, suspend }) => {
-    const { userEmail } = inputData
-    const { approved } = resumeData ?? {}
+	id: 'step-1',
+	inputSchema: z.object({
+		userEmail: z.string(),
+	}),
+	outputSchema: z.object({
+		output: z.string(),
+	}),
+	resumeSchema: z.object({
+		approved: z.boolean(),
+	}),
+	suspendSchema: z.object({
+		reason: z.string(),
+	}),
+	execute: async ({ inputData, resumeData, suspend }) => {
+		const { userEmail } = inputData
+		const { approved } = resumeData ?? {}
 
-    if (!approved) {
-      return await suspend({
-        reason: 'Human approval required.',
-      })
-    }
+		if (!approved) {
+			return await suspend({
+				reason: 'Human approval required.',
+			})
+		}
 
-    return {
-      output: `Email sent to ${userEmail}`,
-    }
-  },
+		return {
+			output: `Email sent to ${userEmail}`,
+		}
+	},
 })
 
 export const testWorkflow = createWorkflow({
-  id: 'test-workflow',
-  inputSchema: z.object({
-    userEmail: z.string(),
-  }),
-  outputSchema: z.object({
-    output: z.string(),
-  }),
+	id: 'test-workflow',
+	inputSchema: z.object({
+		userEmail: z.string(),
+	}),
+	outputSchema: z.object({
+		output: z.string(),
+	}),
 })
-  .then(step1)
-  .commit()
+	.then(step1)
+	.commit()
 ```
 
 ## Providing user feedback
@@ -71,16 +71,16 @@ const workflow = mastra.getWorkflow('testWorkflow')
 const run = await workflow.createRun()
 
 const result = await run.start({
-  inputData: {
-    userEmail: 'alex@example.com',
-  },
+	inputData: {
+		userEmail: 'alex@example.com',
+	},
 })
 
 if (result.status === 'suspended') {
-  const suspendStep = result.suspended[0]
-  const suspendedPayload = result.steps[suspendStep[0]].suspendPayload
+	const suspendStep = result.suspended[0]
+	const suspendedPayload = result.steps[suspendStep[0]].suspendPayload
 
-  console.log(suspendedPayload)
+	console.log(suspendedPayload)
 }
 ```
 
@@ -90,7 +90,7 @@ The data returned by the step can include a reason and help the user understand 
 
 ```typescript
 {
-  reason: 'Confirm to send email.'
+	reason: 'Confirm to send email.'
 }
 ```
 
@@ -105,16 +105,16 @@ const workflow = mastra.getWorkflow('testWorkflow')
 const run = await workflow.createRun()
 
 await run.start({
-  inputData: {
-    userEmail: 'alex@example.com',
-  },
+	inputData: {
+		userEmail: 'alex@example.com',
+	},
 })
 
 const handleResume = async () => {
-  const result = await run.resume({
-    step: 'step-1',
-    resumeData: { approved: true },
-  })
+	const result = await run.resume({
+		step: 'step-1',
+		resumeData: { approved: true },
+	})
 }
 ```
 
@@ -124,26 +124,26 @@ Use `bail()` to stop workflow execution at a step without triggering an error. T
 
 ```typescript {6-10}
 const step1 = createStep({
-  execute: async ({ inputData, resumeData, suspend, bail }) => {
-    const { userEmail } = inputData
-    const { approved } = resumeData ?? {}
+	execute: async ({ inputData, resumeData, suspend, bail }) => {
+		const { userEmail } = inputData
+		const { approved } = resumeData ?? {}
 
-    if (approved === false) {
-      return bail({
-        reason: 'User rejected the request.',
-      })
-    }
+		if (approved === false) {
+			return bail({
+				reason: 'User rejected the request.',
+			})
+		}
 
-    if (!approved) {
-      return await suspend({
-        reason: 'Human approval required.',
-      })
-    }
+		if (!approved) {
+			return await suspend({
+				reason: 'Human approval required.',
+			})
+		}
 
-    return {
-      message: `Email sent to ${userEmail}`,
-    }
-  },
+		return {
+			message: `Email sent to ${userEmail}`,
+		}
+	},
 })
 ```
 
@@ -202,17 +202,17 @@ Each step must be resumed in sequence, with a separate call to `resume()` for ea
 
 ```typescript {4,11}
 const handleResume = async () => {
-  const result = await run.resume({
-    step: 'step-1',
-    resumeData: { approved: true },
-  })
+	const result = await run.resume({
+		step: 'step-1',
+		resumeData: { approved: true },
+	})
 }
 
 const handleDelete = async () => {
-  const result = await run.resume({
-    step: 'step-2',
-    resumeData: { approved: true },
-  })
+	const result = await run.resume({
+		step: 'step-2',
+		resumeData: { approved: true },
+	})
 }
 ```
 

@@ -19,17 +19,17 @@ import Speaker from '@mastra/node-speaker'
 import { getMicrophoneStream } from '@mastra/node-audio'
 
 const speaker = new Speaker({
-  sampleRate: 24100, // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
-  channels: 1, // Mono audio output (as opposed to stereo which would be 2)
-  bitDepth: 16, // Bit depth for audio quality - CD quality standard (16-bit resolution)
+	sampleRate: 24100, // Audio sample rate in Hz - standard for high-quality audio on MacBook Pro
+	channels: 1, // Mono audio output (as opposed to stereo which would be 2)
+	bitDepth: 16, // Bit depth for audio quality - CD quality standard (16-bit resolution)
 })
 
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
-  realtimeConfig: {
-    model: 'gpt-5.1-realtime',
-    apiKey: process.env.OPENAI_API_KEY,
-  },
+	realtimeConfig: {
+		model: 'gpt-5.1-realtime',
+		apiKey: process.env.OPENAI_API_KEY,
+	},
 })
 
 // Connect to the real-time service
@@ -37,11 +37,11 @@ await voice.connect()
 
 // Set up event listeners for responses
 voice.on('writing', ({ text, role }) => {
-  console.log(`${role}: ${text}`)
+	console.log(`${role}: ${text}`)
 })
 
 voice.on('speaker', stream => {
-  stream.pipe(speaker)
+	stream.pipe(speaker)
 })
 
 // Get microphone stream (implementation depends on your environment)
@@ -61,13 +61,13 @@ await voice.send(audioBuffer)
 
 <PropertiesTable
   content={[
-  {
-    name: 'audioData',
-    type: 'NodeJS.ReadableStream | Int16Array',
-    description:
-      'Audio data to send to the voice provider. Can be a readable stream (like a microphone stream) or an Int16Array of audio samples.',
-    isOptional: false,
-  },
+	{
+		name: 'audioData',
+		type: 'NodeJS.ReadableStream | Int16Array',
+		description:
+			'Audio data to send to the voice provider. Can be a readable stream (like a microphone stream) or an Int16Array of audio samples.',
+		isOptional: false,
+	},
 ]}
 />
 

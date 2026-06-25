@@ -49,29 +49,29 @@ Grant `:write`, `:delete`, and `:publish` on `stored-agents` and `stored-skills`
 import { MastraAuthWorkos, MastraRBACWorkos } from '@mastra/auth-workos'
 
 export const mastraAuth = new MastraAuthWorkos({
-  redirectUri: process.env.WORKOS_REDIRECT_URI || 'http://localhost:4111/api/auth/callback',
+	redirectUri: process.env.WORKOS_REDIRECT_URI || 'http://localhost:4111/api/auth/callback',
 })
 
 export const rbacProvider = new MastraRBACWorkos({
-  roleMapping: {
-    admin: ['*'],
-    member: [
-      'agent-builder:*',
-      'agents:read',
-      'agents:execute',
-      'stored-agents:*',
-      'stored-skills:*',
-      'stored-workspaces:*',
-      'tools:read',
-      'tools:execute',
-      'workflows:read',
-      'workflows:execute',
-      'memory:read',
-      'channels:read',
-      'infrastructure:read',
-    ],
-    _default: [],
-  },
+	roleMapping: {
+		admin: ['*'],
+		member: [
+			'agent-builder:*',
+			'agents:read',
+			'agents:execute',
+			'stored-agents:*',
+			'stored-skills:*',
+			'stored-workspaces:*',
+			'tools:read',
+			'tools:execute',
+			'workflows:read',
+			'workflows:execute',
+			'memory:read',
+			'channels:read',
+			'infrastructure:read',
+		],
+		_default: [],
+	},
 })
 ```
 
@@ -82,11 +82,11 @@ import { Mastra } from '@mastra/core/mastra'
 import { mastraAuth, rbacProvider } from './auth'
 
 export const mastra = new Mastra({
-  server: {
-    auth: mastraAuth,
-    rbac: rbacProvider,
-  },
-  // ...storage, agents, editor
+	server: {
+		auth: mastraAuth,
+		rbac: rbacProvider,
+	},
+	// ...storage, agents, editor
 })
 ```
 

@@ -95,7 +95,7 @@ Initialize your app as usual, then create a `MastraServer` by passing in the `ap
     await server.init()
 
     app.listen(4111, () => {
-      console.log('Server running on port 4111')
+    	console.log('Server running on port 4111')
     })
     ```
 
@@ -120,7 +120,7 @@ Initialize your app as usual, then create a `MastraServer` by passing in the `ap
     await server.init()
 
     serve({ fetch: app.fetch, port: 4111 }, () => {
-      console.log('Server running on port 4111')
+    	console.log('Server running on port 4111')
     })
     ```
 
@@ -143,16 +143,16 @@ Initialize your app as usual, then create a `MastraServer` by passing in the `ap
     await server.init()
 
     app.get('/health', async request => {
-      const mastraInstance = request.mastra
-      const agents = Object.keys(mastraInstance.listAgents())
-      return { status: 'ok', agents }
+    	const mastraInstance = request.mastra
+    	const agents = Object.keys(mastraInstance.listAgents())
+    	return { status: 'ok', agents }
     })
 
     const port = 4111
 
     app.listen({ port }, () => {
-      console.log(`Server running on http://localhost:${port}`)
-      console.log(`Try: curl http://localhost:${port}/api/agents`)
+    	console.log(`Server running on http://localhost:${port}`)
+    	console.log(`Try: curl http://localhost:${port}/api/agents`)
     })
     ```
 
@@ -178,20 +178,20 @@ Initialize your app as usual, then create a `MastraServer` by passing in the `ap
     await server.init()
 
     app.use(async (ctx, next) => {
-      if (ctx.path === '/health' && ctx.method === 'GET') {
-        const mastraInstance = ctx.state.mastra
-        const agents = Object.keys(mastraInstance.listAgents())
-        ctx.body = { status: 'ok', agents }
-        return
-      }
-      await next()
+    	if (ctx.path === '/health' && ctx.method === 'GET') {
+    		const mastraInstance = ctx.state.mastra
+    		const agents = Object.keys(mastraInstance.listAgents())
+    		ctx.body = { status: 'ok', agents }
+    		return
+    	}
+    	await next()
     })
 
     const port = 4111
 
     app.listen(port, () => {
-      console.log(`Server running on http://localhost:${port}`)
-      console.log(`Try: curl http://localhost:${port}/api/agents`)
+    	console.log(`Server running on http://localhost:${port}`)
+    	console.log(`Try: curl http://localhost:${port}/api/agents`)
     })
     ```
 
@@ -209,11 +209,11 @@ Initialize your app as usual, then create a `MastraServer` by passing in the `ap
     import { mastra } from './mastra'
 
     @Module({
-      imports: [
-        MastraModule.register({
-          mastra,
-        }),
-      ],
+    	imports: [
+    		MastraModule.register({
+    			mastra,
+    		}),
+    	],
     })
     export class AppModule {}
     ```
@@ -223,8 +223,8 @@ Initialize your app as usual, then create a `MastraServer` by passing in the `ap
     import { AppModule } from './app.module'
 
     async function bootstrap() {
-      const app = await NestFactory.create(AppModule)
-      await app.listen(3000)
+    	const app = await NestFactory.create(AppModule)
+    	await app.listen(3000)
     }
 
     bootstrap()
@@ -294,9 +294,9 @@ By default, Mastra routes are registered at `/api/agents`, `/api/workflows`, etc
 
 ```typescript
 const server = new MastraServer({
-  app,
-  mastra,
-  prefix: '/api/v2',
+	app,
+	mastra,
+	prefix: '/api/v2',
 })
 ```
 
@@ -308,9 +308,9 @@ Mastra can generate an OpenAPI specification for all registered routes. This is 
 
 ```typescript
 const server = new MastraServer({
-  app,
-  mastra,
-  openapiPath: '/openapi.json',
+	app,
+	mastra,
+	openapiPath: '/openapi.json',
 })
 ```
 
@@ -331,11 +331,11 @@ By default, redaction is enabled. Configure this behavior via `streamOptions`. S
 
 ```typescript
 const server = new MastraServer({
-  app,
-  mastra,
-  streamOptions: {
-    redact: true, // Default
-  },
+	app,
+	mastra,
+	streamOptions: {
+		redact: true, // Default
+	},
 })
 ```
 
@@ -353,20 +353,20 @@ Use `customRouteAuthConfig` to override authentication behavior for specific rou
 
 ```typescript
 const server = new MastraServer({
-  app,
-  mastra,
-  customRouteAuthConfig: new Map([
-    // Public health check
-    ['GET:/api/health', false],
-    // Public API spec
-    ['GET:/api/openapi.json', false],
-    // Public webhook endpoints
-    ['POST:/api/webhooks/*', false],
-    // Require auth even if globally disabled
-    ['POST:/api/admin/reset', true],
-    // Protect all methods on internal routes
-    ['ALL:/api/internal/*', true],
-  ]),
+	app,
+	mastra,
+	customRouteAuthConfig: new Map([
+		// Public health check
+		['GET:/api/health', false],
+		// Public API spec
+		['GET:/api/openapi.json', false],
+		// Public webhook endpoints
+		['POST:/api/webhooks/*', false],
+		// Require auth even if globally disabled
+		['POST:/api/admin/reset', true],
+		// Protect all methods on internal routes
+		['ALL:/api/internal/*', true],
+	]),
 })
 ```
 
@@ -445,11 +445,11 @@ When using the Mastra deployer (the standard `mastra dev` / `mastra build` path)
 
 ```typescript
 const mastra = new Mastra({
-  server: {
-    mcpOptions: {
-      serverless: true,
-    },
-  },
+	server: {
+		mcpOptions: {
+			serverless: true,
+		},
+	},
 })
 ```
 
@@ -457,11 +457,11 @@ When manually creating a server adapter, pass `mcpOptions` directly:
 
 ```typescript
 const server = new MastraServer({
-  app,
-  mastra,
-  mcpOptions: {
-    serverless: true,
-  },
+	app,
+	mastra,
+	mcpOptions: {
+		serverless: true,
+	},
 })
 ```
 

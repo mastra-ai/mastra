@@ -94,20 +94,20 @@ Run Mastra as a standalone server and connect your Next.js frontend (with Copilo
     // Rest of the imports...
 
     export const mastra = new Mastra({
-      // Rest of the configuration...
-      server: {
-        cors: {
-          origin: '*',
-          allowMethods: ['*'],
-          allowHeaders: ['*'],
-        },
-        apiRoutes: [
-          registerCopilotKit({
-            path: '/chat',
-            resourceId: 'weatherAgent',
-          }),
-        ],
-      },
+    	// Rest of the configuration...
+    	server: {
+    		cors: {
+    			origin: '*',
+    			allowMethods: ['*'],
+    			allowHeaders: ['*'],
+    		},
+    		apiRoutes: [
+    			registerCopilotKit({
+    				path: '/chat',
+    				resourceId: 'weatherAgent',
+    			}),
+    		],
+    	},
     })
     ```
 
@@ -159,16 +159,16 @@ Run Mastra as a standalone server and connect your Next.js frontend (with Copilo
     import '@copilotkit/react-ui/styles.css'
 
     export default function Home() {
-      return (
-        <CopilotKit runtimeUrl="http://localhost:4111/chat" agent="weatherAgent">
-          <CopilotChat
-            labels={{
-              title: 'Weather Agent',
-              initial: 'Hi! 👋 Ask me about the weather, forecasts, and climate.',
-            }}
-          />
-        </CopilotKit>
-      )
+    	return (
+    		<CopilotKit runtimeUrl="http://localhost:4111/chat" agent="weatherAgent">
+    			<CopilotChat
+    				labels={{
+    					title: 'Weather Agent',
+    					initial: 'Hi! 👋 Ask me about the weather, forecasts, and climate.',
+    				}}
+    			/>
+    		</CopilotKit>
+    	)
     }
     ```
   </StepItem>
@@ -200,8 +200,8 @@ Add the `@copilotkit/runtime` package to your bundler externals configuration:
 
 ```typescript title="src/mastra/index.ts" 
 export const mastra = new Mastra({
-  bundler: {
-    externals: ['@copilotkit/runtime'],
-  },
+	bundler: {
+		externals: ['@copilotkit/runtime'],
+	},
 })
 ```

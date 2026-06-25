@@ -46,14 +46,14 @@ import { Observability } from '@mastra/observability'
 import { DatadogExporter } from '@mastra/datadog'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      datadog: {
-        serviceName: 'my-service',
-        exporters: [new DatadogExporter()],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			datadog: {
+				serviceName: 'my-service',
+				exporters: [new DatadogExporter()],
+			},
+		},
+	}),
 })
 ```
 
@@ -67,19 +67,19 @@ import { Observability } from '@mastra/observability'
 import { DatadogExporter } from '@mastra/datadog'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      datadog: {
-        serviceName: 'my-service',
-        exporters: [
-          new DatadogExporter({
-            mlApp: process.env.DD_LLMOBS_ML_APP!,
-            apiKey: process.env.DD_API_KEY!,
-          }),
-        ],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			datadog: {
+				serviceName: 'my-service',
+				exporters: [
+					new DatadogExporter({
+						mlApp: process.env.DD_LLMOBS_ML_APP!,
+						apiKey: process.env.DD_API_KEY!,
+					}),
+				],
+			},
+		},
+	}),
 })
 ```
 
@@ -89,21 +89,21 @@ export const mastra = new Mastra({
 
 ```typescript
 new DatadogExporter({
-  // Required settings
-  mlApp: process.env.DD_LLMOBS_ML_APP!, // Groups traces under this ML app name
-  apiKey: process.env.DD_API_KEY!, // Required for agentless mode (default)
+	// Required settings
+	mlApp: process.env.DD_LLMOBS_ML_APP!, // Groups traces under this ML app name
+	apiKey: process.env.DD_API_KEY!, // Required for agentless mode (default)
 
-  // Optional settings
-  site: 'datadoghq.com', // Datadog site (datadoghq.eu, us3.datadoghq.com, etc.)
-  service: 'my-service', // Service name (defaults to mlApp)
-  env: 'production', // Environment name
-  agentless: true, // true = direct HTTPS, false = local Datadog Agent
+	// Optional settings
+	site: 'datadoghq.com', // Datadog site (datadoghq.eu, us3.datadoghq.com, etc.)
+	service: 'my-service', // Service name (defaults to mlApp)
+	env: 'production', // Environment name
+	agentless: true, // true = direct HTTPS, false = local Datadog Agent
 
-  // Advanced settings
-  integrationsEnabled: false, // Enable dd-trace auto-instrumentation
+	// Advanced settings
+	integrationsEnabled: false, // Enable dd-trace auto-instrumentation
 
-  // Diagnostic logging
-  logLevel: 'info', // debug | info | warn | error
+	// Diagnostic logging
+	logLevel: 'info', // debug | info | warn | error
 })
 ```
 
@@ -113,9 +113,9 @@ If you have a Datadog Agent running locally, you can route traces through it ins
 
 ```typescript
 new DatadogExporter({
-  mlApp: process.env.DD_LLMOBS_ML_APP!,
-  agentless: false, // Use local Datadog Agent
-  env: 'production',
+	mlApp: process.env.DD_LLMOBS_ML_APP!,
+	agentless: false, // Use local Datadog Agent
+	env: 'production',
 })
 ```
 
@@ -163,23 +163,23 @@ Import and initialize `dd-trace` at the top of your entry file, before any other
 import tracer from 'dd-trace'
 
 tracer.init({
-  service: process.env.DD_SERVICE || 'my-mastra-app',
-  env: process.env.DD_ENV || 'production',
-  version: process.env.DD_VERSION,
+	service: process.env.DD_SERVICE || 'my-mastra-app',
+	env: process.env.DD_ENV || 'production',
+	version: process.env.DD_VERSION,
 })
 
 import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
-  bundler: {
-    externals: [
-      'dd-trace',
-      '@datadog/native-metrics',
-      '@datadog/native-appsec',
-      '@datadog/native-iast-taint-tracking',
-      '@datadog/pprof',
-    ],
-  },
+	bundler: {
+		externals: [
+			'dd-trace',
+			'@datadog/native-metrics',
+			'@datadog/native-appsec',
+			'@datadog/native-iast-taint-tracking',
+			'@datadog/pprof',
+		],
+	},
 })
 ```
 
@@ -201,9 +201,9 @@ Import and initialize `dd-trace` before creating the Mastra instance. The `Datad
 import tracer from 'dd-trace'
 
 tracer.init({
-  service: process.env.DD_SERVICE || 'my-mastra-app',
-  env: process.env.DD_ENV || 'production',
-  version: process.env.DD_VERSION,
+	service: process.env.DD_SERVICE || 'my-mastra-app',
+	env: process.env.DD_ENV || 'production',
+	version: process.env.DD_VERSION,
 })
 
 import { Mastra } from '@mastra/core'
@@ -211,28 +211,28 @@ import { Observability } from '@mastra/observability'
 import { DatadogExporter } from '@mastra/datadog'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      datadog: {
-        serviceName: 'my-mastra-app',
-        exporters: [
-          new DatadogExporter({
-            mlApp: process.env.DD_LLMOBS_ML_APP!,
-            apiKey: process.env.DD_API_KEY!,
-          }),
-        ],
-      },
-    },
-  }),
-  bundler: {
-    externals: [
-      'dd-trace',
-      '@datadog/native-metrics',
-      '@datadog/native-appsec',
-      '@datadog/native-iast-taint-tracking',
-      '@datadog/pprof',
-    ],
-  },
+	observability: new Observability({
+		configs: {
+			datadog: {
+				serviceName: 'my-mastra-app',
+				exporters: [
+					new DatadogExporter({
+						mlApp: process.env.DD_LLMOBS_ML_APP!,
+						apiKey: process.env.DD_API_KEY!,
+					}),
+				],
+			},
+		},
+	}),
+	bundler: {
+		externals: [
+			'dd-trace',
+			'@datadog/native-metrics',
+			'@datadog/native-appsec',
+			'@datadog/native-iast-taint-tracking',
+			'@datadog/pprof',
+		],
+	},
 })
 ```
 
@@ -274,15 +274,15 @@ When using bundlers like esbuild, webpack, or the Mastra CLI bundler, you may ne
 
 ```typescript title="src/mastra/index.ts"
 export const mastra = new Mastra({
-  bundler: {
-    externals: [
-      'dd-trace',
-      '@datadog/native-metrics',
-      '@datadog/native-appsec',
-      '@datadog/native-iast-taint-tracking',
-      '@datadog/pprof',
-    ],
-  },
+	bundler: {
+		externals: [
+			'dd-trace',
+			'@datadog/native-metrics',
+			'@datadog/native-appsec',
+			'@datadog/native-iast-taint-tracking',
+			'@datadog/pprof',
+		],
+	},
 })
 ```
 

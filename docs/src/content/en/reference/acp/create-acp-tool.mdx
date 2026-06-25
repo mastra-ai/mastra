@@ -21,21 +21,21 @@ import { createACPTool } from '@mastra/acp'
 import { Agent } from '@mastra/core/agent'
 
 const codeAgentTool = createACPTool({
-  id: 'code-agent',
-  description: 'Use an ACP-compatible coding agent to inspect and edit code',
-  command: 'acp-agent',
-  args: ['--stdio'],
-  cwd: process.cwd(),
+	id: 'code-agent',
+	description: 'Use an ACP-compatible coding agent to inspect and edit code',
+	command: 'acp-agent',
+	args: ['--stdio'],
+	cwd: process.cwd(),
 })
 
 export const codeSupervisor = new Agent({
-  id: 'code-supervisor',
-  name: 'Code Supervisor',
-  instructions: 'Use the code-agent tool when a task requires repository inspection or code edits.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  tools: {
-    codeAgentTool,
-  },
+	id: 'code-supervisor',
+	name: 'Code Supervisor',
+	instructions: 'Use the code-agent tool when a task requires repository inspection or code edits.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	tools: {
+		codeAgentTool,
+	},
 })
 ```
 
@@ -43,89 +43,89 @@ export const codeSupervisor = new Agent({
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Unique identifier for the Mastra tool.',
-  },
-  {
-    name: 'description',
-    type: 'string',
-    description: 'Description shown to the model when it can call this tool.',
-  },
-  {
-    name: 'command',
-    type: 'string',
-    description: 'ACP agent executable to spawn.',
-  },
-  {
-    name: 'args',
-    type: 'string[]',
-    description: 'Arguments passed to the ACP agent executable.',
-    isOptional: true,
-    defaultValue: '[]',
-  },
-  {
-    name: 'env',
-    type: 'Record<string, string>',
-    description: 'Environment variables to merge with the current process environment when spawning the ACP process.',
-    isOptional: true,
-  },
-  {
-    name: 'cwd',
-    type: 'string',
-    description:
-      'Working directory for the ACP process and ACP session. Also used as the default local filesystem base path.',
-    isOptional: true,
-    defaultValue: 'process.cwd()',
-  },
-  {
-    name: 'session',
-    type: 'Partial<NewSessionRequest>',
-    description: 'ACP session creation options. Defaults to `cwd` or `process.cwd()` and an empty MCP server list.',
-    isOptional: true,
-  },
-  {
-    name: 'initialize',
-    type: 'Partial<InitializeRequest>',
-    description:
-      'ACP initialization options. Defaults to Mastra client information, the current ACP protocol version, and read/write filesystem capabilities.',
-    isOptional: true,
-  },
-  {
-    name: 'authMethodId',
-    type: 'string',
-    description: 'ACP authentication method ID to invoke after initialization and before session creation.',
-    isOptional: true,
-  },
-  {
-    name: 'persistSession',
-    type: 'boolean',
-    description:
-      'Whether the ACP connection created for a tool execution disconnects after the prompt. Set to `false` to stop the process after each prompt completes.',
-    isOptional: true,
-    defaultValue: 'true',
-  },
-  {
-    name: 'onPermissionRequest',
-    type: '(request: RequestPermissionRequest) => Promise<RequestPermissionResponse>',
-    description:
-      'Callback invoked when the ACP agent requests permission. Defaults to selecting the first permission option, or cancelling when no option is available.',
-    isOptional: true,
-  },
-  {
-    name: 'workspace',
-    type: 'Workspace',
-    description:
-      'Workspace option from the shared ACP connection options. During tool execution, `createACPTool()` passes the current Mastra workspace from the execution context when one is available; otherwise the ACP connection falls back to a local filesystem workspace. Use `AcpAgent` when you need to provide an explicit workspace instance.',
-    isOptional: true,
-  },
-  {
-    name: 'model',
-    type: 'ModelId',
-    description: 'Model ID to select after ACP session creation using the ACP `session/set_model` method.',
-    isOptional: true,
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Unique identifier for the Mastra tool.',
+	},
+	{
+		name: 'description',
+		type: 'string',
+		description: 'Description shown to the model when it can call this tool.',
+	},
+	{
+		name: 'command',
+		type: 'string',
+		description: 'ACP agent executable to spawn.',
+	},
+	{
+		name: 'args',
+		type: 'string[]',
+		description: 'Arguments passed to the ACP agent executable.',
+		isOptional: true,
+		defaultValue: '[]',
+	},
+	{
+		name: 'env',
+		type: 'Record<string, string>',
+		description: 'Environment variables to merge with the current process environment when spawning the ACP process.',
+		isOptional: true,
+	},
+	{
+		name: 'cwd',
+		type: 'string',
+		description:
+			'Working directory for the ACP process and ACP session. Also used as the default local filesystem base path.',
+		isOptional: true,
+		defaultValue: 'process.cwd()',
+	},
+	{
+		name: 'session',
+		type: 'Partial<NewSessionRequest>',
+		description: 'ACP session creation options. Defaults to `cwd` or `process.cwd()` and an empty MCP server list.',
+		isOptional: true,
+	},
+	{
+		name: 'initialize',
+		type: 'Partial<InitializeRequest>',
+		description:
+			'ACP initialization options. Defaults to Mastra client information, the current ACP protocol version, and read/write filesystem capabilities.',
+		isOptional: true,
+	},
+	{
+		name: 'authMethodId',
+		type: 'string',
+		description: 'ACP authentication method ID to invoke after initialization and before session creation.',
+		isOptional: true,
+	},
+	{
+		name: 'persistSession',
+		type: 'boolean',
+		description:
+			'Whether the ACP connection created for a tool execution disconnects after the prompt. Set to `false` to stop the process after each prompt completes.',
+		isOptional: true,
+		defaultValue: 'true',
+	},
+	{
+		name: 'onPermissionRequest',
+		type: '(request: RequestPermissionRequest) => Promise<RequestPermissionResponse>',
+		description:
+			'Callback invoked when the ACP agent requests permission. Defaults to selecting the first permission option, or cancelling when no option is available.',
+		isOptional: true,
+	},
+	{
+		name: 'workspace',
+		type: 'Workspace',
+		description:
+			'Workspace option from the shared ACP connection options. During tool execution, `createACPTool()` passes the current Mastra workspace from the execution context when one is available; otherwise the ACP connection falls back to a local filesystem workspace. Use `AcpAgent` when you need to provide an explicit workspace instance.',
+		isOptional: true,
+	},
+	{
+		name: 'model',
+		type: 'ModelId',
+		description: 'Model ID to select after ACP session creation using the ACP `session/set_model` method.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -133,11 +133,11 @@ export const codeSupervisor = new Agent({
 
 <PropertiesTable
   content={[
-  {
-    name: 'task',
-    type: 'string',
-    description: 'The task to send to the ACP agent.',
-  },
+	{
+		name: 'task',
+		type: 'string',
+		description: 'The task to send to the ACP agent.',
+	},
 ]}
 />
 
@@ -145,11 +145,11 @@ export const codeSupervisor = new Agent({
 
 <PropertiesTable
   content={[
-  {
-    name: 'output',
-    type: 'string',
-    description: 'The final text output returned by the ACP agent.',
-  },
+	{
+		name: 'output',
+		type: 'string',
+		description: 'The final text output returned by the ACP agent.',
+	},
 ]}
 />
 
@@ -161,11 +161,11 @@ export const codeSupervisor = new Agent({
 
 <PropertiesTable
   content={[
-  {
-    name: 'permissionRequest',
-    type: '{ title: string; options: { optionId: string; name: string }[] }',
-    description: 'Permission request title and selectable options returned by the ACP agent.',
-  },
+	{
+		name: 'permissionRequest',
+		type: '{ title: string; options: { optionId: string; name: string }[] }',
+		description: 'Permission request title and selectable options returned by the ACP agent.',
+	},
 ]}
 />
 
@@ -173,18 +173,18 @@ export const codeSupervisor = new Agent({
 
 <PropertiesTable
   content={[
-  {
-    name: 'optionId',
-    type: 'string',
-    description: 'Permission option ID to select when resuming with `outcome: "selected"`.',
-    isOptional: true,
-  },
-  {
-    name: 'outcome',
-    type: '"selected" | "cancelled"',
-    description: 'Permission decision used to continue or cancel the ACP request.',
-    isOptional: true,
-  },
+	{
+		name: 'optionId',
+		type: 'string',
+		description: 'Permission option ID to select when resuming with `outcome: "selected"`.',
+		isOptional: true,
+	},
+	{
+		name: 'outcome',
+		type: '"selected" | "cancelled"',
+		description: 'Permission decision used to continue or cancel the ACP request.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -206,24 +206,24 @@ Pass `onPermissionRequest` to inspect the request and return your own permission
 import { createACPTool } from '@mastra/acp'
 
 export const codeAgentTool = createACPTool({
-  id: 'code-agent',
-  description: 'Use an ACP-compatible coding agent',
-  command: 'acp-agent',
-  args: ['--stdio'],
-  async onPermissionRequest(request) {
-    const allowOption = request.options.find(option => option.name === 'Allow')
+	id: 'code-agent',
+	description: 'Use an ACP-compatible coding agent',
+	command: 'acp-agent',
+	args: ['--stdio'],
+	async onPermissionRequest(request) {
+		const allowOption = request.options.find(option => option.name === 'Allow')
 
-    if (!allowOption) {
-      return { outcome: { outcome: 'cancelled' } }
-    }
+		if (!allowOption) {
+			return { outcome: { outcome: 'cancelled' } }
+		}
 
-    return {
-      outcome: {
-        outcome: 'selected',
-        optionId: allowOption.optionId,
-      },
-    }
-  },
+		return {
+			outcome: {
+				outcome: 'selected',
+				optionId: allowOption.optionId,
+			},
+		}
+	},
 })
 ```
 

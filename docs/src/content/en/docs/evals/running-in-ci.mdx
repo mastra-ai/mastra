@@ -24,30 +24,30 @@ import { weatherAgent } from './weather-agent'
 import { locationScorer } from '../scorers/location-scorer'
 
 describe('Weather Agent Tests', () => {
-  it('should correctly extract locations from queries', async () => {
-    const result = await runEvals({
-      data: [
-        {
-          input: 'weather in Berlin',
-          groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'DE' },
-        },
-        {
-          input: 'weather in Berlin, Maryland',
-          groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'US' },
-        },
-        {
-          input: 'weather in Berlin, Russia',
-          groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'RU' },
-        },
-      ],
-      target: weatherAgent,
-      scorers: [locationScorer],
-    })
+	it('should correctly extract locations from queries', async () => {
+		const result = await runEvals({
+			data: [
+				{
+					input: 'weather in Berlin',
+					groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'DE' },
+				},
+				{
+					input: 'weather in Berlin, Maryland',
+					groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'US' },
+				},
+				{
+					input: 'weather in Berlin, Russia',
+					groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'RU' },
+				},
+			],
+			target: weatherAgent,
+			scorers: [locationScorer],
+		})
 
-    // Assert aggregate score meets threshold
-    expect(result.scores['location-accuracy']).toBe(1)
-    expect(result.summary.totalItems).toBe(3)
-  })
+		// Assert aggregate score meets threshold
+		expect(result.scores['location-accuracy']).toBe(1)
+		expect(result.summary.totalItems).toBe(3)
+	})
 })
 ```
 
@@ -76,51 +76,51 @@ Create separate test cases for different evaluation scenarios:
 
 ```typescript title="src/mastra/agents/weather-agent.test.ts"
 describe('Weather Agent Tests', () => {
-  const locationScorer = createScorer({
-    /* ... */
-  })
+	const locationScorer = createScorer({
+		/* ... */
+	})
 
-  it('should handle location disambiguation', async () => {
-    const result = await runEvals({
-      data: [
-        {
-          input: 'weather in Berlin',
-          groundTruth: {
-            /* ... */
-          },
-        },
-        {
-          input: 'weather in Berlin, Maryland',
-          groundTruth: {
-            /* ... */
-          },
-        },
-      ],
-      target: weatherAgent,
-      scorers: [locationScorer],
-    })
+	it('should handle location disambiguation', async () => {
+		const result = await runEvals({
+			data: [
+				{
+					input: 'weather in Berlin',
+					groundTruth: {
+						/* ... */
+					},
+				},
+				{
+					input: 'weather in Berlin, Maryland',
+					groundTruth: {
+						/* ... */
+					},
+				},
+			],
+			target: weatherAgent,
+			scorers: [locationScorer],
+		})
 
-    expect(result.scores['location-accuracy']).toBe(1)
-  })
+		expect(result.scores['location-accuracy']).toBe(1)
+	})
 
-  it('should handle typos and misspellings', async () => {
-    const result = await runEvals({
-      data: [
-        {
-          input: 'weather in Berln',
-          groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'DE' },
-        },
-        {
-          input: 'weather in Parris',
-          groundTruth: { expectedLocation: 'Paris', expectedCountry: 'FR' },
-        },
-      ],
-      target: weatherAgent,
-      scorers: [locationScorer],
-    })
+	it('should handle typos and misspellings', async () => {
+		const result = await runEvals({
+			data: [
+				{
+					input: 'weather in Berln',
+					groundTruth: { expectedLocation: 'Berlin', expectedCountry: 'DE' },
+				},
+				{
+					input: 'weather in Parris',
+					groundTruth: { expectedLocation: 'Paris', expectedCountry: 'FR' },
+				},
+			],
+			target: weatherAgent,
+			scorers: [locationScorer],
+		})
 
-    expect(result.scores['location-accuracy']).toBe(1)
-  })
+		expect(result.scores['location-accuracy']).toBe(1)
+	})
 })
 ```
 

@@ -37,14 +37,14 @@ import { Mastra } from '@mastra/core'
 import { LibSQLStore } from '@mastra/libsql'
 
 export const mastra = new Mastra({
-  storage: new LibSQLStore({ id: 'storage', url: 'file:mastra.db' }),
-  backgroundTasks: {
-    enabled: true,
-    globalConcurrency: 10,
-    perAgentConcurrency: 5,
-    backpressure: 'queue',
-    defaultTimeoutMs: 300_000,
-  },
+	storage: new LibSQLStore({ id: 'storage', url: 'file:mastra.db' }),
+	backgroundTasks: {
+		enabled: true,
+		globalConcurrency: 10,
+		perAgentConcurrency: 5,
+		backpressure: 'queue',
+		defaultTimeoutMs: 300_000,
+	},
 })
 ```
 
@@ -68,19 +68,19 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 export const researchTool = createTool({
-  id: 'research',
-  description: 'Run a long research job',
-  inputSchema: z.object({ topic: z.string() }),
-  // highlight-start
-  backgroundTasks: {
-    enabled: true,
-    timeoutMs: 600_000,
-    maxRetries: 1,
-  },
-  // highlight-end
-  execute: async ({ context }) => {
-    // ...
-  },
+	id: 'research',
+	description: 'Run a long research job',
+	inputSchema: z.object({ topic: z.string() }),
+	// highlight-start
+	backgroundTasks: {
+		enabled: true,
+		timeoutMs: 600_000,
+		maxRetries: 1,
+	},
+	// highlight-end
+	execute: async ({ context }) => {
+		// ...
+	},
 })
 ```
 
@@ -92,18 +92,18 @@ Use `backgroundTasks.tools` on the agent to opt in specific tools, override time
 import { Agent } from '@mastra/core/agent'
 
 export const researcher = new Agent({
-  id: 'researcher',
-  instructions: 'You research topics and answer questions.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  tools: { researchTool, summarizeTool },
-  // highlight-start
-  backgroundTasks: {
-    tools: {
-      researchTool: { enabled: true, timeoutMs: 600_000 },
-      summarizeTool: false,
-    },
-  },
-  // highlight-end
+	id: 'researcher',
+	instructions: 'You research topics and answer questions.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	tools: { researchTool, summarizeTool },
+	// highlight-start
+	backgroundTasks: {
+		tools: {
+			researchTool: { enabled: true, timeoutMs: 600_000 },
+			summarizeTool: false,
+		},
+	},
+	// highlight-end
 })
 ```
 
@@ -115,8 +115,8 @@ When a tool is registered on an agent that has background tasks enabled, the mod
 
 ```json
 {
-  "topic": "solana",
-  "_background": { "enabled": true, "timeoutMs": 900_000 }
+	"topic": "solana",
+	"_background": { "enabled": true, "timeoutMs": 900_000 }
 }
 ```
 
@@ -161,13 +161,13 @@ The full payload shapes are documented in the [background task chunks reference]
 
 ```typescript title="src/mastra/run.ts"
 const stream = await agent.stream('Research solana for me', {
-  memory: { thread: 't1', resource: 'u1' },
-  untilIdle: true,
+	memory: { thread: 't1', resource: 'u1' },
+	untilIdle: true,
 })
 
 for await (const chunk of stream.fullStream) {
-  // chunks from the initial turn AND any continuation turns triggered by
-  // background task completions flow through here
+	// chunks from the initial turn AND any continuation turns triggered by
+	// background task completions flow through here
 }
 ```
 
@@ -177,8 +177,8 @@ Customize the idle timeout by passing an object instead of `true`. The timer onl
 
 ```typescript
 const stream = await agent.stream('Research solana for me', {
-  memory: { thread: 't1', resource: 'u1' },
-  untilIdle: { maxIdleMs: 30_000 },
+	memory: { thread: 't1', resource: 'u1' },
+	untilIdle: { maxIdleMs: 30_000 },
 })
 ```
 
@@ -200,23 +200,23 @@ Subagent invocations are dispatched as tool calls under the hood, so the same ba
 import { Agent } from '@mastra/core/agent'
 
 const supervisor = new Agent({
-  id: 'supervisor',
-  instructions: 'Coordinate research and writing using the available agents.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  agents: { researchAgent, writingAgent },
-  // highlight-start
-  backgroundTasks: {
-    tools: {
-      researchAgent: { enabled: true, timeoutMs: 900_000 },
-      writingAgent: { enabled: true, timeoutMs: 900_000 },
-    },
-  },
-  // highlight-end
+	id: 'supervisor',
+	instructions: 'Coordinate research and writing using the available agents.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	agents: { researchAgent, writingAgent },
+	// highlight-start
+	backgroundTasks: {
+		tools: {
+			researchAgent: { enabled: true, timeoutMs: 900_000 },
+			writingAgent: { enabled: true, timeoutMs: 900_000 },
+		},
+	},
+	// highlight-end
 })
 
 const stream = await supervisor.stream('Research AI in education and write an article', {
-  memory: { thread: 't1', resource: 'u1' },
-  untilIdle: true,
+	memory: { thread: 't1', resource: 'u1' },
+	untilIdle: true,
 })
 ```
 
@@ -228,18 +228,18 @@ The background config used for the inherited dispatch (for example `waitTimeoutM
 
 ```typescript title="src/mastra/agents/researcher.ts"
 const researchAgent = new Agent({
-  id: 'research-agent',
-  description: 'Gathers factual information.',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
-  tools: { deepResearchTool },
-  // highlight-start
-  backgroundTasks: {
-    tools: {
-      deepResearchTool: { enabled: true, timeoutMs: 600_000 },
-    },
-    waitTimeoutMs: 900_000,
-  },
-  // highlight-end
+	id: 'research-agent',
+	description: 'Gathers factual information.',
+	model: '__GATEWAY_OPENAI_MODEL_MINI__',
+	tools: { deepResearchTool },
+	// highlight-start
+	backgroundTasks: {
+		tools: {
+			deepResearchTool: { enabled: true, timeoutMs: 600_000 },
+		},
+		waitTimeoutMs: 900_000,
+	},
+	// highlight-end
 })
 ```
 
@@ -265,20 +265,20 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 export const reviewTool = createTool({
-  id: 'review',
-  description: 'Submit a draft for human review.',
-  inputSchema: z.object({ draft: z.string() }),
-  outputSchema: z.object({ approvedBy: z.string(), edits: z.string().optional() }),
-  background: { enabled: true },
-  execute: async ({ draft }, context) => {
-    const { suspend, resumeData } = context.agent
-    if (!resumeData) {
-      await suspend?.({ awaiting: 'approval', draft })
-      return { approvedBy: '', edits: undefined }
-    }
-    const { reviewer, edits } = resumeData as { reviewer: string; edits?: string }
-    return { approvedBy: reviewer, edits }
-  },
+	id: 'review',
+	description: 'Submit a draft for human review.',
+	inputSchema: z.object({ draft: z.string() }),
+	outputSchema: z.object({ approvedBy: z.string(), edits: z.string().optional() }),
+	background: { enabled: true },
+	execute: async ({ draft }, context) => {
+		const { suspend, resumeData } = context.agent
+		if (!resumeData) {
+			await suspend?.({ awaiting: 'approval', draft })
+			return { approvedBy: '', edits: undefined }
+		}
+		const { reviewer, edits } = resumeData as { reviewer: string; edits?: string }
+		return { approvedBy: reviewer, edits }
+	},
 })
 ```
 
@@ -288,8 +288,8 @@ To resume the task once an approval arrives:
 
 ```typescript title="src/server/approvals.ts"
 await mastra.backgroundTaskManager?.resume(taskId, {
-  reviewer: 'alice@example.com',
-  edits: 'Reworded paragraph 3.',
+	reviewer: 'alice@example.com',
+	edits: 'Reworded paragraph 3.',
 })
 ```
 
@@ -315,16 +315,16 @@ Each layer can register terminal-state callbacks. They don't replace one another
 
 ```typescript title="src/mastra/index.ts"
 export const mastra = new Mastra({
-  storage,
-  backgroundTasks: {
-    enabled: true,
-    onTaskComplete: task => {
-      logger.info('Background task complete', { taskId: task.id, toolName: task.toolName })
-    },
-    onTaskFailed: task => {
-      logger.error('Background task failed', { taskId: task.id, error: task.error })
-    },
-  },
+	storage,
+	backgroundTasks: {
+		enabled: true,
+		onTaskComplete: task => {
+			logger.info('Background task complete', { taskId: task.id, toolName: task.toolName })
+		},
+		onTaskFailed: task => {
+			logger.error('Background task failed', { taskId: task.id, error: task.error })
+		},
+	},
 })
 ```
 
@@ -342,17 +342,17 @@ const controller = new AbortController()
 const stream = bgManager.stream({ abortSignal: controller.signal })
 
 for await (const chunk of stream) {
-  switch (chunk.type) {
-    case 'background-task-running':
-      console.log('started', chunk.payload.taskId, chunk.payload.toolName)
-      break
-    case 'background-task-completed':
-      console.log('done', chunk.payload.taskId, chunk.payload.result)
-      break
-    case 'background-task-failed':
-      console.error('failed', chunk.payload.taskId, chunk.payload.error)
-      break
-  }
+	switch (chunk.type) {
+		case 'background-task-running':
+			console.log('started', chunk.payload.taskId, chunk.payload.toolName)
+			break
+		case 'background-task-completed':
+			console.log('done', chunk.payload.taskId, chunk.payload.result)
+			break
+		case 'background-task-failed':
+			console.error('failed', chunk.payload.taskId, chunk.payload.error)
+			break
+	}
 }
 ```
 
@@ -364,10 +364,10 @@ Pass any combination of filter options to narrow the events you receive. Filters
 
 ```typescript
 const stream = bgManager.stream({
-  agentId: 'researcher',
-  threadId: 't1',
-  resourceId: 'u1',
-  abortSignal: controller.signal,
+	agentId: 'researcher',
+	threadId: 't1',
+	resourceId: 'u1',
+	abortSignal: controller.signal,
 })
 ```
 
@@ -387,8 +387,8 @@ For one-off lookups instead of a live stream, use `getTask` and `listTasks`:
 ```typescript
 const task = await mastra.backgroundTaskManager?.getTask(taskId)
 const { tasks, total } = await mastra.backgroundTaskManager?.listTasks({
-  status: 'running',
-  agentId: 'researcher',
+	status: 'running',
+	agentId: 'researcher',
 })
 ```
 

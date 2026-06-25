@@ -36,31 +36,31 @@ import { cityWorkflow } from '../workflows/city-workflow'
 import { weatherTool } from '../tools/weather-tool'
 
 export const routingAgent = new Agent({
-  id: 'routing-agent',
-  name: 'Routing Agent',
-  instructions: `
+	id: 'routing-agent',
+	name: 'Routing Agent',
+	instructions: `
     You are a network of writers and researchers. The user will ask you to research a topic. Always respond with a complete report—no bullet points. Write in full paragraphs, like a blog post. Do not answer with incomplete or uncertain information.`,
-  model: '__GATEWAY_OPENAI_MODEL__',
-  agents: {
-    // highlight-start
-    researchAgent,
-    writingAgent,
-    // highlight-end
-  },
-  workflows: {
-    // highlight-next-line
-    cityWorkflow,
-  },
-  tools: {
-    // highlight-next-line
-    weatherTool,
-  },
-  memory: new Memory({
-    storage: new LibSQLStore({
-      id: 'mastra-storage',
-      url: 'file:../mastra.db',
-    }),
-  }),
+	model: '__GATEWAY_OPENAI_MODEL__',
+	agents: {
+		// highlight-start
+		researchAgent,
+		writingAgent,
+		// highlight-end
+	},
+	workflows: {
+		// highlight-next-line
+		cityWorkflow,
+	},
+	tools: {
+		// highlight-next-line
+		weatherTool,
+	},
+	memory: new Memory({
+		storage: new LibSQLStore({
+			id: 'mastra-storage',
+			url: 'file:../mastra.db',
+		}),
+	}),
 })
 ```
 
@@ -78,10 +78,10 @@ Call `.network()` with a user message. The method returns a stream of events you
 const result = await routingAgent.network('Tell me three cool ways to use Mastra')
 
 for await (const chunk of result) {
-  console.log(chunk.type)
-  if (chunk.type === 'network-execution-event-step-finish') {
-    console.log(chunk.payload.result)
-  }
+	console.log(chunk.type)
+	if (chunk.type === 'network-execution-event-step-finish') {
+		console.log(chunk.payload.result)
+	}
 }
 ```
 
@@ -93,17 +93,17 @@ Pass `structuredOutput` to get typed, validated results. Use `objectStream` for 
 import { z } from 'zod'
 
 const resultSchema = z.object({
-  summary: z.string().describe('A brief summary of the findings'),
-  recommendations: z.array(z.string()).describe('List of recommendations'),
-  confidence: z.number().min(0).max(1).describe('Confidence score'),
+	summary: z.string().describe('A brief summary of the findings'),
+	recommendations: z.array(z.string()).describe('List of recommendations'),
+	confidence: z.number().min(0).max(1).describe('Confidence score'),
 })
 
 const stream = await routingAgent.network('Research AI trends', {
-  structuredOutput: { schema: resultSchema },
+	structuredOutput: { schema: resultSchema },
 })
 
 for await (const partial of stream.objectStream) {
-  console.log('Building result:', partial)
+	console.log('Building result:', partial)
 }
 
 const final = await stream.object
@@ -118,26 +118,26 @@ Network approval uses snapshots to capture execution state. Ensure a [storage pr
 
 ```typescript title="src/approve-network.ts"
 const stream = await routingAgent.network('Perform some sensitive action', {
-  memory: {
-    thread: 'user-123',
-    resource: 'my-app',
-  },
+	memory: {
+		thread: 'user-123',
+		resource: 'my-app',
+	},
 })
 
 for await (const chunk of stream) {
-  if (chunk.type === 'agent-execution-approval' || chunk.type === 'tool-execution-approval') {
-    // Approve
-    const approvedStream = await routingAgent.approveNetworkToolCall(chunk.payload.toolCallId, {
-      runId: stream.runId,
-      memory: { thread: 'user-123', resource: 'my-app' },
-    })
+	if (chunk.type === 'agent-execution-approval' || chunk.type === 'tool-execution-approval') {
+		// Approve
+		const approvedStream = await routingAgent.approveNetworkToolCall(chunk.payload.toolCallId, {
+			runId: stream.runId,
+			memory: { thread: 'user-123', resource: 'my-app' },
+		})
 
-    for await (const c of approvedStream) {
-      if (c.type === 'network-execution-event-step-finish') {
-        console.log(c.payload.result)
-      }
-    }
-  }
+		for await (const c of approvedStream) {
+			if (c.type === 'network-execution-event-step-finish') {
+				console.log(c.payload.result)
+			}
+		}
+	}
 }
 ```
 
@@ -149,28 +149,28 @@ When a primitive calls `suspend()`, the stream emits a suspension chunk (e.g., `
 
 ```typescript title="src/resume-network.ts"
 const stream = await routingAgent.network('Delete the old records', {
-  memory: { thread: 'user-123', resource: 'my-app' },
+	memory: { thread: 'user-123', resource: 'my-app' },
 })
 
 for await (const chunk of stream) {
-  if (chunk.type === 'workflow-execution-suspended') {
-    console.log(chunk.payload.suspendPayload)
-  }
+	if (chunk.type === 'workflow-execution-suspended') {
+		console.log(chunk.payload.suspendPayload)
+	}
 }
 
 // Resume with user confirmation
 const resumedStream = await routingAgent.resumeNetwork(
-  { confirmed: true },
-  {
-    runId: stream.runId,
-    memory: { thread: 'user-123', resource: 'my-app' },
-  },
+	{ confirmed: true },
+	{
+		runId: stream.runId,
+		memory: { thread: 'user-123', resource: 'my-app' },
+	},
 )
 
 for await (const chunk of resumedStream) {
-  if (chunk.type === 'network-execution-event-step-finish') {
-    console.log(chunk.payload.result)
-  }
+	if (chunk.type === 'network-execution-event-step-finish') {
+		console.log(chunk.payload.result)
+	}
 }
 ```
 
@@ -180,8 +180,8 @@ Set `autoResumeSuspendedTools` to `true` so the network resumes suspended primit
 
 ```typescript
 const stream = await routingAgent.network('Delete the old records', {
-  autoResumeSuspendedTools: true,
-  memory: { thread: 'user-123', resource: 'my-app' },
+	autoResumeSuspendedTools: true,
+	memory: { thread: 'user-123', resource: 'my-app' },
 })
 ```
 

@@ -17,19 +17,19 @@ If you want to create a custom deployer, you can extend the abstract `Deployer` 
 import { Deployer } from '@mastra/deployer'
 
 class CustomDeployer extends Deployer {
-  constructor() {
-    super({ name: 'custom-deployer' })
-  }
+	constructor() {
+		super({ name: 'custom-deployer' })
+	}
 
-  async deploy(outputDirectory: string): Promise<void> {
-    // Prepare the output directory
-    await this.prepare(outputDirectory)
+	async deploy(outputDirectory: string): Promise<void> {
+		// Prepare the output directory
+		await this.prepare(outputDirectory)
 
-    // Bundle the application
-    await this._bundle('server.ts', 'mastra.ts', outputDirectory)
+		// Bundle the application
+		await this._bundle('server.ts', 'mastra.ts', outputDirectory)
 
-    // Custom deployment logic
-  }
+		// Custom deployment logic
+	}
 }
 ```
 
@@ -39,18 +39,18 @@ class CustomDeployer extends Deployer {
 
 <PropertiesTable
   content={[
-  {
-    name: 'args',
-    type: 'object',
-    description: 'Configuration options for the Deployer.',
-    isOptional: false,
-  },
-  {
-    name: 'args.name',
-    type: 'string',
-    description: 'A unique name for the deployer instance.',
-    isOptional: false,
-  },
+	{
+		name: 'args',
+		type: 'object',
+		description: 'Configuration options for the Deployer.',
+		isOptional: false,
+	},
+	{
+		name: 'args.name',
+		type: 'string',
+		description: 'A unique name for the deployer instance.',
+		isOptional: false,
+	},
 ]}
 />
 
@@ -58,12 +58,12 @@ class CustomDeployer extends Deployer {
 
 <PropertiesTable
   content={[
-  {
-    name: 'outputDirectory',
-    type: 'string',
-    description: 'The directory where the bundled and deployment-ready application will be output.',
-    isOptional: false,
-  },
+	{
+		name: 'outputDirectory',
+		type: 'string',
+		description: 'The directory where the bundled and deployment-ready application will be output.',
+		isOptional: false,
+	},
 ]}
 />
 
@@ -71,18 +71,18 @@ class CustomDeployer extends Deployer {
 
 <PropertiesTable
   content={[
-  {
-    name: 'getEnvFiles',
-    type: '() => Promise<string[]>',
-    description:
-      "Returns a list of environment files to be used during deployment. By default, it looks for '.env.production' and '.env' files.",
-  },
-  {
-    name: 'deploy',
-    type: '(outputDirectory: string) => Promise<void>',
-    description:
-      'Abstract method that must be implemented by subclasses. Handles the deployment process to the specified output directory.',
-  },
+	{
+		name: 'getEnvFiles',
+		type: '() => Promise<string[]>',
+		description:
+			"Returns a list of environment files to be used during deployment. By default, it looks for '.env.production' and '.env' files.",
+	},
+	{
+		name: 'deploy',
+		type: '(outputDirectory: string) => Promise<void>',
+		description:
+			'Abstract method that must be implemented by subclasses. Handles the deployment process to the specified output directory.',
+	},
 ]}
 />
 
@@ -92,21 +92,21 @@ The Deployer class inherits the following key methods from the Bundler class:
 
 <PropertiesTable
   content={[
-  {
-    name: 'prepare',
-    type: '(outputDirectory: string) => Promise<void>',
-    description: 'Prepares the output directory by cleaning it and creating necessary subdirectories.',
-  },
-  {
-    name: 'writePackageJson',
-    type: '(outputDirectory: string, dependencies: Map<string, string>) => Promise<void>',
-    description: 'Generates a package.json file in the output directory with the specified dependencies.',
-  },
-  {
-    name: '_bundle',
-    type: '(serverFile: string, mastraEntryFile: string, outputDirectory: string, bundleLocation?: string) => Promise<void>',
-    description: 'Bundles the application using the specified server and Mastra entry files.',
-  },
+	{
+		name: 'prepare',
+		type: '(outputDirectory: string) => Promise<void>',
+		description: 'Prepares the output directory by cleaning it and creating necessary subdirectories.',
+	},
+	{
+		name: 'writePackageJson',
+		type: '(outputDirectory: string, dependencies: Map<string, string>) => Promise<void>',
+		description: 'Generates a package.json file in the output directory with the specified dependencies.',
+	},
+	{
+		name: '_bundle',
+		type: '(serverFile: string, mastraEntryFile: string, outputDirectory: string, bundleLocation?: string) => Promise<void>',
+		description: 'Bundles the application using the specified server and Mastra entry files.',
+	},
 ]}
 />
 

@@ -64,30 +64,30 @@ const results = await store.query({
 
 <PropertiesTable
   content={[
-  {
-    name: 'url',
-    type: 'string',
-    description:
-      "libSQL database URL. Use ':memory:' for in-memory database, 'file:dbname.db' for local file, or a libSQL-compatible connection string like 'libsql://your-database.turso.io'.",
-  },
-  {
-    name: 'authToken',
-    type: 'string',
-    isOptional: true,
-    description: 'Authentication token for Turso cloud databases',
-  },
-  {
-    name: 'syncUrl',
-    type: 'string',
-    isOptional: true,
-    description: 'URL for database replication (Turso specific)',
-  },
-  {
-    name: 'syncInterval',
-    type: 'number',
-    isOptional: true,
-    description: 'Interval in milliseconds for database sync (Turso specific)',
-  },
+	{
+		name: 'url',
+		type: 'string',
+		description:
+			"libSQL database URL. Use ':memory:' for in-memory database, 'file:dbname.db' for local file, or a libSQL-compatible connection string like 'libsql://your-database.turso.io'.",
+	},
+	{
+		name: 'authToken',
+		type: 'string',
+		isOptional: true,
+		description: 'Authentication token for Turso cloud databases',
+	},
+	{
+		name: 'syncUrl',
+		type: 'string',
+		isOptional: true,
+		description: 'URL for database replication (Turso specific)',
+	},
+	{
+		name: 'syncInterval',
+		type: 'number',
+		isOptional: true,
+		description: 'Interval in milliseconds for database sync (Turso specific)',
+	},
 ]}
 />
 
@@ -99,24 +99,24 @@ Creates a new vector collection. The index name must start with a letter or unde
 
 <PropertiesTable
   content={[
-  {
-    name: 'indexName',
-    type: 'string',
-    description: 'Name of the index to create',
-  },
-  {
-    name: 'dimension',
-    type: 'number',
-    description: 'Vector dimension size (must match your embedding model)',
-  },
-  {
-    name: 'metric',
-    type: "'cosine' | 'euclidean' | 'dotproduct'",
-    isOptional: true,
-    defaultValue: 'cosine',
-    description:
-      'Distance metric for similarity search. Note: Currently only cosine similarity is supported by libSQL.',
-  },
+	{
+		name: 'indexName',
+		type: 'string',
+		description: 'Name of the index to create',
+	},
+	{
+		name: 'dimension',
+		type: 'number',
+		description: 'Vector dimension size (must match your embedding model)',
+	},
+	{
+		name: 'metric',
+		type: "'cosine' | 'euclidean' | 'dotproduct'",
+		isOptional: true,
+		defaultValue: 'cosine',
+		description:
+			'Distance metric for similarity search. Note: Currently only cosine similarity is supported by libSQL.',
+	},
 ]}
 />
 
@@ -126,28 +126,28 @@ Adds or updates vectors and their metadata in the index. Uses a transaction to e
 
 <PropertiesTable
   content={[
-  {
-    name: 'indexName',
-    type: 'string',
-    description: 'Name of the index to insert into',
-  },
-  {
-    name: 'vectors',
-    type: 'number[][]',
-    description: 'Array of embedding vectors',
-  },
-  {
-    name: 'metadata',
-    type: 'Record<string, any>[]',
-    isOptional: true,
-    description: 'Metadata for each vector',
-  },
-  {
-    name: 'ids',
-    type: 'string[]',
-    isOptional: true,
-    description: 'Optional vector IDs (auto-generated if not provided)',
-  },
+	{
+		name: 'indexName',
+		type: 'string',
+		description: 'Name of the index to insert into',
+	},
+	{
+		name: 'vectors',
+		type: 'number[][]',
+		description: 'Array of embedding vectors',
+	},
+	{
+		name: 'metadata',
+		type: 'Record<string, any>[]',
+		isOptional: true,
+		description: 'Metadata for each vector',
+	},
+	{
+		name: 'ids',
+		type: 'string[]',
+		isOptional: true,
+		description: 'Optional vector IDs (auto-generated if not provided)',
+	},
 ]}
 />
 
@@ -157,43 +157,43 @@ Searches for similar vectors with optional metadata filtering.
 
 <PropertiesTable
   content={[
-  {
-    name: 'indexName',
-    type: 'string',
-    description: 'Name of the index to search in',
-  },
-  {
-    name: 'queryVector',
-    type: 'number[]',
-    description: 'Query vector to find similar vectors for',
-  },
-  {
-    name: 'topK',
-    type: 'number',
-    isOptional: true,
-    defaultValue: '10',
-    description: 'Number of results to return',
-  },
-  {
-    name: 'filter',
-    type: 'Filter',
-    isOptional: true,
-    description: 'Metadata filters',
-  },
-  {
-    name: 'includeVector',
-    type: 'boolean',
-    isOptional: true,
-    defaultValue: 'false',
-    description: 'Whether to include vector data in results',
-  },
-  {
-    name: 'minScore',
-    type: 'number',
-    isOptional: true,
-    defaultValue: '0',
-    description: 'Minimum similarity score threshold',
-  },
+	{
+		name: 'indexName',
+		type: 'string',
+		description: 'Name of the index to search in',
+	},
+	{
+		name: 'queryVector',
+		type: 'number[]',
+		description: 'Query vector to find similar vectors for',
+	},
+	{
+		name: 'topK',
+		type: 'number',
+		isOptional: true,
+		defaultValue: '10',
+		description: 'Number of results to return',
+	},
+	{
+		name: 'filter',
+		type: 'Filter',
+		isOptional: true,
+		description: 'Metadata filters',
+	},
+	{
+		name: 'includeVector',
+		type: 'boolean',
+		isOptional: true,
+		defaultValue: 'false',
+		description: 'Whether to include vector data in results',
+	},
+	{
+		name: 'minScore',
+		type: 'number',
+		isOptional: true,
+		defaultValue: '0',
+		description: 'Minimum similarity score threshold',
+	},
 ]}
 />
 
@@ -203,11 +203,11 @@ Gets information about an index.
 
 <PropertiesTable
   content={[
-  {
-    name: 'indexName',
-    type: 'string',
-    description: 'Name of the index to describe',
-  },
+	{
+		name: 'indexName',
+		type: 'string',
+		description: 'Name of the index to describe',
+	},
 ]}
 />
 
@@ -215,9 +215,9 @@ Returns:
 
 ```typescript
 interface IndexStats {
-  dimension: number
-  count: number
-  metric: 'cosine' | 'euclidean' | 'dotproduct'
+	dimension: number
+	count: number
+	metric: 'cosine' | 'euclidean' | 'dotproduct'
 }
 ```
 
@@ -227,11 +227,11 @@ Deletes an index and all its data.
 
 <PropertiesTable
   content={[
-  {
-    name: 'indexName',
-    type: 'string',
-    description: 'Name of the index to delete',
-  },
+	{
+		name: 'indexName',
+		type: 'string',
+		description: 'Name of the index to delete',
+	},
 ]}
 />
 
@@ -247,11 +247,11 @@ Removes all vectors from an index while keeping the index structure.
 
 <PropertiesTable
   content={[
-  {
-    name: 'indexName',
-    type: 'string',
-    description: 'Name of the index to truncate',
-  },
+	{
+		name: 'indexName',
+		type: 'string',
+		description: 'Name of the index to truncate',
+	},
 ]}
 />
 
@@ -261,40 +261,40 @@ Update a single vector by ID or by metadata filter. Either `id` or `filter` must
 
 <PropertiesTable
   content={[
-  {
-    name: 'indexName',
-    type: 'string',
-    description: 'Name of the index containing the vector',
-  },
-  {
-    name: 'id',
-    type: 'string',
-    isOptional: true,
-    description: 'ID of the vector entry to update (mutually exclusive with filter)',
-  },
-  {
-    name: 'filter',
-    type: 'Record<string, any>',
-    isOptional: true,
-    description: 'Metadata filter to identify vector(s) to update (mutually exclusive with id)',
-  },
-  {
-    name: 'update',
-    type: 'object',
-    description: 'Update data containing vector and/or metadata',
-  },
-  {
-    name: 'update.vector',
-    type: 'number[]',
-    isOptional: true,
-    description: 'New vector data to update',
-  },
-  {
-    name: 'update.metadata',
-    type: 'Record<string, any>',
-    isOptional: true,
-    description: 'New metadata to update',
-  },
+	{
+		name: 'indexName',
+		type: 'string',
+		description: 'Name of the index containing the vector',
+	},
+	{
+		name: 'id',
+		type: 'string',
+		isOptional: true,
+		description: 'ID of the vector entry to update (mutually exclusive with filter)',
+	},
+	{
+		name: 'filter',
+		type: 'Record<string, any>',
+		isOptional: true,
+		description: 'Metadata filter to identify vector(s) to update (mutually exclusive with id)',
+	},
+	{
+		name: 'update',
+		type: 'object',
+		description: 'Update data containing vector and/or metadata',
+	},
+	{
+		name: 'update.vector',
+		type: 'number[]',
+		isOptional: true,
+		description: 'New vector data to update',
+	},
+	{
+		name: 'update.metadata',
+		type: 'Record<string, any>',
+		isOptional: true,
+		description: 'New metadata to update',
+	},
 ]}
 />
 
@@ -304,16 +304,16 @@ Deletes a specific vector entry from an index by its ID.
 
 <PropertiesTable
   content={[
-  {
-    name: 'indexName',
-    type: 'string',
-    description: 'Name of the index containing the vector',
-  },
-  {
-    name: 'id',
-    type: 'string',
-    description: 'ID of the vector entry to delete',
-  },
+	{
+		name: 'indexName',
+		type: 'string',
+		description: 'Name of the index containing the vector',
+	},
+	{
+		name: 'id',
+		type: 'string',
+		description: 'ID of the vector entry to delete',
+	},
 ]}
 />
 
@@ -323,23 +323,23 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
 
 <PropertiesTable
   content={[
-  {
-    name: 'indexName',
-    type: 'string',
-    description: 'Name of the index containing the vectors to delete',
-  },
-  {
-    name: 'ids',
-    type: 'string[]',
-    isOptional: true,
-    description: 'Array of vector IDs to delete (mutually exclusive with filter)',
-  },
-  {
-    name: 'filter',
-    type: 'Record<string, any>',
-    isOptional: true,
-    description: 'Metadata filter to identify vectors to delete (mutually exclusive with ids)',
-  },
+	{
+		name: 'indexName',
+		type: 'string',
+		description: 'Name of the index containing the vectors to delete',
+	},
+	{
+		name: 'ids',
+		type: 'string[]',
+		isOptional: true,
+		description: 'Array of vector IDs to delete (mutually exclusive with filter)',
+	},
+	{
+		name: 'filter',
+		type: 'Record<string, any>',
+		isOptional: true,
+		description: 'Metadata filter to identify vectors to delete (mutually exclusive with ids)',
+	},
 ]}
 />
 
@@ -349,10 +349,10 @@ Query results are returned in this format:
 
 ```typescript
 interface QueryResult {
-  id: string
-  score: number
-  metadata: Record<string, any>
-  vector?: number[] // Only included if includeVector is true
+	id: string
+	score: number
+	metadata: Record<string, any>
+	vector?: number[] // Only included if includeVector is true
 }
 ```
 
@@ -362,21 +362,21 @@ The store throws specific errors for different failure cases:
 
 ```typescript
 try {
-  await store.query({
-    indexName: 'my-collection',
-    queryVector: queryVector,
-  })
+	await store.query({
+		indexName: 'my-collection',
+		queryVector: queryVector,
+	})
 } catch (error) {
-  // Handle specific error cases
-  if (error.message.includes('Invalid index name format')) {
-    console.error(
-      'Index name must start with a letter/underscore and contain only alphanumeric characters',
-    )
-  } else if (error.message.includes('Table not found')) {
-    console.error('The specified index does not exist')
-  } else {
-    console.error('Vector store error:', error.message)
-  }
+	// Handle specific error cases
+	if (error.message.includes('Invalid index name format')) {
+		console.error(
+			'Index name must start with a letter/underscore and contain only alphanumeric characters',
+		)
+	} else if (error.message.includes('Table not found')) {
+		console.error('The specified index does not exist')
+	} else {
+		console.error('Vector store error:', error.message)
+	}
 }
 ```
 
@@ -409,30 +409,30 @@ import { LibSQLStore, LibSQLVector } from '@mastra/libsql'
 import { fastembed } from '@mastra/fastembed'
 
 export const libsqlAgent = new Agent({
-  id: 'libsql-agent',
-  name: 'libSQL Agent',
-  instructions:
-    'You are an AI agent with the ability to automatically recall memories from previous interactions.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  memory: new Memory({
-    storage: new LibSQLStore({
-      id: 'libsql-agent-storage',
-      url: 'file:libsql-agent.db',
-    }),
-    vector: new LibSQLVector({
-      id: 'libsql-agent-vector',
-      url: 'file:libsql-agent.db',
-    }),
-    embedder: fastembed,
-    options: {
-      lastMessages: 10,
-      semanticRecall: {
-        topK: 3,
-        messageRange: 2,
-      },
-      generateTitle: true, // Explicitly enable automatic title generation
-    },
-  }),
+	id: 'libsql-agent',
+	name: 'libSQL Agent',
+	instructions:
+		'You are an AI agent with the ability to automatically recall memories from previous interactions.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	memory: new Memory({
+		storage: new LibSQLStore({
+			id: 'libsql-agent-storage',
+			url: 'file:libsql-agent.db',
+		}),
+		vector: new LibSQLVector({
+			id: 'libsql-agent-vector',
+			url: 'file:libsql-agent.db',
+		}),
+		embedder: fastembed,
+		options: {
+			lastMessages: 10,
+			semanticRecall: {
+				topK: 3,
+				messageRange: 2,
+			},
+			generateTitle: true, // Explicitly enable automatic title generation
+		},
+	}),
 })
 ```
 

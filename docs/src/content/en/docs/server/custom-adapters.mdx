@@ -39,14 +39,14 @@ The class takes three type parameters that represent your framework's types:
 import { MastraServer } from '@mastra/server/server-adapter'
 
 export class MyFrameworkServer extends MastraServer<
-  // Your framework's app type (e.g., FastifyInstance)
-  MyApp,
-  // Your framework's request type (e.g., FastifyRequest)
-  MyRequest,
-  // Your framework's response type (e.g., FastifyReply)
-  MyResponse
+	// Your framework's app type (e.g., FastifyInstance)
+	MyApp,
+	// Your framework's request type (e.g., FastifyRequest)
+	MyRequest,
+	// Your framework's response type (e.g., FastifyReply)
+	MyResponse
 > {
-  // Implement abstract methods
+	// Implement abstract methods
 }
 ```
 
@@ -317,55 +317,55 @@ import { MastraServer, ServerRoute } from '@mastra/server/server-adapter'
 import type { Mastra } from '@mastra/core'
 
 export class MyFrameworkServer extends MastraServer<MyApp, MyRequest, MyResponse> {
-  constructor(options: { app: MyApp; mastra: Mastra; prefix?: string }) {
-    super(options)
-  }
+	constructor(options: { app: MyApp; mastra: Mastra; prefix?: string }) {
+		super(options)
+	}
 
-  registerContextMiddleware(): void {
-    this.app.use('*', (req, res, next) => {
-      res.locals.mastra = this.mastra
-      res.locals.requestContext = this.mergeRequestContext({
-        paramsRequestContext: req.query.requestContext,
-        bodyRequestContext: req.body?.requestContext,
-      })
-      res.locals.tools = this.tools ?? {}
-      res.locals.abortSignal = createAbortSignal(req)
-      next()
-    })
-  }
+	registerContextMiddleware(): void {
+		this.app.use('*', (req, res, next) => {
+			res.locals.mastra = this.mastra
+			res.locals.requestContext = this.mergeRequestContext({
+				paramsRequestContext: req.query.requestContext,
+				bodyRequestContext: req.body?.requestContext,
+			})
+			res.locals.tools = this.tools ?? {}
+			res.locals.abortSignal = createAbortSignal(req)
+			next()
+		})
+	}
 
-  registerAuthMiddleware(): void {
-    const authConfig = this.mastra.getServer()?.auth
-    if (!authConfig) return
-    // ... implement auth middleware
-  }
+	registerAuthMiddleware(): void {
+		const authConfig = this.mastra.getServer()?.auth
+		if (!authConfig) return
+		// ... implement auth middleware
+	}
 
-  async registerRoute(
-    app: MyApp,
-    route: ServerRoute,
-    { prefix }: { prefix?: string },
-  ): Promise<void> {
-    // ... implement route registration
-  }
+	async registerRoute(
+		app: MyApp,
+		route: ServerRoute,
+		{ prefix }: { prefix?: string },
+	): Promise<void> {
+		// ... implement route registration
+	}
 
-  async getParams(route: ServerRoute, request: MyRequest) {
-    return {
-      urlParams: request.params,
-      queryParams: request.query,
-      body: request.body,
-    }
-  }
+	async getParams(route: ServerRoute, request: MyRequest) {
+		return {
+			urlParams: request.params,
+			queryParams: request.query,
+			body: request.body,
+		}
+	}
 
-  async sendResponse(route: ServerRoute, response: MyResponse, result: unknown) {
-    if (route.responseType === 'stream') {
-      return this.stream(route, response, result)
-    }
-    return response.json(result)
-  }
+	async sendResponse(route: ServerRoute, response: MyResponse, result: unknown) {
+		if (route.responseType === 'stream') {
+			return this.stream(route, response, result)
+		}
+		return response.json(result)
+	}
 
-  async stream(route: ServerRoute, response: MyResponse, result: unknown) {
-    // ... implement streaming
-  }
+	async stream(route: ServerRoute, response: MyResponse, result: unknown) {
+		// ... implement streaming
+	}
 }
 ```
 

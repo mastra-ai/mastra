@@ -16,20 +16,20 @@ The `createContentSimilarityScorer()` function accepts a single options object w
 
 <PropertiesTable
   content={[
-  {
-    name: 'ignoreCase',
-    type: 'boolean',
-    required: false,
-    defaultValue: 'true',
-    description: 'Whether to ignore case differences when comparing strings.',
-  },
-  {
-    name: 'ignoreWhitespace',
-    type: 'boolean',
-    required: false,
-    defaultValue: 'true',
-    description: 'Whether to normalize whitespace when comparing strings.',
-  },
+	{
+		name: 'ignoreCase',
+		type: 'boolean',
+		required: false,
+		defaultValue: 'true',
+		description: 'Whether to ignore case differences when comparing strings.',
+	},
+	{
+		name: 'ignoreWhitespace',
+		type: 'boolean',
+		required: false,
+		defaultValue: 'true',
+		description: 'Whether to normalize whitespace when comparing strings.',
+	},
 ]}
 />
 
@@ -39,26 +39,26 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
 
 <PropertiesTable
   content={[
-  {
-    name: 'runId',
-    type: 'string',
-    description: 'The id of the run (optional).',
-  },
-  {
-    name: 'preprocessStepResult',
-    type: 'object',
-    description: 'Object with processed input and output: { processedInput: string, processedOutput: string }',
-  },
-  {
-    name: 'analyzeStepResult',
-    type: 'object',
-    description: 'Object with similarity: { similarity: number }',
-  },
-  {
-    name: 'score',
-    type: 'number',
-    description: 'Similarity score (0-1) where 1 indicates perfect similarity.',
-  },
+	{
+		name: 'runId',
+		type: 'string',
+		description: 'The id of the run (optional).',
+	},
+	{
+		name: 'preprocessStepResult',
+		type: 'object',
+		description: 'Object with processed input and output: { processedInput: string, processedOutput: string }',
+	},
+	{
+		name: 'analyzeStepResult',
+		type: 'object',
+		description: 'Object with similarity: { similarity: number }',
+	},
+	{
+		name: 'score',
+		type: 'number',
+		description: 'Similarity score (0-1) where 1 indicates perfect similarity.',
+	},
 ]}
 />
 
@@ -91,26 +91,26 @@ import { myAgent } from './agent'
 const scorer = createContentSimilarityScorer()
 
 const result = await runEvals({
-  data: [
-    {
-      input: 'Summarize the benefits of TypeScript',
-      groundTruth:
-        'TypeScript provides static typing, better tooling support, and improved code maintainability.',
-    },
-    {
-      input: 'What is machine learning?',
-      groundTruth:
-        'Machine learning is a subset of AI that enables systems to learn from data without explicit programming.',
-    },
-  ],
-  scorers: [scorer],
-  target: myAgent,
-  onItemComplete: ({ scorerResults }) => {
-    console.log({
-      score: scorerResults[scorer.id].score,
-      groundTruth: scorerResults[scorer.id].groundTruth,
-    })
-  },
+	data: [
+		{
+			input: 'Summarize the benefits of TypeScript',
+			groundTruth:
+				'TypeScript provides static typing, better tooling support, and improved code maintainability.',
+		},
+		{
+			input: 'What is machine learning?',
+			groundTruth:
+				'Machine learning is a subset of AI that enables systems to learn from data without explicit programming.',
+		},
+	],
+	scorers: [scorer],
+	target: myAgent,
+	onItemComplete: ({ scorerResults }) => {
+		console.log({
+			score: scorerResults[scorer.id].score,
+			groundTruth: scorerResults[scorer.id].groundTruth,
+		})
+	},
 })
 
 console.log(result.scores)

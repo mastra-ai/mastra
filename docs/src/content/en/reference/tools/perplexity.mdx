@@ -43,26 +43,26 @@ All factory functions accept a `PerplexityClientOptions` object:
 
 <PropertiesTable
   content={[
-  {
-    name: 'apiKey',
-    type: 'string',
-    description:
-      'Perplexity API key. Falls back to the `PERPLEXITY_API_KEY` then `PPLX_API_KEY` environment variables.',
-    isOptional: true,
-  },
-  {
-    name: 'baseUrl',
-    type: 'string',
-    description: 'Override the API base URL.',
-    isOptional: true,
-    defaultValue: "'https://api.perplexity.ai'",
-  },
-  {
-    name: 'fetch',
-    type: 'typeof fetch',
-    description: 'Custom `fetch` implementation. Useful for tests, retries, or instrumentation.',
-    isOptional: true,
-  },
+	{
+		name: 'apiKey',
+		type: 'string',
+		description:
+			'Perplexity API key. Falls back to the `PERPLEXITY_API_KEY` then `PPLX_API_KEY` environment variables.',
+		isOptional: true,
+	},
+	{
+		name: 'baseUrl',
+		type: 'string',
+		description: 'Override the API base URL.',
+		isOptional: true,
+		defaultValue: "'https://api.perplexity.ai'",
+	},
+	{
+		name: 'fetch',
+		type: 'typeof fetch',
+		description: 'Custom `fetch` implementation. Useful for tests, retries, or instrumentation.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -99,42 +99,42 @@ const searchTool = createPerplexitySearchTool()
 
 <PropertiesTable
   content={[
-  {
-    name: 'query',
-    type: 'string',
-    description: 'The search query.',
-  },
-  {
-    name: 'maxResults',
-    type: 'number',
-    description: 'Maximum number of results to return (1-20).',
-    isOptional: true,
-  },
-  {
-    name: 'searchDomainFilter',
-    type: 'string[]',
-    description:
-      'Restrict (or exclude) results by domain. Prefix a domain with `-` to exclude it (for example, `-pinterest.com`). Do not mix allow- and deny-list entries in the same call.',
-    isOptional: true,
-  },
-  {
-    name: 'searchRecencyFilter',
-    type: "'hour' | 'day' | 'week' | 'month' | 'year'",
-    description: 'Only return results from within the given recency window.',
-    isOptional: true,
-  },
-  {
-    name: 'searchAfterDateFilter',
-    type: 'string',
-    description: 'Only return results published on or after this date. Format: m/d/yyyy.',
-    isOptional: true,
-  },
-  {
-    name: 'searchBeforeDateFilter',
-    type: 'string',
-    description: 'Only return results published on or before this date. Format: m/d/yyyy.',
-    isOptional: true,
-  },
+	{
+		name: 'query',
+		type: 'string',
+		description: 'The search query.',
+	},
+	{
+		name: 'maxResults',
+		type: 'number',
+		description: 'Maximum number of results to return (1-20).',
+		isOptional: true,
+	},
+	{
+		name: 'searchDomainFilter',
+		type: 'string[]',
+		description:
+			'Restrict (or exclude) results by domain. Prefix a domain with `-` to exclude it (for example, `-pinterest.com`). Do not mix allow- and deny-list entries in the same call.',
+		isOptional: true,
+	},
+	{
+		name: 'searchRecencyFilter',
+		type: "'hour' | 'day' | 'week' | 'month' | 'year'",
+		description: 'Only return results from within the given recency window.',
+		isOptional: true,
+	},
+	{
+		name: 'searchAfterDateFilter',
+		type: 'string',
+		description: 'Only return results published on or after this date. Format: m/d/yyyy.',
+		isOptional: true,
+	},
+	{
+		name: 'searchBeforeDateFilter',
+		type: 'string',
+		description: 'Only return results published on or before this date. Format: m/d/yyyy.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -142,27 +142,27 @@ const searchTool = createPerplexitySearchTool()
 
 <PropertiesTable
   content={[
-  {
-    name: 'query',
-    type: 'string',
-    description: 'The original search query.',
-  },
-  {
-    name: 'results',
-    type: 'SearchResult[]',
-    description: 'Array of search results.',
-    properties: [
-      {
-        type: 'SearchResult',
-        parameters: [
-          { name: 'title', type: 'string', description: 'Result title.' },
-          { name: 'url', type: 'string', description: 'Result URL.' },
-          { name: 'snippet', type: 'string', description: 'Content snippet.' },
-          { name: 'date', type: 'string', description: 'Publication date when available.', isOptional: true },
-        ],
-      },
-    ],
-  },
+	{
+		name: 'query',
+		type: 'string',
+		description: 'The original search query.',
+	},
+	{
+		name: 'results',
+		type: 'SearchResult[]',
+		description: 'Array of search results.',
+		properties: [
+			{
+				type: 'SearchResult',
+				parameters: [
+					{ name: 'title', type: 'string', description: 'Result title.' },
+					{ name: 'url', type: 'string', description: 'Result URL.' },
+					{ name: 'snippet', type: 'string', description: 'Content snippet.' },
+					{ name: 'date', type: 'string', description: 'Publication date when available.', isOptional: true },
+				],
+			},
+		],
+	},
 ]}
 />
 
@@ -175,14 +175,14 @@ import { Agent } from '@mastra/core/agent'
 import { createPerplexitySearchTool } from '@mastra/perplexity'
 
 const agent = new Agent({
-  id: 'research-agent',
-  name: 'Research Agent',
-  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
-  instructions:
-    'You are a research assistant. Use the perplexity-search tool to find up-to-date information from the web before answering.',
-  tools: {
-    search: createPerplexitySearchTool(),
-  },
+	id: 'research-agent',
+	name: 'Research Agent',
+	model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+	instructions:
+		'You are a research assistant. Use the perplexity-search tool to find up-to-date information from the web before answering.',
+	tools: {
+		search: createPerplexitySearchTool(),
+	},
 })
 ```
 

@@ -56,22 +56,22 @@ import { Workspace } from '@mastra/core/workspace'
 import { DaytonaSandbox } from '@mastra/daytona'
 
 const workspace = new Workspace({
-  sandbox: new DaytonaSandbox({
-    language: 'typescript',
-    timeout: 120_000,
-  }),
+	sandbox: new DaytonaSandbox({
+		language: 'typescript',
+		timeout: 120_000,
+	}),
 })
 
 const agent = new Agent({
-  id: 'code-agent',
-  name: 'Code Agent',
-  instructions: 'You are a coding assistant working in this workspace.',
-  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
-  workspace,
+	id: 'code-agent',
+	name: 'Code Agent',
+	instructions: 'You are a coding assistant working in this workspace.',
+	model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+	workspace,
 })
 
 const response = await agent.generate(
-  'Print "Hello, world!" and show the current working directory.',
+	'Print "Hello, world!" and show the current working directory.',
 )
 
 console.log(response.text)
@@ -91,10 +91,10 @@ Use a pre-built snapshot to skip environment setup time:
 
 ```typescript
 const workspace = new Workspace({
-  sandbox: new DaytonaSandbox({
-    snapshot: 'my-snapshot-id',
-    timeout: 60_000,
-  }),
+	sandbox: new DaytonaSandbox({
+		snapshot: 'my-snapshot-id',
+		timeout: 60_000,
+	}),
 })
 ```
 
@@ -104,11 +104,11 @@ Use a custom Docker image with specific resource allocation:
 
 ```typescript
 const workspace = new Workspace({
-  sandbox: new DaytonaSandbox({
-    image: 'node:20-slim',
-    resources: { cpu: 2, memory: 4, disk: 6 },
-    language: 'typescript',
-  }),
+	sandbox: new DaytonaSandbox({
+		image: 'node:20-slim',
+		resources: { cpu: 2, memory: 4, disk: 6 },
+		language: 'typescript',
+	}),
 })
 ```
 
@@ -118,10 +118,10 @@ For one-shot tasks — sandbox is deleted immediately on stop:
 
 ```typescript
 const workspace = new Workspace({
-  sandbox: new DaytonaSandbox({
-    ephemeral: true,
-    language: 'python',
-  }),
+	sandbox: new DaytonaSandbox({
+		ephemeral: true,
+		language: 'python',
+	}),
 })
 ```
 
@@ -131,8 +131,8 @@ Stream command output in real time via `onStdout` and `onStderr` callbacks:
 
 ```typescript
 await sandbox.executeCommand('bash', ['-c', 'for i in 1 2 3; do echo "line $i"; sleep 1; done'], {
-  onStdout: chunk => process.stdout.write(chunk),
-  onStderr: chunk => process.stderr.write(chunk),
+	onStdout: chunk => process.stdout.write(chunk),
+	onStderr: chunk => process.stderr.write(chunk),
 })
 ```
 
@@ -174,21 +174,21 @@ import { GCSFilesystem } from '@mastra/gcs'
 import { S3Filesystem } from '@mastra/s3'
 
 const workspace = new Workspace({
-  mounts: {
-    '/s3-data': new S3Filesystem({
-      bucket: process.env.S3_BUCKET!,
-      region: 'auto',
-      accessKeyId: process.env.S3_ACCESS_KEY_ID,
-      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
-      endpoint: process.env.S3_ENDPOINT, // e.g. https://<account-id>.r2.cloudflarestorage.com
-    }),
-    '/gcs-data': new GCSFilesystem({
-      bucket: process.env.GCS_BUCKET!,
-      projectId: 'my-project-id',
-      credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY!),
-    }),
-  },
-  sandbox: new DaytonaSandbox({ language: 'python' }),
+	mounts: {
+		'/s3-data': new S3Filesystem({
+			bucket: process.env.S3_BUCKET!,
+			region: 'auto',
+			accessKeyId: process.env.S3_ACCESS_KEY_ID,
+			secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
+			endpoint: process.env.S3_ENDPOINT, // e.g. https://<account-id>.r2.cloudflarestorage.com
+		}),
+		'/gcs-data': new GCSFilesystem({
+			bucket: process.env.GCS_BUCKET!,
+			projectId: 'my-project-id',
+			credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY!),
+		}),
+	},
+	sandbox: new DaytonaSandbox({ language: 'python' }),
 })
 ```
 
@@ -204,13 +204,13 @@ Mount manually at any point after the sandbox has started:
 import { S3Filesystem } from '@mastra/s3'
 
 await sandbox.mount(
-  new S3Filesystem({
-    bucket: process.env.S3_BUCKET!,
-    region: 'us-east-1',
-    accessKeyId: process.env.S3_ACCESS_KEY_ID,
-    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
-  }),
-  '/data',
+	new S3Filesystem({
+		bucket: process.env.S3_BUCKET!,
+		region: 'us-east-1',
+		accessKeyId: process.env.S3_ACCESS_KEY_ID,
+		secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
+	}),
+	'/data',
 )
 ```
 
@@ -220,14 +220,14 @@ await sandbox.mount(
 import { S3Filesystem } from '@mastra/s3'
 
 await sandbox.mount(
-  new S3Filesystem({
-    bucket: process.env.S3_BUCKET!,
-    region: 'auto',
-    accessKeyId: process.env.S3_ACCESS_KEY_ID,
-    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
-    endpoint: process.env.S3_ENDPOINT, // e.g. https://<account-id>.r2.cloudflarestorage.com
-  }),
-  '/data',
+	new S3Filesystem({
+		bucket: process.env.S3_BUCKET!,
+		region: 'auto',
+		accessKeyId: process.env.S3_ACCESS_KEY_ID,
+		secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
+		endpoint: process.env.S3_ENDPOINT, // e.g. https://<account-id>.r2.cloudflarestorage.com
+	}),
+	'/data',
 )
 ```
 
@@ -237,12 +237,12 @@ await sandbox.mount(
 import { GCSFilesystem } from '@mastra/gcs'
 
 await sandbox.mount(
-  new GCSFilesystem({
-    bucket: process.env.GCS_BUCKET!,
-    projectId: 'my-project-id',
-    credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY!),
-  }),
-  '/data',
+	new GCSFilesystem({
+		bucket: process.env.GCS_BUCKET!,
+		projectId: 'my-project-id',
+		credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY!),
+	}),
+	'/data',
 )
 ```
 
@@ -252,10 +252,10 @@ Restrict outbound network access:
 
 ```typescript
 const workspace = new Workspace({
-  sandbox: new DaytonaSandbox({
-    networkBlockAll: true,
-    networkAllowList: '10.0.0.0/8,192.168.0.0/16',
-  }),
+	sandbox: new DaytonaSandbox({
+		networkBlockAll: true,
+		networkAllowList: '10.0.0.0/8,192.168.0.0/16',
+	}),
 })
 ```
 
@@ -263,147 +263,147 @@ const workspace = new Workspace({
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Unique identifier for this sandbox instance.',
-    isOptional: true,
-    defaultValue: 'Auto-generated',
-  },
-  {
-    name: 'apiKey',
-    type: 'string',
-    description: 'Daytona API key for authentication. Falls back to DAYTONA_API_KEY environment variable.',
-    isOptional: true,
-  },
-  {
-    name: 'apiUrl',
-    type: 'string',
-    description: 'Daytona API endpoint. Falls back to DAYTONA_API_URL environment variable.',
-    isOptional: true,
-  },
-  {
-    name: 'target',
-    type: 'string',
-    description: 'Runner region. Falls back to DAYTONA_TARGET environment variable.',
-    isOptional: true,
-  },
-  {
-    name: 'timeout',
-    type: 'number',
-    description: 'Default execution timeout in milliseconds.',
-    isOptional: true,
-    defaultValue: '300000 (5 minutes)',
-  },
-  {
-    name: 'language',
-    type: "'typescript' | 'javascript' | 'python'",
-    description: 'Runtime language for the sandbox.',
-    isOptional: true,
-    defaultValue: "'typescript'",
-  },
-  {
-    name: 'snapshot',
-    type: 'string',
-    description: 'Pre-built snapshot ID to create the sandbox from. Takes precedence over image.',
-    isOptional: true,
-  },
-  {
-    name: 'image',
-    type: 'string',
-    description:
-      'Docker image for sandbox creation. Triggers image-based creation when set. Can be combined with resources. Ignored when snapshot is set.',
-    isOptional: true,
-  },
-  {
-    name: 'resources',
-    type: '{ cpu?: number; memory?: number; disk?: number }',
-    description:
-      'Resource allocation for the sandbox (CPU cores, memory in GiB, disk in GiB). Only used when image is set.',
-    isOptional: true,
-  },
-  {
-    name: 'env',
-    type: 'Record<string, string>',
-    description: 'Environment variables to set in the sandbox.',
-    isOptional: true,
-    defaultValue: '{}',
-  },
-  {
-    name: 'labels',
-    type: 'Record<string, string>',
-    description: 'Custom metadata labels.',
-    isOptional: true,
-    defaultValue: '{}',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: 'Sandbox display name.',
-    isOptional: true,
-    defaultValue: 'Sandbox id',
-  },
-  {
-    name: 'user',
-    type: 'string',
-    description: 'OS user to run commands as.',
-    isOptional: true,
-    defaultValue: "'daytona'",
-  },
-  {
-    name: 'public',
-    type: 'boolean',
-    description: 'Make port previews public.',
-    isOptional: true,
-    defaultValue: 'false',
-  },
-  {
-    name: 'ephemeral',
-    type: 'boolean',
-    description: 'Delete sandbox immediately on stop.',
-    isOptional: true,
-    defaultValue: 'false',
-  },
-  {
-    name: 'autoStopInterval',
-    type: 'number',
-    description: 'Auto-stop interval in minutes. Set to 0 to disable.',
-    isOptional: true,
-    defaultValue: '15',
-  },
-  {
-    name: 'autoArchiveInterval',
-    type: 'number',
-    description: 'Auto-archive interval in minutes. Set to 0 for the maximum interval (7 days).',
-    isOptional: true,
-    defaultValue: '7 days',
-  },
-  {
-    name: 'autoDeleteInterval',
-    type: 'number',
-    description: 'Auto-delete interval in minutes. Negative values disable auto-delete. Set to 0 to delete on stop.',
-    isOptional: true,
-    defaultValue: 'disabled',
-  },
-  {
-    name: 'volumes',
-    type: 'Array<{ volumeId: string; mountPath: string }>',
-    description: 'Daytona volumes to attach at sandbox creation time.',
-    isOptional: true,
-  },
-  {
-    name: 'networkBlockAll',
-    type: 'boolean',
-    description: 'Block all outbound network access from the sandbox.',
-    isOptional: true,
-    defaultValue: 'false',
-  },
-  {
-    name: 'networkAllowList',
-    type: 'string',
-    description: 'Comma-separated list of allowed CIDR addresses when network access is restricted.',
-    isOptional: true,
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Unique identifier for this sandbox instance.',
+		isOptional: true,
+		defaultValue: 'Auto-generated',
+	},
+	{
+		name: 'apiKey',
+		type: 'string',
+		description: 'Daytona API key for authentication. Falls back to DAYTONA_API_KEY environment variable.',
+		isOptional: true,
+	},
+	{
+		name: 'apiUrl',
+		type: 'string',
+		description: 'Daytona API endpoint. Falls back to DAYTONA_API_URL environment variable.',
+		isOptional: true,
+	},
+	{
+		name: 'target',
+		type: 'string',
+		description: 'Runner region. Falls back to DAYTONA_TARGET environment variable.',
+		isOptional: true,
+	},
+	{
+		name: 'timeout',
+		type: 'number',
+		description: 'Default execution timeout in milliseconds.',
+		isOptional: true,
+		defaultValue: '300000 (5 minutes)',
+	},
+	{
+		name: 'language',
+		type: "'typescript' | 'javascript' | 'python'",
+		description: 'Runtime language for the sandbox.',
+		isOptional: true,
+		defaultValue: "'typescript'",
+	},
+	{
+		name: 'snapshot',
+		type: 'string',
+		description: 'Pre-built snapshot ID to create the sandbox from. Takes precedence over image.',
+		isOptional: true,
+	},
+	{
+		name: 'image',
+		type: 'string',
+		description:
+			'Docker image for sandbox creation. Triggers image-based creation when set. Can be combined with resources. Ignored when snapshot is set.',
+		isOptional: true,
+	},
+	{
+		name: 'resources',
+		type: '{ cpu?: number; memory?: number; disk?: number }',
+		description:
+			'Resource allocation for the sandbox (CPU cores, memory in GiB, disk in GiB). Only used when image is set.',
+		isOptional: true,
+	},
+	{
+		name: 'env',
+		type: 'Record<string, string>',
+		description: 'Environment variables to set in the sandbox.',
+		isOptional: true,
+		defaultValue: '{}',
+	},
+	{
+		name: 'labels',
+		type: 'Record<string, string>',
+		description: 'Custom metadata labels.',
+		isOptional: true,
+		defaultValue: '{}',
+	},
+	{
+		name: 'name',
+		type: 'string',
+		description: 'Sandbox display name.',
+		isOptional: true,
+		defaultValue: 'Sandbox id',
+	},
+	{
+		name: 'user',
+		type: 'string',
+		description: 'OS user to run commands as.',
+		isOptional: true,
+		defaultValue: "'daytona'",
+	},
+	{
+		name: 'public',
+		type: 'boolean',
+		description: 'Make port previews public.',
+		isOptional: true,
+		defaultValue: 'false',
+	},
+	{
+		name: 'ephemeral',
+		type: 'boolean',
+		description: 'Delete sandbox immediately on stop.',
+		isOptional: true,
+		defaultValue: 'false',
+	},
+	{
+		name: 'autoStopInterval',
+		type: 'number',
+		description: 'Auto-stop interval in minutes. Set to 0 to disable.',
+		isOptional: true,
+		defaultValue: '15',
+	},
+	{
+		name: 'autoArchiveInterval',
+		type: 'number',
+		description: 'Auto-archive interval in minutes. Set to 0 for the maximum interval (7 days).',
+		isOptional: true,
+		defaultValue: '7 days',
+	},
+	{
+		name: 'autoDeleteInterval',
+		type: 'number',
+		description: 'Auto-delete interval in minutes. Negative values disable auto-delete. Set to 0 to delete on stop.',
+		isOptional: true,
+		defaultValue: 'disabled',
+	},
+	{
+		name: 'volumes',
+		type: 'Array<{ volumeId: string; mountPath: string }>',
+		description: 'Daytona volumes to attach at sandbox creation time.',
+		isOptional: true,
+	},
+	{
+		name: 'networkBlockAll',
+		type: 'boolean',
+		description: 'Block all outbound network access from the sandbox.',
+		isOptional: true,
+		defaultValue: 'false',
+	},
+	{
+		name: 'networkAllowList',
+		type: 'string',
+		description: 'Comma-separated list of allowed CIDR addresses when network access is restricted.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -411,38 +411,38 @@ const workspace = new Workspace({
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Sandbox instance identifier.',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: "Provider name ('DaytonaSandbox').",
-  },
-  {
-    name: 'provider',
-    type: 'string',
-    description: "Provider identifier ('daytona').",
-  },
-  {
-    name: 'status',
-    type: 'ProviderStatus',
-    description: "'pending' | 'initializing' | 'ready' | 'stopped' | 'destroyed' | 'error'",
-  },
-  {
-    name: 'instance',
-    type: 'Sandbox',
-    description:
-      'The underlying Daytona Sandbox instance. Throws SandboxNotReadyError if the sandbox has not been started.',
-  },
-  {
-    name: 'processes',
-    type: 'DaytonaProcessManager',
-    description:
-      'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Sandbox instance identifier.',
+	},
+	{
+		name: 'name',
+		type: 'string',
+		description: "Provider name ('DaytonaSandbox').",
+	},
+	{
+		name: 'provider',
+		type: 'string',
+		description: "Provider identifier ('daytona').",
+	},
+	{
+		name: 'status',
+		type: 'ProviderStatus',
+		description: "'pending' | 'initializing' | 'ready' | 'stopped' | 'destroyed' | 'error'",
+	},
+	{
+		name: 'instance',
+		type: 'Sandbox',
+		description:
+			'The underlying Daytona Sandbox instance. Throws SandboxNotReadyError if the sandbox has not been started.',
+	},
+	{
+		name: 'processes',
+		type: 'DaytonaProcessManager',
+		description:
+			'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
+	},
 ]}
 />
 
@@ -456,8 +456,8 @@ await sandbox.start()
 
 // Spawn a background process
 const handle = await sandbox.processes.spawn('node server.js', {
-  env: { PORT: '3000' },
-  onStdout: data => console.log(data),
+	env: { PORT: '3000' },
+	onStdout: data => console.log(data),
 })
 
 // Interact with the process
@@ -512,26 +512,26 @@ By default, `s3fs` and `gcsfuse` are installed at first mount via `apt`, which a
 import { Daytona, Image } from '@daytonaio/sdk'
 
 const template = Image.base('daytonaio/sandbox')
-  .runCommands('sudo apt-get update -qq')
-  .runCommands('sudo apt-get install -y s3fs')
-  // gcsfuse requires the Google Cloud apt repository
-  .runCommands(
-    'sudo mkdir -p /etc/apt/keyrings && ' +
-      'curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg -o /tmp/gcsfuse-key.gpg && ' +
-      'sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/gcsfuse.gpg /tmp/gcsfuse-key.gpg && ' +
-      // Use gcsfuse-jammy for Ubuntu, gcsfuse-bookworm for Debian
-      'echo "deb [signed-by=/etc/apt/keyrings/gcsfuse.gpg] https://packages.cloud.google.com/apt gcsfuse-jammy main" | sudo tee /etc/apt/sources.list.d/gcsfuse.list',
-  )
-  .runCommands('sudo apt-get update -qq && sudo apt-get install -y gcsfuse')
+	.runCommands('sudo apt-get update -qq')
+	.runCommands('sudo apt-get install -y s3fs')
+	// gcsfuse requires the Google Cloud apt repository
+	.runCommands(
+		'sudo mkdir -p /etc/apt/keyrings && ' +
+			'curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg -o /tmp/gcsfuse-key.gpg && ' +
+			'sudo gpg --batch --yes --dearmor -o /etc/apt/keyrings/gcsfuse.gpg /tmp/gcsfuse-key.gpg && ' +
+			// Use gcsfuse-jammy for Ubuntu, gcsfuse-bookworm for Debian
+			'echo "deb [signed-by=/etc/apt/keyrings/gcsfuse.gpg] https://packages.cloud.google.com/apt gcsfuse-jammy main" | sudo tee /etc/apt/sources.list.d/gcsfuse.list',
+	)
+	.runCommands('sudo apt-get update -qq && sudo apt-get install -y gcsfuse')
 
 const daytona = new Daytona()
 
 await daytona.snapshot.create(
-  {
-    name: 'cloud-fs-mounting',
-    image: template,
-  },
-  { onLogs: console.log },
+	{
+		name: 'cloud-fs-mounting',
+		image: template,
+	},
+	{ onLogs: console.log },
 )
 ```
 
@@ -552,11 +552,11 @@ import { Daytona, Image } from '@daytonaio/sdk'
 const daytona = new Daytona()
 
 await daytona.snapshot.create(
-  {
-    name: 'cloud-fs-mounting',
-    image: Image.fromDockerfile('./Dockerfile'),
-  },
-  { onLogs: console.log },
+	{
+		name: 'cloud-fs-mounting',
+		image: Image.fromDockerfile('./Dockerfile'),
+	},
+	{ onLogs: console.log },
 )
 ```
 
@@ -564,15 +564,15 @@ Then use the snapshot name in your sandbox config:
 
 ```typescript
 const workspace = new Workspace({
-  mounts: {
-    '/s3-data': new S3Filesystem({
-      /* ... */
-    }),
-    '/gcs-data': new GCSFilesystem({
-      /* ... */
-    }),
-  },
-  sandbox: new DaytonaSandbox({ snapshot: 'cloud-fs-mounting' }),
+	mounts: {
+		'/s3-data': new S3Filesystem({
+			/* ... */
+		}),
+		'/gcs-data': new GCSFilesystem({
+			/* ... */
+		}),
+	},
+	sandbox: new DaytonaSandbox({ snapshot: 'cloud-fs-mounting' }),
 })
 ```
 

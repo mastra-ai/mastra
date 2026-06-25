@@ -12,15 +12,15 @@ import { getTransactionsTool } from '../tools/get-transactions-tool'
 
 ```typescript
 export const financialAgent = new Agent({
-  name: 'Financial Assistant Agent',
-  instructions: `ROLE DEFINITION
+	name: 'Financial Assistant Agent',
+	instructions: `ROLE DEFINITION
   // ... existing instructions ...
   
   TOOLS
   - Use the getTransactions tool to fetch financial transaction data.
   - Analyze the transaction data to answer user questions about their spending.`,
-  model: 'openai/gpt-5.4',
-  tools: { getTransactionsTool }, // Add our tool here
+	model: 'openai/gpt-5.4',
+	tools: { getTransactionsTool }, // Add our tool here
 })
 ```
 

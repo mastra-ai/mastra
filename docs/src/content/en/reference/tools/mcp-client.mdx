@@ -28,26 +28,26 @@ constructor({
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    isOptional: true,
-    description:
-      'Optional unique identifier for the configuration instance. Use this to prevent memory leaks when creating multiple instances with identical configurations.',
-  },
-  {
-    name: 'servers',
-    type: 'Record<string, MastraMCPServerDefinition>',
-    description:
-      'A map of server configurations, where each key is a unique server identifier and the value is the server configuration.',
-  },
-  {
-    name: 'timeout',
-    type: 'number',
-    isOptional: true,
-    defaultValue: '60000',
-    description: 'Global timeout value in milliseconds for all servers unless overridden in individual server configs.',
-  },
+	{
+		name: 'id',
+		type: 'string',
+		isOptional: true,
+		description:
+			'Optional unique identifier for the configuration instance. Use this to prevent memory leaks when creating multiple instances with identical configurations.',
+	},
+	{
+		name: 'servers',
+		type: 'Record<string, MastraMCPServerDefinition>',
+		description:
+			'A map of server configurations, where each key is a unique server identifier and the value is the server configuration.',
+	},
+	{
+		name: 'timeout',
+		type: 'number',
+		isOptional: true,
+		defaultValue: '60000',
+		description: 'Global timeout value in milliseconds for all servers unless overridden in individual server configs.',
+	},
 ]}
 />
 
@@ -62,104 +62,104 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
 
 <PropertiesTable
   content={[
-  {
-    name: 'command',
-    type: 'string',
-    isOptional: true,
-    description: 'For Stdio servers: The command to execute.',
-  },
-  {
-    name: 'args',
-    type: 'string[]',
-    isOptional: true,
-    description: 'For Stdio servers: Arguments to pass to the command.',
-  },
-  {
-    name: 'env',
-    type: 'Record<string, string>',
-    isOptional: true,
-    description: 'For Stdio servers: Environment variables to set for the command.',
-  },
-  {
-    name: 'url',
-    type: 'URL',
-    isOptional: true,
-    description: 'For HTTP servers (Streamable HTTP or SSE): The URL of the server.',
-  },
-  {
-    name: 'requestInit',
-    type: 'RequestInit',
-    isOptional: true,
-    description: 'For HTTP servers: Request configuration for the fetch API.',
-  },
-  {
-    name: 'eventSourceInit',
-    type: 'EventSourceInit',
-    isOptional: true,
-    description:
-      'For SSE fallback: Custom fetch configuration for SSE connections. Required when using custom headers with SSE.',
-  },
-  {
-    name: 'fetch',
-    type: 'MastraFetchLike',
-    isOptional: true,
-    description:
-      'For HTTP servers: Custom fetch implementation used for all network requests. Receives an optional third `requestContext` parameter containing request-scoped data (e.g., authentication cookies, bearer tokens) from the incoming request. When provided, this function will be used for all HTTP requests, allowing you to add dynamic authentication headers, forward request-scoped credentials to the MCP server, customize request behavior per-request, or intercept and modify requests/responses. When `fetch` is provided, `requestInit`, `eventSourceInit`, and `authProvider` become optional, as you can handle these concerns within your custom fetch function.',
-  },
-  {
-    name: 'logger',
-    type: 'LogHandler',
-    isOptional: true,
-    description: 'Optional additional handler for logging.',
-  },
-  {
-    name: 'timeout',
-    type: 'number',
-    isOptional: true,
-    description: 'Server-specific timeout in milliseconds.',
-  },
-  {
-    name: 'capabilities',
-    type: 'ClientCapabilities',
-    isOptional: true,
-    description: 'Server-specific capabilities configuration.',
-  },
-  {
-    name: 'authProvider',
-    type: 'OAuthClientProvider',
-    isOptional: true,
-    description:
-      'For HTTP servers: OAuth authentication provider for automatic token refresh and OAuth flow management. Use MCPOAuthClientProvider for a ready-to-use implementation.',
-  },
-  {
-    name: 'enableServerLogs',
-    type: 'boolean',
-    isOptional: true,
-    defaultValue: 'true',
-    description: 'Whether to enable logging for this server.',
-  },
-  {
-    name: 'forwardInstructions',
-    type: 'boolean',
-    isOptional: true,
-    defaultValue: 'false',
-    description:
-      "Whether to append instructions advertised by this MCP server to an agent's system prompt when the agent uses this server's tools. Disabled by default; enable it only for servers you trust, since the instructions are injected into the agent's system prompt.",
-  },
-  {
-    name: 'instructionsMaxLength',
-    type: 'number',
-    isOptional: true,
-    defaultValue: '512',
-    description: "Maximum number of server instruction characters to append to an agent's system prompt.",
-  },
-  {
-    name: 'requireToolApproval',
-    type: 'boolean | (params: RequireToolApprovalContext) => boolean | Promise<boolean>',
-    isOptional: true,
-    description:
-      'Require human approval before executing tools from this server. When set to `true`, all tools require approval. When set to a function, the function is called with the tool name, arguments, request context, and any tool annotations advertised by the server to dynamically decide whether approval is needed.',
-  },
+	{
+		name: 'command',
+		type: 'string',
+		isOptional: true,
+		description: 'For Stdio servers: The command to execute.',
+	},
+	{
+		name: 'args',
+		type: 'string[]',
+		isOptional: true,
+		description: 'For Stdio servers: Arguments to pass to the command.',
+	},
+	{
+		name: 'env',
+		type: 'Record<string, string>',
+		isOptional: true,
+		description: 'For Stdio servers: Environment variables to set for the command.',
+	},
+	{
+		name: 'url',
+		type: 'URL',
+		isOptional: true,
+		description: 'For HTTP servers (Streamable HTTP or SSE): The URL of the server.',
+	},
+	{
+		name: 'requestInit',
+		type: 'RequestInit',
+		isOptional: true,
+		description: 'For HTTP servers: Request configuration for the fetch API.',
+	},
+	{
+		name: 'eventSourceInit',
+		type: 'EventSourceInit',
+		isOptional: true,
+		description:
+			'For SSE fallback: Custom fetch configuration for SSE connections. Required when using custom headers with SSE.',
+	},
+	{
+		name: 'fetch',
+		type: 'MastraFetchLike',
+		isOptional: true,
+		description:
+			'For HTTP servers: Custom fetch implementation used for all network requests. Receives an optional third `requestContext` parameter containing request-scoped data (e.g., authentication cookies, bearer tokens) from the incoming request. When provided, this function will be used for all HTTP requests, allowing you to add dynamic authentication headers, forward request-scoped credentials to the MCP server, customize request behavior per-request, or intercept and modify requests/responses. When `fetch` is provided, `requestInit`, `eventSourceInit`, and `authProvider` become optional, as you can handle these concerns within your custom fetch function.',
+	},
+	{
+		name: 'logger',
+		type: 'LogHandler',
+		isOptional: true,
+		description: 'Optional additional handler for logging.',
+	},
+	{
+		name: 'timeout',
+		type: 'number',
+		isOptional: true,
+		description: 'Server-specific timeout in milliseconds.',
+	},
+	{
+		name: 'capabilities',
+		type: 'ClientCapabilities',
+		isOptional: true,
+		description: 'Server-specific capabilities configuration.',
+	},
+	{
+		name: 'authProvider',
+		type: 'OAuthClientProvider',
+		isOptional: true,
+		description:
+			'For HTTP servers: OAuth authentication provider for automatic token refresh and OAuth flow management. Use MCPOAuthClientProvider for a ready-to-use implementation.',
+	},
+	{
+		name: 'enableServerLogs',
+		type: 'boolean',
+		isOptional: true,
+		defaultValue: 'true',
+		description: 'Whether to enable logging for this server.',
+	},
+	{
+		name: 'forwardInstructions',
+		type: 'boolean',
+		isOptional: true,
+		defaultValue: 'false',
+		description:
+			"Whether to append instructions advertised by this MCP server to an agent's system prompt when the agent uses this server's tools. Disabled by default; enable it only for servers you trust, since the instructions are injected into the agent's system prompt.",
+	},
+	{
+		name: 'instructionsMaxLength',
+		type: 'number',
+		isOptional: true,
+		defaultValue: '512',
+		description: "Maximum number of server instruction characters to append to an agent's system prompt.",
+	},
+	{
+		name: 'requireToolApproval',
+		type: 'boolean | (params: RequireToolApprovalContext) => boolean | Promise<boolean>',
+		isOptional: true,
+		description:
+			'Require human approval before executing tools from this server. When set to `true`, all tools require approval. When set to a function, the function is called with the tool name, arguments, request context, and any tool annotations advertised by the server to dynamically decide whether approval is needed.',
+	},
 ]}
 />
 
@@ -173,12 +173,12 @@ Set `requireToolApproval` to `true` to require approval for every tool on the se
 
 ```typescript
 const mcp = new MCPClient({
-  servers: {
-    github: {
-      url: new URL('http://localhost:3000/mcp'),
-      requireToolApproval: true,
-    },
-  },
+	servers: {
+		github: {
+			url: new URL('http://localhost:3000/mcp'),
+			requireToolApproval: true,
+		},
+	},
 })
 ```
 
@@ -188,19 +188,19 @@ Pass a function to decide per-call whether approval is needed. The function rece
 
 ```typescript
 const mcp = new MCPClient({
-  servers: {
-    github: {
-      url: new URL('http://localhost:3000/mcp'),
-      requireToolApproval: ({ toolName, args, requestContext }) => {
-        // Read-only tools don't need approval
-        if (toolName === 'list_repos') return false
-        // Destructive tools with force flag always need approval
-        if (toolName === 'delete_repo') return args.force === true
-        // Non-admin users need approval for everything else
-        return requestContext?.userRole !== 'admin'
-      },
-    },
-  },
+	servers: {
+		github: {
+			url: new URL('http://localhost:3000/mcp'),
+			requireToolApproval: ({ toolName, args, requestContext }) => {
+				// Read-only tools don't need approval
+				if (toolName === 'list_repos') return false
+				// Destructive tools with force flag always need approval
+				if (toolName === 'delete_repo') return args.force === true
+				// Non-admin users need approval for everything else
+				return requestContext?.userRole !== 'admin'
+			},
+		},
+	},
 })
 ```
 
@@ -212,18 +212,18 @@ If you trust the MCP server, you can use its [tool annotations](https://modelcon
 
 ```typescript
 const mcp = new MCPClient({
-  servers: {
-    github: {
-      url: new URL('http://localhost:3000/mcp'),
-      requireToolApproval: ({ annotations }) => {
-        // Skip approval for tools the server has marked read-only
-        if (annotations?.readOnlyHint) return false
-        // Always require approval for destructive tools
-        if (annotations?.destructiveHint) return true
-        return true
-      },
-    },
-  },
+	servers: {
+		github: {
+			url: new URL('http://localhost:3000/mcp'),
+			requireToolApproval: ({ annotations }) => {
+				// Skip approval for tools the server has marked read-only
+				if (annotations?.readOnlyHint) return false
+				// Always require approval for destructive tools
+				if (annotations?.destructiveHint) return true
+				return true
+			},
+		},
+	},
 })
 ```
 
@@ -239,21 +239,21 @@ The guidance is grouped by server name and truncated to `instructionsMaxLength` 
 
 ```typescript
 const mcp = new MCPClient({
-  servers: {
-    db: {
-      url: new URL('http://localhost:3000/mcp'),
-      forwardInstructions: true,
-      instructionsMaxLength: 512,
-    },
-  },
+	servers: {
+		db: {
+			url: new URL('http://localhost:3000/mcp'),
+			forwardInstructions: true,
+			instructionsMaxLength: 512,
+		},
+	},
 })
 
 const agent = new Agent({
-  id: 'db-agent',
-  name: 'DB Agent',
-  instructions: 'Help with database changes.',
-  model,
-  tools: await mcp.listTools(),
+	id: 'db-agent',
+	name: 'DB Agent',
+	instructions: 'Help with database changes.',
+	model,
+	tools: await mcp.listTools(),
 })
 ```
 
@@ -290,7 +290,7 @@ Intended to be passed dynamically into the generate or stream method.
 
 ```typescript
 const res = await agent.stream(prompt, {
-  toolsets: await mcp.listToolsets(),
+	toolsets: await mcp.listToolsets(),
 })
 ```
 
@@ -334,18 +334,18 @@ import { Mastra } from '@mastra/core/mastra'
 import { MCPClient } from '@mastra/mcp'
 
 const mcpClient = new MCPClient({
-  servers: {
-    'color-mixer': {
-      command: 'node',
-      args: ['path/to/color-mixer-server.js'],
-    },
-  },
+	servers: {
+		'color-mixer': {
+			command: 'node',
+			args: ['path/to/color-mixer-server.js'],
+		},
+	},
 })
 
 export const mastra = new Mastra({
-  mcpServers: {
-    ...(await mcpClient.toMCPServerProxies()),
-  },
+	mcpServers: {
+		...(await mcpClient.toMCPServerProxies()),
+	},
 })
 ```
 
@@ -357,7 +357,7 @@ The `MCPClient` instance has a `resources` property that provides access to reso
 
 ```typescript
 const mcpClient = new MCPClient({
-  /* ...servers configuration... */
+	/* ...servers configuration... */
 })
 
 // Access resource methods via mcpClient.resources
@@ -379,7 +379,7 @@ Example:
 ```typescript
 const resourcesByServer = await mcpClient.resources.list()
 for (const serverName in resourcesByServer) {
-  console.log(`Resources from ${serverName}:`, resourcesByServer[serverName])
+	console.log(`Resources from ${serverName}:`, resourcesByServer[serverName])
 }
 ```
 
@@ -396,7 +396,7 @@ Example:
 ```typescript
 const templatesByServer = await mcpClient.resources.templates()
 for (const serverName in templatesByServer) {
-  console.log(`Templates from ${serverName}:`, templatesByServer[serverName])
+	console.log(`Templates from ${serverName}:`, templatesByServer[serverName])
 }
 ```
 
@@ -458,9 +458,9 @@ Example:
 
 ```typescript
 mcpClient.resources.onUpdated('myWeatherServer', params => {
-  console.log(`Resource updated on myWeatherServer: ${params.uri}`)
-  // You might want to re-fetch the resource content here
-  // await mcpClient.resources.read("myWeatherServer", params.uri);
+	console.log(`Resource updated on myWeatherServer: ${params.uri}`)
+	// You might want to re-fetch the resource content here
+	// await mcpClient.resources.read("myWeatherServer", params.uri);
 })
 ```
 
@@ -476,9 +476,9 @@ Example:
 
 ```typescript
 mcpClient.resources.onListChanged('myWeatherServer', () => {
-  console.log('Resource list changed on myWeatherServer.')
-  // You should re-fetch the list of resources
-  // await mcpClient.resources.list();
+	console.log('Resource list changed on myWeatherServer.')
+	// You should re-fetch the list of resources
+	// await mcpClient.resources.list();
 })
 ```
 
@@ -488,20 +488,20 @@ The `MCPClient` instance has an `elicitation` property that provides access to e
 
 ```typescript
 const mcpClient = new MCPClient({
-  /* ...servers configuration... */
+	/* ...servers configuration... */
 })
 
 // Set up elicitation handler
 mcpClient.elicitation.onRequest('serverName', async request => {
-  // Handle elicitation request from server
-  console.log('Server requests:', request.message)
-  console.log('Schema:', request.requestedSchema)
+	// Handle elicitation request from server
+	console.log('Server requests:', request.message)
+	console.log('Schema:', request.requestedSchema)
 
-  // Return user response
-  return {
-    action: 'accept',
-    content: { name: 'John Doe', email: 'john@example.com' },
-  }
+	// Return user response
+	return {
+		action: 'accept',
+		content: { name: 'John Doe', email: 'john@example.com' },
+	}
 })
 ```
 
@@ -525,22 +525,22 @@ The handler must return an `ElicitResult` with:
 
 ```typescript
 mcpClient.elicitation.onRequest('serverName', async request => {
-  console.log(`Server requests: ${request.message}`)
+	console.log(`Server requests: ${request.message}`)
 
-  // Example: Simple user input collection
-  if (request.requestedSchema.properties.name) {
-    // Simulate user accepting and providing data
-    return {
-      action: 'accept',
-      content: {
-        name: 'Alice Smith',
-        email: 'alice@example.com',
-      },
-    }
-  }
+	// Example: Simple user input collection
+	if (request.requestedSchema.properties.name) {
+		// Simulate user accepting and providing data
+		return {
+			action: 'accept',
+			content: {
+				name: 'Alice Smith',
+				email: 'alice@example.com',
+			},
+		}
+	}
 
-  // Simulate user declining the request
-  return { action: 'decline' }
+	// Simulate user declining the request
+	return { action: 'decline' }
 })
 ```
 
@@ -551,75 +551,75 @@ import { MCPClient } from '@mastra/mcp'
 import { createInterface } from 'readline'
 
 const readline = createInterface({
-  input: process.stdin,
-  output: process.stdout,
+	input: process.stdin,
+	output: process.stdout,
 })
 
 function askQuestion(question: string): Promise<string> {
-  return new Promise(resolve => {
-    readline.question(question, answer => resolve(answer.trim()))
-  })
+	return new Promise(resolve => {
+		readline.question(question, answer => resolve(answer.trim()))
+	})
 }
 
 const mcpClient = new MCPClient({
-  servers: {
-    interactiveServer: {
-      url: new URL('http://localhost:3000/mcp'),
-    },
-  },
+	servers: {
+		interactiveServer: {
+			url: new URL('http://localhost:3000/mcp'),
+		},
+	},
 })
 
 // Set up interactive elicitation handler
 await mcpClient.elicitation.onRequest('interactiveServer', async request => {
-  console.log(`\n📋 Server Request: ${request.message}`)
-  console.log('Required information:')
+	console.log(`\n📋 Server Request: ${request.message}`)
+	console.log('Required information:')
 
-  const schema = request.requestedSchema
-  const properties = schema.properties || {}
-  const required = schema.required || []
-  const content: Record<string, any> = {}
+	const schema = request.requestedSchema
+	const properties = schema.properties || {}
+	const required = schema.required || []
+	const content: Record<string, any> = {}
 
-  // Collect input for each field
-  for (const [fieldName, fieldSchema] of Object.entries(properties)) {
-    const field = fieldSchema as any
-    const isRequired = required.includes(fieldName)
+	// Collect input for each field
+	for (const [fieldName, fieldSchema] of Object.entries(properties)) {
+		const field = fieldSchema as any
+		const isRequired = required.includes(fieldName)
 
-    let prompt = `${field.title || fieldName}`
-    if (field.description) prompt += ` (${field.description})`
-    if (isRequired) prompt += ' *required*'
-    prompt += ': '
+		let prompt = `${field.title || fieldName}`
+		if (field.description) prompt += ` (${field.description})`
+		if (isRequired) prompt += ' *required*'
+		prompt += ': '
 
-    const answer = await askQuestion(prompt)
+		const answer = await askQuestion(prompt)
 
-    // Handle cancellation
-    if (answer.toLowerCase() === 'cancel') {
-      return { action: 'cancel' }
-    }
+		// Handle cancellation
+		if (answer.toLowerCase() === 'cancel') {
+			return { action: 'cancel' }
+		}
 
-    // Validate required fields
-    if (answer === '' && isRequired) {
-      console.log(`❌ ${fieldName} is required`)
-      return { action: 'decline' }
-    }
+		// Validate required fields
+		if (answer === '' && isRequired) {
+			console.log(`❌ ${fieldName} is required`)
+			return { action: 'decline' }
+		}
 
-    if (answer !== '') {
-      content[fieldName] = answer
-    }
-  }
+		if (answer !== '') {
+			content[fieldName] = answer
+		}
+	}
 
-  // Confirm submission
-  console.log('\n📝 You provided:')
-  console.log(JSON.stringify(content, null, 2))
+	// Confirm submission
+	console.log('\n📝 You provided:')
+	console.log(JSON.stringify(content, null, 2))
 
-  const confirm = await askQuestion('\nSubmit this information? (yes/no/cancel): ')
+	const confirm = await askQuestion('\nSubmit this information? (yes/no/cancel): ')
 
-  if (confirm.toLowerCase() === 'yes' || confirm.toLowerCase() === 'y') {
-    return { action: 'accept', content }
-  } else if (confirm.toLowerCase() === 'cancel') {
-    return { action: 'cancel' }
-  } else {
-    return { action: 'decline' }
-  }
+	if (confirm.toLowerCase() === 'yes' || confirm.toLowerCase() === 'y') {
+		return { action: 'accept', content }
+	} else if (confirm.toLowerCase() === 'cancel') {
+		return { action: 'cancel' }
+	} else {
+		return { action: 'decline' }
+	}
 })
 ```
 
@@ -629,14 +629,14 @@ The `MCPClient` instance has a `prompts` property that provides access to prompt
 
 ```typescript
 const mcpClient = new MCPClient({
-  /* ...servers configuration... */
+	/* ...servers configuration... */
 })
 
 // Access prompt methods via mcpClient.prompts
 const allPromptsByServer = await mcpClient.prompts.list()
 const { prompt, messages } = await mcpClient.prompts.get({
-  serverName: 'myWeatherServer',
-  name: 'current',
+	serverName: 'myWeatherServer',
+	name: 'current',
 })
 ```
 
@@ -653,7 +653,7 @@ Example:
 ```typescript
 const promptsByServer = await mcpClient.prompts.list()
 for (const serverName in promptsByServer) {
-  console.log(`Prompts from ${serverName}:`, promptsByServer[serverName])
+	console.log(`Prompts from ${serverName}:`, promptsByServer[serverName])
 }
 ```
 
@@ -679,9 +679,9 @@ Example:
 
 ```typescript
 const { prompt, messages } = await mcpClient.prompts.get({
-  serverName: 'myWeatherServer',
-  name: 'current',
-  args: { location: 'London' },
+	serverName: 'myWeatherServer',
+	name: 'current',
+	args: { location: 'London' },
 })
 console.log(prompt)
 console.log(messages)
@@ -699,9 +699,9 @@ Example:
 
 ```typescript
 mcpClient.prompts.onListChanged('myWeatherServer', () => {
-  console.log('Prompt list changed on myWeatherServer.')
-  // You should re-fetch the list of prompts
-  // await mcpClient.prompts.list();
+	console.log('Prompt list changed on myWeatherServer.')
+	// You should re-fetch the list of prompts
+	// await mcpClient.prompts.list();
 })
 ```
 
@@ -711,20 +711,20 @@ The `MCPClient` instance has a `progress` property for subscribing to progress n
 
 ```typescript
 const mcpClient = new MCPClient({
-  servers: {
-    myServer: {
-      url: new URL('http://localhost:4111/api/mcp/myServer/mcp'),
-      // Enabled by default; set to false to disable
-      enableProgressTracking: true,
-    },
-  },
+	servers: {
+		myServer: {
+			url: new URL('http://localhost:4111/api/mcp/myServer/mcp'),
+			// Enabled by default; set to false to disable
+			enableProgressTracking: true,
+		},
+	},
 })
 
 // Subscribe to progress updates for a specific server
 await mcpClient.progress.onUpdate('myServer', params => {
-  console.log('📊 Progress:', params.progress, '/', params.total)
-  if (params.message) console.log('Message:', params.message)
-  if (params.progressToken) console.log('Token:', params.progressToken)
+	console.log('📊 Progress:', params.progress, '/', params.total)
+	if (params.message) console.log('Message:', params.message)
+	if (params.progressToken) console.log('Token:', params.progressToken)
 })
 ```
 
@@ -753,12 +753,12 @@ To disable progress tracking for a server:
 
 ```typescript
 const mcpClient = new MCPClient({
-  servers: {
-    myServer: {
-      url: new URL('http://localhost:4111/api/mcp/myServer/mcp'),
-      enableProgressTracking: false,
-    },
-  },
+	servers: {
+		myServer: {
+			url: new URL('http://localhost:4111/api/mcp/myServer/mcp'),
+			enableProgressTracking: false,
+		},
+	},
 })
 ```
 
@@ -782,25 +782,25 @@ You must set up an elicitation handler before tools that use elicitation are cal
 import { MCPClient } from '@mastra/mcp'
 
 const mcpClient = new MCPClient({
-  servers: {
-    interactiveServer: {
-      url: new URL('http://localhost:3000/mcp'),
-    },
-  },
+	servers: {
+		interactiveServer: {
+			url: new URL('http://localhost:3000/mcp'),
+		},
+	},
 })
 
 // Set up elicitation handler
 mcpClient.elicitation.onRequest('interactiveServer', async request => {
-  // Handle the server's request for user input
-  console.log(`Server needs: ${request.message}`)
+	// Handle the server's request for user input
+	console.log(`Server needs: ${request.message}`)
 
-  // Your logic to collect user input
-  const userData = await collectUserInput(request.requestedSchema)
+	// Your logic to collect user input
+	const userData = await collectUserInput(request.requestedSchema)
 
-  return {
-    action: 'accept',
-    content: userData,
-  }
+	return {
+		action: 'accept',
+		content: userData,
+	}
 })
 ```
 
@@ -812,8 +812,8 @@ Your elicitation handler must return one of three response types:
 
   ```typescript
   return {
-    action: 'accept',
-    content: { name: 'John Doe', email: 'john@example.com' },
+  	action: 'accept',
+  	content: { name: 'John Doe', email: 'john@example.com' },
   }
   ```
 
@@ -834,30 +834,30 @@ The `requestedSchema` provides structure for the data the server needs:
 
 ```typescript
 await mcpClient.elicitation.onRequest('interactiveServer', async request => {
-  const { properties, required = [] } = request.requestedSchema
-  const content: Record<string, any> = {}
+	const { properties, required = [] } = request.requestedSchema
+	const content: Record<string, any> = {}
 
-  for (const [fieldName, fieldSchema] of Object.entries(properties || {})) {
-    const field = fieldSchema as any
-    const isRequired = required.includes(fieldName)
+	for (const [fieldName, fieldSchema] of Object.entries(properties || {})) {
+		const field = fieldSchema as any
+		const isRequired = required.includes(fieldName)
 
-    // Collect input based on field type and requirements
-    const value = await promptUser({
-      name: fieldName,
-      title: field.title,
-      description: field.description,
-      type: field.type,
-      required: isRequired,
-      format: field.format,
-      enum: field.enum,
-    })
+		// Collect input based on field type and requirements
+		const value = await promptUser({
+			name: fieldName,
+			title: field.title,
+			description: field.description,
+			type: field.type,
+			required: isRequired,
+			format: field.format,
+			enum: field.enum,
+		})
 
-    if (value !== null) {
-      content[fieldName] = value
-    }
-  }
+		if (value !== null) {
+			content[fieldName] = value
+		}
+	}
 
-  return { action: 'accept', content }
+	return { action: 'accept', content }
 })
 ```
 
@@ -878,27 +878,27 @@ import { MCPClient, MCPOAuthClientProvider } from '@mastra/mcp'
 
 // Create an OAuth provider
 const oauthProvider = new MCPOAuthClientProvider({
-  redirectUrl: 'http://localhost:3000/oauth/callback',
-  clientMetadata: {
-    redirect_uris: ['http://localhost:3000/oauth/callback'],
-    client_name: 'My MCP Client',
-    grant_types: ['authorization_code', 'refresh_token'],
-    response_types: ['code'],
-  },
-  onRedirectToAuthorization: url => {
-    // Handle authorization redirect (open browser, redirect response, etc.)
-    console.log(`Please visit: ${url}`)
-  },
+	redirectUrl: 'http://localhost:3000/oauth/callback',
+	clientMetadata: {
+		redirect_uris: ['http://localhost:3000/oauth/callback'],
+		client_name: 'My MCP Client',
+		grant_types: ['authorization_code', 'refresh_token'],
+		response_types: ['code'],
+	},
+	onRedirectToAuthorization: url => {
+		// Handle authorization redirect (open browser, redirect response, etc.)
+		console.log(`Please visit: ${url}`)
+	},
 })
 
 // Use the provider with MCPClient
 const client = new MCPClient({
-  servers: {
-    protectedServer: {
-      url: new URL('https://mcp.example.com/mcp'),
-      authProvider: oauthProvider,
-    },
-  },
+	servers: {
+		protectedServer: {
+			url: new URL('https://mcp.example.com/mcp'),
+			authProvider: oauthProvider,
+		},
+	},
 })
 ```
 
@@ -910,20 +910,20 @@ For testing or when you already have a valid access token:
 import { MCPClient, createSimpleTokenProvider } from '@mastra/mcp'
 
 const provider = createSimpleTokenProvider('your-access-token', {
-  redirectUrl: 'http://localhost:3000/callback',
-  clientMetadata: {
-    redirect_uris: ['http://localhost:3000/callback'],
-    client_name: 'Test Client',
-  },
+	redirectUrl: 'http://localhost:3000/callback',
+	clientMetadata: {
+		redirect_uris: ['http://localhost:3000/callback'],
+		client_name: 'Test Client',
+	},
 })
 
 const client = new MCPClient({
-  servers: {
-    testServer: {
-      url: new URL('https://mcp.example.com/mcp'),
-      authProvider: provider,
-    },
-  },
+	servers: {
+		testServer: {
+			url: new URL('https://mcp.example.com/mcp'),
+			authProvider: provider,
+		},
+	},
 })
 ```
 
@@ -935,40 +935,40 @@ For persistent token storage across sessions, implement the `OAuthStorage` inter
 import { MCPOAuthClientProvider, OAuthStorage } from '@mastra/mcp'
 
 class DatabaseOAuthStorage implements OAuthStorage {
-  constructor(
-    private db: Database,
-    private userId: string,
-  ) {}
+	constructor(
+		private db: Database,
+		private userId: string,
+	) {}
 
-  async set(key: string, value: string): Promise<void> {
-    await this.db.query(
-      'INSERT INTO oauth_tokens (user_id, key, value) VALUES (?, ?, ?) ON CONFLICT DO UPDATE SET value = ?',
-      [this.userId, key, value, value],
-    )
-  }
+	async set(key: string, value: string): Promise<void> {
+		await this.db.query(
+			'INSERT INTO oauth_tokens (user_id, key, value) VALUES (?, ?, ?) ON CONFLICT DO UPDATE SET value = ?',
+			[this.userId, key, value, value],
+		)
+	}
 
-  async get(key: string): Promise<string | undefined> {
-    const result = await this.db.query(
-      'SELECT value FROM oauth_tokens WHERE user_id = ? AND key = ?',
-      [this.userId, key],
-    )
-    return result?.[0]?.value
-  }
+	async get(key: string): Promise<string | undefined> {
+		const result = await this.db.query(
+			'SELECT value FROM oauth_tokens WHERE user_id = ? AND key = ?',
+			[this.userId, key],
+		)
+		return result?.[0]?.value
+	}
 
-  async delete(key: string): Promise<void> {
-    await this.db.query('DELETE FROM oauth_tokens WHERE user_id = ? AND key = ?', [
-      this.userId,
-      key,
-    ])
-  }
+	async delete(key: string): Promise<void> {
+		await this.db.query('DELETE FROM oauth_tokens WHERE user_id = ? AND key = ?', [
+			this.userId,
+			key,
+		])
+	}
 }
 
 const provider = new MCPOAuthClientProvider({
-  redirectUrl: 'http://localhost:3000/callback',
-  clientMetadata: {
-    /* ... */
-  },
-  storage: new DatabaseOAuthStorage(db, 'user-123'),
+	redirectUrl: 'http://localhost:3000/callback',
+	clientMetadata: {
+		/* ... */
+	},
+	storage: new DatabaseOAuthStorage(db, 'user-123'),
 })
 ```
 
@@ -983,63 +983,63 @@ import { MCPClient } from '@mastra/mcp'
 import { Agent } from '@mastra/core/agent'
 
 const mcp = new MCPClient({
-  servers: {
-    stockPrice: {
-      command: 'npx',
-      args: ['tsx', 'stock-price.ts'],
-      env: {
-        API_KEY: 'your-api-key',
-      },
-      log: logMessage => {
-        console.log(`[${logMessage.level}] ${logMessage.message}`)
-      },
-    },
-    weather: {
-      url: new URL('http://localhost:8080/sse'),
-    },
-  },
-  timeout: 30000, // Global 30s timeout
+	servers: {
+		stockPrice: {
+			command: 'npx',
+			args: ['tsx', 'stock-price.ts'],
+			env: {
+				API_KEY: 'your-api-key',
+			},
+			log: logMessage => {
+				console.log(`[${logMessage.level}] ${logMessage.message}`)
+			},
+		},
+		weather: {
+			url: new URL('http://localhost:8080/sse'),
+		},
+	},
+	timeout: 30000, // Global 30s timeout
 })
 
 // Create an agent with access to all tools
 const agent = new Agent({
-  id: 'multi-tool-agent',
-  name: 'Multi-tool Agent',
-  instructions: 'You have access to multiple tool servers.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  tools: await mcp.listTools(),
+	id: 'multi-tool-agent',
+	name: 'Multi-tool Agent',
+	instructions: 'You have access to multiple tool servers.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	tools: await mcp.listTools(),
 })
 
 // Example of using resource methods
 async function checkWeatherResource() {
-  try {
-    const weatherResources = await mcp.resources.list()
-    if (weatherResources.weather && weatherResources.weather.length > 0) {
-      const currentWeatherURI = weatherResources.weather[0].uri
-      const weatherData = await mcp.resources.read('weather', currentWeatherURI)
-      console.log('Weather data:', weatherData.contents[0].text)
-    }
-  } catch (error) {
-    console.error('Error fetching weather resource:', error)
-  }
+	try {
+		const weatherResources = await mcp.resources.list()
+		if (weatherResources.weather && weatherResources.weather.length > 0) {
+			const currentWeatherURI = weatherResources.weather[0].uri
+			const weatherData = await mcp.resources.read('weather', currentWeatherURI)
+			console.log('Weather data:', weatherData.contents[0].text)
+		}
+	} catch (error) {
+		console.error('Error fetching weather resource:', error)
+	}
 }
 checkWeatherResource()
 
 // Example of using prompt methods
 async function checkWeatherPrompt() {
-  try {
-    const weatherPrompts = await mcp.prompts.list()
-    if (weatherPrompts.weather && weatherPrompts.weather.length > 0) {
-      const currentWeatherPrompt = weatherPrompts.weather.find(p => p.name === 'current')
-      if (currentWeatherPrompt) {
-        console.log('Weather prompt:', currentWeatherPrompt)
-      } else {
-        console.log('Current weather prompt not found')
-      }
-    }
-  } catch (error) {
-    console.error('Error fetching weather prompt:', error)
-  }
+	try {
+		const weatherPrompts = await mcp.prompts.list()
+		if (weatherPrompts.weather && weatherPrompts.weather.length > 0) {
+			const currentWeatherPrompt = weatherPrompts.weather.find(p => p.name === 'current')
+			if (currentWeatherPrompt) {
+				console.log('Weather prompt:', currentWeatherPrompt)
+			} else {
+				console.log('Current weather prompt not found')
+			}
+		}
+	} catch (error) {
+		console.error('Error fetching weather prompt:', error)
+	}
 }
 checkWeatherPrompt()
 ```
@@ -1054,37 +1054,37 @@ import { MCPClient } from '@mastra/mcp'
 
 // Create the agent first, without any tools
 const agent = new Agent({
-  id: 'multi-tool-agent',
-  name: 'Multi-tool Agent',
-  instructions: 'You help users check stocks and weather.',
-  model: '__GATEWAY_OPENAI_MODEL__',
+	id: 'multi-tool-agent',
+	name: 'Multi-tool Agent',
+	instructions: 'You help users check stocks and weather.',
+	model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 // Later, configure MCP with user-specific settings
 const mcp = new MCPClient({
-  servers: {
-    stockPrice: {
-      command: 'npx',
-      args: ['tsx', 'stock-price.ts'],
-      env: {
-        API_KEY: 'user-123-api-key',
-      },
-      timeout: 20000, // Server-specific timeout
-    },
-    weather: {
-      url: new URL('http://localhost:8080/sse'),
-      requestInit: {
-        headers: {
-          Authorization: `Bearer user-123-token`,
-        },
-      },
-    },
-  },
+	servers: {
+		stockPrice: {
+			command: 'npx',
+			args: ['tsx', 'stock-price.ts'],
+			env: {
+				API_KEY: 'user-123-api-key',
+			},
+			timeout: 20000, // Server-specific timeout
+		},
+		weather: {
+			url: new URL('http://localhost:8080/sse'),
+			requestInit: {
+				headers: {
+					Authorization: `Bearer user-123-token`,
+				},
+			},
+		},
+	},
 })
 
 // Pass all toolsets to stream() or generate()
 const response = await agent.stream('How is AAPL doing and what is the weather?', {
-  toolsets: await mcp.listToolsets(),
+	toolsets: await mcp.listToolsets(),
 })
 ```
 
@@ -1102,33 +1102,33 @@ For example, if you try to create multiple instances with the same configuration
 ```typescript
 // First instance - OK
 const mcp1 = new MCPClient({
-  servers: {
-    /* ... */
-  },
+	servers: {
+		/* ... */
+	},
 })
 
 // Second instance with same config - Will throw an error
 const mcp2 = new MCPClient({
-  servers: {
-    /* ... */
-  },
+	servers: {
+		/* ... */
+	},
 })
 
 // To fix, either:
 // 1. Add unique IDs
 const mcp3 = new MCPClient({
-  id: 'instance-1',
-  servers: {
-    /* ... */
-  },
+	id: 'instance-1',
+	servers: {
+		/* ... */
+	},
 })
 
 // 2. Or disconnect before recreating
 await mcp1.disconnect()
 const mcp4 = new MCPClient({
-  servers: {
-    /* ... */
-  },
+	servers: {
+		/* ... */
+	},
 })
 ```
 
@@ -1150,32 +1150,32 @@ When `fetch` is provided, `requestInit`, `eventSourceInit`, and `authProvider` b
 
 ```typescript
 const mcpClient = new MCPClient({
-  servers: {
-    apiServer: {
-      url: new URL('https://api.example.com/mcp'),
-      fetch: async (url, init, requestContext) => {
-        const headers = new Headers(init?.headers)
-        // Forward auth cookie from the incoming request
-        const cookie = requestContext?.get('cookie')
-        if (cookie) {
-          headers.set('cookie', cookie)
-        }
-        return fetch(url, { ...init, headers })
-      },
-    },
-  },
+	servers: {
+		apiServer: {
+			url: new URL('https://api.example.com/mcp'),
+			fetch: async (url, init, requestContext) => {
+				const headers = new Headers(init?.headers)
+				// Forward auth cookie from the incoming request
+				const cookie = requestContext?.get('cookie')
+				if (cookie) {
+					headers.set('cookie', cookie)
+				}
+				return fetch(url, { ...init, headers })
+			},
+		},
+	},
 })
 
 // Use with an agent — requestContext is automatically forwarded
 const agent = new Agent({
-  name: 'My Agent',
-  instructions: 'You are a helpful assistant.',
-  model: openai('gpt-5.4'),
-  tools: await mcpClient.listTools(),
+	name: 'My Agent',
+	instructions: 'You are a helpful assistant.',
+	model: openai('gpt-5.4'),
+	tools: await mcpClient.listTools(),
 })
 
 await agent.generate('Hello!', {
-  requestContext: myRequestContext, // forwarded to the custom fetch
+	requestContext: myRequestContext, // forwarded to the custom fetch
 })
 ```
 
@@ -1189,38 +1189,38 @@ The following pattern waits for an auth token on POST requests, attaches it to o
 
 ```typescript
 async function waitForToken(timeoutMs = 5000): Promise<string | null> {
-  // Replace with your token lookup. Return null if no token is available.
-  return getAuthToken({ timeoutMs })
+	// Replace with your token lookup. Return null if no token is available.
+	return getAuthToken({ timeoutMs })
 }
 
 const mcpClient = new MCPClient({
-  servers: {
-    apiServer: {
-      url: new URL('https://api.example.com/mcp'),
-      fetch: async (url, init) => {
-        const method = (init?.method || 'GET').toUpperCase()
+	servers: {
+		apiServer: {
+			url: new URL('https://api.example.com/mcp'),
+			fetch: async (url, init) => {
+				const method = (init?.method || 'GET').toUpperCase()
 
-        // The SDK opens a background GET stream for server-pushed notifications.
-        // If your server does not use it, short-circuit with 405 to stop reconnect attempts.
-        if (method === 'GET') {
-          return new Response(null, { status: 405, statusText: 'Method Not Allowed' })
-        }
+				// The SDK opens a background GET stream for server-pushed notifications.
+				// If your server does not use it, short-circuit with 405 to stop reconnect attempts.
+				if (method === 'GET') {
+					return new Response(null, { status: 405, statusText: 'Method Not Allowed' })
+				}
 
-        // POST: wait for the token, then forward the request with an Authorization header.
-        const token = await waitForToken()
-        if (!token) {
-          // Forward the request without a token and let the server reject it.
-          // The SDK surfaces non-2xx POST responses as errors to the caller of
-          // tools/list, tools/call, etc., which is the desired behavior here.
-          return fetch(url, init)
-        }
+				// POST: wait for the token, then forward the request with an Authorization header.
+				const token = await waitForToken()
+				if (!token) {
+					// Forward the request without a token and let the server reject it.
+					// The SDK surfaces non-2xx POST responses as errors to the caller of
+					// tools/list, tools/call, etc., which is the desired behavior here.
+					return fetch(url, init)
+				}
 
-        const headers = new Headers(init?.headers)
-        headers.set('authorization', `Bearer ${token}`)
-        return fetch(url, { ...init, headers })
-      },
-    },
-  },
+				const headers = new Headers(init?.headers)
+				headers.set('authorization', `Bearer ${token}`)
+				return fetch(url, { ...init, headers })
+			},
+		},
+	},
 })
 ```
 
@@ -1233,45 +1233,45 @@ When using the legacy SSE MCP transport, you must configure both `requestInit` a
 ```ts
 // Option 1: Using requestInit and eventSourceInit (required for SSE)
 const sseClient = new MCPClient({
-  servers: {
-    exampleServer: {
-      url: new URL('https://your-mcp-server.com/sse'),
-      // Note: requestInit alone isn't enough for SSE
-      requestInit: {
-        headers: {
-          Authorization: 'Bearer your-token',
-        },
-      },
-      // This is also required for SSE connections with custom headers
-      eventSourceInit: {
-        fetch(input: Request | URL | string, init?: RequestInit) {
-          const headers = new Headers(init?.headers || {})
-          headers.set('Authorization', 'Bearer your-token')
-          return fetch(input, {
-            ...init,
-            headers,
-          })
-        },
-      },
-    },
-  },
+	servers: {
+		exampleServer: {
+			url: new URL('https://your-mcp-server.com/sse'),
+			// Note: requestInit alone isn't enough for SSE
+			requestInit: {
+				headers: {
+					Authorization: 'Bearer your-token',
+				},
+			},
+			// This is also required for SSE connections with custom headers
+			eventSourceInit: {
+				fetch(input: Request | URL | string, init?: RequestInit) {
+					const headers = new Headers(init?.headers || {})
+					headers.set('Authorization', 'Bearer your-token')
+					return fetch(input, {
+						...init,
+						headers,
+					})
+				},
+			},
+		},
+	},
 })
 
 // Option 2: Using custom fetch (simpler, works for both Streamable HTTP and SSE)
 const sseClientWithFetch = new MCPClient({
-  servers: {
-    exampleServer: {
-      url: new URL('https://your-mcp-server.com/sse'),
-      fetch: async (url, init) => {
-        const headers = new Headers(init?.headers || {})
-        headers.set('Authorization', 'Bearer your-token')
-        return fetch(url, {
-          ...init,
-          headers,
-        })
-      },
-    },
-  },
+	servers: {
+		exampleServer: {
+			url: new URL('https://your-mcp-server.com/sse'),
+			fetch: async (url, init) => {
+				const headers = new Headers(init?.headers || {})
+				headers.set('Authorization', 'Bearer your-token')
+				return fetch(url, {
+					...init,
+					headers,
+				})
+			},
+		},
+	},
 })
 ```
 

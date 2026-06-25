@@ -31,17 +31,17 @@ import { Workspace } from '@mastra/core/workspace'
 import { GCSFilesystem } from '@mastra/gcs'
 
 const workspace = new Workspace({
-  filesystem: new GCSFilesystem({
-    bucket: 'my-gcs-bucket',
-    projectId: 'my-project-id',
-    credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY),
-  }),
+	filesystem: new GCSFilesystem({
+		bucket: 'my-gcs-bucket',
+		projectId: 'my-project-id',
+		credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY),
+	}),
 })
 
 const agent = new Agent({
-  name: 'file-agent',
-  model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
-  workspace,
+	name: 'file-agent',
+	model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
+	workspace,
 })
 ```
 
@@ -53,8 +53,8 @@ If running on Google Cloud or with `gcloud` CLI configured, you can omit credent
 import { GCSFilesystem } from '@mastra/gcs'
 
 const filesystem = new GCSFilesystem({
-  bucket: 'my-gcs-bucket',
-  // Uses Application Default Credentials automatically
+	bucket: 'my-gcs-bucket',
+	// Uses Application Default Credentials automatically
 })
 ```
 
@@ -72,9 +72,9 @@ You can also pass a path to a service account key file:
 import { GCSFilesystem } from '@mastra/gcs'
 
 const filesystem = new GCSFilesystem({
-  bucket: 'my-gcs-bucket',
-  projectId: 'my-project-id',
-  credentials: '/path/to/service-account-key.json',
+	bucket: 'my-gcs-bucket',
+	projectId: 'my-project-id',
+	credentials: '/path/to/service-account-key.json',
 })
 ```
 
@@ -82,68 +82,68 @@ const filesystem = new GCSFilesystem({
 
 <PropertiesTable
   content={[
-  {
-    name: 'bucket',
-    type: 'string',
-    description: 'GCS bucket name',
-  },
-  {
-    name: 'projectId',
-    type: 'string',
-    description: 'GCS project ID. Required when using service account credentials.',
-    isOptional: true,
-  },
-  {
-    name: 'credentials',
-    type: 'object | string',
-    description:
-      'Service account key JSON object or path to key file. If not provided, uses Application Default Credentials.',
-    isOptional: true,
-  },
-  {
-    name: 'prefix',
-    type: 'string',
-    description: 'Optional prefix for all keys (acts like a subdirectory)',
-    isOptional: true,
-  },
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Unique identifier for this filesystem instance',
-    isOptional: true,
-    defaultValue: 'Auto-generated',
-  },
-  {
-    name: 'displayName',
-    type: 'string',
-    description: 'Human-friendly display name for the UI',
-    isOptional: true,
-  },
-  {
-    name: 'icon',
-    type: 'FilesystemIcon',
-    description: 'Icon identifier for the UI',
-    isOptional: true,
-  },
-  {
-    name: 'description',
-    type: 'string',
-    description: 'Short description of this filesystem for the UI',
-    isOptional: true,
-  },
-  {
-    name: 'readOnly',
-    type: 'boolean',
-    description: 'When true, all write operations are blocked',
-    isOptional: true,
-    defaultValue: 'false',
-  },
-  {
-    name: 'endpoint',
-    type: 'string',
-    description: 'Custom API endpoint URL. Used for local development with emulators.',
-    isOptional: true,
-  },
+	{
+		name: 'bucket',
+		type: 'string',
+		description: 'GCS bucket name',
+	},
+	{
+		name: 'projectId',
+		type: 'string',
+		description: 'GCS project ID. Required when using service account credentials.',
+		isOptional: true,
+	},
+	{
+		name: 'credentials',
+		type: 'object | string',
+		description:
+			'Service account key JSON object or path to key file. If not provided, uses Application Default Credentials.',
+		isOptional: true,
+	},
+	{
+		name: 'prefix',
+		type: 'string',
+		description: 'Optional prefix for all keys (acts like a subdirectory)',
+		isOptional: true,
+	},
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Unique identifier for this filesystem instance',
+		isOptional: true,
+		defaultValue: 'Auto-generated',
+	},
+	{
+		name: 'displayName',
+		type: 'string',
+		description: 'Human-friendly display name for the UI',
+		isOptional: true,
+	},
+	{
+		name: 'icon',
+		type: 'FilesystemIcon',
+		description: 'Icon identifier for the UI',
+		isOptional: true,
+	},
+	{
+		name: 'description',
+		type: 'string',
+		description: 'Short description of this filesystem for the UI',
+		isOptional: true,
+	},
+	{
+		name: 'readOnly',
+		type: 'boolean',
+		description: 'When true, all write operations are blocked',
+		isOptional: true,
+		defaultValue: 'false',
+	},
+	{
+		name: 'endpoint',
+		type: 'string',
+		description: 'Custom API endpoint URL. Used for local development with emulators.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -151,31 +151,31 @@ const filesystem = new GCSFilesystem({
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Filesystem instance identifier',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: "Provider name ('GCSFilesystem')",
-  },
-  {
-    name: 'provider',
-    type: 'string',
-    description: "Provider identifier ('gcs')",
-  },
-  {
-    name: 'bucket',
-    type: 'string',
-    description: 'The GCS bucket name',
-  },
-  {
-    name: 'readOnly',
-    type: 'boolean | undefined',
-    description: 'Whether the filesystem is in read-only mode',
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Filesystem instance identifier',
+	},
+	{
+		name: 'name',
+		type: 'string',
+		description: "Provider name ('GCSFilesystem')",
+	},
+	{
+		name: 'provider',
+		type: 'string',
+		description: "Provider identifier ('gcs')",
+	},
+	{
+		name: 'bucket',
+		type: 'string',
+		description: 'The GCS bucket name',
+	},
+	{
+		name: 'readOnly',
+		type: 'boolean | undefined',
+		description: 'Whether the filesystem is in read-only mode',
+	},
 ]}
 />
 
@@ -231,14 +231,14 @@ import { GCSFilesystem } from '@mastra/gcs'
 import { E2BSandbox } from '@mastra/e2b'
 
 const workspace = new Workspace({
-  mounts: {
-    '/data': new GCSFilesystem({
-      bucket: 'my-gcs-bucket',
-      projectId: 'my-project-id',
-      credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY),
-    }),
-  },
-  sandbox: new E2BSandbox({ id: 'dev-sandbox' }),
+	mounts: {
+		'/data': new GCSFilesystem({
+			bucket: 'my-gcs-bucket',
+			projectId: 'my-project-id',
+			credentials: JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY),
+		}),
+	},
+	sandbox: new E2BSandbox({ id: 'dev-sandbox' }),
 })
 ```
 

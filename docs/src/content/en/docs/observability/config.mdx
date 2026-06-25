@@ -25,36 +25,36 @@ import { MastraCompositeStore } from '@mastra/core/storage'
 import { DuckDBStore } from '@mastra/duckdb'
 import { LibSQLStore } from '@mastra/libsql'
 import {
-  Observability,
-  MastraStorageExporter,
-  MastraPlatformExporter,
-  SensitiveDataFilter,
+	Observability,
+	MastraStorageExporter,
+	MastraPlatformExporter,
+	SensitiveDataFilter,
 } from '@mastra/observability'
 
 export const mastra = new Mastra({
-  storage: new MastraCompositeStore({
-    id: 'composite-storage',
-    default: new LibSQLStore({
-      id: 'mastra-storage',
-      url: 'file:./mastra.db',
-    }),
-    domains: {
-      observability: await new DuckDBStore().getStore('observability'),
-    },
-  }),
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'mastra',
-        exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
-        spanOutputProcessors: [new SensitiveDataFilter()],
-        logging: {
-          enabled: true,
-          level: 'info',
-        },
-      },
-    },
-  }),
+	storage: new MastraCompositeStore({
+		id: 'composite-storage',
+		default: new LibSQLStore({
+			id: 'mastra-storage',
+			url: 'file:./mastra.db',
+		}),
+		domains: {
+			observability: await new DuckDBStore().getStore('observability'),
+		},
+	}),
+	observability: new Observability({
+		configs: {
+			default: {
+				serviceName: 'mastra',
+				exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
+				spanOutputProcessors: [new SensitiveDataFilter()],
+				logging: {
+					enabled: true,
+					level: 'info',
+				},
+			},
+		},
+	}),
 })
 ```
 
@@ -80,19 +80,19 @@ import { Observability, MastraStorageExporter, MastraPlatformExporter } from '@m
 import { ArizeExporter } from '@mastra/arize'
 
 export const observability = new Observability({
-  configs: {
-    production: {
-      serviceName: 'my-service',
-      exporters: [
-        new ArizeExporter({
-          endpoint: process.env.PHOENIX_COLLECTOR_ENDPOINT,
-          apiKey: process.env.PHOENIX_API_KEY,
-        }),
-        new MastraStorageExporter(),
-        new MastraPlatformExporter(),
-      ],
-    },
-  },
+	configs: {
+		production: {
+			serviceName: 'my-service',
+			exporters: [
+				new ArizeExporter({
+					endpoint: process.env.PHOENIX_COLLECTOR_ENDPOINT,
+					apiKey: process.env.PHOENIX_API_KEY,
+				}),
+				new MastraStorageExporter(),
+				new MastraPlatformExporter(),
+			],
+		},
+	},
 })
 ```
 
@@ -120,19 +120,19 @@ const storageExporter = new MastraStorageExporter()
 const langfuseExporter = new LangfuseExporter()
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      development: {
-        serviceName: 'my-service-dev',
-        exporters: [storageExporter],
-      },
-      production: {
-        serviceName: 'my-service-prod',
-        exporters: [storageExporter, langfuseExporter],
-      },
-    },
-    configSelector: () => process.env.NODE_ENV || 'development',
-  }),
+	observability: new Observability({
+		configs: {
+			development: {
+				serviceName: 'my-service-dev',
+				exporters: [storageExporter],
+			},
+			production: {
+				serviceName: 'my-service-prod',
+				exporters: [storageExporter, langfuseExporter],
+			},
+		},
+		configSelector: () => process.env.NODE_ENV || 'development',
+	}),
 })
 ```
 

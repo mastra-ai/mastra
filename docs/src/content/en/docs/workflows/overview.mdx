@@ -45,20 +45,20 @@ The `execute` function defines what the step does. Use it to call functions in y
     import { z } from 'zod'
 
     const step1 = createStep({
-      id: 'step-1',
-      inputSchema: z.object({
-        message: z.string(),
-      }),
-      outputSchema: z.object({
-        formatted: z.string(),
-      }),
-      execute: async ({ inputData }) => {
-        const { message } = inputData
+    	id: 'step-1',
+    	inputSchema: z.object({
+    		message: z.string(),
+    	}),
+    	outputSchema: z.object({
+    		formatted: z.string(),
+    	}),
+    	execute: async ({ inputData }) => {
+    		const { message } = inputData
 
-        return {
-          formatted: message.toUpperCase(),
-        }
-      },
+    		return {
+    			formatted: message.toUpperCase(),
+    		}
+    	},
     })
     ```
   </TabItem>
@@ -70,24 +70,24 @@ The `execute` function defines what the step does. Use it to call functions in y
     import { toStandardJsonSchema } from '@valibot/to-json-schema'
 
     const step1 = createStep({
-      id: 'step-1',
-      inputSchema: toStandardJsonSchema(
-        v.object({
-          message: v.string(),
-        }),
-      ),
-      outputSchema: toStandardJsonSchema(
-        v.object({
-          formatted: v.string(),
-        }),
-      ),
-      execute: async ({ inputData }) => {
-        const { message } = inputData
+    	id: 'step-1',
+    	inputSchema: toStandardJsonSchema(
+    		v.object({
+    			message: v.string(),
+    		}),
+    	),
+    	outputSchema: toStandardJsonSchema(
+    		v.object({
+    			formatted: v.string(),
+    		}),
+    	),
+    	execute: async ({ inputData }) => {
+    		const { message } = inputData
 
-        return {
-          formatted: message.toUpperCase(),
-        }
-      },
+    		return {
+    			formatted: message.toUpperCase(),
+    		}
+    	},
     })
     ```
   </TabItem>
@@ -98,20 +98,20 @@ The `execute` function defines what the step does. Use it to call functions in y
     import { type } from 'arktype'
 
     const step1 = createStep({
-      id: 'step-1',
-      inputSchema: type({
-        message: 'string',
-      }),
-      outputSchema: type({
-        formatted: 'string',
-      }),
-      execute: async ({ inputData }) => {
-        const { message } = inputData
+    	id: 'step-1',
+    	inputSchema: type({
+    		message: 'string',
+    	}),
+    	outputSchema: type({
+    		formatted: 'string',
+    	}),
+    	execute: async ({ inputData }) => {
+    		const { message } = inputData
 
-        return {
-          formatted: message.toUpperCase(),
-        }
-      },
+    		return {
+    			formatted: message.toUpperCase(),
+    		}
+    	},
     })
     ```
   </TabItem>
@@ -222,19 +222,19 @@ Workflow state lets you share values across steps without passing them through e
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
-  id: 'step-1',
-  inputSchema: z.object({ message: z.string() }),
-  outputSchema: z.object({ formatted: z.string() }),
-  stateSchema: z.object({ counter: z.number() }),
-  execute: async ({ inputData, state, setState }) => {
-    // Read from state
-    console.log(state.counter)
+	id: 'step-1',
+	inputSchema: z.object({ message: z.string() }),
+	outputSchema: z.object({ formatted: z.string() }),
+	stateSchema: z.object({ counter: z.number() }),
+	execute: async ({ inputData, state, setState }) => {
+		// Read from state
+		console.log(state.counter)
 
-    // Update state for subsequent steps
-    setState({ ...state, counter: state.counter + 1 })
+		// Update state for subsequent steps
+		setState({ ...state, counter: state.counter + 1 })
 
-    return { formatted: inputData.message.toUpperCase() }
-  },
+		return { formatted: inputData.message.toUpperCase() }
+	},
 })
 ```
 
@@ -305,7 +305,7 @@ import { Mastra } from '@mastra/core/mastra'
 import { testWorkflow } from './workflows/test-workflow'
 
 export const mastra = new Mastra({
-  workflows: { testWorkflow },
+	workflows: { testWorkflow },
 })
 ```
 
@@ -338,13 +338,13 @@ Workflows can be run in two modes: start waits for all steps to complete before 
     const run = await testWorkflow.createRun()
 
     const result = await run.start({
-      inputData: {
-        message: 'Hello world',
-      },
+    	inputData: {
+    		message: 'Hello world',
+    	},
     })
 
     if (result.status === 'success') {
-      console.log(result.result)
+    	console.log(result.result)
     }
     ```
   </TabItem>
@@ -356,20 +356,20 @@ Workflows can be run in two modes: start waits for all steps to complete before 
     const run = await testWorkflow.createRun()
 
     const stream = run.stream({
-      inputData: {
-        message: 'Hello world',
-      },
+    	inputData: {
+    		message: 'Hello world',
+    	},
     })
 
     for await (const chunk of stream.fullStream) {
-      console.log(chunk)
+    	console.log(chunk)
     }
 
     // Get the final result (same type as run.start())
     const result = await stream.result
 
     if (result.status === 'success') {
-      console.log(result.result)
+    	console.log(result.result)
     }
     ```
   </TabItem>
@@ -395,11 +395,11 @@ To access status-specific properties, check the `status` first:
 const result = await run.start({ inputData: { message: 'Hello world' } })
 
 if (result.status === 'success') {
-  console.log(result.result) // Only available when status is "success"
+	console.log(result.result) // Only available when status is "success"
 } else if (result.status === 'failed') {
-  console.log(result.error.message)
+	console.log(result.error.message)
 } else if (result.status === 'suspended') {
-  console.log(result.suspendPayload)
+	console.log(result.suspendPayload)
 }
 ```
 
@@ -409,33 +409,33 @@ Here's an example of a successful workflow result, showing the `input`, `steps`,
 
 ```json
 {
-  "status": "success",
-  "steps": {
-    "step-1": {
-      "status": "success",
-      "payload": {
-        "message": "Hello world"
-      },
-      "output": {
-        "formatted": "HELLO WORLD"
-      }
-    },
-    "step-2": {
-      "status": "success",
-      "payload": {
-        "formatted": "HELLO WORLD"
-      },
-      "output": {
-        "emphasized": "HELLO WORLD!!!"
-      }
-    }
-  },
-  "input": {
-    "message": "Hello world"
-  },
-  "result": {
-    "emphasized": "HELLO WORLD!!!"
-  }
+	"status": "success",
+	"steps": {
+		"step-1": {
+			"status": "success",
+			"payload": {
+				"message": "Hello world"
+			},
+			"output": {
+				"formatted": "HELLO WORLD"
+			}
+		},
+		"step-2": {
+			"status": "success",
+			"payload": {
+				"formatted": "HELLO WORLD"
+			},
+			"output": {
+				"emphasized": "HELLO WORLD!!!"
+			}
+		}
+	},
+	"input": {
+		"message": "Hello world"
+	},
+	"result": {
+		"emphasized": "HELLO WORLD!!!"
+	}
 }
 ```
 
@@ -453,24 +453,24 @@ const testWorkflow = mastra.getWorkflow('testWorkflow')
 const run = await testWorkflow.createRun()
 
 const stream = await run.stream({
-  inputData: {
-    value: 'initial data',
-  },
+	inputData: {
+		value: 'initial data',
+	},
 })
 
 for await (const chunk of stream) {
-  console.log(chunk)
+	console.log(chunk)
 }
 
 if (result!.status === 'suspended') {
-  // if the workflow is suspended, we can resume it with the resumeStream method
-  const resumedStream = await run.resumeStream({
-    resumeData: { value: 'resume data' },
-  })
+	// if the workflow is suspended, we can resume it with the resumeStream method
+	const resumedStream = await run.resumeStream({
+		resumeData: { value: 'resume data' },
+	})
 
-  for await (const chunk of resumedStream) {
-    console.log(chunk)
-  }
+	for await (const chunk of resumedStream) {
+		console.log(chunk)
+	}
 }
 ```
 
@@ -482,7 +482,7 @@ If a workflow stream is closed or interrupted for any reason, you can resume it 
 const newStream = await run.resumeStream()
 
 for await (const chunk of newStream) {
-  console.log(chunk)
+	console.log(chunk)
 }
 ```
 
@@ -495,18 +495,18 @@ import { createStep } from '@mastra/core/workflows'
 import { z } from 'zod'
 
 export const testStep = createStep({
-  execute: async ({ inputData, mastra, writer }) => {
-    const { city } = inputData
+	execute: async ({ inputData, mastra, writer }) => {
+		const { city } = inputData
 
-    const testAgent = mastra?.getAgent('testAgent')
-    const stream = await testAgent?.stream(`What is the weather in ${city}?`)
+		const testAgent = mastra?.getAgent('testAgent')
+		const stream = await testAgent?.stream(`What is the weather in ${city}?`)
 
-    await stream!.textStream.pipeTo(writer!)
+		await stream!.textStream.pipeTo(writer!)
 
-    return {
-      value: await stream!.text,
-    }
-  },
+		return {
+			value: await stream!.text,
+		}
+	},
 })
 ```
 
@@ -541,7 +541,7 @@ When a workflow run is active, it will have a `status` of `running` or `waiting`
 ```typescript
 const activeRuns = await workflow.listActiveWorkflowRuns()
 if (activeRuns.runs.length > 0) {
-  console.log(activeRuns.runs)
+	console.log(activeRuns.runs)
 }
 ```
 
@@ -557,17 +557,17 @@ Use [RequestContext](/docs/server/request-context) to access request-specific va
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 export type UserTier = {
-  'user-tier': 'enterprise' | 'pro'
+	'user-tier': 'enterprise' | 'pro'
 }
 
 const step1 = createStep({
-  execute: async ({ requestContext }) => {
-    const userTier = requestContext.get('user-tier') as UserTier['user-tier']
+	execute: async ({ requestContext }) => {
+		const userTier = requestContext.get('user-tier') as UserTier['user-tier']
 
-    const maxResults = userTier === 'enterprise' ? 1000 : 50
+		const maxResults = userTier === 'enterprise' ? 1000 : 50
 
-    return { maxResults }
-  },
+		return { maxResults }
+	},
 })
 ```
 

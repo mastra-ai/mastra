@@ -31,29 +31,29 @@ Build the tag with a small helper. The example below is one way to do it — cop
 
 ```typescript title="src/mastra/identity.ts"
 export type Speaker = {
-  id: string
-  name: string
-  role: string
+	id: string
+	name: string
+	role: string
 }
 
 function escapeAttr(value: string) {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
+	return value
+		.replace(/&/g, '&amp;')
+		.replace(/"/g, '&quot;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
 }
 
 export function asUserTurn(speaker: Speaker, text: string) {
-  const id = escapeAttr(speaker.id)
-  const name = escapeAttr(speaker.name)
-  const role = escapeAttr(speaker.role)
-  return {
-    role: 'user' as const,
-    content: `<turn author_id="${id}" author_name="${name}" functional_role="${role}">
+	const id = escapeAttr(speaker.id)
+	const name = escapeAttr(speaker.name)
+	const role = escapeAttr(speaker.role)
+	return {
+		role: 'user' as const,
+		content: `<turn author_id="${id}" author_name="${name}" functional_role="${role}">
 ${text}
 </turn>`,
-  }
+	}
 }
 ```
 
@@ -65,18 +65,18 @@ import { Memory } from '@mastra/memory'
 import { LibSQLStore } from '@mastra/libsql'
 
 const memory = new Memory({
-  storage: new LibSQLStore({ url: 'file:./collab.db' }),
-  options: {
-    lastMessages: 20,
-  },
+	storage: new LibSQLStore({ url: 'file:./collab.db' }),
+	options: {
+		lastMessages: 20,
+	},
 })
 
 export const collabAgent = new Agent({
-  id: 'collab',
-  name: 'CollabAgent',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
-  memory,
-  instructions: `
+	id: 'collab',
+	name: 'CollabAgent',
+	model: '__GATEWAY_OPENAI_MODEL_MINI__',
+	memory,
+	instructions: `
 You are a collaborative document assistant. Multiple users talk to you in the SAME thread.
 
 Every user message is wrapped in a <turn> tag carrying the user's identity:
@@ -106,11 +106,11 @@ const alice = { id: 'u_alice', name: 'Alice', role: 'editor' }
 const bob = { id: 'u_bob', name: 'Bob', role: 'reviewer' }
 
 await collabAgent.generate([asUserTurn(alice, 'My favorite color is teal.')], {
-  memory: { thread: docThreadId, resource: docResourceId },
+	memory: { thread: docThreadId, resource: docResourceId },
 })
 
 await collabAgent.generate([asUserTurn(bob, 'I want QA sign-off before publish.')], {
-  memory: { thread: docThreadId, resource: docResourceId },
+	memory: { thread: docThreadId, resource: docResourceId },
 })
 ```
 
@@ -135,10 +135,10 @@ import { Memory } from '@mastra/memory'
 import { LibSQLStore } from '@mastra/libsql'
 
 const memory = new Memory({
-  storage: new LibSQLStore({ url: 'file:./collab.db' }),
-  options: {
-    lastMessages: 20,
-  },
+	storage: new LibSQLStore({ url: 'file:./collab.db' }),
+	options: {
+		lastMessages: 20,
+	},
 })
 ```
 
@@ -155,11 +155,11 @@ import { Memory } from '@mastra/memory'
 import { LibSQLStore } from '@mastra/libsql'
 
 const memory = new Memory({
-  storage: new LibSQLStore({ url: 'file:./collab.db' }),
-  options: {
-    lastMessages: 20,
-    observationalMemory: true,
-  },
+	storage: new LibSQLStore({ url: 'file:./collab.db' }),
+	options: {
+		lastMessages: 20,
+		observationalMemory: true,
+	},
 })
 ```
 
@@ -182,13 +182,13 @@ import { Memory } from '@mastra/memory'
 import { LibSQLStore } from '@mastra/libsql'
 
 const memory = new Memory({
-  storage: new LibSQLStore({ url: 'file:./collab.db' }),
-  options: {
-    lastMessages: 20,
-    workingMemory: {
-      enabled: true,
-      scope: 'thread',
-      template: `# Document Collaboration State
+	storage: new LibSQLStore({ url: 'file:./collab.db' }),
+	options: {
+		lastMessages: 20,
+		workingMemory: {
+			enabled: true,
+			scope: 'thread',
+			template: `# Document Collaboration State
 
 ## Participants
 <!-- One entry per known collaborator. Use author_id as the stable key. -->
@@ -198,8 +198,8 @@ const memory = new Memory({
 
 ## Decisions
 `,
-    },
-  },
+		},
+	},
 })
 ```
 

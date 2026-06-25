@@ -30,9 +30,9 @@ const grants = harness.session.getGrants()
 
 // Render from the coalesced display-state snapshot
 harness.subscribe(event => {
-  if (event.type === 'display_state_changed') {
-    render(harness.session.displayState.get())
-  }
+	if (event.type === 'display_state_changed') {
+		render(harness.session.displayState.get())
+	}
 })
 ```
 
@@ -42,61 +42,61 @@ The session is organized into sub-objects, each owning one domain of per-convers
 
 <PropertiesTable
   content={[
-  {
-    name: 'identity',
-    type: 'SessionIdentity',
-    description: 'Stable session, owner, and resource identity for the conversation. See identity methods below.',
-  },
-  {
-    name: 'thread',
-    type: 'SessionThread',
-    description: 'Active thread binding and thread/message reads. See thread methods below.',
-  },
-  {
-    name: 'mode',
-    type: 'SessionMode',
-    description: 'Active mode selection. See mode methods below.',
-  },
-  {
-    name: 'model',
-    type: 'SessionModel',
-    description: 'Active model selection, including per-mode persistence. See model methods below.',
-  },
-  {
-    name: 'run',
-    type: 'SessionRun',
-    description: 'Run and trace identity plus abort state for the in-flight run. See run methods below.',
-  },
-  {
-    name: 'stream',
-    type: 'SessionStream',
-    description: 'The live subscription to the agent thread stream. See stream methods below.',
-  },
-  {
-    name: 'suspensions',
-    type: 'SessionSuspensions',
-    description: 'Parked interactive tool calls awaiting a resume. See suspensions methods below.',
-  },
-  {
-    name: 'followUps',
-    type: 'SessionFollowUps',
-    description: 'Queue of messages submitted while a run is in progress. See follow-up methods below.',
-  },
-  {
-    name: 'approval',
-    type: 'SessionApproval',
-    description: 'The pending tool-approval gate. See approval methods below.',
-  },
-  {
-    name: 'displayState',
-    type: 'SessionDisplayState',
-    description: 'The canonical HarnessDisplayState snapshot a UI renders from. See display-state methods below.',
-  },
-  {
-    name: 'state',
-    type: 'SessionState<TState>',
-    description: 'The schema-validated, session-owned Harness state. See state methods below.',
-  },
+	{
+		name: 'identity',
+		type: 'SessionIdentity',
+		description: 'Stable session, owner, and resource identity for the conversation. See identity methods below.',
+	},
+	{
+		name: 'thread',
+		type: 'SessionThread',
+		description: 'Active thread binding and thread/message reads. See thread methods below.',
+	},
+	{
+		name: 'mode',
+		type: 'SessionMode',
+		description: 'Active mode selection. See mode methods below.',
+	},
+	{
+		name: 'model',
+		type: 'SessionModel',
+		description: 'Active model selection, including per-mode persistence. See model methods below.',
+	},
+	{
+		name: 'run',
+		type: 'SessionRun',
+		description: 'Run and trace identity plus abort state for the in-flight run. See run methods below.',
+	},
+	{
+		name: 'stream',
+		type: 'SessionStream',
+		description: 'The live subscription to the agent thread stream. See stream methods below.',
+	},
+	{
+		name: 'suspensions',
+		type: 'SessionSuspensions',
+		description: 'Parked interactive tool calls awaiting a resume. See suspensions methods below.',
+	},
+	{
+		name: 'followUps',
+		type: 'SessionFollowUps',
+		description: 'Queue of messages submitted while a run is in progress. See follow-up methods below.',
+	},
+	{
+		name: 'approval',
+		type: 'SessionApproval',
+		description: 'The pending tool-approval gate. See approval methods below.',
+	},
+	{
+		name: 'displayState',
+		type: 'SessionDisplayState',
+		description: 'The canonical HarnessDisplayState snapshot a UI renders from. See display-state methods below.',
+	},
+	{
+		name: 'state',
+		type: 'SessionState<TState>',
+		description: 'The schema-validated, session-owned Harness state. See state methods below.',
+	},
 ]}
 />
 
@@ -270,7 +270,7 @@ Retrieve the first user message for many threads at once, returned as a map.
 
 ```typescript
 const firstByThread = await harness.session.thread.firstUserMessages({
-  threadIds: ['thread-a', 'thread-b'],
+	threadIds: ['thread-a', 'thread-b'],
 })
 ```
 
@@ -338,7 +338,7 @@ Check whether a model is currently selected.
 
 ```typescript
 if (harness.session.model.hasSelection()) {
-  // Ready to send messages
+	// Ready to send messages
 }
 ```
 
@@ -349,8 +349,8 @@ Switch the active model. When `scope` is `'thread'` (the default), the model ID 
 ```typescript
 // Set for the current session only
 await harness.session.model.switch({
-  modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
-  scope: 'global',
+	modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+	scope: 'global',
 })
 
 // Persist to the current thread (default)
@@ -447,8 +447,8 @@ await harness.session.subagents.model.set({ modelId: '__GATEWAY_ANTHROPIC_MODEL_
 
 // Set a per-type override
 await harness.session.subagents.model.set({
-  modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
-  agentType: 'explore',
+	modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
+	agentType: 'explore',
 })
 ```
 
@@ -471,7 +471,7 @@ Return whether a run is currently in progress.
 
 ```typescript
 if (harness.session.run.isRunning()) {
-  // A run is active
+	// A run is active
 }
 ```
 
@@ -493,7 +493,7 @@ Return whether the stream currently has an active run.
 
 ```typescript
 if (harness.session.stream.isActive()) {
-  // The current thread's stream is producing output
+	// The current thread's stream is producing output
 }
 ```
 
@@ -507,7 +507,7 @@ Return whether any tool is currently suspended.
 
 ```typescript
 if (harness.session.suspensions.hasPending()) {
-  // At least one interactive tool is waiting for a response
+	// At least one interactive tool is waiting for a response
 }
 ```
 
@@ -539,7 +539,7 @@ Return whether the follow-up queue is empty.
 
 ```typescript
 if (!harness.session.followUps.isEmpty()) {
-  // Messages are waiting to be processed
+	// Messages are waiting to be processed
 }
 ```
 
@@ -553,7 +553,7 @@ Return whether a tool is currently awaiting an approval decision.
 
 ```typescript
 if (harness.session.approval.isArmed()) {
-  // Show the approval prompt
+	// Show the approval prompt
 }
 ```
 
@@ -607,8 +607,8 @@ Run an updater against the current snapshot and apply its result atomically with
 
 ```typescript
 const added = await harness.session.state.update(current => ({
-  updates: { count: (current.count ?? 0) + 1 },
-  result: (current.count ?? 0) + 1,
+	updates: { count: (current.count ?? 0) + 1 },
+	result: (current.count ?? 0) + 1,
 }))
 ```
 

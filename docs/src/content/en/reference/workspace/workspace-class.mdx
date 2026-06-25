@@ -17,16 +17,16 @@ The `Workspace` class combines a filesystem and sandbox to provide agents with f
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  id: 'my-workspace',
-  name: 'My Workspace',
-  filesystem: new LocalFilesystem({
-    basePath: './workspace',
-  }),
-  sandbox: new LocalSandbox({
-    workingDirectory: './workspace',
-  }),
-  bm25: true,
-  autoIndexPaths: ['docs'],
+	id: 'my-workspace',
+	name: 'My Workspace',
+	filesystem: new LocalFilesystem({
+		basePath: './workspace',
+	}),
+	sandbox: new LocalSandbox({
+		workingDirectory: './workspace',
+	}),
+	bm25: true,
+	autoIndexPaths: ['docs'],
 })
 ```
 
@@ -34,164 +34,164 @@ const workspace = new Workspace({
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Unique identifier for the workspace',
-    isOptional: true,
-    defaultValue: 'Auto-generated',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: 'Human-readable name',
-    isOptional: true,
-    defaultValue: 'workspace-{id}',
-  },
-  {
-    name: 'filesystem',
-    type: 'WorkspaceFilesystem | WorkspaceFilesystemResolver',
-    description:
-      'Filesystem provider instance, or a resolver function that receives `requestContext` and returns a filesystem per request. See [dynamic filesystem](/docs/workspace/filesystem#dynamic-filesystem).',
-    isOptional: true,
-  },
-  {
-    name: 'sandbox',
-    type: 'WorkspaceSandbox | WorkspaceSandboxResolver',
-    description:
-      'Sandbox provider instance, or a resolver function that receives `requestContext` and returns a sandbox per request. See [dynamic sandbox](/docs/workspace/sandbox#dynamic-sandbox).',
-    isOptional: true,
-  },
-  {
-    name: 'instructions.dynamicSandbox',
-    type: "'placeholder' | 'resolve' | (({ requestContext }) => string)",
-    description:
-      "Controls how a resolver-backed `sandbox` contributes to workspace instructions. `'placeholder'` (default) emits stable text without calling the resolver. `'resolve'` calls the resolver and uses the sandbox's own instructions. A function returns custom text without resolving. Has no effect on a static sandbox.",
-    isOptional: true,
-    defaultValue: "'placeholder'",
-  },
-  {
-    name: 'sandboxCacheKey',
-    type: '({ requestContext }) => string | undefined',
-    description:
-      'Stable cache key for a resolver-backed `sandbox`. When set, resolved sandboxes are memoized per key instead of per `RequestContext` instance, so background-process tools reach the same sandbox across follow-up requests. Has no effect on a static sandbox.',
-    isOptional: true,
-  },
-  {
-    name: 'bm25',
-    type: 'boolean | BM25Config',
-    description: 'Enable BM25 keyword search. Pass true for defaults or a config object.',
-    isOptional: true,
-    defaultValue: 'undefined',
-  },
-  {
-    name: 'vectorStore',
-    type: 'MastraVector',
-    description: 'Vector store for semantic search',
-    isOptional: true,
-  },
-  {
-    name: 'embedder',
-    type: 'Embedder',
-    description:
-      'Function that turns text into vectors. Required when `vectorStore` is set. Accepts either a single-text function `(text: string) => Promise<number[]>` or a batch-capable function `(texts: string[]) => Promise<number[][]>` that has a `batch: true` property and an optional `maxBatchSize`. See [Batch embedding](/docs/workspace/search#batch-embedding).',
-    isOptional: true,
-  },
-  {
-    name: 'autoIndexPaths',
-    type: 'string[]',
-    description:
-      "Paths or glob patterns to auto-index on init(). Supports glob patterns like '**/*.md' for selective indexing.",
-    isOptional: true,
-  },
-  {
-    name: 'skills',
-    type: 'string[] | ((context: SkillsContext) => string[] | Promise<string[]>)',
-    description:
-      "Paths where SKILL.md files are located. This can be a static array or an async function that resolves paths dynamically. Supports glob patterns like './**/skills' for discovery.",
-    isOptional: true,
-  },
-  {
-    name: 'skillSource',
-    type: 'SkillSource',
-    description:
-      'Custom skill source for skill discovery. When provided, this source is used instead of the workspace filesystem. Use VersionedSkillSource to serve published skill versions from a content-addressable blob store.',
-    isOptional: true,
-  },
-  {
-    name: 'onMount',
-    type: 'OnMountHook',
-    description:
-      'Pre-mount hook called for each filesystem before mounting into a sandbox. Return false to skip mounting, or return { success: true } if the hook handled the mount. Return undefined to use the default mount behavior.',
-    isOptional: true,
-  },
-  {
-    name: 'searchIndexName',
-    type: 'string',
-    description:
-      "Custom index name for the vector store. Must be a valid SQL identifier (start with a letter or underscore, contain only letters, numbers, or underscores, max 63 characters). Defaults to a sanitized version of '{id}_search'.",
-    isOptional: true,
-  },
-  {
-    name: 'tools',
-    type: 'WorkspaceToolsConfig',
-    description: 'Per-tool configuration for enabling tools and setting safety options',
-    isOptional: true,
-    properties: [
-      {
-        type: 'WorkspaceToolsConfig',
-        parameters: [
-          {
-            name: 'enabled',
-            type: 'boolean',
-            description: 'Whether the tool is available to agents',
-            isOptional: true,
-            defaultValue: 'true',
-          },
-          {
-            name: 'requireApproval',
-            type: 'boolean',
-            description: 'Whether the tool requires user approval before execution',
-            isOptional: true,
-            defaultValue: 'false',
-          },
-          {
-            name: 'name',
-            type: 'string',
-            description:
-              'Custom name to expose this tool as. Replaces the default `mastra_workspace_*` name. The config key must still use the original `WORKSPACE_TOOLS` constant.',
-            isOptional: true,
-          },
-          {
-            name: 'requireReadBeforeWrite',
-            type: 'boolean',
-            description: 'For write tools: require reading the file first to prevent overwrites',
-            isOptional: true,
-            defaultValue: 'false',
-          },
-          {
-            name: 'maxOutputTokens',
-            type: 'number',
-            description: 'Maximum tokens for tool output. Output exceeding this limit is truncated using tiktoken.',
-            isOptional: true,
-            defaultValue: '2000',
-          },
-          {
-            name: 'hooks',
-            type: 'WorkspaceToolHooks',
-            description: 'Hooks that run before and after every enabled workspace tool call. See Tool hooks below.',
-            isOptional: true,
-          },
-        ],
-      },
-    ],
-  },
-  {
-    name: 'operationTimeout',
-    type: 'number',
-    description: 'Timeout for operations in milliseconds',
-    isOptional: true,
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Unique identifier for the workspace',
+		isOptional: true,
+		defaultValue: 'Auto-generated',
+	},
+	{
+		name: 'name',
+		type: 'string',
+		description: 'Human-readable name',
+		isOptional: true,
+		defaultValue: 'workspace-{id}',
+	},
+	{
+		name: 'filesystem',
+		type: 'WorkspaceFilesystem | WorkspaceFilesystemResolver',
+		description:
+			'Filesystem provider instance, or a resolver function that receives `requestContext` and returns a filesystem per request. See [dynamic filesystem](/docs/workspace/filesystem#dynamic-filesystem).',
+		isOptional: true,
+	},
+	{
+		name: 'sandbox',
+		type: 'WorkspaceSandbox | WorkspaceSandboxResolver',
+		description:
+			'Sandbox provider instance, or a resolver function that receives `requestContext` and returns a sandbox per request. See [dynamic sandbox](/docs/workspace/sandbox#dynamic-sandbox).',
+		isOptional: true,
+	},
+	{
+		name: 'instructions.dynamicSandbox',
+		type: "'placeholder' | 'resolve' | (({ requestContext }) => string)",
+		description:
+			"Controls how a resolver-backed `sandbox` contributes to workspace instructions. `'placeholder'` (default) emits stable text without calling the resolver. `'resolve'` calls the resolver and uses the sandbox's own instructions. A function returns custom text without resolving. Has no effect on a static sandbox.",
+		isOptional: true,
+		defaultValue: "'placeholder'",
+	},
+	{
+		name: 'sandboxCacheKey',
+		type: '({ requestContext }) => string | undefined',
+		description:
+			'Stable cache key for a resolver-backed `sandbox`. When set, resolved sandboxes are memoized per key instead of per `RequestContext` instance, so background-process tools reach the same sandbox across follow-up requests. Has no effect on a static sandbox.',
+		isOptional: true,
+	},
+	{
+		name: 'bm25',
+		type: 'boolean | BM25Config',
+		description: 'Enable BM25 keyword search. Pass true for defaults or a config object.',
+		isOptional: true,
+		defaultValue: 'undefined',
+	},
+	{
+		name: 'vectorStore',
+		type: 'MastraVector',
+		description: 'Vector store for semantic search',
+		isOptional: true,
+	},
+	{
+		name: 'embedder',
+		type: 'Embedder',
+		description:
+			'Function that turns text into vectors. Required when `vectorStore` is set. Accepts either a single-text function `(text: string) => Promise<number[]>` or a batch-capable function `(texts: string[]) => Promise<number[][]>` that has a `batch: true` property and an optional `maxBatchSize`. See [Batch embedding](/docs/workspace/search#batch-embedding).',
+		isOptional: true,
+	},
+	{
+		name: 'autoIndexPaths',
+		type: 'string[]',
+		description:
+			"Paths or glob patterns to auto-index on init(). Supports glob patterns like '**/*.md' for selective indexing.",
+		isOptional: true,
+	},
+	{
+		name: 'skills',
+		type: 'string[] | ((context: SkillsContext) => string[] | Promise<string[]>)',
+		description:
+			"Paths where SKILL.md files are located. This can be a static array or an async function that resolves paths dynamically. Supports glob patterns like './**/skills' for discovery.",
+		isOptional: true,
+	},
+	{
+		name: 'skillSource',
+		type: 'SkillSource',
+		description:
+			'Custom skill source for skill discovery. When provided, this source is used instead of the workspace filesystem. Use VersionedSkillSource to serve published skill versions from a content-addressable blob store.',
+		isOptional: true,
+	},
+	{
+		name: 'onMount',
+		type: 'OnMountHook',
+		description:
+			'Pre-mount hook called for each filesystem before mounting into a sandbox. Return false to skip mounting, or return { success: true } if the hook handled the mount. Return undefined to use the default mount behavior.',
+		isOptional: true,
+	},
+	{
+		name: 'searchIndexName',
+		type: 'string',
+		description:
+			"Custom index name for the vector store. Must be a valid SQL identifier (start with a letter or underscore, contain only letters, numbers, or underscores, max 63 characters). Defaults to a sanitized version of '{id}_search'.",
+		isOptional: true,
+	},
+	{
+		name: 'tools',
+		type: 'WorkspaceToolsConfig',
+		description: 'Per-tool configuration for enabling tools and setting safety options',
+		isOptional: true,
+		properties: [
+			{
+				type: 'WorkspaceToolsConfig',
+				parameters: [
+					{
+						name: 'enabled',
+						type: 'boolean',
+						description: 'Whether the tool is available to agents',
+						isOptional: true,
+						defaultValue: 'true',
+					},
+					{
+						name: 'requireApproval',
+						type: 'boolean',
+						description: 'Whether the tool requires user approval before execution',
+						isOptional: true,
+						defaultValue: 'false',
+					},
+					{
+						name: 'name',
+						type: 'string',
+						description:
+							'Custom name to expose this tool as. Replaces the default `mastra_workspace_*` name. The config key must still use the original `WORKSPACE_TOOLS` constant.',
+						isOptional: true,
+					},
+					{
+						name: 'requireReadBeforeWrite',
+						type: 'boolean',
+						description: 'For write tools: require reading the file first to prevent overwrites',
+						isOptional: true,
+						defaultValue: 'false',
+					},
+					{
+						name: 'maxOutputTokens',
+						type: 'number',
+						description: 'Maximum tokens for tool output. Output exceeding this limit is truncated using tiktoken.',
+						isOptional: true,
+						defaultValue: '2000',
+					},
+					{
+						name: 'hooks',
+						type: 'WorkspaceToolHooks',
+						description: 'Hooks that run before and after every enabled workspace tool call. See Tool hooks below.',
+						isOptional: true,
+					},
+				],
+			},
+		],
+	},
+	{
+		name: 'operationTimeout',
+		type: 'number',
+		description: 'Timeout for operations in milliseconds',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -204,18 +204,18 @@ import { Workspace } from '@mastra/core/workspace'
 import { WORKSPACE_TOOLS } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  id: 'my-workspace',
-  name: 'My Workspace',
-  tools: {
-    // Global defaults (apply to all tools)
-    enabled: true,
-    requireApproval: false,
+	id: 'my-workspace',
+	name: 'My Workspace',
+	tools: {
+		// Global defaults (apply to all tools)
+		enabled: true,
+		requireApproval: false,
 
-    // Per-tool overrides using WORKSPACE_TOOLS constants
-    [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
-      requireApproval: true,
-    },
-  },
+		// Per-tool overrides using WORKSPACE_TOOLS constants
+		[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
+			requireApproval: true,
+		},
+	},
 })
 ```
 
@@ -235,12 +235,12 @@ import { Workspace } from '@mastra/core/workspace'
 import { WORKSPACE_TOOLS } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  id: 'my-workspace',
-  name: 'My Workspace',
-  tools: {
-    [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: { name: 'view' },
-    [WORKSPACE_TOOLS.FILESYSTEM.GREP]: { name: 'search_content' },
-  },
+	id: 'my-workspace',
+	name: 'My Workspace',
+	tools: {
+		[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: { name: 'view' },
+		[WORKSPACE_TOOLS.FILESYSTEM.GREP]: { name: 'search_content' },
+	},
 })
 ```
 
@@ -254,36 +254,36 @@ Set `tools.hooks` to run logic before and after every enabled workspace tool cal
 import { Workspace } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  id: 'my-workspace',
-  tools: {
-    hooks: {
-      beforeToolCall: ({ toolName, workspaceToolName, input }) => {
-        console.log(`Running ${toolName} (${workspaceToolName})`, input)
-      },
-      afterToolCall: ({ toolName, output, error }) => {
-        console.log(`Finished ${toolName}`, { output, error })
-      },
-    },
-  },
+	id: 'my-workspace',
+	tools: {
+		hooks: {
+			beforeToolCall: ({ toolName, workspaceToolName, input }) => {
+				console.log(`Running ${toolName} (${workspaceToolName})`, input)
+			},
+			afterToolCall: ({ toolName, output, error }) => {
+				console.log(`Finished ${toolName}`, { output, error })
+			},
+		},
+	},
 })
 ```
 
 <PropertiesTable
   content={[
-  {
-    name: 'beforeToolCall',
-    type: '(context: WorkspaceToolHookContext) => void | WorkspaceToolBeforeHookResult | Promise<void | WorkspaceToolBeforeHookResult>',
-    isOptional: true,
-    description:
-      'Runs before a workspace tool executes. Receives `{ toolName, workspaceToolName, input, context }`. Return `{ proceed: false, output }` to skip the tool call and use `output` as its result.',
-  },
-  {
-    name: 'afterToolCall',
-    type: '(context: WorkspaceToolAfterHookContext) => void | Promise<void>',
-    isOptional: true,
-    description:
-      'Runs after a workspace tool executes. Receives `{ toolName, workspaceToolName, input, context, output, error }`. `output` is undefined when the tool throws, and `error` is set instead.',
-  },
+	{
+		name: 'beforeToolCall',
+		type: '(context: WorkspaceToolHookContext) => void | WorkspaceToolBeforeHookResult | Promise<void | WorkspaceToolBeforeHookResult>',
+		isOptional: true,
+		description:
+			'Runs before a workspace tool executes. Receives `{ toolName, workspaceToolName, input, context }`. Return `{ proceed: false, output }` to skip the tool call and use `output` as its result.',
+	},
+	{
+		name: 'afterToolCall',
+		type: '(context: WorkspaceToolAfterHookContext) => void | Promise<void>',
+		isOptional: true,
+		description:
+			'Runs after a workspace tool executes. Receives `{ toolName, workspaceToolName, input, context, output, error }`. `output` is undefined when the tool throws, and `error` is set instead.',
+	},
 ]}
 />
 
@@ -293,53 +293,53 @@ If the owning agent also defines [tool hooks](/reference/agents/agent#tool-hooks
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Workspace identifier',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: 'Workspace name',
-  },
-  {
-    name: 'status',
-    type: 'WorkspaceStatus',
-    description: "'pending' | 'initializing' | 'ready' | 'paused' | 'error' | 'destroying' | 'destroyed'",
-  },
-  {
-    name: 'filesystem',
-    type: 'WorkspaceFilesystem | undefined',
-    description:
-      'The static filesystem provider. Returns `undefined` when a resolver function is configured — use `hasFilesystemConfig()` to check availability.',
-  },
-  {
-    name: 'sandbox',
-    type: 'WorkspaceSandbox | undefined',
-    description:
-      'The static sandbox provider. Returns `undefined` when a resolver function is configured — use `hasSandboxConfig()` to check availability.',
-  },
-  {
-    name: 'skills',
-    type: 'WorkspaceSkills | undefined',
-    description: 'Skills interface for accessing SKILL.md files',
-  },
-  {
-    name: 'canBM25',
-    type: 'boolean',
-    description: 'Whether BM25 search is available',
-  },
-  {
-    name: 'canVector',
-    type: 'boolean',
-    description: 'Whether vector search is available',
-  },
-  {
-    name: 'canHybrid',
-    type: 'boolean',
-    description: 'Whether hybrid search is available',
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Workspace identifier',
+	},
+	{
+		name: 'name',
+		type: 'string',
+		description: 'Workspace name',
+	},
+	{
+		name: 'status',
+		type: 'WorkspaceStatus',
+		description: "'pending' | 'initializing' | 'ready' | 'paused' | 'error' | 'destroying' | 'destroyed'",
+	},
+	{
+		name: 'filesystem',
+		type: 'WorkspaceFilesystem | undefined',
+		description:
+			'The static filesystem provider. Returns `undefined` when a resolver function is configured — use `hasFilesystemConfig()` to check availability.',
+	},
+	{
+		name: 'sandbox',
+		type: 'WorkspaceSandbox | undefined',
+		description:
+			'The static sandbox provider. Returns `undefined` when a resolver function is configured — use `hasSandboxConfig()` to check availability.',
+	},
+	{
+		name: 'skills',
+		type: 'WorkspaceSkills | undefined',
+		description: 'Skills interface for accessing SKILL.md files',
+	},
+	{
+		name: 'canBM25',
+		type: 'boolean',
+		description: 'Whether BM25 search is available',
+	},
+	{
+		name: 'canVector',
+		type: 'boolean',
+		description: 'Whether vector search is available',
+	},
+	{
+		name: 'canHybrid',
+		type: 'boolean',
+		description: 'Whether hybrid search is available',
+	},
 ]}
 />
 
@@ -397,8 +397,8 @@ Search indexed content.
 
 ```typescript
 const results = await workspace.search('password reset', {
-  topK: 10,
-  mode: 'hybrid',
+	topK: 10,
+	mode: 'hybrid',
 })
 ```
 
@@ -423,26 +423,26 @@ const info = await workspace.getInfo({ resolveDynamicProviders: false })
 
 <PropertiesTable
   content={[
-  {
-    name: 'options.includeFileCount',
-    type: 'boolean',
-    description: 'Whether to count total files. This can be slow for large workspaces.',
-    isOptional: true,
-  },
-  {
-    name: 'options.requestContext',
-    type: 'RequestContext',
-    description: 'Passed to dynamic provider resolvers when `resolveDynamicProviders` is enabled.',
-    isOptional: true,
-  },
-  {
-    name: 'options.resolveDynamicProviders',
-    type: 'boolean',
-    description:
-      'Whether to invoke dynamic provider resolvers. Set to `false` when you only need metadata and want resolver-backed providers reported as `dynamic`.',
-    isOptional: true,
-    defaultValue: 'true',
-  },
+	{
+		name: 'options.includeFileCount',
+		type: 'boolean',
+		description: 'Whether to count total files. This can be slow for large workspaces.',
+		isOptional: true,
+	},
+	{
+		name: 'options.requestContext',
+		type: 'RequestContext',
+		description: 'Passed to dynamic provider resolvers when `resolveDynamicProviders` is enabled.',
+		isOptional: true,
+	},
+	{
+		name: 'options.resolveDynamicProviders',
+		type: 'boolean',
+		description:
+			'Whether to invoke dynamic provider resolvers. Set to `false` when you only need metadata and want resolver-backed providers reported as `dynamic`.',
+		isOptional: true,
+		defaultValue: 'true',
+	},
 ]}
 />
 
@@ -464,13 +464,13 @@ const instructions = workspace.getInstructions({ requestContext })
 
 <PropertiesTable
   content={[
-  {
-    name: 'opts.requestContext',
-    type: 'RequestContext',
-    description:
-      'Forwarded to the `instructions` function on the filesystem or sandbox provider, if one is configured.',
-    isOptional: true,
-  },
+	{
+		name: 'opts.requestContext',
+		type: 'RequestContext',
+		description:
+			'Forwarded to the `instructions` function on the filesystem or sandbox provider, if one is configured.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -488,13 +488,13 @@ const instructions = await workspace.getInstructionsAsync({ requestContext })
 
 <PropertiesTable
   content={[
-  {
-    name: 'opts.requestContext',
-    type: 'RequestContext',
-    description:
-      "Passed to the dynamic filesystem resolver, and to the dynamic sandbox resolver when `instructions.dynamicSandbox` is `'resolve'`.",
-    isOptional: true,
-  },
+	{
+		name: 'opts.requestContext',
+		type: 'RequestContext',
+		description:
+			"Passed to the dynamic filesystem resolver, and to the dynamic sandbox resolver when `instructions.dynamicSandbox` is `'resolve'`.",
+		isOptional: true,
+	},
 ]}
 />
 
@@ -521,8 +521,8 @@ import { WORKSPACE_TOOLS } from '@mastra/core/workspace'
 
 // Disable write tools for read-only mode
 workspace.setToolsConfig({
-  [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: { enabled: false },
-  [WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]: { enabled: false },
+	[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: { enabled: false },
+	[WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE]: { enabled: false },
 })
 
 // Reset to defaults
@@ -533,12 +533,12 @@ workspace.setToolsConfig(undefined)
 
 <PropertiesTable
   content={[
-  {
-    name: 'config',
-    type: 'WorkspaceToolsConfig | undefined',
-    isOptional: true,
-    description: 'New tool configuration to apply. Pass undefined to reset to defaults.',
-  },
+	{
+		name: 'config',
+		type: 'WorkspaceToolsConfig | undefined',
+		isOptional: true,
+		description: 'New tool configuration to apply. Pass undefined to reset to defaults.',
+	},
 ]}
 />
 
@@ -550,7 +550,7 @@ Check whether a filesystem is configured, either as a static instance or a resol
 
 ```typescript
 if (workspace.hasFilesystemConfig()) {
-  // Filesystem tools are available
+	// Filesystem tools are available
 }
 ```
 
@@ -571,11 +571,11 @@ const fs = await workspace.resolveFilesystem({ requestContext: ctx })
 
 <PropertiesTable
   content={[
-  {
-    name: 'requestContext',
-    type: 'RequestContext',
-    description: 'The request context to pass to the resolver function.',
-  },
+	{
+		name: 'requestContext',
+		type: 'RequestContext',
+		description: 'The request context to pass to the resolver function.',
+	},
 ]}
 />
 
@@ -589,7 +589,7 @@ Check whether a sandbox is configured, either as a static instance or a resolver
 
 ```typescript
 if (workspace.hasSandboxConfig()) {
-  // Sandbox tools are available
+	// Sandbox tools are available
 }
 ```
 
@@ -610,11 +610,11 @@ const sandbox = await workspace.resolveSandbox({ requestContext: ctx })
 
 <PropertiesTable
   content={[
-  {
-    name: 'requestContext',
-    type: 'RequestContext',
-    description: 'The request context to pass to the resolver function.',
-  },
+	{
+		name: 'requestContext',
+		type: 'RequestContext',
+		description: 'The request context to pass to the resolver function.',
+	},
 ]}
 />
 
@@ -637,12 +637,12 @@ workspace.clearSandboxCache()
 
 <PropertiesTable
   content={[
-  {
-    name: 'cacheKey',
-    type: 'string',
-    description: 'The cache key to clear. Omit this value to clear all keyed sandbox entries.',
-    isOptional: true,
-  },
+	{
+		name: 'cacheKey',
+		type: 'string',
+		description: 'The cache key to clear. Omit this value to clear all keyed sandbox entries.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -673,36 +673,36 @@ The `read_file` tool accepts `mediaTypes` and `maxMediaBytes` options to control
 
 <PropertiesTable
   content={[
-  {
-    name: 'mediaTypes',
-    type: 'string[] | ((mimeType: string) => boolean) | false',
-    description:
-      "Which mime types to surface to the model as media parts (file/image parts) rather than as text. Accepts an array of globs (e.g. `['image/*']`), a custom predicate function, or `false` to disable media detection. Defaults to the cross-provider-safe intersection of image formats plus PDF. Only applies when the caller doesn't pass an explicit `encoding`.",
-    isOptional: true,
-    defaultValue: "['image/png', 'image/jpeg', 'image/webp', 'application/pdf']",
-  },
-  {
-    name: 'maxMediaBytes',
-    type: 'number',
-    description:
-      'Maximum file size (in bytes) to inline as a media part. Files larger than this fall back to metadata-only output rather than being fully base64-encoded into context and persisted in storage on rehydration.',
-    isOptional: true,
-    defaultValue: '10 * 1024 * 1024 (10 MiB)',
-  },
+	{
+		name: 'mediaTypes',
+		type: 'string[] | ((mimeType: string) => boolean) | false',
+		description:
+			"Which mime types to surface to the model as media parts (file/image parts) rather than as text. Accepts an array of globs (e.g. `['image/*']`), a custom predicate function, or `false` to disable media detection. Defaults to the cross-provider-safe intersection of image formats plus PDF. Only applies when the caller doesn't pass an explicit `encoding`.",
+		isOptional: true,
+		defaultValue: "['image/png', 'image/jpeg', 'image/webp', 'application/pdf']",
+	},
+	{
+		name: 'maxMediaBytes',
+		type: 'number',
+		description:
+			'Maximum file size (in bytes) to inline as a media part. Files larger than this fall back to metadata-only output rather than being fully base64-encoded into context and persisted in storage on rehydration.',
+		isOptional: true,
+		defaultValue: '10 * 1024 * 1024 (10 MiB)',
+	},
 ]}
 />
 
 ```typescript
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  tools: {
-    [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: {
-      // Broaden to any image (including SVG, BMP, HEIC) — may fail on some providers
-      mediaTypes: ['image/*'],
-      // Raise the inline-media cap to 25 MiB
-      maxMediaBytes: 25 * 1024 * 1024,
-    },
-  },
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	tools: {
+		[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: {
+			// Broaden to any image (including SVG, BMP, HEIC) — may fail on some providers
+			mediaTypes: ['image/*'],
+			// Raise the inline-media cap to 25 MiB
+			maxMediaBytes: 25 * 1024 * 1024,
+		},
+	},
 })
 ```
 
@@ -722,45 +722,45 @@ The `execute_command` tool accepts a `backgroundProcesses` option for lifecycle 
 
 <PropertiesTable
   content={[
-  {
-    name: 'backgroundProcesses',
-    type: 'BackgroundProcessesConfig',
-    description:
-      'Configuration for handling background processes. Only applicable if the sandbox supports background execution.',
-    isOptional: true,
-    properties: [
-      {
-        type: 'BackgroundProcessesConfig',
-        parameters: [
-          {
-            name: 'onStdout',
-            type: '(data: string, meta: BackgroundProcessMeta) => void',
-            description: 'Callback for stdout chunks from background processes.',
-            isOptional: true,
-          },
-          {
-            name: 'onStderr',
-            type: '(data: string, meta: BackgroundProcessMeta) => void',
-            description: 'Callback for stderr chunks from background processes.',
-            isOptional: true,
-          },
-          {
-            name: 'onExit',
-            type: '(meta: BackgroundProcessExitMeta) => void',
-            description: 'Callback when a background process exits. Meta includes pid, exitCode, stdout, and stderr.',
-            isOptional: true,
-          },
-          {
-            name: 'abortSignal',
-            type: 'AbortSignal | null | false',
-            description:
-              "Abort signal for background processes. undefined (default) uses the agent's signal. null or false disables abort — processes persist after agent shutdown.",
-            isOptional: true,
-          },
-        ],
-      },
-    ],
-  },
+	{
+		name: 'backgroundProcesses',
+		type: 'BackgroundProcessesConfig',
+		description:
+			'Configuration for handling background processes. Only applicable if the sandbox supports background execution.',
+		isOptional: true,
+		properties: [
+			{
+				type: 'BackgroundProcessesConfig',
+				parameters: [
+					{
+						name: 'onStdout',
+						type: '(data: string, meta: BackgroundProcessMeta) => void',
+						description: 'Callback for stdout chunks from background processes.',
+						isOptional: true,
+					},
+					{
+						name: 'onStderr',
+						type: '(data: string, meta: BackgroundProcessMeta) => void',
+						description: 'Callback for stderr chunks from background processes.',
+						isOptional: true,
+					},
+					{
+						name: 'onExit',
+						type: '(meta: BackgroundProcessExitMeta) => void',
+						description: 'Callback when a background process exits. Meta includes pid, exitCode, stdout, and stderr.',
+						isOptional: true,
+					},
+					{
+						name: 'abortSignal',
+						type: 'AbortSignal | null | false',
+						description:
+							"Abort signal for background processes. undefined (default) uses the agent's signal. null or false disables abort — processes persist after agent shutdown.",
+						isOptional: true,
+					},
+				],
+			},
+		],
+	},
 ]}
 />
 

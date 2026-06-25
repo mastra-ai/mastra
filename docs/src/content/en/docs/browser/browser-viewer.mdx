@@ -51,30 +51,30 @@ import { Workspace, LocalSandbox } from '@mastra/core/workspace'
 import { BrowserViewer } from '@mastra/browser-viewer'
 
 const workspace = new Workspace({
-  sandbox: new LocalSandbox({
-    workingDirectory: './workspace',
-  }),
-  browser: new BrowserViewer({
-    cli: 'browser-use',
-    headless: false,
-  }),
+	sandbox: new LocalSandbox({
+		workingDirectory: './workspace',
+	}),
+	browser: new BrowserViewer({
+		cli: 'browser-use',
+		headless: false,
+	}),
 })
 
 const browserAgent = new Agent({
-  id: 'browser-agent',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  workspace,
-  instructions: `You are a web automation assistant.
+	id: 'browser-agent',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	workspace,
+	instructions: `You are a web automation assistant.
 Use browser-use commands to navigate and interact with websites.`,
-  memory: new Memory(),
+	memory: new Memory(),
 })
 
 export const mastra = new Mastra({
-  agents: { browserAgent },
-  storage: new LibSQLStore({
-    id: 'mastra-storage',
-    url: 'file:./mastra.db',
-  }),
+	agents: { browserAgent },
+	storage: new LibSQLStore({
+		id: 'mastra-storage',
+		url: 'file:./mastra.db',
+	}),
 })
 ```
 
@@ -95,8 +95,8 @@ Set the `cli` option to match the CLI your agent uses:
 
 ```typescript
 const viewer = new BrowserViewer({
-  cli: 'browser-use',
-  headless: false,
+	cli: 'browser-use',
+	headless: false,
 })
 ```
 

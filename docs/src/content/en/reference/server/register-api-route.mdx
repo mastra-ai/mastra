@@ -33,43 +33,43 @@ registerApiRoute("/items/:itemId", { ... })
 
 <PropertiesTable
   content={[
-  {
-    name: 'method',
-    type: "'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'ALL'",
-    description: 'HTTP method for the route',
-    isOptional: false,
-  },
-  {
-    name: 'handler',
-    type: 'Handler',
-    description: 'Route handler function receiving Hono Context. Use either `handler` or `createHandler`, not both.',
-    isOptional: true,
-  },
-  {
-    name: 'createHandler',
-    type: '(c: Context) => Promise<Handler>',
-    description: 'Async factory function to create the handler. Use either `handler` or `createHandler`, not both.',
-    isOptional: true,
-  },
-  {
-    name: 'middleware',
-    type: 'MiddlewareHandler | MiddlewareHandler[]',
-    description: 'Route-specific middleware functions',
-    isOptional: true,
-  },
-  {
-    name: 'cors',
-    type: 'CorsOptions',
-    description:
-      'Route-specific CORS configuration. Use this when one custom route needs a different cross-origin policy from `server.cors`.',
-    isOptional: true,
-  },
-  {
-    name: 'openapi',
-    type: 'DescribeRouteOptions',
-    description: 'OpenAPI metadata for Swagger UI documentation',
-    isOptional: true,
-  },
+	{
+		name: 'method',
+		type: "'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'ALL'",
+		description: 'HTTP method for the route',
+		isOptional: false,
+	},
+	{
+		name: 'handler',
+		type: 'Handler',
+		description: 'Route handler function receiving Hono Context. Use either `handler` or `createHandler`, not both.',
+		isOptional: true,
+	},
+	{
+		name: 'createHandler',
+		type: '(c: Context) => Promise<Handler>',
+		description: 'Async factory function to create the handler. Use either `handler` or `createHandler`, not both.',
+		isOptional: true,
+	},
+	{
+		name: 'middleware',
+		type: 'MiddlewareHandler | MiddlewareHandler[]',
+		description: 'Route-specific middleware functions',
+		isOptional: true,
+	},
+	{
+		name: 'cors',
+		type: 'CorsOptions',
+		description:
+			'Route-specific CORS configuration. Use this when one custom route needs a different cross-origin policy from `server.cors`.',
+		isOptional: true,
+	},
+	{
+		name: 'openapi',
+		type: 'DescribeRouteOptions',
+		description: 'OpenAPI metadata for Swagger UI documentation',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -79,54 +79,54 @@ The `openapi` property accepts standard OpenAPI 3.1 operation fields from [hono-
 
 <PropertiesTable
   content={[
-  {
-    name: 'summary',
-    type: 'string',
-    description: 'Short summary of the operation',
-    isOptional: true,
-  },
-  {
-    name: 'description',
-    type: 'string',
-    description: 'Detailed description of the operation',
-    isOptional: true,
-  },
-  {
-    name: 'tags',
-    type: 'string[]',
-    description: "Tags for grouping in Swagger UI. Defaults to ['custom'] if not specified.",
-    isOptional: true,
-  },
-  {
-    name: 'deprecated',
-    type: 'boolean',
-    description: 'Mark the operation as deprecated',
-    isOptional: true,
-  },
-  {
-    name: 'parameters',
-    type: 'ParameterObject[]',
-    description: 'Path, query, and header parameters',
-    isOptional: true,
-  },
-  {
-    name: 'requestBody',
-    type: 'RequestBodyObject',
-    description: 'Request body specification',
-    isOptional: true,
-  },
-  {
-    name: 'responses',
-    type: 'ResponsesObject',
-    description: 'Response specifications by status code',
-    isOptional: true,
-  },
-  {
-    name: 'security',
-    type: 'SecurityRequirementObject[]',
-    description: 'Security requirements for the operation',
-    isOptional: true,
-  },
+	{
+		name: 'summary',
+		type: 'string',
+		description: 'Short summary of the operation',
+		isOptional: true,
+	},
+	{
+		name: 'description',
+		type: 'string',
+		description: 'Detailed description of the operation',
+		isOptional: true,
+	},
+	{
+		name: 'tags',
+		type: 'string[]',
+		description: "Tags for grouping in Swagger UI. Defaults to ['custom'] if not specified.",
+		isOptional: true,
+	},
+	{
+		name: 'deprecated',
+		type: 'boolean',
+		description: 'Mark the operation as deprecated',
+		isOptional: true,
+	},
+	{
+		name: 'parameters',
+		type: 'ParameterObject[]',
+		description: 'Path, query, and header parameters',
+		isOptional: true,
+	},
+	{
+		name: 'requestBody',
+		type: 'RequestBodyObject',
+		description: 'Request body specification',
+		isOptional: true,
+	},
+	{
+		name: 'responses',
+		type: 'ResponsesObject',
+		description: 'Response specifications by status code',
+		isOptional: true,
+	},
+	{
+		name: 'security',
+		type: 'SecurityRequirementObject[]',
+		description: 'Security requirements for the operation',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -140,23 +140,23 @@ The handler receives a Hono `Context` object with access to:
 
 ```typescript
 handler: async c => {
-  // Get the Mastra instance
-  const mastra = c.get('mastra')
+	// Get the Mastra instance
+	const mastra = c.get('mastra')
 
-  // Get request context
-  const requestContext = c.get('requestContext')
+	// Get request context
+	const requestContext = c.get('requestContext')
 
-  // Access path parameters
-  const itemId = c.req.param('itemId')
+	// Access path parameters
+	const itemId = c.req.param('itemId')
 
-  // Access query parameters
-  const filter = c.req.query('filter')
+	// Access query parameters
+	const filter = c.req.query('filter')
 
-  // Access request body
-  const body = await c.req.json()
+	// Access request body
+	const body = await c.req.json()
 
-  // Return JSON response
-  return c.json({ data: 'value' })
+	// Return JSON response
+	return c.json({ data: 'value' })
 }
 ```
 
@@ -169,16 +169,16 @@ import { Mastra } from '@mastra/core'
 import { registerApiRoute } from '@mastra/core/server'
 
 export const mastra = new Mastra({
-  server: {
-    apiRoutes: [
-      registerApiRoute('/health-check', {
-        method: 'GET',
-        handler: async c => {
-          return c.json({ status: 'ok' })
-        },
-      }),
-    ],
-  },
+	server: {
+		apiRoutes: [
+			registerApiRoute('/health-check', {
+				method: 'GET',
+				handler: async c => {
+					return c.json({ status: 'ok' })
+				},
+			}),
+		],
+	},
 })
 ```
 
@@ -186,13 +186,13 @@ export const mastra = new Mastra({
 
 ```typescript
 registerApiRoute('/users/:userId/posts/:postId', {
-  method: 'GET',
-  handler: async c => {
-    const userId = c.req.param('userId')
-    const postId = c.req.param('postId')
+	method: 'GET',
+	handler: async c => {
+		const userId = c.req.param('userId')
+		const postId = c.req.param('postId')
 
-    return c.json({ userId, postId })
-  },
+		return c.json({ userId, postId })
+	},
 })
 ```
 
@@ -200,15 +200,15 @@ registerApiRoute('/users/:userId/posts/:postId', {
 
 ```typescript
 registerApiRoute('/items', {
-  method: 'POST',
-  handler: async c => {
-    const body = await c.req.json()
-    const mastra = c.get('mastra')
+	method: 'POST',
+	handler: async c => {
+		const body = await c.req.json()
+		const mastra = c.get('mastra')
 
-    // Process the request...
+		// Process the request...
 
-    return c.json({ id: 'new-id', ...body }, 201)
-  },
+		return c.json({ id: 'new-id', ...body }, 201)
+	},
 })
 ```
 
@@ -216,19 +216,19 @@ registerApiRoute('/items', {
 
 ```typescript
 registerApiRoute('/protected', {
-  method: 'GET',
-  middleware: [
-    async (c, next) => {
-      const token = c.req.header('Authorization')
-      if (!token) {
-        return c.json({ error: 'Unauthorized' }, 401)
-      }
-      await next()
-    },
-  ],
-  handler: async c => {
-    return c.json({ data: 'protected content' })
-  },
+	method: 'GET',
+	middleware: [
+		async (c, next) => {
+			const token = c.req.header('Authorization')
+			if (!token) {
+				return c.json({ error: 'Unauthorized' }, 401)
+			}
+			await next()
+		},
+	],
+	handler: async c => {
+		return c.json({ data: 'protected content' })
+	},
 })
 ```
 
@@ -238,14 +238,14 @@ Use route-specific CORS when one custom route needs cross-origin credentials, bu
 
 ```typescript
 registerApiRoute('/customer-webhook', {
-  method: 'POST',
-  cors: {
-    origin: ['https://customer-saas.example'],
-    credentials: true,
-  },
-  handler: async c => {
-    return c.json({ ok: true })
-  },
+	method: 'POST',
+	cors: {
+		origin: ['https://customer-saas.example'],
+		credentials: true,
+	},
+	handler: async c => {
+		return c.json({ ok: true })
+	},
 })
 ```
 
@@ -255,44 +255,44 @@ registerApiRoute('/customer-webhook', {
 import { z } from 'zod'
 
 const ItemSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  price: z.number(),
+	id: z.string(),
+	name: z.string(),
+	price: z.number(),
 })
 
 registerApiRoute('/items/:itemId', {
-  method: 'GET',
-  openapi: {
-    summary: 'Get item by ID',
-    description: 'Retrieves a single item by its unique identifier',
-    tags: ['Items'],
-    parameters: [
-      {
-        name: 'itemId',
-        in: 'path',
-        required: true,
-        description: 'The item ID',
-        schema: { type: 'string' },
-      },
-    ],
-    responses: {
-      200: {
-        description: 'Item found',
-        content: {
-          'application/json': {
-            schema: ItemSchema, // Zod schemas are converted to JSON Schema during OpenAPI generation
-          },
-        },
-      },
-      404: {
-        description: 'Item not found',
-      },
-    },
-  },
-  handler: async c => {
-    const itemId = c.req.param('itemId')
-    return c.json({ id: itemId, name: 'Example', price: 9.99 })
-  },
+	method: 'GET',
+	openapi: {
+		summary: 'Get item by ID',
+		description: 'Retrieves a single item by its unique identifier',
+		tags: ['Items'],
+		parameters: [
+			{
+				name: 'itemId',
+				in: 'path',
+				required: true,
+				description: 'The item ID',
+				schema: { type: 'string' },
+			},
+		],
+		responses: {
+			200: {
+				description: 'Item found',
+				content: {
+					'application/json': {
+						schema: ItemSchema, // Zod schemas are converted to JSON Schema during OpenAPI generation
+					},
+				},
+			},
+			404: {
+				description: 'Item not found',
+			},
+		},
+	},
+	handler: async c => {
+		const itemId = c.req.param('itemId')
+		return c.json({ id: itemId, name: 'Example', price: 9.99 })
+	},
 })
 ```
 
@@ -302,15 +302,15 @@ For routes that need async initialization:
 
 ```typescript
 registerApiRoute('/dynamic', {
-  method: 'GET',
-  createHandler: async c => {
-    // Perform async setup
-    const config = await loadConfig()
+	method: 'GET',
+	createHandler: async c => {
+		// Perform async setup
+		const config = await loadConfig()
 
-    return async c => {
-      return c.json({ config })
-    }
-  },
+		return async c => {
+			return c.json({ config })
+		}
+	},
 })
 ```
 
@@ -322,17 +322,17 @@ Throw errors with status codes using Hono's `HTTPException`:
 import { HTTPException } from 'hono/http-exception'
 
 registerApiRoute('/items/:itemId', {
-  method: 'GET',
-  handler: async c => {
-    const itemId = c.req.param('itemId')
-    const item = await findItem(itemId)
+	method: 'GET',
+	handler: async c => {
+		const itemId = c.req.param('itemId')
+		const item = await findItem(itemId)
 
-    if (!item) {
-      throw new HTTPException(404, { message: 'Item not found' })
-    }
+		if (!item) {
+			throw new HTTPException(404, { message: 'Item not found' })
+		}
 
-    return c.json(item)
-  },
+		return c.json(item)
+	},
 })
 ```
 

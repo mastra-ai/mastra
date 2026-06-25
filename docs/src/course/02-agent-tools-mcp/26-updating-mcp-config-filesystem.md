@@ -6,35 +6,35 @@ Now, let's update your MCP configuration in `src/mastra/agents/index.ts` to incl
 import path from 'path'
 
 const mcp = new MCPClient({
-  servers: {
-    zapier: {
-      url: new URL(process.env.ZAPIER_MCP_URL || ''),
-      requestInit: {
-        headers: {
-          Authorization: `Bearer ${process.env.ZAPIER_MCP_API_KEY}`,
-        },
-      },
-    },
-    github: {
-      url: new URL('https://api.githubcopilot.com/mcp/'),
-      requestInit: {
-        headers: {
-          Authorization: `Bearer ${process.env.GITHUB_PERSONAL_ACCESS_TOKEN}`,
-        },
-      },
-    },
-    hackernews: {
-      command: 'npx',
-      args: ['-y', '@devabdultech/hn-mcp-server'],
-    },
-    textEditor: {
-      command: 'pnpx',
-      args: [
-        `@modelcontextprotocol/server-filesystem`,
-        path.join(process.cwd(), '..', '..', 'notes'), // relative to output directory
-      ],
-    },
-  },
+	servers: {
+		zapier: {
+			url: new URL(process.env.ZAPIER_MCP_URL || ''),
+			requestInit: {
+				headers: {
+					Authorization: `Bearer ${process.env.ZAPIER_MCP_API_KEY}`,
+				},
+			},
+		},
+		github: {
+			url: new URL('https://api.githubcopilot.com/mcp/'),
+			requestInit: {
+				headers: {
+					Authorization: `Bearer ${process.env.GITHUB_PERSONAL_ACCESS_TOKEN}`,
+				},
+			},
+		},
+		hackernews: {
+			command: 'npx',
+			args: ['-y', '@devabdultech/hn-mcp-server'],
+		},
+		textEditor: {
+			command: 'pnpx',
+			args: [
+				`@modelcontextprotocol/server-filesystem`,
+				path.join(process.cwd(), '..', '..', 'notes'), // relative to output directory
+			],
+		},
+	},
 })
 ```
 

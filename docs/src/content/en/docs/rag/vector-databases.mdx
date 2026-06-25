@@ -33,18 +33,18 @@ After generating embeddings, you need to store them in a database that supports 
     import { MongoDBVector } from '@mastra/mongodb'
 
     const store = new MongoDBVector({
-      id: 'mongodb-vector',
-      uri: process.env.MONGODB_URI,
-      dbName: process.env.MONGODB_DATABASE,
+    	id: 'mongodb-vector',
+    	uri: process.env.MONGODB_URI,
+    	dbName: process.env.MONGODB_DATABASE,
     })
     await store.createIndex({
-      indexName: 'myCollection',
-      dimension: 1536,
+    	indexName: 'myCollection',
+    	dimension: 1536,
     })
     await store.upsert({
-      indexName: 'myCollection',
-      vectors: embeddings,
-      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    	indexName: 'myCollection',
+    	vectors: embeddings,
+    	metadata: chunks.map(chunk => ({ text: chunk.text })),
     })
     ```
 
@@ -58,19 +58,19 @@ After generating embeddings, you need to store them in a database that supports 
     import { PgVector } from '@mastra/pg'
 
     const store = new PgVector({
-      id: 'pg-vector',
-      connectionString: process.env.POSTGRES_CONNECTION_STRING,
+    	id: 'pg-vector',
+    	connectionString: process.env.POSTGRES_CONNECTION_STRING,
     })
 
     await store.createIndex({
-      indexName: 'myCollection',
-      dimension: 1536,
+    	indexName: 'myCollection',
+    	dimension: 1536,
     })
 
     await store.upsert({
-      indexName: 'myCollection',
-      vectors: embeddings,
-      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    	indexName: 'myCollection',
+    	vectors: embeddings,
+    	metadata: chunks.map(chunk => ({ text: chunk.text })),
     })
     ```
 
@@ -85,17 +85,17 @@ After generating embeddings, you need to store them in a database that supports 
     import { PineconeVector } from '@mastra/pinecone'
 
     const store = new PineconeVector({
-      id: 'pinecone-vector',
-      apiKey: process.env.PINECONE_API_KEY,
+    	id: 'pinecone-vector',
+    	apiKey: process.env.PINECONE_API_KEY,
     })
     await store.createIndex({
-      indexName: 'myCollection',
-      dimension: 1536,
+    	indexName: 'myCollection',
+    	dimension: 1536,
     })
     await store.upsert({
-      indexName: 'myCollection',
-      vectors: embeddings,
-      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    	indexName: 'myCollection',
+    	vectors: embeddings,
+    	metadata: chunks.map(chunk => ({ text: chunk.text })),
     })
     ```
   </TabItem>
@@ -105,20 +105,20 @@ After generating embeddings, you need to store them in a database that supports 
     import { QdrantVector } from '@mastra/qdrant'
 
     const store = new QdrantVector({
-      id: 'qdrant-vector',
-      url: process.env.QDRANT_URL,
-      apiKey: process.env.QDRANT_API_KEY,
+    	id: 'qdrant-vector',
+    	url: process.env.QDRANT_URL,
+    	apiKey: process.env.QDRANT_API_KEY,
     })
 
     await store.createIndex({
-      indexName: 'myCollection',
-      dimension: 1536,
+    	indexName: 'myCollection',
+    	dimension: 1536,
     })
 
     await store.upsert({
-      indexName: 'myCollection',
-      vectors: embeddings,
-      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    	indexName: 'myCollection',
+    	vectors: embeddings,
+    	metadata: chunks.map(chunk => ({ text: chunk.text })),
     })
     ```
   </TabItem>
@@ -132,21 +132,21 @@ After generating embeddings, you need to store them in a database that supports 
 
     // Running on Chroma Cloud
     const store = new ChromaVector({
-      id: 'chroma-vector',
-      apiKey: process.env.CHROMA_API_KEY,
-      tenant: process.env.CHROMA_TENANT,
-      database: process.env.CHROMA_DATABASE,
+    	id: 'chroma-vector',
+    	apiKey: process.env.CHROMA_API_KEY,
+    	tenant: process.env.CHROMA_TENANT,
+    	database: process.env.CHROMA_DATABASE,
     })
 
     await store.createIndex({
-      indexName: 'myCollection',
-      dimension: 1536,
+    	indexName: 'myCollection',
+    	dimension: 1536,
     })
 
     await store.upsert({
-      indexName: 'myCollection',
-      vectors: embeddings,
-      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    	indexName: 'myCollection',
+    	vectors: embeddings,
+    	metadata: chunks.map(chunk => ({ text: chunk.text })),
     })
     ```
   </TabItem>
@@ -156,21 +156,21 @@ After generating embeddings, you need to store them in a database that supports 
     import { AstraVector } from '@mastra/astra'
 
     const store = new AstraVector({
-      id: 'astra-vector',
-      token: process.env.ASTRA_DB_TOKEN,
-      endpoint: process.env.ASTRA_DB_ENDPOINT,
-      keyspace: process.env.ASTRA_DB_KEYSPACE,
+    	id: 'astra-vector',
+    	token: process.env.ASTRA_DB_TOKEN,
+    	endpoint: process.env.ASTRA_DB_ENDPOINT,
+    	keyspace: process.env.ASTRA_DB_KEYSPACE,
     })
 
     await store.createIndex({
-      indexName: 'myCollection',
-      dimension: 1536,
+    	indexName: 'myCollection',
+    	dimension: 1536,
     })
 
     await store.upsert({
-      indexName: 'myCollection',
-      vectors: embeddings,
-      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    	indexName: 'myCollection',
+    	vectors: embeddings,
+    	metadata: chunks.map(chunk => ({ text: chunk.text })),
     })
     ```
   </TabItem>
@@ -180,20 +180,20 @@ After generating embeddings, you need to store them in a database that supports 
     import { LibSQLVector } from '@mastra/core/vector/libsql'
 
     const store = new LibSQLVector({
-      id: 'libsql-vector',
-      url: process.env.DATABASE_URL,
-      authToken: process.env.DATABASE_AUTH_TOKEN, // Optional: for Turso cloud databases
+    	id: 'libsql-vector',
+    	url: process.env.DATABASE_URL,
+    	authToken: process.env.DATABASE_AUTH_TOKEN, // Optional: for Turso cloud databases
     })
 
     await store.createIndex({
-      indexName: 'myCollection',
-      dimension: 1536,
+    	indexName: 'myCollection',
+    	dimension: 1536,
     })
 
     await store.upsert({
-      indexName: 'myCollection',
-      vectors: embeddings,
-      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    	indexName: 'myCollection',
+    	vectors: embeddings,
+    	metadata: chunks.map(chunk => ({ text: chunk.text })),
     })
     ```
   </TabItem>
@@ -204,17 +204,17 @@ After generating embeddings, you need to store them in a database that supports 
 
     // In upstash they refer to the store as an index
     const store = new UpstashVector({
-      id: 'upstash-vector',
-      url: process.env.UPSTASH_URL,
-      token: process.env.UPSTASH_TOKEN,
+    	id: 'upstash-vector',
+    	url: process.env.UPSTASH_URL,
+    	token: process.env.UPSTASH_TOKEN,
     })
 
     // There is no store.createIndex call here, Upstash creates indexes (known as namespaces in Upstash) automatically
     // when you upsert if that namespace does not exist yet.
     await store.upsert({
-      indexName: 'myCollection', // the namespace name in Upstash
-      vectors: embeddings,
-      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    	indexName: 'myCollection', // the namespace name in Upstash
+    	vectors: embeddings,
+    	metadata: chunks.map(chunk => ({ text: chunk.text })),
     })
     ```
   </TabItem>
@@ -224,18 +224,18 @@ After generating embeddings, you need to store them in a database that supports 
     import { CloudflareVector } from '@mastra/vectorize'
 
     const store = new CloudflareVector({
-      id: 'cloudflare-vector',
-      accountId: process.env.CF_ACCOUNT_ID,
-      apiToken: process.env.CF_API_TOKEN,
+    	id: 'cloudflare-vector',
+    	accountId: process.env.CF_ACCOUNT_ID,
+    	apiToken: process.env.CF_API_TOKEN,
     })
     await store.createIndex({
-      indexName: 'myCollection',
-      dimension: 1536,
+    	indexName: 'myCollection',
+    	dimension: 1536,
     })
     await store.upsert({
-      indexName: 'myCollection',
-      vectors: embeddings,
-      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    	indexName: 'myCollection',
+    	vectors: embeddings,
+    	metadata: chunks.map(chunk => ({ text: chunk.text })),
     })
     ```
   </TabItem>
@@ -247,14 +247,14 @@ After generating embeddings, you need to store them in a database that supports 
     const store = new OpenSearchVector({ id: 'opensearch', node: process.env.OPENSEARCH_URL })
 
     await store.createIndex({
-      indexName: 'my-collection',
-      dimension: 1536,
+    	indexName: 'my-collection',
+    	dimension: 1536,
     })
 
     await store.upsert({
-      indexName: 'my-collection',
-      vectors: embeddings,
-      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    	indexName: 'my-collection',
+    	vectors: embeddings,
+    	metadata: chunks.map(chunk => ({ text: chunk.text })),
     })
     ```
   </TabItem>
@@ -264,22 +264,22 @@ After generating embeddings, you need to store them in a database that supports 
     import { ElasticSearchVector } from '@mastra/elasticsearch'
 
     const store = new ElasticSearchVector({
-      id: 'elasticsearch-vector',
-      url: process.env.ELASTICSEARCH_URL,
-      auth: {
-        apiKey: process.env.ELASTICSEARCH_API_KEY,
-      },
+    	id: 'elasticsearch-vector',
+    	url: process.env.ELASTICSEARCH_URL,
+    	auth: {
+    		apiKey: process.env.ELASTICSEARCH_API_KEY,
+    	},
     })
 
     await store.createIndex({
-      indexName: 'my-collection',
-      dimension: 1536,
+    	indexName: 'my-collection',
+    	dimension: 1536,
     })
 
     await store.upsert({
-      indexName: 'my-collection',
-      vectors: embeddings,
-      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    	indexName: 'my-collection',
+    	vectors: embeddings,
+    	metadata: chunks.map(chunk => ({ text: chunk.text })),
     })
     ```
 
@@ -293,22 +293,22 @@ After generating embeddings, you need to store them in a database that supports 
     import { CouchbaseVector } from '@mastra/couchbase'
 
     const store = new CouchbaseVector({
-      id: 'couchbase-vector',
-      connectionString: process.env.COUCHBASE_CONNECTION_STRING,
-      username: process.env.COUCHBASE_USERNAME,
-      password: process.env.COUCHBASE_PASSWORD,
-      bucketName: process.env.COUCHBASE_BUCKET,
-      scopeName: process.env.COUCHBASE_SCOPE,
-      collectionName: process.env.COUCHBASE_COLLECTION,
+    	id: 'couchbase-vector',
+    	connectionString: process.env.COUCHBASE_CONNECTION_STRING,
+    	username: process.env.COUCHBASE_USERNAME,
+    	password: process.env.COUCHBASE_PASSWORD,
+    	bucketName: process.env.COUCHBASE_BUCKET,
+    	scopeName: process.env.COUCHBASE_SCOPE,
+    	collectionName: process.env.COUCHBASE_COLLECTION,
     })
     await store.createIndex({
-      indexName: 'myCollection',
-      dimension: 1536,
+    	indexName: 'myCollection',
+    	dimension: 1536,
     })
     await store.upsert({
-      indexName: 'myCollection',
-      vectors: embeddings,
-      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    	indexName: 'myCollection',
+    	vectors: embeddings,
+    	metadata: chunks.map(chunk => ({ text: chunk.text })),
     })
     ```
   </TabItem>
@@ -320,15 +320,15 @@ After generating embeddings, you need to store them in a database that supports 
     const store = await LanceVectorStore.create('/path/to/db')
 
     await store.createIndex({
-      tableName: 'myVectors',
-      indexName: 'myCollection',
-      dimension: 1536,
+    	tableName: 'myVectors',
+    	indexName: 'myCollection',
+    	dimension: 1536,
     })
 
     await store.upsert({
-      tableName: 'myVectors',
-      vectors: embeddings,
-      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    	tableName: 'myVectors',
+    	vectors: embeddings,
+    	metadata: chunks.map(chunk => ({ text: chunk.text })),
     })
     ```
 
@@ -343,22 +343,22 @@ After generating embeddings, you need to store them in a database that supports 
     import { S3Vectors } from '@mastra/s3vectors'
 
     const store = new S3Vectors({
-      id: 's3-vectors',
-      vectorBucketName: 'my-vector-bucket',
-      clientConfig: {
-        region: 'us-east-1',
-      },
-      nonFilterableMetadataKeys: ['content'],
+    	id: 's3-vectors',
+    	vectorBucketName: 'my-vector-bucket',
+    	clientConfig: {
+    		region: 'us-east-1',
+    	},
+    	nonFilterableMetadataKeys: ['content'],
     })
 
     await store.createIndex({
-      indexName: 'my-index',
-      dimension: 1536,
+    	indexName: 'my-index',
+    	dimension: 1536,
     })
     await store.upsert({
-      indexName: 'my-index',
-      vectors: embeddings,
-      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    	indexName: 'my-index',
+    	vectors: embeddings,
+    	metadata: chunks.map(chunk => ({ text: chunk.text })),
     })
     ```
   </TabItem>
@@ -375,8 +375,8 @@ Before storing embeddings, you need to create an index with the appropriate dime
 ```ts title="store-embeddings.ts"
 // Create an index with dimension 1536 (for text-embedding-3-small)
 await store.createIndex({
-  indexName: 'myCollection',
-  dimension: 1536,
+	indexName: 'myCollection',
+	dimension: 1536,
 })
 ```
 
@@ -544,12 +544,12 @@ After creating an index, you can store embeddings along with their basic metadat
 ```ts title="store-embeddings.ts"
 // Store embeddings with their corresponding metadata
 await store.upsert({
-  indexName: 'myCollection', // index name
-  vectors: embeddings, // array of embedding vectors
-  metadata: chunks.map(chunk => ({
-    text: chunk.text, // The original text content
-    id: chunk.id, // Optional unique identifier
-  })),
+	indexName: 'myCollection', // index name
+	vectors: embeddings, // array of embedding vectors
+	metadata: chunks.map(chunk => ({
+		text: chunk.text, // The original text content
+		id: chunk.id, // Optional unique identifier
+	})),
 })
 ```
 
@@ -571,26 +571,26 @@ Metadata is crucial for vector storage - without it, you'd only have numerical e
 ```ts
 // Store embeddings with rich metadata for better organization and filtering
 await store.upsert({
-  indexName: 'myCollection',
-  vectors: embeddings,
-  metadata: chunks.map(chunk => ({
-    // Basic content
-    text: chunk.text,
-    id: chunk.id,
+	indexName: 'myCollection',
+	vectors: embeddings,
+	metadata: chunks.map(chunk => ({
+		// Basic content
+		text: chunk.text,
+		id: chunk.id,
 
-    // Document organization
-    source: chunk.source,
-    category: chunk.category,
+		// Document organization
+		source: chunk.source,
+		category: chunk.category,
 
-    // Temporal metadata
-    createdAt: new Date().toISOString(),
-    version: '1.0',
+		// Temporal metadata
+		createdAt: new Date().toISOString(),
+		version: '1.0',
 
-    // Custom fields
-    language: chunk.language,
-    author: chunk.author,
-    confidenceScore: chunk.score,
-  })),
+		// Custom fields
+		language: chunk.language,
+		author: chunk.author,
+		confidenceScore: chunk.score,
+	})),
 })
 ```
 
@@ -611,8 +611,8 @@ The most common use case is deleting all vectors for a specific document when a 
 ```ts title="delete-vectors.ts"
 // Delete all vectors for a specific document
 await store.deleteVectors({
-  indexName: 'myCollection',
-  filter: { docId: 'document-123' },
+	indexName: 'myCollection',
+	filter: { docId: 'document-123' },
 })
 ```
 
@@ -629,18 +629,18 @@ You can also use complex filters to delete vectors matching multiple conditions:
 ```ts title="delete-vectors-advanced.ts"
 // Delete all vectors for multiple documents
 await store.deleteVectors({
-  indexName: 'myCollection',
-  filter: {
-    docId: { $in: ['doc-1', 'doc-2', 'doc-3'] },
-  },
+	indexName: 'myCollection',
+	filter: {
+		docId: { $in: ['doc-1', 'doc-2', 'doc-3'] },
+	},
 })
 
 // Delete vectors for a specific user's documents
 await store.deleteVectors({
-  indexName: 'myCollection',
-  filter: {
-    $and: [{ userId: 'user-123' }, { status: 'archived' }],
-  },
+	indexName: 'myCollection',
+	filter: {
+		$and: [{ userId: 'user-123' }, { status: 'archived' }],
+	},
 })
 ```
 
@@ -651,8 +651,8 @@ If you have specific vector IDs to delete, you can pass them directly:
 ```ts title="delete-by-ids.ts"
 // Delete specific vectors by their IDs
 await store.deleteVectors({
-  indexName: 'myCollection',
-  ids: ['vec-1', 'vec-2', 'vec-3'],
+	indexName: 'myCollection',
+	ids: ['vec-1', 'vec-2', 'vec-3'],
 })
 ```
 

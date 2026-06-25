@@ -11,9 +11,9 @@ Create a new file for your agent in the `src/mastra/agents` directory. Use `cont
 import { Agent } from '@mastra/core/agent'
 
 export const contentAgent = new Agent({
-  name: 'Content Agent',
-  description: 'AI agent for analyzing and improving content',
-  instructions: `
+	name: 'Content Agent',
+	description: 'AI agent for analyzing and improving content',
+	instructions: `
     You are a professional content analyst. Your role is to:
     1. Analyze content for clarity and engagement
     2. Identify the main themes and topics
@@ -22,7 +22,7 @@ export const contentAgent = new Agent({
     
     Always provide constructive, actionable feedback.
   `,
-  model: 'openai/gpt-5.4',
+	model: 'openai/gpt-5.4',
 })
 ```
 
@@ -42,11 +42,11 @@ Open your `src/mastra/index.ts` file and add your agent (you may need to append 
 import { contentAgent } from './agents/content-agent'
 
 export const mastra = new Mastra({
-  // Register your agent here
-  agents: {
-    contentAgent,
-  },
-  // ...Existing code
+	// Register your agent here
+	agents: {
+		contentAgent,
+	},
+	// ...Existing code
 })
 ```
 

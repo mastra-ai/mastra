@@ -84,16 +84,16 @@ import { fromNodeProviderChain } from '@aws-sdk/credential-providers'
 import { weatherTool } from '../tools/weather-tool.js'
 
 const bedrock = createAmazonBedrock({
-  credentialProvider: fromNodeProviderChain(),
+	credentialProvider: fromNodeProviderChain(),
 })
 
 export const weatherAgent = new Agent({
-  id: 'weather-agent',
-  name: 'Weather Agent',
-  instructions:
-    'You are a helpful weather assistant. Use the weatherTool to fetch current weather data.',
-  model: bedrock('us.anthropic.claude-sonnet-4-6'),
-  tools: { weatherTool },
+	id: 'weather-agent',
+	name: 'Weather Agent',
+	instructions:
+		'You are a helpful weather assistant. Use the weatherTool to fetch current weather data.',
+	model: bedrock('us.anthropic.claude-sonnet-4-6'),
+	tools: { weatherTool },
 })
 ```
 
@@ -112,12 +112,12 @@ import { weatherWorkflow } from './workflows/weather-workflow.js'
 import { weatherAgent } from './agents/weather-agent.js'
 
 export const mastra = new Mastra({
-  workflows: { weatherWorkflow },
-  agents: { weatherAgent },
-  logger: new PinoLogger({
-    name: 'Mastra',
-    level: 'info',
-  }),
+	workflows: { weatherWorkflow },
+	agents: { weatherAgent },
+	logger: new PinoLogger({
+		name: 'Mastra',
+		level: 'info',
+	}),
 })
 ```
 
@@ -125,20 +125,20 @@ Create a `tsconfig.json` file with the following content:
 
 ```json title="app/MastraAgent/tsconfig.json"
 {
-  "compilerOptions": {
-    "outDir": "./dist",
-    "rootDir": ".",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "declaration": true,
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "forceConsistentCasingInFileNames": true
-  },
-  "include": ["*.ts", "src/**/*"],
-  "exclude": ["node_modules", "dist"]
+	"compilerOptions": {
+		"outDir": "./dist",
+		"rootDir": ".",
+		"strict": true,
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"declaration": true,
+		"target": "ES2022",
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"forceConsistentCasingInFileNames": true
+	},
+	"include": ["*.ts", "src/**/*"],
+	"exclude": ["node_modules", "dist"]
 }
 ```
 
@@ -170,18 +170,18 @@ import { BedrockAgentCoreApp } from 'bedrock-agentcore/runtime'
 import { mastra } from './src/mastra/index.js'
 
 const app = new BedrockAgentCoreApp({
-  invocationHandler: {
-    process: async (payload, context) => {
-      const { prompt } = payload as { prompt: string }
+	invocationHandler: {
+		process: async (payload, context) => {
+			const { prompt } = payload as { prompt: string }
 
-      const agent = mastra.getAgentById('weather-agent')
-      const response = await agent.generate(prompt, {
-        runId: context.sessionId,
-      })
+			const agent = mastra.getAgentById('weather-agent')
+			const response = await agent.generate(prompt, {
+				runId: context.sessionId,
+			})
 
-      return response.text
-    },
-  },
+			return response.text
+		},
+	},
 })
 
 app.run()
@@ -257,11 +257,11 @@ Set the AWS account and region in `agentcore/aws-targets.json`:
 
 ```json title="agentcore/aws-targets.json"
 [
-  {
-    "name": "default",
-    "account": "123456789012",
-    "region": "us-east-1"
-  }
+	{
+		"name": "default",
+		"account": "123456789012",
+		"region": "us-east-1"
+	}
 ]
 ```
 

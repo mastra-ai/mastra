@@ -1,10 +1,10 @@
 {
-  "$schema": "https://v2-9-16.turborepo.dev/schema.json",
-  "extends": ["//"],
-  "tasks": {
-    "build": {
-      "outputs": ["build/**"],
-      "outputLogs": "new-only"
-    }
-  }
+	"$schema": "https://v2-9-16.turborepo.dev/schema.json",
+	"extends": ["//"],
+	"tasks": {
+		"build": {
+			"outputs": ["build/**"],
+			"outputLogs": "new-only"
+		}
+	}
 }

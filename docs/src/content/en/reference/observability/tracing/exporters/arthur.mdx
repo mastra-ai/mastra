@@ -21,10 +21,10 @@ new ArthurExporter(config: ArthurExporterConfig)
 
 ```typescript
 type ArthurExporterConfig = Omit<OtelExporterConfig, 'provider' | 'exporter'> & {
-  apiKey?: string
-  endpoint?: string
-  taskId?: string
-  headers?: Record<string, string>
+	apiKey?: string
+	endpoint?: string
+	taskId?: string
+	headers?: Record<string, string>
 }
 ```
 
@@ -41,56 +41,56 @@ Non-reserved span attributes are serialized into the OpenInference `metadata` pa
 
 <PropertiesTable
   props={[
-  {
-    name: 'apiKey',
-    type: 'string',
-    description: 'Arthur API key for authentication. Falls back to ARTHUR_API_KEY env var.',
-    required: false,
-  },
-  {
-    name: 'endpoint',
-    type: 'string',
-    description: 'Arthur Engine endpoint (e.g. http://localhost:3030). Falls back to ARTHUR_BASE_URL env var.',
-    required: false,
-  },
-  {
-    name: 'taskId',
-    type: 'string',
-    description:
-      'Route traces to a pre-existing Arthur task by ID. Falls back to ARTHUR_TASK_ID env var. If omitted, Arthur Engine routes traces by serviceName instead.',
-    required: false,
-  },
-  {
-    name: 'headers',
-    type: 'Record<string, string>',
-    description:
-      'Additional headers for OTLP requests. The Authorization header is managed internally when apiKey is provided.',
-    required: false,
-  },
-  {
-    name: 'timeout',
-    type: 'number',
-    description: 'Timeout in milliseconds before exporting spans (default: 30000)',
-    required: false,
-  },
-  {
-    name: 'batchSize',
-    type: 'number',
-    description: 'Number of spans to batch before export (default: 512)',
-    required: false,
-  },
-  {
-    name: 'logLevel',
-    type: "'debug' | 'info' | 'warn' | 'error'",
-    description: "Logger level (default: 'warn')",
-    required: false,
-  },
-  {
-    name: 'resourceAttributes',
-    type: 'Record<string, any>',
-    description: 'Custom resource attributes added to each span',
-    required: false,
-  },
+	{
+		name: 'apiKey',
+		type: 'string',
+		description: 'Arthur API key for authentication. Falls back to ARTHUR_API_KEY env var.',
+		required: false,
+	},
+	{
+		name: 'endpoint',
+		type: 'string',
+		description: 'Arthur Engine endpoint (e.g. http://localhost:3030). Falls back to ARTHUR_BASE_URL env var.',
+		required: false,
+	},
+	{
+		name: 'taskId',
+		type: 'string',
+		description:
+			'Route traces to a pre-existing Arthur task by ID. Falls back to ARTHUR_TASK_ID env var. If omitted, Arthur Engine routes traces by serviceName instead.',
+		required: false,
+	},
+	{
+		name: 'headers',
+		type: 'Record<string, string>',
+		description:
+			'Additional headers for OTLP requests. The Authorization header is managed internally when apiKey is provided.',
+		required: false,
+	},
+	{
+		name: 'timeout',
+		type: 'number',
+		description: 'Timeout in milliseconds before exporting spans (default: 30000)',
+		required: false,
+	},
+	{
+		name: 'batchSize',
+		type: 'number',
+		description: 'Number of spans to batch before export (default: 512)',
+		required: false,
+	},
+	{
+		name: 'logLevel',
+		type: "'debug' | 'info' | 'warn' | 'error'",
+		description: "Logger level (default: 'warn')",
+		required: false,
+	},
+	{
+		name: 'resourceAttributes',
+		type: 'Record<string, any>',
+		description: 'Custom resource attributes added to each span',
+		required: false,
+	},
 ]}
 />
 
@@ -145,9 +145,9 @@ const exporter = new ArthurExporter()
 import { ArthurExporter } from '@mastra/arthur'
 
 const exporter = new ArthurExporter({
-  apiKey: process.env.ARTHUR_API_KEY!,
-  endpoint: 'http://localhost:3030',
-  taskId: process.env.ARTHUR_TASK_ID, // Optional
+	apiKey: process.env.ARTHUR_API_KEY!,
+	endpoint: 'http://localhost:3030',
+	taskId: process.env.ARTHUR_TASK_ID, // Optional
 })
 ```
 
@@ -163,9 +163,9 @@ The ArthurExporter supports trace tagging for categorization and filtering. Tags
 
 ```typescript
 const result = await agent.generate('Hello', {
-  tracingOptions: {
-    tags: ['production', 'experiment-v2', 'user-request'],
-  },
+	tracingOptions: {
+		tags: ['production', 'experiment-v2', 'user-request'],
+	},
 })
 ```
 
@@ -175,7 +175,7 @@ Tags are stored using the OpenInference `tag.tags` attribute:
 
 ```json
 {
-  "tag.tags": ["production", "experiment-v2", "user-request"]
+	"tag.tags": ["production", "experiment-v2", "user-request"]
 }
 ```
 

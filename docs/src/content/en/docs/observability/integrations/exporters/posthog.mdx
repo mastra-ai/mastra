@@ -42,14 +42,14 @@ import { Observability } from '@mastra/observability'
 import { PosthogExporter } from '@mastra/posthog'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      posthog: {
-        serviceName: 'my-service',
-        exporters: [new PosthogExporter()],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			posthog: {
+				serviceName: 'my-service',
+				exporters: [new PosthogExporter()],
+			},
+		},
+	}),
 })
 ```
 
@@ -63,18 +63,18 @@ import { Observability } from '@mastra/observability'
 import { PosthogExporter } from '@mastra/posthog'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      posthog: {
-        serviceName: 'my-service',
-        exporters: [
-          new PosthogExporter({
-            apiKey: process.env.POSTHOG_API_KEY,
-          }),
-        ],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			posthog: {
+				serviceName: 'my-service',
+				exporters: [
+					new PosthogExporter({
+						apiKey: process.env.POSTHOG_API_KEY,
+					}),
+				],
+			},
+		},
+	}),
 })
 ```
 
@@ -84,27 +84,27 @@ export const mastra = new Mastra({
 
 ```typescript
 new PosthogExporter({
-  // Required credentials
-  apiKey: process.env.POSTHOG_API_KEY!,
+	// Required credentials
+	apiKey: process.env.POSTHOG_API_KEY!,
 
-  // Optional settings
-  host: 'https://us.i.posthog.com', // Default: US region
-  // or "https://eu.i.posthog.com" for EU region
-  // or your self-hosted URL
+	// Optional settings
+	host: 'https://us.i.posthog.com', // Default: US region
+	// or "https://eu.i.posthog.com" for EU region
+	// or your self-hosted URL
 
-  // Batching configuration
-  flushAt: 20, // Batch size (default: 20)
-  flushInterval: 10000, // Flush interval in ms (default: 10000)
-  serverless: false, // Serverless mode: flushAt=10, flushInterval=2000
+	// Batching configuration
+	flushAt: 20, // Batch size (default: 20)
+	flushInterval: 10000, // Flush interval in ms (default: 10000)
+	serverless: false, // Serverless mode: flushAt=10, flushInterval=2000
 
-  // User identification
-  defaultDistinctId: 'anonymous', // Fallback if no userId in metadata
+	// User identification
+	defaultDistinctId: 'anonymous', // Fallback if no userId in metadata
 
-  // Privacy settings
-  enablePrivacyMode: false, // Excludes input/output from generation events
+	// Privacy settings
+	enablePrivacyMode: false, // Excludes input/output from generation events
 
-  // Diagnostic logging
-  logLevel: 'info', // debug | info | warn | error
+	// Diagnostic logging
+	logLevel: 'info', // debug | info | warn | error
 })
 ```
 
@@ -114,8 +114,8 @@ Optimized batching for serverless environments:
 
 ```typescript
 new PosthogExporter({
-  apiKey: process.env.POSTHOG_API_KEY!,
-  serverless: true, // Configures smaller batches for faster flushing
+	apiKey: process.env.POSTHOG_API_KEY!,
+	serverless: true, // Configures smaller batches for faster flushing
 })
 ```
 
@@ -125,8 +125,8 @@ Exclude input/output data from generation events while preserving token metrics:
 
 ```typescript
 new PosthogExporter({
-  apiKey: process.env.POSTHOG_API_KEY!,
-  enablePrivacyMode: true, // Removes $ai_input and $ai_output_choices
+	apiKey: process.env.POSTHOG_API_KEY!,
+	enablePrivacyMode: true, // Removes $ai_input and $ai_output_choices
 })
 ```
 
@@ -136,13 +136,13 @@ To attach events to a [PostHog group](https://posthog.com/docs/product-analytics
 
 ```ts
 await agent.generate(input, {
-  tracingOptions: {
-    metadata: {
-      $groups: {
-        publication: 'publication-1',
-      },
-    },
-  },
+	tracingOptions: {
+		metadata: {
+			$groups: {
+				publication: 'publication-1',
+			},
+		},
+	},
 })
 ```
 

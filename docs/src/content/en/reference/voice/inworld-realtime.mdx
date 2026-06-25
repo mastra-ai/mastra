@@ -25,16 +25,16 @@ const voice = new InworldRealtimeVoice()
 
 // Or initialize with explicit configuration
 const voiceWithConfig = new InworldRealtimeVoice({
-  apiKey: 'your-inworld-api-key',
-  model: 'inworld/models/gemma-4-26b-a4b-it',
-  speaker: 'Sarah',
-  instructions: 'You are a helpful voice assistant.',
-  session: {
-    audio: {
-      output: { speed: 1.1 },
-      input: { turn_detection: { type: 'semantic_vad', eagerness: 'high' } },
-    },
-  },
+	apiKey: 'your-inworld-api-key',
+	model: 'inworld/models/gemma-4-26b-a4b-it',
+	speaker: 'Sarah',
+	instructions: 'You are a helpful voice assistant.',
+	session: {
+		audio: {
+			output: { speed: 1.1 },
+			input: { turn_detection: { type: 'semantic_vad', eagerness: 'high' } },
+		},
+	},
 })
 
 // Establish connection
@@ -42,16 +42,16 @@ await voice.connect()
 
 // Listen for audio output (PCM16 @ 24 kHz by default)
 voice.on('speaker', stream => {
-  playAudio(stream)
+	playAudio(stream)
 })
 
 voice.on('writing', ({ text, role }) => {
-  console.log(`${role}: ${text}`)
+	console.log(`${role}: ${text}`)
 })
 
 // Convert text to speech
 await voice.speak('Hello, how can I help you today?', {
-  speaker: 'Hades',
+	speaker: 'Hades',
 })
 
 // Stream microphone audio to the model
@@ -68,79 +68,79 @@ voice.close()
 
 <PropertiesTable
   content={[
-  {
-    name: 'apiKey',
-    type: 'string',
-    description:
-      'Inworld API key. Falls back to the INWORLD_API_KEY environment variable. Keys are Basic-encoded and passed verbatim in the Authorization header.',
-    isOptional: true,
-  },
-  {
-    name: 'url',
-    type: 'string',
-    description:
-      'Realtime WebSocket endpoint. A client-generated session key and protocol parameter are appended automatically.',
-    isOptional: true,
-    defaultValue: "'wss://api.inworld.ai/api/v1/realtime/session'",
-  },
-  {
-    name: 'model',
-    type: 'string',
-    description:
-      "LLM Router model ID. Sent via the initial session.update, not in the URL. Any model supported by Inworld's router is accepted.",
-    isOptional: true,
-    defaultValue: "'inworld/models/gemma-4-26b-a4b-it'",
-  },
-  {
-    name: 'speaker',
-    type: 'string',
-    description: "Default voice ID for speech synthesis. Any voice from Inworld's catalog is accepted.",
-    isOptional: true,
-    defaultValue: "'Sarah'",
-  },
-  {
-    name: 'sessionId',
-    type: 'string',
-    description:
-      'Client-generated session key surfaced as the URL `key` parameter. A timestamp-based key is generated automatically when omitted.',
-    isOptional: true,
-    defaultValue: "'voice-{Date.now()}'",
-  },
-  {
-    name: 'instructions',
-    type: 'string',
-    description: 'System prompt sent with the initial session.update.',
-    isOptional: true,
-  },
-  {
-    name: 'session',
-    type: 'Partial<InworldSessionConfig>',
-    description:
-      'Typed first-class session options (audio, tool_choice, output_modalities, temperature, ...). Deep-merged into every session.update so nested fields like audio.output.voice and audio.output.speed compose rather than overwrite each other. See the session field below.',
-    isOptional: true,
-  },
-  {
-    name: 'debug',
-    type: 'boolean',
-    description: 'Log raw server events.',
-    isOptional: true,
-    defaultValue: 'false',
-  },
-  {
-    name: 'providerData',
-    type: 'InworldProviderData',
-    description:
-      'Typed Inworld extension config (stt, tts, memory, backchannel, responsiveness, plus user_id and metadata). Sent under session.providerData on every session.update. Composes with any session.providerData set via the `session` field; the constructor option wins on key collisions.',
-    isOptional: true,
-  },
-  {
-    name: 'connectTimeoutMs',
-    type: 'number',
-    description:
-      'Max time `connect()` will wait for both the WebSocket handshake and the initial `session.updated` round-trip. A pre-open error or close on the WebSocket — or this timeout expiring — surfaces as a rejected promise instead of an uncaught socket error.',
-    isOptional: true,
-    defaultValue: '15000',
-  },
+	{
+		name: 'apiKey',
+		type: 'string',
+		description:
+			'Inworld API key. Falls back to the INWORLD_API_KEY environment variable. Keys are Basic-encoded and passed verbatim in the Authorization header.',
+		isOptional: true,
+	},
+	{
+		name: 'url',
+		type: 'string',
+		description:
+			'Realtime WebSocket endpoint. A client-generated session key and protocol parameter are appended automatically.',
+		isOptional: true,
+		defaultValue: "'wss://api.inworld.ai/api/v1/realtime/session'",
+	},
+	{
+		name: 'model',
+		type: 'string',
+		description:
+			"LLM Router model ID. Sent via the initial session.update, not in the URL. Any model supported by Inworld's router is accepted.",
+		isOptional: true,
+		defaultValue: "'inworld/models/gemma-4-26b-a4b-it'",
+	},
+	{
+		name: 'speaker',
+		type: 'string',
+		description: "Default voice ID for speech synthesis. Any voice from Inworld's catalog is accepted.",
+		isOptional: true,
+		defaultValue: "'Sarah'",
+	},
+	{
+		name: 'sessionId',
+		type: 'string',
+		description:
+			'Client-generated session key surfaced as the URL `key` parameter. A timestamp-based key is generated automatically when omitted.',
+		isOptional: true,
+		defaultValue: "'voice-{Date.now()}'",
+	},
+	{
+		name: 'instructions',
+		type: 'string',
+		description: 'System prompt sent with the initial session.update.',
+		isOptional: true,
+	},
+	{
+		name: 'session',
+		type: 'Partial<InworldSessionConfig>',
+		description:
+			'Typed first-class session options (audio, tool_choice, output_modalities, temperature, ...). Deep-merged into every session.update so nested fields like audio.output.voice and audio.output.speed compose rather than overwrite each other. See the session field below.',
+		isOptional: true,
+	},
+	{
+		name: 'debug',
+		type: 'boolean',
+		description: 'Log raw server events.',
+		isOptional: true,
+		defaultValue: 'false',
+	},
+	{
+		name: 'providerData',
+		type: 'InworldProviderData',
+		description:
+			'Typed Inworld extension config (stt, tts, memory, backchannel, responsiveness, plus user_id and metadata). Sent under session.providerData on every session.update. Composes with any session.providerData set via the `session` field; the constructor option wins on key collisions.',
+		isOptional: true,
+	},
+	{
+		name: 'connectTimeoutMs',
+		type: 'number',
+		description:
+			'Max time `connect()` will wait for both the WebSocket handshake and the initial `session.updated` round-trip. A pre-open error or close on the WebSocket — or this timeout expiring — surfaces as a rejected promise instead of an uncaught socket error.',
+		isOptional: true,
+		defaultValue: '15000',
+	},
 ]}
 />
 
@@ -150,107 +150,107 @@ Use the typed `session` field for documented Inworld realtime options. Fields co
 
 <PropertiesTable
   content={[
-  {
-    name: 'output_modalities',
-    type: 'Array<"text" | "audio">',
-    description: 'Modalities the model should produce.',
-    isOptional: true,
-  },
-  {
-    name: 'audio.output.voice',
-    type: 'string',
-    description: 'Voice catalog ID. When omitted, the constructor `speaker` is used.',
-    isOptional: true,
-  },
-  {
-    name: 'audio.output.speed',
-    type: 'number',
-    description: 'Playback speed multiplier for synthesized audio (0.25 to 1.5).',
-    isOptional: true,
-  },
-  {
-    name: 'audio.output.model',
-    type: 'string',
-    description: 'Inworld TTS model (e.g. "inworld-tts-2").',
-    isOptional: true,
-  },
-  {
-    name: 'audio.output.format',
-    type: 'InworldAudioFormat',
-    description:
-      'Output audio encoding. A codec string (e.g. "audio/pcm", "audio/pcmu", "audio/pcma", "audio/float32") or an object `{ type, rate? }`. `rate` (Hz) applies to audio/pcm and audio/float32 (default 24000); audio/pcmu and audio/pcma are fixed at 8 kHz.',
-    isOptional: true,
-  },
-  {
-    name: 'audio.input.format',
-    type: 'InworldAudioFormat',
-    description:
-      'Input audio encoding sent to the server. Same shape as `audio.output.format` — a codec string or `{ type, rate? }` object.',
-    isOptional: true,
-  },
-  {
-    name: 'audio.input.noise_reduction',
-    type: '{ type: "near_field" | "far_field" }',
-    description: 'Input noise-reduction mode applied before transcription and VAD.',
-    isOptional: true,
-  },
-  {
-    name: 'audio.input.transcription',
-    type: '{ model?: string; language?: string; prompt?: string }',
-    description:
-      'Server-side transcription for incoming user audio. Defaults to `{ model: "inworld/inworld-stt-1" }`. `prompt` biases transcription with vocabulary, spelling, or style hints. Supply your own object to override; set to `null` to disable user-side transcription.',
-    isOptional: true,
-  },
-  {
-    name: 'audio.input.turn_detection',
-    type: 'InworldTurnDetection | null',
-    description:
-      'Voice activity / turn detection. Defaults to `{ type: "semantic_vad", eagerness: "medium", create_response: true, interrupt_response: true }`. Supply your own object to override; set to `null` to disable turn detection entirely. The `eagerness` field controls how quickly semantic VAD ends a user turn — `low` waits for clearer pauses (more interruption-resistant), `high` ends turns sooner (snappier, more prone to cutting users off). Default `medium` balances both. `idle_timeout_ms` (server_vad only) sets the idle window before the server commits a turn.',
-    isOptional: true,
-  },
-  {
-    name: 'tool_choice',
-    type: 'string | { type: "function"; name: string } | { type: "mcp"; server_label: string }',
-    description:
-      'Tool selection strategy. Use the mcp variant to route tool calls through a configured Inworld MCP server.',
-    isOptional: true,
-  },
-  {
-    name: 'temperature',
-    type: 'number',
-    description: 'Sampling temperature for the model.',
-    isOptional: true,
-  },
-  {
-    name: 'max_output_tokens',
-    type: 'number | "inf"',
-    description: 'Maximum tokens generated per response.',
-    isOptional: true,
-  },
-  {
-    name: 'truncation',
-    type: '"auto" | "disabled" | { type: "retention_ratio"; retention_ratio: number }',
-    description: 'Conversation truncation strategy.',
-    isOptional: true,
-  },
-  {
-    name: 'tracing',
-    type: '"auto" | { workflow_name?: string; group_id?: string; metadata?: Record<string, unknown> }',
-    description: 'Distributed-tracing config. Use "auto" for server defaults, or name the workflow/group explicitly.',
-    isOptional: true,
-  },
-  {
-    name: 'include',
-    type: 'Array<"item.input_audio_transcription.logprobs">',
-    description: 'Opt-in extra fields the server should include on emitted events.',
-    isOptional: true,
-  },
-  {
-    name: 'prompt',
-    type: 'string | null',
-    description: 'Reference to a server-side prompt template. Pass null to clear it.',
-    isOptional: true,
-  },
+	{
+		name: 'output_modalities',
+		type: 'Array<"text" | "audio">',
+		description: 'Modalities the model should produce.',
+		isOptional: true,
+	},
+	{
+		name: 'audio.output.voice',
+		type: 'string',
+		description: 'Voice catalog ID. When omitted, the constructor `speaker` is used.',
+		isOptional: true,
+	},
+	{
+		name: 'audio.output.speed',
+		type: 'number',
+		description: 'Playback speed multiplier for synthesized audio (0.25 to 1.5).',
+		isOptional: true,
+	},
+	{
+		name: 'audio.output.model',
+		type: 'string',
+		description: 'Inworld TTS model (e.g. "inworld-tts-2").',
+		isOptional: true,
+	},
+	{
+		name: 'audio.output.format',
+		type: 'InworldAudioFormat',
+		description:
+			'Output audio encoding. A codec string (e.g. "audio/pcm", "audio/pcmu", "audio/pcma", "audio/float32") or an object `{ type, rate? }`. `rate` (Hz) applies to audio/pcm and audio/float32 (default 24000); audio/pcmu and audio/pcma are fixed at 8 kHz.',
+		isOptional: true,
+	},
+	{
+		name: 'audio.input.format',
+		type: 'InworldAudioFormat',
+		description:
+			'Input audio encoding sent to the server. Same shape as `audio.output.format` — a codec string or `{ type, rate? }` object.',
+		isOptional: true,
+	},
+	{
+		name: 'audio.input.noise_reduction',
+		type: '{ type: "near_field" | "far_field" }',
+		description: 'Input noise-reduction mode applied before transcription and VAD.',
+		isOptional: true,
+	},
+	{
+		name: 'audio.input.transcription',
+		type: '{ model?: string; language?: string; prompt?: string }',
+		description:
+			'Server-side transcription for incoming user audio. Defaults to `{ model: "inworld/inworld-stt-1" }`. `prompt` biases transcription with vocabulary, spelling, or style hints. Supply your own object to override; set to `null` to disable user-side transcription.',
+		isOptional: true,
+	},
+	{
+		name: 'audio.input.turn_detection',
+		type: 'InworldTurnDetection | null',
+		description:
+			'Voice activity / turn detection. Defaults to `{ type: "semantic_vad", eagerness: "medium", create_response: true, interrupt_response: true }`. Supply your own object to override; set to `null` to disable turn detection entirely. The `eagerness` field controls how quickly semantic VAD ends a user turn — `low` waits for clearer pauses (more interruption-resistant), `high` ends turns sooner (snappier, more prone to cutting users off). Default `medium` balances both. `idle_timeout_ms` (server_vad only) sets the idle window before the server commits a turn.',
+		isOptional: true,
+	},
+	{
+		name: 'tool_choice',
+		type: 'string | { type: "function"; name: string } | { type: "mcp"; server_label: string }',
+		description:
+			'Tool selection strategy. Use the mcp variant to route tool calls through a configured Inworld MCP server.',
+		isOptional: true,
+	},
+	{
+		name: 'temperature',
+		type: 'number',
+		description: 'Sampling temperature for the model.',
+		isOptional: true,
+	},
+	{
+		name: 'max_output_tokens',
+		type: 'number | "inf"',
+		description: 'Maximum tokens generated per response.',
+		isOptional: true,
+	},
+	{
+		name: 'truncation',
+		type: '"auto" | "disabled" | { type: "retention_ratio"; retention_ratio: number }',
+		description: 'Conversation truncation strategy.',
+		isOptional: true,
+	},
+	{
+		name: 'tracing',
+		type: '"auto" | { workflow_name?: string; group_id?: string; metadata?: Record<string, unknown> }',
+		description: 'Distributed-tracing config. Use "auto" for server defaults, or name the workflow/group explicitly.',
+		isOptional: true,
+	},
+	{
+		name: 'include',
+		type: 'Array<"item.input_audio_transcription.logprobs">',
+		description: 'Opt-in extra fields the server should include on emitted events.',
+		isOptional: true,
+	},
+	{
+		name: 'prompt',
+		type: 'string | null',
+		description: 'Reference to a server-side prompt template. Pass null to clear it.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -269,13 +269,13 @@ It has five branches plus two session-level fields:
 
 ```typescript
 const voice = new InworldRealtimeVoice({
-  providerData: {
-    stt: { voice_profile: true, language_hints: ['en-US'] },
-    tts: { delivery_mode: 'CREATIVE', segmenter_strategy: 'balanced' },
-    memory: { enabled: true, turn_interval: 4 },
-    backchannel: { enabled: true, max_per_turn: 1 },
-    user_id: 'user-123',
-  },
+	providerData: {
+		stt: { voice_profile: true, language_hints: ['en-US'] },
+		tts: { delivery_mode: 'CREATIVE', segmenter_strategy: 'balanced' },
+		memory: { enabled: true, turn_interval: 4 },
+		backchannel: { enabled: true, max_per_turn: 1 },
+		user_id: 'user-123',
+	},
 })
 ```
 
@@ -301,32 +301,32 @@ Serial `speak()` calls are the supported pattern. Concurrent calls share the sam
 
 <PropertiesTable
   content={[
-  {
-    name: 'input',
-    type: 'string | NodeJS.ReadableStream',
-    description: 'Text or text stream to convert to speech.',
-    isOptional: false,
-  },
-  {
-    name: 'options',
-    type: 'Options',
-    description: 'Per-call configuration.',
-    isOptional: true,
-    properties: [
-      {
-        type: 'Options',
-        parameters: [
-          {
-            name: 'speaker',
-            type: 'string',
-            description: 'Voice ID to use for this specific request.',
-            isOptional: true,
-            defaultValue: "Constructor's speaker value",
-          },
-        ],
-      },
-    ],
-  },
+	{
+		name: 'input',
+		type: 'string | NodeJS.ReadableStream',
+		description: 'Text or text stream to convert to speech.',
+		isOptional: false,
+	},
+	{
+		name: 'options',
+		type: 'Options',
+		description: 'Per-call configuration.',
+		isOptional: true,
+		properties: [
+			{
+				type: 'Options',
+				parameters: [
+					{
+						name: 'speaker',
+						type: 'string',
+						description: 'Voice ID to use for this specific request.',
+						isOptional: true,
+						defaultValue: "Constructor's speaker value",
+					},
+				],
+			},
+		],
+	},
 ]}
 />
 
@@ -338,12 +338,12 @@ Sends a single audio buffer as a user turn and asks the model to respond with te
 
 <PropertiesTable
   content={[
-  {
-    name: 'audioData',
-    type: 'NodeJS.ReadableStream',
-    description: 'Audio stream to transcribe.',
-    isOptional: false,
-  },
+	{
+		name: 'audioData',
+		type: 'NodeJS.ReadableStream',
+		description: 'Audio stream to transcribe.',
+		isOptional: false,
+	},
 ]}
 />
 
@@ -355,19 +355,19 @@ Streams audio data to the server in real time. Useful for continuous microphone 
 
 <PropertiesTable
   content={[
-  {
-    name: 'audioData',
-    type: 'NodeJS.ReadableStream | Int16Array',
-    description:
-      'Audio data to stream. Int16Array is sent as a single base64 chunk; a readable stream is forwarded chunk by chunk.',
-    isOptional: false,
-  },
-  {
-    name: 'eventId',
-    type: 'string',
-    description: 'Optional event ID forwarded to the server with each audio chunk.',
-    isOptional: true,
-  },
+	{
+		name: 'audioData',
+		type: 'NodeJS.ReadableStream | Int16Array',
+		description:
+			'Audio data to stream. Int16Array is sent as a single base64 chunk; a readable stream is forwarded chunk by chunk.',
+		isOptional: false,
+	},
+	{
+		name: 'eventId',
+		type: 'string',
+		description: 'Optional event ID forwarded to the server with each audio chunk.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -379,12 +379,12 @@ Sends a `session.update` to the server. The typed `session` field is deep-merged
 
 <PropertiesTable
   content={[
-  {
-    name: 'sessionConfig',
-    type: 'InworldSessionConfig | Record<string, unknown>',
-    description: 'Partial session configuration to apply.',
-    isOptional: false,
-  },
+	{
+		name: 'sessionConfig',
+		type: 'InworldSessionConfig | Record<string, unknown>',
+		description: 'Partial session configuration to apply.',
+		isOptional: false,
+	},
 ]}
 />
 
@@ -396,12 +396,12 @@ Sets the system instructions used on the next `connect()` or `updateConfig()` ca
 
 <PropertiesTable
   content={[
-  {
-    name: 'instructions',
-    type: 'string',
-    description: 'System prompt for the model.',
-    isOptional: true,
-  },
+	{
+		name: 'instructions',
+		type: 'string',
+		description: 'System prompt for the model.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -413,12 +413,12 @@ Registers tools that the model can call during the session. When `InworldRealtim
 
 <PropertiesTable
   content={[
-  {
-    name: 'tools',
-    type: 'ToolsInput',
-    description: 'Tools configuration to equip.',
-    isOptional: true,
-  },
+	{
+		name: 'tools',
+		type: 'ToolsInput',
+		description: 'Tools configuration to equip.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -430,12 +430,12 @@ Sends a `response.create` event to trigger a model response, optionally with per
 
 <PropertiesTable
   content={[
-  {
-    name: 'options',
-    type: 'Record<string, unknown>',
-    description: 'Response options forwarded to the server.',
-    isOptional: true,
-  },
+	{
+		name: 'options',
+		type: 'Record<string, unknown>',
+		description: 'Response options forwarded to the server.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -495,150 +495,150 @@ The `InworldRealtimeVoice` class emits the following events:
 
 <PropertiesTable
   content={[
-  {
-    name: 'speaker',
-    type: 'event',
-    description:
-      'Emitted once per response with a PassThrough stream of PCM audio. Use this when piping audio to a player.',
-  },
-  {
-    name: 'speaking',
-    type: 'event',
-    description: 'Emitted for each audio delta. Callback receives { audio: Buffer, response_id: string }.',
-  },
-  {
-    name: 'speaking.done',
-    type: 'event',
-    description: 'Emitted when audio output for a response is complete. Callback receives { response_id: string }.',
-  },
-  {
-    name: 'writing',
-    type: 'event',
-    description:
-      'Emitted as transcribed text becomes available. Callback receives { text: string, response_id: string, role: "assistant" | "user", voiceProfile? }. Deduplicated across audio-transcript and text deltas in the same response so a single response only emits one stream. On user events, voiceProfile is present when providerData.stt.voice_profile is enabled.',
-  },
-  {
-    name: 'speech-started',
-    type: 'event',
-    description: 'Raw `input_audio_buffer.speech_started` VAD edge from the server.',
-  },
-  {
-    name: 'speech-stopped',
-    type: 'event',
-    description: 'Raw `input_audio_buffer.speech_stopped` VAD edge from the server.',
-  },
-  {
-    name: 'interrupted',
-    type: 'event',
-    description:
-      'Synthetic client-side signal: emitted once per in-flight `response_id` when the user starts speaking. Use this to stop main response playback on barge-in. Callback receives `{ response_id: string }`. Only carries main-response ids — never back-channel ids — so stopping the matching `speaker` stream leaves `backchannel` streams playing (back-channels are meant to overlap user speech and are never cancelled by barge-in).',
-  },
-  {
-    name: 'turn-suggestion',
-    type: 'event',
-    description:
-      'Smart-turn endpointing hint for a buffered user utterance. Callback receives { item_id, utterance_index, probability, trailing_silence_ms?, audio_duration_ms?, inference_ms? }.',
-  },
-  {
-    name: 'turn-suggestion-revoked',
-    type: 'event',
-    description: 'A previously emitted turn suggestion was retracted. Callback receives { item_id, utterance_index }.',
-  },
-  {
-    name: 'input-committed',
-    type: 'event',
-    description:
-      'Buffered input audio was committed as a user turn (via commitInput() or auto-VAD). Callback receives { item_id, previous_item_id? } where previous_item_id may be null.',
-  },
-  {
-    name: 'input-cleared',
-    type: 'event',
-    description: 'Buffered input audio was discarded (via clearInput()). Callback receives {}.',
-  },
-  {
-    name: 'input-timeout',
-    type: 'event',
-    description:
-      'A server-VAD idle timeout committed a user turn. Callback receives { audio_start_ms, audio_end_ms, item_id }.',
-  },
-  {
-    name: 'output-audio-started',
-    type: 'event',
-    description: 'Server began emitting output audio. Callback receives {}.',
-  },
-  {
-    name: 'output-audio-stopped',
-    type: 'event',
-    description: 'Server stopped emitting output audio for the current response. Callback receives {}.',
-  },
-  {
-    name: 'output-audio-cleared',
-    type: 'event',
-    description: 'Server output audio buffer was flushed, stopping playback (via clearOutput()). Callback receives {}.',
-  },
-  {
-    name: 'memory',
-    type: 'event',
-    description:
-      "Emitted with Inworld's rolling summary and facts state, deduplicated by version. Requires providerData.memory.enabled. Callback receives InworldMemoryState.",
-  },
-  {
-    name: 'backchannel',
-    type: 'event',
-    description:
-      "Emitted with a PassThrough stream of back-channel PCM audio (short acknowledgements while the user speaks). Each stream's `.id` is a `backchannel_id` that never appears in `interrupted`, so play these on a separate track that barge-in does not stop. Requires providerData.backchannel.enabled.",
-  },
-  {
-    name: 'backchannel.done',
-    type: 'event',
-    description: 'Emitted when a back-channel finishes. Callback receives { backchannel_id: string, phrase? }.',
-  },
-  {
-    name: 'backchannel.skipped',
-    type: 'event',
-    description:
-      'Emitted when the decider skips a back-channel before any audio is produced. Callback receives { reason: string }.',
-  },
-  {
-    name: 'response.created',
-    type: 'event',
-    description: 'Emitted when a new response begins. Callback receives the full server event.',
-  },
-  {
-    name: 'response.done',
-    type: 'event',
-    description: 'Emitted when a response completes. Callback receives the full server event.',
-  },
-  {
-    name: 'conversation.item.added',
-    type: 'event',
-    description: 'Emitted when a new conversation item is appended.',
-  },
-  {
-    name: 'conversation.item.done',
-    type: 'event',
-    description: 'Emitted when a conversation item finishes.',
-  },
-  {
-    name: 'function_call.arguments',
-    type: 'event',
-    description: 'Emitted with complete tool call arguments. Callback receives { call_id, name, arguments }.',
-  },
-  {
-    name: 'tool-call-start',
-    type: 'event',
-    description: 'Emitted before a registered tool is executed.',
-  },
-  {
-    name: 'tool-call-result',
-    type: 'event',
-    description: 'Emitted after a registered tool returns.',
-  },
-  {
-    name: 'error',
-    type: 'event',
-    description: 'Emitted on transport or server errors.',
-  },
+	{
+		name: 'speaker',
+		type: 'event',
+		description:
+			'Emitted once per response with a PassThrough stream of PCM audio. Use this when piping audio to a player.',
+	},
+	{
+		name: 'speaking',
+		type: 'event',
+		description: 'Emitted for each audio delta. Callback receives { audio: Buffer, response_id: string }.',
+	},
+	{
+		name: 'speaking.done',
+		type: 'event',
+		description: 'Emitted when audio output for a response is complete. Callback receives { response_id: string }.',
+	},
+	{
+		name: 'writing',
+		type: 'event',
+		description:
+			'Emitted as transcribed text becomes available. Callback receives { text: string, response_id: string, role: "assistant" | "user", voiceProfile? }. Deduplicated across audio-transcript and text deltas in the same response so a single response only emits one stream. On user events, voiceProfile is present when providerData.stt.voice_profile is enabled.',
+	},
+	{
+		name: 'speech-started',
+		type: 'event',
+		description: 'Raw `input_audio_buffer.speech_started` VAD edge from the server.',
+	},
+	{
+		name: 'speech-stopped',
+		type: 'event',
+		description: 'Raw `input_audio_buffer.speech_stopped` VAD edge from the server.',
+	},
+	{
+		name: 'interrupted',
+		type: 'event',
+		description:
+			'Synthetic client-side signal: emitted once per in-flight `response_id` when the user starts speaking. Use this to stop main response playback on barge-in. Callback receives `{ response_id: string }`. Only carries main-response ids — never back-channel ids — so stopping the matching `speaker` stream leaves `backchannel` streams playing (back-channels are meant to overlap user speech and are never cancelled by barge-in).',
+	},
+	{
+		name: 'turn-suggestion',
+		type: 'event',
+		description:
+			'Smart-turn endpointing hint for a buffered user utterance. Callback receives { item_id, utterance_index, probability, trailing_silence_ms?, audio_duration_ms?, inference_ms? }.',
+	},
+	{
+		name: 'turn-suggestion-revoked',
+		type: 'event',
+		description: 'A previously emitted turn suggestion was retracted. Callback receives { item_id, utterance_index }.',
+	},
+	{
+		name: 'input-committed',
+		type: 'event',
+		description:
+			'Buffered input audio was committed as a user turn (via commitInput() or auto-VAD). Callback receives { item_id, previous_item_id? } where previous_item_id may be null.',
+	},
+	{
+		name: 'input-cleared',
+		type: 'event',
+		description: 'Buffered input audio was discarded (via clearInput()). Callback receives {}.',
+	},
+	{
+		name: 'input-timeout',
+		type: 'event',
+		description:
+			'A server-VAD idle timeout committed a user turn. Callback receives { audio_start_ms, audio_end_ms, item_id }.',
+	},
+	{
+		name: 'output-audio-started',
+		type: 'event',
+		description: 'Server began emitting output audio. Callback receives {}.',
+	},
+	{
+		name: 'output-audio-stopped',
+		type: 'event',
+		description: 'Server stopped emitting output audio for the current response. Callback receives {}.',
+	},
+	{
+		name: 'output-audio-cleared',
+		type: 'event',
+		description: 'Server output audio buffer was flushed, stopping playback (via clearOutput()). Callback receives {}.',
+	},
+	{
+		name: 'memory',
+		type: 'event',
+		description:
+			"Emitted with Inworld's rolling summary and facts state, deduplicated by version. Requires providerData.memory.enabled. Callback receives InworldMemoryState.",
+	},
+	{
+		name: 'backchannel',
+		type: 'event',
+		description:
+			"Emitted with a PassThrough stream of back-channel PCM audio (short acknowledgements while the user speaks). Each stream's `.id` is a `backchannel_id` that never appears in `interrupted`, so play these on a separate track that barge-in does not stop. Requires providerData.backchannel.enabled.",
+	},
+	{
+		name: 'backchannel.done',
+		type: 'event',
+		description: 'Emitted when a back-channel finishes. Callback receives { backchannel_id: string, phrase? }.',
+	},
+	{
+		name: 'backchannel.skipped',
+		type: 'event',
+		description:
+			'Emitted when the decider skips a back-channel before any audio is produced. Callback receives { reason: string }.',
+	},
+	{
+		name: 'response.created',
+		type: 'event',
+		description: 'Emitted when a new response begins. Callback receives the full server event.',
+	},
+	{
+		name: 'response.done',
+		type: 'event',
+		description: 'Emitted when a response completes. Callback receives the full server event.',
+	},
+	{
+		name: 'conversation.item.added',
+		type: 'event',
+		description: 'Emitted when a new conversation item is appended.',
+	},
+	{
+		name: 'conversation.item.done',
+		type: 'event',
+		description: 'Emitted when a conversation item finishes.',
+	},
+	{
+		name: 'function_call.arguments',
+		type: 'event',
+		description: 'Emitted with complete tool call arguments. Callback receives { call_id, name, arguments }.',
+	},
+	{
+		name: 'tool-call-start',
+		type: 'event',
+		description: 'Emitted before a registered tool is executed.',
+	},
+	{
+		name: 'tool-call-result',
+		type: 'event',
+		description: 'Emitted after a registered tool returns.',
+	},
+	{
+		name: 'error',
+		type: 'event',
+		description: 'Emitted on transport or server errors.',
+	},
 ]}
 />
 

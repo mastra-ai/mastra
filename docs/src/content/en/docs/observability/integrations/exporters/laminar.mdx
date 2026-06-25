@@ -44,14 +44,14 @@ import { Laminar, MastraExporter } from '@lmnr-ai/lmnr'
 Laminar.initialize()
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      laminar: {
-        serviceName: 'my-service',
-        exporters: [new MastraExporter()],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			laminar: {
+				serviceName: 'my-service',
+				exporters: [new MastraExporter()],
+			},
+		},
+	}),
 })
 ```
 
@@ -65,24 +65,24 @@ import { Observability } from '@mastra/observability'
 import { Laminar, MastraExporter } from '@lmnr-ai/lmnr'
 
 Laminar.initialize({
-  projectApiKey: process.env.LMNR_PROJECT_API_KEY!,
-  baseUrl: process.env.LMNR_BASE_URL, // Optional
-  // ...other options
+	projectApiKey: process.env.LMNR_PROJECT_API_KEY!,
+	baseUrl: process.env.LMNR_BASE_URL, // Optional
+	// ...other options
 })
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      laminar: {
-        serviceName: 'my-service',
-        exporters: [
-          new MastraExporter({
-            realtime: process.env.NODE_ENV === 'development', // Optional
-          }),
-        ],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			laminar: {
+				serviceName: 'my-service',
+				exporters: [
+					new MastraExporter({
+						realtime: process.env.NODE_ENV === 'development', // Optional
+					}),
+				],
+			},
+		},
+	}),
 })
 ```
 

@@ -17,14 +17,14 @@ import { createWorkflowStateReader } from '@mastra/core/workflows'
 const state = await workflow.getWorkflowRunById('run-123')
 
 if (state) {
-  const reader = createWorkflowStateReader(state)
-  const suspendedStep = reader.getSuspendedStep()
-  const labels = reader.getResumeLabels()
+	const reader = createWorkflowStateReader(state)
+	const suspendedStep = reader.getSuspendedStep()
+	const labels = reader.getResumeLabels()
 
-  console.log(reader.getStatus())
-  console.log(reader.getStepOutput('extract-data'))
-  console.log(suspendedStep?.path)
-  console.log(labels.approve)
+	console.log(reader.getStatus())
+	console.log(reader.getStepOutput('extract-data'))
+	console.log(suspendedStep?.path)
+	console.log(labels.approve)
 }
 ```
 
@@ -93,51 +93,51 @@ const labels = getWorkflowResumeLabels(state)
 
 <PropertiesTable
   content={[
-  {
-    name: 'getStatus',
-    type: '() => WorkflowRunStatus',
-    description: 'Returns the workflow run status.',
-  },
-  {
-    name: 'getResult',
-    type: '() => WorkflowState["result"]',
-    description: 'Returns the terminal workflow result when it exists.',
-  },
-  {
-    name: 'getError',
-    type: '() => WorkflowState["error"]',
-    description: 'Returns the terminal workflow error when it exists.',
-  },
-  {
-    name: 'getStepOutput',
-    type: '(stepId: string) => any | Array<any | undefined> | undefined',
-    description: 'Returns the output for a step ID or nested workflow dot path.',
-  },
-  {
-    name: 'getStepPayload',
-    type: '(stepId: string) => any | Array<any | undefined> | undefined',
-    description: 'Returns the payload for a step ID or nested workflow dot path.',
-  },
-  {
-    name: 'getSuspendedStep',
-    type: '() => { stepId: string; path: string[]; executionPath?: number[]; step?: NonNullable<WorkflowState["steps"]>[string]; payload?: any; suspendPayload?: any; suspendOutput?: any; resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> } | undefined',
-    description: 'Returns the first suspended step.',
-  },
-  {
-    name: 'getSuspendedSteps',
-    type: '() => Array<{ stepId: string; path: string[]; executionPath?: number[]; step?: NonNullable<WorkflowState["steps"]>[string]; payload?: any; suspendPayload?: any; suspendOutput?: any; resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> }>',
-    description: 'Returns all suspended steps.',
-  },
-  {
-    name: 'getResumeLabel',
-    type: '(label: string) => { stepId: string; foreachIndex?: number } | undefined',
-    description: 'Returns a resume label by name.',
-  },
-  {
-    name: 'getResumeLabels',
-    type: '() => Record<string, { stepId: string; foreachIndex?: number }>',
-    description: 'Returns all resume labels.',
-  },
+	{
+		name: 'getStatus',
+		type: '() => WorkflowRunStatus',
+		description: 'Returns the workflow run status.',
+	},
+	{
+		name: 'getResult',
+		type: '() => WorkflowState["result"]',
+		description: 'Returns the terminal workflow result when it exists.',
+	},
+	{
+		name: 'getError',
+		type: '() => WorkflowState["error"]',
+		description: 'Returns the terminal workflow error when it exists.',
+	},
+	{
+		name: 'getStepOutput',
+		type: '(stepId: string) => any | Array<any | undefined> | undefined',
+		description: 'Returns the output for a step ID or nested workflow dot path.',
+	},
+	{
+		name: 'getStepPayload',
+		type: '(stepId: string) => any | Array<any | undefined> | undefined',
+		description: 'Returns the payload for a step ID or nested workflow dot path.',
+	},
+	{
+		name: 'getSuspendedStep',
+		type: '() => { stepId: string; path: string[]; executionPath?: number[]; step?: NonNullable<WorkflowState["steps"]>[string]; payload?: any; suspendPayload?: any; suspendOutput?: any; resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> } | undefined',
+		description: 'Returns the first suspended step.',
+	},
+	{
+		name: 'getSuspendedSteps',
+		type: '() => Array<{ stepId: string; path: string[]; executionPath?: number[]; step?: NonNullable<WorkflowState["steps"]>[string]; payload?: any; suspendPayload?: any; suspendOutput?: any; resumeLabels: Record<string, { stepId: string; foreachIndex?: number }> }>',
+		description: 'Returns all suspended steps.',
+	},
+	{
+		name: 'getResumeLabel',
+		type: '(label: string) => { stepId: string; foreachIndex?: number } | undefined',
+		description: 'Returns a resume label by name.',
+	},
+	{
+		name: 'getResumeLabels',
+		type: '() => Record<string, { stepId: string; foreachIndex?: number }>',
+		description: 'Returns all resume labels.',
+	},
 ]}
 />
 

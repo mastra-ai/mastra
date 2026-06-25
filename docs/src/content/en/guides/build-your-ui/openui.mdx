@@ -86,12 +86,12 @@ Embed Mastra in your Next.js API route and connect an OpenUI `<FullScreen />` ch
     import { z } from 'zod'
 
     const getWeather = createTool({
-      id: 'get_weather',
-      description: 'Get current weather for a city.',
-      inputSchema: z.object({ location: z.string().describe('City name') }),
-      execute: async ({ location }) => {
-        return { location, temperature_celsius: 22, condition: 'Clear' }
-      },
+    	id: 'get_weather',
+    	description: 'Get current weather for a city.',
+    	inputSchema: z.object({ location: z.string().describe('City name') }),
+    	execute: async ({ location }) => {
+    		return { location, temperature_celsius: 22, condition: 'Clear' }
+    	},
     })
     ```
 
@@ -106,17 +106,17 @@ Embed Mastra in your Next.js API route and connect an OpenUI `<FullScreen />` ch
     const systemPrompt = readFileSync(join(process.cwd(), 'src/generated/system-prompt.txt'), 'utf-8')
 
     const agent = new MastraAgent({
-      agent: new Agent({
-        id: 'openui-agent',
-        name: 'OpenUI Agent',
-        instructions: `You are a helpful assistant. Use tools when relevant.\n\n${systemPrompt}`,
-        model: {
-          id: '__GATEWAY_OPENAI_MODEL__',
-          apiKey: process.env.OPENAI_API_KEY,
-        },
-        tools: { getWeather },
-      }),
-      resourceId: 'chat-user',
+    	agent: new Agent({
+    		id: 'openui-agent',
+    		name: 'OpenUI Agent',
+    		instructions: `You are a helpful assistant. Use tools when relevant.\n\n${systemPrompt}`,
+    		model: {
+    			id: '__GATEWAY_OPENAI_MODEL__',
+    			apiKey: process.env.OPENAI_API_KEY,
+    		},
+    		tools: { getWeather },
+    	}),
+    	resourceId: 'chat-user',
     })
     ```
 
@@ -127,40 +127,40 @@ Embed Mastra in your Next.js API route and connect an OpenUI `<FullScreen />` ch
     import { NextRequest } from 'next/server'
 
     export async function POST(req: NextRequest) {
-      const { messages, threadId }: { messages: Message[]; threadId: string } = await req.json()
-      const encoder = new TextEncoder()
+    	const { messages, threadId }: { messages: Message[]; threadId: string } = await req.json()
+    	const encoder = new TextEncoder()
 
-      const stream = new ReadableStream({
-        start(controller) {
-          const subscription = agent
-            .run({ messages, threadId, runId: crypto.randomUUID(), tools: [], context: [] })
-            .subscribe({
-              next: event => {
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
-              },
-              complete: () => {
-                controller.enqueue(encoder.encode('data: [DONE]\n\n'))
-                controller.close()
-              },
-              error: error => {
-                controller.enqueue(
-                  encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`),
-                )
-                controller.close()
-              },
-            })
+    	const stream = new ReadableStream({
+    		start(controller) {
+    			const subscription = agent
+    				.run({ messages, threadId, runId: crypto.randomUUID(), tools: [], context: [] })
+    				.subscribe({
+    					next: event => {
+    						controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+    					},
+    					complete: () => {
+    						controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+    						controller.close()
+    					},
+    					error: error => {
+    						controller.enqueue(
+    							encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`),
+    						)
+    						controller.close()
+    					},
+    				})
 
-          req.signal.addEventListener('abort', () => subscription.unsubscribe())
-        },
-      })
+    			req.signal.addEventListener('abort', () => subscription.unsubscribe())
+    		},
+    	})
 
-      return new Response(stream, {
-        headers: {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache, no-transform',
-          Connection: 'keep-alive',
-        },
-      })
+    	return new Response(stream, {
+    		headers: {
+    			'Content-Type': 'text/event-stream',
+    			'Cache-Control': 'no-cache, no-transform',
+    			Connection: 'keep-alive',
+    		},
+    	})
     }
     ```
   </StepItem>
@@ -178,23 +178,23 @@ Embed Mastra in your Next.js API route and connect an OpenUI `<FullScreen />` ch
     import { openuiChatLibrary } from '@openuidev/react-ui/genui-lib'
 
     export default function Page() {
-      return (
-        <div className="relative h-screen w-screen overflow-hidden">
-          <FullScreen
-            processMessage={async ({ messages, threadId, abortController }) => {
-              return fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages, threadId }),
-                signal: abortController.signal,
-              })
-            }}
-            streamProtocol={agUIAdapter()}
-            componentLibrary={openuiChatLibrary}
-            agentName="OpenUI + Mastra Chat"
-          />
-        </div>
-      )
+    	return (
+    		<div className="relative h-screen w-screen overflow-hidden">
+    			<FullScreen
+    				processMessage={async ({ messages, threadId, abortController }) => {
+    					return fetch('/api/chat', {
+    						method: 'POST',
+    						headers: { 'Content-Type': 'application/json' },
+    						body: JSON.stringify({ messages, threadId }),
+    						signal: abortController.signal,
+    					})
+    				}}
+    				streamProtocol={agUIAdapter()}
+    				componentLibrary={openuiChatLibrary}
+    				agentName="OpenUI + Mastra Chat"
+    			/>
+    		</div>
+    	)
     }
     ```
 

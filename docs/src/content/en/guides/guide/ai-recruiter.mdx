@@ -31,18 +31,18 @@ Set up the Workflow, define steps to extract and classify candidate data, and th
     import { z } from 'zod'
 
     export const candidateWorkflow = createWorkflow({
-      id: 'candidate-workflow',
-      inputSchema: z.object({
-        resumeText: z.string(),
-      }),
-      outputSchema: z.object({
-        askAboutSpecialty: z.object({
-          question: z.string(),
-        }),
-        askAboutRole: z.object({
-          question: z.string(),
-        }),
-      }),
+    	id: 'candidate-workflow',
+    	inputSchema: z.object({
+    		resumeText: z.string(),
+    	}),
+    	outputSchema: z.object({
+    		askAboutSpecialty: z.object({
+    			question: z.string(),
+    		}),
+    		askAboutRole: z.object({
+    			question: z.string(),
+    		}),
+    	}),
     }).commit()
     ```
   </StepItem>
@@ -56,42 +56,42 @@ Set up the Workflow, define steps to extract and classify candidate data, and th
     import { Agent } from '@mastra/core/agent'
 
     const recruiter = new Agent({
-      id: 'recruiter-agent',
-      name: 'Recruiter Agent',
-      instructions: `You are a recruiter.`,
-      model: '__GATEWAY_OPENAI_MODEL__',
+    	id: 'recruiter-agent',
+    	name: 'Recruiter Agent',
+    	instructions: `You are a recruiter.`,
+    	model: '__GATEWAY_OPENAI_MODEL__',
     })
 
     const gatherCandidateInfo = createStep({
-      id: 'gatherCandidateInfo',
-      inputSchema: z.object({
-        resumeText: z.string(),
-      }),
-      outputSchema: z.object({
-        candidateName: z.string(),
-        isTechnical: z.boolean(),
-        specialty: z.string(),
-        resumeText: z.string(),
-      }),
-      execute: async ({ inputData }) => {
-        const resumeText = inputData?.resumeText
+    	id: 'gatherCandidateInfo',
+    	inputSchema: z.object({
+    		resumeText: z.string(),
+    	}),
+    	outputSchema: z.object({
+    		candidateName: z.string(),
+    		isTechnical: z.boolean(),
+    		specialty: z.string(),
+    		resumeText: z.string(),
+    	}),
+    	execute: async ({ inputData }) => {
+    		const resumeText = inputData?.resumeText
 
-        const prompt = `Extract details from the resume text:
+    		const prompt = `Extract details from the resume text:
     "${resumeText}"`
 
-        const res = await recruiter.generate(prompt, {
-          structuredOutput: {
-            schema: z.object({
-              candidateName: z.string(),
-              isTechnical: z.boolean(),
-              specialty: z.string(),
-              resumeText: z.string(),
-            }),
-          },
-        })
+    		const res = await recruiter.generate(prompt, {
+    			structuredOutput: {
+    				schema: z.object({
+    					candidateName: z.string(),
+    					isTechnical: z.boolean(),
+    					specialty: z.string(),
+    					resumeText: z.string(),
+    				}),
+    			},
+    		})
 
-        return res.object
-      },
+    		return res.object
+    	},
     })
     ```
 
@@ -105,24 +105,24 @@ Set up the Workflow, define steps to extract and classify candidate data, and th
 
     ```ts title="src/mastra/workflows/candidate-workflow.ts"
     const askAboutSpecialty = createStep({
-      id: 'askAboutSpecialty',
-      inputSchema: z.object({
-        candidateName: z.string(),
-        isTechnical: z.boolean(),
-        specialty: z.string(),
-        resumeText: z.string(),
-      }),
-      outputSchema: z.object({
-        question: z.string(),
-      }),
-      execute: async ({ inputData: candidateInfo }) => {
-        const prompt = `You are a recruiter. Given the resume below, craft a short question
+    	id: 'askAboutSpecialty',
+    	inputSchema: z.object({
+    		candidateName: z.string(),
+    		isTechnical: z.boolean(),
+    		specialty: z.string(),
+    		resumeText: z.string(),
+    	}),
+    	outputSchema: z.object({
+    		question: z.string(),
+    	}),
+    	execute: async ({ inputData: candidateInfo }) => {
+    		const prompt = `You are a recruiter. Given the resume below, craft a short question
     for ${candidateInfo?.candidateName} about how they got into "${candidateInfo?.specialty}".
     Resume: ${candidateInfo?.resumeText}`
-        const res = await recruiter.generate(prompt)
+    		const res = await recruiter.generate(prompt)
 
-        return { question: res?.text?.trim() || '' }
-      },
+    		return { question: res?.text?.trim() || '' }
+    	},
     })
     ```
   </StepItem>
@@ -134,23 +134,23 @@ Set up the Workflow, define steps to extract and classify candidate data, and th
 
     ```ts title="src/mastra/workflows/candidate-workflow.ts"
     const askAboutRole = createStep({
-      id: 'askAboutRole',
-      inputSchema: z.object({
-        candidateName: z.string(),
-        isTechnical: z.boolean(),
-        specialty: z.string(),
-        resumeText: z.string(),
-      }),
-      outputSchema: z.object({
-        question: z.string(),
-      }),
-      execute: async ({ inputData: candidateInfo }) => {
-        const prompt = `You are a recruiter. Given the resume below, craft a short question
+    	id: 'askAboutRole',
+    	inputSchema: z.object({
+    		candidateName: z.string(),
+    		isTechnical: z.boolean(),
+    		specialty: z.string(),
+    		resumeText: z.string(),
+    	}),
+    	outputSchema: z.object({
+    		question: z.string(),
+    	}),
+    	execute: async ({ inputData: candidateInfo }) => {
+    		const prompt = `You are a recruiter. Given the resume below, craft a short question
     for ${candidateInfo?.candidateName} asking what interests them most about this role.
     Resume: ${candidateInfo?.resumeText}`
-        const res = await recruiter.generate(prompt)
-        return { question: res?.text?.trim() || '' }
-      },
+    		const res = await recruiter.generate(prompt)
+    		return { question: res?.text?.trim() || '' }
+    	},
     })
     ```
   </StepItem>
@@ -162,25 +162,25 @@ Set up the Workflow, define steps to extract and classify candidate data, and th
 
     ```ts title="src/mastra/workflows/candidate-workflow.ts" {10-14}
     export const candidateWorkflow = createWorkflow({
-      id: 'candidate-workflow',
-      inputSchema: z.object({
-        resumeText: z.string(),
-      }),
-      outputSchema: z.object({
-        askAboutSpecialty: z.object({
-          question: z.string(),
-        }),
-        askAboutRole: z.object({
-          question: z.string(),
-        }),
-      }),
+    	id: 'candidate-workflow',
+    	inputSchema: z.object({
+    		resumeText: z.string(),
+    	}),
+    	outputSchema: z.object({
+    		askAboutSpecialty: z.object({
+    			question: z.string(),
+    		}),
+    		askAboutRole: z.object({
+    			question: z.string(),
+    		}),
+    	}),
     })
-      .then(gatherCandidateInfo)
-      .branch([
-        [async ({ inputData: { isTechnical } }) => isTechnical, askAboutSpecialty],
-        [async ({ inputData: { isTechnical } }) => !isTechnical, askAboutRole],
-      ])
-      .commit()
+    	.then(gatherCandidateInfo)
+    	.branch([
+    		[async ({ inputData: { isTechnical } }) => isTechnical, askAboutSpecialty],
+    		[async ({ inputData: { isTechnical } }) => !isTechnical, askAboutRole],
+    	])
+    	.commit()
     ```
   </StepItem>
 
@@ -192,7 +192,7 @@ Set up the Workflow, define steps to extract and classify candidate data, and th
     import { candidateWorkflow } from './workflows/candidate-workflow'
 
     export const mastra = new Mastra({
-      workflows: { candidateWorkflow },
+    	workflows: { candidateWorkflow },
     })
     ```
   </StepItem>
@@ -222,10 +222,10 @@ import { mastra } from './mastra'
 const run = await mastra.getWorkflow('candidateWorkflow').createRun()
 
 const res = await run.start({
-  inputData: {
-    resumeText:
-      'Knowledgeable Software Engineer with more than 10 years of experience in software development. Proven expertise in the design and development of software databases and optimization of user interfaces.',
-  },
+	inputData: {
+		resumeText:
+			'Knowledgeable Software Engineer with more than 10 years of experience in software development. Proven expertise in the design and development of software databases and optimization of user interfaces.',
+	},
 })
 
 // Dump the complete workflow result (includes status, steps and result)
@@ -233,9 +233,9 @@ console.log(JSON.stringify(res, null, 2))
 
 // Get the workflow output value
 if (res.status === 'success') {
-  const question = res.result.askAboutRole?.question ?? res.result.askAboutSpecialty?.question
+	const question = res.result.askAboutRole?.question ?? res.result.askAboutSpecialty?.question
 
-  console.log(`Output value: ${question}`)
+	console.log(`Output value: ${question}`)
 }
 ```
 

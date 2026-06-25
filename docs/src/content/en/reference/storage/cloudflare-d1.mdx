@@ -40,17 +40,17 @@ import { Mastra } from '@mastra/core'
 import { CloudflareDeployer } from '@mastra/deployer-cloudflare'
 
 export const mastra = new Mastra({
-  storage: new D1Store({ binding: env.DB }),
-  deployer: new CloudflareDeployer({
-    name: 'my-worker',
-    d1_databases: [
-      {
-        binding: 'DB',
-        database_name: 'your-database-name',
-        database_id: 'your-database-id',
-      },
-    ],
-  }),
+	storage: new D1Store({ binding: env.DB }),
+	deployer: new CloudflareDeployer({
+		name: 'my-worker',
+		d1_databases: [
+			{
+				binding: 'DB',
+				database_name: 'your-database-name',
+				database_id: 'your-database-id',
+			},
+		],
+	}),
 })
 ```
 
@@ -67,20 +67,20 @@ import { D1Store } from '@mastra/cloudflare-d1'
 import { Mastra } from '@mastra/core'
 
 type Env = {
-  DB: D1Database
+	DB: D1Database
 }
 
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
-    const mastra = new Mastra({
-      storage: new D1Store({ binding: env.DB }),
-    })
+	async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+		const mastra = new Mastra({
+			storage: new D1Store({ binding: env.DB }),
+		})
 
-    const agent = mastra.getAgent('my-agent')
-    const result = await agent.generate('Hello')
+		const agent = mastra.getAgent('my-agent')
+		const result = await agent.generate('Hello')
 
-    return Response.json({ text: result.text })
-  },
+		return Response.json({ text: result.text })
+	},
 }
 ```
 
@@ -92,10 +92,10 @@ For non-Workers environments (Node.js, serverless functions, etc.), use the REST
 import { D1Store } from '@mastra/cloudflare-d1'
 
 const storage = new D1Store({
-  accountId: process.env.CLOUDFLARE_ACCOUNT_ID!, // Cloudflare Account ID
-  databaseId: process.env.CLOUDFLARE_D1_DATABASE_ID!, // D1 Database ID
-  apiToken: process.env.CLOUDFLARE_API_TOKEN!, // Cloudflare API Token
-  tablePrefix: 'dev_', // Optional: isolate tables per environment
+	accountId: process.env.CLOUDFLARE_ACCOUNT_ID!, // Cloudflare Account ID
+	databaseId: process.env.CLOUDFLARE_D1_DATABASE_ID!, // D1 Database ID
+	apiToken: process.env.CLOUDFLARE_API_TOKEN!, // Cloudflare API Token
+	tablePrefix: 'dev_', // Optional: isolate tables per environment
 })
 ```
 
@@ -114,13 +114,13 @@ Or in `wrangler.jsonc`:
 
 ```jsonc
 {
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "your-database-name",
-      "database_id": "your-database-id",
-    },
-  ],
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "your-database-name",
+			"database_id": "your-database-id",
+		},
+	],
 }
 ```
 
@@ -128,36 +128,36 @@ Or in `wrangler.jsonc`:
 
 <PropertiesTable
   content={[
-  {
-    name: 'binding',
-    type: 'D1Database',
-    description: 'Cloudflare D1 Workers binding (for Workers runtime)',
-    isOptional: true,
-  },
-  {
-    name: 'accountId',
-    type: 'string',
-    description: 'Cloudflare Account ID (for REST API)',
-    isOptional: true,
-  },
-  {
-    name: 'databaseId',
-    type: 'string',
-    description: 'Cloudflare D1 Database ID (for REST API)',
-    isOptional: true,
-  },
-  {
-    name: 'apiToken',
-    type: 'string',
-    description: 'Cloudflare API Token (for REST API)',
-    isOptional: true,
-  },
-  {
-    name: 'tablePrefix',
-    type: 'string',
-    description: 'Optional prefix for all table names (useful for environment isolation)',
-    isOptional: true,
-  },
+	{
+		name: 'binding',
+		type: 'D1Database',
+		description: 'Cloudflare D1 Workers binding (for Workers runtime)',
+		isOptional: true,
+	},
+	{
+		name: 'accountId',
+		type: 'string',
+		description: 'Cloudflare Account ID (for REST API)',
+		isOptional: true,
+	},
+	{
+		name: 'databaseId',
+		type: 'string',
+		description: 'Cloudflare D1 Database ID (for REST API)',
+		isOptional: true,
+	},
+	{
+		name: 'apiToken',
+		type: 'string',
+		description: 'Cloudflare API Token (for REST API)',
+		isOptional: true,
+	},
+	{
+		name: 'tablePrefix',
+		type: 'string',
+		description: 'Optional prefix for all table names (useful for environment isolation)',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -180,23 +180,23 @@ import { Mastra } from '@mastra/core'
 import { D1Store } from '@mastra/cloudflare-d1'
 
 type Env = {
-  DB: D1Database
+	DB: D1Database
 }
 
 // In a Cloudflare Worker
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
-    const storage = new D1Store({
-      binding: env.DB,
-    })
+	async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+		const storage = new D1Store({
+			binding: env.DB,
+		})
 
-    const mastra = new Mastra({
-      storage, // init() is called automatically
-    })
+		const mastra = new Mastra({
+			storage, // init() is called automatically
+		})
 
-    // Your handler logic here
-    return new Response('Success')
-  },
+		// Your handler logic here
+		return new Response('Success')
+	},
 }
 ```
 
@@ -206,26 +206,26 @@ If you're using storage directly without Mastra, you must call `init()` explicit
 import { D1Store } from '@mastra/cloudflare-d1'
 
 type Env = {
-  DB: D1Database
+	DB: D1Database
 }
 
 // In a Cloudflare Worker
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
-    const storage = new D1Store({
-      id: 'd1-storage',
-      binding: env.DB,
-    })
+	async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+		const storage = new D1Store({
+			id: 'd1-storage',
+			binding: env.DB,
+		})
 
-    // Required when using storage directly
-    await storage.init()
+		// Required when using storage directly
+		await storage.init()
 
-    // Access domain-specific stores via getStore()
-    const memoryStore = await storage.getStore('memory')
-    const thread = await memoryStore?.getThreadById({ threadId: '...' })
+		// Access domain-specific stores via getStore()
+		const memoryStore = await storage.getStore('memory')
+		const thread = await memoryStore?.getThreadById({ threadId: '...' })
 
-    return new Response('Success')
-  },
+		return new Response('Success')
+	},
 }
 ```
 

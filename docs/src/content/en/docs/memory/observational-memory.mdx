@@ -21,15 +21,15 @@ import { Memory } from '@mastra/memory'
 import { Agent } from '@mastra/core/agent'
 
 export const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant.',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
-  memory: new Memory({
-    options: {
-      // highlight-next-line
-      observationalMemory: true,
-    },
-  }),
+	name: 'my-agent',
+	instructions: 'You are a helpful assistant.',
+	model: '__GATEWAY_OPENAI_MODEL_MINI__',
+	memory: new Memory({
+		options: {
+			// highlight-next-line
+			observationalMemory: true,
+		},
+	}),
 })
 ```
 
@@ -37,11 +37,11 @@ That's it. The agent now has humanlike long-term memory that persists across con
 
 ```typescript
 const memory = new Memory({
-  options: {
-    observationalMemory: {
-      model: 'deepseek/deepseek-reasoner',
-    },
-  },
+	options: {
+		observationalMemory: {
+			model: 'deepseek/deepseek-reasoner',
+		},
+	},
 })
 ```
 
@@ -73,17 +73,17 @@ import { Memory } from '@mastra/memory'
 import { Agent } from '@mastra/core/agent'
 
 export const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant.',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
-  memory: new Memory({
-    options: {
-      observationalMemory: {
-        model: 'google/gemini-2.5-flash',
-        temporalMarkers: true,
-      },
-    },
-  }),
+	name: 'my-agent',
+	instructions: 'You are a helpful assistant.',
+	model: '__GATEWAY_OPENAI_MODEL_MINI__',
+	memory: new Memory({
+		options: {
+			observationalMemory: {
+				model: 'google/gemini-2.5-flash',
+				temporalMarkers: true,
+			},
+		},
+	}),
 })
 ```
 
@@ -101,13 +101,13 @@ Top-level early activation settings apply to observations by default:
 
 ```typescript title="src/mastra/agents/agent.ts"
 const memory = new Memory({
-  options: {
-    observationalMemory: {
-      model: 'google/gemini-2.5-flash',
-      activateAfterIdle: 'auto',
-      activateOnProviderChange: true,
-    },
-  },
+	options: {
+		observationalMemory: {
+			model: 'google/gemini-2.5-flash',
+			activateAfterIdle: 'auto',
+			activateOnProviderChange: true,
+		},
+	},
 })
 ```
 
@@ -115,19 +115,19 @@ Use nested `observation` and `reflection` settings for per-phase control. Reflec
 
 ```typescript title="src/mastra/agents/agent.ts"
 const memory = new Memory({
-  options: {
-    observationalMemory: {
-      model: 'google/gemini-2.5-flash',
-      activateAfterIdle: '5m',
-      observation: {
-        activateAfterIdle: false,
-      },
-      reflection: {
-        activateAfterIdle: '10m',
-        activateOnProviderChange: true,
-      },
-    },
-  },
+	options: {
+		observationalMemory: {
+			model: 'google/gemini-2.5-flash',
+			activateAfterIdle: '5m',
+			observation: {
+				activateAfterIdle: false,
+			},
+			reflection: {
+				activateAfterIdle: '10m',
+				activateOnProviderChange: true,
+			},
+		},
+	},
 })
 ```
 
@@ -139,14 +139,14 @@ Set `observation.bufferOnIdle` to `true` to run background observation buffering
 
 ```typescript title="src/mastra/agents/agent.ts"
 const memory = new Memory({
-  options: {
-    observationalMemory: {
-      model: '__GATEWAY_OPENAI_MODEL_MINI__',
-      observation: {
-        bufferOnIdle: true,
-      },
-    },
-  },
+	options: {
+		observationalMemory: {
+			model: '__GATEWAY_OPENAI_MODEL_MINI__',
+			observation: {
+				bufferOnIdle: true,
+			},
+		},
+	},
 })
 ```
 
@@ -183,19 +183,19 @@ If your Observer model is text-only or its API rejects multimodal input, set `ob
 
 ```typescript
 new Agent({
-  name: 'assistant',
-  instructions: 'You are a helpful assistant.',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
-  memory: new Memory({
-    options: {
-      observationalMemory: {
-        observation: {
-          model: 'deepseek/deepseek-reasoner',
-          observeAttachments: false,
-        },
-      },
-    },
-  }),
+	name: 'assistant',
+	instructions: 'You are a helpful assistant.',
+	model: '__GATEWAY_OPENAI_MODEL_MINI__',
+	memory: new Memory({
+		options: {
+			observationalMemory: {
+				observation: {
+					model: 'deepseek/deepseek-reasoner',
+					observeAttachments: false,
+				},
+			},
+		},
+	}),
 })
 ```
 
@@ -236,12 +236,12 @@ Set `retrieval: true` to enable the recall tool for browsing raw messages. No ve
 
 ```typescript
 const memory = new Memory({
-  options: {
-    observationalMemory: {
-      model: 'google/gemini-2.5-flash',
-      retrieval: true,
-    },
-  },
+	options: {
+		observationalMemory: {
+			model: 'google/gemini-2.5-flash',
+			retrieval: true,
+		},
+	},
 })
 ```
 
@@ -251,15 +251,15 @@ Set `retrieval: { vector: true }` to also enable semantic search. This reuses th
 
 ```typescript
 const memory = new Memory({
-  storage,
-  vector: myVectorStore,
-  embedder: myEmbedder,
-  options: {
-    observationalMemory: {
-      model: 'google/gemini-2.5-flash',
-      retrieval: { vector: true },
-    },
-  },
+	storage,
+	vector: myVectorStore,
+	embedder: myEmbedder,
+	options: {
+		observationalMemory: {
+			model: 'google/gemini-2.5-flash',
+			retrieval: { vector: true },
+		},
+	},
 })
 ```
 
@@ -271,12 +271,12 @@ By default, the recall tool scope is `'resource'` — the agent can list threads
 
 ```typescript
 const memory = new Memory({
-  options: {
-    observationalMemory: {
-      model: 'google/gemini-2.5-flash',
-      retrieval: { vector: true, scope: 'thread' },
-    },
-  },
+	options: {
+		observationalMemory: {
+			model: 'google/gemini-2.5-flash',
+			retrieval: { vector: true, scope: 'thread' },
+		},
+	},
 })
 ```
 
@@ -314,11 +314,11 @@ If you're unsure which model to use, start with the default `google/gemini-2.5-f
 
 ```typescript
 const memory = new Memory({
-  options: {
-    observationalMemory: {
-      model: 'deepseek/deepseek-reasoner',
-    },
-  },
+	options: {
+		observationalMemory: {
+			model: 'deepseek/deepseek-reasoner',
+		},
+	},
 })
 ```
 
@@ -342,29 +342,29 @@ You can use `ModelByInputTokens` to specify different Observer or Reflector mode
 import { Memory, ModelByInputTokens } from '@mastra/memory'
 
 const memory = new Memory({
-  options: {
-    observationalMemory: {
-      observation: {
-        model: new ModelByInputTokens({
-          upTo: {
-            // Faster, cheaper models for smaller inputs; stronger models for larger contexts
-            5_000: 'openrouter/mistralai/ministral-8b-2512',
-            20_000: 'openrouter/mistralai/mistral-small-2603',
-            40_000: '__GATEWAY_OPENAI_MODEL_MINI__',
-            1_000_000: 'google/gemini-3.1-flash-lite-preview',
-          },
-        }),
-      },
-      reflection: {
-        model: new ModelByInputTokens({
-          upTo: {
-            20_000: '__GATEWAY_OPENAI_MODEL_MINI__',
-            100_000: 'google/gemini-2.5-flash',
-          },
-        }),
-      },
-    },
-  },
+	options: {
+		observationalMemory: {
+			observation: {
+				model: new ModelByInputTokens({
+					upTo: {
+						// Faster, cheaper models for smaller inputs; stronger models for larger contexts
+						5_000: 'openrouter/mistralai/ministral-8b-2512',
+						20_000: 'openrouter/mistralai/mistral-small-2603',
+						40_000: '__GATEWAY_OPENAI_MODEL_MINI__',
+						1_000_000: 'google/gemini-3.1-flash-lite-preview',
+					},
+				}),
+			},
+			reflection: {
+				model: new ModelByInputTokens({
+					upTo: {
+						20_000: '__GATEWAY_OPENAI_MODEL_MINI__',
+						100_000: 'google/gemini-2.5-flash',
+					},
+				}),
+			},
+		},
+	},
 })
 ```
 
@@ -380,12 +380,12 @@ Each thread has its own observations. This scope is well tested and works well a
 
 ```typescript
 const memory = new Memory({
-  options: {
-    observationalMemory: {
-      model: 'google/gemini-2.5-flash',
-      scope: 'thread',
-    },
-  },
+	options: {
+		observationalMemory: {
+			model: 'google/gemini-2.5-flash',
+			scope: 'thread',
+		},
+	},
 })
 ```
 
@@ -397,12 +397,12 @@ Observations are shared across all threads for a resource (typically a user). En
 
 ```typescript
 const memory = new Memory({
-  options: {
-    observationalMemory: {
-      model: 'google/gemini-2.5-flash',
-      scope: 'resource',
-    },
-  },
+	options: {
+		observationalMemory: {
+			model: 'google/gemini-2.5-flash',
+			scope: 'resource',
+		},
+	},
 })
 ```
 
@@ -425,22 +425,22 @@ OM uses token thresholds to decide when to observe and reflect. See [token budge
 
 ```typescript
 const memory = new Memory({
-  options: {
-    observationalMemory: {
-      model: 'google/gemini-2.5-flash',
-      observation: {
-        // when to run the Observer (default: 30,000)
-        messageTokens: 30_000,
-      },
-      reflection: {
-        // when to run the Reflector (default: 40,000)
-        observationTokens: 40_000,
-      },
-      // let message history borrow from observation budget
-      // requires bufferTokens: false (temporary limitation)
-      shareTokenBudget: false,
-    },
-  },
+	options: {
+		observationalMemory: {
+			model: 'google/gemini-2.5-flash',
+			observation: {
+				// when to run the Observer (default: 30,000)
+				messageTokens: 30_000,
+			},
+			reflection: {
+				// when to run the Reflector (default: 40,000)
+				observationTokens: 40_000,
+			},
+			// let message history borrow from observation budget
+			// requires bufferTokens: false (temporary limitation)
+			shareTokenBudget: false,
+		},
+	},
 })
 ```
 
@@ -459,20 +459,20 @@ You can attach a token estimate directly to an `image` or `file` part using `pro
 
 ```typescript
 const filePart = {
-  type: 'file',
-  data: 'storage://bucket/large-report.pdf',
-  mimeType: 'application/pdf',
-  filename: 'large-report.pdf',
-  providerMetadata: {
-    mastra: {
-      tokenEstimate: {
-        v: 0,
-        source: 'client',
-        key: 'client',
-        tokens: 100_000,
-      },
-    },
-  },
+	type: 'file',
+	data: 'storage://bucket/large-report.pdf',
+	mimeType: 'application/pdf',
+	filename: 'large-report.pdf',
+	providerMetadata: {
+		mastra: {
+			tokenEstimate: {
+				v: 0,
+				source: 'client',
+				key: 'client',
+				tokens: 100_000,
+			},
+		},
+	},
 }
 ```
 
@@ -534,13 +534,13 @@ With `"auto"`, Mastra chooses an idle activation TTL from the active model provi
 
 ```typescript
 const memory = new Memory({
-  options: {
-    observationalMemory: {
-      model: 'google/gemini-2.5-flash',
-      activateAfterIdle: 'auto',
-      activateOnProviderChange: true,
-    },
-  },
+	options: {
+		observationalMemory: {
+			model: 'google/gemini-2.5-flash',
+			activateAfterIdle: 'auto',
+			activateOnProviderChange: true,
+		},
+	},
 })
 ```
 
@@ -554,14 +554,14 @@ To disable async buffering and use synchronous observation/reflection instead:
 
 ```typescript
 const memory = new Memory({
-  options: {
-    observationalMemory: {
-      model: 'google/gemini-2.5-flash',
-      observation: {
-        bufferTokens: false,
-      },
-    },
-  },
+	options: {
+		observationalMemory: {
+			model: 'google/gemini-2.5-flash',
+			observation: {
+				bufferTokens: false,
+			},
+		},
+	},
 })
 ```
 
@@ -581,14 +581,14 @@ Set `observation.previousObserverTokens` to limit how many tokens of previous ob
 
 ```typescript
 const memory = new Memory({
-  options: {
-    observationalMemory: {
-      model: 'google/gemini-2.5-flash',
-      observation: {
-        previousObserverTokens: 10_000, // keep only ~10k tokens of recent observations
-      },
-    },
-  },
+	options: {
+		observationalMemory: {
+			model: 'google/gemini-2.5-flash',
+			observation: {
+				previousObserverTokens: 10_000, // keep only ~10k tokens of recent observations
+			},
+		},
+	},
 })
 ```
 

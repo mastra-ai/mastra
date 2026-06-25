@@ -26,34 +26,34 @@ Use `.then()` to run steps in order, allowing each step to access the result of 
 
 ```typescript {27-28} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
-  inputSchema: z.object({
-    message: z.string(),
-  }),
-  outputSchema: z.object({
-    formatted: z.string(),
-  }),
+	inputSchema: z.object({
+		message: z.string(),
+	}),
+	outputSchema: z.object({
+		formatted: z.string(),
+	}),
 })
 
 const step2 = createStep({
-  inputSchema: z.object({
-    formatted: z.string(),
-  }),
-  outputSchema: z.object({
-    emphasized: z.string(),
-  }),
+	inputSchema: z.object({
+		formatted: z.string(),
+	}),
+	outputSchema: z.object({
+		emphasized: z.string(),
+	}),
 })
 
 export const testWorkflow = createWorkflow({
-  inputSchema: z.object({
-    message: z.string(),
-  }),
-  outputSchema: z.object({
-    emphasized: z.string(),
-  }),
+	inputSchema: z.object({
+		message: z.string(),
+	}),
+	outputSchema: z.object({
+		emphasized: z.string(),
+	}),
 })
-  .then(step1)
-  .then(step2)
-  .commit()
+	.then(step1)
+	.then(step2)
+	.commit()
 ```
 
 ## Simultaneous steps with `.parallel()`
@@ -64,46 +64,46 @@ Use `.parallel()` to run steps at the same time. All parallel steps must complet
 
 ```typescript {39} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
-  id: 'step-1',
+	id: 'step-1',
 })
 
 const step2 = createStep({
-  id: 'step-2',
+	id: 'step-2',
 })
 
 const step3 = createStep({
-  id: 'step-3',
-  inputSchema: z.object({
-    'step-1': z.object({
-      formatted: z.string(),
-    }),
-    'step-2': z.object({
-      emphasized: z.string(),
-    }),
-  }),
-  outputSchema: z.object({
-    combined: z.string(),
-  }),
-  execute: async ({ inputData }) => {
-    const { formatted } = inputData['step-1']
-    const { emphasized } = inputData['step-2']
-    return {
-      combined: `${formatted} | ${emphasized}`,
-    }
-  },
+	id: 'step-3',
+	inputSchema: z.object({
+		'step-1': z.object({
+			formatted: z.string(),
+		}),
+		'step-2': z.object({
+			emphasized: z.string(),
+		}),
+	}),
+	outputSchema: z.object({
+		combined: z.string(),
+	}),
+	execute: async ({ inputData }) => {
+		const { formatted } = inputData['step-1']
+		const { emphasized } = inputData['step-2']
+		return {
+			combined: `${formatted} | ${emphasized}`,
+		}
+	},
 })
 
 export const testWorkflow = createWorkflow({
-  inputSchema: z.object({
-    message: z.string(),
-  }),
-  outputSchema: z.object({
-    combined: z.string(),
-  }),
+	inputSchema: z.object({
+		message: z.string(),
+	}),
+	outputSchema: z.object({
+		combined: z.string(),
+	}),
 })
-  .parallel([step1, step2])
-  .then(step3)
-  .commit()
+	.parallel([step1, step2])
+	.then(step3)
+	.commit()
 ```
 
 :::tip[📹 Watch]
@@ -118,49 +118,49 @@ When steps run in parallel, the output is an object where each key is the step's
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
-  id: 'format-step',
-  inputSchema: z.object({ message: z.string() }),
-  outputSchema: z.object({ formatted: z.string() }),
-  execute: async ({ inputData }) => ({
-    formatted: inputData.message.toUpperCase(),
-  }),
+	id: 'format-step',
+	inputSchema: z.object({ message: z.string() }),
+	outputSchema: z.object({ formatted: z.string() }),
+	execute: async ({ inputData }) => ({
+		formatted: inputData.message.toUpperCase(),
+	}),
 })
 
 const step2 = createStep({
-  id: 'count-step',
-  inputSchema: z.object({ message: z.string() }),
-  outputSchema: z.object({ count: z.number() }),
-  execute: async ({ inputData }) => ({
-    count: inputData.message.length,
-  }),
+	id: 'count-step',
+	inputSchema: z.object({ message: z.string() }),
+	outputSchema: z.object({ count: z.number() }),
+	execute: async ({ inputData }) => ({
+		count: inputData.message.length,
+	}),
 })
 
 const step3 = createStep({
-  id: 'combine-step',
-  // The inputSchema must match the structure of parallel outputs
-  inputSchema: z.object({
-    'format-step': z.object({ formatted: z.string() }),
-    'count-step': z.object({ count: z.number() }),
-  }),
-  outputSchema: z.object({ result: z.string() }),
-  execute: async ({ inputData }) => {
-    // Access each parallel step's output by its id
-    const formatted = inputData['format-step'].formatted
-    const count = inputData['count-step'].count
-    return {
-      result: `${formatted} (${count} characters)`,
-    }
-  },
+	id: 'combine-step',
+	// The inputSchema must match the structure of parallel outputs
+	inputSchema: z.object({
+		'format-step': z.object({ formatted: z.string() }),
+		'count-step': z.object({ count: z.number() }),
+	}),
+	outputSchema: z.object({ result: z.string() }),
+	execute: async ({ inputData }) => {
+		// Access each parallel step's output by its id
+		const formatted = inputData['format-step'].formatted
+		const count = inputData['count-step'].count
+		return {
+			result: `${formatted} (${count} characters)`,
+		}
+	},
 })
 
 export const testWorkflow = createWorkflow({
-  id: 'parallel-output-example',
-  inputSchema: z.object({ message: z.string() }),
-  outputSchema: z.object({ result: z.string() }),
+	id: 'parallel-output-example',
+	inputSchema: z.object({ message: z.string() }),
+	outputSchema: z.object({ result: z.string() }),
 })
-  .parallel([step1, step2])
-  .then(step3)
-  .commit()
+	.parallel([step1, step2])
+	.then(step3)
+	.commit()
 
 // When executed with { message: "hello" }
 // The parallel output structure will be:
@@ -183,20 +183,20 @@ If any parallel step throws an error, the entire parallel block fails. To build 
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 const resilientStep = createStep({
-  id: 'researcher',
-  inputSchema: z.object({ query: z.string() }),
-  outputSchema: z.object({
-    brief: z.string().nullable(),
-    failed: z.boolean(),
-  }),
-  execute: async ({ inputData }) => {
-    try {
-      const result = await fetchExternalData(inputData.query)
-      return { brief: result, failed: false }
-    } catch {
-      return { brief: null, failed: true }
-    }
-  },
+	id: 'researcher',
+	inputSchema: z.object({ query: z.string() }),
+	outputSchema: z.object({
+		brief: z.string().nullable(),
+		failed: z.boolean(),
+	}),
+	execute: async ({ inputData }) => {
+		try {
+			const result = await fetchExternalData(inputData.query)
+			return { brief: result, failed: false }
+		} catch {
+			return { brief: null, failed: true }
+		}
+	},
 })
 ```
 
@@ -204,18 +204,18 @@ This way the step always succeeds with a typed result, and the downstream step c
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 const writerStep = createStep({
-  id: 'writer',
-  inputSchema: z.object({
-    'researcher-a': z.object({ brief: z.string().nullable(), failed: z.boolean() }),
-    'researcher-b': z.object({ brief: z.string().nullable(), failed: z.boolean() }),
-  }),
-  outputSchema: z.object({ synthesis: z.string() }),
-  execute: async ({ inputData }) => {
-    const briefs = Object.values(inputData)
-      .filter(v => !v.failed && v.brief)
-      .map(v => v.brief)
-    return { synthesis: briefs.join('; ') }
-  },
+	id: 'writer',
+	inputSchema: z.object({
+		'researcher-a': z.object({ brief: z.string().nullable(), failed: z.boolean() }),
+		'researcher-b': z.object({ brief: z.string().nullable(), failed: z.boolean() }),
+	}),
+	outputSchema: z.object({ synthesis: z.string() }),
+	execute: async ({ inputData }) => {
+		const briefs = Object.values(inputData)
+			.filter(v => !v.failed && v.brief)
+			.map(v => v.brief)
+		return { synthesis: briefs.join('; ') }
+	},
 })
 ```
 
@@ -274,57 +274,57 @@ When using conditional branching, only one branch executes based on which condit
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
-  id: 'initial-step',
-  inputSchema: z.object({ value: z.number() }),
-  outputSchema: z.object({ value: z.number() }),
-  execute: async ({ inputData }) => inputData,
+	id: 'initial-step',
+	inputSchema: z.object({ value: z.number() }),
+	outputSchema: z.object({ value: z.number() }),
+	execute: async ({ inputData }) => inputData,
 })
 
 const highValueStep = createStep({
-  id: 'high-value-step',
-  inputSchema: z.object({ value: z.number() }),
-  outputSchema: z.object({ result: z.string() }),
-  execute: async ({ inputData }) => ({
-    result: `High value: ${inputData.value}`,
-  }),
+	id: 'high-value-step',
+	inputSchema: z.object({ value: z.number() }),
+	outputSchema: z.object({ result: z.string() }),
+	execute: async ({ inputData }) => ({
+		result: `High value: ${inputData.value}`,
+	}),
 })
 
 const lowValueStep = createStep({
-  id: 'low-value-step',
-  inputSchema: z.object({ value: z.number() }),
-  outputSchema: z.object({ result: z.string() }),
-  execute: async ({ inputData }) => ({
-    result: `Low value: ${inputData.value}`,
-  }),
+	id: 'low-value-step',
+	inputSchema: z.object({ value: z.number() }),
+	outputSchema: z.object({ result: z.string() }),
+	execute: async ({ inputData }) => ({
+		result: `Low value: ${inputData.value}`,
+	}),
 })
 
 const finalStep = createStep({
-  id: 'final-step',
-  // The inputSchema must account for either branch's output
-  inputSchema: z.object({
-    'high-value-step': z.object({ result: z.string() }).optional(),
-    'low-value-step': z.object({ result: z.string() }).optional(),
-  }),
-  outputSchema: z.object({ message: z.string() }),
-  execute: async ({ inputData }) => {
-    // Only one branch will have executed
-    const result = inputData['high-value-step']?.result || inputData['low-value-step']?.result
-    return { message: result }
-  },
+	id: 'final-step',
+	// The inputSchema must account for either branch's output
+	inputSchema: z.object({
+		'high-value-step': z.object({ result: z.string() }).optional(),
+		'low-value-step': z.object({ result: z.string() }).optional(),
+	}),
+	outputSchema: z.object({ message: z.string() }),
+	execute: async ({ inputData }) => {
+		// Only one branch will have executed
+		const result = inputData['high-value-step']?.result || inputData['low-value-step']?.result
+		return { message: result }
+	},
 })
 
 export const testWorkflow = createWorkflow({
-  id: 'branch-output-example',
-  inputSchema: z.object({ value: z.number() }),
-  outputSchema: z.object({ message: z.string() }),
+	id: 'branch-output-example',
+	inputSchema: z.object({ value: z.number() }),
+	outputSchema: z.object({ message: z.string() }),
 })
-  .then(step1)
-  .branch([
-    [async ({ inputData }) => inputData.value > 10, highValueStep],
-    [async ({ inputData }) => inputData.value <= 10, lowValueStep],
-  ])
-  .then(finalStep)
-  .commit()
+	.then(step1)
+	.branch([
+		[async ({ inputData }) => inputData.value > 10, highValueStep],
+		[async ({ inputData }) => inputData.value <= 10, lowValueStep],
+	])
+	.then(finalStep)
+	.commit()
 
 // When executed with { value: 15 }
 // Only the high-value-step executes, output structure:
@@ -498,21 +498,21 @@ The `.foreach()` method always returns an array containing the output of each it
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 const addTenStep = createStep({
-  id: 'add-ten',
-  inputSchema: z.object({ value: z.number() }),
-  outputSchema: z.object({ value: z.number() }),
-  execute: async ({ inputData }) => ({
-    value: inputData.value + 10,
-  }),
+	id: 'add-ten',
+	inputSchema: z.object({ value: z.number() }),
+	outputSchema: z.object({ value: z.number() }),
+	execute: async ({ inputData }) => ({
+		value: inputData.value + 10,
+	}),
 })
 
 export const testWorkflow = createWorkflow({
-  id: 'foreach-output-example',
-  inputSchema: z.array(z.object({ value: z.number() })),
-  outputSchema: z.array(z.object({ value: z.number() })),
+	id: 'foreach-output-example',
+	inputSchema: z.array(z.object({ value: z.number() })),
+	outputSchema: z.array(z.object({ value: z.number() })),
 })
-  .foreach(addTenStep)
-  .commit()
+	.foreach(addTenStep)
+	.commit()
 
 // When executed with [{ value: 1 }, { value: 22 }, { value: 333 }]
 // Output: [{ value: 11 }, { value: 32 }, { value: 343 }]
@@ -536,33 +536,33 @@ Since `.foreach()` outputs an array, you can use `.then()` or `.map()` to aggreg
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 const processItemStep = createStep({
-  id: 'process-item',
-  inputSchema: z.object({ value: z.number() }),
-  outputSchema: z.object({ processed: z.number() }),
-  execute: async ({ inputData }) => ({
-    processed: inputData.value * 2,
-  }),
+	id: 'process-item',
+	inputSchema: z.object({ value: z.number() }),
+	outputSchema: z.object({ processed: z.number() }),
+	execute: async ({ inputData }) => ({
+		processed: inputData.value * 2,
+	}),
 })
 
 const aggregateStep = createStep({
-  id: 'aggregate',
-  // Input is an array of outputs from foreach
-  inputSchema: z.array(z.object({ processed: z.number() })),
-  outputSchema: z.object({ total: z.number() }),
-  execute: async ({ inputData }) => ({
-    // Sum all processed values
-    total: inputData.reduce((sum, item) => sum + item.processed, 0),
-  }),
+	id: 'aggregate',
+	// Input is an array of outputs from foreach
+	inputSchema: z.array(z.object({ processed: z.number() })),
+	outputSchema: z.object({ total: z.number() }),
+	execute: async ({ inputData }) => ({
+		// Sum all processed values
+		total: inputData.reduce((sum, item) => sum + item.processed, 0),
+	}),
 })
 
 export const testWorkflow = createWorkflow({
-  id: 'foreach-aggregate-example',
-  inputSchema: z.array(z.object({ value: z.number() })),
-  outputSchema: z.object({ total: z.number() }),
+	id: 'foreach-aggregate-example',
+	inputSchema: z.array(z.object({ value: z.number() })),
+	outputSchema: z.object({ total: z.number() }),
 })
-  .foreach(processItemStep)
-  .then(aggregateStep) // Receives the full array from foreach
-  .commit()
+	.foreach(processItemStep)
+	.then(aggregateStep) // Receives the full array from foreach
+	.commit()
 
 // When executed with [{ value: 1 }, { value: 2 }, { value: 3 }]
 // After foreach: [{ processed: 2 }, { processed: 4 }, { processed: 6 }]
@@ -589,38 +589,38 @@ When you chain `.foreach()` calls, each operates on the array output of the prev
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 const chunkStep = createStep({
-  id: 'chunk',
-  // Takes a document, returns an array of chunks
-  inputSchema: z.object({ content: z.string() }),
-  outputSchema: z.array(z.object({ chunk: z.string() })),
-  execute: async ({ inputData }) => {
-    // Split document into chunks
-    const chunks = inputData.content.match(/.{1,100}/g) || []
-    return chunks.map(chunk => ({ chunk }))
-  },
+	id: 'chunk',
+	// Takes a document, returns an array of chunks
+	inputSchema: z.object({ content: z.string() }),
+	outputSchema: z.array(z.object({ chunk: z.string() })),
+	execute: async ({ inputData }) => {
+		// Split document into chunks
+		const chunks = inputData.content.match(/.{1,100}/g) || []
+		return chunks.map(chunk => ({ chunk }))
+	},
 })
 
 const embedStep = createStep({
-  id: 'embed',
-  // Takes a single chunk, returns embedding
-  inputSchema: z.object({ chunk: z.string() }),
-  outputSchema: z.object({ embedding: z.array(z.number()) }),
-  execute: async ({ inputData }) => ({
-    embedding: [
-      /* vector embedding */
-    ],
-  }),
+	id: 'embed',
+	// Takes a single chunk, returns embedding
+	inputSchema: z.object({ chunk: z.string() }),
+	outputSchema: z.object({ embedding: z.array(z.number()) }),
+	execute: async ({ inputData }) => ({
+		embedding: [
+			/* vector embedding */
+		],
+	}),
 })
 
 // For a single document that produces multiple chunks:
 export const singleDocWorkflow = createWorkflow({
-  id: 'single-doc-rag',
-  inputSchema: z.object({ content: z.string() }),
-  outputSchema: z.array(z.object({ embedding: z.array(z.number()) })),
+	id: 'single-doc-rag',
+	inputSchema: z.object({ content: z.string() }),
+	outputSchema: z.array(z.object({ embedding: z.array(z.number()) })),
 })
-  .then(chunkStep) // Returns array of chunks
-  .foreach(embedStep) // Process each chunk -> array of embeddings
-  .commit()
+	.then(chunkStep) // Returns array of chunks
+	.foreach(embedStep) // Process each chunk -> array of embeddings
+	.commit()
 ```
 
 For processing multiple documents where each produces multiple chunks, you have options:
@@ -654,38 +654,38 @@ export const multiDocWorkflow = createWorkflow({...})
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 const downloadStep = createStep({
-  id: 'download',
-  inputSchema: z.string(), // Single URL
-  outputSchema: z.object({ content: z.string(), source: z.string() }),
-  execute: async ({ inputData: url }) => ({
-    content: await fetch(url).then(r => r.text()),
-    source: url,
-  }),
+	id: 'download',
+	inputSchema: z.string(), // Single URL
+	outputSchema: z.object({ content: z.string(), source: z.string() }),
+	execute: async ({ inputData: url }) => ({
+		content: await fetch(url).then(r => r.text()),
+		source: url,
+	}),
 })
 
 const chunkDocStep = createStep({
-  id: 'chunk-doc',
-  inputSchema: z.object({ content: z.string(), source: z.string() }),
-  outputSchema: z.array(z.object({ chunk: z.string(), source: z.string() })),
-  execute: async ({ inputData }) => {
-    const chunks = inputData.content.match(/.{1,100}/g) || []
-    return chunks.map(chunk => ({ chunk, source: inputData.source }))
-  },
+	id: 'chunk-doc',
+	inputSchema: z.object({ content: z.string(), source: z.string() }),
+	outputSchema: z.array(z.object({ chunk: z.string(), source: z.string() })),
+	execute: async ({ inputData }) => {
+		const chunks = inputData.content.match(/.{1,100}/g) || []
+		return chunks.map(chunk => ({ chunk, source: inputData.source }))
+	},
 })
 
 export const multiDocWorkflow = createWorkflow({
-  id: 'multi-doc-rag',
-  inputSchema: z.array(z.string()), // Array of URLs
-  outputSchema: z.array(z.object({ embedding: z.array(z.number()) })),
+	id: 'multi-doc-rag',
+	inputSchema: z.array(z.string()), // Array of URLs
+	outputSchema: z.array(z.object({ embedding: z.array(z.number()) })),
 })
-  .foreach(downloadStep, { concurrency: 5 }) // Download docs in parallel
-  .foreach(chunkDocStep) // Chunk each doc -> array of chunk arrays
-  .map(async ({ inputData }) => {
-    // Flatten nested arrays: [[chunks], [chunks]] -> [chunks]
-    return inputData.flat()
-  })
-  .foreach(embedStep, { concurrency: 10 }) // Embed all chunks
-  .commit()
+	.foreach(downloadStep, { concurrency: 5 }) // Download docs in parallel
+	.foreach(chunkDocStep) // Chunk each doc -> array of chunk arrays
+	.map(async ({ inputData }) => {
+		// Flatten nested arrays: [[chunks], [chunks]] -> [chunks]
+		return inputData.flat()
+	})
+	.foreach(embedStep, { concurrency: 10 }) // Embed all chunks
+	.commit()
 ```
 
 **Key points about chaining `.foreach()`:**
@@ -702,32 +702,32 @@ The step after `.foreach()` only executes after all iterations complete. If you 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 // Define a workflow that processes a single document
 const processDocumentWorkflow = createWorkflow({
-  id: 'process-document',
-  inputSchema: z.object({ url: z.string() }),
-  outputSchema: z.object({
-    embeddings: z.array(z.array(z.number())),
-    metadata: z.object({ url: z.string(), chunkCount: z.number() }),
-  }),
+	id: 'process-document',
+	inputSchema: z.object({ url: z.string() }),
+	outputSchema: z.object({
+		embeddings: z.array(z.array(z.number())),
+		metadata: z.object({ url: z.string(), chunkCount: z.number() }),
+	}),
 })
-  .then(downloadStep) // Download the document
-  .then(chunkStep) // Split into chunks
-  .then(embedChunksStep) // Embed all chunks for this document
-  .then(formatResultStep) // Format the final output
-  .commit()
+	.then(downloadStep) // Download the document
+	.then(chunkStep) // Split into chunks
+	.then(embedChunksStep) // Embed all chunks for this document
+	.then(formatResultStep) // Format the final output
+	.commit()
 
 // Use the nested workflow inside foreach
 export const batchProcessWorkflow = createWorkflow({
-  id: 'batch-process-documents',
-  inputSchema: z.array(z.object({ url: z.string() })),
-  outputSchema: z.array(
-    z.object({
-      embeddings: z.array(z.array(z.number())),
-      metadata: z.object({ url: z.string(), chunkCount: z.number() }),
-    }),
-  ),
+	id: 'batch-process-documents',
+	inputSchema: z.array(z.object({ url: z.string() })),
+	outputSchema: z.array(
+		z.object({
+			embeddings: z.array(z.array(z.number())),
+			metadata: z.object({ url: z.string(), chunkCount: z.number() }),
+		}),
+	),
 })
-  .foreach(processDocumentWorkflow, { concurrency: 3 })
-  .commit()
+	.foreach(processDocumentWorkflow, { concurrency: 3 })
+	.commit()
 
 // Each document goes through all 4 steps before the next document starts (with concurrency: 1)
 // With concurrency: 3, up to 3 documents process their full pipelines in parallel
@@ -820,14 +820,14 @@ Both `.parallel()` and `.foreach()` are synchronization points. The next step in
 
 ```typescript
 workflow
-  .parallel([stepA, stepB, stepC]) // All 3 run simultaneously
-  .then(combineStep) // Waits for ALL 3 to finish before running
-  .commit()
+	.parallel([stepA, stepB, stepC]) // All 3 run simultaneously
+	.then(combineStep) // Waits for ALL 3 to finish before running
+	.commit()
 
 workflow
-  .foreach(processStep, { concurrency: 5 }) // Up to 5 items process at once
-  .then(aggregateStep) // Waits for ALL items to finish before running
-  .commit()
+	.foreach(processStep, { concurrency: 5 }) // Up to 5 items process at once
+	.then(aggregateStep) // Waits for ALL items to finish before running
+	.commit()
 ```
 
 This means:

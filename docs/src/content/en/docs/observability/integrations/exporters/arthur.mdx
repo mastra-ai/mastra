@@ -55,14 +55,14 @@ import { Observability } from '@mastra/observability'
 import { ArthurExporter } from '@mastra/arthur'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      arthur: {
-        serviceName: 'my-service',
-        exporters: [new ArthurExporter()],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			arthur: {
+				serviceName: 'my-service',
+				exporters: [new ArthurExporter()],
+			},
+		},
+	}),
 })
 ```
 
@@ -76,20 +76,20 @@ import { Observability } from '@mastra/observability'
 import { ArthurExporter } from '@mastra/arthur'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      arthur: {
-        serviceName: 'my-service',
-        exporters: [
-          new ArthurExporter({
-            apiKey: process.env.ARTHUR_API_KEY!,
-            endpoint: process.env.ARTHUR_BASE_URL!,
-            taskId: process.env.ARTHUR_TASK_ID,
-          }),
-        ],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			arthur: {
+				serviceName: 'my-service',
+				exporters: [
+					new ArthurExporter({
+						apiKey: process.env.ARTHUR_API_KEY!,
+						endpoint: process.env.ARTHUR_BASE_URL!,
+						taskId: process.env.ARTHUR_TASK_ID,
+					}),
+				],
+			},
+		},
+	}),
 })
 ```
 
@@ -99,26 +99,26 @@ export const mastra = new Mastra({
 
 ```typescript
 new ArthurExporter({
-  // Arthur Configuration
-  apiKey: 'your-api-key', // Required
-  endpoint: 'http://localhost:3030', // Required
-  taskId: 'your-task-id', // Optional
+	// Arthur Configuration
+	apiKey: 'your-api-key', // Required
+	endpoint: 'http://localhost:3030', // Required
+	taskId: 'your-task-id', // Optional
 
-  // Optional OTLP settings
-  headers: {
-    'x-custom-header': 'value', // Additional headers for OTLP requests
-  },
+	// Optional OTLP settings
+	headers: {
+		'x-custom-header': 'value', // Additional headers for OTLP requests
+	},
 
-  // Debug and performance tuning
-  logLevel: 'debug', // Logging: debug | info | warn | error
-  batchSize: 512, // Batch size before exporting spans
-  timeout: 30000, // Timeout in ms before exporting spans
+	// Debug and performance tuning
+	logLevel: 'debug', // Logging: debug | info | warn | error
+	batchSize: 512, // Batch size before exporting spans
+	timeout: 30000, // Timeout in ms before exporting spans
 
-  // Custom resource attributes
-  resourceAttributes: {
-    'deployment.environment': process.env.NODE_ENV,
-    'service.version': process.env.APP_VERSION,
-  },
+	// Custom resource attributes
+	resourceAttributes: {
+		'deployment.environment': process.env.NODE_ENV,
+		'service.version': process.env.APP_VERSION,
+	},
 })
 ```
 
@@ -128,12 +128,12 @@ Non-reserved span attributes are serialized into the OpenInference `metadata` pa
 
 ```ts
 await agent.generate(input, {
-  tracingOptions: {
-    metadata: {
-      companyId: 'acme-co',
-      tier: 'enterprise',
-    },
-  },
+	tracingOptions: {
+		metadata: {
+			companyId: 'acme-co',
+			tier: 'enterprise',
+		},
+	},
 })
 ```
 

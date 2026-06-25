@@ -20,22 +20,22 @@ This function returns an instance of the MastraScorer class. See the [MastraScor
 
 <PropertiesTable
   content={[
-  {
-    name: 'runId',
-    type: 'string',
-    description: 'The id of the run (optional).',
-  },
-  {
-    name: 'preprocessStepResult',
-    type: 'object',
-    description:
-      'Object with extracted elements and coverage details: { inputElements: string[], outputElements: string[], missingElements: string[], elementCounts: { input: number, output: number } }',
-  },
-  {
-    name: 'score',
-    type: 'number',
-    description: 'Completeness score (0-1) representing the proportion of input elements covered in the output.',
-  },
+	{
+		name: 'runId',
+		type: 'string',
+		description: 'The id of the run (optional).',
+	},
+	{
+		name: 'preprocessStepResult',
+		type: 'object',
+		description:
+			'Object with extracted elements and coverage details: { inputElements: string[], outputElements: string[], missingElements: string[], elementCounts: { input: number, output: number } }',
+	},
+	{
+		name: 'score',
+		type: 'number',
+		description: 'Completeness score (0-1) representing the proportion of input elements covered in the output.',
+	},
 ]}
 />
 
@@ -119,26 +119,26 @@ import { myAgent } from './agent'
 const scorer = createCompletenessScorer()
 
 const result = await runEvals({
-  data: [
-    {
-      input:
-        'Explain the process of photosynthesis, including the inputs, outputs, and stages involved.',
-    },
-    {
-      input: 'What are the benefits and drawbacks of remote work for both employees and employers?',
-    },
-    {
-      input:
-        'Compare renewable and non-renewable energy sources in terms of cost, environmental impact, and sustainability.',
-    },
-  ],
-  scorers: [scorer],
-  target: myAgent,
-  onItemComplete: ({ scorerResults }) => {
-    console.log({
-      score: scorerResults[scorer.id].score,
-    })
-  },
+	data: [
+		{
+			input:
+				'Explain the process of photosynthesis, including the inputs, outputs, and stages involved.',
+		},
+		{
+			input: 'What are the benefits and drawbacks of remote work for both employees and employers?',
+		},
+		{
+			input:
+				'Compare renewable and non-renewable energy sources in terms of cost, environmental impact, and sustainability.',
+		},
+	],
+	scorers: [scorer],
+	target: myAgent,
+	onItemComplete: ({ scorerResults }) => {
+		console.log({
+			score: scorerResults[scorer.id].score,
+		})
+	},
 })
 
 console.log(result.scores)

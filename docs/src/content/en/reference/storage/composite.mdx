@@ -59,14 +59,14 @@ import { MemoryLibSQL } from '@mastra/libsql'
 import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
-  storage: new MastraCompositeStore({
-    id: 'composite',
-    domains: {
-      memory: new MemoryLibSQL({ url: 'file:./local.db' }),
-      workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
-      scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
-    },
-  }),
+	storage: new MastraCompositeStore({
+		id: 'composite',
+		domains: {
+			memory: new MemoryLibSQL({ url: 'file:./local.db' }),
+			workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+			scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
+		},
+	}),
 })
 ```
 
@@ -81,18 +81,18 @@ import { MemoryLibSQL } from '@mastra/libsql'
 import { Mastra } from '@mastra/core'
 
 const pgStore = new PostgresStore({
-  id: 'pg',
-  connectionString: process.env.DATABASE_URL,
+	id: 'pg',
+	connectionString: process.env.DATABASE_URL,
 })
 
 export const mastra = new Mastra({
-  storage: new MastraCompositeStore({
-    id: 'composite',
-    default: pgStore,
-    domains: {
-      memory: new MemoryLibSQL({ url: 'file:./local.db' }),
-    },
-  }),
+	storage: new MastraCompositeStore({
+		id: 'composite',
+		default: pgStore,
+		domains: {
+			memory: new MemoryLibSQL({ url: 'file:./local.db' }),
+		},
+	}),
 })
 ```
 
@@ -100,81 +100,81 @@ export const mastra = new Mastra({
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Unique identifier for this storage instance.',
-    isOptional: false,
-  },
-  {
-    name: 'default',
-    type: 'MastraCompositeStore',
-    description:
-      "Default storage adapter. Domains not explicitly specified in `domains` will use this storage's domains as fallbacks.",
-    isOptional: true,
-  },
-  {
-    name: 'disableInit',
-    type: 'boolean',
-    description: 'When true, automatic initialization is disabled. You must call init() explicitly.',
-    isOptional: true,
-  },
-  {
-    name: 'domains',
-    type: 'object',
-    description:
-      'Individual domain overrides. Each domain can come from a different storage adapter. These take precedence over both `editor` and `default` storage.',
-    isOptional: true,
-    properties: [
-      {
-        type: 'object',
-        parameters: [
-          {
-            name: 'memory',
-            type: 'MemoryStorage',
-            description: 'Storage for threads, messages, and resources.',
-            isOptional: true,
-          },
-          {
-            name: 'workflows',
-            type: 'WorkflowsStorage',
-            description: 'Storage for workflow snapshots.',
-            isOptional: true,
-          },
-          {
-            name: 'scores',
-            type: 'ScoresStorage',
-            description: 'Storage for evaluation scores.',
-            isOptional: true,
-          },
-          {
-            name: 'observability',
-            type: 'ObservabilityStorage',
-            description: 'Storage for traces and spans.',
-            isOptional: true,
-          },
-          {
-            name: 'agents',
-            type: 'AgentsStorage',
-            description: 'Storage for stored agent configurations.',
-            isOptional: true,
-          },
-          {
-            name: 'datasets',
-            type: 'DatasetsStorage',
-            description: 'Storage for dataset metadata, dataset items, and dataset versions.',
-            isOptional: true,
-          },
-          {
-            name: 'experiments',
-            type: 'ExperimentsStorage',
-            description: 'Storage for experiment runs and per-item experiment results.',
-            isOptional: true,
-          },
-        ],
-      },
-    ],
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Unique identifier for this storage instance.',
+		isOptional: false,
+	},
+	{
+		name: 'default',
+		type: 'MastraCompositeStore',
+		description:
+			"Default storage adapter. Domains not explicitly specified in `domains` will use this storage's domains as fallbacks.",
+		isOptional: true,
+	},
+	{
+		name: 'disableInit',
+		type: 'boolean',
+		description: 'When true, automatic initialization is disabled. You must call init() explicitly.',
+		isOptional: true,
+	},
+	{
+		name: 'domains',
+		type: 'object',
+		description:
+			'Individual domain overrides. Each domain can come from a different storage adapter. These take precedence over both `editor` and `default` storage.',
+		isOptional: true,
+		properties: [
+			{
+				type: 'object',
+				parameters: [
+					{
+						name: 'memory',
+						type: 'MemoryStorage',
+						description: 'Storage for threads, messages, and resources.',
+						isOptional: true,
+					},
+					{
+						name: 'workflows',
+						type: 'WorkflowsStorage',
+						description: 'Storage for workflow snapshots.',
+						isOptional: true,
+					},
+					{
+						name: 'scores',
+						type: 'ScoresStorage',
+						description: 'Storage for evaluation scores.',
+						isOptional: true,
+					},
+					{
+						name: 'observability',
+						type: 'ObservabilityStorage',
+						description: 'Storage for traces and spans.',
+						isOptional: true,
+					},
+					{
+						name: 'agents',
+						type: 'AgentsStorage',
+						description: 'Storage for stored agent configurations.',
+						isOptional: true,
+					},
+					{
+						name: 'datasets',
+						type: 'DatasetsStorage',
+						description: 'Storage for dataset metadata, dataset items, and dataset versions.',
+						isOptional: true,
+					},
+					{
+						name: 'experiments',
+						type: 'ExperimentsStorage',
+						description: 'Storage for experiment runs and per-item experiment results.',
+						isOptional: true,
+					},
+				],
+			},
+		],
+	},
 ]}
 />
 
@@ -188,16 +188,16 @@ import { MemoryPG, WorkflowsPG, ScoresPG } from '@mastra/pg'
 import { Mastra } from '@mastra/core'
 
 const storage = new MastraCompositeStore({
-  id: 'composite',
-  domains: {
-    memory: new MemoryPG({ connectionString: process.env.DATABASE_URL }),
-    workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
-    scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
-  },
+	id: 'composite',
+	domains: {
+		memory: new MemoryPG({ connectionString: process.env.DATABASE_URL }),
+		workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+		scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
+	},
 })
 
 export const mastra = new Mastra({
-  storage, // init() called automatically
+	storage, // init() called automatically
 })
 ```
 
@@ -208,10 +208,10 @@ import { MastraCompositeStore } from '@mastra/core/storage'
 import { MemoryPG } from '@mastra/pg'
 
 const storage = new MastraCompositeStore({
-  id: 'composite',
-  domains: {
-    memory: new MemoryPG({ connectionString: process.env.DATABASE_URL }),
-  },
+	id: 'composite',
+	domains: {
+		memory: new MemoryPG({ connectionString: process.env.DATABASE_URL }),
+	},
 })
 
 await storage.init()
@@ -233,16 +233,16 @@ import { MemoryPG, WorkflowsPG, ScoresPG } from '@mastra/pg'
 import { MemoryLibSQL } from '@mastra/libsql'
 
 const storage = new MastraCompositeStore({
-  id: 'composite',
-  domains: {
-    // Use local SQLite for development, PostgreSQL for production
-    memory:
-      process.env.NODE_ENV === 'development'
-        ? new MemoryLibSQL({ url: 'file:./dev.db' })
-        : new MemoryPG({ connectionString: process.env.DATABASE_URL }),
-    workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
-    scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
-  },
+	id: 'composite',
+	domains: {
+		// Use local SQLite for development, PostgreSQL for production
+		memory:
+			process.env.NODE_ENV === 'development'
+				? new MemoryLibSQL({ url: 'file:./dev.db' })
+				: new MemoryPG({ connectionString: process.env.DATABASE_URL }),
+		workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+		scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
+	},
 })
 ```
 
@@ -258,17 +258,17 @@ import { MemoryPG, WorkflowsPG, ScoresPG } from '@mastra/pg'
 import { ObservabilityStorageClickhouseVNext } from '@mastra/clickhouse'
 
 const storage = new MastraCompositeStore({
-  id: 'composite',
-  domains: {
-    memory: new MemoryPG({ connectionString: process.env.DATABASE_URL }),
-    workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
-    scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
-    observability: new ObservabilityStorageClickhouseVNext({
-      url: process.env.CLICKHOUSE_URL,
-      username: process.env.CLICKHOUSE_USERNAME,
-      password: process.env.CLICKHOUSE_PASSWORD,
-    }),
-  },
+	id: 'composite',
+	domains: {
+		memory: new MemoryPG({ connectionString: process.env.DATABASE_URL }),
+		workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+		scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
+		observability: new ObservabilityStorageClickhouseVNext({
+			url: process.env.CLICKHOUSE_URL,
+			username: process.env.CLICKHOUSE_USERNAME,
+			password: process.env.CLICKHOUSE_PASSWORD,
+		}),
+	},
 })
 ```
 
@@ -288,23 +288,23 @@ import { MemoryPG, WorkflowsPG, ScoresPG } from '@mastra/pg'
 import { ObservabilityStorageClickhouseVNext } from '@mastra/clickhouse'
 
 const storage = new MastraCompositeStore({
-  id: 'composite',
-  domains: {
-    memory: new MemoryPG({ connectionString: process.env.DATABASE_URL }),
-    workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
-    scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
-    observability: new ObservabilityStorageClickhouseVNext({
-      url: process.env.CLICKHOUSE_URL,
-      username: process.env.CLICKHOUSE_USERNAME,
-      password: process.env.CLICKHOUSE_PASSWORD,
-      replication: {
-        cluster: 'production_cluster',
-        // Optional (defaults shown):
-        // zookeeperPath: '/clickhouse/tables/{shard}/{database}/{table}',
-        // replicaName: '{replica}',
-      },
-    }),
-  },
+	id: 'composite',
+	domains: {
+		memory: new MemoryPG({ connectionString: process.env.DATABASE_URL }),
+		workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+		scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
+		observability: new ObservabilityStorageClickhouseVNext({
+			url: process.env.CLICKHOUSE_URL,
+			username: process.env.CLICKHOUSE_USERNAME,
+			password: process.env.CLICKHOUSE_PASSWORD,
+			replication: {
+				cluster: 'production_cluster',
+				// Optional (defaults shown):
+				// zookeeperPath: '/clickhouse/tables/{shard}/{database}/{table}',
+				// replicaName: '{replica}',
+			},
+		}),
+	},
 })
 ```
 

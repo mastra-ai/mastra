@@ -50,14 +50,14 @@ import { Mastra } from '@mastra/core/mastra'
 import { Observability, MastraPlatformExporter } from '@mastra/observability'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'mastra',
-        exporters: [new MastraPlatformExporter()],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			default: {
+				serviceName: 'mastra',
+				exporters: [new MastraPlatformExporter()],
+			},
+		},
+	}),
 })
 ```
 

@@ -38,10 +38,10 @@ import { Agent } from '@mastra/core/agent'
 import { createDurableAgent } from '@mastra/core/agent/durable'
 
 const agent = new Agent({
-  id: 'researcher',
-  name: 'Researcher',
-  instructions: 'You research topics thoroughly.',
-  model: '__GATEWAY_OPENAI_MODEL__',
+	id: 'researcher',
+	name: 'Researcher',
+	instructions: 'You research topics thoroughly.',
+	model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 export const durableResearcher = createDurableAgent({ agent })
@@ -54,15 +54,15 @@ import { Mastra } from '@mastra/core'
 import { durableResearcher } from './agents/researcher'
 
 const mastra = new Mastra({
-  agents: { durableResearcher },
+	agents: { durableResearcher },
 })
 
 const { output, runId, cleanup } = await durableResearcher.stream(
-  'Research quantum computing advances in 2025',
+	'Research quantum computing advances in 2025',
 )
 
 for await (const chunk of output.fullStream) {
-  // Process each chunk as it arrives
+	// Process each chunk as it arrives
 }
 
 // Release PubSub subscriptions and clear the run from the registry.
@@ -109,9 +109,9 @@ import { Agent } from '@mastra/core/agent'
 import { createDurableAgent } from '@mastra/core/agent/durable'
 
 const agent = new Agent({
-  id: 'helper',
-  instructions: 'You are a helpful assistant.',
-  model: '__GATEWAY_OPENAI_MODEL__',
+	id: 'helper',
+	instructions: 'You are a helpful assistant.',
+	model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 export const durableHelper = createDurableAgent({ agent })
@@ -126,9 +126,9 @@ import { Agent } from '@mastra/core/agent'
 import { createEventedAgent } from '@mastra/core/agent/durable'
 
 const agent = new Agent({
-  id: 'writer',
-  instructions: 'You write articles.',
-  model: '__GATEWAY_OPENAI_MODEL__',
+	id: 'writer',
+	instructions: 'You write articles.',
+	model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 export const eventedWriter = createEventedAgent({ agent })
@@ -146,9 +146,9 @@ import { Inngest } from 'inngest'
 const inngest = new Inngest({ id: 'my-app' })
 
 const agent = new Agent({
-  id: 'analyst',
-  instructions: 'You analyze data.',
-  model: '__GATEWAY_OPENAI_MODEL__',
+	id: 'analyst',
+	instructions: 'You analyze data.',
+	model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 export const inngestAnalyst = createInngestAgent({ agent, inngest })
@@ -168,7 +168,7 @@ Durable agents support resumable streams through PubSub and an event cache. When
 const { output, cleanup } = await durableResearcher.observe(runId)
 
 for await (const chunk of output.fullStream) {
-  // Chunks from the run, including any missed while disconnected
+	// Chunks from the run, including any missed while disconnected
 }
 
 cleanup()
@@ -183,8 +183,8 @@ import { RedisServerCache } from '@mastra/redis'
 const cache = new RedisServerCache({ url: 'redis://localhost:6379' })
 
 export const durableAgent = createDurableAgent({
-  agent,
-  cache,
+	agent,
+	cache,
 })
 ```
 
@@ -196,13 +196,13 @@ Durable agents support the same [`untilIdle`](/reference/agents/durable-agent#st
 
 ```typescript title="src/mastra/run.ts"
 const { output, cleanup } = await durableAgent.stream('Research and summarize the topic', {
-  untilIdle: true,
-  memory: { thread: 'thread-1', resource: 'user-1' },
+	untilIdle: true,
+	memory: { thread: 'thread-1', resource: 'user-1' },
 })
 
 for await (const chunk of output.fullStream) {
-  // Chunks from the initial turn AND any follow-up turns triggered by
-  // background task completions
+	// Chunks from the initial turn AND any follow-up turns triggered by
+	// background task completions
 }
 
 cleanup()
@@ -212,8 +212,8 @@ Pass `{ maxIdleMs }` to customize the idle timeout (defaults to 5 minutes):
 
 ```typescript
 await durableAgent.stream('Research topic', {
-  untilIdle: { maxIdleMs: 30_000 },
-  memory: { thread: 'thread-1', resource: 'user-1' },
+	untilIdle: { maxIdleMs: 30_000 },
+	memory: { thread: 'thread-1', resource: 'user-1' },
 })
 ```
 
@@ -233,10 +233,10 @@ Durable agents support tool approval (human-in-the-loop). When a tool call requi
 
 ```typescript title="src/mastra/run.ts" {4}
 const { output, runId, cleanup } = await durableAgent.stream('Delete the old records', {
-  requireToolApproval: true,
-  onSuspended: ({ toolCallId, toolName, args }) => {
-    // Notify the user and ask for approval
-  },
+	requireToolApproval: true,
+	onSuspended: ({ toolCallId, toolName, args }) => {
+		// Notify the user and ask for approval
+	},
 })
 ```
 

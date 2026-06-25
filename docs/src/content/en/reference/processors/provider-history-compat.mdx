@@ -20,10 +20,10 @@ import { Agent } from '@mastra/core/agent'
 import { ProviderHistoryCompat } from '@mastra/core/processors'
 
 export const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant.',
-  model: 'anthropic/claude-sonnet-4-5',
-  inputProcessors: [new ProviderHistoryCompat()],
+	name: 'my-agent',
+	instructions: 'You are a helpful assistant.',
+	model: 'anthropic/claude-sonnet-4-5',
+	inputProcessors: [new ProviderHistoryCompat()],
 })
 ```
 
@@ -33,26 +33,26 @@ Mastra agents don't add this processor automatically. Add it explicitly when you
 
 <PropertiesTable
   content={[
-  {
-    name: 'opts',
-    type: '{ additionalRules?: CompatRule[] }',
-    description: 'Configuration options for provider history compatibility rules.',
-    isOptional: true,
-    properties: [
-      {
-        type: 'Options',
-        parameters: [
-          {
-            name: 'additionalRules',
-            type: 'CompatRule[]',
-            description:
-              'Custom compatibility rules to run after the built-in rules. Rules can rewrite the outbound prompt or repair persisted messages after matching an API error.',
-            isOptional: true,
-          },
-        ],
-      },
-    ],
-  },
+	{
+		name: 'opts',
+		type: '{ additionalRules?: CompatRule[] }',
+		description: 'Configuration options for provider history compatibility rules.',
+		isOptional: true,
+		properties: [
+			{
+				type: 'Options',
+				parameters: [
+					{
+						name: 'additionalRules',
+						type: 'CompatRule[]',
+						description:
+							'Custom compatibility rules to run after the built-in rules. Rules can rewrite the outbound prompt or repair persisted messages after matching an API error.',
+						isOptional: true,
+					},
+				],
+			},
+		],
+	},
 ]}
 />
 
@@ -60,32 +60,32 @@ Mastra agents don't add this processor automatically. Add it explicitly when you
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: "'provider-history-compat'",
-    description: 'Processor identifier.',
-    isOptional: false,
-  },
-  {
-    name: 'name',
-    type: "'Provider History Compat'",
-    description: 'Processor display name.',
-    isOptional: false,
-  },
-  {
-    name: 'processLLMRequest',
-    type: '(args: ProcessLLMRequestArgs) => ProcessLLMRequestResult',
-    description:
-      'Runs preemptive compatibility rules against the converted LanguageModelV2Prompt immediately before the provider call. Returned prompt changes are transient and are not persisted to memory or message history.',
-    isOptional: false,
-  },
-  {
-    name: 'processAPIError',
-    type: '(args: ProcessAPIErrorArgs) => Promise<ProcessAPIErrorResult | void>',
-    description:
-      'Runs reactive compatibility rules when a provider rejects the request. Matching rules can mutate the message list and return retry: true on the first retry attempt.',
-    isOptional: false,
-  },
+	{
+		name: 'id',
+		type: "'provider-history-compat'",
+		description: 'Processor identifier.',
+		isOptional: false,
+	},
+	{
+		name: 'name',
+		type: "'Provider History Compat'",
+		description: 'Processor display name.',
+		isOptional: false,
+	},
+	{
+		name: 'processLLMRequest',
+		type: '(args: ProcessLLMRequestArgs) => ProcessLLMRequestResult',
+		description:
+			'Runs preemptive compatibility rules against the converted LanguageModelV2Prompt immediately before the provider call. Returned prompt changes are transient and are not persisted to memory or message history.',
+		isOptional: false,
+	},
+	{
+		name: 'processAPIError',
+		type: '(args: ProcessAPIErrorArgs) => Promise<ProcessAPIErrorResult | void>',
+		description:
+			'Runs reactive compatibility rules when a provider rejects the request. Matching rules can mutate the message list and return retry: true on the first retry attempt.',
+		isOptional: false,
+	},
 ]}
 />
 
@@ -111,43 +111,43 @@ A `CompatRule` defines one provider history compatibility fix:
 import type { CompatRule } from '@mastra/core/processors'
 
 const removeUnsupportedPromptParts: CompatRule = {
-  name: 'remove-unsupported-prompt-parts',
-  applyToPrompt({ prompt, model }) {
-    // Return a modified LanguageModelV2Prompt, or undefined to leave it unchanged.
-    return undefined
-  },
+	name: 'remove-unsupported-prompt-parts',
+	applyToPrompt({ prompt, model }) {
+		// Return a modified LanguageModelV2Prompt, or undefined to leave it unchanged.
+		return undefined
+	},
 }
 ```
 
 <PropertiesTable
   content={[
-  {
-    name: 'name',
-    type: 'string',
-    description: 'Human-readable rule identifier for logs and debugging.',
-    isOptional: false,
-  },
-  {
-    name: 'errorPatterns',
-    type: 'RegExp[]',
-    description:
-      'Patterns matched against provider API error messages and response bodies. Required for reactive rules that implement fix.',
-    isOptional: true,
-  },
-  {
-    name: 'fix',
-    type: '(messages: MastraDBMessage[]) => boolean',
-    description:
-      'Reactive fix that mutates persisted database messages after a matching API error. Return true when the rule changed messages and the request should retry.',
-    isOptional: true,
-  },
-  {
-    name: 'applyToPrompt',
-    type: '(args: { prompt: LanguageModelV2Prompt; model: unknown }) => LanguageModelV2Prompt | undefined',
-    description:
-      'Preemptive fix that rewrites the outbound prompt for the current provider call. Return undefined when no prompt change is needed.',
-    isOptional: true,
-  },
+	{
+		name: 'name',
+		type: 'string',
+		description: 'Human-readable rule identifier for logs and debugging.',
+		isOptional: false,
+	},
+	{
+		name: 'errorPatterns',
+		type: 'RegExp[]',
+		description:
+			'Patterns matched against provider API error messages and response bodies. Required for reactive rules that implement fix.',
+		isOptional: true,
+	},
+	{
+		name: 'fix',
+		type: '(messages: MastraDBMessage[]) => boolean',
+		description:
+			'Reactive fix that mutates persisted database messages after a matching API error. Return true when the rule changed messages and the request should retry.',
+		isOptional: true,
+	},
+	{
+		name: 'applyToPrompt',
+		type: '(args: { prompt: LanguageModelV2Prompt; model: unknown }) => LanguageModelV2Prompt | undefined',
+		description:
+			'Preemptive fix that rewrites the outbound prompt for the current provider call. Return undefined when no prompt change is needed.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -160,41 +160,41 @@ import { Agent } from '@mastra/core/agent'
 import { ProviderHistoryCompat, type CompatRule } from '@mastra/core/processors'
 
 const stripUnsupportedAssistantMetadata: CompatRule = {
-  name: 'strip-unsupported-assistant-metadata',
-  applyToPrompt({ prompt, model }) {
-    if (typeof model !== 'string' || !model.startsWith('example-provider/')) {
-      return undefined
-    }
+	name: 'strip-unsupported-assistant-metadata',
+	applyToPrompt({ prompt, model }) {
+		if (typeof model !== 'string' || !model.startsWith('example-provider/')) {
+			return undefined
+		}
 
-    let changed = false
-    const nextPrompt = prompt.map(message => {
-      if (message.role !== 'assistant' || typeof message.content === 'string') {
-        return message
-      }
+		let changed = false
+		const nextPrompt = prompt.map(message => {
+			if (message.role !== 'assistant' || typeof message.content === 'string') {
+				return message
+			}
 
-      const nextContent = message.content.map(part => {
-        if (!('providerOptions' in part)) return part
-        changed = true
-        const { providerOptions: _providerOptions, ...rest } = part
-        return rest
-      })
+			const nextContent = message.content.map(part => {
+				if (!('providerOptions' in part)) return part
+				changed = true
+				const { providerOptions: _providerOptions, ...rest } = part
+				return rest
+			})
 
-      return { ...message, content: nextContent }
-    })
+			return { ...message, content: nextContent }
+		})
 
-    return changed ? nextPrompt : undefined
-  },
+		return changed ? nextPrompt : undefined
+	},
 }
 
 export const agent = new Agent({
-  name: 'custom-provider-agent',
-  instructions: 'You are a helpful assistant.',
-  model: 'example-provider/model',
-  inputProcessors: [
-    new ProviderHistoryCompat({
-      additionalRules: [stripUnsupportedAssistantMetadata],
-    }),
-  ],
+	name: 'custom-provider-agent',
+	instructions: 'You are a helpful assistant.',
+	model: 'example-provider/model',
+	inputProcessors: [
+		new ProviderHistoryCompat({
+			additionalRules: [stripUnsupportedAssistantMetadata],
+		}),
+	],
 })
 ```
 

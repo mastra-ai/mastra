@@ -17,10 +17,10 @@ import { Mastra } from '@mastra/core'
 import { PinoLogger } from '@mastra/loggers'
 
 export const mastra = new Mastra({
-  logger: new PinoLogger({
-    name: 'Mastra',
-    level: 'info',
-  }),
+	logger: new PinoLogger({
+		name: 'Mastra',
+		level: 'info',
+	}),
 })
 ```
 
@@ -28,60 +28,60 @@ export const mastra = new Mastra({
 
 <PropertiesTable
   content={[
-  {
-    name: 'name',
-    type: 'string',
-    description: 'A label used to group and identify logs from this logger.',
-  },
-  {
-    name: 'level',
-    type: `"debug" | "info" | "warn" | "error"`,
-    description: 'Sets the minimum log level. Messages below this level are ignored.',
-  },
-  {
-    name: 'transports',
-    type: 'Record<string, LoggerTransport>',
-    description: 'A map of transport instances used to persist logs.',
-  },
-  {
-    name: 'overrideDefaultTransports',
-    type: 'boolean',
-    isOptional: true,
-    description: 'If true, disables the default console transport.',
-  },
-  {
-    name: 'formatters',
-    type: "pino.LoggerOptions['formatters']",
-    isOptional: true,
-    description: 'Custom Pino formatters for log serialization.',
-  },
-  {
-    name: 'redact',
-    type: "pino.LoggerOptions['redact']",
-    isOptional: true,
-    description: 'Paths or options for redacting sensitive fields from log output (Pino `redact`).',
-  },
-  {
-    name: 'prettyPrint',
-    type: 'boolean',
-    isOptional: true,
-    defaultValue: 'true',
-    description: 'When false, disables `pino-pretty` and writes raw JSON lines (useful for log aggregators).',
-  },
-  {
-    name: 'mixin',
-    type: 'pino.MixinFn',
-    isOptional: true,
-    description:
-      'Pino mixin function merged into every log object (for example request-scoped `traceId` or other shared metadata).',
-  },
-  {
-    name: 'customLevels',
-    type: 'Record<string, number>',
-    isOptional: true,
-    description:
-      'Custom log levels and numeric values, forwarded to Pino. Standard severity is still logged via `debug`, `info`, `warn`, and `error`; extra levels follow Pino’s custom-level behavior.',
-  },
+	{
+		name: 'name',
+		type: 'string',
+		description: 'A label used to group and identify logs from this logger.',
+	},
+	{
+		name: 'level',
+		type: `"debug" | "info" | "warn" | "error"`,
+		description: 'Sets the minimum log level. Messages below this level are ignored.',
+	},
+	{
+		name: 'transports',
+		type: 'Record<string, LoggerTransport>',
+		description: 'A map of transport instances used to persist logs.',
+	},
+	{
+		name: 'overrideDefaultTransports',
+		type: 'boolean',
+		isOptional: true,
+		description: 'If true, disables the default console transport.',
+	},
+	{
+		name: 'formatters',
+		type: "pino.LoggerOptions['formatters']",
+		isOptional: true,
+		description: 'Custom Pino formatters for log serialization.',
+	},
+	{
+		name: 'redact',
+		type: "pino.LoggerOptions['redact']",
+		isOptional: true,
+		description: 'Paths or options for redacting sensitive fields from log output (Pino `redact`).',
+	},
+	{
+		name: 'prettyPrint',
+		type: 'boolean',
+		isOptional: true,
+		defaultValue: 'true',
+		description: 'When false, disables `pino-pretty` and writes raw JSON lines (useful for log aggregators).',
+	},
+	{
+		name: 'mixin',
+		type: 'pino.MixinFn',
+		isOptional: true,
+		description:
+			'Pino mixin function merged into every log object (for example request-scoped `traceId` or other shared metadata).',
+	},
+	{
+		name: 'customLevels',
+		type: 'Record<string, number>',
+		isOptional: true,
+		description:
+			'Custom log levels and numeric values, forwarded to Pino. Standard severity is still logged via `debug`, `info`, `warn`, and `error`; extra levels follow Pino’s custom-level behavior.',
+	},
 ]}
 />
 
@@ -94,17 +94,17 @@ import { Mastra } from '@mastra/core'
 import { PinoLogger } from '@mastra/loggers'
 
 function getTraceContext() {
-  return { traceId: 'abc-123' }
+	return { traceId: 'abc-123' }
 }
 
 export const mastra = new Mastra({
-  logger: new PinoLogger({
-    name: 'Mastra',
-    level: 'info',
-    mixin() {
-      return getTraceContext()
-    },
-  }),
+	logger: new PinoLogger({
+		name: 'Mastra',
+		level: 'info',
+		mixin() {
+			return getTraceContext()
+		},
+	}),
 })
 ```
 
@@ -119,15 +119,15 @@ import { PinoLogger } from '@mastra/loggers'
 type AuditLevel = 'audit'
 
 class MastraPinoWithAudit extends PinoLogger<AuditLevel> {
-  audit(message: string, meta: Record<string, unknown> = {}) {
-    this.logger.audit(meta, message)
-  }
+	audit(message: string, meta: Record<string, unknown> = {}) {
+		this.logger.audit(meta, message)
+	}
 }
 
 const logger = new MastraPinoWithAudit({
-  name: 'Mastra',
-  level: 'info',
-  customLevels: { audit: 35 },
+	name: 'Mastra',
+	level: 'info',
+	customLevels: { audit: 35 },
 })
 
 export const mastra = new Mastra({ logger })
@@ -144,9 +144,9 @@ import { FileTransport } from '@mastra/loggers/file'
 import { PinoLogger } from '@mastra/loggers/pino'
 
 export const fileLogger = new PinoLogger({
-  name: 'Mastra',
-  transports: { file: new FileTransport({ path: 'test-dir/test.log' }) },
-  level: 'warn',
+	name: 'Mastra',
+	transports: { file: new FileTransport({ path: 'test-dir/test.log' }) },
+	level: 'warn',
 })
 ```
 
@@ -154,8 +154,8 @@ export const fileLogger = new PinoLogger({
 
 ```typescript
 fileLogger.warn('Low disk space', {
-  destinationPath: 'system',
-  type: 'WORKFLOW',
+	destinationPath: 'system',
+	type: 'WORKFLOW',
 })
 ```
 
@@ -168,15 +168,15 @@ import { UpstashTransport } from '@mastra/loggers/upstash'
 import { PinoLogger } from '@mastra/loggers/pino'
 
 export const upstashLogger = new PinoLogger({
-  name: 'Mastra',
-  transports: {
-    upstash: new UpstashTransport({
-      listName: 'production-logs',
-      upstashUrl: process.env.UPSTASH_URL!,
-      upstashToken: process.env.UPSTASH_TOKEN!,
-    }),
-  },
-  level: 'info',
+	name: 'Mastra',
+	transports: {
+		upstash: new UpstashTransport({
+			listName: 'production-logs',
+			upstashUrl: process.env.UPSTASH_URL!,
+			upstashToken: process.env.UPSTASH_TOKEN!,
+		}),
+	},
+	level: 'info',
 })
 ```
 
@@ -184,9 +184,9 @@ export const upstashLogger = new PinoLogger({
 
 ```typescript
 upstashLogger.info('User signed in', {
-  destinationPath: 'auth',
-  type: 'AGENT',
-  runId: 'run_123',
+	destinationPath: 'auth',
+	type: 'AGENT',
+	runId: 'run_123',
 })
 ```
 
@@ -204,19 +204,19 @@ import { PinoLogger } from '@mastra/loggers/pino'
 import pinoSentry from 'pino-sentry-transport'
 
 const sentryStream = await pinoSentry({
-  sentry: {
-    dsn: 'YOUR_SENTRY_DSN',
-    _experiments: {
-      enableLogs: true,
-    },
-  },
+	sentry: {
+		dsn: 'YOUR_SENTRY_DSN',
+		_experiments: {
+			enableLogs: true,
+		},
+	},
 })
 
 const customTransport = createCustomTransport(sentryStream)
 
 export const sentryLogger = new PinoLogger({
-  name: 'Mastra',
-  level: 'info',
-  transports: { sentry: customTransport },
+	name: 'Mastra',
+	level: 'info',
+	transports: { sentry: customTransport },
 })
 ```

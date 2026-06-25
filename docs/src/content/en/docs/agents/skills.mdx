@@ -31,9 +31,9 @@ import { Agent } from '@mastra/core/agent'
 import { createSkill } from '@mastra/core/skills'
 
 const codeReview = createSkill({
-  name: 'code-review',
-  description: 'Use when reviewing code changes.',
-  instructions: `
+	name: 'code-review',
+	description: 'Use when reviewing code changes.',
+	instructions: `
     When reviewing code:
     1. Check for correctness and edge cases
     2. Verify style consistency
@@ -42,11 +42,11 @@ const codeReview = createSkill({
 })
 
 export const reviewer = new Agent({
-  id: 'reviewer',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  instructions: 'You are a code review assistant.',
-  // highlight-next-line
-  skills: [codeReview],
+	id: 'reviewer',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	instructions: 'You are a code review assistant.',
+	// highlight-next-line
+	skills: [codeReview],
 })
 ```
 
@@ -60,18 +60,18 @@ Use `createSkill()` to create skills entirely in code:
 import { createSkill } from '@mastra/core/skills'
 
 export const releaseChecklist = createSkill({
-  name: 'release-checklist',
-  description: 'Use when preparing a release.',
-  instructions: `
+	name: 'release-checklist',
+	description: 'Use when preparing a release.',
+	instructions: `
     ## Release Checklist
     1. Run the full test suite
     2. Update CHANGELOG.md
     3. Bump version numbers
     4. Create a git tag
   `,
-  references: {
-    'changelog-format.md': '# Changelog Format\nUse Keep a Changelog...',
-  },
+	references: {
+		'changelog-format.md': '# Changelog Format\nUse Keep a Changelog...',
+	},
 })
 ```
 
@@ -90,15 +90,15 @@ import { Agent } from '@mastra/core/agent'
 import { createSkill } from '@mastra/core/skills'
 
 export const agent = new Agent({
-  id: 'my-agent',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  skills: [
-    './skills/code-review', // path to a SKILL.md directory
-    './skills/testing', // another filesystem skill
-    createSkill({
-      /* ... */
-    }), // inline skill
-  ],
+	id: 'my-agent',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	skills: [
+		'./skills/code-review', // path to a SKILL.md directory
+		'./skills/testing', // another filesystem skill
+		createSkill({
+			/* ... */
+		}), // inline skill
+	],
 })
 ```
 
@@ -113,27 +113,27 @@ import { Agent } from '@mastra/core/agent'
 import { createSkill } from '@mastra/core/skills'
 
 const devSkill = createSkill({
-  name: 'dev-tools',
-  description: 'Developer productivity tools.',
-  instructions: '...',
+	name: 'dev-tools',
+	description: 'Developer productivity tools.',
+	instructions: '...',
 })
 
 const supportSkill = createSkill({
-  name: 'support-guide',
-  description: 'Customer support guidelines.',
-  instructions: '...',
+	name: 'support-guide',
+	description: 'Customer support guidelines.',
+	instructions: '...',
 })
 
 export const agent = new Agent({
-  id: 'dynamic-agent',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  // highlight-start
-  skills: ({ requestContext }) => {
-    const role = requestContext.get('userRole')
-    if (role === 'developer') return [devSkill]
-    return [supportSkill]
-  },
-  // highlight-end
+	id: 'dynamic-agent',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	// highlight-start
+	skills: ({ requestContext }) => {
+		const role = requestContext.get('userRole')
+		if (role === 'developer') return [devSkill]
+		return [supportSkill]
+	},
+	// highlight-end
 })
 ```
 
@@ -149,21 +149,21 @@ import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 import { createSkill } from '@mastra/core/skills'
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  skills: ['skills'], // provides "code-review" skill
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	skills: ['skills'], // provides "code-review" skill
 })
 
 const customReview = createSkill({
-  name: 'code-review', // same name as workspace skill
-  description: 'Custom review process.',
-  instructions: '...',
+	name: 'code-review', // same name as workspace skill
+	description: 'Custom review process.',
+	instructions: '...',
 })
 
 export const agent = new Agent({
-  id: 'reviewer',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  workspace,
-  skills: [customReview], // agent-level "code-review" wins
+	id: 'reviewer',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	workspace,
+	skills: [customReview], // agent-level "code-review" wins
 })
 ```
 
@@ -177,13 +177,13 @@ import { reviewer } from '../mastra/agents'
 // Get a specific skill by name
 const skill = await reviewer.getSkill('code-review')
 if (skill) {
-  console.log(skill.instructions)
+	console.log(skill.instructions)
 }
 
 // List all available skills
 const allSkills = await reviewer.listSkills()
 for (const meta of allSkills) {
-  console.log(`${meta.name}: ${meta.description}`)
+	console.log(`${meta.name}: ${meta.description}`)
 }
 ```
 

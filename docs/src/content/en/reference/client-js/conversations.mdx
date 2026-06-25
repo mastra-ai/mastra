@@ -19,9 +19,9 @@ Use the OpenAI Responses API for generation and continuation:
 
 ```typescript
 const response = await client.responses.create({
-  agent_id: 'support-agent',
-  input: 'Start a support thread',
-  store: true,
+	agent_id: 'support-agent',
+	input: 'Start a support thread',
+	store: true,
 })
 
 console.log(response.conversation_id)
@@ -40,11 +40,11 @@ const items = await client.conversations.items.list(response.conversation_id!)
 import { MastraClient } from '@mastra/client-js'
 
 const client = new MastraClient({
-  baseUrl: 'http://localhost:4111',
+	baseUrl: 'http://localhost:4111',
 })
 
 const conversation = await client.conversations.create({
-  agent_id: 'support-agent',
+	agent_id: 'support-agent',
 })
 
 console.log(conversation.id)
@@ -60,8 +60,8 @@ Creates a new conversation thread for the selected agent.
 
 ```typescript
 const conversation = await client.conversations.create({
-  agent_id: 'support-agent',
-  title: 'Billing support',
+	agent_id: 'support-agent',
+	title: 'Billing support',
 })
 ```
 
@@ -131,41 +131,41 @@ console.log(items.data)
 
 <PropertiesTable
   content={[
-  {
-    name: 'agent_id',
-    type: 'string',
-    description: 'Required. The registered Mastra agent that owns the conversation memory.',
-    isOptional: false,
-  },
-  {
-    name: 'conversation_id',
-    type: 'string',
-    description: 'Optional conversation ID to use as the raw thread ID.',
-    isOptional: true,
-  },
-  {
-    name: 'resource_id',
-    type: 'string',
-    description: 'Optional resource ID to associate with the conversation thread.',
-    isOptional: true,
-  },
-  {
-    name: 'title',
-    type: 'string',
-    description: 'Optional thread title stored with the conversation.',
-    isOptional: true,
-  },
-  {
-    name: 'metadata',
-    type: 'Record<string, unknown>',
-    description: 'Optional thread metadata stored with the conversation.',
-    isOptional: true,
-  },
-  {
-    name: 'requestContext',
-    type: 'RequestContext | Record<string, any>',
-    description: 'Optional request context forwarded to the Mastra server.',
-    isOptional: true,
-  },
+	{
+		name: 'agent_id',
+		type: 'string',
+		description: 'Required. The registered Mastra agent that owns the conversation memory.',
+		isOptional: false,
+	},
+	{
+		name: 'conversation_id',
+		type: 'string',
+		description: 'Optional conversation ID to use as the raw thread ID.',
+		isOptional: true,
+	},
+	{
+		name: 'resource_id',
+		type: 'string',
+		description: 'Optional resource ID to associate with the conversation thread.',
+		isOptional: true,
+	},
+	{
+		name: 'title',
+		type: 'string',
+		description: 'Optional thread title stored with the conversation.',
+		isOptional: true,
+	},
+	{
+		name: 'metadata',
+		type: 'Record<string, unknown>',
+		description: 'Optional thread metadata stored with the conversation.',
+		isOptional: true,
+	},
+	{
+		name: 'requestContext',
+		type: 'RequestContext | Record<string, any>',
+		description: 'Optional request context forwarded to the Mastra server.',
+		isOptional: true,
+	},
 ]}
 />

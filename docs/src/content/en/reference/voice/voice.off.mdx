@@ -17,10 +17,10 @@ import chalk from 'chalk'
 
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
-  realtimeConfig: {
-    model: 'gpt-5.1-realtime',
-    apiKey: process.env.OPENAI_API_KEY,
-  },
+	realtimeConfig: {
+		model: 'gpt-5.1-realtime',
+		apiKey: process.env.OPENAI_API_KEY,
+	},
 })
 
 // Connect to the real-time service
@@ -28,11 +28,11 @@ await voice.connect()
 
 // Define the callback function
 const writingCallback = ({ text, role }) => {
-  if (role === 'user') {
-    process.stdout.write(chalk.green(text))
-  } else {
-    process.stdout.write(chalk.blue(text))
-  }
+	if (role === 'user') {
+		process.stdout.write(chalk.green(text))
+	} else {
+		process.stdout.write(chalk.blue(text))
+	}
 }
 
 // Register event listener
@@ -48,18 +48,18 @@ voice.off('writing', writingCallback)
 
 <PropertiesTable
   content={[
-  {
-    name: 'event',
-    type: 'string',
-    description: "Name of the event to stop listening for (e.g., 'speaking', 'writing', 'error')",
-    isOptional: false,
-  },
-  {
-    name: 'callback',
-    type: 'function',
-    description: 'The same callback function that was passed to on()',
-    isOptional: false,
-  },
+	{
+		name: 'event',
+		type: 'string',
+		description: "Name of the event to stop listening for (e.g., 'speaking', 'writing', 'error')",
+		isOptional: false,
+	},
+	{
+		name: 'callback',
+		type: 'function',
+		description: 'The same callback function that was passed to on()',
+		isOptional: false,
+	},
 ]}
 />
 

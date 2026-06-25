@@ -26,7 +26,7 @@ const cache = new InMemoryServerCache()
 const pubsub = new CachingPubSub(new EventEmitterPubSub(), cache)
 
 export const mastra = new Mastra({
-  pubsub,
+	pubsub,
 })
 ```
 
@@ -43,40 +43,40 @@ const pubsub = withCaching(new EventEmitterPubSub(), new InMemoryServerCache())
 
 <PropertiesTable
   content={[
-  {
-    name: 'inner',
-    type: 'PubSub',
-    description:
-      'The pub/sub implementation to wrap. All publishes and live subscriptions pass through to this instance.',
-    isOptional: false,
-  },
-  {
-    name: 'cache',
-    type: 'MastraServerCache',
-    description: 'Cache used to store events per topic for replay.',
-    isOptional: false,
-  },
-  {
-    name: 'options',
-    type: 'CachingPubSubOptions',
-    description: 'Optional configuration.',
-    isOptional: true,
-    properties: [
-      {
-        name: 'keyPrefix',
-        type: 'string',
-        description: 'Prefix for cache keys, used to namespace events.',
-        isOptional: true,
-        defaultValue: 'pubsub:',
-      },
-      {
-        name: 'logger',
-        type: 'IMastraLogger',
-        description: 'Logger for errors. Falls back to `console.error` when omitted.',
-        isOptional: true,
-      },
-    ],
-  },
+	{
+		name: 'inner',
+		type: 'PubSub',
+		description:
+			'The pub/sub implementation to wrap. All publishes and live subscriptions pass through to this instance.',
+		isOptional: false,
+	},
+	{
+		name: 'cache',
+		type: 'MastraServerCache',
+		description: 'Cache used to store events per topic for replay.',
+		isOptional: false,
+	},
+	{
+		name: 'options',
+		type: 'CachingPubSubOptions',
+		description: 'Optional configuration.',
+		isOptional: true,
+		properties: [
+			{
+				name: 'keyPrefix',
+				type: 'string',
+				description: 'Prefix for cache keys, used to namespace events.',
+				isOptional: true,
+				defaultValue: 'pubsub:',
+			},
+			{
+				name: 'logger',
+				type: 'IMastraLogger',
+				description: 'Logger for errors. Falls back to `console.error` when omitted.',
+				isOptional: true,
+			},
+		],
+	},
 ]}
 />
 
@@ -84,11 +84,11 @@ const pubsub = withCaching(new EventEmitterPubSub(), new InMemoryServerCache())
 
 <PropertiesTable
   content={[
-  {
-    name: 'supportsNativeBatching',
-    type: 'boolean',
-    description: 'Mirrors the inner pub/sub. Returns `true` only when the wrapped implementation supports batching.',
-  },
+	{
+		name: 'supportsNativeBatching',
+		type: 'boolean',
+		description: 'Mirrors the inner pub/sub. Returns `true` only when the wrapped implementation supports batching.',
+	},
 ]}
 />
 
@@ -102,9 +102,9 @@ Caches the event with a sequential index, then publishes it to the inner pub/sub
 
 ```typescript
 await pubsub.publish('my-topic', {
-  type: 'example',
-  data: { value: 1 },
-  runId: 'run-123',
+	type: 'example',
+	data: { value: 1 },
+	runId: 'run-123',
 })
 ```
 
@@ -114,7 +114,7 @@ Replays all cached events for the topic, then subscribes to live events.
 
 ```typescript
 await pubsub.subscribeWithReplay('my-topic', event => {
-  console.log(event)
+	console.log(event)
 })
 ```
 
@@ -124,7 +124,7 @@ Replays cached events starting at `offset`, then subscribes to live events. Use 
 
 ```typescript
 await pubsub.subscribeFromOffset('my-topic', 42, event => {
-  console.log(event)
+	console.log(event)
 })
 ```
 
@@ -149,7 +149,7 @@ import { withCaching, EventEmitterPubSub } from '@mastra/core/events'
 import { InMemoryServerCache } from '@mastra/core/cache'
 
 const pubsub = withCaching(new EventEmitterPubSub(), new InMemoryServerCache(), {
-  keyPrefix: 'events:',
+	keyPrefix: 'events:',
 })
 ```
 

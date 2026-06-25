@@ -21,11 +21,11 @@ const weatherAgent = mastra.getAgent('weatherAgent')
 
 // Use the scorer to evaluate an AI output
 await weatherAgent.generate('What is the weather in Rome', {
-  scorers: {
-    answerRelevancy: {
-      scorer: relevancyScorer,
-    },
-  },
+	scorers: {
+		answerRelevancy: {
+			scorer: relevancyScorer,
+		},
+	},
 })
 ```
 
@@ -33,13 +33,13 @@ await weatherAgent.generate('What is the weather in Rome', {
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description:
-      "The id property of the scorer to retrieve. This should match the 'id' field specified when creating the scorer with createScorer(). The method will also search by 'name' property as a fallback.",
-    isOptional: false,
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description:
+			"The id property of the scorer to retrieve. This should match the 'id' field specified when creating the scorer with createScorer(). The method will also search by 'name' property as a fallback.",
+		isOptional: false,
+	},
 ]}
 />
 
@@ -47,11 +47,11 @@ await weatherAgent.generate('What is the weather in Rome', {
 
 <PropertiesTable
   content={[
-  {
-    name: 'scorer',
-    type: 'MastraScorer',
-    description: 'The MastraScorer instance that has the matching id (or name) property.',
-  },
+	{
+		name: 'scorer',
+		type: 'MastraScorer',
+		description: 'The MastraScorer instance that has the matching id (or name) property.',
+	},
 ]}
 />
 
@@ -64,11 +64,11 @@ This method throws a `MastraError` if:
 
 ```typescript
 try {
-  const scorer = mastra.getScorerById('non-existent-scorer')
+	const scorer = mastra.getScorerById('non-existent-scorer')
 } catch (error) {
-  if (error.id === 'MASTRA_GET_SCORER_BY_ID_NOT_FOUND') {
-    console.log('Scorer with that id not found')
-  }
+	if (error.id === 'MASTRA_GET_SCORER_BY_ID_NOT_FOUND') {
+		console.log('Scorer with that id not found')
+	}
 }
 ```
 

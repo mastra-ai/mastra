@@ -24,24 +24,24 @@ import { SignalProvider } from '@mastra/core/signals'
 import type { SignalSubscription } from '@mastra/core/signals'
 
 class SlackSignals extends SignalProvider<'slack-signals'> {
-  readonly id = 'slack-signals'
-  readonly pollInterval = 30_000
+	readonly id = 'slack-signals'
+	readonly pollInterval = 30_000
 
-  async poll(subscriptions: SignalSubscription[]) {
-    for (const sub of subscriptions) {
-      const messages = await fetchSlackMessages(sub.externalResourceId)
-      if (messages.length > 0) {
-        await this.notify(
-          {
-            source: 'slack',
-            kind: 'new-messages',
-            summary: `${messages.length} new messages in ${sub.externalResourceId}`,
-          },
-          { threadId: sub.threadId, resourceId: sub.resourceId },
-        )
-      }
-    }
-  }
+	async poll(subscriptions: SignalSubscription[]) {
+		for (const sub of subscriptions) {
+			const messages = await fetchSlackMessages(sub.externalResourceId)
+			if (messages.length > 0) {
+				await this.notify(
+					{
+						source: 'slack',
+						kind: 'new-messages',
+						summary: `${messages.length} new messages in ${sub.externalResourceId}`,
+					},
+					{ threadId: sub.threadId, resourceId: sub.resourceId },
+				)
+			}
+		}
+	}
 }
 ```
 
@@ -51,7 +51,7 @@ Register with an agent:
 import { Agent } from '@mastra/core/agent'
 
 const agent = new Agent({
-  signals: [new SlackSignals()],
+	signals: [new SlackSignals()],
 })
 ```
 
@@ -65,30 +65,30 @@ The agent calls `connect(this)`, registers any processors or tools the provider 
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'TId extends string',
-    description: 'Unique identifier for this provider. Subclasses must implement this as a readonly property.',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: 'Human-readable display name for the provider.',
-    isOptional: true,
-  },
-  {
-    name: 'pollInterval',
-    type: 'number',
-    description:
-      'Poll interval in milliseconds. When set, the framework calls `poll()` on this interval. Leave `undefined` or `0` for webhook-only providers.',
-    isOptional: true,
-  },
-  {
-    name: 'isConnected',
-    type: 'boolean',
-    description:
-      'Whether this provider is connected to an agent. Returns `true` after `connect()` is called. Used internally to skip re-wiring during `Agent.__fork()`.',
-  },
+	{
+		name: 'id',
+		type: 'TId extends string',
+		description: 'Unique identifier for this provider. Subclasses must implement this as a readonly property.',
+	},
+	{
+		name: 'name',
+		type: 'string',
+		description: 'Human-readable display name for the provider.',
+		isOptional: true,
+	},
+	{
+		name: 'pollInterval',
+		type: 'number',
+		description:
+			'Poll interval in milliseconds. When set, the framework calls `poll()` on this interval. Leave `undefined` or `0` for webhook-only providers.',
+		isOptional: true,
+	},
+	{
+		name: 'isConnected',
+		type: 'boolean',
+		description:
+			'Whether this provider is connected to an agent. Returns `true` after `connect()` is called. Used internally to skip re-wiring during `Agent.__fork()`.',
+	},
 ]}
 />
 
@@ -181,23 +181,23 @@ Returns: `SignalSubscription` — the created subscription, or the existing one 
 
 <PropertiesTable
   content={[
-  {
-    name: 'target',
-    type: 'SignalProviderTarget',
-    description: 'The thread to subscribe. Must include `threadId` and `resourceId`.',
-  },
-  {
-    name: 'externalResourceId',
-    type: 'string',
-    description: 'Provider-specific identifier for the external resource (for example, `"github:owner/repo#123"`).',
-  },
-  {
-    name: 'metadata',
-    type: 'Record<string, unknown>',
-    description:
-      'Additional data to store with the subscription. Merged into existing metadata on duplicate subscribes.',
-    isOptional: true,
-  },
+	{
+		name: 'target',
+		type: 'SignalProviderTarget',
+		description: 'The thread to subscribe. Must include `threadId` and `resourceId`.',
+	},
+	{
+		name: 'externalResourceId',
+		type: 'string',
+		description: 'Provider-specific identifier for the external resource (for example, `"github:owner/repo#123"`).',
+	},
+	{
+		name: 'metadata',
+		type: 'Record<string, unknown>',
+		description:
+			'Additional data to store with the subscription. Merged into existing metadata on duplicate subscribes.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -391,50 +391,50 @@ await this.notify(
 
 <PropertiesTable
   content={[
-  {
-    name: 'notification',
-    type: 'object',
-    description: 'The notification payload.',
-    properties: [
-      {
-        type: 'object',
-        parameters: [
-          {
-            name: 'source',
-            type: 'string',
-            description: 'Identifier for the notification source.',
-          },
-          {
-            name: 'kind',
-            type: 'string',
-            description: 'Type of event (for example, `"pr-updated"`, `"new-message"`).',
-          },
-          {
-            name: 'summary',
-            type: 'string',
-            description: 'Human-readable summary of the event.',
-          },
-          {
-            name: 'priority',
-            type: '"high" | "medium" | "low"',
-            description: 'Notification priority.',
-            isOptional: true,
-          },
-          {
-            name: 'payload',
-            type: 'unknown',
-            description: 'Arbitrary data attached to the notification.',
-            isOptional: true,
-          },
-        ],
-      },
-    ],
-  },
-  {
-    name: 'target',
-    type: 'SignalProviderTarget',
-    description: 'The thread to notify. Must include `threadId` and `resourceId`.',
-  },
+	{
+		name: 'notification',
+		type: 'object',
+		description: 'The notification payload.',
+		properties: [
+			{
+				type: 'object',
+				parameters: [
+					{
+						name: 'source',
+						type: 'string',
+						description: 'Identifier for the notification source.',
+					},
+					{
+						name: 'kind',
+						type: 'string',
+						description: 'Type of event (for example, `"pr-updated"`, `"new-message"`).',
+					},
+					{
+						name: 'summary',
+						type: 'string',
+						description: 'Human-readable summary of the event.',
+					},
+					{
+						name: 'priority',
+						type: '"high" | "medium" | "low"',
+						description: 'Notification priority.',
+						isOptional: true,
+					},
+					{
+						name: 'payload',
+						type: 'unknown',
+						description: 'Arbitrary data attached to the notification.',
+						isOptional: true,
+					},
+				],
+			},
+		],
+	},
+	{
+		name: 'target',
+		type: 'SignalProviderTarget',
+		description: 'The thread to notify. Must include `threadId` and `resourceId`.',
+	},
 ]}
 />
 
@@ -446,41 +446,41 @@ The subscription object returned by `subscribe()`.
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Unique identifier for the subscription.',
-  },
-  {
-    name: 'providerId',
-    type: 'string',
-    description: 'The provider that owns this subscription.',
-  },
-  {
-    name: 'threadId',
-    type: 'string',
-    description: 'The thread receiving signals.',
-  },
-  {
-    name: 'resourceId',
-    type: 'string',
-    description: 'The resource owning the thread.',
-  },
-  {
-    name: 'externalResourceId',
-    type: 'string',
-    description: 'Provider-specific identifier for the external resource (for example, `"github:owner/repo#123"`).',
-  },
-  {
-    name: 'subscribedAt',
-    type: 'Date',
-    description: 'When the subscription was created.',
-  },
-  {
-    name: 'metadata',
-    type: 'Record<string, unknown>',
-    description: 'Provider-specific metadata stored with the subscription.',
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Unique identifier for the subscription.',
+	},
+	{
+		name: 'providerId',
+		type: 'string',
+		description: 'The provider that owns this subscription.',
+	},
+	{
+		name: 'threadId',
+		type: 'string',
+		description: 'The thread receiving signals.',
+	},
+	{
+		name: 'resourceId',
+		type: 'string',
+		description: 'The resource owning the thread.',
+	},
+	{
+		name: 'externalResourceId',
+		type: 'string',
+		description: 'Provider-specific identifier for the external resource (for example, `"github:owner/repo#123"`).',
+	},
+	{
+		name: 'subscribedAt',
+		type: 'Date',
+		description: 'When the subscription was created.',
+	},
+	{
+		name: 'metadata',
+		type: 'Record<string, unknown>',
+		description: 'Provider-specific metadata stored with the subscription.',
+	},
 ]}
 />
 
@@ -490,22 +490,22 @@ Identifies a specific agent thread.
 
 <PropertiesTable
   content={[
-  {
-    name: 'threadId',
-    type: 'string',
-    description: 'The thread to target.',
-  },
-  {
-    name: 'resourceId',
-    type: 'string',
-    description: 'The resource owning the thread.',
-  },
-  {
-    name: 'agentId',
-    type: 'string',
-    description: 'Agent identifier.',
-    isOptional: true,
-  },
+	{
+		name: 'threadId',
+		type: 'string',
+		description: 'The thread to target.',
+	},
+	{
+		name: 'resourceId',
+		type: 'string',
+		description: 'The resource owning the thread.',
+	},
+	{
+		name: 'agentId',
+		type: 'string',
+		description: 'Agent identifier.',
+		isOptional: true,
+	},
 ]}
 />
 

@@ -53,10 +53,10 @@ Some LLM providers include built-in web search capabilities that can be used dir
         import { Agent } from '@mastra/core/agent'
 
         export const searchAgent = new Agent({
-          id: 'search-agent',
-          name: 'Search Agent',
-          instructions: 'You are a search agent that can search the web for information.',
-          model: '__GATEWAY_OPENAI_MODEL__',
+        	id: 'search-agent',
+        	name: 'Search Agent',
+        	instructions: 'You are a search agent that can search the web for information.',
+        	model: '__GATEWAY_OPENAI_MODEL__',
         })
         ```
       </TabItem>
@@ -66,10 +66,10 @@ Some LLM providers include built-in web search capabilities that can be used dir
         import { Agent } from '@mastra/core/agent'
 
         export const searchAgent = new Agent({
-          id: 'search-agent',
-          name: 'Search Agent',
-          instructions: 'You are a search agent that can search the web for information.',
-          model: 'google/gemini-2.5-flash',
+        	id: 'search-agent',
+        	name: 'Search Agent',
+        	instructions: 'You are a search agent that can search the web for information.',
+        	model: 'google/gemini-2.5-flash',
         })
         ```
       </TabItem>
@@ -86,13 +86,13 @@ Some LLM providers include built-in web search capabilities that can be used dir
         import { Agent } from '@mastra/core/agent'
 
         export const searchAgent = new Agent({
-          id: 'search-agent',
-          name: 'Search Agent',
-          instructions: 'You are a search agent that can search the web for information.',
-          model: '__GATEWAY_OPENAI_MODEL__',
-          tools: {
-            webSearch: openai.tools.webSearch(),
-          },
+        	id: 'search-agent',
+        	name: 'Search Agent',
+        	instructions: 'You are a search agent that can search the web for information.',
+        	model: '__GATEWAY_OPENAI_MODEL__',
+        	tools: {
+        		webSearch: openai.tools.webSearch(),
+        	},
         })
         ```
       </TabItem>
@@ -103,15 +103,15 @@ Some LLM providers include built-in web search capabilities that can be used dir
         import { Agent } from '@mastra/core/agent'
 
         export const searchAgent = new Agent({
-          id: 'search-agent',
-          name: 'Search Agent',
-          instructions: 'You are a search agent that can search the web for information.',
-          model: 'google/gemini-2.5-flash',
-          tools: {
-            webSearch: google.tools.googleSearch({
-              mode: 'MODE_DYNAMIC',
-            }),
-          },
+        	id: 'search-agent',
+        	name: 'Search Agent',
+        	instructions: 'You are a search agent that can search the web for information.',
+        	model: 'google/gemini-2.5-flash',
+        	tools: {
+        		webSearch: google.tools.googleSearch({
+        			mode: 'MODE_DYNAMIC',
+        		}),
+        	},
         })
         ```
       </TabItem>
@@ -126,7 +126,7 @@ Some LLM providers include built-in web search capabilities that can be used dir
     import { searchAgent } from './agents/searchAgent'
 
     export const mastra = new Mastra({
-      agents: { searchAgent },
+    	agents: { searchAgent },
     })
     ```
   </StepItem>
@@ -162,10 +162,10 @@ For more control over search behavior, you can integrate external search APIs as
     import { Agent } from '@mastra/core/agent'
 
     export const searchAgent = new Agent({
-      id: 'search-agent',
-      name: 'Search Agent',
-      instructions: 'You are a search agent that can search the web for information.',
-      model: '__GATEWAY_OPENAI_MODEL__',
+    	id: 'search-agent',
+    	name: 'Search Agent',
+    	instructions: 'You are a search agent that can search the web for information.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
     })
     ```
   </StepItem>
@@ -181,32 +181,32 @@ For more control over search behavior, you can integrate external search APIs as
     export const exa = new Exa(process.env.EXA_API_KEY)
 
     export const webSearch = createTool({
-      id: 'exa-web-search',
-      description: 'Search the web',
-      inputSchema: z.object({
-        query: z.string().min(1).max(50).describe('The search query'),
-      }),
-      outputSchema: z.array(
-        z.object({
-          title: z.string().nullable(),
-          url: z.string(),
-          content: z.string(),
-          publishedDate: z.string().optional(),
-        }),
-      ),
-      execute: async inputData => {
-        const { results } = await exa.searchAndContents(inputData.query, {
-          livecrawl: 'always',
-          numResults: 2,
-        })
+    	id: 'exa-web-search',
+    	description: 'Search the web',
+    	inputSchema: z.object({
+    		query: z.string().min(1).max(50).describe('The search query'),
+    	}),
+    	outputSchema: z.array(
+    		z.object({
+    			title: z.string().nullable(),
+    			url: z.string(),
+    			content: z.string(),
+    			publishedDate: z.string().optional(),
+    		}),
+    	),
+    	execute: async inputData => {
+    		const { results } = await exa.searchAndContents(inputData.query, {
+    			livecrawl: 'always',
+    			numResults: 2,
+    		})
 
-        return results.map(result => ({
-          title: result.title,
-          url: result.url,
-          content: result.text.slice(0, 500),
-          publishedDate: result.publishedDate,
-        }))
-      },
+    		return results.map(result => ({
+    			title: result.title,
+    			url: result.url,
+    			content: result.text.slice(0, 500),
+    			publishedDate: result.publishedDate,
+    		}))
+    	},
     })
     ```
   </StepItem>
@@ -218,13 +218,13 @@ For more control over search behavior, you can integrate external search APIs as
     import { webSearch } from './tools/searchTool'
 
     export const searchAgent = new Agent({
-      id: 'search-agent',
-      name: 'Search Agent',
-      instructions: 'You are a search agent that can search the web for information.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      tools: {
-        webSearch,
-      },
+    	id: 'search-agent',
+    	name: 'Search Agent',
+    	instructions: 'You are a search agent that can search the web for information.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	tools: {
+    		webSearch,
+    	},
     })
     ```
   </StepItem>
@@ -237,7 +237,7 @@ For more control over search behavior, you can integrate external search APIs as
     import { searchAgent } from './agents/searchAgent'
 
     export const mastra = new Mastra({
-      agents: { searchAgent },
+    	agents: { searchAgent },
     })
     ```
   </StepItem>

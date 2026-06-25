@@ -35,21 +35,21 @@ import { CloudflareKVStorage } from '@mastra/cloudflare/kv'
 
 // --- Example 1: Using Workers Binding ---
 const storageWorkers = new CloudflareKVStorage({
-  id: 'cloudflare-workers-storage',
-  bindings: {
-    threads: THREADS_KV, // KVNamespace binding for threads table
-    messages: MESSAGES_KV, // KVNamespace binding for messages table
-    // Add other tables as needed
-  },
-  keyPrefix: 'dev_', // Optional: isolate keys per environment
+	id: 'cloudflare-workers-storage',
+	bindings: {
+		threads: THREADS_KV, // KVNamespace binding for threads table
+		messages: MESSAGES_KV, // KVNamespace binding for messages table
+		// Add other tables as needed
+	},
+	keyPrefix: 'dev_', // Optional: isolate keys per environment
 })
 
 // --- Example 2: Using REST API ---
 const storageRest = new CloudflareKVStorage({
-  id: 'cloudflare-rest-storage',
-  accountId: process.env.CLOUDFLARE_ACCOUNT_ID!, // Cloudflare Account ID
-  apiToken: process.env.CLOUDFLARE_API_TOKEN!, // Cloudflare API Token
-  namespacePrefix: 'dev_', // Optional: isolate namespaces per environment
+	id: 'cloudflare-rest-storage',
+	accountId: process.env.CLOUDFLARE_ACCOUNT_ID!, // Cloudflare Account ID
+	apiToken: process.env.CLOUDFLARE_API_TOKEN!, // Cloudflare API Token
+	namespacePrefix: 'dev_', // Optional: isolate namespaces per environment
 })
 ```
 
@@ -57,42 +57,42 @@ const storageRest = new CloudflareKVStorage({
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Unique identifier for this storage instance.',
-    isOptional: false,
-  },
-  {
-    name: 'bindings',
-    type: 'Record<string, KVNamespace>',
-    description: 'Cloudflare Workers KV bindings (for Workers runtime)',
-    isOptional: true,
-  },
-  {
-    name: 'accountId',
-    type: 'string',
-    description: 'Cloudflare Account ID (for REST API)',
-    isOptional: true,
-  },
-  {
-    name: 'apiToken',
-    type: 'string',
-    description: 'Cloudflare API Token (for REST API)',
-    isOptional: true,
-  },
-  {
-    name: 'namespacePrefix',
-    type: 'string',
-    description: 'Optional prefix for all namespace names (useful for environment isolation)',
-    isOptional: true,
-  },
-  {
-    name: 'keyPrefix',
-    type: 'string',
-    description: 'Optional prefix for all keys (useful for environment isolation)',
-    isOptional: true,
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Unique identifier for this storage instance.',
+		isOptional: false,
+	},
+	{
+		name: 'bindings',
+		type: 'Record<string, KVNamespace>',
+		description: 'Cloudflare Workers KV bindings (for Workers runtime)',
+		isOptional: true,
+	},
+	{
+		name: 'accountId',
+		type: 'string',
+		description: 'Cloudflare Account ID (for REST API)',
+		isOptional: true,
+	},
+	{
+		name: 'apiToken',
+		type: 'string',
+		description: 'Cloudflare API Token (for REST API)',
+		isOptional: true,
+	},
+	{
+		name: 'namespacePrefix',
+		type: 'string',
+		description: 'Optional prefix for all namespace names (useful for environment isolation)',
+		isOptional: true,
+	},
+	{
+		name: 'keyPrefix',
+		type: 'string',
+		description: 'Optional prefix for all keys (useful for environment isolation)',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -126,22 +126,22 @@ import { DurableObject } from 'cloudflare:workers'
 import { CloudflareDOStorage } from '@mastra/cloudflare/do'
 
 class AgentDurableObject extends DurableObject<Env> {
-  private storage: CloudflareDOStorage
+	private storage: CloudflareDOStorage
 
-  constructor(ctx: DurableObjectState, env: Env) {
-    super(ctx, env)
-    this.storage = new CloudflareDOStorage({
-      sql: ctx.storage.sql,
-      tablePrefix: 'mastra_', // Optional: prefix for table names
-    })
-  }
+	constructor(ctx: DurableObjectState, env: Env) {
+		super(ctx, env)
+		this.storage = new CloudflareDOStorage({
+			sql: ctx.storage.sql,
+			tablePrefix: 'mastra_', // Optional: prefix for table names
+		})
+	}
 
-  async run() {
-    const memory = await this.storage.getStore('memory')
-    await memory?.saveThread({
-      thread: { id: 'thread-1', resourceId: 'user-1', title: 'Chat', metadata: {} },
-    })
-  }
+	async run() {
+		const memory = await this.storage.getStore('memory')
+		await memory?.saveThread({
+			thread: { id: 'thread-1', resourceId: 'user-1', title: 'Chat', metadata: {} },
+		})
+	}
 }
 ```
 
@@ -149,25 +149,25 @@ class AgentDurableObject extends DurableObject<Env> {
 
 <PropertiesTable
   content={[
-  {
-    name: 'sql',
-    type: 'SqlStorage',
-    description: 'SqlStorage instance from Durable Objects ctx.storage.sql',
-    isOptional: false,
-  },
-  {
-    name: 'tablePrefix',
-    type: 'string',
-    description: 'Optional prefix for table names (only letters, numbers, and underscores allowed)',
-    isOptional: true,
-  },
-  {
-    name: 'disableInit',
-    type: 'boolean',
-    description:
-      'When true, automatic table creation/migrations are disabled. Useful for CI/CD pipelines where migrations run separately.',
-    isOptional: true,
-  },
+	{
+		name: 'sql',
+		type: 'SqlStorage',
+		description: 'SqlStorage instance from Durable Objects ctx.storage.sql',
+		isOptional: false,
+	},
+	{
+		name: 'tablePrefix',
+		type: 'string',
+		description: 'Optional prefix for table names (only letters, numbers, and underscores allowed)',
+		isOptional: true,
+	},
+	{
+		name: 'disableInit',
+		type: 'boolean',
+		description:
+			'When true, automatic table creation/migrations are disabled. Useful for CI/CD pipelines where migrations run separately.',
+		isOptional: true,
+	},
 ]}
 />
 

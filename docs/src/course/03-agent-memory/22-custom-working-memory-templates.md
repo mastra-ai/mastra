@@ -10,28 +10,28 @@ import { Memory } from '@mastra/memory'
 
 // Create a memory instance with a custom working memory template
 const memory = new Memory({
-  storage: new LibSQLStore({
-    id: 'learning-memory-storage',
-    url: 'file:../../memory.db', // relative path from the `.mastra/output` directory
-  }), // Storage for message history
-  vector: new LibSQLVector({
-    url: 'file:../../vector.db', // relative path from the `.mastra/output` directory
-  }), // Vector database for semantic search
-  embedder: 'openai/text-embedding-3-small', // Embedder for message embeddings
-  options: {
-    semanticRecall: {
-      topK: 3,
-      messageRange: {
-        before: 2,
-        after: 1,
-      },
-    },
-    workingMemory: {
-      enabled: true,
-    },
-    workingMemory: {
-      enabled: true,
-      template: `
+	storage: new LibSQLStore({
+		id: 'learning-memory-storage',
+		url: 'file:../../memory.db', // relative path from the `.mastra/output` directory
+	}), // Storage for message history
+	vector: new LibSQLVector({
+		url: 'file:../../vector.db', // relative path from the `.mastra/output` directory
+	}), // Vector database for semantic search
+	embedder: 'openai/text-embedding-3-small', // Embedder for message embeddings
+	options: {
+		semanticRecall: {
+			topK: 3,
+			messageRange: {
+				before: 2,
+				after: 1,
+			},
+		},
+		workingMemory: {
+			enabled: true,
+		},
+		workingMemory: {
+			enabled: true,
+			template: `
 # User Profile
 
 ## Personal Info
@@ -53,14 +53,14 @@ const memory = new Memory({
   - [Question 1]
   - [Question 2]
 `,
-    },
-  },
+		},
+	},
 })
 
 // Create an agent with the configured memory
 export const memoryAgent = new Agent({
-  name: 'MemoryAgent',
-  instructions: `
+	name: 'MemoryAgent',
+	instructions: `
     You are a helpful assistant with advanced memory capabilities.
     You can remember previous conversations and user preferences.
     
@@ -73,8 +73,8 @@ export const memoryAgent = new Agent({
     When the user shares personal information such as their name, location, or preferences,
     acknowledge it and update your working memory accordingly.
   `,
-  model: 'openai/gpt-5.4',
-  memory: memory,
+	model: 'openai/gpt-5.4',
+	memory: memory,
 })
 ```
 

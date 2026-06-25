@@ -17,16 +17,16 @@ Updates an existing item in the dataset. Only the provided fields are updated. U
 import { Mastra } from '@mastra/core'
 
 const mastra = new Mastra({
-  /* storage config */
+	/* storage config */
 })
 
 const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 
 const updated = await dataset.updateItem({
-  itemId: 'item-id',
-  input: { question: 'What is TypeScript?' },
-  groundTruth: { answer: 'A typed superset of JavaScript' },
-  metadata: { reviewed: true },
+	itemId: 'item-id',
+	input: { question: 'What is TypeScript?' },
+	groundTruth: { answer: 'A typed superset of JavaScript' },
+	metadata: { reviewed: true },
 })
 ```
 
@@ -34,29 +34,29 @@ const updated = await dataset.updateItem({
 
 <PropertiesTable
   content={[
-  {
-    name: 'itemId',
-    type: 'string',
-    description: 'ID of the item to update.',
-  },
-  {
-    name: 'input',
-    type: 'unknown',
-    isOptional: true,
-    description: 'Updated input data.',
-  },
-  {
-    name: 'groundTruth',
-    type: 'unknown',
-    isOptional: true,
-    description: 'Updated ground truth.',
-  },
-  {
-    name: 'metadata',
-    type: 'Record<string, unknown>',
-    isOptional: true,
-    description: 'Updated metadata.',
-  },
+	{
+		name: 'itemId',
+		type: 'string',
+		description: 'ID of the item to update.',
+	},
+	{
+		name: 'input',
+		type: 'unknown',
+		isOptional: true,
+		description: 'Updated input data.',
+	},
+	{
+		name: 'groundTruth',
+		type: 'unknown',
+		isOptional: true,
+		description: 'Updated ground truth.',
+	},
+	{
+		name: 'metadata',
+		type: 'Record<string, unknown>',
+		isOptional: true,
+		description: 'Updated metadata.',
+	},
 ]}
 />
 
@@ -64,10 +64,10 @@ const updated = await dataset.updateItem({
 
 <PropertiesTable
   content={[
-  {
-    name: 'result',
-    type: 'Promise<DatasetItem>',
-    description: 'The updated dataset item. See dataset.addItem() for the item shape.',
-  },
+	{
+		name: 'result',
+		type: 'Promise<DatasetItem>',
+		description: 'The updated dataset item. See dataset.addItem() for the item shape.',
+	},
 ]}
 />

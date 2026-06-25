@@ -18,27 +18,27 @@ import { createWorkflow, createStep } from '@mastra/core/workflows'
 import { z } from 'zod'
 
 const sendReport = createStep({
-  id: 'send-report',
-  inputSchema: z.object({ userId: z.string() }),
-  outputSchema: z.object({ ok: z.boolean() }),
-  execute: async ({ inputData }) => {
-    // ...send the report for inputData.userId
-    return { ok: true }
-  },
+	id: 'send-report',
+	inputSchema: z.object({ userId: z.string() }),
+	outputSchema: z.object({ ok: z.boolean() }),
+	execute: async ({ inputData }) => {
+		// ...send the report for inputData.userId
+		return { ok: true }
+	},
 })
 
 export const dailyReport = createWorkflow({
-  id: 'daily-report',
-  inputSchema: z.object({ userId: z.string() }),
-  outputSchema: z.object({ ok: z.boolean() }),
-  schedule: {
-    cron: '0 9 * * *',
-    timezone: 'America/New_York',
-    inputData: { userId: 'system' },
-  },
+	id: 'daily-report',
+	inputSchema: z.object({ userId: z.string() }),
+	outputSchema: z.object({ ok: z.boolean() }),
+	schedule: {
+		cron: '0 9 * * *',
+		timezone: 'America/New_York',
+		inputData: { userId: 'system' },
+	},
 })
-  .then(sendReport)
-  .commit()
+	.then(sendReport)
+	.commit()
 ```
 
 A separate "register schedule" call won't happen. The scheduler reads `schedule` straight off the workflow when `Mastra` boots.
@@ -55,13 +55,13 @@ Pass an object to `schedule` for a workflow that fires on one cadence:
 
 ```typescript title="src/mastra/workflows/daily-report.ts"
 const dailyReport = createWorkflow({
-  id: 'daily-report',
-  schedule: {
-    cron: '0 9 * * *',
-    timezone: 'America/New_York',
-    inputData: { userId: 'system' },
-  },
-  // ...
+	id: 'daily-report',
+	schedule: {
+		cron: '0 9 * * *',
+		timezone: 'America/New_York',
+		inputData: { userId: 'system' },
+	},
+	// ...
 })
 ```
 
@@ -80,12 +80,12 @@ Pass an array to fire the same workflow on multiple cadences. Each entry needs a
 
 ```typescript title="src/mastra/workflows/heartbeat.ts"
 const heartbeat = createWorkflow({
-  id: 'heartbeat',
-  schedule: [
-    { id: 'morning', cron: '0 9 * * *', inputData: { window: 'morning' } },
-    { id: 'evening', cron: '0 18 * * *', inputData: { window: 'evening' } },
-  ],
-  // ...
+	id: 'heartbeat',
+	schedule: [
+		{ id: 'morning', cron: '0 9 * * *', inputData: { window: 'morning' } },
+		{ id: 'evening', cron: '0 18 * * *', inputData: { window: 'evening' } },
+	],
+	// ...
 })
 ```
 

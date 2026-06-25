@@ -37,29 +37,29 @@ In `convex/schema.ts`:
 ```typescript
 import { defineSchema } from 'convex/server'
 import {
-  mastraThreadsTable,
-  mastraMessagesTable,
-  mastraResourcesTable,
-  mastraWorkflowSnapshotsTable,
-  mastraScoresTable,
-  mastraVectorIndexesTable,
-  mastraVectorsTable,
-  mastraCacheTable,
-  mastraCacheListItemsTable,
-  mastraDocumentsTable,
+	mastraThreadsTable,
+	mastraMessagesTable,
+	mastraResourcesTable,
+	mastraWorkflowSnapshotsTable,
+	mastraScoresTable,
+	mastraVectorIndexesTable,
+	mastraVectorsTable,
+	mastraCacheTable,
+	mastraCacheListItemsTable,
+	mastraDocumentsTable,
 } from '@mastra/convex/schema'
 
 export default defineSchema({
-  mastra_threads: mastraThreadsTable,
-  mastra_messages: mastraMessagesTable,
-  mastra_resources: mastraResourcesTable,
-  mastra_workflow_snapshots: mastraWorkflowSnapshotsTable,
-  mastra_scorers: mastraScoresTable,
-  mastra_vector_indexes: mastraVectorIndexesTable,
-  mastra_vectors: mastraVectorsTable,
-  mastra_cache: mastraCacheTable,
-  mastra_cache_list_items: mastraCacheListItemsTable,
-  mastra_documents: mastraDocumentsTable,
+	mastra_threads: mastraThreadsTable,
+	mastra_messages: mastraMessagesTable,
+	mastra_resources: mastraResourcesTable,
+	mastra_workflow_snapshots: mastraWorkflowSnapshotsTable,
+	mastra_scorers: mastraScoresTable,
+	mastra_vector_indexes: mastraVectorIndexesTable,
+	mastra_vectors: mastraVectorsTable,
+	mastra_cache: mastraCacheTable,
+	mastra_cache_list_items: mastraCacheListItemsTable,
+	mastra_documents: mastraDocumentsTable,
 })
 ```
 
@@ -95,14 +95,14 @@ npx convex deploy
 import { ConvexServerCache, ConvexStore } from '@mastra/convex'
 
 const storage = new ConvexStore({
-  id: 'convex-storage',
-  deploymentUrl: process.env.CONVEX_URL!,
-  adminAuthToken: process.env.CONVEX_ADMIN_KEY!,
+	id: 'convex-storage',
+	deploymentUrl: process.env.CONVEX_URL!,
+	adminAuthToken: process.env.CONVEX_ADMIN_KEY!,
 })
 
 const cache = new ConvexServerCache({
-  deploymentUrl: process.env.CONVEX_URL!,
-  adminAuthToken: process.env.CONVEX_ADMIN_KEY!,
+	deploymentUrl: process.env.CONVEX_URL!,
+	adminAuthToken: process.env.CONVEX_ADMIN_KEY!,
 })
 ```
 
@@ -110,25 +110,25 @@ const cache = new ConvexServerCache({
 
 <PropertiesTable
   content={[
-  {
-    name: 'deploymentUrl',
-    type: 'string',
-    description: 'Convex deployment URL (e.g., https://your-project.convex.cloud)',
-    isOptional: false,
-  },
-  {
-    name: 'adminAuthToken',
-    type: 'string',
-    description: 'Convex admin authentication token for backend access',
-    isOptional: false,
-  },
-  {
-    name: 'storageFunction',
-    type: 'string',
-    description: "Path to the storage mutation function (default: 'mastra/storage:handle')",
-    isOptional: true,
-    defaultValue: 'mastra/storage:handle',
-  },
+	{
+		name: 'deploymentUrl',
+		type: 'string',
+		description: 'Convex deployment URL (e.g., https://your-project.convex.cloud)',
+		isOptional: false,
+	},
+	{
+		name: 'adminAuthToken',
+		type: 'string',
+		description: 'Convex admin authentication token for backend access',
+		isOptional: false,
+	},
+	{
+		name: 'storageFunction',
+		type: 'string',
+		description: "Path to the storage mutation function (default: 'mastra/storage:handle')",
+		isOptional: true,
+		defaultValue: 'mastra/storage:handle',
+	},
 ]}
 />
 
@@ -136,48 +136,48 @@ const cache = new ConvexServerCache({
 
 <PropertiesTable
   content={[
-  {
-    name: 'deploymentUrl',
-    type: 'string',
-    description: 'Convex deployment URL (e.g., https://your-project.convex.cloud)',
-    isOptional: false,
-  },
-  {
-    name: 'adminAuthToken',
-    type: 'string',
-    description: 'Convex admin authentication token for backend access',
-    isOptional: false,
-  },
-  {
-    name: 'cacheFunction',
-    type: 'string',
-    description: "Path to the cache mutation function for ConvexServerCache (default: 'mastra/cache:handle')",
-    isOptional: true,
-    defaultValue: 'mastra/cache:handle',
-  },
-  {
-    name: 'requestTimeoutMs',
-    type: 'number',
-    description:
-      'Timeout for Convex cache mutation requests in milliseconds. Set to 0 to disable the client-side timeout.',
-    isOptional: true,
-    defaultValue: 30000,
-  },
-  {
-    name: 'keyPrefix',
-    type: 'string',
-    description:
-      'Prefix applied to ConvexServerCache keys. clear() removes rows whose stored prefix exactly matches this value.',
-    isOptional: true,
-    defaultValue: 'mastra:cache:',
-  },
-  {
-    name: 'ttlMs',
-    type: 'number',
-    description: 'Default ConvexServerCache TTL in milliseconds. Set to 0 to disable expiry.',
-    isOptional: true,
-    defaultValue: 300000,
-  },
+	{
+		name: 'deploymentUrl',
+		type: 'string',
+		description: 'Convex deployment URL (e.g., https://your-project.convex.cloud)',
+		isOptional: false,
+	},
+	{
+		name: 'adminAuthToken',
+		type: 'string',
+		description: 'Convex admin authentication token for backend access',
+		isOptional: false,
+	},
+	{
+		name: 'cacheFunction',
+		type: 'string',
+		description: "Path to the cache mutation function for ConvexServerCache (default: 'mastra/cache:handle')",
+		isOptional: true,
+		defaultValue: 'mastra/cache:handle',
+	},
+	{
+		name: 'requestTimeoutMs',
+		type: 'number',
+		description:
+			'Timeout for Convex cache mutation requests in milliseconds. Set to 0 to disable the client-side timeout.',
+		isOptional: true,
+		defaultValue: 30000,
+	},
+	{
+		name: 'keyPrefix',
+		type: 'string',
+		description:
+			'Prefix applied to ConvexServerCache keys. clear() removes rows whose stored prefix exactly matches this value.',
+		isOptional: true,
+		defaultValue: 'mastra:cache:',
+	},
+	{
+		name: 'ttlMs',
+		type: 'number',
+		description: 'Default ConvexServerCache TTL in milliseconds. Set to 0 to disable expiry.',
+		isOptional: true,
+		defaultValue: 300000,
+	},
 ]}
 />
 
@@ -188,24 +188,24 @@ import { ConvexServerCache, ConvexStore } from '@mastra/convex'
 
 // Basic configuration
 const store = new ConvexStore({
-  id: 'convex-storage',
-  deploymentUrl: 'https://your-project.convex.cloud',
-  adminAuthToken: 'your-admin-token',
+	id: 'convex-storage',
+	deploymentUrl: 'https://your-project.convex.cloud',
+	adminAuthToken: 'your-admin-token',
 })
 
 // With custom storage function path
 const storeCustom = new ConvexStore({
-  id: 'convex-storage',
-  deploymentUrl: 'https://your-project.convex.cloud',
-  adminAuthToken: 'your-admin-token',
-  storageFunction: 'custom/path:handler',
+	id: 'convex-storage',
+	deploymentUrl: 'https://your-project.convex.cloud',
+	adminAuthToken: 'your-admin-token',
+	storageFunction: 'custom/path:handler',
 })
 
 // Server cache for durable stream replay and response caching
 const cache = new ConvexServerCache({
-  deploymentUrl: 'https://your-project.convex.cloud',
-  adminAuthToken: 'your-admin-token',
-  cacheFunction: 'mastra/cache:handle',
+	deploymentUrl: 'https://your-project.convex.cloud',
+	adminAuthToken: 'your-admin-token',
+	cacheFunction: 'mastra/cache:handle',
 })
 ```
 

@@ -116,14 +116,14 @@ import { Mastra } from '@mastra/core'
 
 // Compose domains from different stores
 const mastra = new Mastra({
-  storage: new MastraCompositeStore({
-    id: 'composite',
-    domains: {
-      memory: new MemoryLibSQL({ url: 'file:./local.db' }),
-      workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
-      scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
-    },
-  }),
+	storage: new MastraCompositeStore({
+		id: 'composite',
+		domains: {
+			memory: new MemoryLibSQL({ url: 'file:./local.db' }),
+			workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+			scores: new ScoresPG({ connectionString: process.env.DATABASE_URL }),
+		},
+	}),
 })
 ```
 
@@ -322,19 +322,19 @@ await memoryStore?.listThreads({ page: 0, perPage: 20 })
 
 // Filter by metadata only
 await memoryStore?.listThreads({
-  filter: { metadata: { status: 'active' } },
-  page: 0,
-  perPage: 20,
+	filter: { metadata: { status: 'active' } },
+	page: 0,
+	perPage: 20,
 })
 
 // Combined filter
 await memoryStore?.listThreads({
-  filter: {
-    resourceId: 'user-123',
-    metadata: { category: 'support' },
-  },
-  page: 0,
-  perPage: 20,
+	filter: {
+		resourceId: 'user-123',
+		metadata: { category: 'support' },
+	},
+	page: 0,
+	perPage: 20,
 })
 ```
 

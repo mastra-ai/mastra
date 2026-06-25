@@ -42,30 +42,30 @@ import { ObservabilityStorageClickhouseVNext } from '@mastra/clickhouse'
 import { Observability, MastraStorageExporter } from '@mastra/observability'
 
 const observabilityStore = new ObservabilityStorageClickhouseVNext({
-  url: process.env.CLICKHOUSE_URL!,
-  username: process.env.CLICKHOUSE_USERNAME!,
-  password: process.env.CLICKHOUSE_PASSWORD!,
+	url: process.env.CLICKHOUSE_URL!,
+	username: process.env.CLICKHOUSE_USERNAME!,
+	password: process.env.CLICKHOUSE_PASSWORD!,
 })
 
 export const mastra = new Mastra({
-  storage: new MastraCompositeStore({
-    id: 'composite-storage',
-    default: new PostgresStore({
-      id: 'pg',
-      connectionString: process.env.DATABASE_URL!,
-    }),
-    domains: {
-      observability: observabilityStore,
-    },
-  }),
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'mastra',
-        exporters: [new MastraStorageExporter()],
-      },
-    },
-  }),
+	storage: new MastraCompositeStore({
+		id: 'composite-storage',
+		default: new PostgresStore({
+			id: 'pg',
+			connectionString: process.env.DATABASE_URL!,
+		}),
+		domains: {
+			observability: observabilityStore,
+		},
+	}),
+	observability: new Observability({
+		configs: {
+			default: {
+				serviceName: 'mastra',
+				exporters: [new MastraStorageExporter()],
+			},
+		},
+	}),
 })
 ```
 
@@ -79,9 +79,9 @@ export const mastra = new Mastra({
 import { ObservabilityStorageClickhouse } from '@mastra/clickhouse'
 
 const observabilityStore = new ObservabilityStorageClickhouse({
-  url: process.env.CLICKHOUSE_URL!,
-  username: process.env.CLICKHOUSE_USERNAME!,
-  password: process.env.CLICKHOUSE_PASSWORD!,
+	url: process.env.CLICKHOUSE_URL!,
+	username: process.env.CLICKHOUSE_USERNAME!,
+	password: process.env.CLICKHOUSE_PASSWORD!,
 })
 ```
 
@@ -96,12 +96,12 @@ import { Mastra } from '@mastra/core'
 import { ClickhouseStoreVNext } from '@mastra/clickhouse'
 
 export const mastra = new Mastra({
-  storage: new ClickhouseStoreVNext({
-    id: 'clickhouse-storage',
-    url: process.env.CLICKHOUSE_URL!,
-    username: process.env.CLICKHOUSE_USERNAME!,
-    password: process.env.CLICKHOUSE_PASSWORD!,
-  }),
+	storage: new ClickhouseStoreVNext({
+		id: 'clickhouse-storage',
+		url: process.env.CLICKHOUSE_URL!,
+		username: process.env.CLICKHOUSE_USERNAME!,
+		password: process.env.CLICKHOUSE_PASSWORD!,
+	}),
 })
 ```
 
@@ -117,19 +117,19 @@ import { MastraCompositeStore } from '@mastra/core/storage'
 import { ClickhouseStore, ObservabilityStorageClickhouseVNext } from '@mastra/clickhouse'
 
 const credentials = {
-  url: process.env.CLICKHOUSE_URL!,
-  username: process.env.CLICKHOUSE_USERNAME!,
-  password: process.env.CLICKHOUSE_PASSWORD!,
+	url: process.env.CLICKHOUSE_URL!,
+	username: process.env.CLICKHOUSE_USERNAME!,
+	password: process.env.CLICKHOUSE_PASSWORD!,
 }
 
 export const mastra = new Mastra({
-  storage: new MastraCompositeStore({
-    id: 'composite-storage',
-    default: new ClickhouseStore({ id: 'clickhouse-storage', ...credentials }),
-    domains: {
-      observability: new ObservabilityStorageClickhouseVNext(credentials),
-    },
-  }),
+	storage: new MastraCompositeStore({
+		id: 'composite-storage',
+		default: new ClickhouseStore({ id: 'clickhouse-storage', ...credentials }),
+		domains: {
+			observability: new ObservabilityStorageClickhouseVNext(credentials),
+		},
+	}),
 })
 ```
 
@@ -142,11 +142,11 @@ import { createClient } from '@clickhouse/client'
 import { ClickhouseStore } from '@mastra/clickhouse'
 
 const client = createClient({
-  url: process.env.CLICKHOUSE_URL!,
-  username: process.env.CLICKHOUSE_USERNAME!,
-  password: process.env.CLICKHOUSE_PASSWORD!,
-  request_timeout: 60_000,
-  compression: { request: true, response: true },
+	url: process.env.CLICKHOUSE_URL!,
+	username: process.env.CLICKHOUSE_USERNAME!,
+	password: process.env.CLICKHOUSE_PASSWORD!,
+	request_timeout: 60_000,
+	compression: { request: true, response: true },
 })
 
 const storage = new ClickhouseStore({ id: 'clickhouse-storage', client })
@@ -160,61 +160,61 @@ The same `client` form is accepted by `ObservabilityStorageClickhouse` and `Obse
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Unique identifier for this storage instance.',
-    isOptional: false,
-  },
-  {
-    name: 'url',
-    type: 'string',
-    description:
-      'ClickHouse server URL (for example, `https://your-instance.clickhouse.cloud:8443` or `http://localhost:8123`). Required when not passing a pre-configured `client`.',
-    isOptional: true,
-  },
-  {
-    name: 'username',
-    type: 'string',
-    description: 'ClickHouse username. Required when not passing a pre-configured `client`.',
-    isOptional: true,
-  },
-  {
-    name: 'password',
-    type: 'string',
-    description:
-      'ClickHouse password. Required when not passing a pre-configured `client`. It can be an empty string for the default user on a local instance.',
-    isOptional: true,
-  },
-  {
-    name: 'client',
-    type: 'ClickHouseClient',
-    description:
-      'Pre-configured ClickHouse client from `@clickhouse/client`. Use this when you need custom request settings. Mutually exclusive with the credential fields above.',
-    isOptional: true,
-  },
-  {
-    name: 'ttl',
-    type: 'object',
-    description:
-      'Per-table TTL configuration applied at table creation time. Accepts row-level and column-level TTLs in interval units from `NANOSECOND` through `YEAR`.',
-    isOptional: true,
-  },
-  {
-    name: 'replication',
-    type: '{ cluster?: string; zookeeperPath?: string; replicaName?: string }',
-    description:
-      'Opt-in replicated table configuration for multi-replica ClickHouse clusters. When set, Mastra creates replicated MergeTree tables. When `cluster` is set, Mastra also adds `ON CLUSTER` to Mastra-owned data definition language (DDL).',
-    isOptional: true,
-  },
-  {
-    name: 'disableInit',
-    type: 'boolean',
-    description:
-      'When `true`, the store does not run table creation or migrations on first use. Call `storage.init()` explicitly from your deployment scripts.',
-    isOptional: true,
-    defaultValue: 'false',
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Unique identifier for this storage instance.',
+		isOptional: false,
+	},
+	{
+		name: 'url',
+		type: 'string',
+		description:
+			'ClickHouse server URL (for example, `https://your-instance.clickhouse.cloud:8443` or `http://localhost:8123`). Required when not passing a pre-configured `client`.',
+		isOptional: true,
+	},
+	{
+		name: 'username',
+		type: 'string',
+		description: 'ClickHouse username. Required when not passing a pre-configured `client`.',
+		isOptional: true,
+	},
+	{
+		name: 'password',
+		type: 'string',
+		description:
+			'ClickHouse password. Required when not passing a pre-configured `client`. It can be an empty string for the default user on a local instance.',
+		isOptional: true,
+	},
+	{
+		name: 'client',
+		type: 'ClickHouseClient',
+		description:
+			'Pre-configured ClickHouse client from `@clickhouse/client`. Use this when you need custom request settings. Mutually exclusive with the credential fields above.',
+		isOptional: true,
+	},
+	{
+		name: 'ttl',
+		type: 'object',
+		description:
+			'Per-table TTL configuration applied at table creation time. Accepts row-level and column-level TTLs in interval units from `NANOSECOND` through `YEAR`.',
+		isOptional: true,
+	},
+	{
+		name: 'replication',
+		type: '{ cluster?: string; zookeeperPath?: string; replicaName?: string }',
+		description:
+			'Opt-in replicated table configuration for multi-replica ClickHouse clusters. When set, Mastra creates replicated MergeTree tables. When `cluster` is set, Mastra also adds `ON CLUSTER` to Mastra-owned data definition language (DDL).',
+		isOptional: true,
+	},
+	{
+		name: 'disableInit',
+		type: 'boolean',
+		description:
+			'When `true`, the store does not run table creation or migrations on first use. Call `storage.init()` explicitly from your deployment scripts.',
+		isOptional: true,
+		defaultValue: 'false',
+	},
 ]}
 />
 
@@ -226,13 +226,13 @@ Use `replication` when Mastra writes to a multi-replica ClickHouse cluster throu
 
 ```typescript
 const storage = new ClickhouseStoreVNext({
-  id: 'clickhouse-storage',
-  url: process.env.CLICKHOUSE_URL!,
-  username: process.env.CLICKHOUSE_USERNAME!,
-  password: process.env.CLICKHOUSE_PASSWORD!,
-  replication: {
-    cluster: 'company_cluster',
-  },
+	id: 'clickhouse-storage',
+	url: process.env.CLICKHOUSE_URL!,
+	username: process.env.CLICKHOUSE_USERNAME!,
+	password: process.env.CLICKHOUSE_PASSWORD!,
+	replication: {
+		cluster: 'company_cluster',
+	},
 })
 ```
 
@@ -245,13 +245,13 @@ The defaults match the most common self-managed convention. If your cluster's ex
 
 ```typescript
 new ClickhouseStoreVNext({
-  url: process.env.CLICKHOUSE_URL!,
-  username: process.env.CLICKHOUSE_USERNAME!,
-  password: process.env.CLICKHOUSE_PASSWORD!,
-  replication: {
-    cluster: 'company_cluster',
-    zookeeperPath: '/clickhouse/tables/{shard}/{table}',
-  },
+	url: process.env.CLICKHOUSE_URL!,
+	username: process.env.CLICKHOUSE_USERNAME!,
+	password: process.env.CLICKHOUSE_PASSWORD!,
+	replication: {
+		cluster: 'company_cluster',
+		zookeeperPath: '/clickhouse/tables/{shard}/{table}',
+	},
 })
 ```
 
@@ -286,9 +286,9 @@ docker run -d --name mastra-clickhouse \
 
 ```typescript
 new ObservabilityStorageClickhouseVNext({
-  url: 'http://localhost:8123',
-  username: 'default',
-  password: 'password',
+	url: 'http://localhost:8123',
+	username: 'default',
+	password: 'password',
 })
 ```
 
@@ -306,28 +306,28 @@ import { ObservabilityStorageClickhouseVNext } from '@mastra/clickhouse'
 import { Observability, MastraStorageExporter } from '@mastra/observability'
 
 export const mastra = new Mastra({
-  storage: new MastraCompositeStore({
-    id: 'composite-storage',
-    default: new PostgresStore({
-      id: 'pg',
-      connectionString: process.env.DATABASE_URL!,
-    }),
-    domains: {
-      observability: new ObservabilityStorageClickhouseVNext({
-        url: process.env.CLICKHOUSE_URL!,
-        username: process.env.CLICKHOUSE_USERNAME!,
-        password: process.env.CLICKHOUSE_PASSWORD!,
-      }),
-    },
-  }),
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'mastra',
-        exporters: [new MastraStorageExporter()],
-      },
-    },
-  }),
+	storage: new MastraCompositeStore({
+		id: 'composite-storage',
+		default: new PostgresStore({
+			id: 'pg',
+			connectionString: process.env.DATABASE_URL!,
+		}),
+		domains: {
+			observability: new ObservabilityStorageClickhouseVNext({
+				url: process.env.CLICKHOUSE_URL!,
+				username: process.env.CLICKHOUSE_USERNAME!,
+				password: process.env.CLICKHOUSE_PASSWORD!,
+			}),
+		},
+	}),
+	observability: new Observability({
+		configs: {
+			default: {
+				serviceName: 'mastra',
+				exporters: [new MastraStorageExporter()],
+			},
+		},
+	}),
 })
 ```
 
@@ -352,9 +352,9 @@ If you manage storage outside of `Mastra`, call `init()` explicitly:
 import { ObservabilityStorageClickhouseVNext } from '@mastra/clickhouse'
 
 const observability = new ObservabilityStorageClickhouseVNext({
-  url: process.env.CLICKHOUSE_URL!,
-  username: process.env.CLICKHOUSE_USERNAME!,
-  password: process.env.CLICKHOUSE_PASSWORD!,
+	url: process.env.CLICKHOUSE_URL!,
+	username: process.env.CLICKHOUSE_USERNAME!,
+	password: process.env.CLICKHOUSE_PASSWORD!,
 })
 
 await observability.init()

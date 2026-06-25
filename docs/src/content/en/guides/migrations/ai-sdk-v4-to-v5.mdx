@@ -50,21 +50,21 @@ import { InferUITool, createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 const weatherTool = createTool({
-  id: 'get-weather',
-  description: 'Get the current weather',
-  inputSchema: z.object({
-    location: z.string().describe('The city and state'),
-  }),
-  outputSchema: z.object({
-    temperature: z.number(),
-    conditions: z.string(),
-  }),
-  execute: async inputData => {
-    return {
-      temperature: 72,
-      conditions: 'sunny',
-    }
-  },
+	id: 'get-weather',
+	description: 'Get the current weather',
+	inputSchema: z.object({
+		location: z.string().describe('The city and state'),
+	}),
+	outputSchema: z.object({
+		temperature: z.number(),
+		conditions: z.string(),
+	}),
+	execute: async inputData => {
+		return {
+			temperature: 72,
+			conditions: 'sunny',
+		}
+	},
 })
 
 // Infer the types from the tool
@@ -86,23 +86,23 @@ import { z } from 'zod'
 
 // Using weatherTool from the previous example
 const tools = {
-  weather: weatherTool,
-  calculator: createTool({
-    id: 'calculator',
-    description: 'Perform basic arithmetic',
-    inputSchema: z.object({
-      operation: z.enum(['add', 'subtract', 'multiply', 'divide']),
-      a: z.number(),
-      b: z.number(),
-    }),
-    outputSchema: z.object({
-      result: z.number(),
-    }),
-    execute: async inputData => {
-      // implementation...
-      return { result: 0 }
-    },
-  }),
+	weather: weatherTool,
+	calculator: createTool({
+		id: 'calculator',
+		description: 'Perform basic arithmetic',
+		inputSchema: z.object({
+			operation: z.enum(['add', 'subtract', 'multiply', 'divide']),
+			a: z.number(),
+			b: z.number(),
+		}),
+		outputSchema: z.object({
+			result: z.number(),
+		}),
+		execute: async inputData => {
+			// implementation...
+			return { result: 0 }
+		},
+	}),
 }
 
 // Infer types from the tool set

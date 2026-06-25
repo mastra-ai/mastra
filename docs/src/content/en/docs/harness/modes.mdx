@@ -28,19 +28,19 @@ import { Harness } from '@mastra/core/harness'
 import { myAgent } from './agents'
 
 const harness = new Harness({
-  id: 'multi-mode',
-  agent: myAgent,
-  // highlight-start
-  modes: [
-    {
-      id: 'plan',
-      name: 'Plan',
-      metadata: { default: true },
-      instructions: 'Reason about the task before making changes.',
-    },
-    { id: 'build', name: 'Build', instructions: 'Implement the approved plan.' },
-  ],
-  // highlight-end
+	id: 'multi-mode',
+	agent: myAgent,
+	// highlight-start
+	modes: [
+		{
+			id: 'plan',
+			name: 'Plan',
+			metadata: { default: true },
+			instructions: 'Reason about the task before making changes.',
+		},
+		{ id: 'build', name: 'Build', instructions: 'Implement the approved plan.' },
+	],
+	// highlight-end
 })
 
 await harness.init()
@@ -54,23 +54,23 @@ Each mode requires an `id`. When a top-level `agent` is provided, modes layer in
 import { Harness } from '@mastra/core/harness'
 
 const harness = new Harness({
-  id: 'multi-mode',
-  agent: myAgent,
-  modes: [
-    {
-      id: 'plan',
-      name: 'Plan',
-      metadata: { default: true },
-      defaultModelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
-      instructions: 'Reason about the task before making changes.',
-    },
-    {
-      id: 'build',
-      name: 'Build',
-      defaultModelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
-      instructions: 'Implement the approved plan.',
-    },
-  ],
+	id: 'multi-mode',
+	agent: myAgent,
+	modes: [
+		{
+			id: 'plan',
+			name: 'Plan',
+			metadata: { default: true },
+			defaultModelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+			instructions: 'Reason about the task before making changes.',
+		},
+		{
+			id: 'build',
+			name: 'Build',
+			defaultModelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+			instructions: 'Implement the approved plan.',
+		},
+	],
 })
 ```
 
@@ -94,10 +94,10 @@ A mode can declare a `transitionsTo` target. When the `submit_plan` built-in too
 
 ```typescript
 const planMode = {
-  id: 'plan',
-  name: 'Plan',
-  transitionsTo: 'build',
-  instructions: 'Reason about the task and submit a plan.',
+	id: 'plan',
+	name: 'Plan',
+	transitionsTo: 'build',
+	instructions: 'Reason about the task and submit a plan.',
 }
 ```
 

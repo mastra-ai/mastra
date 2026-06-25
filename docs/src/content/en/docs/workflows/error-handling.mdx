@@ -23,15 +23,15 @@ const run = await workflow.createRun()
 const result = await run.start({ inputData: { value: 'test' } })
 
 switch (result.status) {
-  case 'success':
-    console.log('Workflow completed:', result.result)
-    break
-  case 'failed':
-    console.error('Workflow failed:', result.error)
-    break
-  case 'suspended':
-    console.log('Workflow suspended, waiting for resume')
-    break
+	case 'success':
+		console.log('Workflow completed:', result.result)
+		break
+	case 'failed':
+		console.error('Workflow failed:', result.error)
+		break
+	case 'suspended':
+		console.log('Workflow suspended, waiting for resume')
+		break
 }
 ```
 
@@ -52,12 +52,12 @@ You can inspect individual step results to understand where a failure occurred:
 const result = await run.start({ inputData: { value: 'test' } })
 
 if (result.status === 'failed') {
-  // Find which step failed
-  for (const [stepId, stepResult] of Object.entries(result.steps)) {
-    if (stepResult.status === 'failed') {
-      console.error(`Step ${stepId} failed:`, stepResult.error)
-    }
-  }
+	// Find which step failed
+	for (const [stepId, stepResult] of Object.entries(result.steps)) {
+		if (stepResult.status === 'failed') {
+			console.error(`Step ${stepId} failed:`, stepResult.error)
+		}
+	}
 }
 ```
 
@@ -74,20 +74,20 @@ import { createWorkflow } from '@mastra/core/workflows'
 import { z } from 'zod'
 
 const orderWorkflow = createWorkflow({
-  id: 'order-processing',
-  inputSchema: z.object({ orderId: z.string() }),
-  outputSchema: z.object({ orderId: z.string(), status: z.string() }),
-  options: {
-    onFinish: async result => {
-      if (result.status === 'success') {
-        await db.updateOrderStatus(result.result.orderId, result.status)
-      }
-      await analytics.track('workflow_completed', {
-        workflowId: 'order-processing',
-        status: result.status,
-      })
-    },
-  },
+	id: 'order-processing',
+	inputSchema: z.object({ orderId: z.string() }),
+	outputSchema: z.object({ orderId: z.string(), status: z.string() }),
+	options: {
+		onFinish: async result => {
+			if (result.status === 'success') {
+				await db.updateOrderStatus(result.result.orderId, result.status)
+			}
+			await analytics.track('workflow_completed', {
+				workflowId: 'order-processing',
+				status: result.status,
+			})
+		},
+	},
 })
 ```
 
@@ -116,18 +116,18 @@ import { createWorkflow } from '@mastra/core/workflows'
 import { z } from 'zod'
 
 const paymentWorkflow = createWorkflow({
-  id: 'payment-processing',
-  inputSchema: z.object({ amount: z.number() }),
-  outputSchema: z.object({ transactionId: z.string() }),
-  options: {
-    onError: async errorInfo => {
-      await alertService.notify({
-        channel: 'payments-alerts',
-        message: `Payment workflow failed: ${errorInfo.error?.message}`,
-      })
-      await errorTracker.capture(errorInfo.error)
-    },
-  },
+	id: 'payment-processing',
+	inputSchema: z.object({ amount: z.number() }),
+	outputSchema: z.object({ transactionId: z.string() }),
+	options: {
+		onError: async errorInfo => {
+			await alertService.notify({
+				channel: 'payments-alerts',
+				message: `Payment workflow failed: ${errorInfo.error?.message}`,
+			})
+			await errorTracker.capture(errorInfo.error)
+		},
+	},
 })
 ```
 
@@ -155,19 +155,19 @@ import { createWorkflow } from '@mastra/core/workflows'
 import { z } from 'zod'
 
 const pipelineWorkflow = createWorkflow({
-  id: 'data-pipeline',
-  inputSchema: z.object({ source: z.string() }),
-  outputSchema: z.object({ recordsProcessed: z.number() }),
-  options: {
-    onFinish: async result => {
-      // Always log completion
-      await logger.info('Pipeline completed', { status: result.status })
-    },
-    onError: async errorInfo => {
-      // Alert on failures
-      await pagerDuty.alert('Data pipeline failed', errorInfo.error)
-    },
-  },
+	id: 'data-pipeline',
+	inputSchema: z.object({ source: z.string() }),
+	outputSchema: z.object({ recordsProcessed: z.number() }),
+	options: {
+		onFinish: async result => {
+			// Always log completion
+			await logger.info('Pipeline completed', { status: result.status })
+		},
+		onError: async errorInfo => {
+			// Alert on failures
+			await pagerDuty.alert('Data pipeline failed', errorInfo.error)
+		},
+	},
 })
 ```
 
@@ -217,18 +217,18 @@ import { createWorkflow, createStep } from '@mastra/core/workflows'
 import { z } from 'zod'
 
 const step1 = createStep({
-  execute: async () => {
-    const response = await fetch('example-url')
+	execute: async () => {
+		const response = await fetch('example-url')
 
-    if (!response.ok) {
-      throw new Error('Error')
-    }
+		if (!response.ok) {
+			throw new Error('Error')
+		}
 
-    return {
-      value: '',
-    }
-  },
-  retries: 3,
+		return {
+			value: '',
+		}
+	},
+	retries: 3,
 })
 ```
 
@@ -349,13 +349,13 @@ const workflow = mastra.getWorkflow('testWorkflow')
 const run = await workflow.createRun()
 
 const stream = await run.stream({
-  inputData: {
-    value: 'initial data',
-  },
+	inputData: {
+		value: 'initial data',
+	},
 })
 
 for await (const chunk of stream.stream) {
-  console.log(chunk.payload.output.stats)
+	console.log(chunk.payload.output.stats)
 }
 ```
 

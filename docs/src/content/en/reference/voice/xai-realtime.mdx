@@ -18,29 +18,29 @@ import { getMicrophoneStream, playAudio } from '@mastra/node-audio'
 import { XAIRealtimeVoice } from '@mastra/voice-xai-realtime'
 
 const voice = new XAIRealtimeVoice({
-  apiKey: process.env.XAI_API_KEY,
-  model: 'grok-voice-think-fast-1.0',
-  speaker: 'eve',
-  instructions: 'You are a concise voice assistant.',
-  turnDetection: { type: 'server_vad' },
+	apiKey: process.env.XAI_API_KEY,
+	model: 'grok-voice-think-fast-1.0',
+	speaker: 'eve',
+	instructions: 'You are a concise voice assistant.',
+	turnDetection: { type: 'server_vad' },
 })
 
 const agent = new Agent({
-  id: 'voice-agent',
-  name: 'Voice Agent',
-  instructions: 'You are a helpful voice assistant.',
-  model: 'xai/grok-4.3',
-  voice,
+	id: 'voice-agent',
+	name: 'Voice Agent',
+	instructions: 'You are a helpful voice assistant.',
+	model: 'xai/grok-4.3',
+	voice,
 })
 
 await agent.voice.connect()
 
 agent.voice.on('speaker', audioStream => {
-  playAudio(audioStream)
+	playAudio(audioStream)
 })
 
 agent.voice.on('writing', ({ text, role }) => {
-  console.log(`${role}: ${text}`)
+	console.log(`${role}: ${text}`)
 })
 
 await agent.voice.speak('How can I help you today?')
@@ -57,81 +57,81 @@ agent.voice.close()
 
 <PropertiesTable
   content={[
-  {
-    name: 'apiKey',
-    type: 'string',
-    description: 'xAI API key. Falls back to the XAI_API_KEY environment variable.',
-    isOptional: true,
-  },
-  {
-    name: 'ephemeralToken',
-    type: 'string',
-    description: 'Short-lived xAI token sent with the WebSocket protocol instead of an authorization header.',
-    isOptional: true,
-  },
-  {
-    name: 'model',
-    type: 'XAIRealtimeModel',
-    description: 'The Grok voice model to use.',
-    isOptional: true,
-    defaultValue: "'grok-voice-think-fast-1.0'",
-  },
-  {
-    name: 'speaker',
-    type: 'XAIVoice',
-    description:
-      'Voice ID to use for speech output. Built-in values are eve, ara, rex, sal, and leo. Custom xAI voice IDs are also supported.',
-    isOptional: true,
-    defaultValue: "'eve'",
-  },
-  {
-    name: 'instructions',
-    type: 'string',
-    description: 'System instructions sent in session.update.',
-    isOptional: true,
-  },
-  {
-    name: 'turnDetection',
-    type: 'XAITurnDetection',
-    description: 'Voice activity detection configuration.',
-    isOptional: true,
-    defaultValue: "{ type: 'server_vad' }",
-  },
-  {
-    name: 'audio',
-    type: 'XAIAudioConfig',
-    description: 'Input and output audio format configuration.',
-    isOptional: true,
-    defaultValue: '24 kHz audio/pcm input and output',
-  },
-  {
-    name: 'serverTools',
-    type: 'XAIServerTool[]',
-    description:
-      'xAI server-side tools to send in session.update. Supports file_search, web_search, x_search, and mcp. These are merged with session.tools.',
-    isOptional: true,
-  },
-  {
-    name: 'session',
-    type: 'Partial<XAISessionConfig>',
-    description: 'Additional xAI session fields to merge into the initial session.update event.',
-    isOptional: true,
-  },
-  {
-    name: 'url',
-    type: 'string',
-    description: 'Override the xAI realtime WebSocket URL.',
-    isOptional: true,
-    defaultValue: "'wss://api.x.ai/v1/realtime'",
-  },
-  {
-    name: 'debug',
-    type: 'boolean',
-    description:
-      'Enable debug logging for received xAI events. Debug logs can include transcripts and tool-call arguments.',
-    isOptional: true,
-    defaultValue: 'false',
-  },
+	{
+		name: 'apiKey',
+		type: 'string',
+		description: 'xAI API key. Falls back to the XAI_API_KEY environment variable.',
+		isOptional: true,
+	},
+	{
+		name: 'ephemeralToken',
+		type: 'string',
+		description: 'Short-lived xAI token sent with the WebSocket protocol instead of an authorization header.',
+		isOptional: true,
+	},
+	{
+		name: 'model',
+		type: 'XAIRealtimeModel',
+		description: 'The Grok voice model to use.',
+		isOptional: true,
+		defaultValue: "'grok-voice-think-fast-1.0'",
+	},
+	{
+		name: 'speaker',
+		type: 'XAIVoice',
+		description:
+			'Voice ID to use for speech output. Built-in values are eve, ara, rex, sal, and leo. Custom xAI voice IDs are also supported.',
+		isOptional: true,
+		defaultValue: "'eve'",
+	},
+	{
+		name: 'instructions',
+		type: 'string',
+		description: 'System instructions sent in session.update.',
+		isOptional: true,
+	},
+	{
+		name: 'turnDetection',
+		type: 'XAITurnDetection',
+		description: 'Voice activity detection configuration.',
+		isOptional: true,
+		defaultValue: "{ type: 'server_vad' }",
+	},
+	{
+		name: 'audio',
+		type: 'XAIAudioConfig',
+		description: 'Input and output audio format configuration.',
+		isOptional: true,
+		defaultValue: '24 kHz audio/pcm input and output',
+	},
+	{
+		name: 'serverTools',
+		type: 'XAIServerTool[]',
+		description:
+			'xAI server-side tools to send in session.update. Supports file_search, web_search, x_search, and mcp. These are merged with session.tools.',
+		isOptional: true,
+	},
+	{
+		name: 'session',
+		type: 'Partial<XAISessionConfig>',
+		description: 'Additional xAI session fields to merge into the initial session.update event.',
+		isOptional: true,
+	},
+	{
+		name: 'url',
+		type: 'string',
+		description: 'Override the xAI realtime WebSocket URL.',
+		isOptional: true,
+		defaultValue: "'wss://api.x.ai/v1/realtime'",
+	},
+	{
+		name: 'debug',
+		type: 'boolean',
+		description:
+			'Enable debug logging for received xAI events. Debug logs can include transcripts and tool-call arguments.',
+		isOptional: true,
+		defaultValue: 'false',
+	},
 ]}
 />
 
@@ -141,15 +141,15 @@ You can also use Mastra's shared voice configuration shape:
 
 ```typescript
 const voice = new XAIRealtimeVoice({
-  speaker: 'ara',
-  realtimeConfig: {
-    model: 'grok-voice-think-fast-1.0',
-    apiKey: process.env.XAI_API_KEY,
-    options: {
-      instructions: 'Answer briefly.',
-      turnDetection: { type: 'server_vad', threshold: 0.85 },
-    },
-  },
+	speaker: 'ara',
+	realtimeConfig: {
+		model: 'grok-voice-think-fast-1.0',
+		apiKey: process.env.XAI_API_KEY,
+		options: {
+			instructions: 'Answer briefly.',
+			turnDetection: { type: 'server_vad', threshold: 0.85 },
+		},
+	},
 })
 ```
 
@@ -165,12 +165,12 @@ Establishes the WebSocket connection and sends the initial `session.update`.
 
 <PropertiesTable
   content={[
-  {
-    name: 'requestContext',
-    type: 'RequestContext',
-    description: 'Optional Mastra request context passed to function tool executions.',
-    isOptional: true,
-  },
+	{
+		name: 'requestContext',
+		type: 'RequestContext',
+		description: 'Optional Mastra request context passed to function tool executions.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -188,12 +188,12 @@ Sets session instructions. If the WebSocket is open, the provider sends a `sessi
 
 <PropertiesTable
   content={[
-  {
-    name: 'instructions',
-    type: 'string',
-    description: 'System instructions to send to xAI.',
-    isOptional: true,
-  },
+	{
+		name: 'instructions',
+		type: 'string',
+		description: 'System instructions to send to xAI.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -205,12 +205,12 @@ Registers Mastra function tools and, when connected, refreshes the session tools
 
 <PropertiesTable
   content={[
-  {
-    name: 'tools',
-    type: 'ToolsInput',
-    description: 'Mastra tools to expose as xAI function tools.',
-    isOptional: true,
-  },
+	{
+		name: 'tools',
+		type: 'ToolsInput',
+		description: 'Mastra tools to expose as xAI function tools.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -222,12 +222,12 @@ Sends a `session.update` event with additional xAI session fields.
 
 <PropertiesTable
   content={[
-  {
-    name: 'sessionConfig',
-    type: 'Partial<XAISessionConfig>',
-    description: 'Session fields to update.',
-    isOptional: false,
-  },
+	{
+		name: 'sessionConfig',
+		type: 'Partial<XAISessionConfig>',
+		description: 'Session fields to update.',
+		isOptional: false,
+	},
 ]}
 />
 
@@ -239,24 +239,24 @@ Sends a text turn using `conversation.item.create` and then requests a response.
 
 <PropertiesTable
   content={[
-  {
-    name: 'input',
-    type: 'string | NodeJS.ReadableStream',
-    description: 'Text or a readable text stream to send as user input.',
-    isOptional: false,
-  },
-  {
-    name: 'options.speaker',
-    type: 'XAIVoice',
-    description: 'Voice override. This updates the active xAI session voice and is used for subsequent turns.',
-    isOptional: true,
-  },
-  {
-    name: 'options.response',
-    type: 'Record<string, unknown>',
-    description: 'Additional xAI response.create fields.',
-    isOptional: true,
-  },
+	{
+		name: 'input',
+		type: 'string | NodeJS.ReadableStream',
+		description: 'Text or a readable text stream to send as user input.',
+		isOptional: false,
+	},
+	{
+		name: 'options.speaker',
+		type: 'XAIVoice',
+		description: 'Voice override. This updates the active xAI session voice and is used for subsequent turns.',
+		isOptional: true,
+	},
+	{
+		name: 'options.response',
+		type: 'Record<string, unknown>',
+		description: 'Additional xAI response.create fields.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -270,18 +270,18 @@ Streams realtime audio chunks with `input_audio_buffer.append`.
 
 <PropertiesTable
   content={[
-  {
-    name: 'audioData',
-    type: 'NodeJS.ReadableStream | Int16Array',
-    description: 'PCM audio stream or Int16Array audio data.',
-    isOptional: false,
-  },
-  {
-    name: 'eventId',
-    type: 'string',
-    description: 'Optional xAI event ID.',
-    isOptional: true,
-  },
+	{
+		name: 'audioData',
+		type: 'NodeJS.ReadableStream | Int16Array',
+		description: 'PCM audio stream or Int16Array audio data.',
+		isOptional: false,
+	},
+	{
+		name: 'eventId',
+		type: 'string',
+		description: 'Optional xAI event ID.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -293,26 +293,26 @@ Sends a finite audio stream with `input_audio_buffer.append`. By default it comm
 
 <PropertiesTable
   content={[
-  {
-    name: 'audioData',
-    type: 'NodeJS.ReadableStream',
-    description: 'Audio stream to send.',
-    isOptional: false,
-  },
-  {
-    name: 'options.commit',
-    type: 'boolean',
-    description: 'Whether to send input_audio_buffer.commit after the audio item.',
-    isOptional: true,
-    defaultValue: 'true',
-  },
-  {
-    name: 'options.createResponse',
-    type: 'boolean',
-    description: 'Whether to send response.create after the audio item.',
-    isOptional: true,
-    defaultValue: 'true',
-  },
+	{
+		name: 'audioData',
+		type: 'NodeJS.ReadableStream',
+		description: 'Audio stream to send.',
+		isOptional: false,
+	},
+	{
+		name: 'options.commit',
+		type: 'boolean',
+		description: 'Whether to send input_audio_buffer.commit after the audio item.',
+		isOptional: true,
+		defaultValue: 'true',
+	},
+	{
+		name: 'options.createResponse',
+		type: 'boolean',
+		description: 'Whether to send response.create after the audio item.',
+		isOptional: true,
+		defaultValue: 'true',
+	},
 ]}
 />
 
@@ -336,18 +336,18 @@ Sends `response.cancel` to interrupt an in-flight response.
 
 <PropertiesTable
   content={[
-  {
-    name: 'responseId',
-    type: 'string',
-    description: 'Optional xAI response ID to cancel.',
-    isOptional: true,
-  },
-  {
-    name: 'eventId',
-    type: 'string',
-    description: 'Optional xAI event ID.',
-    isOptional: true,
-  },
+	{
+		name: 'responseId',
+		type: 'string',
+		description: 'Optional xAI response ID to cancel.',
+		isOptional: true,
+	},
+	{
+		name: 'eventId',
+		type: 'string',
+		description: 'Optional xAI event ID.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -379,14 +379,14 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 const weatherTool = createTool({
-  id: 'getWeather',
-  description: 'Get current weather for a location.',
-  inputSchema: z.object({
-    location: z.string(),
-  }),
-  execute: async ({ location }) => {
-    return { location, temperature: 22 }
-  },
+	id: 'getWeather',
+	description: 'Get current weather for a location.',
+	inputSchema: z.object({
+		location: z.string(),
+	}),
+	execute: async ({ location }) => {
+		return { location, temperature: 22 }
+	},
 })
 
 voice.addTools({ getWeather: weatherTool })
@@ -400,18 +400,18 @@ xAI server-side tools are passed through in the session configuration and execut
 
 ```typescript
 const voice = new XAIRealtimeVoice({
-  apiKey: process.env.XAI_API_KEY,
-  serverTools: [
-    { type: 'web_search' },
-    { type: 'x_search', allowed_x_handles: ['xai'] },
-    { type: 'file_search', vector_store_ids: ['collection_123'], max_num_results: 10 },
-    {
-      type: 'mcp',
-      server_url: 'https://mcp.example.com/mcp',
-      server_label: 'business-tools',
-      allowed_tools: ['lookup_order'],
-    },
-  ],
+	apiKey: process.env.XAI_API_KEY,
+	serverTools: [
+		{ type: 'web_search' },
+		{ type: 'x_search', allowed_x_handles: ['xai'] },
+		{ type: 'file_search', vector_store_ids: ['collection_123'], max_num_results: 10 },
+		{
+			type: 'mcp',
+			server_url: 'https://mcp.example.com/mcp',
+			server_label: 'business-tools',
+			allowed_tools: ['lookup_order'],
+		},
+	],
 })
 ```
 
@@ -421,10 +421,10 @@ The default input and output format is 24 kHz PCM16. You can also configure supp
 
 ```typescript
 const voice = new XAIRealtimeVoice({
-  audio: {
-    input: { format: { type: 'audio/pcm', rate: 16000 } },
-    output: { format: { type: 'audio/pcm', rate: 16000 } },
-  },
+	audio: {
+		input: { format: { type: 'audio/pcm', rate: 16000 } },
+		output: { format: { type: 'audio/pcm', rate: 16000 } },
+	},
 })
 ```
 

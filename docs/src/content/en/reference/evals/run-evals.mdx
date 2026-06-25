@@ -17,19 +17,19 @@ import { myAgent } from './agents/my-agent'
 import { myScorer1, myScorer2 } from './scorers'
 
 const result = await runEvals({
-  target: myAgent,
-  data: [
-    { input: 'What is machine learning?' },
-    { input: 'Explain neural networks' },
-    { input: 'How does AI work?' },
-  ],
-  scorers: [myScorer1, myScorer2],
-  targetOptions: { maxSteps: 5 },
-  concurrency: 2,
-  onItemComplete: ({ item, targetResult, scorerResults }) => {
-    console.log(`Completed: ${item.input}`)
-    console.log(`Scores:`, scorerResults)
-  },
+	target: myAgent,
+	data: [
+		{ input: 'What is machine learning?' },
+		{ input: 'Explain neural networks' },
+		{ input: 'How does AI work?' },
+	],
+	scorers: [myScorer1, myScorer2],
+	targetOptions: { maxSteps: 5 },
+	concurrency: 2,
+	onItemComplete: ({ item, targetResult, scorerResults }) => {
+		console.log(`Completed: ${item.input}`)
+		console.log(`Scores:`, scorerResults)
+	},
 })
 
 console.log(`Average scores:`, result.scores)
@@ -44,10 +44,10 @@ import { checks } from '@mastra/evals/checks'
 import { faithfulnessScorer } from './scorers'
 
 const result = await runEvals({
-  target: myAgent,
-  data: [{ input: 'What is the weather in Brooklyn?' }],
-  gates: [checks.calledTool('get_weather'), checks.noToolErrors()],
-  scorers: [{ scorer: faithfulnessScorer, threshold: 0.7 }, checks.includes('Brooklyn')],
+	target: myAgent,
+	data: [{ input: 'What is the weather in Brooklyn?' }],
+	gates: [checks.calledTool('get_weather'), checks.noToolErrors()],
+	scorers: [{ scorer: faithfulnessScorer, threshold: 0.7 }, checks.includes('Brooklyn')],
 })
 
 result.verdict // 'passed' | 'scored' | 'failed'
@@ -59,53 +59,53 @@ result.thresholdResults // [{ id, passed, averageScore, threshold }]
 
 <PropertiesTable
   content={[
-  {
-    name: 'target',
-    type: 'Agent | Workflow',
-    description: 'The agent or workflow to evaluate.',
-    isOptional: false,
-  },
-  {
-    name: 'data',
-    type: 'RunEvalsDataItem[]',
-    description: 'Array of test cases with input data and optional ground truth.',
-    isOptional: false,
-  },
-  {
-    name: 'scorers',
-    type: 'ScorerEntry[] | AgentScorerConfig | WorkflowScorerConfig',
-    description:
-      'Scorers to use. Each entry is either a bare `MastraScorer` or `{ scorer, threshold }` for threshold tracking. An `AgentScorerConfig` object separates agent-level and trajectory scorers. A `WorkflowScorerConfig` object specifies scorers for the workflow, individual steps, and trajectory.',
-    isOptional: false,
-  },
-  {
-    name: 'gates',
-    type: 'MastraScorer[]',
-    description:
-      'Scorers that must score 1.0 for the run to pass. If any gate averages below 1.0 across data items, the verdict is `failed`. Gates run before regular scorers on each data item.',
-    isOptional: true,
-  },
-  {
-    name: 'targetOptions',
-    type: 'AgentExecutionOptions | WorkflowRunOptions',
-    description:
-      'Options forwarded to the target during execution. For agents: options passed to agent.generate() (e.g. maxSteps, modelSettings, instructions). For workflows: options passed to run.start() (e.g. perStep, outputOptions, initialState).',
-    isOptional: true,
-  },
-  {
-    name: 'concurrency',
-    type: 'number',
-    description: 'Number of test cases to run concurrently.',
-    isOptional: true,
-    defaultValue: '1',
-  },
-  {
-    name: 'onItemComplete',
-    type: 'function',
-    description:
-      'Callback function called after each test case completes. Receives item, target result, and scorer results.',
-    isOptional: true,
-  },
+	{
+		name: 'target',
+		type: 'Agent | Workflow',
+		description: 'The agent or workflow to evaluate.',
+		isOptional: false,
+	},
+	{
+		name: 'data',
+		type: 'RunEvalsDataItem[]',
+		description: 'Array of test cases with input data and optional ground truth.',
+		isOptional: false,
+	},
+	{
+		name: 'scorers',
+		type: 'ScorerEntry[] | AgentScorerConfig | WorkflowScorerConfig',
+		description:
+			'Scorers to use. Each entry is either a bare `MastraScorer` or `{ scorer, threshold }` for threshold tracking. An `AgentScorerConfig` object separates agent-level and trajectory scorers. A `WorkflowScorerConfig` object specifies scorers for the workflow, individual steps, and trajectory.',
+		isOptional: false,
+	},
+	{
+		name: 'gates',
+		type: 'MastraScorer[]',
+		description:
+			'Scorers that must score 1.0 for the run to pass. If any gate averages below 1.0 across data items, the verdict is `failed`. Gates run before regular scorers on each data item.',
+		isOptional: true,
+	},
+	{
+		name: 'targetOptions',
+		type: 'AgentExecutionOptions | WorkflowRunOptions',
+		description:
+			'Options forwarded to the target during execution. For agents: options passed to agent.generate() (e.g. maxSteps, modelSettings, instructions). For workflows: options passed to run.start() (e.g. perStep, outputOptions, initialState).',
+		isOptional: true,
+	},
+	{
+		name: 'concurrency',
+		type: 'number',
+		description: 'Number of test cases to run concurrently.',
+		isOptional: true,
+		defaultValue: '1',
+	},
+	{
+		name: 'onItemComplete',
+		type: 'function',
+		description:
+			'Callback function called after each test case completes. Receives item, target result, and scorer results.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -113,44 +113,44 @@ result.thresholdResults // [{ id, passed, averageScore, threshold }]
 
 <PropertiesTable
   content={[
-  {
-    name: 'input',
-    type: 'string | string[] | CoreMessage[] | any',
-    description: 'Input data for the target. For agents: messages or strings. For workflows: workflow input data.',
-    isOptional: false,
-  },
-  {
-    name: 'groundTruth',
-    type: 'any',
-    description: 'Expected or reference output for comparison during scoring.',
-    isOptional: true,
-  },
-  {
-    name: 'expectedTrajectory',
-    type: 'TrajectoryExpectation',
-    description:
-      'Expected trajectory configuration for trajectory scoring. Includes expected steps, ordering, efficiency budgets, blacklists, and tool failure tolerance. Passed to trajectory scorers as `run.expectedTrajectory`. Overrides the static defaults in scorer constructors.',
-    isOptional: true,
-  },
-  {
-    name: 'requestContext',
-    type: 'RequestContext',
-    description: 'Request Context to pass to the target during execution.',
-    isOptional: true,
-  },
-  {
-    name: 'tracingContext',
-    type: 'TracingContext',
-    description: 'Tracing context for observability and debugging.',
-    isOptional: true,
-  },
-  {
-    name: 'startOptions',
-    type: 'WorkflowRunOptions',
-    description:
-      'Per-item workflow run options (e.g. initialState, perStep, outputOptions). Merged on top of targetOptions, so per-item values take precedence. Only applicable when the target is a workflow.',
-    isOptional: true,
-  },
+	{
+		name: 'input',
+		type: 'string | string[] | CoreMessage[] | any',
+		description: 'Input data for the target. For agents: messages or strings. For workflows: workflow input data.',
+		isOptional: false,
+	},
+	{
+		name: 'groundTruth',
+		type: 'any',
+		description: 'Expected or reference output for comparison during scoring.',
+		isOptional: true,
+	},
+	{
+		name: 'expectedTrajectory',
+		type: 'TrajectoryExpectation',
+		description:
+			'Expected trajectory configuration for trajectory scoring. Includes expected steps, ordering, efficiency budgets, blacklists, and tool failure tolerance. Passed to trajectory scorers as `run.expectedTrajectory`. Overrides the static defaults in scorer constructors.',
+		isOptional: true,
+	},
+	{
+		name: 'requestContext',
+		type: 'RequestContext',
+		description: 'Request Context to pass to the target during execution.',
+		isOptional: true,
+	},
+	{
+		name: 'tracingContext',
+		type: 'TracingContext',
+		description: 'Tracing context for observability and debugging.',
+		isOptional: true,
+	},
+	{
+		name: 'startOptions',
+		type: 'WorkflowRunOptions',
+		description:
+			'Per-item workflow run options (e.g. initialState, perStep, outputOptions). Merged on top of targetOptions, so per-item values take precedence. Only applicable when the target is a workflow.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -160,20 +160,20 @@ For agents, use `AgentScorerConfig` to separate agent-level scorers from traject
 
 <PropertiesTable
   content={[
-  {
-    name: 'agent',
-    type: 'MastraScorer[]',
-    description:
-      'Scorers that receive the raw agent output (MastraDBMessage[]). Use for evaluating response quality, content, etc.',
-    isOptional: true,
-  },
-  {
-    name: 'trajectory',
-    type: 'MastraScorer[]',
-    description:
-      'Scorers that receive a pre-extracted Trajectory object. When storage is configured, the pipeline extracts a hierarchical trajectory from observability traces (including nested tool calls and model generations). Otherwise, it falls back to extracting tool calls from agent messages.',
-    isOptional: true,
-  },
+	{
+		name: 'agent',
+		type: 'MastraScorer[]',
+		description:
+			'Scorers that receive the raw agent output (MastraDBMessage[]). Use for evaluating response quality, content, etc.',
+		isOptional: true,
+	},
+	{
+		name: 'trajectory',
+		type: 'MastraScorer[]',
+		description:
+			'Scorers that receive a pre-extracted Trajectory object. When storage is configured, the pipeline extracts a hierarchical trajectory from observability traces (including nested tool calls and model generations). Otherwise, it falls back to extracting tool calls from agent messages.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -183,25 +183,25 @@ For workflows, use `WorkflowScorerConfig` to specify scorers at different levels
 
 <PropertiesTable
   content={[
-  {
-    name: 'workflow',
-    type: 'MastraScorer[]',
-    description: 'Scorers to evaluate the entire workflow output.',
-    isOptional: true,
-  },
-  {
-    name: 'steps',
-    type: 'Record<string, MastraScorer[]>',
-    description: 'Object mapping step IDs to arrays of scorers for evaluating individual step outputs.',
-    isOptional: true,
-  },
-  {
-    name: 'trajectory',
-    type: 'MastraScorer[]',
-    description:
-      'Scorers that receive a pre-extracted Trajectory from the workflow execution. When storage is configured, the pipeline extracts a hierarchical trajectory from observability traces (including nested agent runs and tool calls within workflow steps). Otherwise, it falls back to extracting step results from the workflow output.',
-    isOptional: true,
-  },
+	{
+		name: 'workflow',
+		type: 'MastraScorer[]',
+		description: 'Scorers to evaluate the entire workflow output.',
+		isOptional: true,
+	},
+	{
+		name: 'steps',
+		type: 'Record<string, MastraScorer[]>',
+		description: 'Object mapping step IDs to arrays of scorers for evaluating individual step outputs.',
+		isOptional: true,
+	},
+	{
+		name: 'trajectory',
+		type: 'MastraScorer[]',
+		description:
+			'Scorers that receive a pre-extracted Trajectory from the workflow execution. When storage is configured, the pipeline extracts a hierarchical trajectory from observability traces (including nested agent runs and tool calls within workflow steps). Otherwise, it falls back to extracting step results from the workflow output.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -209,42 +209,42 @@ For workflows, use `WorkflowScorerConfig` to specify scorers at different levels
 
 <PropertiesTable
   content={[
-  {
-    name: 'scores',
-    type: 'Record<string, any>',
-    description: 'Average scores across all test cases, organized by scorer name.',
-  },
-  {
-    name: 'summary',
-    type: 'object',
-    description: 'Summary information about the experiment execution.',
-  },
-  {
-    name: 'summary.totalItems',
-    type: 'number',
-    description: 'Total number of test cases processed.',
-  },
-  {
-    name: 'verdict',
-    type: "'passed' | 'scored' | 'failed'",
-    description:
-      'Present when `gates` or threshold-bearing scorers are provided. `passed` = all gates and thresholds met. `scored` = gates passed but a threshold was missed. `failed` = at least one gate did not score 1.0.',
-    isOptional: true,
-  },
-  {
-    name: 'gateResults',
-    type: 'GateResult[]',
-    description:
-      'Per-gate results averaged across all data items. Each entry has `id`, `passed` (boolean), and `score` (0–1).',
-    isOptional: true,
-  },
-  {
-    name: 'thresholdResults',
-    type: 'ThresholdResult[]',
-    description:
-      'Per-threshold-scorer results averaged across all data items. Each entry has `id`, `passed`, `averageScore`, and `threshold`.',
-    isOptional: true,
-  },
+	{
+		name: 'scores',
+		type: 'Record<string, any>',
+		description: 'Average scores across all test cases, organized by scorer name.',
+	},
+	{
+		name: 'summary',
+		type: 'object',
+		description: 'Summary information about the experiment execution.',
+	},
+	{
+		name: 'summary.totalItems',
+		type: 'number',
+		description: 'Total number of test cases processed.',
+	},
+	{
+		name: 'verdict',
+		type: "'passed' | 'scored' | 'failed'",
+		description:
+			'Present when `gates` or threshold-bearing scorers are provided. `passed` = all gates and thresholds met. `scored` = gates passed but a threshold was missed. `failed` = at least one gate did not score 1.0.',
+		isOptional: true,
+	},
+	{
+		name: 'gateResults',
+		type: 'GateResult[]',
+		description:
+			'Per-gate results averaged across all data items. Each entry has `id`, `passed` (boolean), and `score` (0–1).',
+		isOptional: true,
+	},
+	{
+		name: 'thresholdResults',
+		type: 'ThresholdResult[]',
+		description:
+			'Per-threshold-scorer results averaged across all data items. Each entry has `id`, `passed`, `averageScore`, and `threshold`.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -254,17 +254,17 @@ A scorer entry in the `scorers` array can be either a bare scorer or a scorer wi
 
 <PropertiesTable
   content={[
-  {
-    name: 'scorer',
-    type: 'MastraScorer',
-    description: 'The scorer instance.',
-  },
-  {
-    name: 'threshold',
-    type: 'number | { min?: number; max?: number }',
-    description:
-      'A number implies minimum threshold (score at or above passes). Use `{ min, max }` for range-based checks — e.g. `{ max: 0.3 }` for scorers like hallucination where a high score is bad. Both `min` and `max` must be between 0 and 1.',
-  },
+	{
+		name: 'scorer',
+		type: 'MastraScorer',
+		description: 'The scorer instance.',
+	},
+	{
+		name: 'threshold',
+		type: 'number | { min?: number; max?: number }',
+		description:
+			'A number implies minimum threshold (score at or above passes). Use `{ min, max }` for range-based checks — e.g. `{ max: 0.3 }` for scorers like hallucination where a high score is bad. Both `min` and `max` must be between 0 and 1.',
+	},
 ]}
 />
 
@@ -279,27 +279,27 @@ import { runEvals } from '@mastra/core/evals'
 import { checks } from '@mastra/evals/checks'
 
 const result = await runEvals({
-  target: weatherAgent,
-  data: [{ input: 'What is the weather in Brooklyn?' }],
-  gates: [checks.calledTool('get_weather'), checks.noToolErrors()],
-  scorers: [
-    { scorer: faithfulnessScorer, threshold: 0.7 }, // min threshold (number shorthand)
-    { scorer: hallucinationScorer, threshold: { max: 0.3 } }, // max threshold (high = bad)
-    { scorer: toneScorer, threshold: { min: 0.5, max: 0.9 } }, // range threshold
-    checks.includes('Brooklyn'), // bare scorer, no threshold
-  ],
+	target: weatherAgent,
+	data: [{ input: 'What is the weather in Brooklyn?' }],
+	gates: [checks.calledTool('get_weather'), checks.noToolErrors()],
+	scorers: [
+		{ scorer: faithfulnessScorer, threshold: 0.7 }, // min threshold (number shorthand)
+		{ scorer: hallucinationScorer, threshold: { max: 0.3 } }, // max threshold (high = bad)
+		{ scorer: toneScorer, threshold: { min: 0.5, max: 0.9 } }, // range threshold
+		checks.includes('Brooklyn'), // bare scorer, no threshold
+	],
 })
 
 if (result.verdict === 'failed') {
-  console.log(
-    'Gate failures:',
-    result.gateResults?.filter(g => !g.passed),
-  )
+	console.log(
+		'Gate failures:',
+		result.gateResults?.filter(g => !g.passed),
+	)
 } else if (result.verdict === 'scored') {
-  console.log(
-    'Threshold misses:',
-    result.thresholdResults?.filter(t => !t.passed),
-  )
+	console.log(
+		'Threshold misses:',
+		result.thresholdResults?.filter(t => !t.passed),
+	)
 }
 ```
 
@@ -309,29 +309,29 @@ if (result.verdict === 'failed') {
 import { createScorer, runEvals } from '@mastra/core/evals'
 
 const myScorer = createScorer({
-  id: 'my-scorer',
-  description: "Check if Agent's response contains ground truth",
-  type: 'agent',
+	id: 'my-scorer',
+	description: "Check if Agent's response contains ground truth",
+	type: 'agent',
 }).generateScore(({ run }) => {
-  const response = run.output[0]?.content || ''
-  const expectedResponse = run.groundTruth
-  return response.includes(expectedResponse) ? 1 : 0
+	const response = run.output[0]?.content || ''
+	const expectedResponse = run.groundTruth
+	return response.includes(expectedResponse) ? 1 : 0
 })
 
 const result = await runEvals({
-  target: chatAgent,
-  data: [
-    {
-      input: 'What is AI?',
-      groundTruth: 'AI is a field of computer science that creates intelligent machines.',
-    },
-    {
-      input: 'How does machine learning work?',
-      groundTruth: 'Machine learning uses algorithms to learn patterns from data.',
-    },
-  ],
-  scorers: [relevancyScorer],
-  concurrency: 3,
+	target: chatAgent,
+	data: [
+		{
+			input: 'What is AI?',
+			groundTruth: 'AI is a field of computer science that creates intelligent machines.',
+		},
+		{
+			input: 'How does machine learning work?',
+			groundTruth: 'Machine learning uses algorithms to learn patterns from data.',
+		},
+	],
+	scorers: [relevancyScorer],
+	concurrency: 3,
 })
 ```
 
@@ -346,19 +346,19 @@ import { createTrajectoryAccuracyScorerCode } from '@mastra/evals/scorers/code/t
 const trajectoryScorer = createTrajectoryAccuracyScorerCode()
 
 const result = await runEvals({
-  target: chatAgent,
-  data: [
-    {
-      input: 'What is the weather in London?',
-      expectedTrajectory: {
-        steps: [{ stepType: 'tool_call', name: 'weatherTool' }],
-      },
-    },
-  ],
-  scorers: {
-    // agent: [responseQualityScorer], // Optional: add agent-level scorers
-    trajectory: [trajectoryScorer],
-  },
+	target: chatAgent,
+	data: [
+		{
+			input: 'What is the weather in London?',
+			expectedTrajectory: {
+				steps: [{ stepType: 'tool_call', name: 'weatherTool' }],
+			},
+		},
+	],
+	scorers: {
+		// agent: [responseQualityScorer], // Optional: add agent-level scorers
+		trajectory: [trajectoryScorer],
+	},
 })
 
 // result.scores.agent — average agent-level scores
@@ -371,13 +371,13 @@ Pass execution options like `maxSteps` or `modelSettings` to customize agent beh
 
 ```typescript
 const result = await runEvals({
-  target: chatAgent,
-  data: [{ input: 'Summarize this article' }, { input: 'Translate to French' }],
-  scorers: [relevancyScorer],
-  targetOptions: {
-    maxSteps: 5,
-    modelSettings: { temperature: 0 },
-  },
+	target: chatAgent,
+	data: [{ input: 'Summarize this article' }, { input: 'Translate to French' }],
+	scorers: [relevancyScorer],
+	targetOptions: {
+		maxSteps: 5,
+		modelSettings: { temperature: 0 },
+	},
 })
 ```
 
@@ -385,27 +385,27 @@ const result = await runEvals({
 
 ```typescript
 const workflowResult = await runEvals({
-  target: myWorkflow,
-  data: [
-    { input: { query: 'Process this data', priority: 'high' } },
-    { input: { query: 'Another task', priority: 'low' } },
-  ],
-  scorers: {
-    workflow: [outputQualityScorer],
-    steps: {
-      'validation-step': [validationScorer],
-      'processing-step': [processingScorer],
-    },
-  },
-  onItemComplete: ({ item, targetResult, scorerResults }) => {
-    console.log(`Workflow completed for: ${item.inputData.query}`)
-    if (scorerResults.workflow) {
-      console.log('Workflow scores:', scorerResults.workflow)
-    }
-    if (scorerResults.steps) {
-      console.log('Step scores:', scorerResults.steps)
-    }
-  },
+	target: myWorkflow,
+	data: [
+		{ input: { query: 'Process this data', priority: 'high' } },
+		{ input: { query: 'Another task', priority: 'low' } },
+	],
+	scorers: {
+		workflow: [outputQualityScorer],
+		steps: {
+			'validation-step': [validationScorer],
+			'processing-step': [processingScorer],
+		},
+	},
+	onItemComplete: ({ item, targetResult, scorerResults }) => {
+		console.log(`Workflow completed for: ${item.inputData.query}`)
+		if (scorerResults.workflow) {
+			console.log('Workflow scores:', scorerResults.workflow)
+		}
+		if (scorerResults.steps) {
+			console.log('Step scores:', scorerResults.steps)
+		}
+	},
 })
 ```
 
@@ -415,26 +415,26 @@ Add trajectory scoring to workflow evaluations to validate step execution order:
 
 ```typescript
 const workflowResult = await runEvals({
-  target: myWorkflow,
-  data: [
-    {
-      input: { query: 'Process this data' },
-      expectedTrajectory: {
-        steps: [
-          { stepType: 'workflow_step', name: 'validate' },
-          { stepType: 'workflow_step', name: 'process' },
-          { stepType: 'workflow_step', name: 'output' },
-        ],
-      },
-    },
-  ],
-  scorers: {
-    workflow: [outputQualityScorer],
-    steps: {
-      validate: [validationScorer],
-    },
-    trajectory: [trajectoryScorer],
-  },
+	target: myWorkflow,
+	data: [
+		{
+			input: { query: 'Process this data' },
+			expectedTrajectory: {
+				steps: [
+					{ stepType: 'workflow_step', name: 'validate' },
+					{ stepType: 'workflow_step', name: 'process' },
+					{ stepType: 'workflow_step', name: 'output' },
+				],
+			},
+		},
+	],
+	scorers: {
+		workflow: [outputQualityScorer],
+		steps: {
+			validate: [validationScorer],
+		},
+		trajectory: [trajectoryScorer],
+	},
 })
 
 // result.scores.trajectory — workflow trajectory scores
@@ -446,19 +446,19 @@ Use `startOptions` on individual data items to customize each workflow run. Per-
 
 ```typescript
 const result = await runEvals({
-  target: myWorkflow,
-  data: [
-    {
-      input: { query: 'hello' },
-      startOptions: { initialState: { counter: 1 } },
-    },
-    {
-      input: { query: 'world' },
-      startOptions: { initialState: { counter: 2 } },
-    },
-  ],
-  scorers: [outputQualityScorer],
-  targetOptions: { perStep: true },
+	target: myWorkflow,
+	data: [
+		{
+			input: { query: 'hello' },
+			startOptions: { initialState: { counter: 1 } },
+		},
+		{
+			input: { query: 'world' },
+			startOptions: { initialState: { counter: 2 } },
+		},
+	],
+	scorers: [outputQualityScorer],
+	targetOptions: { perStep: true },
 })
 ```
 

@@ -17,17 +17,17 @@ The returned object implements the `Skill` interface and works anywhere a filesy
 import { createSkill } from '@mastra/core/skills'
 
 const reviewSkill = createSkill({
-  name: 'code-review',
-  description: 'Use when reviewing code changes.',
-  instructions: `
+	name: 'code-review',
+	description: 'Use when reviewing code changes.',
+	instructions: `
     When reviewing code:
     1. Check for correctness
     2. Check for style consistency
     3. Look for potential bugs
   `,
-  references: {
-    'checklist.md': '# Review Checklist\n- No unused imports\n- Error handling present',
-  },
+	references: {
+		'checklist.md': '# Review Checklist\n- No unused imports\n- Error handling present',
+	},
 })
 ```
 
@@ -35,56 +35,56 @@ const reviewSkill = createSkill({
 
 <PropertiesTable
   content={[
-  {
-    name: 'name',
-    type: 'string',
-    description:
-      'Unique skill name. Used as the identifier when agents activate the skill. Must be a valid slug (lowercase, hyphens allowed).',
-  },
-  {
-    name: 'description',
-    type: 'string',
-    description:
-      'Short description shown to the agent in the system message. Helps the agent decide when to use the skill.',
-  },
-  {
-    name: 'instructions',
-    type: 'string',
-    description:
-      'The full skill instructions in markdown. Loaded into the conversation when the agent activates the skill.',
-  },
-  {
-    name: 'references',
-    type: 'Record<string, string>',
-    isOptional: true,
-    description:
-      'Supporting documents the agent can read with the `skill_read` tool. Keys are filenames, values are file contents.',
-  },
-  {
-    name: 'license',
-    type: 'string',
-    isOptional: true,
-    description: 'SPDX license identifier for the skill.',
-  },
-  {
-    name: 'compatibility',
-    type: 'unknown',
-    isOptional: true,
-    description:
-      'Compatibility requirements. The Agent Skills spec leaves this flexible — can be a string array, object, or any structure your tooling expects.',
-  },
-  {
-    name: 'user-invocable',
-    type: 'boolean',
-    isOptional: true,
-    description: 'Whether end users can invoke this skill directly. Defaults to `undefined` (agent decides).',
-  },
-  {
-    name: 'metadata',
-    type: 'Record<string, unknown>',
-    isOptional: true,
-    description: 'Arbitrary metadata attached to the skill.',
-  },
+	{
+		name: 'name',
+		type: 'string',
+		description:
+			'Unique skill name. Used as the identifier when agents activate the skill. Must be a valid slug (lowercase, hyphens allowed).',
+	},
+	{
+		name: 'description',
+		type: 'string',
+		description:
+			'Short description shown to the agent in the system message. Helps the agent decide when to use the skill.',
+	},
+	{
+		name: 'instructions',
+		type: 'string',
+		description:
+			'The full skill instructions in markdown. Loaded into the conversation when the agent activates the skill.',
+	},
+	{
+		name: 'references',
+		type: 'Record<string, string>',
+		isOptional: true,
+		description:
+			'Supporting documents the agent can read with the `skill_read` tool. Keys are filenames, values are file contents.',
+	},
+	{
+		name: 'license',
+		type: 'string',
+		isOptional: true,
+		description: 'SPDX license identifier for the skill.',
+	},
+	{
+		name: 'compatibility',
+		type: 'unknown',
+		isOptional: true,
+		description:
+			'Compatibility requirements. The Agent Skills spec leaves this flexible — can be a string array, object, or any structure your tooling expects.',
+	},
+	{
+		name: 'user-invocable',
+		type: 'boolean',
+		isOptional: true,
+		description: 'Whether end users can invoke this skill directly. Defaults to `undefined` (agent decides).',
+	},
+	{
+		name: 'metadata',
+		type: 'Record<string, unknown>',
+		isOptional: true,
+		description: 'Arbitrary metadata attached to the skill.',
+	},
 ]}
 />
 
@@ -94,8 +94,8 @@ Returns an `InlineSkill` object that implements the `Skill` interface:
 
 ```typescript
 interface InlineSkill extends Skill {
-  __inline: true
-  __referenceContents: Record<string, string>
+	__inline: true
+	__referenceContents: Record<string, string>
 }
 ```
 

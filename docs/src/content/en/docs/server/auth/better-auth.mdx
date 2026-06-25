@@ -49,15 +49,15 @@ First, create your Better Auth instance:
 import { betterAuth } from 'better-auth'
 
 export const auth = betterAuth({
-  database: {
-    provider: 'postgresql',
-    url: process.env.DATABASE_URL!,
-  },
-  emailAndPassword: {
-    enabled: true,
-  },
-  baseURL: process.env.BETTER_AUTH_URL,
-  secret: process.env.BETTER_AUTH_SECRET,
+	database: {
+		provider: 'postgresql',
+		url: process.env.DATABASE_URL!,
+	},
+	emailAndPassword: {
+		enabled: true,
+	},
+	baseURL: process.env.BETTER_AUTH_URL,
+	secret: process.env.BETTER_AUTH_SECRET,
 })
 ```
 
@@ -69,13 +69,13 @@ import { MastraAuthBetterAuth } from '@mastra/auth-better-auth'
 import { auth } from '@/lib/auth'
 
 const mastraAuth = new MastraAuthBetterAuth({
-  auth,
+	auth,
 })
 
 export const mastra = new Mastra({
-  server: {
-    auth: mastraAuth,
-  },
+	server: {
+		auth: mastraAuth,
+	},
 })
 ```
 
@@ -89,11 +89,11 @@ Visit [MastraAuthBetterAuth](/reference/auth/better-auth) for all available conf
 
 ```ts
 const mastraAuth = new MastraAuthBetterAuth({
-  auth,
-  async authorizeUser(user) {
-    // Example: only allow verified emails
-    return user?.user?.emailVerified === true
-  },
+	auth,
+	async authorizeUser(user) {
+		// Example: only allow verified emails
+		return user?.user?.emailVerified === true
+	},
 })
 ```
 
@@ -101,9 +101,9 @@ const mastraAuth = new MastraAuthBetterAuth({
 
 ```ts
 const mastraAuth = new MastraAuthBetterAuth({
-  auth,
-  public: ['/health', '/api/status'],
-  protected: ['/api/*', '/admin/*'],
+	auth,
+	public: ['/health', '/api/status'],
+	protected: ['/api/*', '/admin/*'],
 })
 ```
 
@@ -124,13 +124,13 @@ If your Better Auth setup uses cookies, configure the client to send credentials
 
 ```ts title="src/mastra/index.ts"
 export const mastra = new Mastra({
-  server: {
-    auth: mastraAuth,
-    cors: {
-      origin: 'http://localhost:3000', // your frontend origin
-      credentials: true,
-    },
-  },
+	server: {
+		auth: mastraAuth,
+		cors: {
+			origin: 'http://localhost:3000', // your frontend origin
+			credentials: true,
+		},
+	},
 })
 ```
 
@@ -140,8 +140,8 @@ Then configure the client to include credentials:
 import { MastraClient } from '@mastra/client-js'
 
 export const mastraClient = new MastraClient({
-  baseUrl: 'http://localhost:4111',
-  credentials: 'include',
+	baseUrl: 'http://localhost:4111',
+	credentials: 'include',
 })
 ```
 
@@ -149,12 +149,12 @@ If you are calling the API directly, include credentials in `fetch` as well:
 
 ```ts
 await fetch('http://localhost:4111/api/agents/weatherAgent/generate', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  credentials: 'include',
-  body: JSON.stringify({ messages: 'Weather in London' }),
+	method: 'POST',
+	headers: {
+		'Content-Type': 'application/json',
+	},
+	credentials: 'include',
+	body: JSON.stringify({ messages: 'Weather in London' }),
 })
 ```
 
@@ -169,10 +169,10 @@ import { authClient } from './auth-client' // your Better Auth client
 const session = await authClient.getSession()
 
 export const mastraClient = new MastraClient({
-  baseUrl: 'http://localhost:4111',
-  headers: {
-    Authorization: `Bearer ${session.data?.session.token}`,
-  },
+	baseUrl: 'http://localhost:4111',
+	headers: {
+		Authorization: `Bearer ${session.data?.session.token}`,
+	},
 })
 ```
 
@@ -190,15 +190,15 @@ Visit [Mastra Client SDK](/docs/server/mastra-client) for more configuration opt
     import { mastraClient } from '../lib/mastra-client'
 
     export const TestAgent = () => {
-      async function handleClick() {
-        const agent = mastraClient.getAgent('weatherAgent')
+    	async function handleClick() {
+    		const agent = mastraClient.getAgent('weatherAgent')
 
-        const response = await agent.generate('Weather in London')
+    		const response = await agent.generate('Weather in London')
 
-        console.log(response)
-      }
+    		console.log(response)
+    	}
 
-      return <button onClick={handleClick}>Test Agent</button>
+    	return <button onClick={handleClick}>Test Agent</button>
     }
     ```
   </TabItem>

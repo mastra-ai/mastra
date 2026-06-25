@@ -50,40 +50,40 @@ Create a tool file that exposes Firecrawl search and scrape to Mastra.
     const firecrawl = new Firecrawl({ apiKey: process.env.FIRECRAWL_API_KEY! })
 
     export const firecrawlSearch = createTool({
-      id: 'firecrawl-search',
-      description: 'Search the web and return top results.',
-      inputSchema: z.object({ query: z.string().min(1) }),
-      outputSchema: z.object({
-        results: z.array(
-          z.object({
-            title: z.string().nullable(),
-            url: z.string(),
-          }),
-        ),
-      }),
-      execute: async ({ query }) => {
-        const results = await firecrawl.search(query, { limit: 3 })
-        return {
-          results: (results.web ?? []).map(item => ({
-            title: item.title ?? null,
-            url: item.url,
-          })),
-        }
-      },
+    	id: 'firecrawl-search',
+    	description: 'Search the web and return top results.',
+    	inputSchema: z.object({ query: z.string().min(1) }),
+    	outputSchema: z.object({
+    		results: z.array(
+    			z.object({
+    				title: z.string().nullable(),
+    				url: z.string(),
+    			}),
+    		),
+    	}),
+    	execute: async ({ query }) => {
+    		const results = await firecrawl.search(query, { limit: 3 })
+    		return {
+    			results: (results.web ?? []).map(item => ({
+    				title: item.title ?? null,
+    				url: item.url,
+    			})),
+    		}
+    	},
     })
 
     export const firecrawlScrape = createTool({
-      id: 'firecrawl-scrape',
-      description: 'Scrape a URL and return markdown content.',
-      inputSchema: z.object({ url: z.string().url() }),
-      outputSchema: z.object({ markdown: z.string() }),
-      execute: async ({ url }) => {
-        const result = await firecrawl.scrape(url, {
-          formats: ['markdown'],
-          onlyMainContent: true,
-        })
-        return { markdown: result.markdown ?? '' }
-      },
+    	id: 'firecrawl-scrape',
+    	description: 'Scrape a URL and return markdown content.',
+    	inputSchema: z.object({ url: z.string().url() }),
+    	outputSchema: z.object({ markdown: z.string() }),
+    	execute: async ({ url }) => {
+    		const result = await firecrawl.scrape(url, {
+    			formats: ['markdown'],
+    			onlyMainContent: true,
+    		})
+    		return { markdown: result.markdown ?? '' }
+    	},
     })
     ```
   </StepItem>
@@ -96,11 +96,11 @@ Create a tool file that exposes Firecrawl search and scrape to Mastra.
     import { firecrawlSearch, firecrawlScrape } from '../tools/firecrawl'
 
     export const webAgent = new Agent({
-      id: 'web-agent',
-      name: 'Web Agent',
-      instructions: 'Use Firecrawl tools to search and scrape web pages, then summarize the results.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      tools: { firecrawlSearch, firecrawlScrape },
+    	id: 'web-agent',
+    	name: 'Web Agent',
+    	instructions: 'Use Firecrawl tools to search and scrape web pages, then summarize the results.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	tools: { firecrawlSearch, firecrawlScrape },
     })
     ```
   </StepItem>
@@ -113,7 +113,7 @@ Create a tool file that exposes Firecrawl search and scrape to Mastra.
     import { webAgent } from './agents/web-agent'
 
     export const mastra = new Mastra({
-      agents: { webAgent },
+    	agents: { webAgent },
     })
     ```
   </StepItem>
@@ -138,8 +138,8 @@ If you run Firecrawl locally, set `FIRECRAWL_API_URL` or pass `apiUrl` in the cl
 
 ```ts title="src/mastra/tools/firecrawl.ts"
 const firecrawl = new Firecrawl({
-  apiKey: process.env.FIRECRAWL_API_KEY!,
-  apiUrl: process.env.FIRECRAWL_API_URL,
+	apiKey: process.env.FIRECRAWL_API_KEY!,
+	apiUrl: process.env.FIRECRAWL_API_URL,
 })
 ```
 

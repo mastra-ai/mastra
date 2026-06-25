@@ -6,30 +6,30 @@ Finally, let's enhance our memory configuration to make our agent even more help
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql'
 
 const memory = new Memory({
-  storage: new LibSQLStore({
-    id: 'learning-memory-storage',
-    url: 'file:../../memory.db',
-  }),
-  vector: new LibSQLVector({
-    id: 'learning-memory-vector',
-    url: 'file:../../memory.db',
-  }),
-  embedder: 'openai/text-embedding-3-small',
-  options: {
-    // Keep last 20 messages in context
-    lastMessages: 20,
-    // Enable semantic search to find relevant past conversations
-    semanticRecall: {
-      topK: 3,
-      messageRange: {
-        before: 2,
-        after: 1,
-      },
-    },
-    // Enable working memory to remember user information
-    workingMemory: {
-      enabled: true,
-      template: `
+	storage: new LibSQLStore({
+		id: 'learning-memory-storage',
+		url: 'file:../../memory.db',
+	}),
+	vector: new LibSQLVector({
+		id: 'learning-memory-vector',
+		url: 'file:../../memory.db',
+	}),
+	embedder: 'openai/text-embedding-3-small',
+	options: {
+		// Keep last 20 messages in context
+		lastMessages: 20,
+		// Enable semantic search to find relevant past conversations
+		semanticRecall: {
+			topK: 3,
+			messageRange: {
+				before: 2,
+				after: 1,
+			},
+		},
+		// Enable working memory to remember user information
+		workingMemory: {
+			enabled: true,
+			template: `
       <user>
          <first_name></first_name>
          <username></username>
@@ -37,8 +37,8 @@ const memory = new Memory({
          <interests></interests>
          <conversation_style></conversation_style>
        </user>`,
-    },
-  },
+		},
+	},
 })
 ```
 
@@ -46,8 +46,8 @@ And update the agent instructions to use this enhanced memory:
 
 ```typescript
 export const personalAssistantAgent = new Agent({
-  name: 'Personal Assistant',
-  instructions: `
+	name: 'Personal Assistant',
+	instructions: `
     // ... existing instructions ...
     
     You have access to conversation memory and can remember details about users.
@@ -61,9 +61,9 @@ export const personalAssistantAgent = new Agent({
     Always maintain a helpful and professional tone.
     Use the stored information to provide more personalized responses.
   `,
-  model: 'openai/gpt-5.4',
-  tools: { ...mcpTools },
-  memory,
+	model: 'openai/gpt-5.4',
+	tools: { ...mcpTools },
+	memory,
 })
 ```
 

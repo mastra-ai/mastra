@@ -39,10 +39,10 @@ If you prefer not to use our automatic CLI tool, you can set up your project you
 
     ```json title="package.json" /,/ /"dev": "mastra dev",/ /"build": "mastra build"/
     {
-      "scripts": {
-        "dev": "mastra dev",
-        "build": "mastra build"
-      }
+    	"scripts": {
+    		"dev": "mastra dev",
+    		"build": "mastra build"
+    	}
     }
     ```
   </StepItem>
@@ -58,18 +58,18 @@ If you prefer not to use our automatic CLI tool, you can set up your project you
 
     ```json title="tsconfig.json"
     {
-      "compilerOptions": {
-        "target": "ES2022",
-        "module": "ES2022",
-        "moduleResolution": "bundler",
-        "esModuleInterop": true,
-        "forceConsistentCasingInFileNames": true,
-        "strict": true,
-        "skipLibCheck": true,
-        "noEmit": true,
-        "outDir": "dist"
-      },
-      "include": ["src/**/*"]
+    	"compilerOptions": {
+    		"target": "ES2022",
+    		"module": "ES2022",
+    		"moduleResolution": "bundler",
+    		"esModuleInterop": true,
+    		"forceConsistentCasingInFileNames": true,
+    		"strict": true,
+    		"skipLibCheck": true,
+    		"noEmit": true,
+    		"outDir": "dist"
+    	},
+    	"include": ["src/**/*"]
     }
     ```
 
@@ -114,19 +114,19 @@ If you prefer not to use our automatic CLI tool, you can set up your project you
     import { z } from 'zod'
 
     export const weatherTool = createTool({
-      id: 'get-weather',
-      description: 'Get current weather for a location',
-      inputSchema: z.object({
-        location: z.string().describe('City name'),
-      }),
-      outputSchema: z.object({
-        output: z.string(),
-      }),
-      execute: async () => {
-        return {
-          output: 'The weather is sunny',
-        }
-      },
+    	id: 'get-weather',
+    	description: 'Get current weather for a location',
+    	inputSchema: z.object({
+    		location: z.string().describe('City name'),
+    	}),
+    	outputSchema: z.object({
+    		output: z.string(),
+    	}),
+    	execute: async () => {
+    		return {
+    			output: 'The weather is sunny',
+    		}
+    	},
     })
     ```
 
@@ -151,9 +151,9 @@ If you prefer not to use our automatic CLI tool, you can set up your project you
     import { weatherTool } from '../tools/weather-tool'
 
     export const weatherAgent = new Agent({
-      id: 'weather-agent',
-      name: 'Weather Agent',
-      instructions: `
+    	id: 'weather-agent',
+    	name: 'Weather Agent',
+    	instructions: `
           You are a helpful weather assistant that provides accurate weather information.
 
           Your primary function is to help users get weather details for specific locations. When responding:
@@ -165,8 +165,8 @@ If you prefer not to use our automatic CLI tool, you can set up your project you
 
           Use the weatherTool to fetch current weather data.
     `,
-      model: 'google/gemini-2.5-pro',
-      tools: { weatherTool },
+    	model: 'google/gemini-2.5-pro',
+    	tools: { weatherTool },
     })
     ```
   </StepItem>
@@ -185,7 +185,7 @@ If you prefer not to use our automatic CLI tool, you can set up your project you
     import { weatherAgent } from './agents/weather-agent'
 
     export const mastra = new Mastra({
-      agents: { weatherAgent },
+    	agents: { weatherAgent },
     })
     ```
   </StepItem>

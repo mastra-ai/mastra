@@ -22,7 +22,7 @@ import { Mastra } from '@mastra/core'
 import { EventEmitterPubSub } from '@mastra/core/events'
 
 export const mastra = new Mastra({
-  pubsub: new EventEmitterPubSub(),
+	pubsub: new EventEmitterPubSub(),
 })
 ```
 
@@ -48,27 +48,27 @@ const pubsub = new EventEmitterPubSub(undefined, { logger })
 
 <PropertiesTable
   content={[
-  {
-    name: 'existingEmitter',
-    type: 'EventEmitter',
-    description: 'An existing Node.js EventEmitter to use for delivery. When omitted, a new EventEmitter is created.',
-    isOptional: true,
-  },
-  {
-    name: 'options',
-    type: 'EventEmitterPubSubOptions',
-    description: 'Optional configuration.',
-    isOptional: true,
-    properties: [
-      {
-        name: 'logger',
-        type: 'IMastraLogger',
-        description:
-          'Logger used to surface errors from batched delivery, such as a throwing `coalesce`. Falls back to `console.error` when omitted.',
-        isOptional: true,
-      },
-    ],
-  },
+	{
+		name: 'existingEmitter',
+		type: 'EventEmitter',
+		description: 'An existing Node.js EventEmitter to use for delivery. When omitted, a new EventEmitter is created.',
+		isOptional: true,
+	},
+	{
+		name: 'options',
+		type: 'EventEmitterPubSubOptions',
+		description: 'Optional configuration.',
+		isOptional: true,
+		properties: [
+			{
+				name: 'logger',
+				type: 'IMastraLogger',
+				description:
+					'Logger used to surface errors from batched delivery, such as a throwing `coalesce`. Falls back to `console.error` when omitted.',
+				isOptional: true,
+			},
+		],
+	},
 ]}
 />
 
@@ -76,17 +76,17 @@ const pubsub = new EventEmitterPubSub(undefined, { logger })
 
 <PropertiesTable
   content={[
-  {
-    name: 'supportedModes',
-    type: 'ReadonlyArray<"pull" | "push">',
-    description:
-      'Returns `["pull", "push"]`. The emitter can serve a pull-style worker or push events directly to listeners.',
-  },
-  {
-    name: 'supportsNativeBatching',
-    type: 'boolean',
-    description: 'Returns `true`. Subscribers can opt in to batched delivery with `options.batch`.',
-  },
+	{
+		name: 'supportedModes',
+		type: 'ReadonlyArray<"pull" | "push">',
+		description:
+			'Returns `["pull", "push"]`. The emitter can serve a pull-style worker or push events directly to listeners.',
+	},
+	{
+		name: 'supportsNativeBatching',
+		type: 'boolean',
+		description: 'Returns `true`. Subscribers can opt in to batched delivery with `options.batch`.',
+	},
 ]}
 />
 
@@ -102,7 +102,7 @@ Pass `options.batch` to opt in to batched delivery. See [Batching](#batching) be
 
 ```typescript
 await pubsub.subscribe('workflow.events', (event, ack, nack) => {
-  console.log(event)
+	console.log(event)
 })
 ```
 
@@ -132,16 +132,16 @@ When a grouped subscriber calls `nack`, the event is redelivered to the group af
 
 ```typescript
 await pubsub.subscribe(
-  'workflow.events',
-  event => {
-    console.log(event)
-  },
-  {
-    batch: {
-      maxSize: 10, // flush once 10 events have queued
-      maxWaitMs: 500, // ...or after 500ms, whichever comes first
-    },
-  },
+	'workflow.events',
+	event => {
+		console.log(event)
+	},
+	{
+		batch: {
+			maxSize: 10, // flush once 10 events have queued
+			maxWaitMs: 500, // ...or after 500ms, whichever comes first
+		},
+	},
 )
 ```
 

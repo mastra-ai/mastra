@@ -111,18 +111,18 @@ Drop the following helper into your app, then watch the log after traffic stops.
 
 ```typescript title="src/mastra/diagnose-idle.ts"
 export function logActiveHandles() {
-  // process._getActiveHandles is undocumented but useful for diagnosis.
-  const handles = (process as any)._getActiveHandles() as Array<any>
+	// process._getActiveHandles is undocumented but useful for diagnosis.
+	const handles = (process as any)._getActiveHandles() as Array<any>
 
-  const summary = handles.map(handle => {
-    const type = handle?.constructor?.name ?? typeof handle
-    if (type === 'Socket') {
-      return `Socket -> ${handle.remoteAddress}:${handle.remotePort}`
-    }
-    return type
-  })
+	const summary = handles.map(handle => {
+		const type = handle?.constructor?.name ?? typeof handle
+		if (type === 'Socket') {
+			return `Socket -> ${handle.remoteAddress}:${handle.remotePort}`
+		}
+		return type
+	})
 
-  console.log(`[idle] ${handles.length} active handles:`, summary)
+	console.log(`[idle] ${handles.length} active handles:`, summary)
 }
 
 // Log every 30 seconds so you can see what persists while the server is idle.

@@ -33,13 +33,13 @@ import { createUIMessageStreamResponse } from 'ai'
 import { mastra } from '@/src/mastra'
 
 export async function POST(req: Request) {
-  const params = await req.json()
-  const stream = await handleNetworkStream({
-    mastra,
-    agentId: 'routingAgent',
-    params,
-  })
-  return createUIMessageStreamResponse({ stream })
+	const params = await req.json()
+	const stream = await handleNetworkStream({
+		mastra,
+		agentId: 'routingAgent',
+		params,
+	})
+	return createUIMessageStreamResponse({ stream })
 }
 ```
 
@@ -47,46 +47,46 @@ export async function POST(req: Request) {
 
 <PropertiesTable
   content={[
-  {
-    name: 'version',
-    type: "'v5' | 'v6'",
-    description:
-      "Selects the AI SDK stream contract to emit. Omit it or pass `'v5'` for the existing default behavior. Pass `'v6'` when your app is typed against AI SDK v6 response helpers.",
-    isOptional: true,
-    defaultValue: "'v5'",
-  },
-  {
-    name: 'mastra',
-    type: 'Mastra',
-    description: 'The Mastra instance to use for agent lookup and execution.',
-    isOptional: false,
-  },
-  {
-    name: 'agentId',
-    type: 'string',
-    description: 'The ID of the routing agent to execute as a network.',
-    isOptional: false,
-  },
-  {
-    name: 'agentVersion',
-    type: "{ versionId: string } | { status?: 'draft' | 'published' }",
-    description:
-      "Selects a specific agent version. Pass `{ versionId: '<id>' }` to target an exact version, or `{ status: 'draft' }` / `{ status: 'published' }` to resolve by status. Requires the [Editor](/docs/editor/overview) to be configured.",
-    isOptional: true,
-  },
-  {
-    name: 'params',
-    type: 'NetworkStreamHandlerParams',
-    description:
-      'The request parameters containing messages and execution options. Includes `messages` (required) and any AgentExecutionOptions like `memory`, `maxSteps`, `runId`, etc.',
-    isOptional: false,
-  },
-  {
-    name: 'defaultOptions',
-    type: 'AgentExecutionOptions',
-    description:
-      'Default options passed to agent execution. These are merged with params, with params taking precedence.',
-    isOptional: true,
-  },
+	{
+		name: 'version',
+		type: "'v5' | 'v6'",
+		description:
+			"Selects the AI SDK stream contract to emit. Omit it or pass `'v5'` for the existing default behavior. Pass `'v6'` when your app is typed against AI SDK v6 response helpers.",
+		isOptional: true,
+		defaultValue: "'v5'",
+	},
+	{
+		name: 'mastra',
+		type: 'Mastra',
+		description: 'The Mastra instance to use for agent lookup and execution.',
+		isOptional: false,
+	},
+	{
+		name: 'agentId',
+		type: 'string',
+		description: 'The ID of the routing agent to execute as a network.',
+		isOptional: false,
+	},
+	{
+		name: 'agentVersion',
+		type: "{ versionId: string } | { status?: 'draft' | 'published' }",
+		description:
+			"Selects a specific agent version. Pass `{ versionId: '<id>' }` to target an exact version, or `{ status: 'draft' }` / `{ status: 'published' }` to resolve by status. Requires the [Editor](/docs/editor/overview) to be configured.",
+		isOptional: true,
+	},
+	{
+		name: 'params',
+		type: 'NetworkStreamHandlerParams',
+		description:
+			'The request parameters containing messages and execution options. Includes `messages` (required) and any AgentExecutionOptions like `memory`, `maxSteps`, `runId`, etc.',
+		isOptional: false,
+	},
+	{
+		name: 'defaultOptions',
+		type: 'AgentExecutionOptions',
+		description:
+			'Default options passed to agent execution. These are merged with params, with params taking precedence.',
+		isOptional: true,
+	},
 ]}
 />

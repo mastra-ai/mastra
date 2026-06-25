@@ -109,7 +109,7 @@ Syntax-highlighted code blocks are rendered wherever Markdown code blocks are us
 ````md
 ```typescript
 function add(a: number, b: number) {
-  return a + b
+	return a + b
 }
 ```
 ````
@@ -119,7 +119,7 @@ You can also specify a filename by passing the `title` prop.
 ````md
 ```typescript title="add.ts"
 function add(a: number, b: number) {
-  return a + b
+	return a + b
 }
 ```
 ````
@@ -131,7 +131,7 @@ You can highlight specific lines in a code block using the `{}` notation. For ex
 ````md
 ```typescript {2,5-7}
 function add(a: number, b: number) {
-  return a + b
+	return a + b
 }
 ```
 ````
@@ -141,8 +141,8 @@ Alternatively you can use `// highlight-next-line` and `// highlight-start` / `/
 ````md
 ```typescript
 function add(a: number, b: number) {
-  // highlight-next-line
-  return a + b
+	// highlight-next-line
+	return a + b
 }
 ```
 ````
@@ -156,7 +156,7 @@ By default, Prettier will format code blocks in all Markdown/MDX files. If you w
 ````md
 ```typescript prettier:false
 function add(a: number, b: number) {
-  return a + b
+	return a + b
 }
 ```
 ````
@@ -220,15 +220,15 @@ import Tabs from '@theme/Tabs'
 import TabItem from '@theme/TabItem'
 
 <Tabs>
-  <TabItem value="apple" label="Apple" default>
-    This is an apple 🍎
-  </TabItem>
-  <TabItem value="orange" label="Orange">
-    This is an orange 🍊
-  </TabItem>
-  <TabItem value="banana" label="Banana">
-    This is a banana 🍌
-  </TabItem>
+	<TabItem value="apple" label="Apple" default>
+		This is an apple 🍎
+	</TabItem>
+	<TabItem value="orange" label="Orange">
+		This is an orange 🍊
+	</TabItem>
+	<TabItem value="banana" label="Banana">
+		This is a banana 🍌
+	</TabItem>
 </Tabs>
 ```
 
@@ -238,14 +238,14 @@ Use this on reference documentation pages to display the parameters and return t
 
 ```mdx
 <PropertiesTable
-  content={[
-    {
-      name: 'id',
-      type: 'string',
-      isOptional: true,
-      description: 'Unique identifier for the agent. Defaults to `name` if not provided.',
-    },
-  ]}
+	content={[
+		{
+			name: 'id',
+			type: 'string',
+			isOptional: true,
+			description: 'Unique identifier for the agent. Defaults to `name` if not provided.',
+		},
+	]}
 />
 ```
 

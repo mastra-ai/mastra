@@ -15,28 +15,28 @@ The Sensitive Data Filter is included in the recommended observability configura
 
 ```ts title="src/mastra/index.ts"
 import {
-  Observability,
-  MastraStorageExporter,
-  MastraPlatformExporter,
-  SensitiveDataFilter,
+	Observability,
+	MastraStorageExporter,
+	MastraPlatformExporter,
+	SensitiveDataFilter,
 } from '@mastra/observability'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'mastra',
-        exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
-        spanOutputProcessors: [
-          new SensitiveDataFilter(), // Redacts sensitive fields before export
-        ],
-      },
-    },
-  }),
-  storage: new LibSQLStore({
-    id: 'mastra-storage',
-    url: 'file:./mastra.db',
-  }),
+	observability: new Observability({
+		configs: {
+			default: {
+				serviceName: 'mastra',
+				exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
+				spanOutputProcessors: [
+					new SensitiveDataFilter(), // Redacts sensitive fields before export
+				],
+			},
+		},
+	}),
+	storage: new LibSQLStore({
+		id: 'mastra-storage',
+		url: 'file:./mastra.db',
+	}),
 })
 ```
 
@@ -84,38 +84,38 @@ You can customize which fields are redacted and how redaction displays:
 import { SensitiveDataFilter, MastraStorageExporter, Observability } from '@mastra/observability'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      production: {
-        serviceName: 'my-service',
-        exporters: [new MastraStorageExporter()],
-        spanOutputProcessors: [
-          new SensitiveDataFilter({
-            // Add custom sensitive fields
-            sensitiveFields: [
-              // Default fields
-              'password',
-              'token',
-              'secret',
-              'key',
-              'apikey',
-              // Custom fields for your application
-              'creditCard',
-              'bankAccount',
-              'routingNumber',
-              'email',
-              'phoneNumber',
-              'dateOfBirth',
-            ],
-            // Custom redaction token
-            redactionToken: '***SENSITIVE***',
-            // Redaction style
-            redactionStyle: 'full', // or 'partial'
-          }),
-        ],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			production: {
+				serviceName: 'my-service',
+				exporters: [new MastraStorageExporter()],
+				spanOutputProcessors: [
+					new SensitiveDataFilter({
+						// Add custom sensitive fields
+						sensitiveFields: [
+							// Default fields
+							'password',
+							'token',
+							'secret',
+							'key',
+							'apikey',
+							// Custom fields for your application
+							'creditCard',
+							'bankAccount',
+							'routingNumber',
+							'email',
+							'phoneNumber',
+							'dateOfBirth',
+						],
+						// Custom redaction token
+						redactionToken: '***SENSITIVE***',
+						// Redaction style
+						redactionStyle: 'full', // or 'partial'
+					}),
+				],
+			},
+		},
+	}),
 })
 ```
 
@@ -147,7 +147,7 @@ Shows the first and last 3 characters, useful for debugging without exposing ful
 
 ```ts
 new SensitiveDataFilter({
-  redactionStyle: 'partial',
+	redactionStyle: 'partial',
 })
 ```
 
@@ -229,15 +229,15 @@ If you need to disable sensitive data filtering (not recommended for production)
 
 ```ts title="src/mastra/index.ts"
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      debug: {
-        serviceName: 'debug-service',
-        spanOutputProcessors: [], // No processors, including no SensitiveDataFilter
-        exporters: [new MastraStorageExporter()],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			debug: {
+				serviceName: 'debug-service',
+				spanOutputProcessors: [], // No processors, including no SensitiveDataFilter
+				exporters: [new MastraStorageExporter()],
+			},
+		},
+	}),
 })
 ```
 
@@ -253,18 +253,18 @@ Only disable sensitive data filtering in controlled environments. Never disable 
 
 ```ts
 new SensitiveDataFilter({
-  sensitiveFields: [
-    // HIPAA-related fields
-    'ssn',
-    'socialSecurityNumber',
-    'medicalRecordNumber',
-    'mrn',
-    'healthInsuranceNumber',
-    'diagnosisCode',
-    'icd10',
-    'prescription',
-    'medication',
-  ],
+	sensitiveFields: [
+		// HIPAA-related fields
+		'ssn',
+		'socialSecurityNumber',
+		'medicalRecordNumber',
+		'mrn',
+		'healthInsuranceNumber',
+		'diagnosisCode',
+		'icd10',
+		'prescription',
+		'medication',
+	],
 })
 ```
 
@@ -272,22 +272,22 @@ new SensitiveDataFilter({
 
 ```ts
 new SensitiveDataFilter({
-  sensitiveFields: [
-    // PCI compliance fields
-    'creditCard',
-    'ccNumber',
-    'cardNumber',
-    'cvv',
-    'cvc',
-    'securityCode',
-    'expirationDate',
-    'expiry',
-    'bankAccount',
-    'accountNumber',
-    'routingNumber',
-    'iban',
-    'swift',
-  ],
+	sensitiveFields: [
+		// PCI compliance fields
+		'creditCard',
+		'ccNumber',
+		'cardNumber',
+		'cvv',
+		'cvc',
+		'securityCode',
+		'expirationDate',
+		'expiry',
+		'bankAccount',
+		'accountNumber',
+		'routingNumber',
+		'iban',
+		'swift',
+	],
 })
 ```
 
@@ -297,11 +297,11 @@ If the filter encounters an error while processing a field, it replaces the fiel
 
 ```json
 {
-  "problematicField": {
-    "error": {
-      "processor": "sensitive-data-filter"
-    }
-  }
+	"problematicField": {
+		"error": {
+			"processor": "sensitive-data-filter"
+		}
+	}
 }
 ```
 

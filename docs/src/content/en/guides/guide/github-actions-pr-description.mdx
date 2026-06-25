@@ -57,9 +57,9 @@ This agent receives the raw diff from a pull request. It generates descriptions 
 import { Agent } from '@mastra/core/agent'
 
 export const descriptionAgent = new Agent({
-  id: 'description-agent',
-  name: 'PR Description Agent',
-  instructions: `You are a helpful assistant that creates clear, concise PR descriptions.
+	id: 'description-agent',
+	name: 'PR Description Agent',
+	instructions: `You are a helpful assistant that creates clear, concise PR descriptions.
 
 When given a git diff of changed files, you will:
 1. Analyze the changes to understand what was modified
@@ -99,7 +99,7 @@ Output format:
 
 - [Same changes in Japanese]
 `,
-  model: '__GATEWAY_OPENAI_MODEL__',
+	model: '__GATEWAY_OPENAI_MODEL__',
 })
 ```
 
@@ -202,23 +202,23 @@ import { mastra } from '../../src/mastra'
 const agent = mastra.getAgent('descriptionAgent')
 
 await agent.generate(
-  `Please create a PR description for the following changes.
+	`Please create a PR description for the following changes.
 
 Git diff:
 \`\`\`diff
 ${readFileSync(process.env.PR_DIFF_FILE!, 'utf-8')}
 \`\`\``,
-  {
-    onError: () => {
-      writeFileSync(
-        process.env.PR_DESCRIPTION_FILE!,
-        'This PR diff is too large to generate a description automatically.',
-      )
-    },
-    onFinish: result => {
-      writeFileSync(process.env.PR_DESCRIPTION_FILE!, result.text)
-    },
-  },
+	{
+		onError: () => {
+			writeFileSync(
+				process.env.PR_DESCRIPTION_FILE!,
+				'This PR diff is too large to generate a description automatically.',
+			)
+		},
+		onFinish: result => {
+			writeFileSync(process.env.PR_DESCRIPTION_FILE!, result.text)
+		},
+	},
 )
 ```
 

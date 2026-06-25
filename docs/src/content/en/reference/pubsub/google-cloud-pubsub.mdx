@@ -29,9 +29,9 @@ import { Mastra } from '@mastra/core'
 import { GoogleCloudPubSub } from '@mastra/google-cloud-pubsub'
 
 export const mastra = new Mastra({
-  pubsub: new GoogleCloudPubSub({
-    projectId: 'my-project',
-  }),
+	pubsub: new GoogleCloudPubSub({
+		projectId: 'my-project',
+	}),
 })
 ```
 
@@ -39,13 +39,13 @@ export const mastra = new Mastra({
 
 <PropertiesTable
   content={[
-  {
-    name: 'config',
-    type: 'ClientConfig',
-    description:
-      'Configuration for the Google Cloud Pub/Sub client, including credentials and project ID. See the `@google-cloud/pubsub` client documentation for all fields.',
-    isOptional: false,
-  },
+	{
+		name: 'config',
+		type: 'ClientConfig',
+		description:
+			'Configuration for the Google Cloud Pub/Sub client, including credentials and project ID. See the `@google-cloud/pubsub` client documentation for all fields.',
+		isOptional: false,
+	},
 ]}
 />
 
@@ -67,7 +67,7 @@ Subscribes to a topic. With `options.group`, members of the group share a subscr
 
 ```typescript
 await pubsub.subscribe('workflow.events', (event, ack, nack) => {
-  console.log(event)
+	console.log(event)
 })
 ```
 

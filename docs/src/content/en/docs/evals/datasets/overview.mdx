@@ -25,10 +25,10 @@ import { Mastra } from '@mastra/core'
 import { LibSQLStore } from '@mastra/libsql'
 
 export const mastra = new Mastra({
-  storage: new LibSQLStore({
-    id: 'my-store',
-    url: 'file:./mastra.db',
-  }),
+	storage: new LibSQLStore({
+		id: 'my-store',
+		url: 'file:./mastra.db',
+	}),
 })
 ```
 
@@ -73,8 +73,8 @@ Call [`create()`](/reference/datasets/create) with a name and optional descripti
 import { mastra } from '../index'
 
 const dataset = await mastra.datasets.create({
-  name: 'translation-pairs',
-  description: 'English to Spanish translation test cases',
+	name: 'translation-pairs',
+	description: 'English to Spanish translation test cases',
 })
 
 console.log(dataset.id) // auto-generated UUID
@@ -89,15 +89,15 @@ import { z } from 'zod'
 import { mastra } from '../index'
 
 const dataset = await mastra.datasets.create({
-  name: 'translation-pairs',
-  inputSchema: z.object({
-    text: z.string(),
-    sourceLang: z.string(),
-    targetLang: z.string(),
-  }),
-  groundTruthSchema: z.object({
-    translation: z.string(),
-  }),
+	name: 'translation-pairs',
+	inputSchema: z.object({
+		text: z.string(),
+		sourceLang: z.string(),
+		targetLang: z.string(),
+	}),
+	groundTruthSchema: z.object({
+		translation: z.string(),
+	}),
 })
 ```
 
@@ -110,22 +110,22 @@ Use [`addItem()`](/reference/datasets/addItem) for a single item or [`addItems()
 ```typescript title="src/mastra/datasets/add-items.ts"
 // Single item
 await dataset.addItem({
-  input: { text: 'Hello', sourceLang: 'en', targetLang: 'es' },
-  groundTruth: { translation: 'Hola' },
+	input: { text: 'Hello', sourceLang: 'en', targetLang: 'es' },
+	groundTruth: { translation: 'Hola' },
 })
 
 // Bulk insert
 await dataset.addItems({
-  items: [
-    {
-      input: { text: 'Goodbye', sourceLang: 'en', targetLang: 'es' },
-      groundTruth: { translation: 'Adiós' },
-    },
-    {
-      input: { text: 'Thank you', sourceLang: 'en', targetLang: 'es' },
-      groundTruth: { translation: 'Gracias' },
-    },
-  ],
+	items: [
+		{
+			input: { text: 'Goodbye', sourceLang: 'en', targetLang: 'es' },
+			groundTruth: { translation: 'Adiós' },
+		},
+		{
+			input: { text: 'Thank you', sourceLang: 'en', targetLang: 'es' },
+			groundTruth: { translation: 'Gracias' },
+		},
+	],
 })
 ```
 
@@ -135,8 +135,8 @@ await dataset.addItems({
 
 ```typescript title="src/mastra/datasets/update-delete.ts"
 await dataset.updateItem({
-  itemId: 'item-abc-123',
-  groundTruth: { translation: '¡Hola!' },
+	itemId: 'item-abc-123',
+	groundTruth: { translation: '¡Hola!' },
 })
 
 await dataset.deleteItem({ itemId: 'item-abc-123' })
@@ -151,13 +151,13 @@ await dataset.deleteItems({ itemIds: ['item-1', 'item-2'] })
 ```typescript title="src/mastra/datasets/list-items.ts"
 // Paginated list
 const { items, pagination } = await dataset.listItems({
-  page: 0,
-  perPage: 50,
+	page: 0,
+	perPage: 50,
 })
 
 // Full-text search
 const { items: matches } = await dataset.listItems({
-  search: 'Hello',
+	search: 'Hello',
 })
 
 // List items at a specific version
@@ -176,7 +176,7 @@ Use [`listVersions()`](/reference/datasets/listVersions) to see the paginated hi
 const { versions, pagination } = await dataset.listVersions()
 
 for (const v of versions) {
-  console.log(`Version ${v.version} — created ${v.createdAt}`)
+	console.log(`Version ${v.version} — created ${v.createdAt}`)
 }
 ```
 
@@ -188,7 +188,7 @@ See how a specific item changed across versions by calling [`getItemHistory()`](
 const history = await dataset.getItemHistory({ itemId: 'item-abc-123' })
 
 for (const row of history) {
-  console.log(`Version ${row.datasetVersion}`, row.input, row.groundTruth)
+	console.log(`Version ${row.datasetVersion}`, row.input, row.groundTruth)
 }
 ```
 

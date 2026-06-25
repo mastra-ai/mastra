@@ -75,8 +75,8 @@ Turso exposes two environment variables: `TURSO_DATABASE_URL` and `TURSO_AUTH_TO
 import { LibSQLStore } from '@mastra/libsql'
 
 export const storage = new LibSQLStore({
-  url: process.env.TURSO_DATABASE_URL!,
-  authToken: process.env.TURSO_AUTH_TOKEN!,
+	url: process.env.TURSO_DATABASE_URL!,
+	authToken: process.env.TURSO_AUTH_TOKEN!,
 })
 ```
 
@@ -94,7 +94,7 @@ PostgreSQL exposes a single `DATABASE_URL` connection string. The following exam
 import { PostgresStore } from '@mastra/pg'
 
 export const storage = new PostgresStore({
-  connectionString: process.env.DATABASE_URL!,
+	connectionString: process.env.DATABASE_URL!,
 })
 ```
 
@@ -111,7 +111,7 @@ import { Mastra } from '@mastra/core'
 import { storage } from './storage'
 
 export const mastra = new Mastra({
-  storage,
+	storage,
 })
 ```
 

@@ -4,16 +4,16 @@ Now, let's update your MCP configuration in `src/mastra/agents/index.ts` to incl
 
 ```typescript
 const mcp = new MCPClient({
-  servers: {
-    zapier: {
-      url: new URL(process.env.ZAPIER_MCP_URL || ''),
-      requestInit: {
-        headers: {
-          Authorization: `Bearer ${process.env.ZAPIER_MCP_API_KEY}`,
-        },
-      },
-    },
-  },
+	servers: {
+		zapier: {
+			url: new URL(process.env.ZAPIER_MCP_URL || ''),
+			requestInit: {
+				headers: {
+					Authorization: `Bearer ${process.env.ZAPIER_MCP_API_KEY}`,
+				},
+			},
+		},
+	},
 })
 ```
 

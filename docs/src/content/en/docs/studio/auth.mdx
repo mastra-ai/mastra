@@ -26,17 +26,17 @@ import { Mastra } from '@mastra/core'
 import { SimpleAuth } from '@mastra/core/server'
 
 export const mastra = new Mastra({
-  server: {
-    auth: new SimpleAuth({
-      users: {
-        'my-api-key': {
-          id: 'user-1',
-          name: 'Alice',
-          role: 'admin',
-        },
-      },
-    }),
-  },
+	server: {
+		auth: new SimpleAuth({
+			users: {
+				'my-api-key': {
+					id: 'user-1',
+					name: 'Alice',
+					role: 'admin',
+				},
+			},
+		}),
+	},
 })
 ```
 
@@ -102,18 +102,18 @@ import { SimpleAuth } from '@mastra/core/server'
 import { StaticRBACProvider, DEFAULT_ROLES } from '@mastra/core/auth/ee'
 
 export const mastra = new Mastra({
-  server: {
-    auth: new SimpleAuth({
-      users: {
-        'admin-key': { id: 'user-1', name: 'Alice', role: 'admin' },
-        'viewer-key': { id: 'user-2', name: 'Bob', role: 'viewer' },
-      },
-    }),
-    rbac: new StaticRBACProvider({
-      roles: DEFAULT_ROLES,
-      getUserRoles: user => [user.role],
-    }),
-  },
+	server: {
+		auth: new SimpleAuth({
+			users: {
+				'admin-key': { id: 'user-1', name: 'Alice', role: 'admin' },
+				'viewer-key': { id: 'user-2', name: 'Bob', role: 'viewer' },
+			},
+		}),
+		rbac: new StaticRBACProvider({
+			roles: DEFAULT_ROLES,
+			getUserRoles: user => [user.role],
+		}),
+	},
 })
 ```
 
@@ -141,12 +141,12 @@ If your identity provider already defines roles (for example, Clerk organization
 import { StaticRBACProvider } from '@mastra/core/auth/ee'
 
 const rbac = new StaticRBACProvider({
-  roleMapping: {
-    'org:admin': ['*'],
-    'org:member': ['*:read', '*:execute'],
-    'org:viewer': ['*:read'],
-  },
-  getUserRoles: user => user.providerRoles,
+	roleMapping: {
+		'org:admin': ['*'],
+		'org:member': ['*:read', '*:execute'],
+		'org:viewer': ['*:read'],
+	},
+	getUserRoles: user => user.providerRoles,
 })
 ```
 

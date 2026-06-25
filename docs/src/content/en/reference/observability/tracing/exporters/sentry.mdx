@@ -22,11 +22,11 @@ new SentryExporter(config: SentryExporterConfig)
 
 ```typescript
 interface SentryExporterConfig extends BaseExporterConfig {
-  dsn?: string
-  environment?: string
-  tracesSampleRate?: number
-  release?: string
-  options?: Partial<Sentry.NodeOptions>
+	dsn?: string
+	environment?: string
+	tracesSampleRate?: number
+	release?: string
+	options?: Partial<Sentry.NodeOptions>
 }
 ```
 
@@ -37,40 +37,40 @@ Extends `BaseExporterConfig`, which includes:
 
 <PropertiesTable
   props={[
-  {
-    name: 'dsn',
-    type: 'string',
-    description:
-      'Data Source Name - tells the SDK where to send events. Either this parameter or the SENTRY_DSN env var must be set. Falls back to SENTRY_DSN env var.',
-    required: false,
-  },
-  {
-    name: 'environment',
-    type: 'string',
-    description:
-      "Deployment environment (enables filtering issues and alerts by environment). Falls back to SENTRY_ENVIRONMENT env var. Default: 'production'.",
-    required: false,
-  },
-  {
-    name: 'tracesSampleRate',
-    type: 'number',
-    description: 'Percentage of transactions sent to Sentry (0.0 = 0%, 1.0 = 100%). Default: 1.0.',
-    required: false,
-  },
-  {
-    name: 'release',
-    type: 'string',
-    description:
-      'Version of your code deployed (helps identify regressions and track deployments). Falls back to SENTRY_RELEASE env var.',
-    required: false,
-  },
-  {
-    name: 'options',
-    type: 'Partial<Sentry.NodeOptions>',
-    description:
-      'Additional Sentry SDK options (integrations, beforeSend, etc.). See Sentry SDK documentation for available options.',
-    required: false,
-  },
+	{
+		name: 'dsn',
+		type: 'string',
+		description:
+			'Data Source Name - tells the SDK where to send events. Either this parameter or the SENTRY_DSN env var must be set. Falls back to SENTRY_DSN env var.',
+		required: false,
+	},
+	{
+		name: 'environment',
+		type: 'string',
+		description:
+			"Deployment environment (enables filtering issues and alerts by environment). Falls back to SENTRY_ENVIRONMENT env var. Default: 'production'.",
+		required: false,
+	},
+	{
+		name: 'tracesSampleRate',
+		type: 'number',
+		description: 'Percentage of transactions sent to Sentry (0.0 = 0%, 1.0 = 100%). Default: 1.0.',
+		required: false,
+	},
+	{
+		name: 'release',
+		type: 'string',
+		description:
+			'Version of your code deployed (helps identify regressions and track deployments). Falls back to SENTRY_RELEASE env var.',
+		required: false,
+	},
+	{
+		name: 'options',
+		type: 'Partial<Sentry.NodeOptions>',
+		description:
+			'Additional Sentry SDK options (integrations, beforeSend, etc.). See Sentry SDK documentation for available options.',
+		required: false,
+	},
 ]}
 />
 
@@ -117,10 +117,10 @@ const exporter = new SentryExporter()
 import { SentryExporter } from '@mastra/sentry'
 
 const exporter = new SentryExporter({
-  dsn: process.env.SENTRY_DSN,
-  environment: 'production',
-  tracesSampleRate: 1.0,
-  release: '1.0.0',
+	dsn: process.env.SENTRY_DSN,
+	environment: 'production',
+	tracesSampleRate: 1.0,
+	release: '1.0.0',
 })
 ```
 
@@ -128,9 +128,9 @@ const exporter = new SentryExporter({
 
 ```typescript
 const exporter = new SentryExporter({
-  dsn: process.env.SENTRY_DSN,
-  environment: 'production',
-  tracesSampleRate: 0.1, // Send 10% of transactions to Sentry (recommended for high-load backends)
+	dsn: process.env.SENTRY_DSN,
+	environment: 'production',
+	tracesSampleRate: 0.1, // Send 10% of transactions to Sentry (recommended for high-load backends)
 })
 ```
 
@@ -138,17 +138,17 @@ const exporter = new SentryExporter({
 
 ```typescript
 const exporter = new SentryExporter({
-  dsn: process.env.SENTRY_DSN,
-  environment: 'production',
-  options: {
-    integrations: [
-      // Custom Sentry integrations
-    ],
-    beforeSend: event => {
-      // Custom event processing
-      return event
-    },
-  },
+	dsn: process.env.SENTRY_DSN,
+	environment: 'production',
+	options: {
+		integrations: [
+			// Custom Sentry integrations
+		],
+		beforeSend: event => {
+			// Custom event processing
+			return event
+		},
+	},
 })
 ```
 

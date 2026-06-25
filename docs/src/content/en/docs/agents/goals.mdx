@@ -38,25 +38,25 @@ Goals require a configured [storage](/docs/memory/storage) backend and a memory-
 import { Agent } from '@mastra/core/agent'
 
 const worker = new Agent({
-  name: 'worker',
-  instructions: 'You complete software tasks end to end.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  memory,
-  goal: {
-    judge: '__GATEWAY_OPENAI_MODEL_MINI__',
-    maxRuns: 50,
-  },
+	name: 'worker',
+	instructions: 'You complete software tasks end to end.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	memory,
+	goal: {
+		judge: '__GATEWAY_OPENAI_MODEL_MINI__',
+		maxRuns: 50,
+	},
 })
 
 // Set the durable objective for a thread.
 await worker.setObjective('Add and test a /health endpoint', {
-  threadId,
-  resourceId,
+	threadId,
+	resourceId,
 })
 
 // The objective is judged each iteration until it's complete or maxRuns is hit.
 const stream = await worker.stream('Start working on the goal', {
-  memory: { thread: threadId, resource: resourceId },
+	memory: { thread: threadId, resource: resourceId },
 })
 ```
 
@@ -78,18 +78,18 @@ By default the step uses a built-in LLM-as-judge scorer that returns `1` when th
 
 ```typescript title="src/mastra/agents/worker.ts"
 const worker = new Agent({
-  name: 'worker',
-  instructions: 'You complete software tasks end to end.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  memory,
-  goal: {
-    // A resolver function lets you inject provider credentials and read the
-    // current judge selection at runtime; returning `undefined` keeps the
-    // goal step a no-op.
-    judge: ({ requestContext }) => resolveJudgeModel(requestContext),
-    maxRuns: 30,
-    prompt: 'Only mark the goal complete when tests pass.',
-  },
+	name: 'worker',
+	instructions: 'You complete software tasks end to end.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	memory,
+	goal: {
+		// A resolver function lets you inject provider credentials and read the
+		// current judge selection at runtime; returning `undefined` keeps the
+		// goal step a no-op.
+		judge: ({ requestContext }) => resolveJudgeModel(requestContext),
+		maxRuns: 30,
+		prompt: 'Only mark the goal complete when tests pass.',
+	},
 })
 ```
 

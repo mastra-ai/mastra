@@ -64,10 +64,10 @@ Use memory when your agent needs to maintain multi-turn conversations that refer
     import { LibSQLStore } from '@mastra/libsql'
 
     export const mastra = new Mastra({
-      storage: new LibSQLStore({
-        id: 'mastra-storage',
-        url: ':memory:',
-      }),
+    	storage: new LibSQLStore({
+    		id: 'mastra-storage',
+    		url: ':memory:',
+    	}),
     })
     ```
   </StepItem>
@@ -80,13 +80,13 @@ Use memory when your agent needs to maintain multi-turn conversations that refer
     import { Memory } from '@mastra/memory'
 
     export const memoryAgent = new Agent({
-      id: 'memory-agent',
-      name: 'Memory Agent',
-      memory: new Memory({
-        options: {
-          lastMessages: 20,
-        },
-      }),
+    	id: 'memory-agent',
+    	name: 'Memory Agent',
+    	memory: new Memory({
+    		options: {
+    			lastMessages: 20,
+    		},
+    	}),
     })
     ```
 
@@ -111,10 +111,10 @@ Pass a `memory` object with `resource` and `thread` to track message history.
 
 ```typescript {2-5}
 const response = await memoryAgent.generate('Remember my favorite color is blue.', {
-  memory: {
-    resource: 'user-123',
-    thread: 'conversation-123',
-  },
+	memory: {
+		resource: 'user-123',
+		thread: 'conversation-123',
+	},
 })
 ```
 
@@ -122,10 +122,10 @@ To recall information stored in memory, call the agent with the same `resource` 
 
 ```typescript {2-5}
 const response = await memoryAgent.generate("What's my favorite color?", {
-  memory: {
-    resource: 'user-123',
-    thread: 'conversation-123',
-  },
+	memory: {
+		resource: 'user-123',
+		thread: 'conversation-123',
+	},
 })
 
 // Response: "Your favorite color is blue."
@@ -148,14 +148,14 @@ import { Agent } from '@mastra/core/agent'
 import { Memory } from '@mastra/memory'
 
 export const memoryAgent = new Agent({
-  id: 'memory-agent',
-  name: 'Memory Agent',
-  memory: new Memory({
-    options: {
-      // highlight-next-line
-      observationalMemory: true,
-    },
-  }),
+	id: 'memory-agent',
+	name: 'Memory Agent',
+	memory: new Memory({
+		options: {
+			// highlight-next-line
+			observationalMemory: true,
+		},
+	}),
 })
 ```
 
@@ -196,11 +196,11 @@ When you call agents directly (outside the delegation flow), memory sharing is c
 ```typescript
 // Both agents share the same resource-scoped memory
 await researcher.generate('Find information about quantum computing.', {
-  memory: { resource: 'project-42', thread: 'research-session' },
+	memory: { resource: 'project-42', thread: 'research-session' },
 })
 
 await writer.generate('Write a summary from the research notes.', {
-  memory: { resource: 'project-42', thread: 'writing-session' },
+	memory: { resource: 'project-42', thread: 'writing-session' },
 })
 ```
 
@@ -220,20 +220,20 @@ Use [`RequestContext`](/docs/server/request-context) to access request-specific 
 
 ```typescript title="src/mastra/agents/memory-agent.ts"
 export type UserTier = {
-  'user-tier': 'enterprise' | 'pro'
+	'user-tier': 'enterprise' | 'pro'
 }
 
 const premiumMemory = new Memory()
 const standardMemory = new Memory()
 
 export const memoryAgent = new Agent({
-  id: 'memory-agent',
-  name: 'Memory Agent',
-  memory: ({ requestContext }) => {
-    const userTier = requestContext.get('user-tier') as UserTier['user-tier']
+	id: 'memory-agent',
+	name: 'Memory Agent',
+	memory: ({ requestContext }) => {
+		const userTier = requestContext.get('user-tier') as UserTier['user-tier']
 
-    return userTier === 'enterprise' ? premiumMemory : standardMemory
-  },
+		return userTier === 'enterprise' ? premiumMemory : standardMemory
+	},
 })
 ```
 

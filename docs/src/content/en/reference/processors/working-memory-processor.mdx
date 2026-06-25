@@ -16,16 +16,16 @@ The `WorkingMemory` is an **input processor** that injects working memory data a
 import { WorkingMemory } from '@mastra/core/processors'
 
 const processor = new WorkingMemory({
-  storage: memoryStorage,
-  scope: 'resource',
-  template: {
-    format: 'markdown',
-    content: `# User Profile
+	storage: memoryStorage,
+	scope: 'resource',
+	template: {
+		format: 'markdown',
+		content: `# User Profile
 - **Name**:
 - **Preferences**:
 - **Goals**:
 `,
-  },
+	},
 })
 ```
 
@@ -33,84 +33,84 @@ const processor = new WorkingMemory({
 
 <PropertiesTable
   content={[
-  {
-    name: 'options',
-    type: 'Options',
-    description: 'Configuration options for the working memory processor',
-    isOptional: false,
-    properties: [
-      {
-        type: 'Options',
-        parameters: [
-          {
-            name: 'storage',
-            type: 'MemoryStorage',
-            description: 'Storage instance for retrieving working memory data',
-            isOptional: false,
-          },
-          {
-            name: 'template',
-            type: 'WorkingMemoryTemplate',
-            description: 'Template defining the format and structure of working memory',
-            isOptional: true,
-            properties: [
-              {
-                type: 'WorkingMemoryTemplate',
-                parameters: [
-                  {
-                    name: 'format',
-                    type: "'markdown' | 'json'",
-                    description: 'Format of the working memory content',
-                    isOptional: false,
-                  },
-                  {
-                    name: 'content',
-                    type: 'string',
-                    description: 'Template content defining the structure of working memory data',
-                    isOptional: false,
-                  },
-                ],
-              },
-            ],
-          },
-          {
-            name: 'scope',
-            type: "'thread' | 'resource'",
-            description:
-              "Scope of working memory. 'thread' scopes to current thread, 'resource' shares across all threads for the resource",
-            isOptional: true,
-            default: "'resource'",
-          },
-          {
-            name: 'useVNext',
-            type: 'boolean',
-            description: 'Use the next-generation instruction format with improved guidelines',
-            isOptional: true,
-          },
-          {
-            name: 'readOnly',
-            type: 'boolean',
-            description:
-              'When true, working memory is provided as read-only context. The data is injected into the conversation but without the updateWorkingMemory tool or update instructions. Useful for agents that should reference working memory without modifying it.',
-            isOptional: true,
-            default: 'false',
-          },
-          {
-            name: 'templateProvider',
-            type: '{ getWorkingMemoryTemplate(args: { memoryConfig?: MemoryConfig }): Promise<WorkingMemoryTemplate | null> }',
-            description: 'Dynamic template provider for runtime template resolution',
-            isOptional: true,
-          },
-          {
-            name: 'logger',
-            type: 'IMastraLogger',
-            description: 'Optional logger instance for structured logging',
-            isOptional: true,
-          },
-        ],
-      },
-    ],
-  },
+	{
+		name: 'options',
+		type: 'Options',
+		description: 'Configuration options for the working memory processor',
+		isOptional: false,
+		properties: [
+			{
+				type: 'Options',
+				parameters: [
+					{
+						name: 'storage',
+						type: 'MemoryStorage',
+						description: 'Storage instance for retrieving working memory data',
+						isOptional: false,
+					},
+					{
+						name: 'template',
+						type: 'WorkingMemoryTemplate',
+						description: 'Template defining the format and structure of working memory',
+						isOptional: true,
+						properties: [
+							{
+								type: 'WorkingMemoryTemplate',
+								parameters: [
+									{
+										name: 'format',
+										type: "'markdown' | 'json'",
+										description: 'Format of the working memory content',
+										isOptional: false,
+									},
+									{
+										name: 'content',
+										type: 'string',
+										description: 'Template content defining the structure of working memory data',
+										isOptional: false,
+									},
+								],
+							},
+						],
+					},
+					{
+						name: 'scope',
+						type: "'thread' | 'resource'",
+						description:
+							"Scope of working memory. 'thread' scopes to current thread, 'resource' shares across all threads for the resource",
+						isOptional: true,
+						default: "'resource'",
+					},
+					{
+						name: 'useVNext',
+						type: 'boolean',
+						description: 'Use the next-generation instruction format with improved guidelines',
+						isOptional: true,
+					},
+					{
+						name: 'readOnly',
+						type: 'boolean',
+						description:
+							'When true, working memory is provided as read-only context. The data is injected into the conversation but without the updateWorkingMemory tool or update instructions. Useful for agents that should reference working memory without modifying it.',
+						isOptional: true,
+						default: 'false',
+					},
+					{
+						name: 'templateProvider',
+						type: '{ getWorkingMemoryTemplate(args: { memoryConfig?: MemoryConfig }): Promise<WorkingMemoryTemplate | null> }',
+						description: 'Dynamic template provider for runtime template resolution',
+						isOptional: true,
+					},
+					{
+						name: 'logger',
+						type: 'IMastraLogger',
+						description: 'Optional logger instance for structured logging',
+						isOptional: true,
+					},
+				],
+			},
+		],
+	},
 ]}
 />
 
@@ -118,30 +118,30 @@ const processor = new WorkingMemory({
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: "Processor identifier set to 'working-memory'",
-    isOptional: false,
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: "Processor display name set to 'WorkingMemory'",
-    isOptional: false,
-  },
-  {
-    name: 'defaultWorkingMemoryTemplate',
-    type: 'string',
-    description: 'The default markdown template used when no custom template is provided',
-    isOptional: false,
-  },
-  {
-    name: 'processInput',
-    type: '(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>',
-    description: 'Retrieves working memory and adds it as a system message to the message list',
-    isOptional: false,
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: "Processor identifier set to 'working-memory'",
+		isOptional: false,
+	},
+	{
+		name: 'name',
+		type: 'string',
+		description: "Processor display name set to 'WorkingMemory'",
+		isOptional: false,
+	},
+	{
+		name: 'defaultWorkingMemoryTemplate',
+		type: 'string',
+		description: 'The default markdown template used when no custom template is provided',
+		isOptional: false,
+	},
+	{
+		name: 'processInput',
+		type: '(args: { messages: MastraDBMessage[]; messageList: MessageList; abort: (reason?: string) => never; requestContext?: RequestContext }) => Promise<MessageList | MastraDBMessage[]>',
+		description: 'Retrieves working memory and adds it as a system message to the message list',
+		isOptional: false,
+	},
 ]}
 />
 
@@ -153,31 +153,31 @@ import { WorkingMemory, MessageHistory } from '@mastra/core/processors'
 import { PostgresStorage } from '@mastra/pg'
 
 const storage = new PostgresStorage({
-  connectionString: process.env.DATABASE_URL,
+	connectionString: process.env.DATABASE_URL,
 })
 
 export const agent = new Agent({
-  name: 'personalized-agent',
-  instructions: 'You are a helpful assistant that remembers user preferences',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  inputProcessors: [
-    new WorkingMemory({
-      storage,
-      scope: 'resource',
-      template: {
-        format: 'markdown',
-        content: `# User Information
+	name: 'personalized-agent',
+	instructions: 'You are a helpful assistant that remembers user preferences',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	inputProcessors: [
+		new WorkingMemory({
+			storage,
+			scope: 'resource',
+			template: {
+				format: 'markdown',
+				content: `# User Information
 - **Name**:
 - **Location**:
 - **Preferences**:
 - **Communication Style**:
 - **Current Projects**:
 `,
-      },
-    }),
-    new MessageHistory({ storage, lastMessages: 50 }),
-  ],
-  outputProcessors: [new MessageHistory({ storage })],
+			},
+		}),
+		new MessageHistory({ storage, lastMessages: 50 }),
+	],
+	outputProcessors: [new MessageHistory({ storage })],
 })
 ```
 
@@ -187,18 +187,18 @@ export const agent = new Agent({
 import { WorkingMemory } from '@mastra/core/processors'
 
 const processor = new WorkingMemory({
-  storage: memoryStorage,
-  scope: 'resource',
-  template: {
-    format: 'json',
-    content: JSON.stringify({
-      user: {
-        name: { type: 'string' },
-        preferences: { type: 'object' },
-        goals: { type: 'array' },
-      },
-    }),
-  },
+	storage: memoryStorage,
+	scope: 'resource',
+	template: {
+		format: 'json',
+		content: JSON.stringify({
+			user: {
+				name: { type: 'string' },
+				preferences: { type: 'object' },
+				goals: { type: 'array' },
+			},
+		}),
+	},
 })
 ```
 

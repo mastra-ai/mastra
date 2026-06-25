@@ -34,39 +34,39 @@ import { LibSQLStore } from '@mastra/libsql'
 import { DuckDBStore } from '@mastra/duckdb'
 import { MastraCompositeStore } from '@mastra/core/storage'
 import {
-  Observability,
-  MastraStorageExporter,
-  MastraPlatformExporter,
-  SensitiveDataFilter,
+	Observability,
+	MastraStorageExporter,
+	MastraPlatformExporter,
+	SensitiveDataFilter,
 } from '@mastra/observability'
 
 export const mastra = new Mastra({
-  // highlight-start
-  storage: new MastraCompositeStore({
-    id: 'composite-storage',
-    default: new LibSQLStore({
-      id: 'mastra-storage',
-      url: 'file:./mastra.db',
-    }),
-    domains: {
-      observability: await new DuckDBStore().getStore('observability'),
-    },
-  }),
-  // highlight-end
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'mastra',
-        exporters: [
-          new MastraStorageExporter(), // Persists observability events to Mastra Storage
-          new MastraPlatformExporter(), // Sends observability events to Mastra platform (if MASTRA_PLATFORM_ACCESS_TOKEN is set)
-        ],
-        spanOutputProcessors: [
-          new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
-        ],
-      },
-    },
-  }),
+	// highlight-start
+	storage: new MastraCompositeStore({
+		id: 'composite-storage',
+		default: new LibSQLStore({
+			id: 'mastra-storage',
+			url: 'file:./mastra.db',
+		}),
+		domains: {
+			observability: await new DuckDBStore().getStore('observability'),
+		},
+	}),
+	// highlight-end
+	observability: new Observability({
+		configs: {
+			default: {
+				serviceName: 'mastra',
+				exporters: [
+					new MastraStorageExporter(), // Persists observability events to Mastra Storage
+					new MastraPlatformExporter(), // Sends observability events to Mastra platform (if MASTRA_PLATFORM_ACCESS_TOKEN is set)
+				],
+				spanOutputProcessors: [
+					new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
+				],
+			},
+		},
+	}),
 })
 ```
 

@@ -7,9 +7,9 @@ import { Mastra } from '@mastra/core'
 import { memoryAgent } from './agents'
 
 export const mastra: Mastra = new Mastra({
-  agents: {
-    memoryAgent,
-  },
+	agents: {
+		memoryAgent,
+	},
 })
 ```
 

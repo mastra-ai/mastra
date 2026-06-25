@@ -37,11 +37,11 @@ Before:
 import { AgentNetwork } from '@mastra/core/network'
 
 const agent = new AgentNetwork({
-  name: 'agent-network',
-  agents: [agent1, agent2],
-  tools: { tool1, tool2 },
-  model: '__GATEWAY_OPENAI_MODEL__',
-  instructions: 'You are a network agent that can help users with a variety of tasks.',
+	name: 'agent-network',
+	agents: [agent1, agent2],
+	tools: { tool1, tool2 },
+	model: '__GATEWAY_OPENAI_MODEL__',
+	instructions: 'You are a network agent that can help users with a variety of tasks.',
 })
 
 await agent.stream('Find me the weather in Tokyo.')
@@ -56,13 +56,13 @@ import { Memory } from '@mastra/memory'
 const memory = new Memory()
 
 const agent = new Agent({
-  id: 'agent-network',
-  name: 'agent-network',
-  agents: { agent1, agent2 },
-  tools: { tool1, tool2 },
-  model: '__GATEWAY_OPENAI_MODEL__',
-  instructions: 'You are a network agent that can help users with a variety of tasks.',
-  memory,
+	id: 'agent-network',
+	name: 'agent-network',
+	agents: { agent1, agent2 },
+	tools: { tool1, tool2 },
+	model: '__GATEWAY_OPENAI_MODEL__',
+	instructions: 'You are a network agent that can help users with a variety of tasks.',
+	memory,
 })
 
 await agent.network('Find me the weather in Tokyo.')
@@ -76,13 +76,13 @@ Before:
 import { NewAgentNetwork } from '@mastra/core/network/vnext'
 
 const agent = new NewAgentNetwork({
-  id: 'agent-network',
-  name: 'agent-network',
-  agents: { agent1, agent2 },
-  workflows: { workflow1 },
-  tools: { tool1, tool2 },
-  model: '__GATEWAY_OPENAI_MODEL__',
-  instructions: 'You are a network agent that can help users with a variety of tasks.',
+	id: 'agent-network',
+	name: 'agent-network',
+	agents: { agent1, agent2 },
+	workflows: { workflow1 },
+	tools: { tool1, tool2 },
+	model: '__GATEWAY_OPENAI_MODEL__',
+	instructions: 'You are a network agent that can help users with a variety of tasks.',
 })
 
 await agent.loop('Find me the weather in Tokyo.')
@@ -97,13 +97,13 @@ import { Memory } from '@mastra/memory'
 const memory = new Memory()
 
 const agent = new Agent({
-  name: 'agent-network',
-  agents: { agent1, agent2 },
-  workflows: { workflow1 },
-  tools: { tool1, tool2 },
-  model: '__GATEWAY_OPENAI_MODEL__',
-  instructions: 'You are a network agent that can help users with a variety of tasks.',
-  memory,
+	name: 'agent-network',
+	agents: { agent1, agent2 },
+	workflows: { workflow1 },
+	tools: { tool1, tool2 },
+	model: '__GATEWAY_OPENAI_MODEL__',
+	instructions: 'You are a network agent that can help users with a variety of tasks.',
+	memory,
 })
 
 await agent.network('Find me the weather in Tokyo.')

@@ -92,14 +92,14 @@ Run Mastra as a standalone server and connect your Next.js frontend (with Assist
     // Rest of the imports...
 
     export const mastra = new Mastra({
-      // Rest of the configuration...
-      server: {
-        apiRoutes: [
-          chatRoute({
-            path: '/chat/:agentId',
-          }),
-        ],
-      },
+    	// Rest of the configuration...
+    	server: {
+    		apiRoutes: [
+    			chatRoute({
+    				path: '/chat/:agentId',
+    			}),
+    		],
+    	},
     })
     ```
 
@@ -147,13 +147,13 @@ Run Mastra as a standalone server and connect your Next.js frontend (with Assist
     // Rest of the imports...
 
     export const Assistant = () => {
-      const runtime = useChatRuntime({
-        transport: new AssistantChatTransport({
-          api: 'http://localhost:4111/chat/weatherAgent',
-        }),
-      })
+    	const runtime = useChatRuntime({
+    		transport: new AssistantChatTransport({
+    			api: 'http://localhost:4111/chat/weatherAgent',
+    		}),
+    	})
 
-      // Rest of the component...
+    	// Rest of the component...
     }
     ```
 

@@ -39,19 +39,19 @@ import { Agent } from '@mastra/core/agent'
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({
-    basePath: './workspace',
-  }),
-  sandbox: new LocalSandbox({
-    workingDirectory: './workspace',
-  }),
+	filesystem: new LocalFilesystem({
+		basePath: './workspace',
+	}),
+	sandbox: new LocalSandbox({
+		workingDirectory: './workspace',
+	}),
 })
 
 const agent = new Agent({
-  id: 'dev-agent',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  instructions: 'You are a helpful development assistant.',
-  workspace,
+	id: 'dev-agent',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	instructions: 'You are a helpful development assistant.',
+	workspace,
 })
 
 // The agent now has the execute_command tool available
@@ -69,20 +69,20 @@ import { Agent } from '@mastra/core/agent'
 import { Workspace, LocalSandbox } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  // highlight-start
-  sandbox: ({ requestContext }) => {
-    const userId = requestContext.get('user-id') as string
-    return new LocalSandbox({
-      workingDirectory: `/workspaces/${userId}`,
-    })
-  },
-  // highlight-end
+	// highlight-start
+	sandbox: ({ requestContext }) => {
+		const userId = requestContext.get('user-id') as string
+		return new LocalSandbox({
+			workingDirectory: `/workspaces/${userId}`,
+		})
+	},
+	// highlight-end
 })
 
 const agent = new Agent({
-  id: 'multi-tenant-agent',
-  model: 'your-provider/your-model',
-  workspace,
+	id: 'multi-tenant-agent',
+	model: 'your-provider/your-model',
+	workspace,
 })
 ```
 
@@ -106,10 +106,10 @@ The resolver can also be asynchronous — for example to look up tenant configur
 
 ```typescript
 const workspace = new Workspace({
-  sandbox: async ({ requestContext }) => {
-    const tenant = await db.getTenant(requestContext.get('tenant-id'))
-    return new LocalSandbox({ workingDirectory: tenant.workspacePath })
-  },
+	sandbox: async ({ requestContext }) => {
+		const tenant = await db.getTenant(requestContext.get('tenant-id'))
+		return new LocalSandbox({ workingDirectory: tenant.workspacePath })
+	},
 })
 ```
 
@@ -135,8 +135,8 @@ Background processes can outlive a single tool call, so `get_process_output` and
 
 ```typescript
 const workspace = new Workspace({
-  sandbox: ({ requestContext }) => resolveSandbox(requestContext),
-  sandboxCacheKey: ({ requestContext }) => requestContext.get('thread-id') as string,
+	sandbox: ({ requestContext }) => resolveSandbox(requestContext),
+	sandboxCacheKey: ({ requestContext }) => requestContext.get('thread-id') as string,
 })
 ```
 
@@ -152,8 +152,8 @@ To include concrete per-request sandbox details, set `instructions.dynamicSandbo
 
 ```typescript
 const workspace = new Workspace({
-  sandbox: ({ requestContext }) => resolveSandbox(requestContext),
-  instructions: { dynamicSandbox: 'resolve' },
+	sandbox: ({ requestContext }) => resolveSandbox(requestContext),
+	instructions: { dynamicSandbox: 'resolve' },
 })
 ```
 
@@ -161,11 +161,11 @@ const workspace = new Workspace({
 
 ```typescript
 const workspace = new Workspace({
-  sandbox: ({ requestContext }) => resolveSandbox(requestContext),
-  instructions: {
-    dynamicSandbox: ({ requestContext }) =>
-      `Sandbox scoped to tenant ${requestContext.get('tenant-id')}.`,
-  },
+	sandbox: ({ requestContext }) => resolveSandbox(requestContext),
+	instructions: {
+		dynamicSandbox: ({ requestContext }) =>
+			`Sandbox scoped to tenant ${requestContext.get('tenant-id')}.`,
+	},
 })
 ```
 
@@ -191,16 +191,16 @@ When agents start background processes through the `execute_command` tool, you c
 import { Workspace, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
-  tools: {
-    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
-      backgroundProcesses: {
-        onStdout: (data, { pid }) => console.log(`[${pid}] ${data}`),
-        onStderr: (data, { pid }) => console.error(`[${pid}] ${data}`),
-        onExit: ({ pid, exitCode }) => console.log(`Process ${pid} exited: ${exitCode}`),
-      },
-    },
-  },
+	sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+	tools: {
+		[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+			backgroundProcesses: {
+				onStdout: (data, { pid }) => console.log(`[${pid}] ${data}`),
+				onStderr: (data, { pid }) => console.error(`[${pid}] ${data}`),
+				onExit: ({ pid, exitCode }) => console.log(`Process ${pid} exited: ${exitCode}`),
+			},
+		},
+	},
 })
 ```
 
@@ -218,14 +218,14 @@ By default, background processes inherit the agent's abort signal and are killed
 import { Workspace, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
-  tools: {
-    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
-      backgroundProcesses: {
-        abortSignal: null, // Processes survive agent disconnection
-      },
-    },
-  },
+	sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+	tools: {
+		[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+			backgroundProcesses: {
+				abortSignal: null, // Processes survive agent disconnection
+			},
+		},
+	},
 })
 ```
 

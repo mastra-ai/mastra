@@ -116,14 +116,14 @@ import { Mastra } from '@mastra/core'
 import { Observability, MastraPlatformExporter } from '@mastra/observability'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      production: {
-        serviceName: 'api-server',
-        exporters: [new MastraPlatformExporter()],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			production: {
+				serviceName: 'api-server',
+				exporters: [new MastraPlatformExporter()],
+			},
+		},
+	}),
 })
 ```
 
@@ -154,22 +154,22 @@ Include `MastraStorageExporter` if you also want to inspect local traces in Stud
 ```ts title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 import {
-  Observability,
-  MastraStorageExporter,
-  MastraPlatformExporter,
-  SensitiveDataFilter,
+	Observability,
+	MastraStorageExporter,
+	MastraPlatformExporter,
+	SensitiveDataFilter,
 } from '@mastra/observability'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'mastra',
-        exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
-        spanOutputProcessors: [new SensitiveDataFilter()],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			default: {
+				serviceName: 'mastra',
+				exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
+				spanOutputProcessors: [new SensitiveDataFilter()],
+			},
+		},
+	}),
 })
 ```
 
@@ -185,10 +185,10 @@ The following example demonstrates how to override the collector endpoint and ba
 
 ```ts title="src/mastra/index.ts"
 new MastraPlatformExporter({
-  endpoint: 'https://collector.example.com',
-  maxBatchSize: 1000,
-  maxBatchWaitMs: 5000,
-  logLevel: 'info',
+	endpoint: 'https://collector.example.com',
+	maxBatchSize: 1000,
+	maxBatchWaitMs: 5000,
+	logLevel: 'info',
 })
 ```
 

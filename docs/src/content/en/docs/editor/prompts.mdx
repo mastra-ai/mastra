@@ -79,11 +79,11 @@ import { mastra } from '../mastra'
 const editor = mastra.getEditor()!
 
 await editor.prompt.create({
-  id: 'brand-voice',
-  name: 'Brand voice',
-  description: 'Acme Inc. tone and style guidelines',
-  content:
-    'You write in a friendly, concise tone. Always address the user as {{userName || "there"}}.',
+	id: 'brand-voice',
+	name: 'Brand voice',
+	description: 'Acme Inc. tone and style guidelines',
+	content:
+		'You write in a friendly, concise tone. Always address the user as {{userName || "there"}}.',
 })
 ```
 
@@ -95,8 +95,8 @@ import { mastra } from '../mastra'
 const editor = mastra.getEditor()!
 
 await editor.prompt.update({
-  id: 'brand-voice',
-  content: 'You write in a friendly, concise tone. Always greet the user by name when available.',
+	id: 'brand-voice',
+	content: 'You write in a friendly, concise tone. Always greet the user by name when available.',
 })
 ```
 
@@ -120,11 +120,11 @@ import { mastra } from '../mastra'
 const editor = mastra.getEditor()!
 
 await editor.agent.update({
-  id: 'support-agent',
-  instructions: [
-    { type: 'prompt_block_ref', id: 'brand-voice' },
-    { type: 'text', content: 'Answer only questions about Acme products.' },
-  ],
+	id: 'support-agent',
+	instructions: [
+		{ type: 'prompt_block_ref', id: 'brand-voice' },
+		{ type: 'text', content: 'Answer only questions about Acme products.' },
+	],
 })
 ```
 

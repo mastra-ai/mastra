@@ -34,38 +34,38 @@ Use when optimizing context selection for:
 
 <PropertiesTable
   content={[
-  {
-    name: 'model',
-    type: 'MastraModelConfig',
-    description: 'The language model to use for evaluating context relevance',
-    required: true,
-  },
-  {
-    name: 'options',
-    type: 'ContextPrecisionMetricOptions',
-    description: 'Configuration options for the scorer',
-    required: true,
-    children: [
-      {
-        name: 'context',
-        type: 'string[]',
-        description: 'Array of context pieces to evaluate for relevance',
-        required: false,
-      },
-      {
-        name: 'contextExtractor',
-        type: '(input, output) => string[]',
-        description: 'Function to dynamically extract context from the run input and output',
-        required: false,
-      },
-      {
-        name: 'scale',
-        type: 'number',
-        description: 'Scale factor to multiply the final score (default: 1)',
-        required: false,
-      },
-    ],
-  },
+	{
+		name: 'model',
+		type: 'MastraModelConfig',
+		description: 'The language model to use for evaluating context relevance',
+		required: true,
+	},
+	{
+		name: 'options',
+		type: 'ContextPrecisionMetricOptions',
+		description: 'Configuration options for the scorer',
+		required: true,
+		children: [
+			{
+				name: 'context',
+				type: 'string[]',
+				description: 'Array of context pieces to evaluate for relevance',
+				required: false,
+			},
+			{
+				name: 'contextExtractor',
+				type: '(input, output) => string[]',
+				description: 'Function to dynamically extract context from the run input and output',
+				required: false,
+			},
+			{
+				name: 'scale',
+				type: 'number',
+				description: 'Scale factor to multiply the final score (default: 1)',
+				required: false,
+			},
+		],
+	},
 ]}
 />
 
@@ -75,16 +75,16 @@ Use when optimizing context selection for:
 
 <PropertiesTable
   content={[
-  {
-    name: 'score',
-    type: 'number',
-    description: 'Mean Average Precision score between 0 and scale (default 0-1)',
-  },
-  {
-    name: 'reason',
-    type: 'string',
-    description: 'Human-readable explanation of the context precision evaluation',
-  },
+	{
+		name: 'score',
+		type: 'number',
+		description: 'Mean Average Precision score between 0 and scale (default 0-1)',
+	},
+	{
+		name: 'reason',
+		type: 'string',
+		description: 'Human-readable explanation of the context precision evaluation',
+	},
 ]}
 />
 
@@ -152,18 +152,18 @@ MAP = (1.0 + 0.67) / 2 = 0.835 ≈ **0.83**
 
 ```typescript
 const scorer = createContextPrecisionScorer({
-  model: '__GATEWAY_OPENAI_MODEL__',
-  options: {
-    contextExtractor: (input, output) => {
-      // Extract context dynamically based on the query
-      const query = input?.inputMessages?.[0]?.content || ''
+	model: '__GATEWAY_OPENAI_MODEL__',
+	options: {
+		contextExtractor: (input, output) => {
+			// Extract context dynamically based on the query
+			const query = input?.inputMessages?.[0]?.content || ''
 
-      // Example: Retrieve from a vector database
-      const searchResults = vectorDB.search(query, { limit: 10 })
-      return searchResults.map(result => result.content)
-    },
-    scale: 1,
-  },
+			// Example: Retrieve from a vector database
+			const searchResults = vectorDB.search(query, { limit: 10 })
+			return searchResults.map(result => result.content)
+		},
+		scale: 1,
+	},
 })
 ```
 
@@ -171,18 +171,18 @@ const scorer = createContextPrecisionScorer({
 
 ```typescript
 const scorer = createContextPrecisionScorer({
-  model: '__GATEWAY_OPENAI_MODEL__',
-  options: {
-    context: [
-      // Simulate retrieved documents from vector database
-      'Document 1: Highly relevant content...',
-      'Document 2: Somewhat related content...',
-      'Document 3: Tangentially related...',
-      'Document 4: Not relevant...',
-      'Document 5: Highly relevant content...',
-      // ... up to dozens of context pieces
-    ],
-  },
+	model: '__GATEWAY_OPENAI_MODEL__',
+	options: {
+		context: [
+			// Simulate retrieved documents from vector database
+			'Document 1: Highly relevant content...',
+			'Document 2: Somewhat related content...',
+			'Document 3: Tangentially related...',
+			'Document 4: Not relevant...',
+			'Document 5: Highly relevant content...',
+			// ... up to dozens of context pieces
+		],
+	},
 })
 ```
 
@@ -196,32 +196,32 @@ import { createContextPrecisionScorer } from '@mastra/evals/scorers/prebuilt'
 import { myAgent } from './agent'
 
 const scorer = createContextPrecisionScorer({
-  model: '__GATEWAY_OPENAI_MODEL__',
-  options: {
-    contextExtractor: (input, output) => {
-      // Extract context from agent's retrieved documents
-      return output.metadata?.retrievedContext || []
-    },
-  },
+	model: '__GATEWAY_OPENAI_MODEL__',
+	options: {
+		contextExtractor: (input, output) => {
+			// Extract context from agent's retrieved documents
+			return output.metadata?.retrievedContext || []
+		},
+	},
 })
 
 const result = await runEvals({
-  data: [
-    {
-      input: 'How does photosynthesis work in plants?',
-    },
-    {
-      input: 'What are the mental and physical benefits of exercise?',
-    },
-  ],
-  scorers: [scorer],
-  target: myAgent,
-  onItemComplete: ({ scorerResults }) => {
-    console.log({
-      score: scorerResults[scorer.id].score,
-      reason: scorerResults[scorer.id].reason,
-    })
-  },
+	data: [
+		{
+			input: 'How does photosynthesis work in plants?',
+		},
+		{
+			input: 'What are the mental and physical benefits of exercise?',
+		},
+	],
+	scorers: [scorer],
+	target: myAgent,
+	onItemComplete: ({ scorerResults }) => {
+		console.log({
+			score: scorerResults[scorer.id].score,
+			reason: scorerResults[scorer.id].reason,
+		})
+	},
 })
 
 console.log(result.scores)

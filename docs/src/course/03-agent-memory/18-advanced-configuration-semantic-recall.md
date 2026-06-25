@@ -4,25 +4,25 @@ Configure semantic recall with the `semanticRecall` option:
 
 ```typescript
 const memory = new Memory({
-  storage: new LibSQLStore({
-    id: 'learning-memory-storage',
-    url: 'file:../../memory.db', // relative path from the `.mastra/output` directory
-  }),
-  vector: new LibSQLVector({
-    url: 'file:../../vector.db', // relative path from the `.mastra/output` directory
-  }),
-  embedder: openai.embedding('text-embedding-3-small'),
-  options: {
-    semanticRecall: {
-      topK: 3,
-      messageRange: {
-        before: 2,
-        after: 1,
-      },
-      scope: 'resource', // Search all threads for this resource
-      filter: { projectId: { $eq: 'project-a' } },
-    },
-  },
+	storage: new LibSQLStore({
+		id: 'learning-memory-storage',
+		url: 'file:../../memory.db', // relative path from the `.mastra/output` directory
+	}),
+	vector: new LibSQLVector({
+		url: 'file:../../vector.db', // relative path from the `.mastra/output` directory
+	}),
+	embedder: openai.embedding('text-embedding-3-small'),
+	options: {
+		semanticRecall: {
+			topK: 3,
+			messageRange: {
+				before: 2,
+				after: 1,
+			},
+			scope: 'resource', // Search all threads for this resource
+			filter: { projectId: { $eq: 'project-a' } },
+		},
+	},
 })
 ```
 
@@ -54,20 +54,20 @@ The following example demonstrates metadata filters for common use cases:
 ```typescript
 // Filter by project
 const options = {
-  semanticRecall: { filter: { projectId: { $eq: 'my-project' } } },
+	semanticRecall: { filter: { projectId: { $eq: 'my-project' } } },
 }
 
 // Filter by multiple categories
 const options = {
-  semanticRecall: { filter: { category: { $in: ['work', 'research'] } } },
+	semanticRecall: { filter: { category: { $in: ['work', 'research'] } } },
 }
 
 // Filter by project and priority
 const options = {
-  semanticRecall: {
-    filter: {
-      $and: [{ projectId: { $eq: 'project-a' } }, { priority: { $gte: 3 } }],
-    },
-  },
+	semanticRecall: {
+		filter: {
+			$and: [{ projectId: { $eq: 'project-a' } }, { priority: { $gte: 3 } }],
+		},
+	},
 }
 ```

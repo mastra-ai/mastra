@@ -15,8 +15,8 @@ packages:
 
 ```ts
 const result = await agent.stream('Research solana for me', {
-  untilIdle: true,
-  memory: { thread: 't1', resource: 'u1' },
+	untilIdle: true,
+	memory: { thread: 't1', resource: 'u1' },
 })
 ```
 
@@ -32,12 +32,12 @@ Use it when the agent dispatches background tasks (typically long-running tools 
 
 ```ts
 const stream = await agent.streamUntilIdle('Research solana for me', {
-  memory: { thread: 't1', resource: 'u1' },
+	memory: { thread: 't1', resource: 'u1' },
 })
 
 for await (const chunk of stream.fullStream) {
-  // chunks from the initial turn AND any continuation turns triggered by
-  // background task completions flow through here
+	// chunks from the initial turn AND any continuation turns triggered by
+	// background task completions flow through here
 }
 ```
 
@@ -51,47 +51,47 @@ for await (const chunk of stream.fullStream) {
 
 <PropertiesTable
   content={[
-  {
-    name: 'messages',
-    type: 'string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]',
-    description:
-      'The messages to send to the agent. Can be a single string, array of strings, or structured message objects.',
-  },
-  {
-    name: 'options',
-    type: 'AgentExecutionOptions<Output> & { maxIdleMs?: number }',
-    isOptional: true,
-    description:
-      'Accepts every option that Agent.stream() accepts, plus maxIdleMs. See the Agent.stream() reference for the full list.',
-    properties: [
-      {
-        parameters: [
-          {
-            name: 'maxIdleMs',
-            type: 'number',
-            isOptional: true,
-            defaultValue: '300000',
-            description:
-              'Closes the outer stream after this many ms of idleness between turns. The timer only runs while the wrapper is between turns, so a slow first token does not close the stream. Default: 5 minutes.',
-          },
-          {
-            name: 'memory',
-            type: '{ thread?: string | { id: string }; resource?: string }',
-            isOptional: true,
-            description:
-              'Memory thread and resource for the run. Required for continuations to write background task results back into the conversation.',
-          },
-          {
-            name: 'structuredOutput',
-            type: 'PublicStructuredOutputOptions<Output>',
-            isOptional: true,
-            description:
-              'Schema-based structured output. Same shape as Agent.stream(). Note that aggregate properties resolve against the first turn only.',
-          },
-        ],
-      },
-    ],
-  },
+	{
+		name: 'messages',
+		type: 'string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]',
+		description:
+			'The messages to send to the agent. Can be a single string, array of strings, or structured message objects.',
+	},
+	{
+		name: 'options',
+		type: 'AgentExecutionOptions<Output> & { maxIdleMs?: number }',
+		isOptional: true,
+		description:
+			'Accepts every option that Agent.stream() accepts, plus maxIdleMs. See the Agent.stream() reference for the full list.',
+		properties: [
+			{
+				parameters: [
+					{
+						name: 'maxIdleMs',
+						type: 'number',
+						isOptional: true,
+						defaultValue: '300000',
+						description:
+							'Closes the outer stream after this many ms of idleness between turns. The timer only runs while the wrapper is between turns, so a slow first token does not close the stream. Default: 5 minutes.',
+					},
+					{
+						name: 'memory',
+						type: '{ thread?: string | { id: string }; resource?: string }',
+						isOptional: true,
+						description:
+							'Memory thread and resource for the run. Required for continuations to write background task results back into the conversation.',
+					},
+					{
+						name: 'structuredOutput',
+						type: 'PublicStructuredOutputOptions<Output>',
+						isOptional: true,
+						description:
+							'Schema-based structured output. Same shape as Agent.stream(). Note that aggregate properties resolve against the first turn only.',
+					},
+				],
+			},
+		],
+	},
 ]}
 />
 
@@ -101,12 +101,12 @@ For every other option (`maxSteps`, `modelSettings`, `toolChoice`, `outputProces
 
 <PropertiesTable
   content={[
-  {
-    name: 'stream',
-    type: 'MastraModelOutput<Output>',
-    description:
-      'A MastraModelOutput where fullStream spans the initial turn plus every auto-continuation. Aggregate properties (text, toolCalls, toolResults, finishReason, messageList, getFullOutput()) resolve against the first turn only.',
-  },
+	{
+		name: 'stream',
+		type: 'MastraModelOutput<Output>',
+		description:
+			'A MastraModelOutput where fullStream spans the initial turn plus every auto-continuation. Aggregate properties (text, toolCalls, toolResults, finishReason, messageList, getFullOutput()) resolve against the first turn only.',
+	},
 ]}
 />
 
@@ -131,14 +131,14 @@ Internally, `streamUntilIdle()`:
 
 ```ts title="index.ts"
 const stream = await agent.streamUntilIdle('Kick off the long jobs', {
-  memory: { thread: 't1', resource: 'u1' },
-  maxIdleMs: 60_000, // close the stream after 1 minute of idleness between turns
+	memory: { thread: 't1', resource: 'u1' },
+	maxIdleMs: 60_000, // close the stream after 1 minute of idleness between turns
 })
 
 for await (const chunk of stream.fullStream) {
-  if (chunk.type === 'background-task-completed') {
-    console.log('Task complete:', chunk.payload.taskId)
-  }
+	if (chunk.type === 'background-task-completed') {
+		console.log('Task complete:', chunk.payload.taskId)
+	}
 }
 ```
 
@@ -146,14 +146,14 @@ for await (const chunk of stream.fullStream) {
 
 ```ts title="index.ts"
 const stream = await agent.streamUntilIdle('Research and summarize', {
-  memory: { thread: 't1', resource: 'u1' },
+	memory: { thread: 't1', resource: 'u1' },
 })
 
 let fullText = ''
 for await (const chunk of stream.fullStream) {
-  if (chunk.type === 'text-delta') {
-    fullText += chunk.payload.text
-  }
+	if (chunk.type === 'text-delta') {
+		fullText += chunk.payload.text
+	}
 }
 ```
 

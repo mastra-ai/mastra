@@ -48,14 +48,14 @@ import { Observability } from '@mastra/observability'
 import { ArizeExporter } from '@mastra/arize'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      arize: {
-        serviceName: 'mastra-service',
-        exporters: [new ArizeExporter()],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			arize: {
+				serviceName: 'mastra-service',
+				exporters: [new ArizeExporter()],
+			},
+		},
+	}),
 })
 ```
 
@@ -69,20 +69,20 @@ import { Observability } from '@mastra/observability'
 import { ArizeExporter } from '@mastra/arize'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      arize: {
-        serviceName: process.env.PHOENIX_PROJECT_NAME || 'mastra-service',
-        exporters: [
-          new ArizeExporter({
-            endpoint: process.env.PHOENIX_COLLECTOR_ENDPOINT!,
-            apiKey: process.env.PHOENIX_API_KEY,
-            projectName: process.env.PHOENIX_PROJECT_NAME,
-          }),
-        ],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			arize: {
+				serviceName: process.env.PHOENIX_PROJECT_NAME || 'mastra-service',
+				exporters: [
+					new ArizeExporter({
+						endpoint: process.env.PHOENIX_COLLECTOR_ENDPOINT!,
+						apiKey: process.env.PHOENIX_API_KEY,
+						projectName: process.env.PHOENIX_PROJECT_NAME,
+					}),
+				],
+			},
+		},
+	}),
 })
 ```
 
@@ -130,14 +130,14 @@ import { Observability } from '@mastra/observability'
 import { ArizeExporter } from '@mastra/arize'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      arize: {
-        serviceName: 'mastra-service',
-        exporters: [new ArizeExporter()],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			arize: {
+				serviceName: 'mastra-service',
+				exporters: [new ArizeExporter()],
+			},
+		},
+	}),
 })
 ```
 
@@ -151,20 +151,20 @@ import { Observability } from '@mastra/observability'
 import { ArizeExporter } from '@mastra/arize'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      arize: {
-        serviceName: process.env.ARIZE_PROJECT_NAME || 'mastra-service',
-        exporters: [
-          new ArizeExporter({
-            apiKey: process.env.ARIZE_API_KEY!,
-            spaceId: process.env.ARIZE_SPACE_ID!,
-            projectName: process.env.ARIZE_PROJECT_NAME,
-          }),
-        ],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			arize: {
+				serviceName: process.env.ARIZE_PROJECT_NAME || 'mastra-service',
+				exporters: [
+					new ArizeExporter({
+						apiKey: process.env.ARIZE_API_KEY!,
+						spaceId: process.env.ARIZE_SPACE_ID!,
+						projectName: process.env.ARIZE_PROJECT_NAME,
+					}),
+				],
+			},
+		},
+	}),
 })
 ```
 
@@ -176,31 +176,31 @@ The Arize exporter supports advanced configuration for fine-tuning OpenTelemetry
 
 ```typescript
 new ArizeExporter({
-  // Phoenix Configuration
-  endpoint: 'https://your-collector.example.com/v1/traces', // Required for Phoenix
+	// Phoenix Configuration
+	endpoint: 'https://your-collector.example.com/v1/traces', // Required for Phoenix
 
-  // Arize AX Configuration
-  spaceId: 'your-space-id', // Required for Arize AX
+	// Arize AX Configuration
+	spaceId: 'your-space-id', // Required for Arize AX
 
-  // Shared Configuration
-  apiKey: 'your-api-key', // Required for authenticated endpoints
-  projectName: 'mastra-service', // Optional project name
+	// Shared Configuration
+	apiKey: 'your-api-key', // Required for authenticated endpoints
+	projectName: 'mastra-service', // Optional project name
 
-  // Optional OTLP settings
-  headers: {
-    'x-custom-header': 'value', // Additional headers for OTLP requests
-  },
+	// Optional OTLP settings
+	headers: {
+		'x-custom-header': 'value', // Additional headers for OTLP requests
+	},
 
-  // Debug and performance tuning
-  logLevel: 'debug', // Logging: debug | info | warn | error
-  batchSize: 512, // Batch size before exporting spans
-  timeout: 30000, // Timeout in ms before exporting spans
+	// Debug and performance tuning
+	logLevel: 'debug', // Logging: debug | info | warn | error
+	batchSize: 512, // Batch size before exporting spans
+	timeout: 30000, // Timeout in ms before exporting spans
 
-  // Custom resource attributes
-  resourceAttributes: {
-    'deployment.environment': process.env.NODE_ENV,
-    'service.version': process.env.APP_VERSION,
-  },
+	// Custom resource attributes
+	resourceAttributes: {
+		'deployment.environment': process.env.NODE_ENV,
+		'service.version': process.env.APP_VERSION,
+	},
 })
 ```
 
@@ -210,12 +210,12 @@ Control how traces are batched and exported:
 
 ```typescript
 new ArizeExporter({
-  endpoint: process.env.PHOENIX_COLLECTOR_ENDPOINT!,
-  apiKey: process.env.PHOENIX_API_KEY,
+	endpoint: process.env.PHOENIX_COLLECTOR_ENDPOINT!,
+	apiKey: process.env.PHOENIX_API_KEY,
 
-  // Batch processing configuration
-  batchSize: 512, // Number of spans to batch (default: 512)
-  timeout: 30000, // Max time in ms to wait before export (default: 30000)
+	// Batch processing configuration
+	batchSize: 512, // Number of spans to batch (default: 512)
+	timeout: 30000, // Max time in ms to wait before export (default: 30000)
 })
 ```
 
@@ -225,13 +225,13 @@ Add custom attributes to all exported spans:
 
 ```typescript
 new ArizeExporter({
-  endpoint: process.env.PHOENIX_COLLECTOR_ENDPOINT!,
-  resourceAttributes: {
-    'deployment.environment': process.env.NODE_ENV,
-    'service.namespace': 'production',
-    'service.instance.id': process.env.HOSTNAME,
-    'custom.attribute': 'value',
-  },
+	endpoint: process.env.PHOENIX_COLLECTOR_ENDPOINT!,
+	resourceAttributes: {
+		'deployment.environment': process.env.NODE_ENV,
+		'service.namespace': 'production',
+		'service.instance.id': process.env.HOSTNAME,
+		'custom.attribute': 'value',
+	},
 })
 ```
 
@@ -241,12 +241,12 @@ Non-reserved span attributes are serialized into the OpenInference `metadata` pa
 
 ```ts
 await agent.generate(input, {
-  tracingOptions: {
-    metadata: {
-      companyId: 'acme-co',
-      tier: 'enterprise',
-    },
-  },
+	tracingOptions: {
+		metadata: {
+			companyId: 'acme-co',
+			tier: 'enterprise',
+		},
+	},
 })
 ```
 

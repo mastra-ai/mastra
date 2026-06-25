@@ -27,59 +27,59 @@ This client handles sending messages to users via the WhatsApp Business API.
 // Simple WhatsApp Business API client for sending messages
 
 interface SendMessageParams {
-  to: string
-  message: string
+	to: string
+	message: string
 }
 
 export async function sendWhatsAppMessage({ to, message }: SendMessageParams) {
-  // Get environment variables for WhatsApp API
-  const apiVersion = process.env.WHATSAPP_API_VERSION || 'v22.0'
-  const phoneNumberId = process.env.WHATSAPP_BUSINESS_PHONE_NUMBER_ID
-  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN
+	// Get environment variables for WhatsApp API
+	const apiVersion = process.env.WHATSAPP_API_VERSION || 'v22.0'
+	const phoneNumberId = process.env.WHATSAPP_BUSINESS_PHONE_NUMBER_ID
+	const accessToken = process.env.WHATSAPP_ACCESS_TOKEN
 
-  // Check if required environment variables are set
-  if (!phoneNumberId || !accessToken) {
-    return false
-  }
+	// Check if required environment variables are set
+	if (!phoneNumberId || !accessToken) {
+		return false
+	}
 
-  // WhatsApp Business API endpoint
-  const url = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`
+	// WhatsApp Business API endpoint
+	const url = `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`
 
-  // Message payload following WhatsApp API format
-  const payload = {
-    messaging_product: 'whatsapp',
-    recipient_type: 'individual',
-    to: to,
-    type: 'text',
-    text: {
-      body: message,
-    },
-  }
+	// Message payload following WhatsApp API format
+	const payload = {
+		messaging_product: 'whatsapp',
+		recipient_type: 'individual',
+		to: to,
+		type: 'text',
+		text: {
+			body: message,
+		},
+	}
 
-  try {
-    // Send message via WhatsApp Business API
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify(payload),
-    })
+	try {
+		// Send message via WhatsApp Business API
+		const response = await fetch(url, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+				Authorization: `Bearer ${accessToken}`,
+			},
+			body: JSON.stringify(payload),
+		})
 
-    const result = await response.json()
+		const result = await response.json()
 
-    if (response.ok) {
-      console.log(`✅ WhatsApp message sent to ${to}: "${message}"`)
-      return true
-    } else {
-      console.error('❌ Failed to send WhatsApp message:', result)
-      return false
-    }
-  } catch (error) {
-    console.error('❌ Error sending WhatsApp message:', error)
-    return false
-  }
+		if (response.ok) {
+			console.log(`✅ WhatsApp message sent to ${to}: "${message}"`)
+			return true
+		} else {
+			console.error('❌ Failed to send WhatsApp message:', result)
+			return false
+		}
+	} catch (error) {
+		console.error('❌ Error sending WhatsApp message:', error)
+		return false
+	}
 }
 ```
 
@@ -93,9 +93,9 @@ import { Memory } from '@mastra/memory'
 import { LibSQLStore } from '@mastra/libsql'
 
 export const chatAgent = new Agent({
-  id: 'chat-agent',
-  name: 'Chat Agent',
-  instructions: `
+	id: 'chat-agent',
+	name: 'Chat Agent',
+	instructions: `
     You are a helpful, friendly, and knowledgeable AI assistant that loves to chat with users via WhatsApp.
 
     Your personality:
@@ -122,13 +122,13 @@ export const chatAgent = new Agent({
 
     Always aim to be helpful while maintaining a friendly, approachable conversation style.
   `,
-  model: '__GATEWAY_OPENAI_MODEL__',
-  memory: new Memory({
-    storage: new LibSQLStore({
-      id: 'agent-storage',
-      url: 'file:../mastra.db',
-    }),
-  }),
+	model: '__GATEWAY_OPENAI_MODEL__',
+	memory: new Memory({
+		storage: new LibSQLStore({
+			id: 'agent-storage',
+			url: 'file:../mastra.db',
+		}),
+	}),
 })
 ```
 
@@ -142,9 +142,9 @@ import { Memory } from '@mastra/memory'
 import { LibSQLStore } from '@mastra/libsql'
 
 export const textMessageAgent = new Agent({
-  id: 'text-message-agent',
-  name: 'Text Message Agent',
-  instructions: `
+	id: 'text-message-agent',
+	name: 'Text Message Agent',
+	instructions: `
     You are a text message converter that takes formal or lengthy text and breaks it down into natural, casual text messages.
 
     Your job is to:
@@ -160,13 +160,13 @@ export const textMessageAgent = new Agent({
 
     Always return exactly 5-8 messages in the messages array.
   `,
-  model: '__GATEWAY_OPENAI_MODEL__',
-  memory: new Memory({
-    storage: new LibSQLStore({
-      id: 'agent-storage',
-      url: 'file:../mastra.db',
-    }),
-  }),
+	model: '__GATEWAY_OPENAI_MODEL__',
+	memory: new Memory({
+		storage: new LibSQLStore({
+			id: 'agent-storage',
+			url: 'file:../mastra.db',
+		}),
+	}),
 })
 ```
 
@@ -180,107 +180,107 @@ import { z } from 'zod'
 import { sendWhatsAppMessage } from '../../whatsapp-client'
 
 const respondToMessage = createStep({
-  id: 'respond-to-message',
-  description: 'Generate response to user message',
-  inputSchema: z.object({ userMessage: z.string() }),
-  outputSchema: z.object({ response: z.string() }),
-  execute: async ({ inputData, mastra }) => {
-    const agent = mastra?.getAgent('chatAgent')
-    if (!agent) {
-      throw new Error('Chat agent not found')
-    }
+	id: 'respond-to-message',
+	description: 'Generate response to user message',
+	inputSchema: z.object({ userMessage: z.string() }),
+	outputSchema: z.object({ response: z.string() }),
+	execute: async ({ inputData, mastra }) => {
+		const agent = mastra?.getAgent('chatAgent')
+		if (!agent) {
+			throw new Error('Chat agent not found')
+		}
 
-    const response = await agent.generate([{ role: 'user', content: inputData.userMessage }])
+		const response = await agent.generate([{ role: 'user', content: inputData.userMessage }])
 
-    return { response: response.text }
-  },
+		return { response: response.text }
+	},
 })
 
 const breakIntoMessages = createStep({
-  id: 'break-into-messages',
-  description: 'Breaks response into text messages',
-  inputSchema: z.object({ prompt: z.string() }),
-  outputSchema: z.object({ messages: z.array(z.string()) }),
-  execute: async ({ inputData, mastra }) => {
-    const agent = mastra?.getAgent('textMessageAgent')
-    if (!agent) {
-      throw new Error('Text Message agent not found')
-    }
+	id: 'break-into-messages',
+	description: 'Breaks response into text messages',
+	inputSchema: z.object({ prompt: z.string() }),
+	outputSchema: z.object({ messages: z.array(z.string()) }),
+	execute: async ({ inputData, mastra }) => {
+		const agent = mastra?.getAgent('textMessageAgent')
+		if (!agent) {
+			throw new Error('Text Message agent not found')
+		}
 
-    const response = await agent.generate([{ role: 'user', content: inputData.prompt }], {
-      structuredOutput: {
-        schema: z.object({
-          messages: z.array(z.string()),
-        }),
-      },
-    })
+		const response = await agent.generate([{ role: 'user', content: inputData.prompt }], {
+			structuredOutput: {
+				schema: z.object({
+					messages: z.array(z.string()),
+				}),
+			},
+		})
 
-    if (!response.object) throw new Error('Error generating messages')
+		if (!response.object) throw new Error('Error generating messages')
 
-    return response.object
-  },
+		return response.object
+	},
 })
 
 const sendMessages = createStep({
-  id: 'send-messages',
-  description: 'Sends text messages via WhatsApp',
-  inputSchema: z.object({
-    messages: z.array(z.string()),
-    userPhone: z.string(),
-  }),
-  outputSchema: z.object({ sentCount: z.number() }),
-  execute: async ({ inputData }) => {
-    const { messages, userPhone } = inputData
+	id: 'send-messages',
+	description: 'Sends text messages via WhatsApp',
+	inputSchema: z.object({
+		messages: z.array(z.string()),
+		userPhone: z.string(),
+	}),
+	outputSchema: z.object({ sentCount: z.number() }),
+	execute: async ({ inputData }) => {
+		const { messages, userPhone } = inputData
 
-    console.log(`\n🔥 Sending ${messages.length} WhatsApp messages to ${userPhone}...`)
+		console.log(`\n🔥 Sending ${messages.length} WhatsApp messages to ${userPhone}...`)
 
-    let sentCount = 0
+		let sentCount = 0
 
-    // Send each message with a small delay for natural flow
-    for (let i = 0; i < messages.length; i++) {
-      const success = await sendWhatsAppMessage({
-        to: userPhone,
-        message: messages[i],
-      })
+		// Send each message with a small delay for natural flow
+		for (let i = 0; i < messages.length; i++) {
+			const success = await sendWhatsAppMessage({
+				to: userPhone,
+				message: messages[i],
+			})
 
-      if (success) {
-        sentCount++
-      }
+			if (success) {
+				sentCount++
+			}
 
-      // Add delay between messages for natural texting rhythm
-      if (i < messages.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 1000))
-      }
-    }
+			// Add delay between messages for natural texting rhythm
+			if (i < messages.length - 1) {
+				await new Promise(resolve => setTimeout(resolve, 1000))
+			}
+		}
 
-    console.log(`\n✅ Successfully sent ${sentCount}/${messages.length} WhatsApp messages\n`)
+		console.log(`\n✅ Successfully sent ${sentCount}/${messages.length} WhatsApp messages\n`)
 
-    return { sentCount }
-  },
+		return { sentCount }
+	},
 })
 
 export const chatWorkflow = createWorkflow({
-  id: 'chat-workflow',
-  inputSchema: z.object({ userMessage: z.string() }),
-  outputSchema: z.object({ sentCount: z.number() }),
+	id: 'chat-workflow',
+	inputSchema: z.object({ userMessage: z.string() }),
+	outputSchema: z.object({ sentCount: z.number() }),
 })
-  .then(respondToMessage)
-  .map(async ({ inputData }) => ({
-    prompt: `Break this AI response into 3-8 casual, friendly text messages that feel natural for WhatsApp conversation:\n\n${inputData.response}`,
-  }))
-  .then(breakIntoMessages)
-  .map(async ({ inputData, getInitData }) => {
-    // Parse the original stringified input to get user phone
-    const initData = getInitData<typeof chatWorkflow>()
-    const webhookData = JSON.parse(initData.userMessage)
-    const userPhone = webhookData.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from || 'unknown'
+	.then(respondToMessage)
+	.map(async ({ inputData }) => ({
+		prompt: `Break this AI response into 3-8 casual, friendly text messages that feel natural for WhatsApp conversation:\n\n${inputData.response}`,
+	}))
+	.then(breakIntoMessages)
+	.map(async ({ inputData, getInitData }) => {
+		// Parse the original stringified input to get user phone
+		const initData = getInitData<typeof chatWorkflow>()
+		const webhookData = JSON.parse(initData.userMessage)
+		const userPhone = webhookData.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from || 'unknown'
 
-    return {
-      messages: inputData.messages,
-      userPhone,
-    }
-  })
-  .then(sendMessages)
+		return {
+			messages: inputData.messages,
+			userPhone,
+		}
+	})
+	.then(sendMessages)
 
 chatWorkflow.commit()
 ```
@@ -300,53 +300,53 @@ import { textMessageAgent } from './agents/text-message-agent'
 import { chatAgent } from './agents/chat-agent'
 
 export const mastra = new Mastra({
-  workflows: { chatWorkflow },
-  agents: { textMessageAgent, chatAgent },
-  storage: new LibSQLStore({
-    id: 'agent-storage',
-    url: ':memory:',
-  }),
-  logger: new PinoLogger({
-    name: 'Mastra',
-    level: 'info',
-  }),
-  server: {
-    apiRoutes: [
-      registerApiRoute('/whatsapp', {
-        method: 'GET',
-        handler: async c => {
-          const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN
-          const {
-            'hub.mode': mode,
-            'hub.challenge': challenge,
-            'hub.verify_token': token,
-          } = c.req.query()
+	workflows: { chatWorkflow },
+	agents: { textMessageAgent, chatAgent },
+	storage: new LibSQLStore({
+		id: 'agent-storage',
+		url: ':memory:',
+	}),
+	logger: new PinoLogger({
+		name: 'Mastra',
+		level: 'info',
+	}),
+	server: {
+		apiRoutes: [
+			registerApiRoute('/whatsapp', {
+				method: 'GET',
+				handler: async c => {
+					const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN
+					const {
+						'hub.mode': mode,
+						'hub.challenge': challenge,
+						'hub.verify_token': token,
+					} = c.req.query()
 
-          if (mode === 'subscribe' && token === verifyToken) {
-            return c.text(challenge, 200)
-          } else {
-            return c.status(403)
-          }
-        },
-      }),
-      registerApiRoute('/whatsapp', {
-        method: 'POST',
-        handler: async c => {
-          const mastra = c.get('mastra')
-          const chatWorkflow = mastra.getWorkflow('chatWorkflow')
+					if (mode === 'subscribe' && token === verifyToken) {
+						return c.text(challenge, 200)
+					} else {
+						return c.status(403)
+					}
+				},
+			}),
+			registerApiRoute('/whatsapp', {
+				method: 'POST',
+				handler: async c => {
+					const mastra = c.get('mastra')
+					const chatWorkflow = mastra.getWorkflow('chatWorkflow')
 
-          const body = await c.req.json()
+					const body = await c.req.json()
 
-          const workflowRun = await chatWorkflow.createRun()
-          const runResult = await workflowRun.start({
-            inputData: { userMessage: JSON.stringify(body) },
-          })
+					const workflowRun = await chatWorkflow.createRun()
+					const runResult = await workflowRun.start({
+						inputData: { userMessage: JSON.stringify(body) },
+					})
 
-          return c.json(runResult)
-        },
-      }),
-    ],
-  },
+					return c.json(runResult)
+				},
+			}),
+		],
+	},
 })
 ```
 
@@ -361,31 +361,31 @@ import { mastra } from './mastra'
 
 // Simulate a WhatsApp webhook payload
 const mockWebhookData = {
-  entry: [
-    {
-      changes: [
-        {
-          value: {
-            messages: [
-              {
-                from: '1234567890', // Test phone number
-                text: {
-                  body: 'Hello! How are you today?',
-                },
-              },
-            ],
-          },
-        },
-      ],
-    },
-  ],
+	entry: [
+		{
+			changes: [
+				{
+					value: {
+						messages: [
+							{
+								from: '1234567890', // Test phone number
+								text: {
+									body: 'Hello! How are you today?',
+								},
+							},
+						],
+					},
+				},
+			],
+		},
+	],
 }
 
 const workflow = mastra.getWorkflow('chatWorkflow')
 const workflowRun = await workflow.createRun()
 
 const result = await workflowRun.start({
-  inputData: { userMessage: JSON.stringify(mockWebhookData) },
+	inputData: { userMessage: JSON.stringify(mockWebhookData) },
 })
 
 console.log('Workflow completed:', result)

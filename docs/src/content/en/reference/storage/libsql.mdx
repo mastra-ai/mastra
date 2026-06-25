@@ -28,10 +28,10 @@ import { LibSQLStore } from '@mastra/libsql'
 import { Mastra } from '@mastra/core'
 
 const mastra = new Mastra({
-  storage: new LibSQLStore({
-    id: 'libsql-storage',
-    url: 'file:./storage.db',
-  }),
+	storage: new LibSQLStore({
+		id: 'libsql-storage',
+		url: 'file:./storage.db',
+	}),
 })
 ```
 
@@ -43,13 +43,13 @@ import { Agent } from '@mastra/core/agent'
 import { LibSQLStore } from '@mastra/libsql'
 
 export const agent = new Agent({
-  id: 'example-agent',
-  memory: new Memory({
-    storage: new LibSQLStore({
-      id: 'libsql-storage',
-      url: 'file:./agent.db',
-    }),
-  }),
+	id: 'example-agent',
+	memory: new Memory({
+		storage: new LibSQLStore({
+			id: 'libsql-storage',
+			url: 'file:./agent.db',
+		}),
+	}),
 })
 ```
 
@@ -61,9 +61,9 @@ Production with remote database:
 
 ```typescript
 storage: new LibSQLStore({
-  id: 'libsql-storage',
-  url: 'libsql://your-db-name.aws-ap-northeast-1.turso.io',
-  authToken: process.env.TURSO_AUTH_TOKEN,
+	id: 'libsql-storage',
+	url: 'libsql://your-db-name.aws-ap-northeast-1.turso.io',
+	authToken: process.env.TURSO_AUTH_TOKEN,
 })
 ```
 
@@ -71,8 +71,8 @@ For local development and testing, you can store data in memory:
 
 ```typescript
 storage: new LibSQLStore({
-  id: 'libsql-storage',
-  url: ':memory:',
+	id: 'libsql-storage',
+	url: ':memory:',
 })
 ```
 
@@ -84,19 +84,19 @@ In-memory storage resets when the process changes. Only suitable for development
 
 <PropertiesTable
   content={[
-  {
-    name: 'url',
-    type: 'string',
-    description:
-      'Database URL. Use `:memory:` for in-memory database, `file:filename.db` for a file database, or a libSQL connection string (e.g., `libsql://your-database.turso.io`) for remote storage.',
-    isOptional: false,
-  },
-  {
-    name: 'authToken',
-    type: 'string',
-    description: 'Authentication token for remote libSQL databases.',
-    isOptional: true,
-  },
+	{
+		name: 'url',
+		type: 'string',
+		description:
+			'Database URL. Use `:memory:` for in-memory database, `file:filename.db` for a file database, or a libSQL connection string (e.g., `libsql://your-database.turso.io`) for remote storage.',
+		isOptional: false,
+	},
+	{
+		name: 'authToken',
+		type: 'string',
+		description: 'Authentication token for remote libSQL databases.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -115,12 +115,12 @@ import { Mastra } from '@mastra/core'
 import { LibSQLStore } from '@mastra/libsql'
 
 const storage = new LibSQLStore({
-  id: 'libsql-storage',
-  url: 'file:./storage.db',
+	id: 'libsql-storage',
+	url: 'file:./storage.db',
 })
 
 const mastra = new Mastra({
-  storage, // init() called automatically
+	storage, // init() called automatically
 })
 ```
 
@@ -130,8 +130,8 @@ If using storage directly without Mastra, call `init()` explicitly:
 import { LibSQLStore } from '@mastra/libsql'
 
 const storage = new LibSQLStore({
-  id: 'libsql-storage',
-  url: 'file:./storage.db',
+	id: 'libsql-storage',
+	url: 'file:./storage.db',
 })
 
 await storage.init()

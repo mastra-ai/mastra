@@ -21,12 +21,12 @@ new BraintrustExporter(config: BraintrustExporterConfig)
 
 ```typescript
 interface BraintrustExporterConfig extends BaseExporterConfig {
-  apiKey?: string
-  endpoint?: string
-  projectName?: string
-  braintrustLogger?: Logger<true>
-  currentSpan?: () => Span | undefined
-  tuningParameters?: Record<string, any>
+	apiKey?: string
+	endpoint?: string
+	projectName?: string
+	braintrustLogger?: Logger<true>
+	currentSpan?: () => Span | undefined
+	tuningParameters?: Record<string, any>
 }
 ```
 
@@ -37,49 +37,49 @@ Extends `BaseExporterConfig`, which includes:
 
 <PropertiesTable
   props={[
-  {
-    name: 'apiKey',
-    type: 'string',
-    description: 'Braintrust API key. Falls back to BRAINTRUST_API_KEY env var.',
-    required: false,
-  },
-  {
-    name: 'endpoint',
-    type: 'string',
-    description: 'Custom Braintrust endpoint. Falls back to BRAINTRUST_ENDPOINT env var.',
-    required: false,
-  },
-  {
-    name: 'projectName',
-    type: 'string',
-    description: "Project name (default: 'mastra-tracing')",
-    required: false,
-  },
-  {
-    name: 'braintrustLogger',
-    type: 'Logger<true>',
-    description: 'Braintrust logger instance for eval and traced span context integration.',
-    required: false,
-  },
-  {
-    name: 'currentSpan',
-    type: '() => Span | undefined',
-    description:
-      'Resolver from the app Braintrust package instance. Use this with braintrustLogger when Eval() or logger.traced() spans are created by a different installed Braintrust SDK copy.',
-    required: false,
-  },
-  {
-    name: 'logLevel',
-    type: "'debug' | 'info' | 'warn' | 'error'",
-    description: "Logger level (default: 'warn')",
-    required: false,
-  },
-  {
-    name: 'tuningParameters',
-    type: 'Record<string, any>',
-    description: 'Tuning parameters for Braintrust',
-    required: false,
-  },
+	{
+		name: 'apiKey',
+		type: 'string',
+		description: 'Braintrust API key. Falls back to BRAINTRUST_API_KEY env var.',
+		required: false,
+	},
+	{
+		name: 'endpoint',
+		type: 'string',
+		description: 'Custom Braintrust endpoint. Falls back to BRAINTRUST_ENDPOINT env var.',
+		required: false,
+	},
+	{
+		name: 'projectName',
+		type: 'string',
+		description: "Project name (default: 'mastra-tracing')",
+		required: false,
+	},
+	{
+		name: 'braintrustLogger',
+		type: 'Logger<true>',
+		description: 'Braintrust logger instance for eval and traced span context integration.',
+		required: false,
+	},
+	{
+		name: 'currentSpan',
+		type: '() => Span | undefined',
+		description:
+			'Resolver from the app Braintrust package instance. Use this with braintrustLogger when Eval() or logger.traced() spans are created by a different installed Braintrust SDK copy.',
+		required: false,
+	},
+	{
+		name: 'logLevel',
+		type: "'debug' | 'info' | 'warn' | 'error'",
+		description: "Logger level (default: 'warn')",
+		required: false,
+	},
+	{
+		name: 'tuningParameters',
+		type: 'Record<string, any>',
+		description: 'Tuning parameters for Braintrust',
+		required: false,
+	},
 ]}
 />
 
@@ -134,8 +134,8 @@ const exporter = new BraintrustExporter()
 import { BraintrustExporter } from '@mastra/braintrust'
 
 const exporter = new BraintrustExporter({
-  apiKey: process.env.BRAINTRUST_API_KEY,
-  projectName: 'my-ai-project',
+	apiKey: process.env.BRAINTRUST_API_KEY,
+	projectName: 'my-ai-project',
 })
 ```
 

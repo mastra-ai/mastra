@@ -18,26 +18,26 @@ import { Mastra } from '@mastra/core'
 import { z } from 'zod'
 
 const mastra = new Mastra({
-  /* storage config */
+	/* storage config */
 })
 
 // Create with metadata
 const dataset = await mastra.datasets.create({
-  name: 'QA evaluation set',
-  description: 'Question-answer pairs for testing',
-  metadata: { team: 'ml' },
+	name: 'QA evaluation set',
+	description: 'Question-answer pairs for testing',
+	metadata: { team: 'ml' },
 })
 
 // Create with Zod schema (library that supports Standard JSON Schema)
 const typedDataset = await mastra.datasets.create({
-  name: 'Typed QA set',
-  inputSchema: z.object({
-    question: z.string(),
-    context: z.string().optional(),
-  }),
-  groundTruthSchema: z.object({
-    answer: z.string(),
-  }),
+	name: 'Typed QA set',
+	inputSchema: z.object({
+		question: z.string(),
+		context: z.string().optional(),
+	}),
+	groundTruthSchema: z.object({
+		answer: z.string(),
+	}),
 })
 ```
 
@@ -45,35 +45,35 @@ const typedDataset = await mastra.datasets.create({
 
 <PropertiesTable
   content={[
-  {
-    name: 'name',
-    type: 'string',
-    description: 'Display name for the dataset.',
-  },
-  {
-    name: 'description',
-    type: 'string',
-    isOptional: true,
-    description: 'Description of the dataset.',
-  },
-  {
-    name: 'inputSchema',
-    type: 'StandardJSONSchemaV1',
-    isOptional: true,
-    description: 'Standard JSON Schema for item inputs.',
-  },
-  {
-    name: 'groundTruthSchema',
-    type: 'StandardJSONSchemaV1',
-    isOptional: true,
-    description: 'Standard JSON Schema for item ground truths.',
-  },
-  {
-    name: 'metadata',
-    type: 'Record<string, unknown>',
-    isOptional: true,
-    description: 'Arbitrary metadata.',
-  },
+	{
+		name: 'name',
+		type: 'string',
+		description: 'Display name for the dataset.',
+	},
+	{
+		name: 'description',
+		type: 'string',
+		isOptional: true,
+		description: 'Description of the dataset.',
+	},
+	{
+		name: 'inputSchema',
+		type: 'StandardJSONSchemaV1',
+		isOptional: true,
+		description: 'Standard JSON Schema for item inputs.',
+	},
+	{
+		name: 'groundTruthSchema',
+		type: 'StandardJSONSchemaV1',
+		isOptional: true,
+		description: 'Standard JSON Schema for item ground truths.',
+	},
+	{
+		name: 'metadata',
+		type: 'Record<string, unknown>',
+		isOptional: true,
+		description: 'Arbitrary metadata.',
+	},
 ]}
 />
 
@@ -81,10 +81,10 @@ const typedDataset = await mastra.datasets.create({
 
 <PropertiesTable
   content={[
-  {
-    name: 'result',
-    type: 'Promise<Dataset>',
-    description: 'A Dataset instance for the newly created dataset.',
-  },
+	{
+		name: 'result',
+		type: 'Promise<Dataset>',
+		description: 'A Dataset instance for the newly created dataset.',
+	},
 ]}
 />

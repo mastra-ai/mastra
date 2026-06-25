@@ -49,7 +49,7 @@ Create a new browser instance:
 import { AgentBrowser } from '@mastra/agent-browser'
 
 export const browser = new AgentBrowser({
-  headless: false,
+	headless: false,
 })
 ```
 
@@ -60,13 +60,13 @@ import { Agent } from '@mastra/core/agent'
 import { browser } from '../browsers'
 
 export const webAgent = new Agent({
-  id: 'web-agent',
-  name: 'Web Agent',
-  description: 'A web automation assistant that can navigate websites and complete tasks.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  browser,
-  instructions:
-    'You are a web automation assistant. Use browser tools to navigate websites and complete tasks.',
+	id: 'web-agent',
+	name: 'Web Agent',
+	description: 'A web automation assistant that can navigate websites and complete tasks.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	browser,
+	instructions:
+		'You are a web automation assistant. Use browser tools to navigate websites and complete tasks.',
 })
 ```
 
@@ -84,9 +84,9 @@ Stagehand has native Browserbase integration:
 import { StagehandBrowser } from '@mastra/stagehand'
 
 const browser = new StagehandBrowser({
-  env: 'BROWSERBASE',
-  apiKey: process.env.BROWSERBASE_API_KEY,
-  projectId: process.env.BROWSERBASE_PROJECT_ID,
+	env: 'BROWSERBASE',
+	apiKey: process.env.BROWSERBASE_API_KEY,
+	projectId: process.env.BROWSERBASE_PROJECT_ID,
 })
 ```
 
@@ -98,8 +98,8 @@ Connect to any browser exposing a Chrome DevTools Protocol (CDP) endpoint:
 import { AgentBrowser } from '@mastra/agent-browser'
 
 const browser = new AgentBrowser({
-  cdpUrl: process.env.BROWSER_CDP_URL,
-  headless: true,
+	cdpUrl: process.env.BROWSER_CDP_URL,
+	headless: true,
 })
 ```
 
@@ -125,13 +125,13 @@ Screencast is enabled by default and can be configured:
 
 ```typescript
 const browser = new AgentBrowser({
-  screencast: {
-    enabled: true,
-    format: 'jpeg',
-    quality: 80,
-    maxWidth: 1280,
-    maxHeight: 720,
-  },
+	screencast: {
+		enabled: true,
+		format: 'jpeg',
+		quality: 80,
+		maxWidth: 1280,
+		maxHeight: 720,
+	},
 })
 ```
 

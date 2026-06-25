@@ -36,76 +36,76 @@ import type { HonoRequest } from 'hono'
 
 // Define your user type
 type MyUser = {
-  id: string
-  email: string
-  roles: string[]
+	id: string
+	email: string
+	roles: string[]
 }
 
 // Define options for your provider
 interface MyAuthOptions extends MastraAuthProviderOptions<MyUser> {
-  apiUrl?: string
-  apiKey?: string
+	apiUrl?: string
+	apiKey?: string
 }
 
 export class MyAuthProvider extends MastraAuthProvider<MyUser> {
-  protected apiUrl: string
-  protected apiKey: string
+	protected apiUrl: string
+	protected apiKey: string
 
-  constructor(options?: MyAuthOptions) {
-    // Call super with a name for logging/debugging
-    super({ name: options?.name ?? 'my-auth' })
+	constructor(options?: MyAuthOptions) {
+		// Call super with a name for logging/debugging
+		super({ name: options?.name ?? 'my-auth' })
 
-    const apiUrl = options?.apiUrl ?? process.env.MY_AUTH_API_URL
-    const apiKey = options?.apiKey ?? process.env.MY_AUTH_API_KEY
+		const apiUrl = options?.apiUrl ?? process.env.MY_AUTH_API_URL
+		const apiKey = options?.apiKey ?? process.env.MY_AUTH_API_KEY
 
-    if (!apiUrl || !apiKey) {
-      throw new Error(
-        'Auth API URL and API key are required. Provide them in options or set MY_AUTH_API_URL and MY_AUTH_API_KEY environment variables.',
-      )
-    }
+		if (!apiUrl || !apiKey) {
+			throw new Error(
+				'Auth API URL and API key are required. Provide them in options or set MY_AUTH_API_URL and MY_AUTH_API_KEY environment variables.',
+			)
+		}
 
-    this.apiUrl = apiUrl
-    this.apiKey = apiKey
+		this.apiUrl = apiUrl
+		this.apiKey = apiKey
 
-    // Register any custom options (authorizeUser override, public/protected paths)
-    this.registerOptions(options)
-  }
+		// Register any custom options (authorizeUser override, public/protected paths)
+		this.registerOptions(options)
+	}
 
-  /**
-   * Verify the token and return the user
-   * Return null if authentication fails
-   */
-  async authenticateToken(token: string, request: HonoRequest): Promise<MyUser | null> {
-    try {
-      const response = await fetch(`${this.apiUrl}/verify`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': this.apiKey,
-        },
-        body: JSON.stringify({ token }),
-      })
+	/**
+	 * Verify the token and return the user
+	 * Return null if authentication fails
+	 */
+	async authenticateToken(token: string, request: HonoRequest): Promise<MyUser | null> {
+		try {
+			const response = await fetch(`${this.apiUrl}/verify`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'X-API-Key': this.apiKey,
+				},
+				body: JSON.stringify({ token }),
+			})
 
-      if (!response.ok) {
-        return null
-      }
+			if (!response.ok) {
+				return null
+			}
 
-      const user = await response.json()
-      return user
-    } catch (error) {
-      console.error('Token verification failed:', error)
-      return null
-    }
-  }
+			const user = await response.json()
+			return user
+		} catch (error) {
+			console.error('Token verification failed:', error)
+			return null
+		}
+	}
 
-  /**
-   * Check if the authenticated user is authorized
-   * Return true to allow access, false to deny
-   */
-  async authorizeUser(user: MyUser, request: HonoRequest): Promise<boolean> {
-    // Basic authorization: user must exist and have an ID
-    return !!user?.id
-  }
+	/**
+	 * Check if the authenticated user is authorized
+	 * Return true to allow access, false to deny
+	 */
+	async authorizeUser(user: MyUser, request: HonoRequest): Promise<boolean> {
+		// Basic authorization: user must exist and have an ID
+		return !!user?.id
+	}
 }
 ```
 
@@ -160,19 +160,19 @@ Configure which paths require authentication using pattern matching:
 
 ```typescript
 const auth = new MyAuthProvider({
-  // Paths that require authentication
-  protected: [
-    '/api/*', // Wildcard: all /api routes
-    '/admin/*', // Wildcard: all /admin routes
-    /^\/secure\/.*/, // Regex pattern
-  ],
+	// Paths that require authentication
+	protected: [
+		'/api/*', // Wildcard: all /api routes
+		'/admin/*', // Wildcard: all /admin routes
+		/^\/secure\/.*/, // Regex pattern
+	],
 
-  // Paths that bypass authentication
-  public: [
-    '/health', // Exact match
-    '/api/status', // Exact match
-    ['/api/webhook', 'POST'], // Only POST requests to /api/webhook
-  ],
+	// Paths that bypass authentication
+	public: [
+		'/health', // Exact match
+		'/api/status', // Exact match
+		['/api/webhook', 'POST'], // Only POST requests to /api/webhook
+	],
 })
 ```
 
@@ -185,12 +185,12 @@ import { Mastra } from '@mastra/core'
 import { MyAuthProvider } from './my-auth-provider'
 
 export const mastra = new Mastra({
-  server: {
-    auth: new MyAuthProvider({
-      apiUrl: process.env.MY_AUTH_API_URL,
-      apiKey: process.env.MY_AUTH_API_KEY,
-    }),
-  },
+	server: {
+		auth: new MyAuthProvider({
+			apiUrl: process.env.MY_AUTH_API_URL,
+			apiKey: process.env.MY_AUTH_API_KEY,
+		}),
+	},
 })
 ```
 
@@ -227,52 +227,52 @@ import type { JwtPayload } from '@mastra/auth'
 type MyUser = JwtPayload
 
 interface MyJwksAuthOptions extends MastraAuthProviderOptions<MyUser> {
-  jwksUri?: string
-  issuer?: string
+	jwksUri?: string
+	issuer?: string
 }
 
 export class MyJwksAuth extends MastraAuthProvider<MyUser> {
-  protected jwksUri: string
-  protected issuer: string
+	protected jwksUri: string
+	protected issuer: string
 
-  constructor(options?: MyJwksAuthOptions) {
-    super({ name: options?.name ?? 'my-jwks-auth' })
+	constructor(options?: MyJwksAuthOptions) {
+		super({ name: options?.name ?? 'my-jwks-auth' })
 
-    const jwksUri = options?.jwksUri ?? process.env.MY_JWKS_URI
-    const issuer = options?.issuer ?? process.env.MY_AUTH_ISSUER
+		const jwksUri = options?.jwksUri ?? process.env.MY_JWKS_URI
+		const issuer = options?.issuer ?? process.env.MY_AUTH_ISSUER
 
-    if (!jwksUri) {
-      throw new Error('JWKS URI is required')
-    }
+		if (!jwksUri) {
+			throw new Error('JWKS URI is required')
+		}
 
-    this.jwksUri = jwksUri
-    this.issuer = issuer ?? ''
+		this.jwksUri = jwksUri
+		this.issuer = issuer ?? ''
 
-    this.registerOptions(options)
-  }
+		this.registerOptions(options)
+	}
 
-  async authenticateToken(token: string): Promise<MyUser | null> {
-    try {
-      const payload = await verifyJwks(token, this.jwksUri)
+	async authenticateToken(token: string): Promise<MyUser | null> {
+		try {
+			const payload = await verifyJwks(token, this.jwksUri)
 
-      // Optionally validate issuer
-      if (this.issuer && payload.iss !== this.issuer) {
-        return null
-      }
+			// Optionally validate issuer
+			if (this.issuer && payload.iss !== this.issuer) {
+				return null
+			}
 
-      return payload
-    } catch {
-      return null
-    }
-  }
+			return payload
+		} catch {
+			return null
+		}
+	}
 
-  async authorizeUser(user: MyUser): Promise<boolean> {
-    // Check token hasn't expired
-    if (user.exp && user.exp * 1000 < Date.now()) {
-      return false
-    }
-    return !!user.sub
-  }
+	async authorizeUser(user: MyUser): Promise<boolean> {
+		// Check token hasn't expired
+		if (user.exp && user.exp * 1000 < Date.now()) {
+			return false
+		}
+		return !!user.sub
+	}
 }
 ```
 
@@ -282,13 +282,13 @@ Override the default authorization by providing a custom `authorizeUser` functio
 
 ```typescript
 const auth = new MyAuthProvider({
-  apiUrl: process.env.MY_AUTH_API_URL,
-  apiKey: process.env.MY_AUTH_API_KEY,
+	apiUrl: process.env.MY_AUTH_API_URL,
+	apiKey: process.env.MY_AUTH_API_KEY,
 
-  // Custom authorization: require admin role for all requests
-  async authorizeUser(user, request) {
-    return user.roles.includes('admin')
-  },
+	// Custom authorization: require admin role for all requests
+	async authorizeUser(user, request) {
+		return user.roles.includes('admin')
+	},
 })
 ```
 
@@ -296,23 +296,23 @@ const auth = new MyAuthProvider({
 
 ```typescript
 const auth = new MyAuthProvider({
-  async authorizeUser(user, request) {
-    const path = request.url
-    const method = request.method
+	async authorizeUser(user, request) {
+		const path = request.url
+		const method = request.method
 
-    // Admin routes require admin role
-    if (path.startsWith('/admin/')) {
-      return user.roles.includes('admin')
-    }
+		// Admin routes require admin role
+		if (path.startsWith('/admin/')) {
+			return user.roles.includes('admin')
+		}
 
-    // Write operations require write role
-    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
-      return user.roles.includes('write') || user.roles.includes('admin')
-    }
+		// Write operations require write role
+		if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+			return user.roles.includes('write') || user.roles.includes('admin')
+		}
 
-    // Read operations allowed for all authenticated users
-    return true
-  },
+		// Read operations allowed for all authenticated users
+		return true
+	},
 })
 ```
 
@@ -328,115 +328,115 @@ import { MyAuthProvider } from './my-auth-provider'
 global.fetch = vi.fn()
 
 describe('MyAuthProvider', () => {
-  const mockOptions = {
-    apiUrl: 'https://auth.example.com',
-    apiKey: 'test-api-key',
-  }
+	const mockOptions = {
+		apiUrl: 'https://auth.example.com',
+		apiKey: 'test-api-key',
+	}
 
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
+	beforeEach(() => {
+		vi.clearAllMocks()
+	})
 
-  describe('initialization', () => {
-    it('should initialize with provided options', () => {
-      const auth = new MyAuthProvider(mockOptions)
-      expect(auth).toBeInstanceOf(MyAuthProvider)
-    })
+	describe('initialization', () => {
+		it('should initialize with provided options', () => {
+			const auth = new MyAuthProvider(mockOptions)
+			expect(auth).toBeInstanceOf(MyAuthProvider)
+		})
 
-    it('should throw error when required options are missing', () => {
-      expect(() => new MyAuthProvider({})).toThrow('Auth API URL and API key are required')
-    })
-  })
+		it('should throw error when required options are missing', () => {
+			expect(() => new MyAuthProvider({})).toThrow('Auth API URL and API key are required')
+		})
+	})
 
-  describe('authenticateToken', () => {
-    it('should return user when token is valid', async () => {
-      const mockUser = { id: 'user123', email: 'test@example.com', roles: ['read'] }
-      ;(fetch as any).mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(mockUser),
-      })
+	describe('authenticateToken', () => {
+		it('should return user when token is valid', async () => {
+			const mockUser = { id: 'user123', email: 'test@example.com', roles: ['read'] }
+			;(fetch as any).mockResolvedValue({
+				ok: true,
+				json: () => Promise.resolve(mockUser),
+			})
 
-      const auth = new MyAuthProvider(mockOptions)
-      const result = await auth.authenticateToken('valid-token', {} as any)
+			const auth = new MyAuthProvider(mockOptions)
+			const result = await auth.authenticateToken('valid-token', {} as any)
 
-      expect(fetch).toHaveBeenCalledWith(
-        'https://auth.example.com/verify',
-        expect.objectContaining({
-          method: 'POST',
-          body: JSON.stringify({ token: 'valid-token' }),
-        }),
-      )
-      expect(result).toEqual(mockUser)
-    })
+			expect(fetch).toHaveBeenCalledWith(
+				'https://auth.example.com/verify',
+				expect.objectContaining({
+					method: 'POST',
+					body: JSON.stringify({ token: 'valid-token' }),
+				}),
+			)
+			expect(result).toEqual(mockUser)
+		})
 
-    it('should return null when token is invalid', async () => {
-      ;(fetch as any).mockResolvedValue({ ok: false })
+		it('should return null when token is invalid', async () => {
+			;(fetch as any).mockResolvedValue({ ok: false })
 
-      const auth = new MyAuthProvider(mockOptions)
-      const result = await auth.authenticateToken('invalid-token', {} as any)
+			const auth = new MyAuthProvider(mockOptions)
+			const result = await auth.authenticateToken('invalid-token', {} as any)
 
-      expect(result).toBeNull()
-    })
-  })
+			expect(result).toBeNull()
+		})
+	})
 
-  describe('authorizeUser', () => {
-    it('should return true when user has valid id', async () => {
-      const auth = new MyAuthProvider(mockOptions)
-      const result = await auth.authorizeUser(
-        { id: 'user123', email: 'test@example.com', roles: [] },
-        {} as any,
-      )
+	describe('authorizeUser', () => {
+		it('should return true when user has valid id', async () => {
+			const auth = new MyAuthProvider(mockOptions)
+			const result = await auth.authorizeUser(
+				{ id: 'user123', email: 'test@example.com', roles: [] },
+				{} as any,
+			)
 
-      expect(result).toBe(true)
-    })
+			expect(result).toBe(true)
+		})
 
-    it('should return false when user has no id', async () => {
-      const auth = new MyAuthProvider(mockOptions)
-      const result = await auth.authorizeUser(
-        { id: '', email: 'test@example.com', roles: [] },
-        {} as any,
-      )
+		it('should return false when user has no id', async () => {
+			const auth = new MyAuthProvider(mockOptions)
+			const result = await auth.authorizeUser(
+				{ id: '', email: 'test@example.com', roles: [] },
+				{} as any,
+			)
 
-      expect(result).toBe(false)
-    })
-  })
+			expect(result).toBe(false)
+		})
+	})
 
-  describe('custom authorization', () => {
-    it('should use custom authorizeUser when provided', async () => {
-      const auth = new MyAuthProvider({
-        ...mockOptions,
-        authorizeUser: user => user.roles.includes('admin'),
-      })
+	describe('custom authorization', () => {
+		it('should use custom authorizeUser when provided', async () => {
+			const auth = new MyAuthProvider({
+				...mockOptions,
+				authorizeUser: user => user.roles.includes('admin'),
+			})
 
-      const adminUser = { id: 'user123', email: 'admin@example.com', roles: ['admin'] }
-      const regularUser = { id: 'user456', email: 'user@example.com', roles: ['read'] }
+			const adminUser = { id: 'user123', email: 'admin@example.com', roles: ['admin'] }
+			const regularUser = { id: 'user456', email: 'user@example.com', roles: ['read'] }
 
-      expect(await auth.authorizeUser(adminUser, {} as any)).toBe(true)
-      expect(await auth.authorizeUser(regularUser, {} as any)).toBe(false)
-    })
-  })
+			expect(await auth.authorizeUser(adminUser, {} as any)).toBe(true)
+			expect(await auth.authorizeUser(regularUser, {} as any)).toBe(false)
+		})
+	})
 
-  describe('route configuration', () => {
-    it('should store public routes configuration', () => {
-      const publicRoutes = ['/health', '/api/status']
-      const auth = new MyAuthProvider({
-        ...mockOptions,
-        public: publicRoutes,
-      })
+	describe('route configuration', () => {
+		it('should store public routes configuration', () => {
+			const publicRoutes = ['/health', '/api/status']
+			const auth = new MyAuthProvider({
+				...mockOptions,
+				public: publicRoutes,
+			})
 
-      expect(auth.public).toEqual(publicRoutes)
-    })
+			expect(auth.public).toEqual(publicRoutes)
+		})
 
-    it('should store protected routes configuration', () => {
-      const protectedRoutes = ['/api/*', '/admin/*']
-      const auth = new MyAuthProvider({
-        ...mockOptions,
-        protected: protectedRoutes,
-      })
+		it('should store protected routes configuration', () => {
+			const protectedRoutes = ['/api/*', '/admin/*']
+			const auth = new MyAuthProvider({
+				...mockOptions,
+				protected: protectedRoutes,
+			})
 
-      expect(auth.protected).toEqual(protectedRoutes)
-    })
-  })
+			expect(auth.protected).toEqual(protectedRoutes)
+		})
+	})
 })
 ```
 
@@ -446,55 +446,55 @@ Provide descriptive errors for common failure scenarios:
 
 ```typescript
 export class MyAuthProvider extends MastraAuthProvider<MyUser> {
-  constructor(options?: MyAuthOptions) {
-    super({ name: options?.name ?? 'my-auth' })
+	constructor(options?: MyAuthOptions) {
+		super({ name: options?.name ?? 'my-auth' })
 
-    const apiUrl = options?.apiUrl ?? process.env.MY_AUTH_API_URL
-    const apiKey = options?.apiKey ?? process.env.MY_AUTH_API_KEY
+		const apiUrl = options?.apiUrl ?? process.env.MY_AUTH_API_URL
+		const apiKey = options?.apiKey ?? process.env.MY_AUTH_API_KEY
 
-    if (!apiUrl) {
-      throw new Error(
-        'Missing MY_AUTH_API_URL. Set the environment variable or pass apiUrl in options.',
-      )
-    }
+		if (!apiUrl) {
+			throw new Error(
+				'Missing MY_AUTH_API_URL. Set the environment variable or pass apiUrl in options.',
+			)
+		}
 
-    if (!apiKey) {
-      throw new Error(
-        'Missing MY_AUTH_API_KEY. Set the environment variable or pass apiKey in options.',
-      )
-    }
+		if (!apiKey) {
+			throw new Error(
+				'Missing MY_AUTH_API_KEY. Set the environment variable or pass apiKey in options.',
+			)
+		}
 
-    this.apiUrl = apiUrl
-    this.apiKey = apiKey
-    this.registerOptions(options)
-  }
+		this.apiUrl = apiUrl
+		this.apiKey = apiKey
+		this.registerOptions(options)
+	}
 
-  async authenticateToken(token: string): Promise<MyUser | null> {
-    if (!token || typeof token !== 'string') {
-      return null // Immediate safe fail
-    }
+	async authenticateToken(token: string): Promise<MyUser | null> {
+		if (!token || typeof token !== 'string') {
+			return null // Immediate safe fail
+		}
 
-    try {
-      const response = await fetch(`${this.apiUrl}/verify`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': this.apiKey,
-        },
-        body: JSON.stringify({ token }),
-      })
+		try {
+			const response = await fetch(`${this.apiUrl}/verify`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'X-API-Key': this.apiKey,
+				},
+				body: JSON.stringify({ token }),
+			})
 
-      if (!response.ok) {
-        return null
-      }
+			if (!response.ok) {
+				return null
+			}
 
-      return await response.json()
-    } catch (error) {
-      // Log error for debugging, but don't expose details to client
-      console.error('Auth verification error:', error)
-      return null
-    }
-  }
+			return await response.json()
+		} catch (error) {
+			// Log error for debugging, but don't expose details to client
+			console.error('Auth verification error:', error)
+			return null
+		}
+	}
 }
 ```
 

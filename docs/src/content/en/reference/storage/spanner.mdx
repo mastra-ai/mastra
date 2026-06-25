@@ -22,10 +22,10 @@ npm install @mastra/spanner@latest
 import { SpannerStore } from '@mastra/spanner'
 
 const storage = new SpannerStore({
-  id: 'spanner-storage',
-  projectId: process.env.SPANNER_PROJECT_ID!,
-  instanceId: process.env.SPANNER_INSTANCE_ID!,
-  databaseId: process.env.SPANNER_DATABASE_ID!,
+	id: 'spanner-storage',
+	projectId: process.env.SPANNER_PROJECT_ID!,
+	instanceId: process.env.SPANNER_INSTANCE_ID!,
+	databaseId: process.env.SPANNER_DATABASE_ID!,
 })
 ```
 
@@ -35,74 +35,74 @@ The instance and database must already exist. The adapter creates the required t
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Unique identifier for this storage instance.',
-    isOptional: false,
-  },
-  {
-    name: 'projectId',
-    type: 'string',
-    description: 'Google Cloud project ID. Required unless `database` is provided.',
-    isOptional: true,
-  },
-  {
-    name: 'instanceId',
-    type: 'string',
-    description: 'Cloud Spanner instance ID. Required unless `database` is provided.',
-    isOptional: true,
-  },
-  {
-    name: 'databaseId',
-    type: 'string',
-    description: 'Cloud Spanner database ID. Required unless `database` is provided.',
-    isOptional: true,
-  },
-  {
-    name: 'database',
-    type: '@google-cloud/spanner Database',
-    description:
-      'Pre-configured Spanner Database handle. Use this when you manage the Spanner client elsewhere (for example, to share auth or connection options across services).',
-    isOptional: true,
-  },
-  {
-    name: 'spannerOptions',
-    type: 'object',
-    description:
-      'Options forwarded to the `@google-cloud/spanner` client constructor. Use this to set credentials, custom endpoints, or to point at the local emulator.',
-    isOptional: true,
-  },
-  {
-    name: 'disableInit',
-    type: 'boolean',
-    description:
-      'When true, skip automatic table creation on first use. You must call `storage.init()` explicitly during a separate deploy step.',
-    isOptional: true,
-    defaultValue: 'false',
-  },
-  {
-    name: 'skipDefaultIndexes',
-    type: 'boolean',
-    description: 'When true, skip creation of default indexes during initialization.',
-    isOptional: true,
-    defaultValue: 'false',
-  },
-  {
-    name: 'indexes',
-    type: 'CreateIndexOptions[]',
-    description:
-      'Custom secondary indexes to create. Each index must specify the table it belongs to. Indexes are routed to the appropriate domain based on the table name.',
-    isOptional: true,
-  },
-  {
-    name: 'initMode',
-    type: "'sync' | 'validate'",
-    description:
-      "Controls schema-initialization behavior. `'sync'` creates missing tables, columns, and indexes during `init()` (the historical behavior). `'validate'` issues no DDL and instead verifies that every expected table, column, and default/custom index already exists, throwing a typed user error if anything is missing — useful when an external process (Terraform, Liquibase, a release pipeline, etc.) owns the schema and Mastra should only verify it.",
-    isOptional: true,
-    defaultValue: "'sync'",
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Unique identifier for this storage instance.',
+		isOptional: false,
+	},
+	{
+		name: 'projectId',
+		type: 'string',
+		description: 'Google Cloud project ID. Required unless `database` is provided.',
+		isOptional: true,
+	},
+	{
+		name: 'instanceId',
+		type: 'string',
+		description: 'Cloud Spanner instance ID. Required unless `database` is provided.',
+		isOptional: true,
+	},
+	{
+		name: 'databaseId',
+		type: 'string',
+		description: 'Cloud Spanner database ID. Required unless `database` is provided.',
+		isOptional: true,
+	},
+	{
+		name: 'database',
+		type: '@google-cloud/spanner Database',
+		description:
+			'Pre-configured Spanner Database handle. Use this when you manage the Spanner client elsewhere (for example, to share auth or connection options across services).',
+		isOptional: true,
+	},
+	{
+		name: 'spannerOptions',
+		type: 'object',
+		description:
+			'Options forwarded to the `@google-cloud/spanner` client constructor. Use this to set credentials, custom endpoints, or to point at the local emulator.',
+		isOptional: true,
+	},
+	{
+		name: 'disableInit',
+		type: 'boolean',
+		description:
+			'When true, skip automatic table creation on first use. You must call `storage.init()` explicitly during a separate deploy step.',
+		isOptional: true,
+		defaultValue: 'false',
+	},
+	{
+		name: 'skipDefaultIndexes',
+		type: 'boolean',
+		description: 'When true, skip creation of default indexes during initialization.',
+		isOptional: true,
+		defaultValue: 'false',
+	},
+	{
+		name: 'indexes',
+		type: 'CreateIndexOptions[]',
+		description:
+			'Custom secondary indexes to create. Each index must specify the table it belongs to. Indexes are routed to the appropriate domain based on the table name.',
+		isOptional: true,
+	},
+	{
+		name: 'initMode',
+		type: "'sync' | 'validate'",
+		description:
+			"Controls schema-initialization behavior. `'sync'` creates missing tables, columns, and indexes during `init()` (the historical behavior). `'validate'` issues no DDL and instead verifies that every expected table, column, and default/custom index already exists, throwing a typed user error if anything is missing — useful when an external process (Terraform, Liquibase, a release pipeline, etc.) owns the schema and Mastra should only verify it.",
+		isOptional: true,
+		defaultValue: "'sync'",
+	},
 ]}
 />
 
@@ -116,10 +116,10 @@ import { SpannerStore } from '@mastra/spanner'
 
 // Using projectId / instanceId / databaseId
 const store1 = new SpannerStore({
-  id: 'spanner-storage-1',
-  projectId: 'my-gcp-project',
-  instanceId: 'my-instance',
-  databaseId: 'mastra',
+	id: 'spanner-storage-1',
+	projectId: 'my-gcp-project',
+	instanceId: 'my-instance',
+	databaseId: 'mastra',
 })
 
 // Reusing an existing Spanner Database handle
@@ -127,18 +127,18 @@ const spanner = new Spanner({ projectId: 'my-gcp-project' })
 const database = spanner.instance('my-instance').database('mastra')
 
 const store2 = new SpannerStore({
-  id: 'spanner-storage-2',
-  database,
+	id: 'spanner-storage-2',
+	database,
 })
 
 // Using the local Spanner emulator (set the SPANNER_EMULATOR_HOST env var)
 process.env.SPANNER_EMULATOR_HOST = 'localhost:9010'
 const store3 = new SpannerStore({
-  id: 'spanner-storage-emulator',
-  projectId: 'test-project',
-  instanceId: 'test-instance',
-  databaseId: 'test-db',
-  spannerOptions: { servicePath: 'localhost', port: 9010, sslCreds: undefined },
+	id: 'spanner-storage-emulator',
+	projectId: 'test-project',
+	instanceId: 'test-instance',
+	databaseId: 'test-db',
+	spannerOptions: { servicePath: 'localhost', port: 9010, sslCreds: undefined },
 })
 ```
 
@@ -190,14 +190,14 @@ import { Mastra } from '@mastra/core'
 import { SpannerStore } from '@mastra/spanner'
 
 const storage = new SpannerStore({
-  id: 'spanner-storage',
-  projectId: process.env.SPANNER_PROJECT_ID!,
-  instanceId: process.env.SPANNER_INSTANCE_ID!,
-  databaseId: process.env.SPANNER_DATABASE_ID!,
+	id: 'spanner-storage',
+	projectId: process.env.SPANNER_PROJECT_ID!,
+	instanceId: process.env.SPANNER_INSTANCE_ID!,
+	databaseId: process.env.SPANNER_DATABASE_ID!,
 })
 
 const mastra = new Mastra({
-  storage, // init() is called automatically
+	storage, // init() is called automatically
 })
 ```
 
@@ -205,10 +205,10 @@ If you use storage directly, call `init()` once before the first operation. Span
 
 ```typescript
 const storage = new SpannerStore({
-  id: 'spanner-storage',
-  projectId: process.env.SPANNER_PROJECT_ID!,
-  instanceId: process.env.SPANNER_INSTANCE_ID!,
-  databaseId: process.env.SPANNER_DATABASE_ID!,
+	id: 'spanner-storage',
+	projectId: process.env.SPANNER_PROJECT_ID!,
+	instanceId: process.env.SPANNER_INSTANCE_ID!,
+	databaseId: process.env.SPANNER_DATABASE_ID!,
 })
 
 await storage.init()

@@ -29,9 +29,9 @@ Enable LSP on a workspace by setting `lsp: true`:
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
-  lsp: true,
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+	lsp: true,
 })
 ```
 
@@ -43,9 +43,9 @@ When LSP is enabled, the workspace exposes `mastra_workspace_lsp_inspect` by def
 
 ```json
 {
-  "path": "/absolute/path/to/file.ts",
-  "line": 10,
-  "match": "const foo = <<<bar()"
+	"path": "/absolute/path/to/file.ts",
+	"line": 10,
+	"match": "const foo = <<<bar()"
 }
 ```
 
@@ -68,13 +68,13 @@ Rename the tool if your agent expects a shorter name:
 import { Workspace, LocalFilesystem, WORKSPACE_TOOLS } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  lsp: true,
-  tools: {
-    [WORKSPACE_TOOLS.LSP.LSP_INSPECT]: {
-      name: 'lsp_inspect',
-    },
-  },
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	lsp: true,
+	tools: {
+		[WORKSPACE_TOOLS.LSP.LSP_INSPECT]: {
+			name: 'lsp_inspect',
+		},
+	},
 })
 ```
 
@@ -88,16 +88,16 @@ Set `lsp` to `true` for default behavior, or provide an object to customize serv
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  lsp: {
-    diagnosticTimeout: 4000,
-    initTimeout: 8000,
-    disableServers: ['eslint'],
-    binaryOverrides: {
-      typescript: '/custom/path/to/typescript-language-server --stdio',
-    },
-    searchPaths: ['/opt/homebrew/bin'],
-  },
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	lsp: {
+		diagnosticTimeout: 4000,
+		initTimeout: 8000,
+		disableServers: ['eslint'],
+		binaryOverrides: {
+			typescript: '/custom/path/to/typescript-language-server --stdio',
+		},
+		searchPaths: ['/opt/homebrew/bin'],
+	},
 })
 ```
 
@@ -116,20 +116,20 @@ By default, Mastra includes built-in support for TypeScript, JavaScript, Python,
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
-  lsp: {
-    servers: {
-      phpactor: {
-        id: 'phpactor',
-        name: 'Phpactor Language Server',
-        languageIds: ['php'],
-        extensions: ['.php'],
-        markers: ['composer.json'],
-        command: 'phpactor language-server',
-      },
-    },
-  },
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+	lsp: {
+		servers: {
+			phpactor: {
+				id: 'phpactor',
+				name: 'Phpactor Language Server',
+				languageIds: ['php'],
+				extensions: ['.php'],
+				markers: ['composer.json'],
+				command: 'phpactor language-server',
+			},
+		},
+	},
 })
 ```
 
@@ -154,28 +154,28 @@ Custom servers are merged with built-in servers. To replace a built-in server, u
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
-  lsp: {
-    servers: {
-      phpactor: {
-        id: 'phpactor',
-        name: 'Phpactor Language Server',
-        languageIds: ['php'],
-        extensions: ['.php'],
-        markers: ['composer.json'],
-        command: 'phpactor language-server',
-      },
-      solargraph: {
-        id: 'solargraph',
-        name: 'Solargraph',
-        languageIds: ['ruby'],
-        extensions: ['.rb', '.erb'],
-        markers: ['Gemfile'],
-        command: 'solargraph stdio',
-      },
-    },
-  },
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+	lsp: {
+		servers: {
+			phpactor: {
+				id: 'phpactor',
+				name: 'Phpactor Language Server',
+				languageIds: ['php'],
+				extensions: ['.php'],
+				markers: ['composer.json'],
+				command: 'phpactor language-server',
+			},
+			solargraph: {
+				id: 'solargraph',
+				name: 'Solargraph',
+				languageIds: ['ruby'],
+				extensions: ['.rb', '.erb'],
+				markers: ['Gemfile'],
+				command: 'solargraph stdio',
+			},
+		},
+	},
 })
 ```
 

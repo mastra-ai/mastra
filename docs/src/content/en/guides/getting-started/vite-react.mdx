@@ -54,12 +54,12 @@ import path from 'path'
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-    },
-  },
+	plugins: [react(), tailwindcss()],
+	resolve: {
+		alias: {
+			'@': path.resolve(__dirname, './src'),
+		},
+	},
 })
 ```
 
@@ -73,13 +73,13 @@ Add these `compilerOptions` to `tsconfig.json`:
 
 ```jsonc title="tsconfig.json"
 {
-  // ...
-  "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"],
-    },
-  },
+	// ...
+	"compilerOptions": {
+		"baseUrl": ".",
+		"paths": {
+			"@/*": ["./src/*"],
+		},
+	},
 }
 ```
 
@@ -87,14 +87,14 @@ Edit `tsconfig.app.json` to resolve paths:
 
 ```jsonc title="tsconfig.app.json"
 {
-  "compilerOptions": {
-    // ...
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"],
-    },
-    // ...
-  },
+	"compilerOptions": {
+		// ...
+		"baseUrl": ".",
+		"paths": {
+			"@/*": ["./src/*"],
+		},
+		// ...
+	},
 }
 ```
 
@@ -140,14 +140,14 @@ import { Mastra } from '@mastra/core/mastra'
 import { chatRoute } from '@mastra/ai-sdk'
 
 export const mastra = new Mastra({
-  // Existing config...
-  server: {
-    apiRoutes: [
-      chatRoute({
-        path: '/chat/:agentId',
-      }),
-    ],
-  },
+	// Existing config...
+	server: {
+		apiRoutes: [
+			chatRoute({
+				path: '/chat/:agentId',
+			}),
+		],
+	},
 })
 ```
 
@@ -161,15 +161,15 @@ import { DefaultChatTransport, type ToolUIPart } from 'ai'
 import { useChat } from '@ai-sdk/react'
 
 import {
-  PromptInput,
-  PromptInputBody,
-  PromptInputTextarea,
+	PromptInput,
+	PromptInputBody,
+	PromptInputTextarea,
 } from '@/components/ai-elements/prompt-input'
 
 import {
-  Conversation,
-  ConversationContent,
-  ConversationScrollButton,
+	Conversation,
+	ConversationContent,
+	ConversationScrollButton,
 } from '@/components/ai-elements/conversation'
 
 import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message'
@@ -177,79 +177,79 @@ import { Message, MessageContent, MessageResponse } from '@/components/ai-elemen
 import { Tool, ToolHeader, ToolContent, ToolInput, ToolOutput } from '@/components/ai-elements/tool'
 
 export default function App() {
-  const [input, setInput] = React.useState<string>('')
+	const [input, setInput] = React.useState<string>('')
 
-  const { messages, sendMessage, status } = useChat({
-    transport: new DefaultChatTransport({
-      api: 'http://localhost:4111/chat/weather-agent',
-    }),
-  })
+	const { messages, sendMessage, status } = useChat({
+		transport: new DefaultChatTransport({
+			api: 'http://localhost:4111/chat/weather-agent',
+		}),
+	})
 
-  const handleSubmit = async () => {
-    if (!input.trim()) return
+	const handleSubmit = async () => {
+		if (!input.trim()) return
 
-    sendMessage({ text: input })
-    setInput('')
-  }
+		sendMessage({ text: input })
+		setInput('')
+	}
 
-  return (
-    <div className="relative mx-auto size-full h-screen max-w-4xl p-6">
-      <div className="flex h-full flex-col">
-        <Conversation className="h-full">
-          <ConversationContent>
-            {messages.map(message => (
-              <div key={message.id}>
-                {message.parts?.map((part, i) => {
-                  if (part.type === 'text') {
-                    return (
-                      <Message key={`${message.id}-${i}`} from={message.role}>
-                        <MessageContent>
-                          <MessageResponse>{part.text}</MessageResponse>
-                        </MessageContent>
-                      </Message>
-                    )
-                  }
+	return (
+		<div className="relative mx-auto size-full h-screen max-w-4xl p-6">
+			<div className="flex h-full flex-col">
+				<Conversation className="h-full">
+					<ConversationContent>
+						{messages.map(message => (
+							<div key={message.id}>
+								{message.parts?.map((part, i) => {
+									if (part.type === 'text') {
+										return (
+											<Message key={`${message.id}-${i}`} from={message.role}>
+												<MessageContent>
+													<MessageResponse>{part.text}</MessageResponse>
+												</MessageContent>
+											</Message>
+										)
+									}
 
-                  if (part.type?.startsWith('tool-')) {
-                    return (
-                      <Tool key={`${message.id}-${i}`}>
-                        <ToolHeader
-                          type={(part as ToolUIPart).type}
-                          state={(part as ToolUIPart).state || 'output-available'}
-                          className="cursor-pointer"
-                        />
-                        <ToolContent>
-                          <ToolInput input={(part as ToolUIPart).input || {}} />
-                          <ToolOutput
-                            output={(part as ToolUIPart).output}
-                            errorText={(part as ToolUIPart).errorText}
-                          />
-                        </ToolContent>
-                      </Tool>
-                    )
-                  }
+									if (part.type?.startsWith('tool-')) {
+										return (
+											<Tool key={`${message.id}-${i}`}>
+												<ToolHeader
+													type={(part as ToolUIPart).type}
+													state={(part as ToolUIPart).state || 'output-available'}
+													className="cursor-pointer"
+												/>
+												<ToolContent>
+													<ToolInput input={(part as ToolUIPart).input || {}} />
+													<ToolOutput
+														output={(part as ToolUIPart).output}
+														errorText={(part as ToolUIPart).errorText}
+													/>
+												</ToolContent>
+											</Tool>
+										)
+									}
 
-                  return null
-                })}
-              </div>
-            ))}
-            <ConversationScrollButton />
-          </ConversationContent>
-        </Conversation>
-        <PromptInput onSubmit={handleSubmit} className="mt-20">
-          <PromptInputBody>
-            <PromptInputTextarea
-              onChange={e => setInput(e.target.value)}
-              className="md:leading-10"
-              value={input}
-              placeholder="Ask about the weather..."
-              disabled={status !== 'ready'}
-            />
-          </PromptInputBody>
-        </PromptInput>
-      </div>
-    </div>
-  )
+									return null
+								})}
+							</div>
+						))}
+						<ConversationScrollButton />
+					</ConversationContent>
+				</Conversation>
+				<PromptInput onSubmit={handleSubmit} className="mt-20">
+					<PromptInputBody>
+						<PromptInputTextarea
+							onChange={e => setInput(e.target.value)}
+							className="md:leading-10"
+							value={input}
+							placeholder="Ask about the weather..."
+							disabled={status !== 'ready'}
+						/>
+					</PromptInputBody>
+				</PromptInput>
+			</div>
+		</div>
+	)
 }
 ```
 

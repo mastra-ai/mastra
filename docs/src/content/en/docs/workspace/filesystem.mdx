@@ -48,16 +48,16 @@ import { Agent } from '@mastra/core/agent'
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({
-    basePath: './workspace',
-  }),
+	filesystem: new LocalFilesystem({
+		basePath: './workspace',
+	}),
 })
 
 const agent = new Agent({
-  id: 'file-agent',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  instructions: 'You are a helpful file management assistant.',
-  workspace,
+	id: 'file-agent',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	instructions: 'You are a helpful file management assistant.',
+	workspace,
 })
 
 // The agent now has filesystem tools available
@@ -78,11 +78,11 @@ If your agent needs to access specific paths outside `basePath`, use `allowedPat
 
 ```typescript
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({
-    basePath: './workspace',
-    // highlight-next-line
-    allowedPaths: ['~/.claude/skills', '../shared-data'],
-  }),
+	filesystem: new LocalFilesystem({
+		basePath: './workspace',
+		// highlight-next-line
+		allowedPaths: ['~/.claude/skills', '../shared-data'],
+	}),
 })
 ```
 
@@ -99,11 +99,11 @@ If your agent needs unrestricted access to the entire filesystem, disable contai
 
 ```typescript
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({
-    basePath: './workspace',
-    // highlight-next-line
-    contained: false,
-  }),
+	filesystem: new LocalFilesystem({
+		basePath: './workspace',
+		// highlight-next-line
+		contained: false,
+	}),
 })
 ```
 
@@ -118,21 +118,21 @@ import { Agent } from '@mastra/core/agent'
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  // highlight-start
-  filesystem: ({ requestContext }) => {
-    const role = requestContext.get('agent-role') || 'guest'
-    return new LocalFilesystem({
-      basePath: `/workspaces/${role}`,
-      readOnly: role !== 'admin',
-    })
-  },
-  // highlight-end
+	// highlight-start
+	filesystem: ({ requestContext }) => {
+		const role = requestContext.get('agent-role') || 'guest'
+		return new LocalFilesystem({
+			basePath: `/workspaces/${role}`,
+			readOnly: role !== 'admin',
+		})
+	},
+	// highlight-end
 })
 
 const agent = new Agent({
-  id: 'multi-role-agent',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  workspace,
+	id: 'multi-role-agent',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	workspace,
 })
 ```
 
@@ -156,10 +156,10 @@ The resolver can also be asynchronous, for example to look up configuration from
 
 ```typescript
 const workspace = new Workspace({
-  filesystem: async ({ requestContext }) => {
-    const tenantConfig = await db.getTenant(requestContext.get('tenant-id'))
-    return new LocalFilesystem({ basePath: tenantConfig.storagePath })
-  },
+	filesystem: async ({ requestContext }) => {
+		const tenantConfig = await db.getTenant(requestContext.get('tenant-id'))
+		return new LocalFilesystem({ basePath: tenantConfig.storagePath })
+	},
 })
 ```
 
@@ -175,11 +175,11 @@ To prevent agents from modifying files, enable read-only mode:
 
 ```typescript
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({
-    basePath: './workspace',
-    // highlight-next-line
-    readOnly: true,
-  }),
+	filesystem: new LocalFilesystem({
+		basePath: './workspace',
+		// highlight-next-line
+		readOnly: true,
+	}),
 })
 ```
 
@@ -198,18 +198,18 @@ import { GCSFilesystem } from '@mastra/gcs'
 import { E2BSandbox } from '@mastra/e2b'
 
 const workspace = new Workspace({
-  mounts: {
-    '/data': new S3Filesystem({
-      bucket: 'my-bucket',
-      region: 'us-east-1',
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    }),
-    '/skills': new GCSFilesystem({
-      bucket: 'agent-skills',
-    }),
-  },
-  sandbox: new E2BSandbox({ id: 'dev-sandbox' }),
+	mounts: {
+		'/data': new S3Filesystem({
+			bucket: 'my-bucket',
+			region: 'us-east-1',
+			accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+			secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+		}),
+		'/skills': new GCSFilesystem({
+			bucket: 'agent-skills',
+		}),
+	},
+	sandbox: new E2BSandbox({ id: 'dev-sandbox' }),
 })
 ```
 

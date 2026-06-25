@@ -39,11 +39,11 @@ import { OpenAIVoice } from '@mastra/voice-openai'
 // Initialize OpenAI voice for TTS
 
 const voiceAgent = new Agent({
-  id: 'voice-agent',
-  name: 'Voice Agent',
-  instructions: 'You are a voice assistant that can help users with their tasks.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  voice: new OpenAIVoice(),
+	id: 'voice-agent',
+	name: 'Voice Agent',
+	instructions: 'You are a voice assistant that can help users with their tasks.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	voice: new OpenAIVoice(),
 })
 ```
 
@@ -64,19 +64,19 @@ For detailed configuration options and advanced features, check out our [Text-to
     import { playAudio } from '@mastra/node-audio'
 
     const voiceAgent = new Agent({
-      id: 'voice-agent',
-      name: 'Voice Agent',
-      instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      voice: new OpenAIVoice(),
+    	id: 'voice-agent',
+    	name: 'Voice Agent',
+    	instructions: 'You are a voice assistant that can help users with their tasks.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	voice: new OpenAIVoice(),
     })
 
     const { text } = await voiceAgent.generate('What color is the sky?')
 
     // Convert text to speech to an Audio Stream
     const audioStream = await voiceAgent.voice.speak(text, {
-      speaker: 'default', // Optional: specify a speaker
-      responseFormat: 'wav', // Optional: specify a response format
+    	speaker: 'default', // Optional: specify a speaker
+    	responseFormat: 'wav', // Optional: specify a response format
     })
 
     playAudio(audioStream)
@@ -92,18 +92,18 @@ For detailed configuration options and advanced features, check out our [Text-to
     import { playAudio } from '@mastra/node-audio'
 
     const voiceAgent = new Agent({
-      id: 'voice-agent',
-      name: 'Voice Agent',
-      instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      voice: new AzureVoice(),
+    	id: 'voice-agent',
+    	name: 'Voice Agent',
+    	instructions: 'You are a voice assistant that can help users with their tasks.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	voice: new AzureVoice(),
     })
 
     const { text } = await voiceAgent.generate('What color is the sky?')
 
     // Convert text to speech to an Audio Stream
     const audioStream = await voiceAgent.voice.speak(text, {
-      speaker: 'en-US-JennyNeural', // Optional: specify a speaker
+    	speaker: 'en-US-JennyNeural', // Optional: specify a speaker
     })
 
     playAudio(audioStream)
@@ -119,18 +119,18 @@ For detailed configuration options and advanced features, check out our [Text-to
     import { playAudio } from '@mastra/node-audio'
 
     const voiceAgent = new Agent({
-      id: 'voice-agent',
-      name: 'Voice Agent',
-      instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      voice: new ElevenLabsVoice(),
+    	id: 'voice-agent',
+    	name: 'Voice Agent',
+    	instructions: 'You are a voice assistant that can help users with their tasks.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	voice: new ElevenLabsVoice(),
     })
 
     const { text } = await voiceAgent.generate('What color is the sky?')
 
     // Convert text to speech to an Audio Stream
     const audioStream = await voiceAgent.voice.speak(text, {
-      speaker: 'default', // Optional: specify a speaker
+    	speaker: 'default', // Optional: specify a speaker
     })
 
     playAudio(audioStream)
@@ -146,18 +146,18 @@ For detailed configuration options and advanced features, check out our [Text-to
     import { playAudio } from '@mastra/node-audio'
 
     const voiceAgent = new Agent({
-      id: 'voice-agent',
-      name: 'Voice Agent',
-      instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      voice: new PlayAIVoice(),
+    	id: 'voice-agent',
+    	name: 'Voice Agent',
+    	instructions: 'You are a voice assistant that can help users with their tasks.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	voice: new PlayAIVoice(),
     })
 
     const { text } = await voiceAgent.generate('What color is the sky?')
 
     // Convert text to speech to an Audio Stream
     const audioStream = await voiceAgent.voice.speak(text, {
-      speaker: 'default', // Optional: specify a speaker
+    	speaker: 'default', // Optional: specify a speaker
     })
 
     playAudio(audioStream)
@@ -173,18 +173,18 @@ For detailed configuration options and advanced features, check out our [Text-to
     import { playAudio } from '@mastra/node-audio'
 
     const voiceAgent = new Agent({
-      id: 'voice-agent',
-      name: 'Voice Agent',
-      instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      voice: new GoogleVoice(),
+    	id: 'voice-agent',
+    	name: 'Voice Agent',
+    	instructions: 'You are a voice assistant that can help users with their tasks.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	voice: new GoogleVoice(),
     })
 
     const { text } = await voiceAgent.generate('What color is the sky?')
 
     // Convert text to speech to an Audio Stream
     const audioStream = await voiceAgent.voice.speak(text, {
-      speaker: 'en-US-Studio-O', // Optional: specify a speaker
+    	speaker: 'en-US-Studio-O', // Optional: specify a speaker
     })
 
     playAudio(audioStream)
@@ -200,18 +200,18 @@ For detailed configuration options and advanced features, check out our [Text-to
     import { playAudio } from '@mastra/node-audio'
 
     const voiceAgent = new Agent({
-      id: 'voice-agent',
-      name: 'Voice Agent',
-      instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      voice: new CloudflareVoice(),
+    	id: 'voice-agent',
+    	name: 'Voice Agent',
+    	instructions: 'You are a voice assistant that can help users with their tasks.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	voice: new CloudflareVoice(),
     })
 
     const { text } = await voiceAgent.generate('What color is the sky?')
 
     // Convert text to speech to an Audio Stream
     const audioStream = await voiceAgent.voice.speak(text, {
-      speaker: 'default', // Optional: specify a speaker
+    	speaker: 'default', // Optional: specify a speaker
     })
 
     playAudio(audioStream)
@@ -227,18 +227,18 @@ For detailed configuration options and advanced features, check out our [Text-to
     import { playAudio } from '@mastra/node-audio'
 
     const voiceAgent = new Agent({
-      id: 'voice-agent',
-      name: 'Voice Agent',
-      instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      voice: new DeepgramVoice(),
+    	id: 'voice-agent',
+    	name: 'Voice Agent',
+    	instructions: 'You are a voice assistant that can help users with their tasks.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	voice: new DeepgramVoice(),
     })
 
     const { text } = await voiceAgent.generate('What color is the sky?')
 
     // Convert text to speech to an Audio Stream
     const audioStream = await voiceAgent.voice.speak(text, {
-      speaker: 'aura-english-us', // Optional: specify a speaker
+    	speaker: 'aura-english-us', // Optional: specify a speaker
     })
 
     playAudio(audioStream)
@@ -254,18 +254,18 @@ For detailed configuration options and advanced features, check out our [Text-to
     import { playAudio } from '@mastra/node-audio'
 
     const voiceAgent = new Agent({
-      id: 'voice-agent',
-      name: 'Voice Agent',
-      instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      voice: new InworldVoice(),
+    	id: 'voice-agent',
+    	name: 'Voice Agent',
+    	instructions: 'You are a voice assistant that can help users with their tasks.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	voice: new InworldVoice(),
     })
 
     const { text } = await voiceAgent.generate('What color is the sky?')
 
     // Convert text to speech to an Audio Stream
     const audioStream = await voiceAgent.voice.speak(text, {
-      speaker: 'Dennis', // Optional: specify a speaker
+    	speaker: 'Dennis', // Optional: specify a speaker
     })
 
     playAudio(audioStream)
@@ -281,18 +281,18 @@ For detailed configuration options and advanced features, check out our [Text-to
     import { playAudio } from '@mastra/node-audio'
 
     const voiceAgent = new Agent({
-      id: 'voice-agent',
-      name: 'Voice Agent',
-      instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      voice: new SpeechifyVoice(),
+    	id: 'voice-agent',
+    	name: 'Voice Agent',
+    	instructions: 'You are a voice assistant that can help users with their tasks.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	voice: new SpeechifyVoice(),
     })
 
     const { text } = await voiceAgent.generate('What color is the sky?')
 
     // Convert text to speech to an Audio Stream
     const audioStream = await voiceAgent.voice.speak(text, {
-      speaker: 'matthew', // Optional: specify a speaker
+    	speaker: 'matthew', // Optional: specify a speaker
     })
 
     playAudio(audioStream)
@@ -308,18 +308,18 @@ For detailed configuration options and advanced features, check out our [Text-to
     import { playAudio } from '@mastra/node-audio'
 
     const voiceAgent = new Agent({
-      id: 'voice-agent',
-      name: 'Voice Agent',
-      instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      voice: new SarvamVoice(),
+    	id: 'voice-agent',
+    	name: 'Voice Agent',
+    	instructions: 'You are a voice assistant that can help users with their tasks.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	voice: new SarvamVoice(),
     })
 
     const { text } = await voiceAgent.generate('What color is the sky?')
 
     // Convert text to speech to an Audio Stream
     const audioStream = await voiceAgent.voice.speak(text, {
-      speaker: 'shubh', // Optional: specify a bulbul:v3 speaker
+    	speaker: 'shubh', // Optional: specify a bulbul:v3 speaker
     })
 
     playAudio(audioStream)
@@ -335,18 +335,18 @@ For detailed configuration options and advanced features, check out our [Text-to
     import { playAudio } from '@mastra/node-audio'
 
     const voiceAgent = new Agent({
-      id: 'voice-agent',
-      name: 'Voice Agent',
-      instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      voice: new MurfVoice(),
+    	id: 'voice-agent',
+    	name: 'Voice Agent',
+    	instructions: 'You are a voice assistant that can help users with their tasks.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	voice: new MurfVoice(),
     })
 
     const { text } = await voiceAgent.generate('What color is the sky?')
 
     // Convert text to speech to an Audio Stream
     const audioStream = await voiceAgent.voice.speak(text, {
-      speaker: 'default', // Optional: specify a speaker
+    	speaker: 'default', // Optional: specify a speaker
     })
 
     playAudio(audioStream)
@@ -374,11 +374,11 @@ You can download a sample audio file from [here](https://github.com/mastra-ai/re
     import { createReadStream } from 'fs'
 
     const voiceAgent = new Agent({
-      id: 'voice-agent',
-      name: 'Voice Agent',
-      instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      voice: new OpenAIVoice(),
+    	id: 'voice-agent',
+    	name: 'Voice Agent',
+    	instructions: 'You are a voice assistant that can help users with their tasks.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	voice: new OpenAIVoice(),
     })
 
     // Use an audio file from a URL
@@ -403,11 +403,11 @@ You can download a sample audio file from [here](https://github.com/mastra-ai/re
     import { createReadStream } from 'fs'
 
     const voiceAgent = new Agent({
-      id: 'voice-agent',
-      name: 'Voice Agent',
-      instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      voice: new AzureVoice(),
+    	id: 'voice-agent',
+    	name: 'Voice Agent',
+    	instructions: 'You are a voice assistant that can help users with their tasks.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	voice: new AzureVoice(),
     })
 
     // Use an audio file from a URL
@@ -431,11 +431,11 @@ You can download a sample audio file from [here](https://github.com/mastra-ai/re
     import { createReadStream } from 'fs'
 
     const voiceAgent = new Agent({
-      id: 'voice-agent',
-      name: 'Voice Agent',
-      instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      voice: new ElevenLabsVoice(),
+    	id: 'voice-agent',
+    	name: 'Voice Agent',
+    	instructions: 'You are a voice assistant that can help users with their tasks.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	voice: new ElevenLabsVoice(),
     })
 
     // Use an audio file from a URL
@@ -459,11 +459,11 @@ You can download a sample audio file from [here](https://github.com/mastra-ai/re
     import { createReadStream } from 'fs'
 
     const voiceAgent = new Agent({
-      id: 'voice-agent',
-      name: 'Voice Agent',
-      instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      voice: new GoogleVoice(),
+    	id: 'voice-agent',
+    	name: 'Voice Agent',
+    	instructions: 'You are a voice assistant that can help users with their tasks.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	voice: new GoogleVoice(),
     })
 
     // Use an audio file from a URL
@@ -487,11 +487,11 @@ You can download a sample audio file from [here](https://github.com/mastra-ai/re
     import { createReadStream } from 'fs'
 
     const voiceAgent = new Agent({
-      id: 'voice-agent',
-      name: 'Voice Agent',
-      instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      voice: new CloudflareVoice(),
+    	id: 'voice-agent',
+    	name: 'Voice Agent',
+    	instructions: 'You are a voice assistant that can help users with their tasks.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	voice: new CloudflareVoice(),
     })
 
     // Use an audio file from a URL
@@ -515,11 +515,11 @@ You can download a sample audio file from [here](https://github.com/mastra-ai/re
     import { createReadStream } from 'fs'
 
     const voiceAgent = new Agent({
-      id: 'voice-agent',
-      name: 'Voice Agent',
-      instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      voice: new DeepgramVoice(),
+    	id: 'voice-agent',
+    	name: 'Voice Agent',
+    	instructions: 'You are a voice assistant that can help users with their tasks.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	voice: new DeepgramVoice(),
     })
 
     // Use an audio file from a URL
@@ -543,11 +543,11 @@ You can download a sample audio file from [here](https://github.com/mastra-ai/re
     import { createReadStream } from 'fs'
 
     const voiceAgent = new Agent({
-      id: 'voice-agent',
-      name: 'Voice Agent',
-      instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      voice: new InworldVoice(),
+    	id: 'voice-agent',
+    	name: 'Voice Agent',
+    	instructions: 'You are a voice assistant that can help users with their tasks.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	voice: new InworldVoice(),
     })
 
     // Use an audio file from a URL
@@ -571,11 +571,11 @@ You can download a sample audio file from [here](https://github.com/mastra-ai/re
     import { createReadStream } from 'fs'
 
     const voiceAgent = new Agent({
-      id: 'voice-agent',
-      name: 'Voice Agent',
-      instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      voice: new SarvamVoice(),
+    	id: 'voice-agent',
+    	name: 'Voice Agent',
+    	instructions: 'You are a voice assistant that can help users with their tasks.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	voice: new SarvamVoice(),
     })
 
     // Use an audio file from a URL
@@ -606,16 +606,16 @@ For detailed configuration options and advanced features, check out [Speech to S
     import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime'
 
     const voiceAgent = new Agent({
-      id: 'voice-agent',
-      name: 'Voice Agent',
-      instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      voice: new OpenAIRealtimeVoice(),
+    	id: 'voice-agent',
+    	name: 'Voice Agent',
+    	instructions: 'You are a voice assistant that can help users with their tasks.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	voice: new OpenAIRealtimeVoice(),
     })
 
     // Listen for agent audio responses
     voiceAgent.voice.on('speaker', ({ audio }) => {
-      playAudio(audio)
+    	playAudio(audio)
     })
 
     // Initiate the conversation
@@ -636,22 +636,22 @@ For detailed configuration options and advanced features, check out [Speech to S
     import { GeminiLiveVoice } from '@mastra/voice-google-gemini-live'
 
     const voiceAgent = new Agent({
-      id: 'voice-agent',
-      name: 'Voice Agent',
-      instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      voice: new GeminiLiveVoice({
-        // Live API mode
-        apiKey: process.env.GOOGLE_API_KEY,
-        model: 'gemini-2.0-flash-exp',
-        speaker: 'Puck',
-        debug: true,
-        // Vertex AI alternative:
-        // vertexAI: true,
-        // project: 'your-gcp-project',
-        // location: 'us-central1',
-        // serviceAccountKeyFile: '/path/to/service-account.json',
-      }),
+    	id: 'voice-agent',
+    	name: 'Voice Agent',
+    	instructions: 'You are a voice assistant that can help users with their tasks.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	voice: new GeminiLiveVoice({
+    		// Live API mode
+    		apiKey: process.env.GOOGLE_API_KEY,
+    		model: 'gemini-2.0-flash-exp',
+    		speaker: 'Puck',
+    		debug: true,
+    		// Vertex AI alternative:
+    		// vertexAI: true,
+    		// project: 'your-gcp-project',
+    		// location: 'us-central1',
+    		// serviceAccountKeyFile: '/path/to/service-account.json',
+    	}),
     })
 
     // Connect before using speak/send
@@ -659,12 +659,12 @@ For detailed configuration options and advanced features, check out [Speech to S
 
     // Listen for agent audio responses
     voiceAgent.voice.on('speaker', ({ audio }) => {
-      playAudio(audio)
+    	playAudio(audio)
     })
 
     // Listen for text responses and transcriptions
     voiceAgent.voice.on('writing', ({ text, role }) => {
-      console.log(`${role}: ${text}`)
+    	console.log(`${role}: ${text}`)
     })
 
     // Initiate the conversation
@@ -685,16 +685,16 @@ For detailed configuration options and advanced features, check out [Speech to S
     import { NovaSonicVoice } from '@mastra/voice-aws-nova-sonic'
 
     const voiceAgent = new Agent({
-      id: 'voice-agent',
-      name: 'Voice Agent',
-      instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      voice: new NovaSonicVoice({
-        region: 'us-east-1',
-        speaker: 'matthew',
-        // Static credentials are optional. The default AWS credential
-        // provider chain is used when none are passed.
-      }),
+    	id: 'voice-agent',
+    	name: 'Voice Agent',
+    	instructions: 'You are a voice assistant that can help users with their tasks.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	voice: new NovaSonicVoice({
+    		region: 'us-east-1',
+    		speaker: 'matthew',
+    		// Static credentials are optional. The default AWS credential
+    		// provider chain is used when none are passed.
+    	}),
     })
 
     // Connect before using speak/send
@@ -702,12 +702,12 @@ For detailed configuration options and advanced features, check out [Speech to S
 
     // Listen for assistant audio (Int16Array PCM)
     voiceAgent.voice.on('speaking', ({ audioData }) => {
-      if (audioData) playAudio(audioData)
+    	if (audioData) playAudio(audioData)
     })
 
     // Listen for transcribed text
     voiceAgent.voice.on('writing', ({ text, role }) => {
-      console.log(`${role}: ${text}`)
+    	console.log(`${role}: ${text}`)
     })
 
     // Initiate the conversation
@@ -728,15 +728,15 @@ For detailed configuration options and advanced features, check out [Speech to S
     import { InworldRealtimeVoice } from '@mastra/voice-inworld'
 
     const voiceAgent = new Agent({
-      id: 'voice-agent',
-      name: 'Voice Agent',
-      instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      voice: new InworldRealtimeVoice({
-        apiKey: process.env.INWORLD_API_KEY,
-        model: 'inworld/models/gemma-4-26b-a4b-it',
-        speaker: 'Sarah',
-      }),
+    	id: 'voice-agent',
+    	name: 'Voice Agent',
+    	instructions: 'You are a voice assistant that can help users with their tasks.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	voice: new InworldRealtimeVoice({
+    		apiKey: process.env.INWORLD_API_KEY,
+    		model: 'inworld/models/gemma-4-26b-a4b-it',
+    		speaker: 'Sarah',
+    	}),
     })
 
     // Connect before using speak/send
@@ -744,12 +744,12 @@ For detailed configuration options and advanced features, check out [Speech to S
 
     // Listen for agent audio (PCM stream)
     voiceAgent.voice.on('speaker', stream => {
-      playAudio(stream)
+    	playAudio(stream)
     })
 
     // Listen for text responses and transcriptions
     voiceAgent.voice.on('writing', ({ text, role }) => {
-      console.log(`${role}: ${text}`)
+    	console.log(`${role}: ${text}`)
     })
 
     // Initiate the conversation
@@ -770,16 +770,16 @@ For detailed configuration options and advanced features, check out [Speech to S
     import { XAIRealtimeVoice } from '@mastra/voice-xai-realtime'
 
     const voiceAgent = new Agent({
-      id: 'voice-agent',
-      name: 'Voice Agent',
-      instructions: 'You are a voice assistant that can help users with their tasks.',
-      model: 'xai/grok-4.3',
-      voice: new XAIRealtimeVoice({
-        apiKey: process.env.XAI_API_KEY,
-        model: 'grok-voice-think-fast-1.0',
-        speaker: 'eve',
-        turnDetection: { type: 'server_vad' },
-      }),
+    	id: 'voice-agent',
+    	name: 'Voice Agent',
+    	instructions: 'You are a voice assistant that can help users with their tasks.',
+    	model: 'xai/grok-4.3',
+    	voice: new XAIRealtimeVoice({
+    		apiKey: process.env.XAI_API_KEY,
+    		model: 'grok-voice-think-fast-1.0',
+    		speaker: 'eve',
+    		turnDetection: { type: 'server_vad' },
+    	}),
     })
 
     // Connect before using speak/send
@@ -787,12 +787,12 @@ For detailed configuration options and advanced features, check out [Speech to S
 
     // Listen for agent audio responses
     voiceAgent.voice.on('speaker', audioStream => {
-      playAudio(audioStream)
+    	playAudio(audioStream)
     })
 
     // Listen for text responses and transcriptions
     voiceAgent.voice.on('writing', ({ text, role }) => {
-      console.log(`${role}: ${text}`)
+    	console.log(`${role}: ${text}`)
     })
 
     // Initiate the conversation
@@ -816,19 +816,19 @@ Each voice provider can be configured with different models and options. Below a
     ```typescript
     // OpenAI Voice Configuration
     const voice = new OpenAIVoice({
-      speechModel: {
-        name: 'gpt-3.5-turbo', // Example model name
-        apiKey: process.env.OPENAI_API_KEY,
-        language: 'en-US', // Language code
-        voiceType: 'neural', // Type of voice model
-      },
-      listeningModel: {
-        name: 'whisper-1', // Example model name
-        apiKey: process.env.OPENAI_API_KEY,
-        language: 'en-US', // Language code
-        format: 'wav', // Audio format
-      },
-      speaker: 'alloy', // Example speaker name
+    	speechModel: {
+    		name: 'gpt-3.5-turbo', // Example model name
+    		apiKey: process.env.OPENAI_API_KEY,
+    		language: 'en-US', // Language code
+    		voiceType: 'neural', // Type of voice model
+    	},
+    	listeningModel: {
+    		name: 'whisper-1', // Example model name
+    		apiKey: process.env.OPENAI_API_KEY,
+    		language: 'en-US', // Language code
+    		format: 'wav', // Audio format
+    	},
+    	speaker: 'alloy', // Example speaker name
     })
     ```
 
@@ -839,21 +839,21 @@ Each voice provider can be configured with different models and options. Below a
     ```typescript
     // Azure Voice Configuration
     const voice = new AzureVoice({
-      speechModel: {
-        name: 'en-US-JennyNeural', // Example model name
-        apiKey: process.env.AZURE_SPEECH_KEY,
-        region: process.env.AZURE_SPEECH_REGION,
-        language: 'en-US', // Language code
-        style: 'cheerful', // Voice style
-        pitch: '+0Hz', // Pitch adjustment
-        rate: '1.0', // Speech rate
-      },
-      listeningModel: {
-        name: 'en-US', // Example model name
-        apiKey: process.env.AZURE_SPEECH_KEY,
-        region: process.env.AZURE_SPEECH_REGION,
-        format: 'simple', // Output format
-      },
+    	speechModel: {
+    		name: 'en-US-JennyNeural', // Example model name
+    		apiKey: process.env.AZURE_SPEECH_KEY,
+    		region: process.env.AZURE_SPEECH_REGION,
+    		language: 'en-US', // Language code
+    		style: 'cheerful', // Voice style
+    		pitch: '+0Hz', // Pitch adjustment
+    		rate: '1.0', // Speech rate
+    	},
+    	listeningModel: {
+    		name: 'en-US', // Example model name
+    		apiKey: process.env.AZURE_SPEECH_KEY,
+    		region: process.env.AZURE_SPEECH_REGION,
+    		format: 'simple', // Output format
+    	},
     })
     ```
 
@@ -864,14 +864,14 @@ Each voice provider can be configured with different models and options. Below a
     ```typescript
     // ElevenLabs Voice Configuration
     const voice = new ElevenLabsVoice({
-      speechModel: {
-        voiceId: 'your-voice-id', // Example voice ID
-        model: 'eleven_multilingual_v2', // Example model name
-        apiKey: process.env.ELEVENLABS_API_KEY,
-        language: 'en', // Language code
-        emotion: 'neutral', // Emotion setting
-      },
-      // ElevenLabs may not have a separate listening model
+    	speechModel: {
+    		voiceId: 'your-voice-id', // Example voice ID
+    		model: 'eleven_multilingual_v2', // Example model name
+    		apiKey: process.env.ELEVENLABS_API_KEY,
+    		language: 'en', // Language code
+    		emotion: 'neutral', // Emotion setting
+    	},
+    	// ElevenLabs may not have a separate listening model
     })
     ```
 
@@ -882,14 +882,14 @@ Each voice provider can be configured with different models and options. Below a
     ```typescript
     // PlayAI Voice Configuration
     const voice = new PlayAIVoice({
-      speechModel: {
-        name: 'playai-voice', // Example model name
-        speaker: 'emma', // Example speaker name
-        apiKey: process.env.PLAYAI_API_KEY,
-        language: 'en-US', // Language code
-        speed: 1.0, // Speech speed
-      },
-      // PlayAI may not have a separate listening model
+    	speechModel: {
+    		name: 'playai-voice', // Example model name
+    		speaker: 'emma', // Example speaker name
+    		apiKey: process.env.PLAYAI_API_KEY,
+    		language: 'en-US', // Language code
+    		speed: 1.0, // Speech speed
+    	},
+    	// PlayAI may not have a separate listening model
     })
     ```
 
@@ -900,17 +900,17 @@ Each voice provider can be configured with different models and options. Below a
     ```typescript
     // Google Voice Configuration
     const voice = new GoogleVoice({
-      speechModel: {
-        name: 'en-US-Studio-O', // Example model name
-        apiKey: process.env.GOOGLE_API_KEY,
-        languageCode: 'en-US', // Language code
-        gender: 'FEMALE', // Voice gender
-        speakingRate: 1.0, // Speaking rate
-      },
-      listeningModel: {
-        name: 'en-US', // Example model name
-        sampleRateHertz: 16000, // Sample rate
-      },
+    	speechModel: {
+    		name: 'en-US-Studio-O', // Example model name
+    		apiKey: process.env.GOOGLE_API_KEY,
+    		languageCode: 'en-US', // Language code
+    		gender: 'FEMALE', // Voice gender
+    		speakingRate: 1.0, // Speaking rate
+    	},
+    	listeningModel: {
+    		name: 'en-US', // Example model name
+    		sampleRateHertz: 16000, // Sample rate
+    	},
     })
     ```
 
@@ -921,14 +921,14 @@ Each voice provider can be configured with different models and options. Below a
     ```typescript
     // Cloudflare Voice Configuration
     const voice = new CloudflareVoice({
-      speechModel: {
-        name: 'cloudflare-voice', // Example model name
-        accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
-        apiToken: process.env.CLOUDFLARE_API_TOKEN,
-        language: 'en-US', // Language code
-        format: 'mp3', // Audio format
-      },
-      // Cloudflare may not have a separate listening model
+    	speechModel: {
+    		name: 'cloudflare-voice', // Example model name
+    		accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
+    		apiToken: process.env.CLOUDFLARE_API_TOKEN,
+    		language: 'en-US', // Language code
+    		format: 'mp3', // Audio format
+    	},
+    	// Cloudflare may not have a separate listening model
     })
     ```
 
@@ -939,17 +939,17 @@ Each voice provider can be configured with different models and options. Below a
     ```typescript
     // Deepgram Voice Configuration
     const voice = new DeepgramVoice({
-      speechModel: {
-        name: 'nova-2', // Example model name
-        speaker: 'aura-english-us', // Example speaker name
-        apiKey: process.env.DEEPGRAM_API_KEY,
-        language: 'en-US', // Language code
-        tone: 'formal', // Tone setting
-      },
-      listeningModel: {
-        name: 'nova-2', // Example model name
-        format: 'flac', // Audio format
-      },
+    	speechModel: {
+    		name: 'nova-2', // Example model name
+    		speaker: 'aura-english-us', // Example speaker name
+    		apiKey: process.env.DEEPGRAM_API_KEY,
+    		language: 'en-US', // Language code
+    		tone: 'formal', // Tone setting
+    	},
+    	listeningModel: {
+    		name: 'nova-2', // Example model name
+    		format: 'flac', // Audio format
+    	},
     })
     ```
 
@@ -960,24 +960,24 @@ Each voice provider can be configured with different models and options. Below a
     ```typescript
     // Inworld Voice Configuration
     const voice = new InworldVoice({
-      speechModel: {
-        name: 'inworld-tts-2',
-        apiKey: process.env.INWORLD_API_KEY,
-      },
-      listeningModel: {
-        name: 'groq/whisper-large-v3',
-        apiKey: process.env.INWORLD_API_KEY,
-      },
-      speaker: 'Dennis',
-      audioEncoding: 'MP3',
-      sampleRateHertz: 48000,
-      language: 'en-US',
+    	speechModel: {
+    		name: 'inworld-tts-2',
+    		apiKey: process.env.INWORLD_API_KEY,
+    	},
+    	listeningModel: {
+    		name: 'groq/whisper-large-v3',
+    		apiKey: process.env.INWORLD_API_KEY,
+    	},
+    	speaker: 'Dennis',
+    	audioEncoding: 'MP3',
+    	sampleRateHertz: 48000,
+    	language: 'en-US',
     })
 
     // Per-call options: `deliveryMode` is honored only by `inworld-tts-2`.
     const audioStream = await voice.speak('Hello!', {
-      deliveryMode: 'BALANCED', // 'STABLE' | 'BALANCED' | 'CREATIVE'
-      language: 'en-US', // BCP-47 per-call override
+    	deliveryMode: 'BALANCED', // 'STABLE' | 'BALANCED' | 'CREATIVE'
+    	language: 'en-US', // BCP-47 per-call override
     })
     ```
 
@@ -988,14 +988,14 @@ Each voice provider can be configured with different models and options. Below a
     ```typescript
     // Speechify Voice Configuration
     const voice = new SpeechifyVoice({
-      speechModel: {
-        name: 'speechify-voice', // Example model name
-        speaker: 'matthew', // Example speaker name
-        apiKey: process.env.SPEECHIFY_API_KEY,
-        language: 'en-US', // Language code
-        speed: 1.0, // Speech speed
-      },
-      // Speechify may not have a separate listening model
+    	speechModel: {
+    		name: 'speechify-voice', // Example model name
+    		speaker: 'matthew', // Example speaker name
+    		apiKey: process.env.SPEECHIFY_API_KEY,
+    		language: 'en-US', // Language code
+    		speed: 1.0, // Speech speed
+    	},
+    	// Speechify may not have a separate listening model
     })
     ```
 
@@ -1006,16 +1006,16 @@ Each voice provider can be configured with different models and options. Below a
     ```typescript
     // Sarvam Voice Configuration
     const voice = new SarvamVoice({
-      speechModel: {
-        model: 'bulbul:v3', // TTS model (bulbul:v2 or bulbul:v3)
-        apiKey: process.env.SARVAM_API_KEY,
-        language: 'en-IN', // BCP-47 language code
-      },
-      listeningModel: {
-        model: 'saarika:v2.5', // STT model (saarika:v2.5 or saaras:v3)
-        apiKey: process.env.SARVAM_API_KEY,
-      },
-      speaker: 'shubh', // Default bulbul:v3 speaker
+    	speechModel: {
+    		model: 'bulbul:v3', // TTS model (bulbul:v2 or bulbul:v3)
+    		apiKey: process.env.SARVAM_API_KEY,
+    		language: 'en-IN', // BCP-47 language code
+    	},
+    	listeningModel: {
+    		model: 'saarika:v2.5', // STT model (saarika:v2.5 or saaras:v3)
+    		apiKey: process.env.SARVAM_API_KEY,
+    	},
+    	speaker: 'shubh', // Default bulbul:v3 speaker
     })
     ```
 
@@ -1026,13 +1026,13 @@ Each voice provider can be configured with different models and options. Below a
     ```typescript
     // Murf Voice Configuration
     const voice = new MurfVoice({
-      speechModel: {
-        name: 'murf-voice', // Example model name
-        apiKey: process.env.MURF_API_KEY,
-        language: 'en-US', // Language code
-        emotion: 'happy', // Emotion setting
-      },
-      // Murf may not have a separate listening model
+    	speechModel: {
+    		name: 'murf-voice', // Example model name
+    		apiKey: process.env.MURF_API_KEY,
+    		language: 'en-US', // Language code
+    		emotion: 'happy', // Emotion setting
+    	},
+    	// Murf may not have a separate listening model
     })
     ```
 
@@ -1043,17 +1043,17 @@ Each voice provider can be configured with different models and options. Below a
     ```typescript
     // OpenAI Realtime Voice Configuration
     const voice = new OpenAIRealtimeVoice({
-      speechModel: {
-        name: 'gpt-3.5-turbo', // Example model name
-        apiKey: process.env.OPENAI_API_KEY,
-        language: 'en-US', // Language code
-      },
-      listeningModel: {
-        name: 'whisper-1', // Example model name
-        apiKey: process.env.OPENAI_API_KEY,
-        format: 'ogg', // Audio format
-      },
-      speaker: 'alloy', // Example speaker name
+    	speechModel: {
+    		name: 'gpt-3.5-turbo', // Example model name
+    		apiKey: process.env.OPENAI_API_KEY,
+    		language: 'en-US', // Language code
+    	},
+    	listeningModel: {
+    		name: 'whisper-1', // Example model name
+    		apiKey: process.env.OPENAI_API_KEY,
+    		format: 'ogg', // Audio format
+    	},
+    	speaker: 'alloy', // Example speaker name
     })
     ```
 
@@ -1064,28 +1064,28 @@ Each voice provider can be configured with different models and options. Below a
     ```typescript
     // xAI Realtime Voice Configuration
     const voice = new XAIRealtimeVoice({
-      apiKey: process.env.XAI_API_KEY,
-      model: 'grok-voice-think-fast-1.0',
-      speaker: 'eve',
-      instructions: 'You are a concise voice assistant.',
-      turnDetection: {
-        type: 'server_vad',
-        threshold: 0.85,
-        silence_duration_ms: 1000,
-        prefix_padding_ms: 333,
-      },
-      audio: {
-        input: { format: { type: 'audio/pcm', rate: 24000 } },
-        output: { format: { type: 'audio/pcm', rate: 24000 } },
-      },
-      serverTools: [
-        { type: 'web_search' },
-        {
-          type: 'mcp',
-          server_url: 'https://mcp.example.com/mcp',
-          server_label: 'business-tools',
-        },
-      ],
+    	apiKey: process.env.XAI_API_KEY,
+    	model: 'grok-voice-think-fast-1.0',
+    	speaker: 'eve',
+    	instructions: 'You are a concise voice assistant.',
+    	turnDetection: {
+    		type: 'server_vad',
+    		threshold: 0.85,
+    		silence_duration_ms: 1000,
+    		prefix_padding_ms: 333,
+    	},
+    	audio: {
+    		input: { format: { type: 'audio/pcm', rate: 24000 } },
+    		output: { format: { type: 'audio/pcm', rate: 24000 } },
+    	},
+    	serverTools: [
+    		{ type: 'web_search' },
+    		{
+    			type: 'mcp',
+    			server_url: 'https://mcp.example.com/mcp',
+    			server_label: 'business-tools',
+    		},
+    	],
     })
     ```
 
@@ -1096,12 +1096,12 @@ Each voice provider can be configured with different models and options. Below a
     ```typescript
     // Google Gemini Live Voice Configuration
     const voice = new GeminiLiveVoice({
-      speechModel: {
-        name: 'gemini-2.0-flash-exp', // Example model name
-        apiKey: process.env.GOOGLE_API_KEY,
-      },
-      speaker: 'Puck', // Example speaker name
-      // Google Gemini Live is a realtime bidirectional API without separate speech and listening models
+    	speechModel: {
+    		name: 'gemini-2.0-flash-exp', // Example model name
+    		apiKey: process.env.GOOGLE_API_KEY,
+    	},
+    	speaker: 'Puck', // Example speaker name
+    	// Google Gemini Live is a realtime bidirectional API without separate speech and listening models
     })
     ```
 
@@ -1112,18 +1112,18 @@ Each voice provider can be configured with different models and options. Below a
     ```typescript
     // AWS Nova Sonic Voice Configuration
     const voice = new NovaSonicVoice({
-      region: 'us-east-1',
-      speaker: 'matthew',
-      sessionConfig: {
-        inferenceConfiguration: {
-          temperature: 0.7,
-          maxTokens: 1024,
-        },
-        turnDetectionConfiguration: {
-          endpointingSensitivity: 'MEDIUM',
-        },
-      },
-      // AWS Nova Sonic is a realtime bidirectional API without separate speech and listening models
+    	region: 'us-east-1',
+    	speaker: 'matthew',
+    	sessionConfig: {
+    		inferenceConfiguration: {
+    			temperature: 0.7,
+    			maxTokens: 1024,
+    		},
+    		turnDetectionConfiguration: {
+    			endpointingSensitivity: 'MEDIUM',
+    		},
+    	},
+    	// AWS Nova Sonic is a realtime bidirectional API without separate speech and listening models
     })
     ```
 
@@ -1134,16 +1134,16 @@ Each voice provider can be configured with different models and options. Below a
     ```typescript
     // Inworld Realtime Voice Configuration
     const voice = new InworldRealtimeVoice({
-      apiKey: process.env.INWORLD_API_KEY,
-      model: 'inworld/models/gemma-4-26b-a4b-it',
-      speaker: 'Sarah',
-      // Typed Inworld realtime knobs (semantic VAD, playback speed, MCP tool routing, ...)
-      session: {
-        audio: {
-          output: { speed: 1.1 },
-          input: { turn_detection: { type: 'semantic_vad', eagerness: 'high' } },
-        },
-      },
+    	apiKey: process.env.INWORLD_API_KEY,
+    	model: 'inworld/models/gemma-4-26b-a4b-it',
+    	speaker: 'Sarah',
+    	// Typed Inworld realtime knobs (semantic VAD, playback speed, MCP tool routing, ...)
+    	session: {
+    		audio: {
+    			output: { speed: 1.1 },
+    			input: { turn_detection: { type: 'semantic_vad', eagerness: 'high' } },
+    		},
+    	},
     })
     ```
 
@@ -1159,17 +1159,17 @@ Each voice provider can be configured with different models and options. Below a
 
     // Use AI SDK models directly - no need to install separate packages
     const voice = new CompositeVoice({
-      input: openai.transcription('whisper-1'), // AI SDK transcription
-      output: elevenlabs.speech('eleven_turbo_v2'), // AI SDK speech
+    	input: openai.transcription('whisper-1'), // AI SDK transcription
+    	output: elevenlabs.speech('eleven_turbo_v2'), // AI SDK speech
     })
 
     // Works seamlessly with your agent
     const voiceAgent = new Agent({
-      id: 'aisdk-voice-agent',
-      name: 'AI SDK Voice Agent',
-      instructions: 'You are a helpful assistant with voice capabilities.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      voice,
+    	id: 'aisdk-voice-agent',
+    	name: 'AI SDK Voice Agent',
+    	instructions: 'You are a helpful assistant with voice capabilities.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	voice,
     })
     ```
   </TabItem>
@@ -1189,24 +1189,24 @@ import { playAudio, getMicrophoneStream } from '@mastra/node-audio'
 
 // Initialize OpenAI voice for STT
 const input = new OpenAIVoice({
-  listeningModel: {
-    name: 'whisper-1',
-    apiKey: process.env.OPENAI_API_KEY,
-  },
+	listeningModel: {
+		name: 'whisper-1',
+		apiKey: process.env.OPENAI_API_KEY,
+	},
 })
 
 // Initialize PlayAI voice for TTS
 const output = new PlayAIVoice({
-  speechModel: {
-    name: 'playai-voice',
-    apiKey: process.env.PLAYAI_API_KEY,
-  },
+	speechModel: {
+		name: 'playai-voice',
+		apiKey: process.env.PLAYAI_API_KEY,
+	},
 })
 
 // Combine the providers using CompositeVoice
 const voice = new CompositeVoice({
-  input,
-  output,
+	input,
+	output,
 })
 
 // Implement voice interactions using the combined voice provider
@@ -1218,8 +1218,8 @@ console.log('Transcribed text:', transcript)
 
 // Convert text to speech
 const responseAudio = await voice.speak(`You said: ${transcript}`, {
-  speaker: 'default', // Optional: specify a speaker,
-  responseFormat: 'wav', // Optional: specify a response format
+	speaker: 'default', // Optional: specify a speaker,
+	responseFormat: 'wav', // Optional: specify a response format
 })
 
 // Play the audio response
@@ -1238,8 +1238,8 @@ import { playAudio, getMicrophoneStream } from '@mastra/node-audio'
 
 // Use AI SDK models directly - no provider setup needed
 const voice = new CompositeVoice({
-  input: openai.transcription('whisper-1'), // AI SDK transcription
-  output: elevenlabs.speech('eleven_turbo_v2'), // AI SDK speech
+	input: openai.transcription('whisper-1'), // AI SDK transcription
+	output: elevenlabs.speech('eleven_turbo_v2'), // AI SDK speech
 })
 
 // Works the same way as Mastra providers
@@ -1250,7 +1250,7 @@ console.log('Transcribed text:', transcript)
 
 // Convert text to speech
 const responseAudio = await voice.speak(`You said: ${transcript}`, {
-  speaker: 'Rachel', // ElevenLabs voice
+	speaker: 'Rachel', // ElevenLabs voice
 })
 
 playAudio(responseAudio)
@@ -1264,8 +1264,8 @@ import { PlayAIVoice } from '@mastra/voice-playai'
 import { groq } from '@ai-sdk/groq'
 
 const voice = new CompositeVoice({
-  input: groq.transcription('whisper-large-v3'), // AI SDK for STT
-  output: new PlayAIVoice(), // Mastra provider for TTS
+	input: groq.transcription('whisper-large-v3'), // AI SDK for STT
+	output: new PlayAIVoice(), // Mastra provider for TTS
 })
 ```
 

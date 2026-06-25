@@ -38,18 +38,18 @@ Executes an async function within the OTEL context of a Mastra span. OTEL-instru
 
 <PropertiesTable
   props={[
-  {
-    name: 'spanId',
-    type: 'string',
-    description: 'The ID of the Mastra span to use as context',
-    required: true,
-  },
-  {
-    name: 'fn',
-    type: '() => Promise<T>',
-    description: 'The async function to execute within the span context',
-    required: true,
-  },
+	{
+		name: 'spanId',
+		type: 'string',
+		description: 'The ID of the Mastra span to use as context',
+		required: true,
+	},
+	{
+		name: 'fn',
+		type: '() => Promise<T>',
+		description: 'The async function to execute within the span context',
+		required: true,
+	},
 ]}
 />
 
@@ -65,18 +65,18 @@ Executes a synchronous function within the OTEL context of a Mastra span.
 
 <PropertiesTable
   props={[
-  {
-    name: 'spanId',
-    type: 'string',
-    description: 'The ID of the Mastra span to use as context',
-    required: true,
-  },
-  {
-    name: 'fn',
-    type: '() => T',
-    description: 'The synchronous function to execute within the span context',
-    required: true,
-  },
+	{
+		name: 'spanId',
+		type: 'string',
+		description: 'The ID of the Mastra span to use as context',
+		required: true,
+	},
+	{
+		name: 'fn',
+		type: '() => T',
+		description: 'The synchronous function to execute within the span context',
+		required: true,
+	},
 ]}
 />
 
@@ -98,12 +98,12 @@ If no `LoggerProvider` is registered globally, emission is a silent no-op.
 
 <PropertiesTable
   props={[
-  {
-    name: 'event',
-    type: 'LogEvent',
-    description: 'The Mastra log event to forward, as delivered by the observability bus',
-    required: true,
-  },
+	{
+		name: 'event',
+		type: 'LogEvent',
+		description: 'The Mastra log event to forward, as delivered by the observability bus',
+		required: true,
+	},
 ]}
 />
 
@@ -133,15 +133,15 @@ import { Observability } from '@mastra/observability'
 import { OtelBridge } from '@mastra/otel-bridge'
 
 const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'my-service',
-        bridge: new OtelBridge(),
-      },
-    },
-  }),
-  agents: { myAgent },
+	observability: new Observability({
+		configs: {
+			default: {
+				serviceName: 'my-service',
+				bridge: new OtelBridge(),
+			},
+		},
+	}),
+	agents: { myAgent },
 })
 ```
 
@@ -156,22 +156,22 @@ import { OtelBridge } from '@mastra/otel-bridge'
 import { LangfuseExporter } from '@mastra/langfuse'
 
 const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'my-service',
-        bridge: new OtelBridge(), // Handles OTEL context
-        exporters: [
-          new MastraStorageExporter(), // Studio access
-          new LangfuseExporter({
-            // Additional destination
-            publicKey: process.env.LANGFUSE_PUBLIC_KEY,
-            secretKey: process.env.LANGFUSE_SECRET_KEY,
-          }),
-        ],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			default: {
+				serviceName: 'my-service',
+				bridge: new OtelBridge(), // Handles OTEL context
+				exporters: [
+					new MastraStorageExporter(), // Studio access
+					new LangfuseExporter({
+						// Additional destination
+						publicKey: process.env.LANGFUSE_PUBLIC_KEY,
+						secretKey: process.env.LANGFUSE_SECRET_KEY,
+					}),
+				],
+			},
+		},
+	}),
 })
 ```
 
@@ -189,9 +189,9 @@ The OtelBridge supports trace tagging for categorization and filtering. Tags are
 
 ```typescript
 const result = await agent.generate('Hello', {
-  tracingOptions: {
-    tags: ['production', 'experiment-v2', 'user-request'],
-  },
+	tracingOptions: {
+		tags: ['production', 'experiment-v2', 'user-request'],
+	},
 })
 ```
 
@@ -201,7 +201,7 @@ Tags are stored as a JSON-stringified array in the `mastra.tags` span attribute:
 
 ```json
 {
-  "mastra.tags": "[\"production\",\"experiment-v2\",\"user-request\"]"
+	"mastra.tags": "[\"production\",\"experiment-v2\",\"user-request\"]"
 }
 ```
 

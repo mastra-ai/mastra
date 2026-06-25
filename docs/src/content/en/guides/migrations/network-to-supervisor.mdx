@@ -25,9 +25,9 @@ With `.network()`, you iterated over custom event types like `network-execution-
 const result = await routingAgent.network('Research AI in education')
 
 for await (const chunk of result) {
-  if (chunk.type === 'network-execution-event-step-finish') {
-    console.log(chunk.payload.result)
-  }
+	if (chunk.type === 'network-execution-event-step-finish') {
+		console.log(chunk.payload.result)
+	}
 }
 ```
 
@@ -35,11 +35,11 @@ for await (const chunk of result) {
 
 ```typescript
 const stream = await supervisorAgent.stream('Research AI in education', {
-  maxSteps: 10,
+	maxSteps: 10,
 })
 
 for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk)
+	process.stdout.write(chunk)
 }
 ```
 
@@ -49,7 +49,7 @@ For non-streaming use cases, use `generate()` with the same options:
 
 ```typescript
 const result = await supervisorAgent.generate('Research AI in education', {
-  maxSteps: 10,
+	maxSteps: 10,
 })
 
 console.log(result.text)
@@ -65,10 +65,10 @@ Your supervisor's `instructions` should specify what resources are available, wh
 
 ```typescript
 const routingAgent = new Agent({
-  id: 'routing-agent',
-  instructions: 'You are a network of researchers and writers...',
-  agents: { researchAgent, writingAgent },
-  memory: new Memory(),
+	id: 'routing-agent',
+	instructions: 'You are a network of researchers and writers...',
+	agents: { researchAgent, writingAgent },
+	memory: new Memory(),
 })
 ```
 
@@ -76,8 +76,8 @@ const routingAgent = new Agent({
 
 ```typescript
 const supervisorAgent = new Agent({
-  id: 'supervisor-agent',
-  instructions: `You coordinate research and writing tasks using specialized agents.
+	id: 'supervisor-agent',
+	instructions: `You coordinate research and writing tasks using specialized agents.
 
 Available resources:
 - researchAgent: Gathers factual data and sources (returns bullet points)
@@ -92,8 +92,8 @@ Success criteria:
 - All user questions are fully answered
 - Response is well-formatted and complete
 - If information is incomplete, continue iterating`,
-  agents: { researchAgent, writingAgent },
-  memory: new Memory(),
+	agents: { researchAgent, writingAgent },
+	memory: new Memory(),
 })
 ```
 
@@ -103,15 +103,15 @@ Each subagent should have a `description` field that explains what it does, what
 
 ```typescript
 const researchAgent = new Agent({
-  id: 'research-agent',
-  description: `Specializes in gathering factual information and data on any topic.
+	id: 'research-agent',
+	description: `Specializes in gathering factual information and data on any topic.
     Returns concise bullet-point summaries with key facts and sources.
     Does not write full articles or narrative content.`,
 })
 
 const writingAgent = new Agent({
-  id: 'writing-agent',
-  description: `Transforms research material into well-structured written content.
+	id: 'writing-agent',
+	description: `Transforms research material into well-structured written content.
     Produces full paragraphs and complete articles.
     Best used after research has been gathered.`,
 })
@@ -140,29 +140,29 @@ Supervisor agents let you hook into the delegation lifecycle to monitor, modify,
 
 ```typescript
 const stream = await supervisorAgent.stream('Research AI in education', {
-  maxSteps: 10,
-  delegation: {
-    onDelegationStart: async context => {
-      console.log(`Delegating to: ${context.primitiveId}`)
+	maxSteps: 10,
+	delegation: {
+		onDelegationStart: async context => {
+			console.log(`Delegating to: ${context.primitiveId}`)
 
-      if (context.primitiveId === 'research-agent') {
-        return {
-          proceed: true,
-          modifiedPrompt: `${context.prompt}\n\nFocus on 2024-2025 data.`,
-          modifiedMaxSteps: 5,
-        }
-      }
+			if (context.primitiveId === 'research-agent') {
+				return {
+					proceed: true,
+					modifiedPrompt: `${context.prompt}\n\nFocus on 2024-2025 data.`,
+					modifiedMaxSteps: 5,
+				}
+			}
 
-      if (context.iteration > 8) {
-        return {
-          proceed: false,
-          rejectionReason: 'Max iterations reached. Synthesize current findings.',
-        }
-      }
+			if (context.iteration > 8) {
+				return {
+					proceed: false,
+					rejectionReason: 'Max iterations reached. Synthesize current findings.',
+				}
+			}
 
-      return { proceed: true }
-    },
-  },
+			return { proceed: true }
+		},
+	},
 })
 ```
 
@@ -170,17 +170,17 @@ const stream = await supervisorAgent.stream('Research AI in education', {
 
 ```typescript
 const stream = await supervisorAgent.stream('Research AI in education', {
-  maxSteps: 10,
-  delegation: {
-    onDelegationComplete: async context => {
-      if (context.error) {
-        context.bail() // Stop further delegations
-        return {
-          feedback: `Delegation to ${context.primitiveId} failed: ${context.error}. Try a different approach.`,
-        }
-      }
-    },
-  },
+	maxSteps: 10,
+	delegation: {
+		onDelegationComplete: async context => {
+			if (context.error) {
+				context.bail() // Stop further delegations
+				return {
+					feedback: `Delegation to ${context.primitiveId} failed: ${context.error}. Try a different approach.`,
+				}
+			}
+		},
+	},
 })
 ```
 
@@ -190,18 +190,18 @@ By default, subagents receive the full conversation context from the supervisor.
 
 ```typescript
 const stream = await supervisorAgent.stream('Research AI in education', {
-  maxSteps: 10,
-  delegation: {
-    messageFilter: ({ messages, primitiveId, prompt }) => {
-      return messages
-        .filter(msg => {
-          const content =
-            typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
-          return !content.includes('confidential')
-        })
-        .slice(-10)
-    },
-  },
+	maxSteps: 10,
+	delegation: {
+		messageFilter: ({ messages, primitiveId, prompt }) => {
+			return messages
+				.filter(msg => {
+					const content =
+						typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
+					return !content.includes('confidential')
+				})
+				.slice(-10)
+		},
+	},
 })
 ```
 
@@ -211,23 +211,23 @@ const stream = await supervisorAgent.stream('Research AI in education', {
 
 ```typescript
 const stream = await supervisorAgent.stream('Research AI in education', {
-  maxSteps: 10,
-  onIterationComplete: async context => {
-    console.log(`Iteration ${context.iteration}/${context.maxIterations}`)
+	maxSteps: 10,
+	onIterationComplete: async context => {
+		console.log(`Iteration ${context.iteration}/${context.maxIterations}`)
 
-    if (!context.text.includes('recommendations')) {
-      return {
-        continue: true,
-        feedback: 'Please include specific recommendations in your analysis.',
-      }
-    }
+		if (!context.text.includes('recommendations')) {
+			return {
+				continue: true,
+				feedback: 'Please include specific recommendations in your analysis.',
+			}
+		}
 
-    if (context.text.length > 1000 && context.finishReason === 'stop') {
-      return { continue: false }
-    }
+		if (context.text.length > 1000 && context.finishReason === 'stop') {
+			return { continue: false }
+		}
 
-    return { continue: true }
-  },
+		return { continue: true }
+	},
 })
 ```
 
@@ -239,24 +239,24 @@ Task completion scorers automatically validate whether the task is complete. If 
 import { createScorer } from '@mastra/core/evals'
 
 const taskCompleteScorer = createScorer({
-  id: 'task-complete',
-  name: 'Task Completeness',
+	id: 'task-complete',
+	name: 'Task Completeness',
 }).generateScore(async context => {
-  const text = (context.run.output || '').toString()
-  const hasAnalysis = text.includes('analysis')
-  const hasRecommendations = text.includes('recommendation')
-  return hasAnalysis && hasRecommendations ? 1 : 0
+	const text = (context.run.output || '').toString()
+	const hasAnalysis = text.includes('analysis')
+	const hasRecommendations = text.includes('recommendation')
+	return hasAnalysis && hasRecommendations ? 1 : 0
 })
 
 const stream = await supervisorAgent.stream('Research AI in education', {
-  maxSteps: 10,
-  isTaskComplete: {
-    scorers: [taskCompleteScorer],
-    strategy: 'all',
-    onComplete: async result => {
-      console.log('Task complete:', result.complete)
-    },
-  },
+	maxSteps: 10,
+	isTaskComplete: {
+		scorers: [taskCompleteScorer],
+		strategy: 'all',
+		onComplete: async result => {
+			console.log('Task complete:', result.complete)
+		},
+	},
 })
 ```
 

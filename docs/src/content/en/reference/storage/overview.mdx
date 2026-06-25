@@ -35,14 +35,14 @@ The schema definitions below cover the built-in database-backed tables documente
   <TabItem value="messages" label="Messages">
     Stores conversation messages and their metadata. Each message belongs to a thread and contains the actual content along with metadata about the sender role and message type.
 
-    | name | type | constraints | description |
-    | - | - | - | - |
-    | `id` | `uuidv4` | Primary key; not nullable | Unique identifier for the message (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`) |
-    | `thread_id` | `uuidv4` | Foreign key to `threads.id`; not nullable | Parent thread reference |
-    | `resourceId` | `uuidv4` | Nullable | ID of the resource that owns this message |
-    | `content` | `text` | Not nullable | JSON of the message content in V2 format. Example: `{ format: 2, parts: [...] }` |
-    | `role` | `text` | Not nullable | Enum of `user | assistant` |
-    | `createdAt` | `timestamp` | Not nullable | Used for thread message ordering |
+    | name | type | constraints | description | |
+    | - | - | - | - | - |
+    | `id` | `uuidv4` | Primary key; not nullable | Unique identifier for the message (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`) | |
+    | `thread_id` | `uuidv4` | Foreign key to `threads.id`; not nullable | Parent thread reference | |
+    | `resourceId` | `uuidv4` | Nullable | ID of the resource that owns this message | |
+    | `content` | `text` | Not nullable | JSON of the message content in V2 format. Example: `{ format: 2, parts: [...] }` | |
+    | `role` | `text` | Not nullable | Enum of \`user | assistant\` |
+    | `createdAt` | `timestamp` | Not nullable | Used for thread message ordering | |
 
     The message `content` column contains a JSON object conforming to the `MastraMessageContentV2` type, which is designed to align closely with the AI SDK `UIMessage` message shape.
 

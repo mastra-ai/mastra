@@ -29,16 +29,16 @@ import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 
 // highlight-start
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({
-    basePath: resolve(import.meta.dirname, '../../workspace'),
-  }),
-  skills: ['skills'],
+	filesystem: new LocalFilesystem({
+		basePath: resolve(import.meta.dirname, '../../workspace'),
+	}),
+	skills: ['skills'],
 })
 // highlight-end
 
 export const mastra = new Mastra({
-  // highlight-next-line
-  workspace,
+	// highlight-next-line
+	workspace,
 })
 ```
 
@@ -99,7 +99,7 @@ const MAX_SIZE = 100
 
 // 3. Types
 interface User {
-  id: string
+	id: string
 }
 
 // 4. Functions
@@ -126,16 +126,16 @@ Now it's time to create the code review bot agent that uses the code-standards s
 import { Agent } from '@mastra/core/agent'
 
 export const codeReviewer = new Agent({
-  id: 'code-reviewer',
-  name: 'Code Review Bot',
-  instructions: `You are an automated code reviewer.
+	id: 'code-reviewer',
+	name: 'Code Review Bot',
+	instructions: `You are an automated code reviewer.
 
 When asked to review code:
 1. Activate the 'code-standards' skill
 2. Follow the review process from the skill
 3. Check against the style guide in skill references
 4. Be constructive and specific with line numbers`,
-  model: '__GATEWAY_OPENAI_MODEL__',
+	model: '__GATEWAY_OPENAI_MODEL__',
 })
 ```
 
@@ -149,16 +149,16 @@ import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 import { codeReviewer } from './agents/code-reviewer'
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({
-    basePath: resolve(import.meta.dirname, '../../workspace'),
-  }),
-  skills: ['skills'],
+	filesystem: new LocalFilesystem({
+		basePath: resolve(import.meta.dirname, '../../workspace'),
+	}),
+	skills: ['skills'],
 })
 
 export const mastra = new Mastra({
-  workspace,
-  // highlight-next-line
-  agents: { codeReviewer },
+	workspace,
+	// highlight-next-line
+	agents: { codeReviewer },
 })
 ```
 

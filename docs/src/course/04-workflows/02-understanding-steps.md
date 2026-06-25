@@ -16,20 +16,20 @@ Every step follows this pattern:
 
 ```typescript
 const myStep = createStep({
-  id: 'unique-step-name',
-  description: 'What this step does',
-  inputSchema: z.object({
-    // Define expected input structure
-  }),
-  outputSchema: z.object({
-    // Define output structure
-  }),
-  execute: async ({ inputData }) => {
-    // Your logic here
-    return {
-      // Return data matching output schema
-    }
-  },
+	id: 'unique-step-name',
+	description: 'What this step does',
+	inputSchema: z.object({
+		// Define expected input structure
+	}),
+	outputSchema: z.object({
+		// Define output structure
+	}),
+	execute: async ({ inputData }) => {
+		// Your logic here
+		return {
+			// Return data matching output schema
+		}
+	},
 })
 ```
 

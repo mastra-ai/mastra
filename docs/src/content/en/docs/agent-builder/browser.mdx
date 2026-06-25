@@ -23,30 +23,30 @@ import { MastraEditor } from '@mastra/editor'
 import { StagehandBrowser } from '@mastra/stagehand'
 
 new MastraEditor({
-  browsers: {
-    stagehand: {
-      id: 'stagehand',
-      name: 'Stagehand Browser',
-      createBrowser: config =>
-        new StagehandBrowser({
-          ...config,
-          apiKey: process.env.BROWSERBASE_API_KEY ?? '',
-          env: 'BROWSERBASE',
-          projectId: process.env.BROWSERBASE_PROJECT_ID ?? '',
-        }),
-    },
-  },
-  builder: {
-    enabled: true,
-    configuration: {
-      agent: {
-        browser: {
-          type: 'inline',
-          config: { provider: 'stagehand', headless: true },
-        },
-      },
-    },
-  },
+	browsers: {
+		stagehand: {
+			id: 'stagehand',
+			name: 'Stagehand Browser',
+			createBrowser: config =>
+				new StagehandBrowser({
+					...config,
+					apiKey: process.env.BROWSERBASE_API_KEY ?? '',
+					env: 'BROWSERBASE',
+					projectId: process.env.BROWSERBASE_PROJECT_ID ?? '',
+				}),
+		},
+	},
+	builder: {
+		enabled: true,
+		configuration: {
+			agent: {
+				browser: {
+					type: 'inline',
+					config: { provider: 'stagehand', headless: true },
+				},
+			},
+		},
+	},
 })
 ```
 

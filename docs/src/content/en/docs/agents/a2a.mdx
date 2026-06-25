@@ -33,30 +33,30 @@ An agent card includes fields like the agent name, description, endpoint URL, pr
 
 ```json title="agent-card.json"
 {
-  "protocolVersion": "0.3.0",
-  "name": "Weather Agent",
-  "description": "Provides weather information.",
-  "url": "https://agent.example.com/api/a2a/weather-agent",
-  "version": "1.0",
-  "provider": {
-    "organization": "Acme",
-    "url": "https://acme.example.com"
-  },
-  "capabilities": {
-    "streaming": true,
-    "pushNotifications": true,
-    "stateTransitionHistory": false
-  },
-  "defaultInputModes": ["text/plain"],
-  "defaultOutputModes": ["text/plain"],
-  "skills": [
-    {
-      "id": "weather",
-      "name": "weather",
-      "description": "Gets weather conditions for a location.",
-      "tags": ["tool"]
-    }
-  ]
+	"protocolVersion": "0.3.0",
+	"name": "Weather Agent",
+	"description": "Provides weather information.",
+	"url": "https://agent.example.com/api/a2a/weather-agent",
+	"version": "1.0",
+	"provider": {
+		"organization": "Acme",
+		"url": "https://acme.example.com"
+	},
+	"capabilities": {
+		"streaming": true,
+		"pushNotifications": true,
+		"stateTransitionHistory": false
+	},
+	"defaultInputModes": ["text/plain"],
+	"defaultOutputModes": ["text/plain"],
+	"skills": [
+		{
+			"id": "weather",
+			"name": "weather",
+			"description": "Gets weather conditions for a location.",
+			"tags": ["tool"]
+		}
+	]
 }
 ```
 
@@ -80,20 +80,20 @@ import { Agent } from '@mastra/core/agent'
 import { A2AAgent } from '@mastra/core/a2a'
 
 const remoteWeatherAgent = new A2AAgent({
-  url: 'https://weather.example.com/api/.well-known/weather-agent/agent-card.json',
-  headers: {
-    Authorization: `Bearer ${process.env.WEATHER_AGENT_TOKEN}`,
-  },
+	url: 'https://weather.example.com/api/.well-known/weather-agent/agent-card.json',
+	headers: {
+		Authorization: `Bearer ${process.env.WEATHER_AGENT_TOKEN}`,
+	},
 })
 
 export const supportAgent = new Agent({
-  id: 'support-agent',
-  name: 'Support Agent',
-  instructions: 'Answer user questions and delegate weather questions when needed.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  agents: {
-    remoteWeatherAgent,
-  },
+	id: 'support-agent',
+	name: 'Support Agent',
+	instructions: 'Answer user questions and delegate weather questions when needed.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	agents: {
+		remoteWeatherAgent,
+	},
 })
 ```
 
@@ -117,10 +117,10 @@ Use `MastraClient.getA2A()` when you want application code to call an A2A-enable
 import { MastraClient } from '@mastra/client-js'
 
 const client = new MastraClient({
-  baseUrl: 'https://agent.example.com',
-  headers: {
-    Authorization: `Bearer ${process.env.AGENT_API_TOKEN}`,
-  },
+	baseUrl: 'https://agent.example.com',
+	headers: {
+		Authorization: `Bearer ${process.env.AGENT_API_TOKEN}`,
+	},
 })
 
 const a2a = client.getA2A('weather-agent')
@@ -133,18 +133,18 @@ Use `sendMessageStream()` to send a message and receive task status and artifact
 
 ```typescript title="src/a2a-client.ts"
 const stream = a2a.sendMessageStream({
-  message: {
-    kind: 'message',
-    role: 'user',
-    messageId: crypto.randomUUID(),
-    parts: [{ kind: 'text', text: "What's the weather in Prague?" }],
-  },
+	message: {
+		kind: 'message',
+		role: 'user',
+		messageId: crypto.randomUUID(),
+		parts: [{ kind: 'text', text: "What's the weather in Prague?" }],
+	},
 })
 
 for await (const event of stream) {
-  if (event.kind === 'artifact-update') {
-    console.log(event.artifact.parts)
-  }
+	if (event.kind === 'artifact-update') {
+		console.log(event.artifact.parts)
+	}
 }
 ```
 
@@ -152,11 +152,11 @@ If a stream disconnects while a task is still running, use `resubscribeTask()` t
 
 ```typescript title="src/a2a-client.ts"
 const updates = a2a.resubscribeTask({
-  id: 'task-123',
+	id: 'task-123',
 })
 
 for await (const event of updates) {
-  console.log(event)
+	console.log(event)
 }
 ```
 
@@ -168,14 +168,14 @@ for await (const event of updates) {
 import { A2AAgent } from '@mastra/core/a2a'
 
 const remoteWeatherAgent = new A2AAgent({
-  url: 'https://weather.example.com/api/.well-known/weather-agent/agent-card.json',
-  headers: {
-    Authorization: `Bearer ${process.env.WEATHER_AGENT_TOKEN}`,
-  },
-  retries: 2,
-  backoffMs: 250,
-  maxBackoffMs: 1000,
-  timeoutMs: 30_000,
+	url: 'https://weather.example.com/api/.well-known/weather-agent/agent-card.json',
+	headers: {
+		Authorization: `Bearer ${process.env.WEATHER_AGENT_TOKEN}`,
+	},
+	retries: 2,
+	backoffMs: 250,
+	maxBackoffMs: 1000,
+	timeoutMs: 30_000,
 })
 ```
 
@@ -189,11 +189,11 @@ After a client has a task ID, it can register a callback URL for that task:
 
 ```typescript title="src/a2a-client.ts"
 await a2a.setTaskPushNotificationConfig({
-  taskId: 'task-123',
-  pushNotificationConfig: {
-    url: 'https://app.example.com/a2a/tasks',
-    token: process.env.A2A_WEBHOOK_TOKEN,
-  },
+	taskId: 'task-123',
+	pushNotificationConfig: {
+		url: 'https://app.example.com/a2a/tasks',
+		token: process.env.A2A_WEBHOOK_TOKEN,
+	},
 })
 ```
 
@@ -207,17 +207,17 @@ Mastra supports signed A2A agent cards so clients can verify that a discovered c
 import { Mastra } from '@mastra/core/mastra'
 
 export const mastra = new Mastra({
-  server: {
-    a2a: {
-      agentCardSigning: {
-        privateKey: process.env.A2A_AGENT_CARD_PRIVATE_KEY!,
-        protectedHeader: {
-          alg: 'ES256',
-          kid: 'agent-card-key',
-        },
-      },
-    },
-  },
+	server: {
+		a2a: {
+			agentCardSigning: {
+				privateKey: process.env.A2A_AGENT_CARD_PRIVATE_KEY!,
+				protectedHeader: {
+					alg: 'ES256',
+					kid: 'agent-card-key',
+				},
+			},
+		},
+	},
 })
 ```
 
@@ -227,16 +227,16 @@ Verify a signed card with `MastraClient.getA2A()`:
 
 ```typescript title="src/a2a-client.ts"
 const card = await a2a.getAgentCard({
-  verifySignature: {
-    algorithms: ['ES256'],
-    keyProvider: async ({ kid, jku }) => {
-      return fetchTrustedPublicJwk({ kid, jku })
-    },
-  },
+	verifySignature: {
+		algorithms: ['ES256'],
+		keyProvider: async ({ kid, jku }) => {
+			return fetchTrustedPublicJwk({ kid, jku })
+		},
+	},
 })
 
 if (!card.signatures?.length) {
-  throw new Error('Expected a signed A2A agent card.')
+	throw new Error('Expected a signed A2A agent card.')
 }
 ```
 
@@ -250,14 +250,14 @@ Use `verifyAgentCard` when a parent agent should validate a remote agent before 
 import { A2AAgent } from '@mastra/core/a2a'
 
 const remoteWeatherAgent = new A2AAgent({
-  url: 'https://weather.example.com/api/.well-known/weather-agent/agent-card.json',
-  verifyAgentCard: {
-    verify: async (card, context) => {
-      if (card.provider?.organization !== 'Weather Inc') {
-        throw new Error(`Unexpected provider for ${context.cardUrl}`)
-      }
-    },
-  },
+	url: 'https://weather.example.com/api/.well-known/weather-agent/agent-card.json',
+	verifyAgentCard: {
+		verify: async (card, context) => {
+			if (card.provider?.organization !== 'Weather Inc') {
+				throw new Error(`Unexpected provider for ${context.cardUrl}`)
+			}
+		},
+	},
 })
 ```
 

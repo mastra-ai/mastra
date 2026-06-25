@@ -13,10 +13,10 @@ The `.setStorage()` method is used to set the storage instance for the Mastra in
 
 ```typescript
 mastra.setStorage(
-  new LibSQLStore({
-    id: 'mastra-storage',
-    url: ':memory:',
-  }),
+	new LibSQLStore({
+		id: 'mastra-storage',
+		url: ':memory:',
+	}),
 )
 ```
 
@@ -24,11 +24,11 @@ mastra.setStorage(
 
 <PropertiesTable
   content={[
-  {
-    name: 'storage',
-    type: 'MastraCompositeStore',
-    description: 'The storage instance to set for the Mastra instance.',
-  },
+	{
+		name: 'storage',
+		type: 'MastraCompositeStore',
+		description: 'The storage instance to set for the Mastra instance.',
+	},
 ]}
 />
 

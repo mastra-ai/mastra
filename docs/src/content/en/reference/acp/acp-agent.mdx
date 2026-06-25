@@ -21,22 +21,22 @@ import { AcpAgent } from '@mastra/acp'
 import { Agent } from '@mastra/core/agent'
 
 const codeAgent = new AcpAgent({
-  id: 'code-agent',
-  name: 'Code Agent',
-  description: 'An ACP-compatible coding agent that can inspect and edit files',
-  command: 'acp-agent',
-  args: ['--stdio'],
-  cwd: process.cwd(),
+	id: 'code-agent',
+	name: 'Code Agent',
+	description: 'An ACP-compatible coding agent that can inspect and edit files',
+	command: 'acp-agent',
+	args: ['--stdio'],
+	cwd: process.cwd(),
 })
 
 export const codeSupervisor = new Agent({
-  id: 'code-supervisor',
-  name: 'Code Supervisor',
-  instructions: 'Delegate code editing tasks to the code-agent subagent.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  agents: {
-    codeAgent,
-  },
+	id: 'code-supervisor',
+	name: 'Code Supervisor',
+	instructions: 'Delegate code editing tasks to the code-agent subagent.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	agents: {
+		codeAgent,
+	},
 })
 ```
 
@@ -46,13 +46,13 @@ For Claude Code, ACP support is provided by the `@agentclientprotocol/claude-age
 import { AcpAgent } from '@mastra/acp'
 
 export const claudeCodeAgent = new AcpAgent({
-  id: 'claude-code-agent',
-  name: 'Claude Code Agent',
-  description: 'Use Claude Code through ACP.',
-  command: 'npx',
-  args: ['@agentclientprotocol/claude-agent-acp'],
-  cwd: process.cwd(),
-  model: '__AI_SDK_ANTHROPIC_MODEL_SONNET__',
+	id: 'claude-code-agent',
+	name: 'Claude Code Agent',
+	description: 'Use Claude Code through ACP.',
+	command: 'npx',
+	args: ['@agentclientprotocol/claude-agent-acp'],
+	cwd: process.cwd(),
+	model: '__AI_SDK_ANTHROPIC_MODEL_SONNET__',
 })
 ```
 
@@ -60,95 +60,95 @@ export const claudeCodeAgent = new AcpAgent({
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Unique identifier for the subagent.',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: 'Display name used during agent delegation. Defaults to `id`.',
-    isOptional: true,
-  },
-  {
-    name: 'description',
-    type: 'string',
-    description: 'Description shown to the model when it can delegate to this subagent.',
-  },
-  {
-    name: 'command',
-    type: 'string',
-    description: 'ACP agent executable to spawn.',
-  },
-  {
-    name: 'args',
-    type: 'string[]',
-    description: 'Arguments passed to the ACP agent executable.',
-    isOptional: true,
-    defaultValue: '[]',
-  },
-  {
-    name: 'env',
-    type: 'Record<string, string>',
-    description: 'Environment variables to merge with the current process environment when spawning the ACP process.',
-    isOptional: true,
-  },
-  {
-    name: 'cwd',
-    type: 'string',
-    description:
-      'Working directory for the ACP process and ACP session. Also used as the default local filesystem base path.',
-    isOptional: true,
-    defaultValue: 'process.cwd()',
-  },
-  {
-    name: 'session',
-    type: 'Partial<NewSessionRequest>',
-    description: 'ACP session creation options. Defaults to `cwd` or `process.cwd()` and an empty MCP server list.',
-    isOptional: true,
-  },
-  {
-    name: 'initialize',
-    type: 'Partial<InitializeRequest>',
-    description:
-      'ACP initialization options. Defaults to Mastra client information, the current ACP protocol version, and read/write filesystem capabilities.',
-    isOptional: true,
-  },
-  {
-    name: 'authMethodId',
-    type: 'string',
-    description: 'ACP authentication method ID to invoke after initialization and before session creation.',
-    isOptional: true,
-  },
-  {
-    name: 'persistSession',
-    type: 'boolean',
-    description:
-      'Whether to keep the ACP process and session alive after each prompt. Set to `false` to stop the process after each prompt completes.',
-    isOptional: true,
-    defaultValue: 'true',
-  },
-  {
-    name: 'onPermissionRequest',
-    type: '(request: RequestPermissionRequest) => Promise<RequestPermissionResponse>',
-    description:
-      'Callback invoked when the ACP agent requests permission. Defaults to selecting the first permission option, or cancelling when no option is available.',
-    isOptional: true,
-  },
-  {
-    name: 'workspace',
-    type: 'Workspace',
-    description:
-      'Workspace used for ACP file read and write requests. Defaults to a `Workspace` backed by `LocalFilesystem` at `cwd` or `process.cwd()`.',
-    isOptional: true,
-  },
-  {
-    name: 'model',
-    type: 'ModelId',
-    description: 'Model ID to select after ACP session creation using the ACP `session/set_model` method.',
-    isOptional: true,
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Unique identifier for the subagent.',
+	},
+	{
+		name: 'name',
+		type: 'string',
+		description: 'Display name used during agent delegation. Defaults to `id`.',
+		isOptional: true,
+	},
+	{
+		name: 'description',
+		type: 'string',
+		description: 'Description shown to the model when it can delegate to this subagent.',
+	},
+	{
+		name: 'command',
+		type: 'string',
+		description: 'ACP agent executable to spawn.',
+	},
+	{
+		name: 'args',
+		type: 'string[]',
+		description: 'Arguments passed to the ACP agent executable.',
+		isOptional: true,
+		defaultValue: '[]',
+	},
+	{
+		name: 'env',
+		type: 'Record<string, string>',
+		description: 'Environment variables to merge with the current process environment when spawning the ACP process.',
+		isOptional: true,
+	},
+	{
+		name: 'cwd',
+		type: 'string',
+		description:
+			'Working directory for the ACP process and ACP session. Also used as the default local filesystem base path.',
+		isOptional: true,
+		defaultValue: 'process.cwd()',
+	},
+	{
+		name: 'session',
+		type: 'Partial<NewSessionRequest>',
+		description: 'ACP session creation options. Defaults to `cwd` or `process.cwd()` and an empty MCP server list.',
+		isOptional: true,
+	},
+	{
+		name: 'initialize',
+		type: 'Partial<InitializeRequest>',
+		description:
+			'ACP initialization options. Defaults to Mastra client information, the current ACP protocol version, and read/write filesystem capabilities.',
+		isOptional: true,
+	},
+	{
+		name: 'authMethodId',
+		type: 'string',
+		description: 'ACP authentication method ID to invoke after initialization and before session creation.',
+		isOptional: true,
+	},
+	{
+		name: 'persistSession',
+		type: 'boolean',
+		description:
+			'Whether to keep the ACP process and session alive after each prompt. Set to `false` to stop the process after each prompt completes.',
+		isOptional: true,
+		defaultValue: 'true',
+	},
+	{
+		name: 'onPermissionRequest',
+		type: '(request: RequestPermissionRequest) => Promise<RequestPermissionResponse>',
+		description:
+			'Callback invoked when the ACP agent requests permission. Defaults to selecting the first permission option, or cancelling when no option is available.',
+		isOptional: true,
+	},
+	{
+		name: 'workspace',
+		type: 'Workspace',
+		description:
+			'Workspace used for ACP file read and write requests. Defaults to a `Workspace` backed by `LocalFilesystem` at `cwd` or `process.cwd()`.',
+		isOptional: true,
+	},
+	{
+		name: 'model',
+		type: 'ModelId',
+		description: 'Model ID to select after ACP session creation using the ACP `session/set_model` method.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -156,27 +156,27 @@ export const claudeCodeAgent = new AcpAgent({
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'TId',
-    description: 'Readonly subagent identifier from the constructor options.',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: 'Readonly display name for this subagent.',
-  },
-  {
-    name: 'description',
-    type: 'string',
-    description: 'Readonly description shown when the parent agent can delegate to this subagent.',
-  },
-  {
-    name: 'connection',
-    type: 'ACPConnection',
-    description:
-      'Readonly ACP connection used to start the agent process, create sessions, send prompts, stream updates, and manage models.',
-  },
+	{
+		name: 'id',
+		type: 'TId',
+		description: 'Readonly subagent identifier from the constructor options.',
+	},
+	{
+		name: 'name',
+		type: 'string',
+		description: 'Readonly display name for this subagent.',
+	},
+	{
+		name: 'description',
+		type: 'string',
+		description: 'Readonly description shown when the parent agent can delegate to this subagent.',
+	},
+	{
+		name: 'connection',
+		type: 'ACPConnection',
+		description:
+			'Readonly ACP connection used to start the agent process, create sessions, send prompts, stream updates, and manage models.',
+	},
 ]}
 />
 
@@ -202,9 +202,9 @@ Sends the prompt to the ACP agent and returns a Mastra subagent stream result. A
 const result = await codeAgent.stream('Refactor the selected module and explain each change')
 
 for await (const chunk of result.fullStream) {
-  if (chunk.type === 'text-delta') {
-    process.stdout.write(chunk.payload.text)
-  }
+	if (chunk.type === 'text-delta') {
+		process.stdout.write(chunk.payload.text)
+	}
 }
 ```
 
@@ -239,12 +239,12 @@ Set `persistSession: false` when each prompt should run in a fresh ACP process:
 import { AcpAgent } from '@mastra/acp'
 
 export const codeAgent = new AcpAgent({
-  id: 'code-agent',
-  description: 'Run one isolated ACP coding task',
-  command: 'acp-agent',
-  args: ['--stdio'],
-  cwd: process.cwd(),
-  persistSession: false,
+	id: 'code-agent',
+	description: 'Run one isolated ACP coding task',
+	command: 'acp-agent',
+	args: ['--stdio'],
+	cwd: process.cwd(),
+	persistSession: false,
 })
 ```
 
@@ -261,17 +261,17 @@ import { AcpAgent } from '@mastra/acp'
 import { LocalFilesystem, Workspace } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({
-    basePath: process.cwd(),
-  }),
+	filesystem: new LocalFilesystem({
+		basePath: process.cwd(),
+	}),
 })
 
 export const codeAgent = new AcpAgent({
-  id: 'code-agent',
-  description: 'Run coding tasks in a controlled workspace',
-  command: 'acp-agent',
-  args: ['--stdio'],
-  workspace,
+	id: 'code-agent',
+	description: 'Run coding tasks in a controlled workspace',
+	command: 'acp-agent',
+	args: ['--stdio'],
+	workspace,
 })
 ```
 
@@ -287,24 +287,24 @@ Pass `onPermissionRequest` to inspect the request and return your own permission
 import { AcpAgent } from '@mastra/acp'
 
 export const codeAgent = new AcpAgent({
-  id: 'code-agent',
-  description: 'Use an ACP-compatible coding agent',
-  command: 'acp-agent',
-  args: ['--stdio'],
-  async onPermissionRequest(request) {
-    const allowOption = request.options.find(option => option.name === 'Allow')
+	id: 'code-agent',
+	description: 'Use an ACP-compatible coding agent',
+	command: 'acp-agent',
+	args: ['--stdio'],
+	async onPermissionRequest(request) {
+		const allowOption = request.options.find(option => option.name === 'Allow')
 
-    if (!allowOption) {
-      return { outcome: { outcome: 'cancelled' } }
-    }
+		if (!allowOption) {
+			return { outcome: { outcome: 'cancelled' } }
+		}
 
-    return {
-      outcome: {
-        outcome: 'selected',
-        optionId: allowOption.optionId,
-      },
-    }
-  },
+		return {
+			outcome: {
+				outcome: 'selected',
+				optionId: allowOption.optionId,
+			},
+		}
+	},
 })
 ```
 

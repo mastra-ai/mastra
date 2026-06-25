@@ -9,33 +9,33 @@ import { LibSQLStore, LibSQLVector } from '@mastra/libsql'
 
 // Create a memory instance with semantic recall configuration
 const memory = new Memory({
-  storage: new LibSQLStore({
-    id: 'learning-memory-storage',
-    url: 'file:../../memory.db', // relative path from the `.mastra/output` directory
-  }), // Storage for message history
-  vector: new LibSQLVector({
-    id: 'learning-memory-vector',
-    url: 'file:../../vector.db', // relative path from the `.mastra/output` directory
-  }), // Vector database for semantic search
-  embedder: 'openai/text-embedding-3-small', // Embedder for message embeddings
-  options: {
-    lastMessages: 20, // Include the last 20 messages in the context
-    semanticRecall: true, // Enable semantic recall with default settings
-  },
+	storage: new LibSQLStore({
+		id: 'learning-memory-storage',
+		url: 'file:../../memory.db', // relative path from the `.mastra/output` directory
+	}), // Storage for message history
+	vector: new LibSQLVector({
+		id: 'learning-memory-vector',
+		url: 'file:../../vector.db', // relative path from the `.mastra/output` directory
+	}), // Vector database for semantic search
+	embedder: 'openai/text-embedding-3-small', // Embedder for message embeddings
+	options: {
+		lastMessages: 20, // Include the last 20 messages in the context
+		semanticRecall: true, // Enable semantic recall with default settings
+	},
 })
 
 // Create an agent with the configured memory
 export const memoryAgent = new Agent({
-  name: 'MemoryAgent',
-  instructions: `
+	name: 'MemoryAgent',
+	instructions: `
     You are a helpful assistant with advanced memory capabilities.
     You can remember previous conversations and user preferences.
     When a user shares information about themselves, acknowledge it and remember it for future reference.
     If asked about something mentioned earlier in the conversation, recall it accurately.
     You can also recall relevant information from older conversations when appropriate.
   `,
-  model: 'openai/gpt-5.4',
-  memory: memory,
+	model: 'openai/gpt-5.4',
+	memory: memory,
 })
 ```
 

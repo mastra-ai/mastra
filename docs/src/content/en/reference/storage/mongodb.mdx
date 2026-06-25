@@ -25,9 +25,9 @@ Ensure you have a MongoDB Atlas Local (via Docker) or MongoDB Atlas Cloud instan
 import { MongoDBStore } from '@mastra/mongodb'
 
 const storage = new MongoDBStore({
-  id: 'mongodb-storage',
-  uri: process.env.MONGODB_URI,
-  dbName: process.env.MONGODB_DATABASE,
+	id: 'mongodb-storage',
+	uri: process.env.MONGODB_URI,
+	dbName: process.env.MONGODB_DATABASE,
 })
 ```
 
@@ -35,36 +35,36 @@ const storage = new MongoDBStore({
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Unique identifier for this storage instance.',
-    isOptional: false,
-  },
-  {
-    name: 'uri',
-    type: 'string',
-    description: 'MongoDB connection string (e.g., mongodb+srv://user:password@cluster.mongodb.net)',
-    isOptional: false,
-  },
-  {
-    name: 'url',
-    type: 'string',
-    description: 'Deprecated. Use uri instead. MongoDB connection string (supported for backward compatibility).',
-    isOptional: true,
-  },
-  {
-    name: 'dbName',
-    type: 'string',
-    description: 'The name of the database you want the storage to use.',
-    isOptional: false,
-  },
-  {
-    name: 'options',
-    type: 'MongoClientOptions',
-    description: 'MongoDB client options for advanced configuration (SSL, connection pooling, etc.).',
-    isOptional: true,
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Unique identifier for this storage instance.',
+		isOptional: false,
+	},
+	{
+		name: 'uri',
+		type: 'string',
+		description: 'MongoDB connection string (e.g., mongodb+srv://user:password@cluster.mongodb.net)',
+		isOptional: false,
+	},
+	{
+		name: 'url',
+		type: 'string',
+		description: 'Deprecated. Use uri instead. MongoDB connection string (supported for backward compatibility).',
+		isOptional: true,
+	},
+	{
+		name: 'dbName',
+		type: 'string',
+		description: 'The name of the database you want the storage to use.',
+		isOptional: false,
+	},
+	{
+		name: 'options',
+		type: 'MongoClientOptions',
+		description: 'MongoDB client options for advanced configuration (SSL, connection pooling, etc.).',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -81,22 +81,22 @@ import { MongoDBStore } from '@mastra/mongodb'
 
 // Basic connection without custom options
 const store1 = new MongoDBStore({
-  id: 'mongodb-storage-01',
-  uri: 'mongodb+srv://user:password@cluster.mongodb.net',
-  dbName: 'mastra_storage',
+	id: 'mongodb-storage-01',
+	uri: 'mongodb+srv://user:password@cluster.mongodb.net',
+	dbName: 'mastra_storage',
 })
 
 // Using connection string with options
 const store2 = new MongoDBStore({
-  id: 'mongodb-storage-02',
-  uri: 'mongodb+srv://user:password@cluster.mongodb.net',
-  dbName: 'mastra_storage',
-  options: {
-    retryWrites: true,
-    maxPoolSize: 10,
-    serverSelectionTimeoutMS: 5000,
-    socketTimeoutMS: 45000,
-  },
+	id: 'mongodb-storage-02',
+	uri: 'mongodb+srv://user:password@cluster.mongodb.net',
+	dbName: 'mastra_storage',
+	options: {
+		retryWrites: true,
+		maxPoolSize: 10,
+		serverSelectionTimeoutMS: 5000,
+		socketTimeoutMS: 45000,
+	},
 })
 ```
 
@@ -126,13 +126,13 @@ import { Mastra } from '@mastra/core'
 import { MongoDBStore } from '@mastra/mongodb'
 
 const storage = new MongoDBStore({
-  id: 'mongodb-storage',
-  uri: process.env.MONGODB_URI,
-  dbName: process.env.MONGODB_DATABASE,
+	id: 'mongodb-storage',
+	uri: process.env.MONGODB_URI,
+	dbName: process.env.MONGODB_DATABASE,
 })
 
 const mastra = new Mastra({
-  storage, // init() is called automatically
+	storage, // init() is called automatically
 })
 ```
 
@@ -142,9 +142,9 @@ If you're using storage directly without Mastra, you must call `init()` explicit
 import { MongoDBStore } from '@mastra/mongodb'
 
 const storage = new MongoDBStore({
-  id: 'mongodb-storage',
-  uri: process.env.MONGODB_URI,
-  dbName: process.env.MONGODB_DATABASE,
+	id: 'mongodb-storage',
+	uri: process.env.MONGODB_URI,
+	dbName: process.env.MONGODB_DATABASE,
 })
 
 // Required when using storage directly
@@ -169,15 +169,15 @@ MongoDB storage includes built-in vector search capabilities for AI applications
 import { MongoDBVector } from '@mastra/mongodb'
 
 const vectorStore = new MongoDBVector({
-  id: 'mongodb-vector',
-  uri: process.env.MONGODB_URI,
-  dbName: process.env.MONGODB_DATABASE,
+	id: 'mongodb-vector',
+	uri: process.env.MONGODB_URI,
+	dbName: process.env.MONGODB_DATABASE,
 })
 
 // Create a vector index for embeddings
 await vectorStore.createIndex({
-  indexName: 'document_embeddings',
-  dimension: 1536,
+	indexName: 'document_embeddings',
+	dimension: 1536,
 })
 ```
 
@@ -223,20 +223,20 @@ import { Agent } from '@mastra/core/agent'
 import { MongoDBStore } from '@mastra/mongodb'
 
 export const mongodbAgent = new Agent({
-  id: 'mongodb-agent',
-  name: 'mongodb-agent',
-  instructions:
-    'You are an AI agent with the ability to automatically recall memories from previous interactions.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  memory: new Memory({
-    storage: new MongoDBStore({
-      uri: process.env.MONGODB_URI!,
-      dbName: process.env.MONGODB_DB_NAME!,
-    }),
-    options: {
-      generateTitle: true,
-    },
-  }),
+	id: 'mongodb-agent',
+	name: 'mongodb-agent',
+	instructions:
+		'You are an AI agent with the ability to automatically recall memories from previous interactions.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	memory: new Memory({
+		storage: new MongoDBStore({
+			uri: process.env.MONGODB_URI!,
+			dbName: process.env.MONGODB_DB_NAME!,
+		}),
+		options: {
+			generateTitle: true,
+		},
+	}),
 })
 ```
 
@@ -255,29 +255,29 @@ const resourceId = 'user-456'
 const agent = mastra.getAgent('mongodbAgent')
 
 const message = await agent.stream('My name is Mastra', {
-  memory: {
-    thread: threadId,
-    resource: resourceId,
-  },
+	memory: {
+		thread: threadId,
+		resource: resourceId,
+	},
 })
 
 await message.textStream.pipeTo(new WritableStream())
 
 const stream = await agent.stream("What's my name?", {
-  memory: {
-    thread: threadId,
-    resource: resourceId,
-  },
-  memoryOptions: {
-    lastMessages: 5,
-    semanticRecall: {
-      topK: 3,
-      messageRange: 2,
-    },
-  },
+	memory: {
+		thread: threadId,
+		resource: resourceId,
+	},
+	memoryOptions: {
+		lastMessages: 5,
+		semanticRecall: {
+			topK: 3,
+			messageRange: 2,
+		},
+	},
 })
 
 for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk)
+	process.stdout.write(chunk)
 }
 ```

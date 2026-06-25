@@ -27,8 +27,8 @@ import { Mastra } from '@mastra/core'
 import { VercelDeployer } from '@mastra/deployer-vercel'
 
 export const mastra = new Mastra({
-  // highlight-next-line
-  deployer: new VercelDeployer(),
+	// highlight-next-line
+	deployer: new VercelDeployer(),
 })
 ```
 
@@ -50,12 +50,12 @@ import { Mastra } from '@mastra/core'
 import { VercelDeployer } from '@mastra/deployer-vercel'
 
 export const mastra = new Mastra({
-  deployer: new VercelDeployer({
-    studio: true,
-    maxDuration: 600,
-    memory: 1536,
-    regions: ['sfo1', 'iad1'],
-  }),
+	deployer: new VercelDeployer({
+		studio: true,
+		maxDuration: 600,
+		memory: 1536,
+		regions: ['sfo1', 'iad1'],
+	}),
 })
 ```
 

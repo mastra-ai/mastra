@@ -77,9 +77,9 @@ Using the DatadogBridge requires two steps:
 import tracer from 'dd-trace'
 
 tracer.init({
-  service: process.env.DD_SERVICE || 'my-mastra-app',
-  env: process.env.DD_ENV || 'production',
-  version: process.env.DD_VERSION,
+	service: process.env.DD_SERVICE || 'my-mastra-app',
+	env: process.env.DD_ENV || 'production',
+	version: process.env.DD_VERSION,
 })
 
 import { Mastra } from '@mastra/core'
@@ -99,25 +99,25 @@ Add the DatadogBridge to your Mastra observability config:
 
 ```typescript title="src/mastra/index.ts"
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'my-mastra-app',
-        bridge: new DatadogBridge({
-          mlApp: process.env.DD_LLMOBS_ML_APP!,
-        }),
-      },
-    },
-  }),
-  bundler: {
-    externals: [
-      'dd-trace',
-      '@datadog/native-metrics',
-      '@datadog/native-appsec',
-      '@datadog/native-iast-taint-tracking',
-      '@datadog/pprof',
-    ],
-  },
+	observability: new Observability({
+		configs: {
+			default: {
+				serviceName: 'my-mastra-app',
+				bridge: new DatadogBridge({
+					mlApp: process.env.DD_LLMOBS_ML_APP!,
+				}),
+			},
+		},
+	}),
+	bundler: {
+		externals: [
+			'dd-trace',
+			'@datadog/native-metrics',
+			'@datadog/native-appsec',
+			'@datadog/native-iast-taint-tracking',
+			'@datadog/pprof',
+		],
+	},
 })
 ```
 
@@ -140,9 +140,9 @@ If you don't have a local Datadog Agent and only need LLM Observability data (no
 
 ```typescript
 new DatadogBridge({
-  mlApp: process.env.DD_LLMOBS_ML_APP!,
-  apiKey: process.env.DD_API_KEY!,
-  agentless: true,
+	mlApp: process.env.DD_LLMOBS_ML_APP!,
+	apiKey: process.env.DD_API_KEY!,
+	agentless: true,
 })
 ```
 
@@ -176,9 +176,9 @@ Tags help you categorize and filter traces in Datadog. Add tags when executing a
 
 ```typescript
 const result = await agent.generate('Hello', {
-  tracingOptions: {
-    tags: ['production', 'experiment-v2', 'user-request'],
-  },
+	tracingOptions: {
+		tags: ['production', 'experiment-v2', 'user-request'],
+	},
 })
 ```
 
@@ -190,8 +190,8 @@ Use `requestContextKeys` to promote specific keys from the request context or sp
 
 ```typescript
 new DatadogBridge({
-  mlApp: process.env.DD_LLMOBS_ML_APP!,
-  requestContextKeys: ['tenantId', 'agentId'],
+	mlApp: process.env.DD_LLMOBS_ML_APP!,
+	requestContextKeys: ['tenantId', 'agentId'],
 })
 ```
 

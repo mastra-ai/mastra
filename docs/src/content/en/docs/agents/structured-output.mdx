@@ -28,14 +28,14 @@ Agents can return structured data by defining the expected output with either [S
     import { z } from 'zod'
 
     const response = await testAgent.generate('Help me plan my day.', {
-      structuredOutput: {
-        schema: z.array(
-          z.object({
-            name: z.string(),
-            activities: z.array(z.string()),
-          }),
-        ),
-      },
+    	structuredOutput: {
+    		schema: z.array(
+    			z.object({
+    				name: z.string(),
+    				activities: z.array(z.string()),
+    			}),
+    		),
+    	},
     })
 
     console.log(response.object)
@@ -50,16 +50,16 @@ Agents can return structured data by defining the expected output with either [S
     import { toStandardJsonSchema } from '@valibot/to-json-schema'
 
     const response = await testAgent.generate('Help me plan my day.', {
-      structuredOutput: {
-        schema: toStandardJsonSchema(
-          v.array(
-            v.object({
-              name: v.string(),
-              activities: v.array(v.string()),
-            }),
-          ),
-        ),
-      },
+    	structuredOutput: {
+    		schema: toStandardJsonSchema(
+    			v.array(
+    				v.object({
+    					name: v.string(),
+    					activities: v.array(v.string()),
+    				}),
+    			),
+    		),
+    	},
     })
 
     console.log(response.object)
@@ -73,12 +73,12 @@ Agents can return structured data by defining the expected output with either [S
     import { type } from 'arktype'
 
     const response = await testAgent.generate('Help me plan my day.', {
-      structuredOutput: {
-        schema: type({
-          name: 'string',
-          activities: 'string[]',
-        }).array(),
-      },
+    	structuredOutput: {
+    		schema: type({
+    			name: 'string',
+    			activities: 'string[]',
+    		}).array(),
+    	},
     })
 
     console.log(response.object)
@@ -90,22 +90,22 @@ Agents can return structured data by defining the expected output with either [S
 
     ```typescript
     const response = await testAgent.generate('Help me plan my day.', {
-      structuredOutput: {
-        schema: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              name: { type: 'string' },
-              activities: {
-                type: 'array',
-                items: { type: 'string' },
-              },
-            },
-            required: ['name', 'activities'],
-          },
-        },
-      },
+    	structuredOutput: {
+    		schema: {
+    			type: 'array',
+    			items: {
+    				type: 'object',
+    				properties: {
+    					name: { type: 'string' },
+    					activities: {
+    						type: 'array',
+    						items: { type: 'string' },
+    					},
+    				},
+    				required: ['name', 'activities'],
+    			},
+    		},
+    	},
     })
 
     console.log(response.object)
@@ -123,18 +123,18 @@ Visit [`.generate()`](/reference/agents/generate) for a full list of configurati
 
 ```json
 [
-  {
-    "name": "Morning Routine",
-    "activities": ["Wake up at 7am", "Exercise", "Shower", "Breakfast"]
-  },
-  {
-    "name": "Work",
-    "activities": ["Check emails", "Team meeting", "Lunch break"]
-  },
-  {
-    "name": "Evening",
-    "activities": ["Dinner", "Relax", "Read a book", "Sleep by 10pm"]
-  }
+	{
+		"name": "Morning Routine",
+		"activities": ["Wake up at 7am", "Exercise", "Shower", "Breakfast"]
+	},
+	{
+		"name": "Work",
+		"activities": ["Check emails", "Team meeting", "Lunch break"]
+	},
+	{
+		"name": "Evening",
+		"activities": ["Dinner", "Relax", "Read a book", "Sleep by 10pm"]
+	}
 ]
 ```
 
@@ -146,27 +146,27 @@ Streaming also supports structured output. The final structured object is availa
 import { z } from 'zod'
 
 const stream = await testAgent.stream('Help me plan my day.', {
-  structuredOutput: {
-    schema: z.array(
-      z.object({
-        name: z.string(),
-        activities: z.array(z.string()),
-      }),
-    ),
-  },
+	structuredOutput: {
+		schema: z.array(
+			z.object({
+				name: z.string(),
+				activities: z.array(z.string()),
+			}),
+		),
+	},
 })
 
 for await (const chunk of stream.fullStream) {
-  if (chunk.type === 'object-result') {
-    console.log('\n', JSON.stringify(chunk, null, 2))
-  }
-  process.stdout.write(JSON.stringify(chunk))
+	if (chunk.type === 'object-result') {
+		console.log('\n', JSON.stringify(chunk, null, 2))
+	}
+	process.stdout.write(JSON.stringify(chunk))
 }
 
 console.log(await stream.object)
 
 for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk)
+	process.stdout.write(chunk)
 }
 ```
 
@@ -178,24 +178,24 @@ When your main agent isn't proficient at creating structured output you can prov
 import { z } from 'zod'
 
 const response = await testAgent.generate('Analyze the TypeScript programming language.', {
-  structuredOutput: {
-    schema: z.object({
-      overview: z.string(),
-      strengths: z.array(z.string()),
-      weaknesses: z.array(z.string()),
-      useCases: z.array(
-        z.object({
-          scenario: z.string(),
-          reasoning: z.string(),
-        }),
-      ),
-      comparison: z.object({
-        similarTo: z.array(z.string()),
-        differentiators: z.array(z.string()),
-      }),
-    }),
-    model: '__GATEWAY_OPENAI_MODEL__',
-  },
+	structuredOutput: {
+		schema: z.object({
+			overview: z.string(),
+			strengths: z.array(z.string()),
+			weaknesses: z.array(z.string()),
+			useCases: z.array(
+				z.object({
+					scenario: z.string(),
+					reasoning: z.string(),
+				}),
+			),
+			comparison: z.object({
+				similarTo: z.array(z.string()),
+				differentiators: z.array(z.string()),
+			}),
+		}),
+		model: '__GATEWAY_OPENAI_MODEL__',
+	},
 })
 
 console.log(response.object)
@@ -231,15 +231,15 @@ If your model provider doesn't support `response_format`, you'll get an error fr
 import { z } from 'zod'
 
 const response = await testAgent.generate('Help me plan my day.', {
-  structuredOutput: {
-    schema: z.array(
-      z.object({
-        name: z.string(),
-        activities: z.array(z.string()),
-      }),
-    ),
-    jsonPromptInjection: true,
-  },
+	structuredOutput: {
+		schema: z.array(
+			z.object({
+				name: z.string(),
+				activities: z.array(z.string()),
+			}),
+		),
+		jsonPromptInjection: true,
+	},
 })
 
 console.log(response.object)
@@ -251,10 +251,10 @@ Gemini 2.5 models don't support combining `response_format` (structured output) 
 
 ```typescript
 const response = await agentWithTools.generate('Your prompt', {
-  structuredOutput: {
-    schema: yourSchema,
-    jsonPromptInjection: true, // Required for Gemini 2.5 when tools are present
-  },
+	structuredOutput: {
+		schema: yourSchema,
+		jsonPromptInjection: true, // Required for Gemini 2.5 when tools are present
+	},
 })
 ```
 
@@ -266,10 +266,10 @@ When `model` is provided to the `structuredOutput` property, Mastra uses a separ
 
 ```typescript
 const response = await testAgent.generate('Tell me about TypeScript.', {
-  structuredOutput: {
-    schema: yourSchema,
-    model: '__GATEWAY_OPENAI_MODEL__',
-  },
+	structuredOutput: {
+		schema: yourSchema,
+		model: '__GATEWAY_OPENAI_MODEL__',
+	},
 })
 ```
 
@@ -277,19 +277,19 @@ If you want that structuring model to also see the current conversation history,
 
 ```typescript
 const response = await testAgent.generate('Return my profile as structured data.', {
-  memory: {
-    thread: 'thread-123',
-    resource: 'user-123',
-  },
-  structuredOutput: {
-    schema: z.object({
-      favoriteColor: z.string(),
-      hometown: z.string(),
-      petName: z.string(),
-    }),
-    model: '__GATEWAY_OPENAI_MODEL__',
-    useAgent: true,
-  },
+	memory: {
+		thread: 'thread-123',
+		resource: 'user-123',
+	},
+	structuredOutput: {
+		schema: z.object({
+			favoriteColor: z.string(),
+			hometown: z.string(),
+			petName: z.string(),
+		}),
+		model: '__GATEWAY_OPENAI_MODEL__',
+		useAgent: true,
+	},
 })
 ```
 
@@ -301,28 +301,28 @@ For models that don't support tools and structured outputs together, you can use
 
 ```typescript
 const result = await agent.stream('weather in vancouver?', {
-  prepareStep: async ({ stepNumber }) => {
-    if (stepNumber === 0) {
-      return {
-        model: '__GATEWAY_OPENAI_MODEL__',
-        tools: {
-          weatherTool,
-        },
-        toolChoice: 'required',
-      }
-    }
-    return {
-      model: '__GATEWAY_OPENAI_MODEL__',
-      tools: undefined,
-      structuredOutput: {
-        schema: z.object({
-          temperature: z.number(),
-          humidity: z.number(),
-          windSpeed: z.number(),
-        }),
-      },
-    }
-  },
+	prepareStep: async ({ stepNumber }) => {
+		if (stepNumber === 0) {
+			return {
+				model: '__GATEWAY_OPENAI_MODEL__',
+				tools: {
+					weatherTool,
+				},
+				toolChoice: 'required',
+			}
+		}
+		return {
+			model: '__GATEWAY_OPENAI_MODEL__',
+			tools: undefined,
+			structuredOutput: {
+				schema: z.object({
+					temperature: z.number(),
+					humidity: z.number(),
+					windSpeed: z.number(),
+				}),
+			},
+		}
+	},
 })
 ```
 
@@ -332,17 +332,17 @@ When schema validation fails, you can control how errors are handled using `erro
 
 ```typescript
 const response = await testAgent.generate('Tell me about TypeScript.', {
-  structuredOutput: {
-    schema: z.object({
-      summary: z.string(),
-      keyFeatures: z.array(z.string()),
-    }),
-    errorStrategy: 'fallback',
-    fallbackValue: {
-      summary: 'TypeScript is a typed superset of JavaScript',
-      keyFeatures: ['Static typing', 'Compiles to JavaScript', 'Better tooling'],
-    },
-  },
+	structuredOutput: {
+		schema: z.object({
+			summary: z.string(),
+			keyFeatures: z.array(z.string()),
+		}),
+		errorStrategy: 'fallback',
+		fallbackValue: {
+			summary: 'TypeScript is a typed superset of JavaScript',
+			keyFeatures: ['Static typing', 'Compiles to JavaScript', 'Better tooling'],
+		},
+	},
 })
 
 console.log(response.object)

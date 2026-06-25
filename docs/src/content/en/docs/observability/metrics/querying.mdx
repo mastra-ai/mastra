@@ -34,25 +34,25 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 export const agentLatencyTool = createTool({
-  id: 'agentLatency',
-  description: 'Average agent latency over the last hour.',
-  inputSchema: z.object({}),
-  execute: async (_input, context) => {
-    const observability = await context.mastra!.getStorage()!.getStore('observability')
-    if (!observability) {
-      throw new Error('Observability domain is not configured (requires DuckDB or ClickHouse)')
-    }
+	id: 'agentLatency',
+	description: 'Average agent latency over the last hour.',
+	inputSchema: z.object({}),
+	execute: async (_input, context) => {
+		const observability = await context.mastra!.getStorage()!.getStore('observability')
+		if (!observability) {
+			throw new Error('Observability domain is not configured (requires DuckDB or ClickHouse)')
+		}
 
-    const result = await observability.getMetricAggregate({
-      name: ['mastra_agent_duration_ms'],
-      aggregation: 'avg',
-      filters: {
-        timestamp: { start: new Date(Date.now() - 60 * 60 * 1000) },
-      },
-    })
+		const result = await observability.getMetricAggregate({
+			name: ['mastra_agent_duration_ms'],
+			aggregation: 'avg',
+			filters: {
+				timestamp: { start: new Date(Date.now() - 60 * 60 * 1000) },
+			},
+		})
 
-    return { averageMs: result.value }
-  },
+		return { averageMs: result.value }
+	},
 })
 ```
 
@@ -115,9 +115,9 @@ Response:
 const observability = await mastra.getStorage()!.getStore('observability')
 
 const cost = await observability!.getMetricAggregate({
-  name: ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'],
-  aggregation: 'sum',
-  comparePeriod: 'previous_day',
+	name: ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'],
+	aggregation: 'sum',
+	comparePeriod: 'previous_day',
 })
 
 console.log(cost.value, cost.estimatedCost, cost.costUnit, cost.changePercent)
@@ -140,11 +140,11 @@ Response: `groups[]`, each with `dimensions` (record of group keys to values), `
 
 ```typescript
 const byAgent = await observability!.getMetricBreakdown({
-  name: ['mastra_model_total_input_tokens'],
-  groupBy: ['entityName'],
-  aggregation: 'sum',
-  limit: 10,
-  orderDirection: 'DESC',
+	name: ['mastra_model_total_input_tokens'],
+	groupBy: ['entityName'],
+	aggregation: 'sum',
+	limit: 10,
+	orderDirection: 'DESC',
 })
 ```
 
@@ -164,12 +164,12 @@ Response: `series[]`, each with `name`, `costUnit`, and `points[]` of `{ timesta
 
 ```typescript
 const inputTokens = await observability!.getMetricTimeSeries({
-  name: ['mastra_model_total_input_tokens'],
-  aggregation: 'sum',
-  interval: '1h',
-  filters: {
-    timestamp: { start: new Date(Date.now() - 24 * 60 * 60 * 1000) },
-  },
+	name: ['mastra_model_total_input_tokens'],
+	aggregation: 'sum',
+	interval: '1h',
+	filters: {
+		timestamp: { start: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+	},
 })
 ```
 
@@ -188,9 +188,9 @@ Response: `series[]`, each with `percentile` and `points[]` of `{ timestamp, val
 
 ```typescript
 const latency = await observability!.getMetricPercentiles({
-  name: 'mastra_agent_duration_ms',
-  percentiles: [0.5, 0.95],
-  interval: '1h',
+	name: 'mastra_agent_duration_ms',
+	percentiles: [0.5, 0.95],
+	interval: '1h',
 })
 ```
 
@@ -231,9 +231,9 @@ The same `filters` shape works across all three surfaces:
 ```typescript
 // In-process
 await observability!.getMetricAggregate({
-  name: ['mastra_tool_duration_ms'],
-  aggregation: 'avg',
-  filters: { entityName: 'weatherTool', labels: { status: 'error' } },
+	name: ['mastra_tool_duration_ms'],
+	aggregation: 'avg',
+	filters: { entityName: 'weatherTool', labels: { status: 'error' } },
 })
 ```
 
@@ -259,11 +259,11 @@ A safe default for ad-hoc queries is the last 24 hours; alerts and dashboards sh
 
 ```typescript
 await observability!.getMetricAggregate({
-  name: ['mastra_agent_duration_ms'],
-  aggregation: 'p95',
-  filters: {
-    timestamp: { start: new Date(Date.now() - 24 * 60 * 60 * 1000) },
-  },
+	name: ['mastra_agent_duration_ms'],
+	aggregation: 'p95',
+	filters: {
+		timestamp: { start: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+	},
 })
 ```
 
@@ -278,37 +278,37 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 export const tokenKpiTool = createTool({
-  id: 'tokenKpi',
-  description: 'Returns input-token volume and estimated cost for the last hour.',
-  inputSchema: z.object({}),
-  outputSchema: z.object({
-    inputTokens: z.number().nullable(),
-    estimatedCost: z.number().nullable(),
-    costUnit: z.string().nullable(),
-    changePercent: z.number().nullable(),
-  }),
-  execute: async (_input, context) => {
-    const observability = await context.mastra!.getStorage()!.getStore('observability')
-    if (!observability) {
-      throw new Error('Observability domain is not configured (requires DuckDB or ClickHouse)')
-    }
+	id: 'tokenKpi',
+	description: 'Returns input-token volume and estimated cost for the last hour.',
+	inputSchema: z.object({}),
+	outputSchema: z.object({
+		inputTokens: z.number().nullable(),
+		estimatedCost: z.number().nullable(),
+		costUnit: z.string().nullable(),
+		changePercent: z.number().nullable(),
+	}),
+	execute: async (_input, context) => {
+		const observability = await context.mastra!.getStorage()!.getStore('observability')
+		if (!observability) {
+			throw new Error('Observability domain is not configured (requires DuckDB or ClickHouse)')
+		}
 
-    const result = await observability.getMetricAggregate({
-      name: ['mastra_model_total_input_tokens'],
-      aggregation: 'sum',
-      filters: {
-        timestamp: { start: new Date(Date.now() - 60 * 60 * 1000) },
-      },
-      comparePeriod: 'previous_period',
-    })
+		const result = await observability.getMetricAggregate({
+			name: ['mastra_model_total_input_tokens'],
+			aggregation: 'sum',
+			filters: {
+				timestamp: { start: new Date(Date.now() - 60 * 60 * 1000) },
+			},
+			comparePeriod: 'previous_period',
+		})
 
-    return {
-      inputTokens: result.value,
-      estimatedCost: result.estimatedCost ?? null,
-      costUnit: result.costUnit ?? null,
-      changePercent: result.changePercent ?? null,
-    }
-  },
+		return {
+			inputTokens: result.value,
+			estimatedCost: result.estimatedCost ?? null,
+			costUnit: result.costUnit ?? null,
+			changePercent: result.changePercent ?? null,
+		}
+	},
 })
 ```
 

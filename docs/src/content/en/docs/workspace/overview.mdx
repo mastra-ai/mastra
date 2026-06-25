@@ -39,13 +39,13 @@ Create a workspace by instantiating the `Workspace` class with your desired feat
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({
-    basePath: './workspace',
-  }),
-  sandbox: new LocalSandbox({
-    workingDirectory: './workspace',
-  }),
-  skills: ['skills'],
+	filesystem: new LocalFilesystem({
+		basePath: './workspace',
+	}),
+	sandbox: new LocalSandbox({
+		workingDirectory: './workspace',
+	}),
+	skills: ['skills'],
 })
 ```
 
@@ -60,11 +60,11 @@ import { Mastra } from '@mastra/core'
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
 })
 
 const mastra = new Mastra({
-  workspace,
+	workspace,
 })
 ```
 
@@ -77,13 +77,13 @@ import { Agent } from '@mastra/core/agent'
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './agent-workspace' }),
+	filesystem: new LocalFilesystem({ basePath: './agent-workspace' }),
 })
 
 export const myAgent = new Agent({
-  id: 'my-agent',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  workspace,
+	id: 'my-agent',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	workspace,
 })
 ```
 
@@ -105,8 +105,8 @@ For local development, pair a `LocalFilesystem` and `LocalSandbox` pointed at th
 
 ```typescript
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
 })
 ```
 
@@ -118,18 +118,18 @@ When you need cloud storage accessible inside a sandbox, use `mounts`. This FUSE
 
 ```typescript
 const workspace = new Workspace({
-  mounts: {
-    '/data': new S3Filesystem({
-      bucket: 'my-bucket',
-      region: 'us-east-1',
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    }),
-    '/skills': new GCSFilesystem({
-      bucket: 'agent-skills',
-    }),
-  },
-  sandbox: new E2BSandbox({ id: 'dev-sandbox' }),
+	mounts: {
+		'/data': new S3Filesystem({
+			bucket: 'my-bucket',
+			region: 'us-east-1',
+			accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+			secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+		}),
+		'/skills': new GCSFilesystem({
+			bucket: 'agent-skills',
+		}),
+	},
+	sandbox: new E2BSandbox({ id: 'dev-sandbox' }),
 })
 ```
 
@@ -149,12 +149,12 @@ Use a single `filesystem` when agents only need to read and write files. No comm
 
 ```typescript
 const workspace = new Workspace({
-  filesystem: new S3Filesystem({
-    bucket: 'my-bucket',
-    region: 'us-east-1',
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  }),
+	filesystem: new S3Filesystem({
+		bucket: 'my-bucket',
+		region: 'us-east-1',
+		accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+		secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+	}),
 })
 ```
 
@@ -166,7 +166,7 @@ Use a single `sandbox` when agents only need to execute commands. No file tools 
 
 ```typescript
 const workspace = new Workspace({
-  sandbox: new E2BSandbox({ id: 'dev-sandbox' }),
+	sandbox: new E2BSandbox({ id: 'dev-sandbox' }),
 })
 ```
 
@@ -178,13 +178,13 @@ Pass a resolver function to `filesystem` to return a different filesystem per re
 
 ```typescript
 const workspace = new Workspace({
-  filesystem: ({ requestContext }) => {
-    const role = requestContext.get('agent-role') || 'guest'
-    return new LocalFilesystem({
-      basePath: `/workspaces/${role}`,
-      readOnly: role !== 'admin',
-    })
-  },
+	filesystem: ({ requestContext }) => {
+		const role = requestContext.get('agent-role') || 'guest'
+		return new LocalFilesystem({
+			basePath: `/workspaces/${role}`,
+			readOnly: role !== 'admin',
+		})
+	},
 })
 ```
 
@@ -196,12 +196,12 @@ Pass a resolver function to `sandbox` to return a different sandbox per request.
 
 ```typescript
 const workspace = new Workspace({
-  sandbox: ({ requestContext }) => {
-    const userId = requestContext.get('user-id') as string
-    return new LocalSandbox({
-      workingDirectory: `/workspaces/${userId}`,
-    })
-  },
+	sandbox: ({ requestContext }) => {
+		const userId = requestContext.get('user-id') as string
+		return new LocalSandbox({
+			workingDirectory: `/workspaces/${userId}`,
+		})
+	},
 })
 ```
 
@@ -227,25 +227,25 @@ Configure tool behavior through the `tools` option on the workspace. This contro
 import { Workspace, LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
-  tools: {
-    // Global defaults
-    enabled: true,
-    requireApproval: false,
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+	tools: {
+		// Global defaults
+		enabled: true,
+		requireApproval: false,
 
-    // Per-tool overrides
-    [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
-      requireApproval: true,
-      requireReadBeforeWrite: true,
-    },
-    [WORKSPACE_TOOLS.FILESYSTEM.DELETE]: {
-      enabled: false,
-    },
-    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
-      requireApproval: true,
-    },
-  },
+		// Per-tool overrides
+		[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
+			requireApproval: true,
+			requireReadBeforeWrite: true,
+		},
+		[WORKSPACE_TOOLS.FILESYSTEM.DELETE]: {
+			enabled: false,
+		},
+		[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+			requireApproval: true,
+		},
+	},
 })
 ```
 
@@ -265,23 +265,23 @@ Tool options that accept functions receive a context object and return a boolean
 
 ```typescript title="src/mastra/workspaces.ts"
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  tools: {
-    // Dynamic enabled: disable command execution unless explicitly allowed
-    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
-      enabled: async ({ requestContext }) => {
-        return requestContext['allowExecution'] === 'true'
-      },
-    },
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	tools: {
+		// Dynamic enabled: disable command execution unless explicitly allowed
+		[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+			enabled: async ({ requestContext }) => {
+				return requestContext['allowExecution'] === 'true'
+			},
+		},
 
-    // Dynamic requireApproval: only require approval for protected paths
-    [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
-      requireApproval: async ({ args }) => {
-        return (args.path as string).startsWith('/protected')
-      },
-      requireReadBeforeWrite: true,
-    },
-  },
+		// Dynamic requireApproval: only require approval for protected paths
+		[WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: {
+			requireApproval: async ({ args }) => {
+				return (args.path as string).startsWith('/protected')
+			},
+			requireReadBeforeWrite: true,
+		},
+	},
 })
 ```
 
@@ -295,16 +295,16 @@ Rename workspace tools to match the conventions your agent expects. The config k
 import { Workspace, LocalFilesystem, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
-  lsp: true,
-  tools: {
-    [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: { name: 'view' },
-    [WORKSPACE_TOOLS.FILESYSTEM.GREP]: { name: 'search_content' },
-    [WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES]: { name: 'find_files' },
-    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: { name: 'execute_command' },
-    [WORKSPACE_TOOLS.LSP.LSP_INSPECT]: { name: 'lsp_inspect' },
-  },
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+	lsp: true,
+	tools: {
+		[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: { name: 'view' },
+		[WORKSPACE_TOOLS.FILESYSTEM.GREP]: { name: 'search_content' },
+		[WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES]: { name: 'find_files' },
+		[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: { name: 'execute_command' },
+		[WORKSPACE_TOOLS.LSP.LSP_INSPECT]: { name: 'lsp_inspect' },
+	},
 })
 ```
 
@@ -318,17 +318,17 @@ Set `tools.hooks` to run logic before and after every enabled workspace tool cal
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  tools: {
-    hooks: {
-      beforeToolCall: ({ toolName, workspaceToolName, input }) => {
-        console.log(`Running ${toolName} (${workspaceToolName})`, input)
-      },
-      afterToolCall: ({ toolName, output, error }) => {
-        console.log(`Finished ${toolName}`, { output, error })
-      },
-    },
-  },
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	tools: {
+		hooks: {
+			beforeToolCall: ({ toolName, workspaceToolName, input }) => {
+				console.log(`Running ${toolName} (${workspaceToolName})`, input)
+			},
+			afterToolCall: ({ toolName, output, error }) => {
+				console.log(`Finished ${toolName}`, { output, error })
+			},
+		},
+	},
 })
 ```
 
@@ -353,12 +353,12 @@ Set `maxOutputTokens` per tool to adjust the token limit:
 
 ```typescript
 const workspace = new Workspace({
-  // ...
-  tools: {
-    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
-      maxOutputTokens: 5000,
-    },
-  },
+	// ...
+	tools: {
+		[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+			maxOutputTokens: 5000,
+		},
+	},
 })
 ```
 
@@ -383,7 +383,7 @@ When `requireReadBeforeWrite` is enabled, workspace tools pass the recorded modi
 const stat = await filesystem.stat('/docs/file.md')
 // ... later ...
 await filesystem.writeFile('/docs/file.md', newContent, {
-  expectedMtime: stat.modifiedAt,
+	expectedMtime: stat.modifiedAt,
 })
 ```
 
@@ -395,8 +395,8 @@ Calling `init()` is optional in most cases—some providers initialize on first 
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
 })
 
 // Optional: pre-create directories and sandbox before first use

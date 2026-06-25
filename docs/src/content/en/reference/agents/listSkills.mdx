@@ -17,7 +17,7 @@ import { agent } from '../mastra/agents'
 const skills = await agent.listSkills()
 
 for (const skill of skills) {
-  console.log(`${skill.name}: ${skill.description}`)
+	console.log(`${skill.name}: ${skill.description}`)
 }
 ```
 
@@ -25,25 +25,25 @@ for (const skill of skills) {
 
 <PropertiesTable
   content={[
-  {
-    name: 'options',
-    type: 'object',
-    isOptional: true,
-    description: 'Options for skill resolution.',
-    properties: [
-      {
-        type: 'object',
-        parameters: [
-          {
-            name: 'requestContext',
-            type: 'RequestContext',
-            isOptional: true,
-            description: 'Request context passed to dynamic skill resolvers.',
-          },
-        ],
-      },
-    ],
-  },
+	{
+		name: 'options',
+		type: 'object',
+		isOptional: true,
+		description: 'Options for skill resolution.',
+		properties: [
+			{
+				type: 'object',
+				parameters: [
+					{
+						name: 'requestContext',
+						type: 'RequestContext',
+						isOptional: true,
+						description: 'Request context passed to dynamic skill resolvers.',
+					},
+				],
+			},
+		],
+	},
 ]}
 />
 
@@ -55,17 +55,17 @@ Each entry contains the metadata for a discovered skill:
 
 ```typescript
 interface SkillMetadata {
-  name: string
-  description: string
-  path: string
-  source: { type: string; projectPath: string }
-  references: string[]
-  scripts: string[]
-  assets: string[]
-  license?: string
-  compatibility?: string[]
-  'user-invocable'?: boolean
-  metadata?: Record<string, unknown>
+	name: string
+	description: string
+	path: string
+	source: { type: string; projectPath: string }
+	references: string[]
+	scripts: string[]
+	assets: string[]
+	license?: string
+	compatibility?: string[]
+	'user-invocable'?: boolean
+	metadata?: Record<string, unknown>
 }
 ```
 

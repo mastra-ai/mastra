@@ -18,18 +18,18 @@ import { Agent } from '@mastra/core/agent'
 
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
-  realtimeConfig: {
-    model: 'gpt-5.1-realtime',
-    apiKey: process.env.OPENAI_API_KEY,
-  },
+	realtimeConfig: {
+		model: 'gpt-5.1-realtime',
+		apiKey: process.env.OPENAI_API_KEY,
+	},
 })
 
 // Create an agent with the voice provider
 const agent = new Agent({
-  name: 'Customer Support Agent',
-  instructions: 'You are a helpful customer support agent for a software company.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  voice,
+	name: 'Customer Support Agent',
+	instructions: 'You are a helpful customer support agent for a software company.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	voice,
 })
 
 // Add additional instructions to the voice provider
@@ -51,12 +51,12 @@ await voice.connect()
 
 <PropertiesTable
   content={[
-  {
-    name: 'instructions',
-    type: 'string',
-    description: "Instructions to guide the voice model's behavior",
-    isOptional: false,
-  },
+	{
+		name: 'instructions',
+		type: 'string',
+		description: "Instructions to guide the voice model's behavior",
+		isOptional: false,
+	},
 ]}
 />
 

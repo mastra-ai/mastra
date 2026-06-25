@@ -21,9 +21,9 @@ import { MastraEditor } from '@mastra/editor'
 import { moderationProcessorProvider } from '@mastra/processors/moderation'
 
 new MastraEditor({
-  processorProviders: {
-    moderation: moderationProcessorProvider,
-  },
+	processorProviders: {
+		moderation: moderationProcessorProvider,
+	},
 })
 ```
 
@@ -31,51 +31,51 @@ new MastraEditor({
 
 <PropertiesTable
   content={[
-  {
-    name: 'info',
-    type: 'ProcessorProviderInfo',
-    description: 'Metadata about the provider.',
-    properties: [
-      {
-        parameters: [
-          {
-            name: 'id',
-            type: 'string',
-            description: 'Unique identifier (for example, `"moderation"`, `"token-limiter"`).',
-          },
-          {
-            name: 'name',
-            type: 'string',
-            description: 'Human-readable name.',
-          },
-          {
-            name: 'description',
-            type: 'string',
-            description: 'Short description of the provider.',
-            isOptional: true,
-          },
-        ],
-      },
-    ],
-  },
-  {
-    name: 'configSchema',
-    type: 'ZodSchema',
-    description:
-      'Zod schema describing the configuration this provider accepts. Used by the UI to render a form. The validated config object is passed to `createProcessor()`.',
-  },
-  {
-    name: 'availablePhases',
-    type: 'ProcessorPhase[]',
-    description:
-      "Phases this provider's processors support. One or more of `'processInput'`, `'processInputStep'`, `'processOutputStream'`, `'processOutputResult'`, `'processOutputStep'`.",
-  },
-  {
-    name: 'createProcessor',
-    type: '(config: Record<string, unknown>) => Processor',
-    description:
-      'Create a `Processor` instance from the validated configuration. Called during agent hydration to resolve stored processor configs into live instances.',
-  },
+	{
+		name: 'info',
+		type: 'ProcessorProviderInfo',
+		description: 'Metadata about the provider.',
+		properties: [
+			{
+				parameters: [
+					{
+						name: 'id',
+						type: 'string',
+						description: 'Unique identifier (for example, `"moderation"`, `"token-limiter"`).',
+					},
+					{
+						name: 'name',
+						type: 'string',
+						description: 'Human-readable name.',
+					},
+					{
+						name: 'description',
+						type: 'string',
+						description: 'Short description of the provider.',
+						isOptional: true,
+					},
+				],
+			},
+		],
+	},
+	{
+		name: 'configSchema',
+		type: 'ZodSchema',
+		description:
+			'Zod schema describing the configuration this provider accepts. Used by the UI to render a form. The validated config object is passed to `createProcessor()`.',
+	},
+	{
+		name: 'availablePhases',
+		type: 'ProcessorPhase[]',
+		description:
+			"Phases this provider's processors support. One or more of `'processInput'`, `'processInputStep'`, `'processOutputStream'`, `'processOutputResult'`, `'processOutputStep'`.",
+	},
+	{
+		name: 'createProcessor',
+		type: '(config: Record<string, unknown>) => Processor',
+		description:
+			'Create a `Processor` instance from the validated configuration. Called during agent hydration to resolve stored processor configs into live instances.',
+	},
 ]}
 />
 
@@ -87,18 +87,18 @@ import { z } from 'zod'
 import { MyProcessor } from './my-processor-impl'
 
 export const myProcessorProvider: ProcessorProvider = {
-  info: {
-    id: 'my-processor',
-    name: 'My Processor',
-    description: 'Filters output for sensitive content.',
-  },
-  configSchema: z.object({
-    threshold: z.number().min(0).max(1),
-  }),
-  availablePhases: ['processOutputStream', 'processOutputResult'],
-  createProcessor(config) {
-    return new MyProcessor(config as { threshold: number })
-  },
+	info: {
+		id: 'my-processor',
+		name: 'My Processor',
+		description: 'Filters output for sensitive content.',
+	},
+	configSchema: z.object({
+		threshold: z.number().min(0).max(1),
+	}),
+	availablePhases: ['processOutputStream', 'processOutputResult'],
+	createProcessor(config) {
+		return new MyProcessor(config as { threshold: number })
+	},
 }
 ```
 

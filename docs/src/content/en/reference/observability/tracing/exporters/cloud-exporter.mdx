@@ -27,12 +27,12 @@ new CloudExporter(config?: CloudExporterConfig)
 
 <PropertiesTable
   props={[
-  {
-    name: 'config',
-    type: 'CloudExporterConfig',
-    description: 'Configuration options',
-    required: false,
-  },
+	{
+		name: 'config',
+		type: 'CloudExporterConfig',
+		description: 'Configuration options',
+		required: false,
+	},
 ]}
 />
 
@@ -40,38 +40,38 @@ new CloudExporter(config?: CloudExporterConfig)
 
 ```typescript
 interface CloudExporterConfig extends BaseExporterConfig {
-  /** Maximum number of spans per batch. Default: 1000 */
-  maxBatchSize?: number
+	/** Maximum number of spans per batch. Default: 1000 */
+	maxBatchSize?: number
 
-  /** Maximum wait time before flushing in milliseconds. Default: 5000 */
-  maxBatchWaitMs?: number
+	/** Maximum wait time before flushing in milliseconds. Default: 5000 */
+	maxBatchWaitMs?: number
 
-  /** Maximum retry attempts. Default: 3 */
-  maxRetries?: number
+	/** Maximum retry attempts. Default: 3 */
+	maxRetries?: number
 
-  /** Cloud access token (from env or config) */
-  accessToken?: string
+	/** Cloud access token (from env or config) */
+	accessToken?: string
 
-  /** Project ID for project-scoped collector routes (letters, numbers, hyphens, underscores) */
-  projectId?: string
+	/** Project ID for project-scoped collector routes (letters, numbers, hyphens, underscores) */
+	projectId?: string
 
-  /** Base cloud observability endpoint */
-  endpoint?: string
+	/** Base cloud observability endpoint */
+	endpoint?: string
 
-  /** Explicit cloud traces endpoint override */
-  tracesEndpoint?: string
+	/** Explicit cloud traces endpoint override */
+	tracesEndpoint?: string
 
-  /** Explicit cloud logs endpoint override */
-  logsEndpoint?: string
+	/** Explicit cloud logs endpoint override */
+	logsEndpoint?: string
 
-  /** Explicit cloud metrics endpoint override */
-  metricsEndpoint?: string
+	/** Explicit cloud metrics endpoint override */
+	metricsEndpoint?: string
 
-  /** Explicit cloud scores endpoint override */
-  scoresEndpoint?: string
+	/** Explicit cloud scores endpoint override */
+	scoresEndpoint?: string
 
-  /** Explicit cloud feedback endpoint override */
-  feedbackEndpoint?: string
+	/** Explicit cloud feedback endpoint override */
+	feedbackEndpoint?: string
 }
 ```
 
@@ -108,12 +108,12 @@ Only `SPAN_ENDED` tracing events are exported. `SPAN_STARTED` and `SPAN_UPDATED`
 
 <PropertiesTable
   props={[
-  {
-    name: 'event',
-    type: 'TracingEvent',
-    description: 'The tracing event to export',
-    required: true,
-  },
+	{
+		name: 'event',
+		type: 'TracingEvent',
+		description: 'The tracing event to export',
+		required: true,
+	},
 ]}
 />
 
@@ -131,12 +131,12 @@ Every `LogEvent` passed to this handler is buffered and exported to the Cloud lo
 
 <PropertiesTable
   props={[
-  {
-    name: 'event',
-    type: 'LogEvent',
-    description: 'The log event to export',
-    required: true,
-  },
+	{
+		name: 'event',
+		type: 'LogEvent',
+		description: 'The log event to export',
+		required: true,
+	},
 ]}
 />
 
@@ -154,12 +154,12 @@ Every `MetricEvent` passed to this handler is buffered and exported to the Cloud
 
 <PropertiesTable
   props={[
-  {
-    name: 'event',
-    type: 'MetricEvent',
-    description: 'The metric event to export',
-    required: true,
-  },
+	{
+		name: 'event',
+		type: 'MetricEvent',
+		description: 'The metric event to export',
+		required: true,
+	},
 ]}
 />
 
@@ -177,12 +177,12 @@ Every `ScoreEvent` passed to this handler is buffered and exported to the Cloud 
 
 <PropertiesTable
   props={[
-  {
-    name: 'event',
-    type: 'ScoreEvent',
-    description: 'The score event to export',
-    required: true,
-  },
+	{
+		name: 'event',
+		type: 'ScoreEvent',
+		description: 'The score event to export',
+		required: true,
+	},
 ]}
 />
 
@@ -200,12 +200,12 @@ Every `FeedbackEvent` passed to this handler is buffered and exported to the Clo
 
 <PropertiesTable
   props={[
-  {
-    name: 'event',
-    type: 'FeedbackEvent',
-    description: 'The feedback event to export',
-    required: true,
-  },
+	{
+		name: 'event',
+		type: 'FeedbackEvent',
+		description: 'The feedback event to export',
+		required: true,
+	},
 ]}
 />
 
@@ -269,21 +269,21 @@ Internal format for cloud spans:
 
 ```typescript
 interface MastraCloudSpanRecord {
-  traceId: string
-  spanId: string
-  parentSpanId: string | null
-  name: string
-  spanType: string
-  attributes: Record<string, any> | null
-  metadata: Record<string, any> | null
-  startedAt: Date
-  endedAt: Date | null
-  input: any
-  output: any
-  error: any
-  isEvent: boolean
-  createdAt: Date
-  updatedAt: Date | null
+	traceId: string
+	spanId: string
+	parentSpanId: string | null
+	name: string
+	spanType: string
+	attributes: Record<string, any> | null
+	metadata: Record<string, any> | null
+	startedAt: Date
+	endedAt: Date | null
+	input: any
+	output: any
+	error: any
+	isEvent: boolean
+	createdAt: Date
+	updatedAt: Date | null
 }
 ```
 
@@ -297,11 +297,11 @@ const exporter = new CloudExporter()
 
 // Explicit configuration
 const customExporter = new CloudExporter({
-  accessToken: 'your-token',
-  projectId: 'project_123',
-  maxBatchSize: 500,
-  maxBatchWaitMs: 2000,
-  logLevel: 'debug',
+	accessToken: 'your-token',
+	projectId: 'project_123',
+	maxBatchSize: 500,
+	maxBatchWaitMs: 2000,
+	logLevel: 'debug',
 })
 ```
 

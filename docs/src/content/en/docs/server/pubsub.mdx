@@ -69,7 +69,7 @@ import { Mastra } from '@mastra/core'
 import { UnixSocketPubSub } from '@mastra/core/events'
 
 export const mastra = new Mastra({
-  pubsub: new UnixSocketPubSub('/tmp/mastra/events.sock'),
+	pubsub: new UnixSocketPubSub('/tmp/mastra/events.sock'),
 })
 ```
 
@@ -86,9 +86,9 @@ import { Mastra } from '@mastra/core'
 import { RedisStreamsPubSub } from '@mastra/redis-streams'
 
 export const mastra = new Mastra({
-  pubsub: new RedisStreamsPubSub({
-    url: 'redis://localhost:6379',
-  }),
+	pubsub: new RedisStreamsPubSub({
+		url: 'redis://localhost:6379',
+	}),
 })
 ```
 
@@ -99,9 +99,9 @@ import { Mastra } from '@mastra/core'
 import { GoogleCloudPubSub } from '@mastra/google-cloud-pubsub'
 
 export const mastra = new Mastra({
-  pubsub: new GoogleCloudPubSub({
-    projectId: 'my-project',
-  }),
+	pubsub: new GoogleCloudPubSub({
+		projectId: 'my-project',
+	}),
 })
 ```
 
@@ -119,7 +119,7 @@ import { InMemoryServerCache } from '@mastra/core/cache'
 const cache = new InMemoryServerCache()
 
 export const mastra = new Mastra({
-  pubsub: new CachingPubSub(new EventEmitterPubSub(), cache),
+	pubsub: new CachingPubSub(new EventEmitterPubSub(), cache),
 })
 ```
 

@@ -28,31 +28,31 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 const calculatorTool = createTool({
-  id: 'calculatorWithUI',
-  description: 'An interactive calculator',
-  inputSchema: z.object({
-    num1: z.number(),
-    num2: z.number(),
-    operation: z.enum(['add', 'subtract']),
-  }),
-  execute: async ({ num1, num2, operation }) => {
-    const result = operation === 'add' ? num1 + num2 : num1 - num2
-    return {
-      content: [{ type: 'text', text: 'An interactive calculator is displayed.' }],
-      structuredContent: { result },
-    }
-  },
+	id: 'calculatorWithUI',
+	description: 'An interactive calculator',
+	inputSchema: z.object({
+		num1: z.number(),
+		num2: z.number(),
+		operation: z.enum(['add', 'subtract']),
+	}),
+	execute: async ({ num1, num2, operation }) => {
+		const result = operation === 'add' ? num1 + num2 : num1 - num2
+		return {
+			content: [{ type: 'text', text: 'An interactive calculator is displayed.' }],
+			structuredContent: { result },
+		}
+	},
 })
 
 const server = new MCPServer({
-  id: 'my-app-server',
-  name: 'My App Server',
-  version: '1.0.0',
-  tools: { calculatorTool },
-  appResources: {
-    'ui://calculator/main': {
-      name: 'Interactive Calculator',
-      html: `<html>
+	id: 'my-app-server',
+	name: 'My App Server',
+	version: '1.0.0',
+	tools: { calculatorTool },
+	appResources: {
+		'ui://calculator/main': {
+			name: 'Interactive Calculator',
+			html: `<html>
         <body>
           <h2>Calculator</h2>
           <button id="btn">Compute</button>
@@ -73,8 +73,8 @@ const server = new MCPServer({
           </script>
         </body>
       </html>`,
-    },
-  },
+		},
+	},
 })
 ```
 
@@ -82,7 +82,7 @@ Link the tool to its app resource by adding `_meta.ui.resourceUri` to the tool d
 
 ```typescript
 calculatorTool._meta = {
-  ui: { resourceUri: 'ui://calculator/main' },
+	ui: { resourceUri: 'ui://calculator/main' },
 }
 ```
 
@@ -101,11 +101,11 @@ import { Agent } from '@mastra/core/agent'
 import { calculatorTool } from '../mcp/tools'
 
 export const myAgent = new Agent({
-  id: 'my-agent',
-  name: 'My Agent',
-  instructions: 'You have access to interactive UI tools.',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
-  tools: { calculatorTool },
+	id: 'my-agent',
+	name: 'My Agent',
+	instructions: 'You have access to interactive UI tools.',
+	model: '__GATEWAY_OPENAI_MODEL_MINI__',
+	tools: { calculatorTool },
 })
 ```
 
@@ -117,8 +117,8 @@ import { myAgent } from './agents'
 import { myAppServer } from './mcp/server'
 
 export const mastra = new Mastra({
-  agents: { myAgent },
-  mcpServers: { myAppServer },
+	agents: { myAgent },
+	mcpServers: { myAppServer },
 })
 ```
 
@@ -128,21 +128,21 @@ For remote MCP servers, use `MCPClient.listTools()` to get tools and `toMCPServe
 import { MCPClient } from '@mastra/mcp'
 
 const mcpClient = new MCPClient({
-  servers: {
-    remoteApp: { url: new URL('https://remote-mcp-server.example.com/mcp') },
-  },
+	servers: {
+		remoteApp: { url: new URL('https://remote-mcp-server.example.com/mcp') },
+	},
 })
 
 const myAgent = new Agent({
-  id: 'my-agent',
-  name: 'My Agent',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
-  tools: await mcpClient.listTools(),
+	id: 'my-agent',
+	name: 'My Agent',
+	model: '__GATEWAY_OPENAI_MODEL_MINI__',
+	tools: await mcpClient.listTools(),
 })
 
 export const mastra = new Mastra({
-  agents: { myAgent },
-  mcpServers: { ...mcpClient.toMCPServerProxies() },
+	agents: { myAgent },
+	mcpServers: { ...mcpClient.toMCPServerProxies() },
 })
 ```
 
@@ -174,11 +174,11 @@ Tools with app resources should return two fields:
 
 ```typescript
 execute: async ({ num1, num2, operation }) => {
-  const result = operation === 'add' ? num1 + num2 : num1 - num2
-  return {
-    content: [{ type: 'text', text: 'An interactive calculator is displayed.' }],
-    structuredContent: { result },
-  }
+	const result = operation === 'add' ? num1 + num2 : num1 - num2
+	return {
+		content: [{ type: 'text', text: 'An interactive calculator is displayed.' }],
+		structuredContent: { result },
+	}
 }
 ```
 
@@ -197,8 +197,8 @@ Calls an MCP server tool from within the iframe. This is useful for interactive 
 
 ```javascript
 const result = await app.callServerTool({
-  name: 'calculatorWithUI',
-  arguments: { num1: 42, num2: 8, operation: 'add' },
+	name: 'calculatorWithUI',
+	arguments: { num1: 42, num2: 8, operation: 'add' },
 })
 ```
 
@@ -208,8 +208,8 @@ Injects a user message into the agent chat, triggering a new model turn. Use thi
 
 ```javascript
 await app.sendMessage({
-  role: 'user',
-  content: [{ type: 'text', text: 'The result of 42 + 8 is 50' }],
+	role: 'user',
+	content: [{ type: 'text', text: 'The result of 42 + 8 is 50' }],
 })
 ```
 
@@ -219,7 +219,7 @@ A callback that fires when the host delivers tool input data to the iframe, allo
 
 ```javascript
 app.ontoolinput = params => {
-  document.getElementById('num1').value = params.arguments.num1
+	document.getElementById('num1').value = params.arguments.num1
 }
 ```
 
@@ -229,26 +229,26 @@ If your app has default form values, the user may briefly see them before `ontoo
 
 ```html
 <style>
-  body {
-    opacity: 0;
-    transition: opacity 0.15s;
-  }
-  body.ready {
-    opacity: 1;
-  }
+	body {
+		opacity: 0;
+		transition: opacity 0.15s;
+	}
+	body.ready {
+		opacity: 1;
+	}
 </style>
 <script type="module">
-  import { App } from 'https://cdn.jsdelivr.net/npm/@modelcontextprotocol/ext-apps/+esm'
-  const app = new App({ name: 'MyApp', version: '1.0.0' })
+	import { App } from 'https://cdn.jsdelivr.net/npm/@modelcontextprotocol/ext-apps/+esm'
+	const app = new App({ name: 'MyApp', version: '1.0.0' })
 
-  app.ontoolinput = params => {
-    // Hydrate form fields from params.arguments
-    document.body.classList.add('ready')
-  }
+	app.ontoolinput = params => {
+		// Hydrate form fields from params.arguments
+		document.body.classList.add('ready')
+	}
 
-  await app.connect()
-  // Fallback: reveal after connection if no tool input arrives
-  setTimeout(() => document.body.classList.add('ready'), 150)
+	await app.connect()
+	// Fallback: reveal after connection if no tool input arrives
+	setTimeout(() => document.body.classList.add('ready'), 150)
 </script>
 ```
 
@@ -278,26 +278,26 @@ import { MCPClient } from '@mastra/mcp'
 import { Agent } from '@mastra/core/agent'
 
 const mcpClient = new MCPClient({
-  servers: {
-    'external-server': {
-      command: 'node',
-      args: ['path/to/external-server.js'],
-    },
-  },
+	servers: {
+		'external-server': {
+			command: 'node',
+			args: ['path/to/external-server.js'],
+		},
+	},
 })
 
 const myAgent = new Agent({
-  id: 'my-agent',
-  name: 'My Agent',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
-  tools: await mcpClient.listTools(),
+	id: 'my-agent',
+	name: 'My Agent',
+	model: '__GATEWAY_OPENAI_MODEL_MINI__',
+	tools: await mcpClient.listTools(),
 })
 
 export const mastra = new Mastra({
-  agents: { myAgent },
-  mcpServers: {
-    ...mcpClient.toMCPServerProxies(),
-  },
+	agents: { myAgent },
+	mcpServers: {
+		...mcpClient.toMCPServerProxies(),
+	},
 })
 ```
 

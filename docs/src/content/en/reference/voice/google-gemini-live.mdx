@@ -18,39 +18,39 @@ import { playAudio, getMicrophoneStream } from '@mastra/node-audio'
 
 // Initialize with Gemini API (using API key)
 const voice = new GeminiLiveVoice({
-  apiKey: process.env.GOOGLE_API_KEY, // Required for Gemini API
-  model: 'gemini-2.0-flash-exp',
-  speaker: 'Puck', // Default voice
-  debug: true,
+	apiKey: process.env.GOOGLE_API_KEY, // Required for Gemini API
+	model: 'gemini-2.0-flash-exp',
+	speaker: 'Puck', // Default voice
+	debug: true,
 })
 
 // Or initialize with Vertex AI (using OAuth)
 const voiceWithVertexAI = new GeminiLiveVoice({
-  vertexAI: true,
-  project: 'your-gcp-project',
-  location: 'us-central1',
-  serviceAccountKeyFile: '/path/to/service-account.json',
-  model: 'gemini-2.0-flash-exp',
-  speaker: 'Puck',
+	vertexAI: true,
+	project: 'your-gcp-project',
+	location: 'us-central1',
+	serviceAccountKeyFile: '/path/to/service-account.json',
+	model: 'gemini-2.0-flash-exp',
+	speaker: 'Puck',
 })
 
 // Or use the VoiceConfig pattern (recommended for consistency with other providers)
 const voiceWithConfig = new GeminiLiveVoice({
-  speechModel: {
-    name: 'gemini-2.0-flash-exp',
-    apiKey: process.env.GOOGLE_API_KEY,
-  },
-  speaker: 'Puck',
-  realtimeConfig: {
-    model: 'gemini-2.0-flash-exp',
-    apiKey: process.env.GOOGLE_API_KEY,
-    options: {
-      debug: true,
-      sessionConfig: {
-        interrupts: { enabled: true },
-      },
-    },
-  },
+	speechModel: {
+		name: 'gemini-2.0-flash-exp',
+		apiKey: process.env.GOOGLE_API_KEY,
+	},
+	speaker: 'Puck',
+	realtimeConfig: {
+		model: 'gemini-2.0-flash-exp',
+		apiKey: process.env.GOOGLE_API_KEY,
+		options: {
+			debug: true,
+			sessionConfig: {
+				interrupts: { enabled: true },
+			},
+		},
+	},
 })
 
 // Establish connection (required before using other methods)
@@ -58,24 +58,24 @@ await voice.connect()
 
 // Set up event listeners
 voice.on('speaker', audioStream => {
-  // Handle audio stream (NodeJS.ReadableStream)
-  playAudio(audioStream)
+	// Handle audio stream (NodeJS.ReadableStream)
+	playAudio(audioStream)
 })
 
 voice.on('writing', ({ text, role }) => {
-  // Handle transcribed text
-  console.log(`${role}: ${text}`)
+	// Handle transcribed text
+	console.log(`${role}: ${text}`)
 })
 
 voice.on('turnComplete', ({ timestamp }) => {
-  // Handle turn completion
-  console.log('Turn completed at:', timestamp)
+	// Handle turn completion
+	console.log('Turn completed at:', timestamp)
 })
 
 // Convert text to speech
 await voice.speak('Hello, how can I help you today?', {
-  speaker: 'Charon', // Override default voice
-  responseModalities: ['AUDIO', 'TEXT'],
+	speaker: 'Charon', // Override default voice
+	responseModalities: ['AUDIO', 'TEXT'],
 })
 
 // Process audio input
@@ -84,8 +84,8 @@ await voice.send(microphoneStream)
 
 // Update session configuration
 await voice.updateSessionConfig({
-  speaker: 'Kore',
-  instructions: 'Be more concise in your responses',
+	speaker: 'Kore',
+	instructions: 'Be more concise in your responses',
 })
 
 // When done, disconnect
@@ -100,111 +100,111 @@ voice.close()
 
 <PropertiesTable
   content={[
-  {
-    name: 'apiKey',
-    type: 'string',
-    description: 'Google API key for Gemini API authentication. Required unless using Vertex AI.',
-    isOptional: true,
-  },
-  {
-    name: 'model',
-    type: 'GeminiVoiceModel',
-    description: 'The model ID to use for real-time voice interactions.',
-    isOptional: true,
-    defaultValue: "'gemini-2.0-flash-exp'",
-  },
-  {
-    name: 'speaker',
-    type: 'GeminiVoiceName',
-    description: 'Default voice ID for speech synthesis.',
-    isOptional: true,
-    defaultValue: "'Puck'",
-  },
-  {
-    name: 'vertexAI',
-    type: 'boolean',
-    description: 'Use Vertex AI instead of Gemini API for authentication.',
-    isOptional: true,
-    defaultValue: 'false',
-  },
-  {
-    name: 'project',
-    type: 'string',
-    description: 'Google Cloud project ID (required for Vertex AI).',
-    isOptional: true,
-  },
-  {
-    name: 'location',
-    type: 'string',
-    description: 'Google Cloud region for Vertex AI.',
-    isOptional: true,
-    defaultValue: "'us-central1'",
-  },
-  {
-    name: 'serviceAccountKeyFile',
-    type: 'string',
-    description: 'Path to service account JSON key file for Vertex AI authentication.',
-    isOptional: true,
-  },
-  {
-    name: 'serviceAccountEmail',
-    type: 'string',
-    description: 'Service account email for impersonation (alternative to key file).',
-    isOptional: true,
-  },
-  {
-    name: 'instructions',
-    type: 'string',
-    description: 'System instructions for the model.',
-    isOptional: true,
-  },
-  {
-    name: 'sessionConfig',
-    type: 'GeminiSessionConfig',
-    description: 'Session configuration including interrupt and context settings.',
-    isOptional: true,
-    properties: [
-      {
-        type: 'GeminiSessionConfig',
-        parameters: [
-          {
-            name: 'interrupts',
-            type: 'object',
-            description: 'Interrupt handling configuration.',
-            isOptional: true,
-          },
-          {
-            name: 'interrupts.enabled',
-            type: 'boolean',
-            description: 'Enable interrupt handling.',
-            isOptional: true,
-            defaultValue: 'true',
-          },
-          {
-            name: 'interrupts.allowUserInterruption',
-            type: 'boolean',
-            description: 'Allow user to interrupt model responses.',
-            isOptional: true,
-            defaultValue: 'true',
-          },
-          {
-            name: 'contextCompression',
-            type: 'boolean',
-            description: 'Enable automatic context compression.',
-            isOptional: true,
-            defaultValue: 'false',
-          },
-        ],
-      },
-    ],
-  },
-  {
-    name: 'debug',
-    type: 'boolean',
-    description: 'Enable debug logging for troubleshooting.',
-    isOptional: true,
-    defaultValue: 'false',
-  },
+	{
+		name: 'apiKey',
+		type: 'string',
+		description: 'Google API key for Gemini API authentication. Required unless using Vertex AI.',
+		isOptional: true,
+	},
+	{
+		name: 'model',
+		type: 'GeminiVoiceModel',
+		description: 'The model ID to use for real-time voice interactions.',
+		isOptional: true,
+		defaultValue: "'gemini-2.0-flash-exp'",
+	},
+	{
+		name: 'speaker',
+		type: 'GeminiVoiceName',
+		description: 'Default voice ID for speech synthesis.',
+		isOptional: true,
+		defaultValue: "'Puck'",
+	},
+	{
+		name: 'vertexAI',
+		type: 'boolean',
+		description: 'Use Vertex AI instead of Gemini API for authentication.',
+		isOptional: true,
+		defaultValue: 'false',
+	},
+	{
+		name: 'project',
+		type: 'string',
+		description: 'Google Cloud project ID (required for Vertex AI).',
+		isOptional: true,
+	},
+	{
+		name: 'location',
+		type: 'string',
+		description: 'Google Cloud region for Vertex AI.',
+		isOptional: true,
+		defaultValue: "'us-central1'",
+	},
+	{
+		name: 'serviceAccountKeyFile',
+		type: 'string',
+		description: 'Path to service account JSON key file for Vertex AI authentication.',
+		isOptional: true,
+	},
+	{
+		name: 'serviceAccountEmail',
+		type: 'string',
+		description: 'Service account email for impersonation (alternative to key file).',
+		isOptional: true,
+	},
+	{
+		name: 'instructions',
+		type: 'string',
+		description: 'System instructions for the model.',
+		isOptional: true,
+	},
+	{
+		name: 'sessionConfig',
+		type: 'GeminiSessionConfig',
+		description: 'Session configuration including interrupt and context settings.',
+		isOptional: true,
+		properties: [
+			{
+				type: 'GeminiSessionConfig',
+				parameters: [
+					{
+						name: 'interrupts',
+						type: 'object',
+						description: 'Interrupt handling configuration.',
+						isOptional: true,
+					},
+					{
+						name: 'interrupts.enabled',
+						type: 'boolean',
+						description: 'Enable interrupt handling.',
+						isOptional: true,
+						defaultValue: 'true',
+					},
+					{
+						name: 'interrupts.allowUserInterruption',
+						type: 'boolean',
+						description: 'Allow user to interrupt model responses.',
+						isOptional: true,
+						defaultValue: 'true',
+					},
+					{
+						name: 'contextCompression',
+						type: 'boolean',
+						description: 'Enable automatic context compression.',
+						isOptional: true,
+						defaultValue: 'false',
+					},
+				],
+			},
+		],
+	},
+	{
+		name: 'debug',
+		type: 'boolean',
+		description: 'Enable debug logging for troubleshooting.',
+		isOptional: true,
+		defaultValue: 'false',
+	},
 ]}
 />
 
@@ -216,17 +216,17 @@ Establishes a connection to the Gemini Live API. Must be called before using spe
 
 <PropertiesTable
   content={[
-  {
-    name: 'requestContext',
-    type: 'object',
-    description: 'Optional request context for the connection.',
-    isOptional: true,
-  },
-  {
-    name: 'returns',
-    type: 'Promise<void>',
-    description: 'Promise that resolves when the connection is established.',
-  },
+	{
+		name: 'requestContext',
+		type: 'object',
+		description: 'Optional request context for the connection.',
+		isOptional: true,
+	},
+	{
+		name: 'returns',
+		type: 'Promise<void>',
+		description: 'Promise that resolves when the connection is established.',
+	},
 ]}
 />
 
@@ -236,45 +236,45 @@ Converts text to speech and sends it to the model. Can accept either a string or
 
 <PropertiesTable
   content={[
-  {
-    name: 'input',
-    type: 'string | NodeJS.ReadableStream',
-    description: 'Text or text stream to convert to speech.',
-    isOptional: false,
-  },
-  {
-    name: 'options',
-    type: 'GeminiLiveVoiceOptions',
-    description: 'Optional speech configuration.',
-    isOptional: true,
-    properties: [
-      {
-        type: 'GeminiLiveVoiceOptions',
-        parameters: [
-          {
-            name: 'speaker',
-            type: 'GeminiVoiceName',
-            description: 'Voice ID to use for this specific speech request.',
-            isOptional: true,
-            defaultValue: "Constructor's speaker value",
-          },
-          {
-            name: 'languageCode',
-            type: 'string',
-            description: 'Language code for the response.',
-            isOptional: true,
-          },
-          {
-            name: 'responseModalities',
-            type: "('AUDIO' | 'TEXT')[]",
-            description: 'Response modalities to receive from the model.',
-            isOptional: true,
-            defaultValue: "['AUDIO', 'TEXT']",
-          },
-        ],
-      },
-    ],
-  },
+	{
+		name: 'input',
+		type: 'string | NodeJS.ReadableStream',
+		description: 'Text or text stream to convert to speech.',
+		isOptional: false,
+	},
+	{
+		name: 'options',
+		type: 'GeminiLiveVoiceOptions',
+		description: 'Optional speech configuration.',
+		isOptional: true,
+		properties: [
+			{
+				type: 'GeminiLiveVoiceOptions',
+				parameters: [
+					{
+						name: 'speaker',
+						type: 'GeminiVoiceName',
+						description: 'Voice ID to use for this specific speech request.',
+						isOptional: true,
+						defaultValue: "Constructor's speaker value",
+					},
+					{
+						name: 'languageCode',
+						type: 'string',
+						description: 'Language code for the response.',
+						isOptional: true,
+					},
+					{
+						name: 'responseModalities',
+						type: "('AUDIO' | 'TEXT')[]",
+						description: 'Response modalities to receive from the model.',
+						isOptional: true,
+						defaultValue: "['AUDIO', 'TEXT']",
+					},
+				],
+			},
+		],
+	},
 ]}
 />
 
@@ -286,8 +286,8 @@ Sends conversation history into the live session without triggering a model resp
 
 ```typescript
 await voice.sendContext([
-  { role: 'user', content: 'What is the weather?' },
-  { role: 'assistant', content: 'It is 72°F in San Francisco.' },
+	{ role: 'user', content: 'What is the weather?' },
+	{ role: 'assistant', content: 'It is 72°F in San Francisco.' },
 ])
 
 // Model stays silent until the user actually speaks.
@@ -296,33 +296,33 @@ await voice.send(micStream)
 
 <PropertiesTable
   content={[
-  {
-    name: 'turns',
-    type: 'IncrementalTurn[]',
-    description:
-      'Prior conversation turns to seed into the session. Each turn has a `role` ("user" or "assistant") and `content` string. Both roles are supported on newer models (e.g. `gemini-2.5-flash-native-audio-preview-12-2025`). Some older models only accept user-role turns.',
-    isOptional: false,
-  },
-  {
-    name: 'options',
-    type: 'object',
-    description: 'Optional configuration.',
-    isOptional: true,
-    properties: [
-      {
-        type: 'object',
-        parameters: [
-          {
-            name: 'turnComplete',
-            type: 'boolean',
-            description: 'Whether to mark the turn as complete and trigger a model response.',
-            isOptional: true,
-            defaultValue: 'false',
-          },
-        ],
-      },
-    ],
-  },
+	{
+		name: 'turns',
+		type: 'IncrementalTurn[]',
+		description:
+			'Prior conversation turns to seed into the session. Each turn has a `role` ("user" or "assistant") and `content` string. Both roles are supported on newer models (e.g. `gemini-2.5-flash-native-audio-preview-12-2025`). Some older models only accept user-role turns.',
+		isOptional: false,
+	},
+	{
+		name: 'options',
+		type: 'object',
+		description: 'Optional configuration.',
+		isOptional: true,
+		properties: [
+			{
+				type: 'object',
+				parameters: [
+					{
+						name: 'turnComplete',
+						type: 'boolean',
+						description: 'Whether to mark the turn as complete and trigger a model response.',
+						isOptional: true,
+						defaultValue: 'false',
+					},
+				],
+			},
+		],
+	},
 ]}
 />
 
@@ -334,18 +334,18 @@ Processes audio input for speech recognition. Takes a readable stream of audio d
 
 <PropertiesTable
   content={[
-  {
-    name: 'audioStream',
-    type: 'NodeJS.ReadableStream',
-    description: 'Audio stream to transcribe.',
-    isOptional: false,
-  },
-  {
-    name: 'options',
-    type: 'GeminiLiveVoiceOptions',
-    description: 'Optional listening configuration.',
-    isOptional: true,
-  },
+	{
+		name: 'audioStream',
+		type: 'NodeJS.ReadableStream',
+		description: 'Audio stream to transcribe.',
+		isOptional: false,
+	},
+	{
+		name: 'options',
+		type: 'GeminiLiveVoiceOptions',
+		description: 'Optional listening configuration.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -357,12 +357,12 @@ Streams audio data in real-time to the Gemini service for continuous audio strea
 
 <PropertiesTable
   content={[
-  {
-    name: 'audioData',
-    type: 'NodeJS.ReadableStream | Int16Array',
-    description: 'Audio stream or buffer to send to the service.',
-    isOptional: false,
-  },
+	{
+		name: 'audioData',
+		type: 'NodeJS.ReadableStream | Int16Array',
+		description: 'Audio stream or buffer to send to the service.',
+		isOptional: false,
+	},
 ]}
 />
 
@@ -374,12 +374,12 @@ Updates the session configuration dynamically. This can be used to modify voice 
 
 <PropertiesTable
   content={[
-  {
-    name: 'config',
-    type: 'Partial<GeminiLiveVoiceConfig>',
-    description: 'Configuration updates to apply.',
-    isOptional: false,
-  },
+	{
+		name: 'config',
+		type: 'Partial<GeminiLiveVoiceConfig>',
+		description: 'Configuration updates to apply.',
+		isOptional: false,
+	},
 ]}
 />
 
@@ -391,12 +391,12 @@ Adds a set of tools to the voice instance. Tools allow the model to perform addi
 
 <PropertiesTable
   content={[
-  {
-    name: 'tools',
-    type: 'ToolsInput',
-    description: 'Tools configuration to equip.',
-    isOptional: false,
-  },
+	{
+		name: 'tools',
+		type: 'ToolsInput',
+		description: 'Tools configuration to equip.',
+		isOptional: false,
+	},
 ]}
 />
 
@@ -408,12 +408,12 @@ Adds or updates system instructions for the model.
 
 <PropertiesTable
   content={[
-  {
-    name: 'instructions',
-    type: 'string',
-    description: 'System instructions to set.',
-    isOptional: true,
-  },
+	{
+		name: 'instructions',
+		type: 'string',
+		description: 'System instructions to set.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -425,12 +425,12 @@ Triggers a response from the model. This method is primarily used internally whe
 
 <PropertiesTable
   content={[
-  {
-    name: 'options',
-    type: 'Record<string, unknown>',
-    description: 'Optional parameters for the answer request.',
-    isOptional: true,
-  },
+	{
+		name: 'options',
+		type: 'Record<string, unknown>',
+		description: 'Optional parameters for the answer request.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -460,18 +460,18 @@ Registers an event listener for voice events.
 
 <PropertiesTable
   content={[
-  {
-    name: 'event',
-    type: 'string',
-    description: 'Name of the event to listen for.',
-    isOptional: false,
-  },
-  {
-    name: 'callback',
-    type: 'Function',
-    description: 'Function to call when the event occurs.',
-    isOptional: false,
-  },
+	{
+		name: 'event',
+		type: 'string',
+		description: 'Name of the event to listen for.',
+		isOptional: false,
+	},
+	{
+		name: 'callback',
+		type: 'Function',
+		description: 'Function to call when the event occurs.',
+		isOptional: false,
+	},
 ]}
 />
 
@@ -483,18 +483,18 @@ Removes a previously registered event listener.
 
 <PropertiesTable
   content={[
-  {
-    name: 'event',
-    type: 'string',
-    description: 'Name of the event to stop listening to.',
-    isOptional: false,
-  },
-  {
-    name: 'callback',
-    type: 'Function',
-    description: 'The specific callback function to remove.',
-    isOptional: false,
-  },
+	{
+		name: 'event',
+		type: 'string',
+		description: 'Name of the event to stop listening to.',
+		isOptional: false,
+	},
+	{
+		name: 'callback',
+		type: 'Function',
+		description: 'The specific callback function to remove.',
+		isOptional: false,
+	},
 ]}
 />
 
@@ -506,64 +506,64 @@ The GeminiLiveVoice class emits the following events:
 
 <PropertiesTable
   content={[
-  {
-    name: 'speaker',
-    type: 'event',
-    description: 'Emitted when audio data is received from the model. Callback receives a NodeJS.ReadableStream.',
-  },
-  {
-    name: 'speaking',
-    type: 'event',
-    description: 'Emitted with audio metadata. Callback receives { audioData?: Int16Array, sampleRate?: number }.',
-  },
-  {
-    name: 'writing',
-    type: 'event',
-    description:
-      "Emitted when transcribed text is available. Callback receives { text: string, role: 'assistant' | 'user' }. On native-audio models the assistant transcript is driven by the server's `output_audio_transcription` channel rather than `modelTurn.parts.text`.",
-  },
-  {
-    name: 'thinking',
-    type: 'event',
-    description:
-      "Emitted on native-audio models with the model's chain-of-thought / reasoning text from `modelTurn.parts.text`. Callback receives { text: string }. Does not fire on non-native-audio models, where `modelTurn.parts.text` is the spoken response and is emitted as `writing` instead.",
-  },
-  {
-    name: 'session',
-    type: 'event',
-    description:
-      "Emitted on session state changes. Callback receives { state: 'connecting' | 'connected' | 'disconnected' | 'disconnecting' | 'updated', config?: object }.",
-  },
-  {
-    name: 'turnComplete',
-    type: 'event',
-    description: 'Emitted when a conversation turn is completed. Callback receives { timestamp: number }.',
-  },
-  {
-    name: 'toolCall',
-    type: 'event',
-    description:
-      'Emitted when the model requests a tool call. Callback receives { name: string, args: object, id: string }.',
-  },
-  {
-    name: 'usage',
-    type: 'event',
-    description:
-      'Emitted with token usage information. Callback receives { inputTokens: number, outputTokens: number, totalTokens: number, modality: string }.',
-  },
-  {
-    name: 'error',
-    type: 'event',
-    description:
-      'Emitted when an error occurs. Callback receives { message: string, code?: string, details?: unknown }.',
-  },
+	{
+		name: 'speaker',
+		type: 'event',
+		description: 'Emitted when audio data is received from the model. Callback receives a NodeJS.ReadableStream.',
+	},
+	{
+		name: 'speaking',
+		type: 'event',
+		description: 'Emitted with audio metadata. Callback receives { audioData?: Int16Array, sampleRate?: number }.',
+	},
+	{
+		name: 'writing',
+		type: 'event',
+		description:
+			"Emitted when transcribed text is available. Callback receives { text: string, role: 'assistant' | 'user' }. On native-audio models the assistant transcript is driven by the server's `output_audio_transcription` channel rather than `modelTurn.parts.text`.",
+	},
+	{
+		name: 'thinking',
+		type: 'event',
+		description:
+			"Emitted on native-audio models with the model's chain-of-thought / reasoning text from `modelTurn.parts.text`. Callback receives { text: string }. Does not fire on non-native-audio models, where `modelTurn.parts.text` is the spoken response and is emitted as `writing` instead.",
+	},
+	{
+		name: 'session',
+		type: 'event',
+		description:
+			"Emitted on session state changes. Callback receives { state: 'connecting' | 'connected' | 'disconnected' | 'disconnecting' | 'updated', config?: object }.",
+	},
+	{
+		name: 'turnComplete',
+		type: 'event',
+		description: 'Emitted when a conversation turn is completed. Callback receives { timestamp: number }.',
+	},
+	{
+		name: 'toolCall',
+		type: 'event',
+		description:
+			'Emitted when the model requests a tool call. Callback receives { name: string, args: object, id: string }.',
+	},
+	{
+		name: 'usage',
+		type: 'event',
+		description:
+			'Emitted with token usage information. Callback receives { inputTokens: number, outputTokens: number, totalTokens: number, modality: string }.',
+	},
+	{
+		name: 'error',
+		type: 'event',
+		description:
+			'Emitted when an error occurs. Callback receives { message: string, code?: string, details?: unknown }.',
+	},
 
-  {
-    name: 'interrupt',
-    type: 'event',
-    description:
-      "Emitted on barge-in when the user starts speaking over an in-flight model response. The server cancels any further audio for the current turn. Callback receives { type: 'user', timestamp: number }.",
-  },
+	{
+		name: 'interrupt',
+		type: 'event',
+		description:
+			"Emitted on barge-in when the user starts speaking over an in-flight model response. The server cancels any further audio for the current turn. Callback receives { type: 'user', timestamp: number }.",
+	},
 ]}
 />
 
@@ -607,8 +607,8 @@ The simplest method using an API key from [Google AI Studio](https://makersuite.
 
 ```typescript
 const voice = new GeminiLiveVoice({
-  apiKey: 'your-api-key', // Required for Gemini API
-  model: 'gemini-2.0-flash-exp',
+	apiKey: 'your-api-key', // Required for Gemini API
+	model: 'gemini-2.0-flash-exp',
 })
 ```
 
@@ -619,25 +619,25 @@ For production use with OAuth authentication and Google Cloud Platform:
 ```typescript
 // Using service account key file
 const voice = new GeminiLiveVoice({
-  vertexAI: true,
-  project: 'your-gcp-project',
-  location: 'us-central1',
-  serviceAccountKeyFile: '/path/to/service-account.json',
+	vertexAI: true,
+	project: 'your-gcp-project',
+	location: 'us-central1',
+	serviceAccountKeyFile: '/path/to/service-account.json',
 })
 
 // Using Application Default Credentials
 const voice = new GeminiLiveVoice({
-  vertexAI: true,
-  project: 'your-gcp-project',
-  location: 'us-central1',
+	vertexAI: true,
+	project: 'your-gcp-project',
+	location: 'us-central1',
 })
 
 // Using service account impersonation
 const voice = new GeminiLiveVoice({
-  vertexAI: true,
-  project: 'your-gcp-project',
-  location: 'us-central1',
-  serviceAccountEmail: 'service-account@project.iam.gserviceaccount.com',
+	vertexAI: true,
+	project: 'your-gcp-project',
+	location: 'us-central1',
+	serviceAccountEmail: 'service-account@project.iam.gserviceaccount.com',
 })
 ```
 
@@ -649,16 +649,16 @@ The Gemini Live API supports session resumption for handling network interruptio
 
 ```typescript
 voice.on('sessionHandle', ({ handle, expiresAt }) => {
-  // Store session handle for resumption
-  saveSessionHandle(handle, expiresAt)
+	// Store session handle for resumption
+	saveSessionHandle(handle, expiresAt)
 })
 
 // Resume a previous session
 const voice = new GeminiLiveVoice({
-  sessionConfig: {
-    enableResumption: true,
-    maxDuration: '2h',
-  },
+	sessionConfig: {
+		enableResumption: true,
+		maxDuration: '2h',
+	},
 })
 ```
 
@@ -670,20 +670,20 @@ Enable the model to call functions during conversations:
 import { z } from 'zod'
 
 voice.addTools({
-  weather: {
-    description: 'Get weather information',
-    parameters: z.object({
-      location: z.string(),
-    }),
-    execute: async ({ location }) => {
-      const weather = await getWeather(location)
-      return weather
-    },
-  },
+	weather: {
+		description: 'Get weather information',
+		parameters: z.object({
+			location: z.string(),
+		}),
+		execute: async ({ location }) => {
+			const weather = await getWeather(location)
+			return weather
+		},
+	},
 })
 
 voice.on('toolCall', ({ name, args, id }) => {
-  console.log(`Tool called: ${name} with args:`, args)
+	console.log(`Tool called: ${name} with args:`, args)
 })
 ```
 

@@ -18,22 +18,22 @@ import { MastraEditor } from '@mastra/editor'
 import { stagehandBrowserProvider } from '@mastra/stagehand'
 
 new MastraEditor({
-  browsers: { [stagehandBrowserProvider.id]: stagehandBrowserProvider },
-  builder: {
-    enabled: true,
-    configuration: {
-      agent: {
-        browser: {
-          type: 'inline',
-          config: {
-            provider: 'stagehand',
-            headless: true,
-            viewport: { width: 1280, height: 720 },
-          },
-        },
-      },
-    },
-  },
+	browsers: { [stagehandBrowserProvider.id]: stagehandBrowserProvider },
+	builder: {
+		enabled: true,
+		configuration: {
+			agent: {
+				browser: {
+					type: 'inline',
+					config: {
+						provider: 'stagehand',
+						headless: true,
+						viewport: { width: 1280, height: 720 },
+					},
+				},
+			},
+		},
+	},
 })
 ```
 
@@ -49,16 +49,16 @@ A `{ type: 'id' }` variant for browsers isn't available — they're always inlin
 
 <PropertiesTable
   content={[
-  {
-    name: 'type',
-    type: "'inline'",
-    description: 'Discriminant. Must be the literal `"inline"`.',
-  },
-  {
-    name: 'config',
-    type: 'StorageBrowserConfig',
-    description: 'Provider id and per-instance browser configuration. See the section below.',
-  },
+	{
+		name: 'type',
+		type: "'inline'",
+		description: 'Discriminant. Must be the literal `"inline"`.',
+	},
+	{
+		name: 'config',
+		type: 'StorageBrowserConfig',
+		description: 'Provider id and per-instance browser configuration. See the section below.',
+	},
 ]}
 />
 
@@ -68,80 +68,80 @@ The shape embedded under `config`. Defined in `@mastra/core/storage`.
 
 <PropertiesTable
   content={[
-  {
-    name: 'provider',
-    type: 'string',
-    description:
-      'Provider identifier (for example, `"stagehand"`). Must match a `BrowserProvider.id` registered on `MastraEditor.browsers`. There are no built-in providers.',
-  },
-  {
-    name: 'headless',
-    type: 'boolean',
-    description: 'Run the browser in headless mode (no visible UI).',
-    isOptional: true,
-    defaultValue: 'true',
-  },
-  {
-    name: 'viewport',
-    type: '{ width: number; height: number }',
-    description: 'Browser viewport dimensions. Controls window size and how pages render.',
-    isOptional: true,
-  },
-  {
-    name: 'timeout',
-    type: 'number',
-    description: 'Default timeout in milliseconds for browser operations.',
-    isOptional: true,
-    defaultValue: '10000',
-  },
-  {
-    name: 'screencast',
-    type: 'ScreencastOptions',
-    description: 'Screencast options for streaming browser frames to the UI.',
-    isOptional: true,
-    properties: [
-      {
-        type: 'ScreencastOptions',
-        parameters: [
-          {
-            name: 'format',
-            type: "'jpeg' | 'png'",
-            description: 'Image format.',
-            isOptional: true,
-            defaultValue: "'jpeg'",
-          },
-          {
-            name: 'quality',
-            type: 'number',
-            description: 'JPEG quality 0–100.',
-            isOptional: true,
-            defaultValue: '80',
-          },
-          {
-            name: 'maxWidth',
-            type: 'number',
-            description: 'Max width in pixels.',
-            isOptional: true,
-            defaultValue: '1280',
-          },
-          {
-            name: 'maxHeight',
-            type: 'number',
-            description: 'Max height in pixels.',
-            isOptional: true,
-            defaultValue: '720',
-          },
-          {
-            name: 'everyNthFrame',
-            type: 'number',
-            description: 'Capture every Nth frame.',
-            isOptional: true,
-            defaultValue: '1',
-          },
-        ],
-      },
-    ],
-  },
+	{
+		name: 'provider',
+		type: 'string',
+		description:
+			'Provider identifier (for example, `"stagehand"`). Must match a `BrowserProvider.id` registered on `MastraEditor.browsers`. There are no built-in providers.',
+	},
+	{
+		name: 'headless',
+		type: 'boolean',
+		description: 'Run the browser in headless mode (no visible UI).',
+		isOptional: true,
+		defaultValue: 'true',
+	},
+	{
+		name: 'viewport',
+		type: '{ width: number; height: number }',
+		description: 'Browser viewport dimensions. Controls window size and how pages render.',
+		isOptional: true,
+	},
+	{
+		name: 'timeout',
+		type: 'number',
+		description: 'Default timeout in milliseconds for browser operations.',
+		isOptional: true,
+		defaultValue: '10000',
+	},
+	{
+		name: 'screencast',
+		type: 'ScreencastOptions',
+		description: 'Screencast options for streaming browser frames to the UI.',
+		isOptional: true,
+		properties: [
+			{
+				type: 'ScreencastOptions',
+				parameters: [
+					{
+						name: 'format',
+						type: "'jpeg' | 'png'",
+						description: 'Image format.',
+						isOptional: true,
+						defaultValue: "'jpeg'",
+					},
+					{
+						name: 'quality',
+						type: 'number',
+						description: 'JPEG quality 0–100.',
+						isOptional: true,
+						defaultValue: '80',
+					},
+					{
+						name: 'maxWidth',
+						type: 'number',
+						description: 'Max width in pixels.',
+						isOptional: true,
+						defaultValue: '1280',
+					},
+					{
+						name: 'maxHeight',
+						type: 'number',
+						description: 'Max height in pixels.',
+						isOptional: true,
+						defaultValue: '720',
+					},
+					{
+						name: 'everyNthFrame',
+						type: 'number',
+						description: 'Capture every Nth frame.',
+						isOptional: true,
+						defaultValue: '1',
+					},
+				],
+			},
+		],
+	},
 ]}
 />
 

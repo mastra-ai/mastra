@@ -39,10 +39,10 @@ import { join } from 'node:path'
 import { AgentBrowser } from '@mastra/agent-browser'
 
 export const browser = new AgentBrowser({
-  headless: false,
-  recording: {
-    outputDir: join(process.cwd(), 'browser-recordings'),
-  },
+	headless: false,
+	recording: {
+		outputDir: join(process.cwd(), 'browser-recordings'),
+	},
 })
 ```
 
@@ -53,10 +53,10 @@ import { join } from 'node:path'
 import { StagehandBrowser } from '@mastra/stagehand'
 
 export const browser = new StagehandBrowser({
-  headless: false,
-  recording: {
-    outputDir: join(process.cwd(), 'browser-recordings'),
-  },
+	headless: false,
+	recording: {
+		outputDir: join(process.cwd(), 'browser-recordings'),
+	},
 })
 ```
 
@@ -86,11 +86,11 @@ import { Agent } from '@mastra/core/agent'
 import { browser } from '../browsers'
 
 export const browserAgent = new Agent({
-  id: 'browser-agent',
-  name: 'Browser Agent',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  browser,
-  instructions: `Use browser tools to complete the requested task.
+	id: 'browser-agent',
+	name: 'Browser Agent',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	browser,
+	instructions: `Use browser tools to complete the requested task.
 
 When the user asks for a recording:
 1. Call browser_record with action="start" before browser work begins.

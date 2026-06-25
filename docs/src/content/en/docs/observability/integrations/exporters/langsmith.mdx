@@ -43,14 +43,14 @@ import { Observability } from '@mastra/observability'
 import { LangSmithExporter } from '@mastra/langsmith'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      langsmith: {
-        serviceName: 'my-service',
-        exporters: [new LangSmithExporter()],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			langsmith: {
+				serviceName: 'my-service',
+				exporters: [new LangSmithExporter()],
+			},
+		},
+	}),
 })
 ```
 
@@ -64,18 +64,18 @@ import { Observability } from '@mastra/observability'
 import { LangSmithExporter } from '@mastra/langsmith'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      langsmith: {
-        serviceName: 'my-service',
-        exporters: [
-          new LangSmithExporter({
-            apiKey: process.env.LANGSMITH_API_KEY,
-          }),
-        ],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			langsmith: {
+				serviceName: 'my-service',
+				exporters: [
+					new LangSmithExporter({
+						apiKey: process.env.LANGSMITH_API_KEY,
+					}),
+				],
+			},
+		},
+	}),
 })
 ```
 
@@ -85,22 +85,22 @@ export const mastra = new Mastra({
 
 ```typescript
 new LangSmithExporter({
-  // Required credentials
-  apiKey: process.env.LANGSMITH_API_KEY!,
+	// Required credentials
+	apiKey: process.env.LANGSMITH_API_KEY!,
 
-  // Optional settings
-  apiUrl: process.env.LANGSMITH_BASE_URL, // Default: https://api.smith.langchain.com
-  projectName: 'my-project', // Project to send traces to (overrides LANGCHAIN_PROJECT env var)
-  callerOptions: {
-    // HTTP client options
-    timeout: 30000, // Request timeout in ms
-    maxRetries: 3, // Retry attempts
-  },
-  logLevel: 'info', // Diagnostic logging: debug | info | warn | error
+	// Optional settings
+	apiUrl: process.env.LANGSMITH_BASE_URL, // Default: https://api.smith.langchain.com
+	projectName: 'my-project', // Project to send traces to (overrides LANGCHAIN_PROJECT env var)
+	callerOptions: {
+		// HTTP client options
+		timeout: 30000, // Request timeout in ms
+		maxRetries: 3, // Retry attempts
+	},
+	logLevel: 'info', // Diagnostic logging: debug | info | warn | error
 
-  // LangSmith-specific options
-  hideInputs: false, // Hide input data in UI
-  hideOutputs: false, // Hide output data in UI
+	// LangSmith-specific options
+	hideInputs: false, // Hide input data in UI
+	hideOutputs: false, // Hide output data in UI
 })
 ```
 
@@ -128,13 +128,13 @@ import { buildTracingOptions } from '@mastra/observability'
 import { withLangsmithMetadata } from '@mastra/langsmith'
 
 export const supportAgent = new Agent({
-  id: 'support-agent',
-  name: 'support-agent',
-  instructions: 'You are a helpful support agent.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  defaultOptions: {
-    tracingOptions: buildTracingOptions(withLangsmithMetadata({ projectName: 'customer-support' })),
-  },
+	id: 'support-agent',
+	name: 'support-agent',
+	instructions: 'You are a helpful support agent.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	defaultOptions: {
+		tracingOptions: buildTracingOptions(withLangsmithMetadata({ projectName: 'customer-support' })),
+	},
 })
 ```
 
@@ -148,23 +148,23 @@ import { buildTracingOptions } from '@mastra/observability'
 import { withLangsmithMetadata } from '@mastra/langsmith'
 
 export const supportAgent = new Agent({
-  id: 'support-agent',
-  name: 'support-agent',
-  instructions: 'You are a helpful support agent.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  defaultOptions: ({ requestContext }) => {
-    const userTier = requestContext?.get('user-tier') as string
-    const userId = requestContext?.get('user-id') as string
+	id: 'support-agent',
+	name: 'support-agent',
+	instructions: 'You are a helpful support agent.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	defaultOptions: ({ requestContext }) => {
+		const userTier = requestContext?.get('user-tier') as string
+		const userId = requestContext?.get('user-id') as string
 
-    return {
-      tracingOptions: buildTracingOptions(
-        withLangsmithMetadata({
-          projectName: userTier === 'enterprise' ? 'enterprise-traces' : 'standard-traces',
-          sessionId: userId,
-        }),
-      ),
-    }
-  },
+		return {
+			tracingOptions: buildTracingOptions(
+				withLangsmithMetadata({
+					projectName: userTier === 'enterprise' ? 'enterprise-traces' : 'standard-traces',
+					sessionId: userId,
+				}),
+			),
+		}
+	},
 })
 ```
 

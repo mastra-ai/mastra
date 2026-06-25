@@ -123,9 +123,9 @@ Follow the example below to create a SPA using Vite.
 
     ```json title="package.json"
     {
-      "scripts": {
-        "build": "vite build"
-      }
+    	"scripts": {
+    		"build": "vite build"
+    	}
     }
     ```
   </StepItem>
@@ -136,8 +136,8 @@ Follow the example below to create a SPA using Vite.
     ```html title="index.html"
     <!doctype html>
     <html>
-      <head></head>
-      <body></body>
+    	<head></head>
+    	<body></body>
     </html>
     ```
   </StepItem>
@@ -153,29 +153,29 @@ Follow the example below to create a SPA using Vite.
     const studioDir = resolve(import.meta.dirname, 'node_modules/mastra/dist/studio')
 
     export default defineConfig(({ mode }) => {
-      const env = loadEnv(mode, process.cwd(), 'MASTRA_')
+    	const env = loadEnv(mode, process.cwd(), 'MASTRA_')
 
-      return {
-        plugins: [
-          {
-            name: 'mastra-studio',
-            closeBundle() {
-              const outDir = resolve(import.meta.dirname, 'dist')
-              cpSync(studioDir, outDir, { recursive: true })
+    	return {
+    		plugins: [
+    			{
+    				name: 'mastra-studio',
+    				closeBundle() {
+    					const outDir = resolve(import.meta.dirname, 'dist')
+    					cpSync(studioDir, outDir, { recursive: true })
 
-              const indexPath = join(outDir, 'index.html')
-              const html = readFileSync(indexPath, 'utf-8')
-              writeFileSync(
-                indexPath,
-                html.replaceAll(/%%(\w+)%%/g, (_, key) => env[key] ?? ''),
-              )
-            },
-          },
-        ],
-        build: {
-          emptyOutDir: true,
-        },
-      }
+    					const indexPath = join(outDir, 'index.html')
+    					const html = readFileSync(indexPath, 'utf-8')
+    					writeFileSync(
+    						indexPath,
+    						html.replaceAll(/%%(\w+)%%/g, (_, key) => env[key] ?? ''),
+    					)
+    				},
+    			},
+    		],
+    		build: {
+    			emptyOutDir: true,
+    		},
+    	}
     })
     ```
   </StepItem>

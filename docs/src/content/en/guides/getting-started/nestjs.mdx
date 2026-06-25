@@ -66,11 +66,11 @@ import { MastraModule } from '@mastra/nestjs'
 import { mastra } from './mastra'
 
 @Module({
-  imports: [
-    MastraModule.register({
-      mastra,
-    }),
-  ],
+	imports: [
+		MastraModule.register({
+			mastra,
+		}),
+	],
 })
 export class AppModule {}
 ```
@@ -111,19 +111,19 @@ import { MastraService } from '@mastra/nestjs'
 
 @Injectable()
 export class AgentService {
-  constructor(private readonly mastraService: MastraService) {}
+	constructor(private readonly mastraService: MastraService) {}
 
-  async chat(agentId: string, message: string) {
-    const agent = this.mastraService.getAgent(agentId)
-    return agent.generate({
-      messages: [{ role: 'user', content: message }],
-    })
-  }
+	async chat(agentId: string, message: string) {
+		const agent = this.mastraService.getAgent(agentId)
+		return agent.generate({
+			messages: [{ role: 'user', content: message }],
+		})
+	}
 
-  async runWorkflow(workflowId: string, input: Record<string, unknown>) {
-    const workflow = this.mastraService.getWorkflow(workflowId)
-    return workflow.start({ inputData: input })
-  }
+	async runWorkflow(workflowId: string, input: Record<string, unknown>) {
+		const workflow = this.mastraService.getWorkflow(workflowId)
+		return workflow.start({ inputData: input })
+	}
 }
 ```
 
@@ -146,12 +146,12 @@ import type { Mastra } from '@mastra/core/mastra'
 
 @Injectable()
 export class MemoryService {
-  constructor(@Inject(MASTRA) private readonly mastra: Mastra) {}
+	constructor(@Inject(MASTRA) private readonly mastra: Mastra) {}
 
-  async getThreadMessages(threadId: string) {
-    const memory = this.mastra.getMemory()
-    return memory?.getMessages({ threadId })
-  }
+	async getThreadMessages(threadId: string) {
+		const memory = this.mastra.getMemory()
+		return memory?.getMessages({ threadId })
+	}
 }
 ```
 

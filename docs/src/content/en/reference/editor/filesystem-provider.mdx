@@ -18,9 +18,9 @@ import { MastraEditor } from '@mastra/editor'
 import { s3FilesystemProvider } from '@mastra/s3'
 
 new MastraEditor({
-  filesystems: {
-    [s3FilesystemProvider.id]: s3FilesystemProvider,
-  },
+	filesystems: {
+		[s3FilesystemProvider.id]: s3FilesystemProvider,
+	},
 })
 ```
 
@@ -28,35 +28,35 @@ new MastraEditor({
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description:
-      'Unique provider identifier (for example, `"local"`, `"s3"`). Must match `StorageFilesystemConfig.provider` on every stored workspace that uses this provider.',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: 'Human-readable name for UI display.',
-  },
-  {
-    name: 'description',
-    type: 'string',
-    description: 'Short description shown in the workspace filesystem picker.',
-    isOptional: true,
-  },
-  {
-    name: 'configSchema',
-    type: 'Record<string, unknown>',
-    description: 'JSON Schema describing provider-specific configuration. Used by the UI to render config forms.',
-    isOptional: true,
-  },
-  {
-    name: 'createFilesystem',
-    type: '(config: TConfig) => WorkspaceFilesystem | Promise<WorkspaceFilesystem>',
-    description:
-      'Create a runtime `WorkspaceFilesystem` instance from the stored config. Called at workspace hydration time.',
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description:
+			'Unique provider identifier (for example, `"local"`, `"s3"`). Must match `StorageFilesystemConfig.provider` on every stored workspace that uses this provider.',
+	},
+	{
+		name: 'name',
+		type: 'string',
+		description: 'Human-readable name for UI display.',
+	},
+	{
+		name: 'description',
+		type: 'string',
+		description: 'Short description shown in the workspace filesystem picker.',
+		isOptional: true,
+	},
+	{
+		name: 'configSchema',
+		type: 'Record<string, unknown>',
+		description: 'JSON Schema describing provider-specific configuration. Used by the UI to render config forms.',
+		isOptional: true,
+	},
+	{
+		name: 'createFilesystem',
+		type: '(config: TConfig) => WorkspaceFilesystem | Promise<WorkspaceFilesystem>',
+		description:
+			'Create a runtime `WorkspaceFilesystem` instance from the stored config. Called at workspace hydration time.',
+	},
 ]}
 />
 
@@ -66,20 +66,20 @@ new MastraEditor({
 import type { FilesystemProvider, WorkspaceFilesystem } from '@mastra/core/editor'
 
 export const myFilesystemProvider: FilesystemProvider<{ bucket: string; region: string }> = {
-  id: 'my-fs',
-  name: 'My Filesystem',
-  description: 'Object-store-backed filesystem.',
-  configSchema: {
-    type: 'object',
-    required: ['bucket', 'region'],
-    properties: {
-      bucket: { type: 'string' },
-      region: { type: 'string' },
-    },
-  },
-  async createFilesystem(config): Promise<WorkspaceFilesystem> {
-    return createMyFilesystem({ bucket: config.bucket, region: config.region })
-  },
+	id: 'my-fs',
+	name: 'My Filesystem',
+	description: 'Object-store-backed filesystem.',
+	configSchema: {
+		type: 'object',
+		required: ['bucket', 'region'],
+		properties: {
+			bucket: { type: 'string' },
+			region: { type: 'string' },
+		},
+	},
+	async createFilesystem(config): Promise<WorkspaceFilesystem> {
+		return createMyFilesystem({ bucket: config.bucket, region: config.region })
+	},
 }
 ```
 

@@ -27,22 +27,22 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 export const weatherTool = createTool({
-  id: 'weather-tool',
-  description: 'Fetches weather for a location',
-  inputSchema: z.object({
-    location: z.string(),
-  }),
-  outputSchema: z.object({
-    weather: z.string(),
-  }),
-  execute: async inputData => {
-    const { location } = inputData
+	id: 'weather-tool',
+	description: 'Fetches weather for a location',
+	inputSchema: z.object({
+		location: z.string(),
+	}),
+	outputSchema: z.object({
+		weather: z.string(),
+	}),
+	execute: async inputData => {
+		const { location } = inputData
 
-    const response = await fetch(`https://wttr.in/${location}?format=3`)
-    const weather = await response.text()
+		const response = await fetch(`https://wttr.in/${location}?format=3`)
+		const weather = await response.text()
 
-    return { weather }
-  },
+		return { weather }
+	},
 })
 ```
 
@@ -61,13 +61,13 @@ import { Agent } from '@mastra/core/agent'
 import { weatherTool } from '../tools/weather-tool'
 
 export const weatherAgent = new Agent({
-  id: 'weather-agent',
-  name: 'Weather Agent',
-  instructions: `
+	id: 'weather-agent',
+	name: 'Weather Agent',
+	instructions: `
     You are a helpful weather assistant.
     Use the weatherTool to fetch current weather data.`,
-  model: '__GATEWAY_OPENAI_MODEL__',
-  tools: { weatherTool },
+	model: '__GATEWAY_OPENAI_MODEL__',
+	tools: { weatherTool },
 })
 ```
 
@@ -82,17 +82,17 @@ You can define the tool's `inputSchema` and `outputSchema` with any library that
     import { z } from 'zod'
 
     export const weatherTool = createTool({
-      id: 'weather-tool',
-      description: 'Fetches weather for a location',
-      inputSchema: z.object({
-        location: z.string(),
-      }),
-      outputSchema: z.object({
-        weather: z.string(),
-      }),
-      execute: async inputData => {
-        // Fetch weather data
-      },
+    	id: 'weather-tool',
+    	description: 'Fetches weather for a location',
+    	inputSchema: z.object({
+    		location: z.string(),
+    	}),
+    	outputSchema: z.object({
+    		weather: z.string(),
+    	}),
+    	execute: async inputData => {
+    		// Fetch weather data
+    	},
     })
     ```
   </TabItem>
@@ -104,21 +104,21 @@ You can define the tool's `inputSchema` and `outputSchema` with any library that
     import { toStandardJsonSchema } from '@valibot/to-json-schema'
 
     export const weatherTool = createTool({
-      id: 'weather-tool',
-      description: 'Fetches weather for a location',
-      inputSchema: toStandardJsonSchema(
-        v.object({
-          location: v.string(),
-        }),
-      ),
-      outputSchema: toStandardJsonSchema(
-        v.object({
-          weather: v.string(),
-        }),
-      ),
-      execute: async inputData => {
-        // Fetch weather data
-      },
+    	id: 'weather-tool',
+    	description: 'Fetches weather for a location',
+    	inputSchema: toStandardJsonSchema(
+    		v.object({
+    			location: v.string(),
+    		}),
+    	),
+    	outputSchema: toStandardJsonSchema(
+    		v.object({
+    			weather: v.string(),
+    		}),
+    	),
+    	execute: async inputData => {
+    		// Fetch weather data
+    	},
     })
     ```
   </TabItem>
@@ -129,17 +129,17 @@ You can define the tool's `inputSchema` and `outputSchema` with any library that
     import { type } from 'arktype'
 
     export const weatherTool = createTool({
-      id: 'weather-tool',
-      description: 'Fetches weather for a location',
-      inputSchema: type({
-        location: 'string',
-      }),
-      outputSchema: type({
-        weather: 'string',
-      }),
-      execute: async inputData => {
-        // Fetch weather data
-      },
+    	id: 'weather-tool',
+    	description: 'Fetches weather for a location',
+    	inputSchema: type({
+    		location: 'string',
+    	}),
+    	outputSchema: type({
+    		weather: 'string',
+    	}),
+    	execute: async inputData => {
+    		// Fetch weather data
+    	},
     })
     ```
   </TabItem>
@@ -155,14 +155,14 @@ import { weatherTool } from '../tools/weather-tool'
 import { hazardsTool } from '../tools/hazards-tool'
 
 export const weatherAgent = new Agent({
-  id: 'weather-agent',
-  name: 'Weather Agent',
-  instructions: `
+	id: 'weather-agent',
+	name: 'Weather Agent',
+	instructions: `
     You are a helpful weather assistant.
     Use the weatherTool to fetch current weather data.
     Use the hazardsTool to provide information about potential weather hazards.`,
-  model: '__GATEWAY_OPENAI_MODEL__',
-  tools: { weatherTool, hazardsTool },
+	model: '__GATEWAY_OPENAI_MODEL__',
+	tools: { weatherTool, hazardsTool },
 })
 ```
 
@@ -174,20 +174,20 @@ Add subagents through the `agents` configuration to create a [supervisor](/docs/
 import { Agent } from '@mastra/core/agent'
 
 const writer = new Agent({
-  id: 'writer',
-  name: 'Writer',
-  description: 'Drafts and edits written content',
-  instructions: 'You are a skilled writer.',
-  model: '__GATEWAY_OPENAI_MODEL__',
+	id: 'writer',
+	name: 'Writer',
+	description: 'Drafts and edits written content',
+	instructions: 'You are a skilled writer.',
+	model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 export const supervisor = new Agent({
-  id: 'supervisor',
-  name: 'Supervisor',
-  instructions: 'Coordinate the writer to produce content.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  // highlight-next-line
-  agents: { writer },
+	id: 'supervisor',
+	name: 'Supervisor',
+	instructions: 'Coordinate the writer to produce content.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	// highlight-next-line
+	agents: { writer },
 })
 ```
 
@@ -200,12 +200,12 @@ import { Agent } from '@mastra/core/agent'
 import { researchWorkflow } from '../workflows/research-workflow'
 
 export const researchAgent = new Agent({
-  id: 'research-agent',
-  name: 'Research Agent',
-  instructions: 'You are a research assistant.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  // highlight-next-line
-  workflows: { researchWorkflow },
+	id: 'research-agent',
+	name: 'Research Agent',
+	instructions: 'You are a research assistant.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	// highlight-next-line
+	workflows: { researchWorkflow },
 })
 ```
 
@@ -215,30 +215,30 @@ Use `toModelOutput` when your tool returns rich structured data for your applica
 
 ```typescript title="src/mastra/tools/weather-tool.ts"
 export const weatherTool = createTool({
-  execute: async ({ location }) => {
-    const response = await fetch(`https://wttr.in/${location}?format=j1`)
-    const data = await response.json()
+	execute: async ({ location }) => {
+		const response = await fetch(`https://wttr.in/${location}?format=j1`)
+		const data = await response.json()
 
-    return {
-      location,
-      temperature: data.current_condition[0].temp_F,
-      condition: data.current_condition[0].weatherDesc[0].value,
-      weatherIconUrl: data.current_condition[0].weatherIconUrl[0].value,
-      source: data,
-    }
-  },
-  toModelOutput: output => {
-    return {
-      type: 'content',
-      value: [
-        {
-          type: 'text',
-          text: `${output.location}: ${output.temperature}F and ${output.condition}`,
-        },
-        { type: 'image-url', url: output.weatherIconUrl },
-      ],
-    }
-  },
+		return {
+			location,
+			temperature: data.current_condition[0].temp_F,
+			condition: data.current_condition[0].weatherDesc[0].value,
+			weatherIconUrl: data.current_condition[0].weatherIconUrl[0].value,
+			source: data,
+		}
+	},
+	toModelOutput: output => {
+		return {
+			type: 'content',
+			value: [
+				{
+					type: 'text',
+					text: `${output.location}: ${output.temperature}F and ${output.condition}`,
+				},
+				{ type: 'image-url', url: output.weatherIconUrl },
+			],
+		}
+	},
 })
 ```
 
@@ -260,19 +260,19 @@ Use `hooks` to run custom logic before and after every tool call an agent makes.
 import { Agent } from '@mastra/core/agent'
 
 export const supportAgent = new Agent({
-  name: 'support-agent',
-  instructions: 'Help users with their questions.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  // highlight-start
-  hooks: {
-    beforeToolCall: ({ toolName, input }) => {
-      console.log(`Running ${toolName}`, input)
-    },
-    afterToolCall: ({ toolName, output, error }) => {
-      console.log(`Finished ${toolName}`, { output, error })
-    },
-  },
-  // highlight-end
+	name: 'support-agent',
+	instructions: 'Help users with their questions.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	// highlight-start
+	hooks: {
+		beforeToolCall: ({ toolName, input }) => {
+			console.log(`Running ${toolName}`, input)
+		},
+		afterToolCall: ({ toolName, output, error }) => {
+			console.log(`Finished ${toolName}`, { output, error })
+		},
+	},
+	// highlight-end
 })
 ```
 
@@ -280,17 +280,17 @@ export const supportAgent = new Agent({
 
 ```typescript
 const guardedAgent = new Agent({
-  name: 'guarded-agent',
-  instructions: 'Run shell commands for the user.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  hooks: {
-    beforeToolCall: ({ toolName, input }) => {
-      const command = (input as { command?: string }).command ?? ''
-      if (toolName === 'execute_command' && command.includes('rm -rf')) {
-        return { proceed: false, output: 'Command blocked by policy.' }
-      }
-    },
-  },
+	name: 'guarded-agent',
+	instructions: 'Run shell commands for the user.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	hooks: {
+		beforeToolCall: ({ toolName, input }) => {
+			const command = (input as { command?: string }).command ?? ''
+			if (toolName === 'execute_command' && command.includes('rm -rf')) {
+				return { proceed: false, output: 'Command blocked by policy.' }
+			}
+		},
+	},
 })
 ```
 
@@ -302,11 +302,11 @@ Pass `hooks` to `.generate()` or `.stream()` to set hooks for a single execution
 
 ```typescript
 await supportAgent.generate('Look up the order status', {
-  hooks: {
-    beforeToolCall: ({ toolName }) => {
-      console.log(`This run only: ${toolName}`)
-    },
-  },
+	hooks: {
+		beforeToolCall: ({ toolName }) => {
+			console.log(`This run only: ${toolName}`)
+		},
+	},
 })
 ```
 
@@ -334,27 +334,27 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 export const weatherTool = createTool({
-  id: 'weather-tool',
-  description: 'Get weather information',
-  inputSchema: z.object({
-    city: z.string(),
-  }),
-  outputSchema: z.object({
-    temperature: z.number(),
-    conditions: z.string(),
-  }),
-  // Called when the complete input is available
-  onInputAvailable: ({ input, toolCallId }) => {
-    console.log(`Weather requested for: ${input.city}`)
-  },
-  execute: async input => {
-    const weather = await fetchWeather(input.city)
-    return weather
-  },
-  // Called after successful execution
-  onOutput: ({ output, toolName }) => {
-    console.log(`${toolName} result: ${output.temperature}°F, ${output.conditions}`)
-  },
+	id: 'weather-tool',
+	description: 'Get weather information',
+	inputSchema: z.object({
+		city: z.string(),
+	}),
+	outputSchema: z.object({
+		temperature: z.number(),
+		conditions: z.string(),
+	}),
+	// Called when the complete input is available
+	onInputAvailable: ({ input, toolCallId }) => {
+		console.log(`Weather requested for: ${input.city}`)
+	},
+	execute: async input => {
+		const weather = await fetchWeather(input.city)
+		return weather
+	},
+	// Called after successful execution
+	onOutput: ({ output, toolName }) => {
+		console.log(`${toolName} result: ${output.temperature}°F, ${output.conditions}`)
+	},
 })
 ```
 
@@ -370,8 +370,8 @@ Pass `toolChoice` or `activeTools` to `.generate()` or `.stream()` to control wh
 
 ```typescript
 await agent.generate('Check the forecast', {
-  toolChoice: 'required',
-  activeTools: ['weatherTool'],
+	toolChoice: 'required',
+	activeTools: ['weatherTool'],
 })
 ```
 
@@ -416,12 +416,12 @@ Subagents and workflows follow the same pattern. They're converted to tools with
 
 ```typescript
 const orchestrator = new Agent({
-  agents: {
-    weather: weatherAgent, // toolName: "agent-weather"
-  },
-  workflows: {
-    research: researchWorkflow, // toolName: "workflow-research"
-  },
+	agents: {
+		weather: weatherAgent, // toolName: "agent-weather"
+	},
+	workflows: {
+		research: researchWorkflow, // toolName: "workflow-research"
+	},
 })
 ```
 

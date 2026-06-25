@@ -27,12 +27,12 @@ new MastraPlatformExporter(config?: MastraPlatformExporterConfig)
 
 <PropertiesTable
   props={[
-  {
-    name: 'config',
-    type: 'MastraPlatformExporterConfig',
-    description: 'Configuration options',
-    required: false,
-  },
+	{
+		name: 'config',
+		type: 'MastraPlatformExporterConfig',
+		description: 'Configuration options',
+		required: false,
+	},
 ]}
 />
 
@@ -40,38 +40,38 @@ new MastraPlatformExporter(config?: MastraPlatformExporterConfig)
 
 ```typescript
 interface MastraPlatformExporterConfig extends BaseExporterConfig {
-  /** Maximum number of buffered events per batch (spans, logs, metrics, scores, feedback). Default: 1000 */
-  maxBatchSize?: number
+	/** Maximum number of buffered events per batch (spans, logs, metrics, scores, feedback). Default: 1000 */
+	maxBatchSize?: number
 
-  /** Maximum wait time before flushing in milliseconds. Default: 5000 */
-  maxBatchWaitMs?: number
+	/** Maximum wait time before flushing in milliseconds. Default: 5000 */
+	maxBatchWaitMs?: number
 
-  /** Maximum retry attempts. Default: 3 */
-  maxRetries?: number
+	/** Maximum retry attempts. Default: 3 */
+	maxRetries?: number
 
-  /** Mastra Observability access token (from env or config) */
-  accessToken?: string
+	/** Mastra Observability access token (from env or config) */
+	accessToken?: string
 
-  /** Project ID for project-scoped collector routes (letters, numbers, hyphens, underscores) */
-  projectId?: string
+	/** Project ID for project-scoped collector routes (letters, numbers, hyphens, underscores) */
+	projectId?: string
 
-  /** Base observability endpoint */
-  endpoint?: string
+	/** Base observability endpoint */
+	endpoint?: string
 
-  /** Explicit traces endpoint override */
-  tracesEndpoint?: string
+	/** Explicit traces endpoint override */
+	tracesEndpoint?: string
 
-  /** Explicit logs endpoint override */
-  logsEndpoint?: string
+	/** Explicit logs endpoint override */
+	logsEndpoint?: string
 
-  /** Explicit metrics endpoint override */
-  metricsEndpoint?: string
+	/** Explicit metrics endpoint override */
+	metricsEndpoint?: string
 
-  /** Explicit scores endpoint override */
-  scoresEndpoint?: string
+	/** Explicit scores endpoint override */
+	scoresEndpoint?: string
 
-  /** Explicit feedback endpoint override */
-  feedbackEndpoint?: string
+	/** Explicit feedback endpoint override */
+	feedbackEndpoint?: string
 }
 ```
 
@@ -110,12 +110,12 @@ Only `SPAN_ENDED` tracing events are exported. `SPAN_STARTED` and `SPAN_UPDATED`
 
 <PropertiesTable
   props={[
-  {
-    name: 'event',
-    type: 'TracingEvent',
-    description: 'The tracing event to export',
-    required: true,
-  },
+	{
+		name: 'event',
+		type: 'TracingEvent',
+		description: 'The tracing event to export',
+		required: true,
+	},
 ]}
 />
 
@@ -133,12 +133,12 @@ Every `LogEvent` passed to this handler is buffered and exported to the logs end
 
 <PropertiesTable
   props={[
-  {
-    name: 'event',
-    type: 'LogEvent',
-    description: 'The log event to export',
-    required: true,
-  },
+	{
+		name: 'event',
+		type: 'LogEvent',
+		description: 'The log event to export',
+		required: true,
+	},
 ]}
 />
 
@@ -156,12 +156,12 @@ Every `MetricEvent` passed to this handler is buffered and exported to the metri
 
 <PropertiesTable
   props={[
-  {
-    name: 'event',
-    type: 'MetricEvent',
-    description: 'The metric event to export',
-    required: true,
-  },
+	{
+		name: 'event',
+		type: 'MetricEvent',
+		description: 'The metric event to export',
+		required: true,
+	},
 ]}
 />
 
@@ -179,12 +179,12 @@ Every `ScoreEvent` passed to this handler is buffered and exported to the scores
 
 <PropertiesTable
   props={[
-  {
-    name: 'event',
-    type: 'ScoreEvent',
-    description: 'The score event to export',
-    required: true,
-  },
+	{
+		name: 'event',
+		type: 'ScoreEvent',
+		description: 'The score event to export',
+		required: true,
+	},
 ]}
 />
 
@@ -202,12 +202,12 @@ Every `FeedbackEvent` passed to this handler is buffered and exported to the fee
 
 <PropertiesTable
   props={[
-  {
-    name: 'event',
-    type: 'FeedbackEvent',
-    description: 'The feedback event to export',
-    required: true,
-  },
+	{
+		name: 'event',
+		type: 'FeedbackEvent',
+		description: 'The feedback event to export',
+		required: true,
+	},
 ]}
 />
 
@@ -273,16 +273,16 @@ The shape of each span sent to Mastra platform is documented here for reference 
 
 ```typescript
 type MastraPlatformSpanRecord = AnyExportedSpan & {
-  // Aliases derived from the source span
-  spanId: string // alias for span.id
-  spanType: string // alias for span.type
-  startedAt: Date // alias for span.startTime
-  endedAt: Date | null // alias for span.endTime ?? null
-  error: AnyExportedSpan['errorInfo'] | null
+	// Aliases derived from the source span
+	spanId: string // alias for span.id
+	spanType: string // alias for span.type
+	startedAt: Date // alias for span.startTime
+	endedAt: Date | null // alias for span.endTime ?? null
+	error: AnyExportedSpan['errorInfo'] | null
 
-  // Stamped at export time
-  createdAt: Date
-  updatedAt: Date | null
+	// Stamped at export time
+	createdAt: Date
+	updatedAt: Date | null
 }
 ```
 
@@ -298,11 +298,11 @@ const exporter = new MastraPlatformExporter()
 
 // Explicit configuration
 const customExporter = new MastraPlatformExporter({
-  accessToken: 'your-token',
-  projectId: 'project_123',
-  maxBatchSize: 500,
-  maxBatchWaitMs: 2000,
-  logLevel: 'debug',
+	accessToken: 'your-token',
+	projectId: 'project_123',
+	maxBatchSize: 500,
+	maxBatchWaitMs: 2000,
+	logLevel: 'debug',
 })
 ```
 

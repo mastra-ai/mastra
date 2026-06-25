@@ -107,18 +107,18 @@ Use the standard Mastra TypeScript configuration:
 
 ```json title="tsconfig.json"
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "ES2022",
-    "moduleResolution": "bundler",
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "strict": true,
-    "skipLibCheck": true,
-    "noEmit": true,
-    "outDir": "dist"
-  },
-  "include": ["src/**/*"]
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "ES2022",
+		"moduleResolution": "bundler",
+		"esModuleInterop": true,
+		"forceConsistentCasingInFileNames": true,
+		"strict": true,
+		"skipLibCheck": true,
+		"noEmit": true,
+		"outDir": "dist"
+	},
+	"include": ["src/**/*"]
 }
 ```
 
@@ -146,9 +146,9 @@ We recommend using OpenAI, Anthropic, or Google model providers for templates. C
 import { Agent } from '@mastra/core/agent'
 
 const agent = new Agent({
-  name: 'example-agent',
-  model: '__GATEWAY_OPENAI_MODEL__', // or other provider strings
-  instructions: 'Your agent instructions here',
+	name: 'example-agent',
+	model: '__GATEWAY_OPENAI_MODEL__', // or other provider strings
+	instructions: 'Your agent instructions here',
 })
 ```
 

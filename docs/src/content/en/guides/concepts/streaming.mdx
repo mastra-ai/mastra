@@ -31,7 +31,7 @@ const testAgent = mastra.getAgent('testAgent')
 const stream = await testAgent.stream([{ role: 'user', content: 'Help me organize my day' }])
 
 for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk)
+	process.stdout.write(chunk)
 }
 ```
 
@@ -105,13 +105,13 @@ The `stream()` method returns a `ReadableStream` of events directly.
 const run = await testWorkflow.createRun()
 
 const stream = await run.stream({
-  inputData: {
-    value: 'initial data',
-  },
+	inputData: {
+		value: 'initial data',
+	},
 })
 
 for await (const chunk of stream) {
-  console.log(chunk)
+	console.log(chunk)
 }
 ```
 
@@ -175,7 +175,7 @@ const testAgent = mastra.getAgent('testAgent')
 const stream = await testAgent.stream([{ role: 'user', content: 'Help me organize my day' }])
 
 for await (const chunk of stream) {
-  console.log(chunk)
+	console.log(chunk)
 }
 ```
 
@@ -227,11 +227,11 @@ import { Agent } from '@mastra/core/agent'
 import { testTool } from '../tools/test-tool'
 
 export const testAgent = new Agent({
-  id: 'test-agent',
-  name: 'Test Agent',
-  instructions: 'You are a weather agent.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  tools: { testTool },
+	id: 'test-agent',
+	name: 'Test Agent',
+	instructions: 'You are a weather agent.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	tools: { testTool },
 })
 ```
 
@@ -249,25 +249,25 @@ You must `await` the call to `writer.write()` or else you will lock the stream a
 import { createTool } from '@mastra/core/tools'
 
 export const testTool = createTool({
-  execute: async (inputData, context) => {
-    const { value } = inputData
+	execute: async (inputData, context) => {
+		const { value } = inputData
 
-    await context?.writer?.write({
-      type: 'custom-event',
-      status: 'pending',
-    })
+		await context?.writer?.write({
+			type: 'custom-event',
+			status: 'pending',
+		})
 
-    const response = await fetch()
+		const response = await fetch()
 
-    await context?.writer?.write({
-      type: 'custom-event',
-      status: 'success',
-    })
+		await context?.writer?.write({
+			type: 'custom-event',
+			status: 'success',
+		})
 
-    return {
-      value: '',
-    }
-  },
+		return {
+			value: '',
+		}
+	},
 })
 ```
 
@@ -277,25 +277,25 @@ You can also use `writer.custom()` to emit top-level stream chunks. This is usef
 import { createTool } from '@mastra/core/tools'
 
 export const testTool = createTool({
-  execute: async (inputData, context) => {
-    const { value } = inputData
+	execute: async (inputData, context) => {
+		const { value } = inputData
 
-    await context?.writer?.custom({
-      type: 'data-tool-progress',
-      status: 'pending',
-    })
+		await context?.writer?.custom({
+			type: 'data-tool-progress',
+			status: 'pending',
+		})
 
-    const response = await fetch()
+		const response = await fetch()
 
-    await context?.writer?.custom({
-      type: 'data-tool-progress',
-      status: 'success',
-    })
+		await context?.writer?.custom({
+			type: 'data-tool-progress',
+			status: 'success',
+		})
 
-    return {
-      value: '',
-    }
-  },
+		return {
+			value: '',
+		}
+	},
 })
 ```
 
@@ -305,9 +305,9 @@ By default, `data-*` chunks emitted with `writer.custom()` are persisted to stor
 
 ```typescript {4}
 await context?.writer?.custom({
-  type: 'data-build-log',
-  data: { line: 'Compiling module 3 of 12...' },
-  transient: true,
+	type: 'data-build-log',
+	data: { line: 'Compiling module 3 of 12...' },
+	transient: true,
 })
 ```
 

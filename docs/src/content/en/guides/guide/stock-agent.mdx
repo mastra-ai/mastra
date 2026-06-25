@@ -31,11 +31,11 @@ To create an agent in Mastra use the `Agent` class to define it and then registe
     import { Agent } from '@mastra/core/agent'
 
     export const stockAgent = new Agent({
-      id: 'stock-agent',
-      name: 'Stock Agent',
-      instructions:
-        'You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.',
-      model: '__GATEWAY_OPENAI_MODEL__',
+    	id: 'stock-agent',
+    	name: 'Stock Agent',
+    	instructions:
+    		'You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
     })
     ```
   </StepItem>
@@ -48,7 +48,7 @@ To create an agent in Mastra use the `Agent` class to define it and then registe
     import { stockAgent } from './agents/stockAgent'
 
     export const mastra = new Mastra({
-      agents: { stockAgent },
+    	agents: { stockAgent },
     })
     ```
   </StepItem>
@@ -67,25 +67,25 @@ The Stock Agent doesn't yet know anything about current stock prices. To change 
     import { z } from 'zod'
 
     const getStockPrice = async (symbol: string) => {
-      const data = await fetch(
-        `https://mastra-stock-data.vercel.app/api/stock-data?symbol=${symbol}`,
-      ).then(r => r.json())
-      return data.prices['4. close']
+    	const data = await fetch(
+    		`https://mastra-stock-data.vercel.app/api/stock-data?symbol=${symbol}`,
+    	).then(r => r.json())
+    	return data.prices['4. close']
     }
 
     export const stockPrices = createTool({
-      id: 'Get Stock Price',
-      inputSchema: z.object({
-        symbol: z.string(),
-      }),
-      description: `Fetches the last day's closing stock price for a given symbol`,
-      execute: async inputData => {
-        console.log('Using tool to fetch stock price for', inputData.symbol)
-        return {
-          symbol: inputData.symbol,
-          currentPrice: await getStockPrice(inputData.symbol),
-        }
-      },
+    	id: 'Get Stock Price',
+    	inputSchema: z.object({
+    		symbol: z.string(),
+    	}),
+    	description: `Fetches the last day's closing stock price for a given symbol`,
+    	execute: async inputData => {
+    		console.log('Using tool to fetch stock price for', inputData.symbol)
+    		return {
+    			symbol: inputData.symbol,
+    			currentPrice: await getStockPrice(inputData.symbol),
+    		}
+    	},
     })
     ```
   </StepItem>
@@ -98,14 +98,14 @@ The Stock Agent doesn't yet know anything about current stock prices. To change 
     import { stockPrices } from '../tools/stockPrices'
 
     export const stockAgent = new Agent({
-      id: 'stock-agent',
-      name: 'Stock Agent',
-      instructions:
-        'You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      tools: {
-        stockPrices,
-      },
+    	id: 'stock-agent',
+    	name: 'Stock Agent',
+    	instructions:
+    		'You are a helpful assistant that provides current stock prices. When asked about a stock, use the stock price tool to fetch the stock price.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
+    	tools: {
+    		stockPrices,
+    	},
     })
     ```
   </StepItem>
@@ -151,8 +151,8 @@ Learn how to interact with your agent through Mastra's API.
 
     ```json
     {
-      "text": "The current price of Apple (AAPL) is $174.55.",
-      "agent": "Stock Agent"
+    	"text": "The current price of Apple (AAPL) is $174.55.",
+    	"agent": "Stock Agent"
     }
     ```
 

@@ -31,17 +31,17 @@ import { Workspace } from '@mastra/core/workspace'
 import { GoogleDriveFilesystem } from '@mastra/google-drive'
 
 const workspace = new Workspace({
-  filesystem: new GoogleDriveFilesystem({
-    folderId: process.env.GOOGLE_DRIVE_FOLDER_ID!,
-    accessToken: process.env.GOOGLE_DRIVE_ACCESS_TOKEN!,
-  }),
+	filesystem: new GoogleDriveFilesystem({
+		folderId: process.env.GOOGLE_DRIVE_FOLDER_ID!,
+		accessToken: process.env.GOOGLE_DRIVE_ACCESS_TOKEN!,
+	}),
 })
 
 const agent = new Agent({
-  id: 'drive-agent',
-  name: 'Drive Agent',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
-  workspace,
+	id: 'drive-agent',
+	name: 'Drive Agent',
+	model: '__GATEWAY_OPENAI_MODEL_MINI__',
+	workspace,
 })
 ```
 
@@ -100,11 +100,11 @@ GOOGLE_DRIVE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkq...\n----
 import { GoogleDriveFilesystem } from '@mastra/google-drive'
 
 const filesystem = new GoogleDriveFilesystem({
-  folderId: process.env.GOOGLE_DRIVE_FOLDER_ID!,
-  serviceAccount: {
-    clientEmail: process.env.GOOGLE_DRIVE_CLIENT_EMAIL!,
-    privateKey: process.env.GOOGLE_DRIVE_PRIVATE_KEY!,
-  },
+	folderId: process.env.GOOGLE_DRIVE_FOLDER_ID!,
+	serviceAccount: {
+		clientEmail: process.env.GOOGLE_DRIVE_CLIENT_EMAIL!,
+		privateKey: process.env.GOOGLE_DRIVE_PRIVATE_KEY!,
+	},
 })
 ```
 
@@ -124,9 +124,9 @@ Pass `readOnly: true` to block write operations (`writeFile`, `appendFile`, `del
 
 ```typescript
 const filesystem = new GoogleDriveFilesystem({
-  folderId,
-  accessToken,
-  readOnly: true,
+	folderId,
+	accessToken,
+	readOnly: true,
 })
 ```
 
@@ -134,50 +134,50 @@ const filesystem = new GoogleDriveFilesystem({
 
 <PropertiesTable
   content={[
-  {
-    name: 'folderId',
-    type: 'string',
-    description:
-      'ID of the Google Drive folder that acts as the workspace root. All paths are resolved inside this folder.',
-  },
-  {
-    name: 'accessToken',
-    type: 'string',
-    description: 'OAuth access token with access to the folder.',
-    isOptional: true,
-  },
-  {
-    name: 'getAccessToken',
-    type: '() => string | Promise<string>',
-    description: 'Callback that returns a fresh OAuth access token. Called on every request that needs authorization.',
-    isOptional: true,
-  },
-  {
-    name: 'serviceAccount',
-    type: '{ clientEmail: string; privateKey: string; privateKeyId?: string; scopes?: string[]; subject?: string }',
-    description: 'Service account credentials used to mint access tokens via the OAuth 2.0 JWT flow.',
-    isOptional: true,
-  },
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Unique identifier for this filesystem instance',
-    isOptional: true,
-    defaultValue: '`google-drive:${folderId}`',
-  },
-  {
-    name: 'readOnly',
-    type: 'boolean',
-    description: 'When true, all write operations are blocked.',
-    isOptional: true,
-    defaultValue: 'false',
-  },
-  {
-    name: 'instructions',
-    type: 'InstructionsOption',
-    description: 'Override the default instructions returned to tool descriptions.',
-    isOptional: true,
-  },
+	{
+		name: 'folderId',
+		type: 'string',
+		description:
+			'ID of the Google Drive folder that acts as the workspace root. All paths are resolved inside this folder.',
+	},
+	{
+		name: 'accessToken',
+		type: 'string',
+		description: 'OAuth access token with access to the folder.',
+		isOptional: true,
+	},
+	{
+		name: 'getAccessToken',
+		type: '() => string | Promise<string>',
+		description: 'Callback that returns a fresh OAuth access token. Called on every request that needs authorization.',
+		isOptional: true,
+	},
+	{
+		name: 'serviceAccount',
+		type: '{ clientEmail: string; privateKey: string; privateKeyId?: string; scopes?: string[]; subject?: string }',
+		description: 'Service account credentials used to mint access tokens via the OAuth 2.0 JWT flow.',
+		isOptional: true,
+	},
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Unique identifier for this filesystem instance',
+		isOptional: true,
+		defaultValue: '`google-drive:${folderId}`',
+	},
+	{
+		name: 'readOnly',
+		type: 'boolean',
+		description: 'When true, all write operations are blocked.',
+		isOptional: true,
+		defaultValue: 'false',
+	},
+	{
+		name: 'instructions',
+		type: 'InstructionsOption',
+		description: 'Override the default instructions returned to tool descriptions.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -185,26 +185,26 @@ const filesystem = new GoogleDriveFilesystem({
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Filesystem instance identifier',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: "Provider name ('GoogleDriveFilesystem')",
-  },
-  {
-    name: 'provider',
-    type: 'string',
-    description: "Provider identifier ('google-drive')",
-  },
-  {
-    name: 'readOnly',
-    type: 'boolean | undefined',
-    description: 'Whether the filesystem is in read-only mode',
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Filesystem instance identifier',
+	},
+	{
+		name: 'name',
+		type: 'string',
+		description: "Provider name ('GoogleDriveFilesystem')",
+	},
+	{
+		name: 'provider',
+		type: 'string',
+		description: "Provider identifier ('google-drive')",
+	},
+	{
+		name: 'readOnly',
+		type: 'boolean | undefined',
+		description: 'Whether the filesystem is in read-only mode',
+	},
 ]}
 />
 

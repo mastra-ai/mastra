@@ -20,14 +20,14 @@ The Agent Builder pins a default memory shape onto every new agent through `buil
 import { MastraEditor } from '@mastra/editor'
 
 new MastraEditor({
-  builder: {
-    enabled: true,
-    configuration: {
-      agent: {
-        memory: { observationalMemory: true },
-      },
-    },
-  },
+	builder: {
+		enabled: true,
+		configuration: {
+			agent: {
+				memory: { observationalMemory: true },
+			},
+		},
+	},
 })
 ```
 
@@ -41,18 +41,18 @@ To use a different model, set `observationalMemory.model` to any model ID suppor
 
 ```typescript title="src/mastra/index.ts"
 new MastraEditor({
-  builder: {
-    enabled: true,
-    configuration: {
-      agent: {
-        memory: {
-          observationalMemory: {
-            model: '__GATEWAY_OPENAI_MODEL__',
-          },
-        },
-      },
-    },
-  },
+	builder: {
+		enabled: true,
+		configuration: {
+			agent: {
+				memory: {
+					observationalMemory: {
+						model: '__GATEWAY_OPENAI_MODEL__',
+					},
+				},
+			},
+		},
+	},
 })
 ```
 

@@ -19,24 +19,24 @@ Call agents inside a step's `execute()` function using `.generate()` or `.stream
 
 ```typescript {6-14} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
-  execute: async ({ inputData, mastra }) => {
-    const { message } = inputData
+	execute: async ({ inputData, mastra }) => {
+		const { message } = inputData
 
-    const testAgent = mastra.getAgent('testAgent')
-    const response = await testAgent.generate(
-      `Convert this message into bullet points: ${message}`,
-      {
-        memory: {
-          thread: 'user-123',
-          resource: 'test-123',
-        },
-      },
-    )
+		const testAgent = mastra.getAgent('testAgent')
+		const response = await testAgent.generate(
+			`Convert this message into bullet points: ${message}`,
+			{
+				memory: {
+					thread: 'user-123',
+					resource: 'test-123',
+				},
+			},
+		)
 
-    return {
-      list: response.text,
-    }
-  },
+		return {
+			list: response.text,
+		}
+	},
 })
 ```
 
@@ -51,15 +51,15 @@ import { testAgent } from '../agents/test-agent'
 const step1 = createStep(testAgent)
 
 export const testWorkflow = createWorkflow({})
-  .map(async ({ inputData }) => {
-    const { message } = inputData
-    return {
-      prompt: `Convert this message into bullet points: ${message}`,
-    }
-  })
-  .then(step1)
-  .then(step2)
-  .commit()
+	.map(async ({ inputData }) => {
+		const { message } = inputData
+		return {
+			prompt: `Convert this message into bullet points: ${message}`,
+		}
+	})
+	.then(step1)
+	.then(step2)
+	.commit()
 ```
 
 :::info
@@ -87,32 +87,32 @@ When you need the agent to return structured data instead of plain text, pass th
 
 ```typescript {8} title="src/mastra/workflows/test-workflow.ts"
 const articleSchema = z.object({
-  title: z.string(),
-  summary: z.string(),
-  tags: z.array(z.string()),
+	title: z.string(),
+	summary: z.string(),
+	tags: z.array(z.string()),
 })
 
 const agentStep = createStep(testAgent, {
-  structuredOutput: { schema: articleSchema },
+	structuredOutput: { schema: articleSchema },
 })
 
 // Next step receives typed structured data
 const processStep = createStep({
-  id: 'process',
-  inputSchema: articleSchema, // Matches agent's outputSchema
-  outputSchema: z.object({ tagCount: z.number() }),
-  execute: async ({ inputData }) => ({
-    tagCount: inputData.tags.length, // Fully typed
-  }),
+	id: 'process',
+	inputSchema: articleSchema, // Matches agent's outputSchema
+	outputSchema: z.object({ tagCount: z.number() }),
+	execute: async ({ inputData }) => ({
+		tagCount: inputData.tags.length, // Fully typed
+	}),
 })
 
 export const testWorkflow = createWorkflow({})
-  .map(async ({ inputData }) => ({
-    prompt: `Generate an article about: ${inputData.topic}`,
-  }))
-  .then(agentStep)
-  .then(processStep)
-  .commit()
+	.map(async ({ inputData }) => ({
+		prompt: `Generate an article about: ${inputData.topic}`,
+	}))
+	.then(agentStep)
+	.then(processStep)
+	.commit()
 ```
 
 The `structuredOutput.schema` option accepts any Standard JSON Schema. The agent will generate output conforming to this schema, and the step's `outputSchema` will be automatically set to match.
@@ -135,15 +135,15 @@ Call tools inside a step's `.execute()` function. This gives you more control ov
 import { testTool } from '../tools/test-tool'
 
 const step2 = createStep({
-  execute: async ({ inputData, requestContext }) => {
-    const { text } = inputData
+	execute: async ({ inputData, requestContext }) => {
+		const { text } = inputData
 
-    const response = await testTool.execute({ text }, { requestContext })
+		const response = await testTool.execute({ text }, { requestContext })
 
-    return {
-      emphasized: response.emphasized,
-    }
-  },
+		return {
+			emphasized: response.emphasized,
+		}
+	},
 })
 ```
 
@@ -159,15 +159,15 @@ import { testTool } from '../tools/test-tool'
 const step2 = createStep(testTool)
 
 export const testWorkflow = createWorkflow({})
-  .then(step1)
-  .map(async ({ inputData }) => {
-    const { formatted } = inputData
-    return {
-      text: formatted,
-    }
-  })
-  .then(step2)
-  .commit()
+	.then(step1)
+	.map(async ({ inputData }) => {
+		const { formatted } = inputData
+		return {
+			text: formatted,
+		}
+	})
+	.then(step2)
+	.commit()
 ```
 
 :::info

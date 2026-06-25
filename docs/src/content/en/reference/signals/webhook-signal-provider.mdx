@@ -21,13 +21,13 @@ Route GitHub webhook events to subscribed threads:
 import { WebhookSignalProvider } from '@mastra/core/signals'
 
 const webhookProvider = new WebhookSignalProvider({
-  extractResourceId: payload => `${payload.repository?.full_name}`,
-  buildNotification: (payload, subscription) => ({
-    source: 'github-webhook',
-    kind: payload.action ?? 'event',
-    summary: `${payload.action} on ${subscription.externalResourceId}`,
-    payload,
-  }),
+	extractResourceId: payload => `${payload.repository?.full_name}`,
+	buildNotification: (payload, subscription) => ({
+		source: 'github-webhook',
+		kind: payload.action ?? 'event',
+		summary: `${payload.action} on ${subscription.externalResourceId}`,
+		payload,
+	}),
 })
 ```
 
@@ -37,7 +37,7 @@ Register with an agent and subscribe a thread:
 import { Agent } from '@mastra/core/agent'
 
 const agent = new Agent({
-  signals: [webhookProvider],
+	signals: [webhookProvider],
 })
 
 // subscribe a thread to a specific repo
@@ -45,8 +45,8 @@ webhookProvider.subscribeThread({ threadId: 'thread-1', resourceId: 'user-1' }, 
 
 // handle an incoming webhook
 const result = await webhookProvider.handleWebhook({
-  body: { repository: { full_name: 'mastra-ai/mastra' }, action: 'push' },
-  headers: {},
+	body: { repository: { full_name: 'mastra-ai/mastra' }, action: 'push' },
+	headers: {},
 })
 // result.matched === 1
 ```
@@ -55,35 +55,35 @@ const result = await webhookProvider.handleWebhook({
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Unique identifier for the provider instance.',
-    isOptional: true,
-    defaultValue: "'webhook-signals'",
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: 'Human-readable name.',
-    isOptional: true,
-    defaultValue: "'Webhook Signals'",
-  },
-  {
-    name: 'extractResourceId',
-    type: '(payload: unknown) => string | string[] | undefined',
-    description:
-      'Extract the external resource ID from a webhook payload. Return `undefined` to skip the event. Can return an array to match multiple resources.',
-    isOptional: true,
-    defaultValue: 'Returns `payload.resource` or `payload.externalResourceId` if present',
-  },
-  {
-    name: 'buildNotification',
-    type: '(payload: unknown, subscription: SignalSubscription) => SendNotificationSignalInput',
-    description: 'Build the notification object from a webhook payload and the matched subscription.',
-    isOptional: true,
-    defaultValue: "Returns `{ source: id, kind: 'webhook-event', summary, payload }`",
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Unique identifier for the provider instance.',
+		isOptional: true,
+		defaultValue: "'webhook-signals'",
+	},
+	{
+		name: 'name',
+		type: 'string',
+		description: 'Human-readable name.',
+		isOptional: true,
+		defaultValue: "'Webhook Signals'",
+	},
+	{
+		name: 'extractResourceId',
+		type: '(payload: unknown) => string | string[] | undefined',
+		description:
+			'Extract the external resource ID from a webhook payload. Return `undefined` to skip the event. Can return an array to match multiple resources.',
+		isOptional: true,
+		defaultValue: 'Returns `payload.resource` or `payload.externalResourceId` if present',
+	},
+	{
+		name: 'buildNotification',
+		type: '(payload: unknown, subscription: SignalSubscription) => SendNotificationSignalInput',
+		description: 'Build the notification object from a webhook payload and the matched subscription.',
+		isOptional: true,
+		defaultValue: "Returns `{ source: id, kind: 'webhook-event', summary, payload }`",
+	},
 ]}
 />
 
@@ -107,22 +107,22 @@ Returns: `SignalSubscription`
 
 <PropertiesTable
   content={[
-  {
-    name: 'target',
-    type: 'SignalProviderTarget',
-    description: 'The thread to subscribe. Must include `threadId` and `resourceId`.',
-  },
-  {
-    name: 'externalResourceId',
-    type: 'string',
-    description: 'The external resource to monitor (for example, a repository full name).',
-  },
-  {
-    name: 'metadata',
-    type: 'Record<string, unknown>',
-    description: 'Additional data to store with the subscription.',
-    isOptional: true,
-  },
+	{
+		name: 'target',
+		type: 'SignalProviderTarget',
+		description: 'The thread to subscribe. Must include `threadId` and `resourceId`.',
+	},
+	{
+		name: 'externalResourceId',
+		type: 'string',
+		description: 'The external resource to monitor (for example, a repository full name).',
+	},
+	{
+		name: 'metadata',
+		type: 'Record<string, unknown>',
+		description: 'Additional data to store with the subscription.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -158,28 +158,28 @@ Returns `{ status: 200, body: { matched: N } }` where `N` is the number of subsc
 
 <PropertiesTable
   content={[
-  {
-    name: 'request',
-    type: 'object',
-    description: 'The incoming webhook request.',
-    properties: [
-      {
-        type: 'object',
-        parameters: [
-          {
-            name: 'body',
-            type: 'unknown',
-            description: 'The parsed webhook payload.',
-          },
-          {
-            name: 'headers',
-            type: 'Record<string, string>',
-            description: 'HTTP headers from the webhook request.',
-          },
-        ],
-      },
-    ],
-  },
+	{
+		name: 'request',
+		type: 'object',
+		description: 'The incoming webhook request.',
+		properties: [
+			{
+				type: 'object',
+				parameters: [
+					{
+						name: 'body',
+						type: 'unknown',
+						description: 'The parsed webhook payload.',
+					},
+					{
+						name: 'headers',
+						type: 'Record<string, string>',
+						description: 'HTTP headers from the webhook request.',
+					},
+				],
+			},
+		],
+	},
 ]}
 />
 

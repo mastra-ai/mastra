@@ -23,25 +23,25 @@ import { Mastra } from '@mastra/core'
 import { MastraEditor } from '@mastra/editor'
 
 export const mastra = new Mastra({
-  editor: new MastraEditor({
-    builder: {
-      enabled: true,
-      configuration: {
-        agent: {
-          workspace: {
-            type: 'inline',
-            config: {
-              name: 'project-workspace',
-              filesystem: {
-                provider: 'local',
-                config: { basePath: './workspace' },
-              },
-            },
-          },
-        },
-      },
-    },
-  }),
+	editor: new MastraEditor({
+		builder: {
+			enabled: true,
+			configuration: {
+				agent: {
+					workspace: {
+						type: 'inline',
+						config: {
+							name: 'project-workspace',
+							filesystem: {
+								provider: 'local',
+								config: { basePath: './workspace' },
+							},
+						},
+					},
+				},
+			},
+		},
+	}),
 })
 ```
 

@@ -34,10 +34,10 @@ Configure the server by passing a `server` object to the `Mastra` constructor:
 import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
-  server: {
-    port: 3000, // Defaults to PORT env var or 4111
-    host: '0.0.0.0', // Defaults to MASTRA_HOST env var or 'localhost'
-  },
+	server: {
+		port: 3000, // Defaults to PORT env var or 4111
+		host: '0.0.0.0', // Defaults to MASTRA_HOST env var or 'localhost'
+	},
 })
 ```
 
@@ -99,18 +99,18 @@ Mastra requires `module` and `moduleResolution` settings compatible with modern 
 
 ```json {4-5} title="tsconfig.json"
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "ES2022",
-    "moduleResolution": "bundler",
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "strict": true,
-    "skipLibCheck": true,
-    "noEmit": true,
-    "outDir": "dist"
-  },
-  "include": ["src/**/*"]
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "ES2022",
+		"moduleResolution": "bundler",
+		"esModuleInterop": true,
+		"forceConsistentCasingInFileNames": true,
+		"strict": true,
+		"skipLibCheck": true,
+		"noEmit": true,
+		"outDir": "dist"
+	},
+	"include": ["src/**/*"]
 }
 ```
 

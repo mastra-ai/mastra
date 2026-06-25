@@ -18,23 +18,23 @@ It's important to understand the difference between **state** and **step input/o
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
-  id: 'step-1',
-  inputSchema: z.object({ workflowInput: z.string() }),
-  outputSchema: z.object({ step1Output: z.string() }),
-  stateSchema: z.object({ sharedCounter: z.number() }),
-  execute: async ({ inputData, state, setState }) => {
-    // inputData comes from workflow input or previous step's output
-    console.log(inputData.workflowInput)
+	id: 'step-1',
+	inputSchema: z.object({ workflowInput: z.string() }),
+	outputSchema: z.object({ step1Output: z.string() }),
+	stateSchema: z.object({ sharedCounter: z.number() }),
+	execute: async ({ inputData, state, setState }) => {
+		// inputData comes from workflow input or previous step's output
+		console.log(inputData.workflowInput)
 
-    // state is the shared workflow state
-    console.log(state.sharedCounter)
+		// state is the shared workflow state
+		console.log(state.sharedCounter)
 
-    // Update state for subsequent steps
-    await setState({ sharedCounter: state.sharedCounter + 1 })
+		// Update state for subsequent steps
+		await setState({ sharedCounter: state.sharedCounter + 1 })
 
-    // Return output that flows to next step's inputData
-    return { step1Output: 'processed' }
-  },
+		// Return output that flows to next step's inputData
+		return { step1Output: 'processed' }
+	},
 })
 ```
 
@@ -44,50 +44,50 @@ Define a `stateSchema` on both the workflow and individual steps. The workflow's
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
-  stateSchema: z.object({
-    processedItems: z.array(z.string()),
-  }),
-  execute: async ({ inputData, state, setState }) => {
-    const { message } = inputData
-    const { processedItems } = state
+	stateSchema: z.object({
+		processedItems: z.array(z.string()),
+	}),
+	execute: async ({ inputData, state, setState }) => {
+		const { message } = inputData
+		const { processedItems } = state
 
-    await setState({
-      processedItems: [...processedItems, 'item-1', 'item-2'],
-    })
+		await setState({
+			processedItems: [...processedItems, 'item-1', 'item-2'],
+		})
 
-    return {
-      formatted: message.toUpperCase(),
-    }
-  },
+		return {
+			formatted: message.toUpperCase(),
+		}
+	},
 })
 
 const step2 = createStep({
-  stateSchema: z.object({
-    metadata: z.object({
-      processedBy: z.string(),
-    }),
-  }),
-  execute: async ({ inputData, state }) => {
-    const { formatted } = inputData
-    const { metadata } = state
+	stateSchema: z.object({
+		metadata: z.object({
+			processedBy: z.string(),
+		}),
+	}),
+	execute: async ({ inputData, state }) => {
+		const { formatted } = inputData
+		const { metadata } = state
 
-    return {
-      emphasized: `${formatted}!! ${metadata.processedBy}`,
-    }
-  },
+		return {
+			emphasized: `${formatted}!! ${metadata.processedBy}`,
+		}
+	},
 })
 
 export const testWorkflow = createWorkflow({
-  stateSchema: z.object({
-    processedItems: z.array(z.string()),
-    metadata: z.object({
-      processedBy: z.string(),
-    }),
-  }),
+	stateSchema: z.object({
+		processedItems: z.array(z.string()),
+		metadata: z.object({
+			processedBy: z.string(),
+		}),
+	}),
 })
-  .then(step1)
-  .then(step2)
-  .commit()
+	.then(step1)
+	.then(step2)
+	.commit()
 ```
 
 ## Setting initial state
@@ -98,11 +98,11 @@ Pass `initialState` when starting a workflow run to set the starting values:
 const run = await workflow.createRun()
 
 const result = await run.start({
-  inputData: { message: 'Hello' },
-  initialState: {
-    processedItems: [],
-    metadata: { processedBy: 'system' },
-  },
+	inputData: { message: 'Hello' },
+	initialState: {
+		processedItems: [],
+		metadata: { processedBy: 'system' },
+	},
 })
 ```
 
@@ -114,21 +114,21 @@ State automatically persists across suspend and resume cycles. When a workflow s
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
-  id: 'step-1',
-  inputSchema: z.object({}),
-  outputSchema: z.object({}),
-  stateSchema: z.object({ count: z.number(), items: z.array(z.string()) }),
-  resumeSchema: z.object({ proceed: z.boolean() }),
-  execute: async ({ state, setState, suspend, resumeData }) => {
-    if (!resumeData) {
-      // First run: update state and suspend
-      await setState({ count: state.count + 1, items: [...state.items, 'item-1'] })
-      await suspend({})
-      return {}
-    }
-    // After resume: state changes are preserved (count: 1, items: ["item-1"])
-    return {}
-  },
+	id: 'step-1',
+	inputSchema: z.object({}),
+	outputSchema: z.object({}),
+	stateSchema: z.object({ count: z.number(), items: z.array(z.string()) }),
+	resumeSchema: z.object({ proceed: z.boolean() }),
+	execute: async ({ state, setState, suspend, resumeData }) => {
+		if (!resumeData) {
+			// First run: update state and suspend
+			await setState({ count: state.count + 1, items: [...state.items, 'item-1'] })
+			await suspend({})
+			return {}
+		}
+		// After resume: state changes are preserved (count: 1, items: ["item-1"])
+		return {}
+	},
 })
 ```
 
@@ -138,46 +138,46 @@ When using nested workflows, state propagates from parent to child. Changes made
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 const nestedStep = createStep({
-  id: 'nested-step',
-  inputSchema: z.object({}),
-  outputSchema: z.object({ result: z.string() }),
-  stateSchema: z.object({ sharedValue: z.string() }),
-  execute: async ({ state }) => {
-    // Receives state modified by parent workflow
-    return { result: `Received: ${state.sharedValue}` }
-  },
+	id: 'nested-step',
+	inputSchema: z.object({}),
+	outputSchema: z.object({ result: z.string() }),
+	stateSchema: z.object({ sharedValue: z.string() }),
+	execute: async ({ state }) => {
+		// Receives state modified by parent workflow
+		return { result: `Received: ${state.sharedValue}` }
+	},
 })
 
 const nestedWorkflow = createWorkflow({
-  id: 'nested-workflow',
-  inputSchema: z.object({}),
-  outputSchema: z.object({ result: z.string() }),
-  stateSchema: z.object({ sharedValue: z.string() }),
+	id: 'nested-workflow',
+	inputSchema: z.object({}),
+	outputSchema: z.object({ result: z.string() }),
+	stateSchema: z.object({ sharedValue: z.string() }),
 })
-  .then(nestedStep)
-  .commit()
+	.then(nestedStep)
+	.commit()
 
 const parentStep = createStep({
-  id: 'parent-step',
-  inputSchema: z.object({}),
-  outputSchema: z.object({}),
-  stateSchema: z.object({ sharedValue: z.string() }),
-  execute: async ({ state, setState }) => {
-    // Modify state before nested workflow runs
-    await setState({ sharedValue: 'modified-by-parent' })
-    return {}
-  },
+	id: 'parent-step',
+	inputSchema: z.object({}),
+	outputSchema: z.object({}),
+	stateSchema: z.object({ sharedValue: z.string() }),
+	execute: async ({ state, setState }) => {
+		// Modify state before nested workflow runs
+		await setState({ sharedValue: 'modified-by-parent' })
+		return {}
+	},
 })
 
 const parentWorkflow = createWorkflow({
-  id: 'parent-workflow',
-  inputSchema: z.object({}),
-  outputSchema: z.object({ result: z.string() }),
-  stateSchema: z.object({ sharedValue: z.string() }),
+	id: 'parent-workflow',
+	inputSchema: z.object({}),
+	outputSchema: z.object({ result: z.string() }),
+	stateSchema: z.object({ sharedValue: z.string() }),
 })
-  .then(parentStep)
-  .then(nestedWorkflow)
-  .commit()
+	.then(parentStep)
+	.then(nestedWorkflow)
+	.commit()
 ```
 
 ## Related

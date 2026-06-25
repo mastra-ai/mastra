@@ -40,14 +40,14 @@ import { Mastra } from '@mastra/core'
 import { CloudflareDeployer } from '@mastra/deployer-cloudflare'
 
 export const mastra = new Mastra({
-  // highlight-start
-  deployer: new CloudflareDeployer({
-    name: 'your-project-name',
-    vars: {
-      NODE_ENV: 'production',
-    },
-  }),
-  // highlight-end
+	// highlight-start
+	deployer: new CloudflareDeployer({
+		name: 'your-project-name',
+		vars: {
+			NODE_ENV: 'production',
+		},
+	}),
+	// highlight-end
 })
 ```
 

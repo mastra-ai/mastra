@@ -23,10 +23,10 @@ import { ResponseCache } from '@mastra/core/processors'
 const cache = new InMemoryServerCache()
 
 const agent = new Agent({
-  name: 'Search Agent',
-  instructions: 'You answer questions concisely.',
-  model: '__GATEWAY_OPENAI_MODEL_BASE__',
-  inputProcessors: [new ResponseCache({ cache, ttl: 600 })],
+	name: 'Search Agent',
+	instructions: 'You answer questions concisely.',
+	model: '__GATEWAY_OPENAI_MODEL_BASE__',
+	inputProcessors: [new ResponseCache({ cache, ttl: 600 })],
 })
 
 // First call hits the LLM and writes to the cache.
@@ -37,7 +37,7 @@ await agent.generate('What is the capital of France?')
 
 // Force a fresh call but still update the cache.
 await agent.generate('What is the capital of France?', {
-  requestContext: ResponseCache.context({ bust: true }),
+	requestContext: ResponseCache.context({ bust: true }),
 })
 ```
 
@@ -47,51 +47,51 @@ See [Response caching](/docs/agents/processors#response-caching) for the concept
 
 <PropertiesTable
   content={[
-  {
-    name: 'cache',
-    type: 'MastraServerCache',
-    description:
-      'The cache backend. Required. Pass any `MastraServerCache` implementation — `InMemoryServerCache` for local development, `RedisCache` from `@mastra/redis` for production, or your own subclass for a custom backend.',
-    isOptional: false,
-  },
-  {
-    name: 'ttl',
-    type: 'number',
-    description:
-      "Time-to-live (seconds) for entries written by this processor. Defaults to 300 seconds (5 minutes), matching OpenRouter's reference implementation.",
-    isOptional: true,
-    defaultValue: '300',
-  },
-  {
-    name: 'scope',
-    type: 'string | null',
-    description:
-      'Tenant scope appended to the cache key. `null` opts out of scoping. When omitted, the processor falls back to the resource id resolved from the request context (`MASTRA_RESOURCE_ID_KEY`) for automatic per-user isolation.',
-    isOptional: true,
-  },
-  {
-    name: 'key',
-    type: 'string | (inputs: ResponseCacheKeyInputs) => string | Promise<string>',
-    description:
-      'Override the auto-derived cache key. Pass a string to pin a key, or a function that receives `{ agentId, scope, model, prompt, stepNumber }` and returns a key. If the function throws, the processor falls back to the deterministic hash so the call still benefits from caching.',
-    isOptional: true,
-  },
-  {
-    name: 'bust',
-    type: 'boolean',
-    description:
-      'Force a cache miss on every call: skip the read but still write on completion. Useful for explicit refresh paths.',
-    isOptional: true,
-    defaultValue: 'false',
-  },
-  {
-    name: 'agentId',
-    type: 'string',
-    description:
-      "Logical id used in the cache key namespace. Defaults to `'mastra-response-cache'`. Set this to the owning agent's id when you want cache entries scoped per-agent.",
-    isOptional: true,
-    defaultValue: "'mastra-response-cache'",
-  },
+	{
+		name: 'cache',
+		type: 'MastraServerCache',
+		description:
+			'The cache backend. Required. Pass any `MastraServerCache` implementation — `InMemoryServerCache` for local development, `RedisCache` from `@mastra/redis` for production, or your own subclass for a custom backend.',
+		isOptional: false,
+	},
+	{
+		name: 'ttl',
+		type: 'number',
+		description:
+			"Time-to-live (seconds) for entries written by this processor. Defaults to 300 seconds (5 minutes), matching OpenRouter's reference implementation.",
+		isOptional: true,
+		defaultValue: '300',
+	},
+	{
+		name: 'scope',
+		type: 'string | null',
+		description:
+			'Tenant scope appended to the cache key. `null` opts out of scoping. When omitted, the processor falls back to the resource id resolved from the request context (`MASTRA_RESOURCE_ID_KEY`) for automatic per-user isolation.',
+		isOptional: true,
+	},
+	{
+		name: 'key',
+		type: 'string | (inputs: ResponseCacheKeyInputs) => string | Promise<string>',
+		description:
+			'Override the auto-derived cache key. Pass a string to pin a key, or a function that receives `{ agentId, scope, model, prompt, stepNumber }` and returns a key. If the function throws, the processor falls back to the deterministic hash so the call still benefits from caching.',
+		isOptional: true,
+	},
+	{
+		name: 'bust',
+		type: 'boolean',
+		description:
+			'Force a cache miss on every call: skip the read but still write on completion. Useful for explicit refresh paths.',
+		isOptional: true,
+		defaultValue: 'false',
+	},
+	{
+		name: 'agentId',
+		type: 'string',
+		description:
+			"Logical id used in the cache key namespace. Defaults to `'mastra-response-cache'`. Set this to the owning agent's id when you want cache entries scoped per-agent.",
+		isOptional: true,
+		defaultValue: "'mastra-response-cache'",
+	},
 ]}
 />
 
@@ -105,7 +105,7 @@ Build a fresh `RequestContext` preloaded with per-call response cache overrides.
 
 ```typescript
 await agent.stream('hello', {
-  requestContext: ResponseCache.context({ key: 'custom', bust: true }),
+	requestContext: ResponseCache.context({ key: 'custom', bust: true }),
 })
 ```
 
@@ -126,24 +126,24 @@ The shape passed to `ResponseCache.context()` / `ResponseCache.applyContext()`.
 
 <PropertiesTable
   content={[
-  {
-    name: 'key',
-    type: 'string | (inputs: ResponseCacheKeyInputs) => string | Promise<string>',
-    description: 'Overrides the auto-derived cache key for this request only.',
-    isOptional: true,
-  },
-  {
-    name: 'scope',
-    type: 'string | null',
-    description: 'Overrides the tenant scope for this request only. `null` opts out of scoping.',
-    isOptional: true,
-  },
-  {
-    name: 'bust',
-    type: 'boolean',
-    description: 'Skip the cache read but still write on completion.',
-    isOptional: true,
-  },
+	{
+		name: 'key',
+		type: 'string | (inputs: ResponseCacheKeyInputs) => string | Promise<string>',
+		description: 'Overrides the auto-derived cache key for this request only.',
+		isOptional: true,
+	},
+	{
+		name: 'scope',
+		type: 'string | null',
+		description: 'Overrides the tenant scope for this request only. `null` opts out of scoping.',
+		isOptional: true,
+	},
+	{
+		name: 'bust',
+		type: 'boolean',
+		description: 'Skip the cache read but still write on completion.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -155,37 +155,37 @@ The argument passed to a `key` function (constructor or per-call). All fields co
 
 <PropertiesTable
   content={[
-  {
-    name: 'agentId',
-    type: 'string',
-    description: 'Logical processor id used to namespace the cache key.',
-    isOptional: false,
-  },
-  {
-    name: 'scope',
-    type: 'string | null | undefined',
-    description: 'Resolved scope for this request, or `null` when scoping is disabled.',
-    isOptional: true,
-  },
-  {
-    name: 'model',
-    type: '{ provider?: string; modelId?: string; specVersion?: string }',
-    description: 'Provider/model identity. Different models produce different responses.',
-    isOptional: false,
-  },
-  {
-    name: 'prompt',
-    type: 'LanguageModelV2Prompt',
-    description:
-      'The exact prompt the provider would receive, post memory load and post any prompt-modifying input processors.',
-    isOptional: false,
-  },
-  {
-    name: 'stepNumber',
-    type: 'number',
-    description: '0-indexed step number within the agentic loop. Greater than zero for tool steps.',
-    isOptional: false,
-  },
+	{
+		name: 'agentId',
+		type: 'string',
+		description: 'Logical processor id used to namespace the cache key.',
+		isOptional: false,
+	},
+	{
+		name: 'scope',
+		type: 'string | null | undefined',
+		description: 'Resolved scope for this request, or `null` when scoping is disabled.',
+		isOptional: true,
+	},
+	{
+		name: 'model',
+		type: '{ provider?: string; modelId?: string; specVersion?: string }',
+		description: 'Provider/model identity. Different models produce different responses.',
+		isOptional: false,
+	},
+	{
+		name: 'prompt',
+		type: 'LanguageModelV2Prompt',
+		description:
+			'The exact prompt the provider would receive, post memory load and post any prompt-modifying input processors.',
+		isOptional: false,
+	},
+	{
+		name: 'stepNumber',
+		type: 'number',
+		description: '0-indexed step number within the agentic loop. Greater than zero for tool steps.',
+		isOptional: false,
+	},
 ]}
 />
 

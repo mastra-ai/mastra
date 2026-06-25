@@ -40,14 +40,14 @@ import { Observability } from '@mastra/observability'
 import { LangfuseExporter } from '@mastra/langfuse'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      langfuse: {
-        serviceName: 'my-service',
-        exporters: [new LangfuseExporter()],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			langfuse: {
+				serviceName: 'my-service',
+				exporters: [new LangfuseExporter()],
+			},
+		},
+	}),
 })
 ```
 
@@ -61,22 +61,22 @@ import { Observability } from '@mastra/observability'
 import { LangfuseExporter } from '@mastra/langfuse'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      langfuse: {
-        serviceName: 'my-service',
-        exporters: [
-          new LangfuseExporter({
-            publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
-            secretKey: process.env.LANGFUSE_SECRET_KEY!,
-            baseUrl: process.env.LANGFUSE_BASE_URL,
-            environment: process.env.NODE_ENV,
-            release: process.env.GIT_COMMIT,
-          }),
-        ],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			langfuse: {
+				serviceName: 'my-service',
+				exporters: [
+					new LangfuseExporter({
+						publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+						secretKey: process.env.LANGFUSE_SECRET_KEY!,
+						baseUrl: process.env.LANGFUSE_BASE_URL,
+						environment: process.env.NODE_ENV,
+						release: process.env.GIT_COMMIT,
+					}),
+				],
+			},
+		},
+	}),
 })
 ```
 
@@ -92,9 +92,9 @@ Traces appear immediately in Langfuse dashboard, ideal for debugging:
 
 ```typescript
 new LangfuseExporter({
-  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
-  secretKey: process.env.LANGFUSE_SECRET_KEY!,
-  realtime: true, // Flush after each event
+	publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+	secretKey: process.env.LANGFUSE_SECRET_KEY!,
+	realtime: true, // Flush after each event
 })
 ```
 
@@ -104,9 +104,9 @@ Better performance with automatic batching:
 
 ```typescript
 new LangfuseExporter({
-  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
-  secretKey: process.env.LANGFUSE_SECRET_KEY!,
-  realtime: false, // Default - batch traces
+	publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+	secretKey: process.env.LANGFUSE_SECRET_KEY!,
+	realtime: false, // Default - batch traces
 })
 ```
 
@@ -116,10 +116,10 @@ For self-hosted Langfuse deployments or streamed runs that produce many spans pe
 
 ```typescript
 new LangfuseExporter({
-  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
-  secretKey: process.env.LANGFUSE_SECRET_KEY!,
-  flushAt: 500, // Maximum spans per OTEL export batch
-  flushInterval: 20, // Maximum seconds between flushes
+	publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+	secretKey: process.env.LANGFUSE_SECRET_KEY!,
+	flushAt: 500, // Maximum spans per OTEL export batch
+	flushInterval: 20, // Maximum seconds between flushes
 })
 ```
 
@@ -129,13 +129,13 @@ To suppress high-volume span types entirely (for example `MODEL_CHUNK` spans fro
 import { SpanType } from '@mastra/core/observability'
 
 new Observability({
-  configs: {
-    langfuse: {
-      serviceName: 'my-service',
-      exporters: [new LangfuseExporter()],
-      excludeSpanTypes: [SpanType.MODEL_CHUNK],
-    },
-  },
+	configs: {
+		langfuse: {
+			serviceName: 'my-service',
+			exporters: [new LangfuseExporter()],
+			excludeSpanTypes: [SpanType.MODEL_CHUNK],
+		},
+	},
 })
 ```
 
@@ -143,20 +143,20 @@ new Observability({
 
 ```typescript
 new LangfuseExporter({
-  // Required credentials
-  publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
-  secretKey: process.env.LANGFUSE_SECRET_KEY!,
+	// Required credentials
+	publicKey: process.env.LANGFUSE_PUBLIC_KEY!,
+	secretKey: process.env.LANGFUSE_SECRET_KEY!,
 
-  // Optional settings
-  baseUrl: process.env.LANGFUSE_BASE_URL, // Default: https://cloud.langfuse.com
-  realtime: process.env.NODE_ENV === 'development', // Dynamic mode selection
-  flushAt: 500, // Maximum spans per OTEL export batch
-  flushInterval: 20, // Maximum seconds between flushes
-  logLevel: 'info', // Diagnostic logging: debug | info | warn | error
+	// Optional settings
+	baseUrl: process.env.LANGFUSE_BASE_URL, // Default: https://cloud.langfuse.com
+	realtime: process.env.NODE_ENV === 'development', // Dynamic mode selection
+	flushAt: 500, // Maximum spans per OTEL export batch
+	flushInterval: 20, // Maximum seconds between flushes
+	logLevel: 'info', // Diagnostic logging: debug | info | warn | error
 
-  // Langfuse-specific settings
-  environment: process.env.NODE_ENV, // Shows in Langfuse UI for filtering
-  release: process.env.GIT_COMMIT, // Git commit hash for version tracking
+	// Langfuse-specific settings
+	environment: process.env.NODE_ENV, // Shows in Langfuse UI for filtering
+	release: process.env.GIT_COMMIT, // Git commit hash for version tracking
 })
 ```
 
@@ -189,12 +189,12 @@ To add your own top-level metadata, set keys under `langfuse` in your span metad
 
 ```typescript
 const tracingOptions = {
-  metadata: {
-    langfuse: {
-      customerId: 'cust_123',
-      tier: 'enterprise',
-    },
-  },
+	metadata: {
+		langfuse: {
+			customerId: 'cust_123',
+			tier: 'enterprise',
+		},
+	},
 }
 ```
 
@@ -225,14 +225,14 @@ const exporter = new LangfuseExporter()
 const prompt = await exporter.client.prompt.get('customer-support', { type: 'text' })
 
 export const supportAgent = new Agent({
-  name: 'support-agent',
-  instructions: prompt.compile(), // Use the prompt text from Langfuse
-  model: '__GATEWAY_OPENAI_MODEL__',
-  defaultGenerateOptions: {
-    tracingOptions: buildTracingOptions(
-      withLangfusePrompt({ name: prompt.name, version: prompt.version }),
-    ),
-  },
+	name: 'support-agent',
+	instructions: prompt.compile(), // Use the prompt text from Langfuse
+	model: '__GATEWAY_OPENAI_MODEL__',
+	defaultGenerateOptions: {
+		tracingOptions: buildTracingOptions(
+			withLangfusePrompt({ name: prompt.name, version: prompt.version }),
+		),
+	},
 })
 ```
 

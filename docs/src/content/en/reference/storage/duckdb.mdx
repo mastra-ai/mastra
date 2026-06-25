@@ -42,24 +42,24 @@ import { DuckDBStore } from '@mastra/duckdb'
 import { Observability, MastraStorageExporter } from '@mastra/observability'
 
 export const mastra = new Mastra({
-  storage: new MastraCompositeStore({
-    id: 'composite-storage',
-    default: new LibSQLStore({
-      id: 'mastra-storage',
-      url: 'file:./mastra.db',
-    }),
-    domains: {
-      observability: new DuckDBStore().observability,
-    },
-  }),
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'mastra',
-        exporters: [new MastraStorageExporter()],
-      },
-    },
-  }),
+	storage: new MastraCompositeStore({
+		id: 'composite-storage',
+		default: new LibSQLStore({
+			id: 'mastra-storage',
+			url: 'file:./mastra.db',
+		}),
+		domains: {
+			observability: new DuckDBStore().observability,
+		},
+	}),
+	observability: new Observability({
+		configs: {
+			default: {
+				serviceName: 'mastra',
+				exporters: [new MastraStorageExporter()],
+			},
+		},
+	}),
 })
 ```
 
@@ -96,20 +96,20 @@ const duckdb = new DuckDBStore({ path: ':memory:' })
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Unique identifier for this storage instance.',
-    isOptional: true,
-    defaultValue: "'duckdb'",
-  },
-  {
-    name: 'path',
-    type: 'string',
-    description: 'Path to the DuckDB database file. Use `:memory:` for an ephemeral in-memory database.',
-    isOptional: true,
-    defaultValue: "'mastra.duckdb'",
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Unique identifier for this storage instance.',
+		isOptional: true,
+		defaultValue: "'duckdb'",
+	},
+	{
+		name: 'path',
+		type: 'string',
+		description: 'Path to the DuckDB database file. Use `:memory:` for an ephemeral in-memory database.',
+		isOptional: true,
+		defaultValue: "'mastra.duckdb'",
+	},
 ]}
 />
 

@@ -17,12 +17,12 @@ import { Mastra } from '@mastra/core'
 import { MastraAuthWorkos } from '@mastra/auth-workos'
 
 export const mastra = new Mastra({
-  server: {
-    auth: new MastraAuthWorkos({
-      apiKey: process.env.WORKOS_API_KEY,
-      clientId: process.env.WORKOS_CLIENT_ID,
-    }),
-  },
+	server: {
+		auth: new MastraAuthWorkos({
+			apiKey: process.env.WORKOS_API_KEY,
+			clientId: process.env.WORKOS_CLIENT_ID,
+		}),
+	},
 })
 ```
 
@@ -36,59 +36,59 @@ You can omit the constructor parameters if you have the appropriately named envi
 
 <PropertiesTable
   content={[
-  {
-    name: 'apiKey',
-    type: 'string',
-    description:
-      'Your WorkOS API key. This is used to authenticate with the WorkOS API for user verification and organization management.',
-    isOptional: true,
-    defaultValue: 'process.env.WORKOS_API_KEY',
-  },
-  {
-    name: 'clientId',
-    type: 'string',
-    description:
-      'Your WorkOS Client ID. This identifies your application when exchanging authorization codes for access tokens.',
-    isOptional: true,
-    defaultValue: 'process.env.WORKOS_CLIENT_ID',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: 'Custom name for the auth provider instance.',
-    isOptional: true,
-    defaultValue: '"workos"',
-  },
-  {
-    name: 'redirectUri',
-    type: 'string',
-    description: 'OAuth redirect URI used by WorkOS AuthKit. Set this when you use the built-in WorkOS sign-in flow.',
-    isOptional: true,
-    defaultValue: 'process.env.WORKOS_REDIRECT_URI',
-  },
-  {
-    name: 'fetchMemberships',
-    type: 'boolean',
-    description:
-      'Loads organization memberships during authentication. Set this to `true` when you use `MastraFGAWorkos` so FGA checks can resolve the correct organization membership ID.',
-    isOptional: true,
-    defaultValue: 'false',
-  },
-  {
-    name: 'trustJwtClaims',
-    type: 'boolean',
-    description:
-      'Trusts verified bearer-token claims enough to construct a `WorkOSUser` even when `workos.userManagement.getUser()` does not apply. Use this for service-account or machine-to-machine tokens backed by a WorkOS custom JWT template.',
-    isOptional: true,
-    defaultValue: 'false',
-  },
-  {
-    name: 'jwtClaims',
-    type: '{ userId?: string; workosId?: string; email?: string; name?: string; organizationId?: string; organizationMembershipId?: string }',
-    description:
-      'Maps verified bearer JWT claims into the authenticated `WorkOSUser`. Useful for custom JWT templates that include `organizationMembershipId` or other FGA-specific claims.',
-    isOptional: true,
-  },
+	{
+		name: 'apiKey',
+		type: 'string',
+		description:
+			'Your WorkOS API key. This is used to authenticate with the WorkOS API for user verification and organization management.',
+		isOptional: true,
+		defaultValue: 'process.env.WORKOS_API_KEY',
+	},
+	{
+		name: 'clientId',
+		type: 'string',
+		description:
+			'Your WorkOS Client ID. This identifies your application when exchanging authorization codes for access tokens.',
+		isOptional: true,
+		defaultValue: 'process.env.WORKOS_CLIENT_ID',
+	},
+	{
+		name: 'name',
+		type: 'string',
+		description: 'Custom name for the auth provider instance.',
+		isOptional: true,
+		defaultValue: '"workos"',
+	},
+	{
+		name: 'redirectUri',
+		type: 'string',
+		description: 'OAuth redirect URI used by WorkOS AuthKit. Set this when you use the built-in WorkOS sign-in flow.',
+		isOptional: true,
+		defaultValue: 'process.env.WORKOS_REDIRECT_URI',
+	},
+	{
+		name: 'fetchMemberships',
+		type: 'boolean',
+		description:
+			'Loads organization memberships during authentication. Set this to `true` when you use `MastraFGAWorkos` so FGA checks can resolve the correct organization membership ID.',
+		isOptional: true,
+		defaultValue: 'false',
+	},
+	{
+		name: 'trustJwtClaims',
+		type: 'boolean',
+		description:
+			'Trusts verified bearer-token claims enough to construct a `WorkOSUser` even when `workos.userManagement.getUser()` does not apply. Use this for service-account or machine-to-machine tokens backed by a WorkOS custom JWT template.',
+		isOptional: true,
+		defaultValue: 'false',
+	},
+	{
+		name: 'jwtClaims',
+		type: '{ userId?: string; workosId?: string; email?: string; name?: string; organizationId?: string; organizationMembershipId?: string }',
+		description:
+			'Maps verified bearer JWT claims into the authenticated `WorkOSUser`. Useful for custom JWT templates that include `organizationMembershipId` or other FGA-specific claims.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -98,24 +98,24 @@ The following environment variables are automatically used when constructor opti
 
 <PropertiesTable
   content={[
-  {
-    name: 'WORKOS_API_KEY',
-    type: 'string',
-    description: 'Your WorkOS API key. Can be found in your WorkOS Dashboard under API Keys.',
-    isOptional: true,
-  },
-  {
-    name: 'WORKOS_CLIENT_ID',
-    type: 'string',
-    description: 'Your WorkOS Client ID. Can be found in your WorkOS Dashboard under Applications.',
-    isOptional: true,
-  },
-  {
-    name: 'WORKOS_REDIRECT_URI',
-    type: 'string',
-    description: 'OAuth redirect URI used by WorkOS AuthKit when you use the built-in session-based flow.',
-    isOptional: true,
-  },
+	{
+		name: 'WORKOS_API_KEY',
+		type: 'string',
+		description: 'Your WorkOS API key. Can be found in your WorkOS Dashboard under API Keys.',
+		isOptional: true,
+	},
+	{
+		name: 'WORKOS_CLIENT_ID',
+		type: 'string',
+		description: 'Your WorkOS Client ID. Can be found in your WorkOS Dashboard under Applications.',
+		isOptional: true,
+	},
+	{
+		name: 'WORKOS_REDIRECT_URI',
+		type: 'string',
+		description: 'OAuth redirect URI used by WorkOS AuthKit when you use the built-in session-based flow.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -143,14 +143,14 @@ If your WorkOS JWT template includes custom claims, you can map them directly in
 import { MastraAuthWorkos } from '@mastra/auth-workos'
 
 const auth = new MastraAuthWorkos({
-  apiKey: process.env.WORKOS_API_KEY,
-  clientId: process.env.WORKOS_CLIENT_ID,
-  redirectUri: process.env.WORKOS_REDIRECT_URI,
-  trustJwtClaims: true,
-  jwtClaims: {
-    organizationId: 'org_id',
-    organizationMembershipId: 'urn:mastra:organization_membership_id',
-  },
+	apiKey: process.env.WORKOS_API_KEY,
+	clientId: process.env.WORKOS_CLIENT_ID,
+	redirectUri: process.env.WORKOS_REDIRECT_URI,
+	trustJwtClaims: true,
+	jwtClaims: {
+		organizationId: 'org_id',
+		organizationMembershipId: 'urn:mastra:organization_membership_id',
+	},
 })
 ```
 
@@ -165,9 +165,9 @@ import { MastraAuthWorkos } from '@mastra/auth-workos'
 import type { HonoRequest } from 'hono'
 
 class AdminOnlyWorkosAuth extends MastraAuthWorkos {
-  async authorizeUser(user: any, _request: HonoRequest): Promise<boolean> {
-    return user?.metadata?.role === 'admin'
-  }
+	async authorizeUser(user: any, _request: HonoRequest): Promise<boolean> {
+		return user?.metadata?.role === 'admin'
+	}
 }
 ```
 

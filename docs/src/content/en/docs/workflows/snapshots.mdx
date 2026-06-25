@@ -38,50 +38,50 @@ Each snapshot includes the `runId`, input, step status (`success`, `suspended`, 
 
 ```json
 {
-  "runId": "34904c14-e79e-4a12-9804-9655d4616c50",
-  "status": "success",
-  "value": {},
-  "context": {
-    "input": {
-      "value": 100,
-      "user": "Michael",
-      "requiredApprovers": ["manager", "finance"]
-    },
-    "approval-step": {
-      "payload": {
-        "value": 100,
-        "user": "Michael",
-        "requiredApprovers": ["manager", "finance"]
-      },
-      "startedAt": 1758027577955,
-      "status": "success",
-      "suspendPayload": {
-        "message": "Workflow suspended",
-        "requestedBy": "Michael",
-        "approvers": ["manager", "finance"]
-      },
-      "suspendedAt": 1758027578065,
-      "resumePayload": { "confirm": true, "approver": "manager" },
-      "resumedAt": 1758027578517,
-      "output": { "value": 100, "approved": true },
-      "endedAt": 1758027578634
-    }
-  },
-  "activePaths": [],
-  "serializedStepGraph": [
-    {
-      "type": "step",
-      "step": {
-        "id": "approval-step",
-        "description": "Accepts a value, waits for confirmation"
-      }
-    }
-  ],
-  "suspendedPaths": {},
-  "waitingPaths": {},
-  "result": { "value": 100, "approved": true },
-  "requestContext": {},
-  "timestamp": 1758027578740
+	"runId": "34904c14-e79e-4a12-9804-9655d4616c50",
+	"status": "success",
+	"value": {},
+	"context": {
+		"input": {
+			"value": 100,
+			"user": "Michael",
+			"requiredApprovers": ["manager", "finance"]
+		},
+		"approval-step": {
+			"payload": {
+				"value": 100,
+				"user": "Michael",
+				"requiredApprovers": ["manager", "finance"]
+			},
+			"startedAt": 1758027577955,
+			"status": "success",
+			"suspendPayload": {
+				"message": "Workflow suspended",
+				"requestedBy": "Michael",
+				"approvers": ["manager", "finance"]
+			},
+			"suspendedAt": 1758027578065,
+			"resumePayload": { "confirm": true, "approver": "manager" },
+			"resumedAt": 1758027578517,
+			"output": { "value": 100, "approved": true },
+			"endedAt": 1758027578634
+		}
+	},
+	"activePaths": [],
+	"serializedStepGraph": [
+		{
+			"type": "step",
+			"step": {
+				"id": "approval-step",
+				"description": "Accepts a value, waits for confirmation"
+			}
+		}
+	],
+	"suspendedPaths": {},
+	"waitingPaths": {},
+	"result": { "value": 100, "approved": true },
+	"requestContext": {},
+	"timestamp": 1758027578740
 }
 ```
 
@@ -120,8 +120,8 @@ const storage = mastra.getStorage()
 const workflowStore = await storage?.getStore('workflows')
 
 const snapshot = await workflowStore?.loadWorkflowSnapshot({
-  runId: '<run-id>',
-  workflowName: '<workflow-id>',
+	runId: '<run-id>',
+	workflowName: '<workflow-id>',
 })
 
 console.log(snapshot)
@@ -137,11 +137,11 @@ import { LibSQLStore } from '@mastra/libsql'
 import { approvalWorkflow } from './workflows'
 
 export const mastra = new Mastra({
-  storage: new LibSQLStore({
-    id: 'mastra-storage',
-    url: ':memory:',
-  }),
-  workflows: { approvalWorkflow },
+	storage: new LibSQLStore({
+		id: 'mastra-storage',
+		url: ':memory:',
+	}),
+	workflows: { approvalWorkflow },
 })
 ```
 
@@ -170,43 +170,43 @@ import { createWorkflow, createStep } from '@mastra/core/workflows'
 import { z } from 'zod'
 
 const approvalStep = createStep({
-  id: 'approval-step',
-  description: 'Accepts a value, waits for confirmation',
-  inputSchema: z.object({
-    value: z.number(),
-    user: z.string(),
-    requiredApprovers: z.array(z.string()),
-  }),
-  suspendSchema: z.object({
-    message: z.string(),
-    requestedBy: z.string(),
-    approvers: z.array(z.string()),
-  }),
-  resumeSchema: z.object({
-    confirm: z.boolean(),
-    approver: z.string(),
-  }),
-  outputSchema: z.object({
-    value: z.number(),
-    approved: z.boolean(),
-  }),
-  execute: async ({ inputData, resumeData, suspend }) => {
-    const { value, user, requiredApprovers } = inputData
-    const { confirm } = resumeData ?? {}
+	id: 'approval-step',
+	description: 'Accepts a value, waits for confirmation',
+	inputSchema: z.object({
+		value: z.number(),
+		user: z.string(),
+		requiredApprovers: z.array(z.string()),
+	}),
+	suspendSchema: z.object({
+		message: z.string(),
+		requestedBy: z.string(),
+		approvers: z.array(z.string()),
+	}),
+	resumeSchema: z.object({
+		confirm: z.boolean(),
+		approver: z.string(),
+	}),
+	outputSchema: z.object({
+		value: z.number(),
+		approved: z.boolean(),
+	}),
+	execute: async ({ inputData, resumeData, suspend }) => {
+		const { value, user, requiredApprovers } = inputData
+		const { confirm } = resumeData ?? {}
 
-    if (!confirm) {
-      return await suspend({
-        message: 'Workflow suspended',
-        requestedBy: user,
-        approvers: [...requiredApprovers],
-      })
-    }
+		if (!confirm) {
+			return await suspend({
+				message: 'Workflow suspended',
+				requestedBy: user,
+				approvers: [...requiredApprovers],
+			})
+		}
 
-    return {
-      value,
-      approved: confirm,
-    }
-  },
+		return {
+			value,
+			approved: confirm,
+		}
+	},
 })
 ```
 
@@ -220,21 +220,21 @@ const workflow = mastra.getWorkflow('approvalWorkflow')
 const run = await workflow.createRun()
 
 const result = await run.start({
-  inputData: {
-    value: 100,
-    user: 'Michael',
-    requiredApprovers: ['manager', 'finance'],
-  },
+	inputData: {
+		value: 100,
+		user: 'Michael',
+		requiredApprovers: ['manager', 'finance'],
+	},
 })
 
 if (result.status === 'suspended') {
-  const resumedResult = await run.resume({
-    step: 'approval-step',
-    resumeData: {
-      confirm: true,
-      approver: 'manager',
-    },
-  })
+	const resumedResult = await run.resume({
+		step: 'approval-step',
+		resumeData: {
+			confirm: true,
+			approver: 'manager',
+		},
+	})
 }
 ```
 

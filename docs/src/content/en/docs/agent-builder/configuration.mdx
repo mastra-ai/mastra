@@ -20,17 +20,17 @@ The Agent Builder is configured through `MastraEditor.builder`. Two top-level ke
 import { MastraEditor } from '@mastra/editor'
 
 new MastraEditor({
-  builder: {
-    enabled: true,
-    features: {
-      agent: { browser: false },
-    },
-    configuration: {
-      agent: {
-        memory: { observationalMemory: true },
-      },
-    },
-  },
+	builder: {
+		enabled: true,
+		features: {
+			agent: { browser: false },
+		},
+		configuration: {
+			agent: {
+				memory: { observationalMemory: true },
+			},
+		},
+	},
 })
 ```
 
@@ -42,24 +42,24 @@ This hides the browser tab in the Builder UI and pins observational memory as th
 
 ```typescript title="src/mastra/index.ts"
 new MastraEditor({
-  builder: {
-    enabled: true,
-    features: {
-      agent: {
-        tools: true,
-        agents: true,
-        workflows: true,
-        scorers: true,
-        skills: true,
-        memory: true,
-        variables: true,
-        favorites: true,
-        avatarUpload: true,
-        model: true,
-        browser: true,
-      },
-    },
-  },
+	builder: {
+		enabled: true,
+		features: {
+			agent: {
+				tools: true,
+				agents: true,
+				workflows: true,
+				scorers: true,
+				skills: true,
+				memory: true,
+				variables: true,
+				favorites: true,
+				avatarUpload: true,
+				model: true,
+				browser: true,
+			},
+		},
+	},
 })
 ```
 
@@ -83,21 +83,21 @@ import { weatherInfo } from './tools/weather-info'
 import { webSearch } from './tools/web-search'
 
 export const mastra = new Mastra({
-  tools: {
-    weatherInfo,
-    webSearch,
-    // add MCP tools or additional tools here
-  },
-  agents: {
-    builderAgent: createBuilderAgent(),
-    // add additional agents here
-  },
-  workflows: {
-    // add workflows here
-  },
-  editor: new MastraEditor({
-    builder: { enabled: true },
-  }),
+	tools: {
+		weatherInfo,
+		webSearch,
+		// add MCP tools or additional tools here
+	},
+	agents: {
+		builderAgent: createBuilderAgent(),
+		// add additional agents here
+	},
+	workflows: {
+		// add workflows here
+	},
+	editor: new MastraEditor({
+		builder: { enabled: true },
+	}),
 })
 ```
 
@@ -119,16 +119,16 @@ Unknown IDs are dropped and surfaced as warnings through `getModelPolicyWarnings
 
 ```typescript title="src/mastra/index.ts"
 new MastraEditor({
-  builder: {
-    enabled: true,
-    configuration: {
-      agent: {
-        tools: { allowed: ['weather-info', 'web-search'] },
-        agents: { allowed: ['weather-agent'] },
-        workflows: { allowed: ['greet-workflow'] },
-      },
-    },
-  },
+	builder: {
+		enabled: true,
+		configuration: {
+			agent: {
+				tools: { allowed: ['weather-info', 'web-search'] },
+				agents: { allowed: ['weather-agent'] },
+				workflows: { allowed: ['greet-workflow'] },
+			},
+		},
+	},
 })
 ```
 

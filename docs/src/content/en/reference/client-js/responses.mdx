@@ -21,13 +21,13 @@ This API is currently experimental.
 import { MastraClient } from '@mastra/client-js'
 
 const client = new MastraClient({
-  baseUrl: 'http://localhost:4111',
+	baseUrl: 'http://localhost:4111',
 })
 
 const response = await client.responses.create({
-  agent_id: 'support-agent',
-  input: 'Summarize this ticket',
-  store: true,
+	agent_id: 'support-agent',
+	input: 'Summarize this ticket',
+	store: true,
 })
 
 console.log(response.output_text)
@@ -43,8 +43,8 @@ Creates a response.
 
 ```typescript
 const response = await client.responses.create({
-  agent_id: 'support-agent',
-  input: 'Summarize this ticket',
+	agent_id: 'support-agent',
+	input: 'Summarize this ticket',
 })
 ```
 
@@ -54,15 +54,15 @@ When `stream: true`, `create()` returns an async iterable of SSE-style event pay
 
 ```typescript
 const stream = await client.responses.create({
-  agent_id: 'support-agent',
-  input: 'Summarize this ticket',
-  stream: true,
+	agent_id: 'support-agent',
+	input: 'Summarize this ticket',
+	stream: true,
 })
 
 for await (const event of stream) {
-  if (event.type === 'response.output_text.delta') {
-    process.stdout.write(event.delta)
-  }
+	if (event.type === 'response.output_text.delta') {
+		process.stdout.write(event.delta)
+	}
 }
 ```
 
@@ -96,12 +96,12 @@ Creates a streaming response.
 
 ```typescript
 const stream = await client.responses.stream({
-  agent_id: 'support-agent',
-  input: 'Say hello',
+	agent_id: 'support-agent',
+	input: 'Say hello',
 })
 
 for await (const event of stream) {
-  console.log(event.type)
+	console.log(event.type)
 }
 ```
 
@@ -118,16 +118,16 @@ Use `previous_response_id` when you want to continue from a previous stored resp
 
 ```typescript
 const first = await client.responses.create({
-  agent_id: 'support-agent',
-  input: 'Start a support thread',
-  store: true,
+	agent_id: 'support-agent',
+	input: 'Start a support thread',
+	store: true,
 })
 
 const second = await client.responses.create({
-  agent_id: 'support-agent',
-  conversation_id: first.conversation_id!,
-  input: 'Add a follow-up to the same thread',
-  store: true,
+	agent_id: 'support-agent',
+	conversation_id: first.conversation_id!,
+	input: 'Add a follow-up to the same thread',
+	store: true,
 })
 ```
 
@@ -152,23 +152,23 @@ Both formats return JSON in the assistant message content. Use `json_schema` whe
 
 ```typescript
 const response = await client.responses.create({
-  agent_id: 'support-agent',
-  input: 'Return a structured support ticket summary.',
-  text: {
-    format: {
-      type: 'json_schema',
-      name: 'ticket_summary',
-      schema: {
-        type: 'object',
-        properties: {
-          summary: { type: 'string' },
-          priority: { type: 'string' },
-        },
-        required: ['summary', 'priority'],
-        additionalProperties: false,
-      },
-    },
-  },
+	agent_id: 'support-agent',
+	input: 'Return a structured support ticket summary.',
+	text: {
+		format: {
+			type: 'json_schema',
+			name: 'ticket_summary',
+			schema: {
+				type: 'object',
+				properties: {
+					summary: { type: 'string' },
+					priority: { type: 'string' },
+				},
+				required: ['summary', 'priority'],
+				additionalProperties: false,
+			},
+		},
+	},
 })
 ```
 
@@ -178,13 +178,13 @@ Use `providerOptions` when you need provider-specific options that Mastra doesn'
 
 ```typescript
 const response = await client.responses.create({
-  agent_id: 'support-agent',
-  input: 'Continue this exchange',
-  providerOptions: {
-    openai: {
-      previousResponseId: 'resp_123',
-    },
-  },
+	agent_id: 'support-agent',
+	input: 'Continue this exchange',
+	providerOptions: {
+		openai: {
+			previousResponseId: 'resp_123',
+		},
+	},
 })
 ```
 
@@ -203,74 +203,74 @@ The returned response object includes:
 
 <PropertiesTable
   content={[
-  {
-    name: 'agent_id',
-    type: 'string',
-    description:
-      'Required on initial requests. Selects the Mastra agent that executes the request. Stored follow-up turns can omit it when continuing with `previous_response_id`.',
-    isOptional: true,
-  },
-  {
-    name: 'model',
-    type: 'string',
-    description:
-      'Optional model override for this request, such as `openai/gpt-5`. If omitted, Mastra uses the model configured on the selected agent.',
-    isOptional: true,
-  },
-  {
-    name: 'input',
-    type: "string | Array<{ role: 'system' | 'developer' | 'user' | 'assistant'; content: string | Array<{ type: 'input_text' | 'text' | 'output_text'; text: string }> }>",
-    description: 'Required. Input text or message array for the response.',
-    isOptional: false,
-  },
-  {
-    name: 'instructions',
-    type: 'string',
-    description: 'Optional instruction override for this request.',
-    isOptional: true,
-  },
-  {
-    name: 'text',
-    type: "{ format: { type: 'json_object' } | { type: 'json_schema'; name: string; schema: Record<string, unknown>; description?: string; strict?: boolean } }",
-    description:
-      'Optional text output format. Use `json_object` for JSON mode or `json_schema` for schema-constrained structured output.',
-    isOptional: true,
-  },
-  {
-    name: 'providerOptions',
-    type: 'Record<string, Record<string, unknown> | undefined>',
-    description: 'Optional provider-specific options passed through to the underlying model call.',
-    isOptional: true,
-  },
-  {
-    name: 'stream',
-    type: 'boolean',
-    description: 'When true, returns an async iterable of Responses API events.',
-    isOptional: true,
-  },
-  {
-    name: 'store',
-    type: 'boolean',
-    description: 'When true, persists the response through the selected agent memory.',
-    isOptional: true,
-  },
-  {
-    name: 'conversation_id',
-    type: 'string',
-    description: 'Optional conversation identifier. In Mastra, this is the raw memory thread ID.',
-    isOptional: true,
-  },
-  {
-    name: 'previous_response_id',
-    type: 'string',
-    description: 'Continues a stored response chain from a previous stored response.',
-    isOptional: true,
-  },
-  {
-    name: 'requestContext',
-    type: 'RequestContext | Record<string, any>',
-    description: 'Optional request context forwarded to the Mastra server.',
-    isOptional: true,
-  },
+	{
+		name: 'agent_id',
+		type: 'string',
+		description:
+			'Required on initial requests. Selects the Mastra agent that executes the request. Stored follow-up turns can omit it when continuing with `previous_response_id`.',
+		isOptional: true,
+	},
+	{
+		name: 'model',
+		type: 'string',
+		description:
+			'Optional model override for this request, such as `openai/gpt-5`. If omitted, Mastra uses the model configured on the selected agent.',
+		isOptional: true,
+	},
+	{
+		name: 'input',
+		type: "string | Array<{ role: 'system' | 'developer' | 'user' | 'assistant'; content: string | Array<{ type: 'input_text' | 'text' | 'output_text'; text: string }> }>",
+		description: 'Required. Input text or message array for the response.',
+		isOptional: false,
+	},
+	{
+		name: 'instructions',
+		type: 'string',
+		description: 'Optional instruction override for this request.',
+		isOptional: true,
+	},
+	{
+		name: 'text',
+		type: "{ format: { type: 'json_object' } | { type: 'json_schema'; name: string; schema: Record<string, unknown>; description?: string; strict?: boolean } }",
+		description:
+			'Optional text output format. Use `json_object` for JSON mode or `json_schema` for schema-constrained structured output.',
+		isOptional: true,
+	},
+	{
+		name: 'providerOptions',
+		type: 'Record<string, Record<string, unknown> | undefined>',
+		description: 'Optional provider-specific options passed through to the underlying model call.',
+		isOptional: true,
+	},
+	{
+		name: 'stream',
+		type: 'boolean',
+		description: 'When true, returns an async iterable of Responses API events.',
+		isOptional: true,
+	},
+	{
+		name: 'store',
+		type: 'boolean',
+		description: 'When true, persists the response through the selected agent memory.',
+		isOptional: true,
+	},
+	{
+		name: 'conversation_id',
+		type: 'string',
+		description: 'Optional conversation identifier. In Mastra, this is the raw memory thread ID.',
+		isOptional: true,
+	},
+	{
+		name: 'previous_response_id',
+		type: 'string',
+		description: 'Continues a stored response chain from a previous stored response.',
+		isOptional: true,
+	},
+	{
+		name: 'requestContext',
+		type: 'RequestContext | Record<string, any>',
+		description: 'Optional request context forwarded to the Mastra server.',
+		isOptional: true,
+	},
 ]}
 />

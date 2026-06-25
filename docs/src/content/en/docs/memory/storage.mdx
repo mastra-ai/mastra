@@ -21,10 +21,10 @@ import { Mastra } from '@mastra/core'
 import { LibSQLStore } from '@mastra/libsql'
 
 export const mastra = new Mastra({
-  storage: new LibSQLStore({
-    id: 'mastra-storage',
-    url: 'file:./mastra.db',
-  }),
+	storage: new LibSQLStore({
+		id: 'mastra-storage',
+		url: 'file:./mastra.db',
+	}),
 })
 ```
 
@@ -76,10 +76,10 @@ import { Mastra } from '@mastra/core'
 import { PostgresStore } from '@mastra/pg'
 
 export const mastra = new Mastra({
-  storage: new PostgresStore({
-    id: 'mastra-storage',
-    connectionString: process.env.DATABASE_URL,
-  }),
+	storage: new PostgresStore({
+		id: 'mastra-storage',
+		connectionString: process.env.DATABASE_URL,
+	}),
 })
 
 // Both agents inherit storage from the Mastra instance above
@@ -101,19 +101,19 @@ import { WorkflowsPG } from '@mastra/pg'
 import { ObservabilityStorageClickhouse } from '@mastra/clickhouse'
 
 export const mastra = new Mastra({
-  storage: new MastraCompositeStore({
-    id: 'composite',
-    domains: {
-      // highlight-next-line
-      memory: new MemoryLibSQL({ url: 'file:./memory.db' }),
-      workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
-      observability: new ObservabilityStorageClickhouse({
-        url: process.env.CLICKHOUSE_URL,
-        username: process.env.CLICKHOUSE_USERNAME,
-        password: process.env.CLICKHOUSE_PASSWORD,
-      }),
-    },
-  }),
+	storage: new MastraCompositeStore({
+		id: 'composite',
+		domains: {
+			// highlight-next-line
+			memory: new MemoryLibSQL({ url: 'file:./memory.db' }),
+			workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
+			observability: new ObservabilityStorageClickhouse({
+				url: process.env.CLICKHOUSE_URL,
+				username: process.env.CLICKHOUSE_USERNAME,
+				password: process.env.CLICKHOUSE_PASSWORD,
+			}),
+		},
+	}),
 })
 ```
 
@@ -129,13 +129,13 @@ import { Memory } from '@mastra/memory'
 import { PostgresStore } from '@mastra/pg'
 
 export const agent = new Agent({
-  id: 'agent',
-  memory: new Memory({
-    storage: new PostgresStore({
-      id: 'agent-storage',
-      connectionString: process.env.AGENT_DATABASE_URL,
-    }),
-  }),
+	id: 'agent',
+	memory: new Memory({
+		storage: new PostgresStore({
+			id: 'agent-storage',
+			connectionString: process.env.AGENT_DATABASE_URL,
+		}),
+	}),
 })
 ```
 
@@ -152,10 +152,10 @@ Both identifiers are required for agents to store information:
   <TabItem value="generate" label=".generate()">
     ```typescript
     const response = await agent.generate('hello', {
-      memory: {
-        thread: 'conversation-abc-123',
-        resource: 'user_123',
-      },
+    	memory: {
+    		thread: 'conversation-abc-123',
+    		resource: 'user_123',
+    	},
     })
     ```
   </TabItem>
@@ -163,10 +163,10 @@ Both identifiers are required for agents to store information:
   <TabItem value="stream" label=".stream()">
     ```typescript
     const stream = await agent.stream('hello', {
-      memory: {
-        thread: 'conversation-abc-123',
-        resource: 'user_123',
-      },
+    	memory: {
+    		thread: 'conversation-abc-123',
+    		resource: 'user_123',
+    	},
     })
     ```
   </TabItem>
@@ -184,12 +184,12 @@ Use this option when implementing a ChatGPT-style chat interface to render a tit
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 export const agent = new Agent({
-  id: 'agent',
-  memory: new Memory({
-    options: {
-      generateTitle: true,
-    },
-  }),
+	id: 'agent',
+	memory: new Memory({
+		options: {
+			generateTitle: true,
+		},
+	}),
 })
 ```
 
@@ -199,15 +199,15 @@ To optimize cost or behavior, provide a smaller [`model`](/models) and custom `i
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 export const agent = new Agent({
-  id: 'agent',
-  memory: new Memory({
-    options: {
-      generateTitle: {
-        model: '__GATEWAY_OPENAI_MODEL_MINI__',
-        instructions: 'Generate a 1 word title',
-      },
-    },
-  }),
+	id: 'agent',
+	memory: new Memory({
+		options: {
+			generateTitle: {
+				model: '__GATEWAY_OPENAI_MODEL_MINI__',
+				instructions: 'Generate a 1 word title',
+			},
+		},
+	}),
 })
 ```
 
@@ -234,38 +234,38 @@ import type { Processor } from '@mastra/core/processors'
 import type { MastraDBMessage } from '@mastra/core/memory'
 
 export class AttachmentUploader implements Processor {
-  id = 'attachment-uploader'
+	id = 'attachment-uploader'
 
-  async processInput({ messages }: { messages: MastraDBMessage[] }) {
-    return Promise.all(messages.map(msg => this.processMessage(msg)))
-  }
+	async processInput({ messages }: { messages: MastraDBMessage[] }) {
+		return Promise.all(messages.map(msg => this.processMessage(msg)))
+	}
 
-  async processMessage(msg: MastraDBMessage) {
-    const attachments = msg.content.experimental_attachments
-    if (!attachments?.length) return msg
+	async processMessage(msg: MastraDBMessage) {
+		const attachments = msg.content.experimental_attachments
+		if (!attachments?.length) return msg
 
-    const uploaded = await Promise.all(
-      attachments.map(async att => {
-        // Skip if already a URL
-        if (!att.url?.startsWith('data:')) return att
+		const uploaded = await Promise.all(
+			attachments.map(async att => {
+				// Skip if already a URL
+				if (!att.url?.startsWith('data:')) return att
 
-        // Upload base64 data and replace with URL
-        const url = await this.upload(att.url, att.contentType)
-        return { ...att, url }
-      }),
-    )
+				// Upload base64 data and replace with URL
+				const url = await this.upload(att.url, att.contentType)
+				return { ...att, url }
+			}),
+		)
 
-    return { ...msg, content: { ...msg.content, experimental_attachments: uploaded } }
-  }
+		return { ...msg, content: { ...msg.content, experimental_attachments: uploaded } }
+	}
 
-  async upload(dataUri: string, contentType?: string): Promise<string> {
-    const base64 = dataUri.split(',')[1]
-    const buffer = Buffer.from(base64, 'base64')
+	async upload(dataUri: string, contentType?: string): Promise<string> {
+		const base64 = dataUri.split(',')[1]
+		const buffer = Buffer.from(base64, 'base64')
 
-    // Replace with your storage provider (S3, R2, GCS, Convex, etc.)
-    // return await s3.upload(buffer, contentType);
-    throw new Error('Implement upload() with your storage provider')
-  }
+		// Replace with your storage provider (S3, R2, GCS, Convex, etc.)
+		// return await s3.upload(buffer, contentType);
+		throw new Error('Implement upload() with your storage provider')
+	}
 }
 ```
 
@@ -277,8 +277,8 @@ import { Memory } from '@mastra/memory'
 import { AttachmentUploader } from './processors/attachment-uploader'
 
 const agent = new Agent({
-  id: 'my-agent',
-  memory: new Memory({ storage: yourStorage }),
-  inputProcessors: [new AttachmentUploader()],
+	id: 'my-agent',
+	memory: new Memory({ storage: yourStorage }),
+	inputProcessors: [new AttachmentUploader()],
 })
 ```

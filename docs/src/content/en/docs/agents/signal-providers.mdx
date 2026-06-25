@@ -44,11 +44,11 @@ import { Agent } from '@mastra/core/agent'
 import { CiSignals } from '../signals/ci-signals'
 
 export const supportAgent = new Agent({
-  id: 'support-agent',
-  name: 'Support Agent',
-  instructions: 'Help the user triage updates.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  signals: [new CiSignals()],
+	id: 'support-agent',
+	name: 'Support Agent',
+	instructions: 'Help the user triage updates.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	signals: [new CiSignals()],
 })
 ```
 
@@ -65,48 +65,48 @@ import { SignalProvider } from '@mastra/core/signals'
 import type { SignalProviderTarget, SignalSubscription } from '@mastra/core/signals'
 
 type BuildStatus = {
-  id: string
-  status: 'passed' | 'failed'
+	id: string
+	status: 'passed' | 'failed'
 }
 
 const builds = new Map<string, BuildStatus>([
-  ['acme-app-main', { id: 'build_123', status: 'failed' }],
+	['acme-app-main', { id: 'build_123', status: 'failed' }],
 ])
 
 async function fetchBuildStatus(pipeline: string): Promise<BuildStatus> {
-  return builds.get(pipeline) ?? { id: 'build_unknown', status: 'passed' }
+	return builds.get(pipeline) ?? { id: 'build_unknown', status: 'passed' }
 }
 
 export class CiSignals extends SignalProvider<'ci-signals'> {
-  readonly id = 'ci-signals' as const
-  readonly pollInterval = 30_000
+	readonly id = 'ci-signals' as const
+	readonly pollInterval = 30_000
 
-  watch(target: SignalProviderTarget, pipeline: string) {
-    return this.subscribe(target, pipeline)
-  }
+	watch(target: SignalProviderTarget, pipeline: string) {
+		return this.subscribe(target, pipeline)
+	}
 
-  unwatch(target: SignalProviderTarget, pipeline: string) {
-    return this.unsubscribe(target, pipeline)
-  }
+	unwatch(target: SignalProviderTarget, pipeline: string) {
+		return this.unsubscribe(target, pipeline)
+	}
 
-  async poll(subscriptions: SignalSubscription[]) {
-    for (const sub of subscriptions) {
-      const build = await fetchBuildStatus(sub.externalResourceId)
-      if (build.status !== 'failed') continue
+	async poll(subscriptions: SignalSubscription[]) {
+		for (const sub of subscriptions) {
+			const build = await fetchBuildStatus(sub.externalResourceId)
+			if (build.status !== 'failed') continue
 
-      await this.notify(
-        {
-          source: this.id,
-          kind: 'ci-status',
-          priority: 'high',
-          summary: `Build failed for ${sub.externalResourceId}`,
-          payload: build,
-          dedupeKey: `${this.id}:${sub.externalResourceId}:${build.id}`,
-        },
-        { resourceId: sub.resourceId, threadId: sub.threadId },
-      )
-    }
-  }
+			await this.notify(
+				{
+					source: this.id,
+					kind: 'ci-status',
+					priority: 'high',
+					summary: `Build failed for ${sub.externalResourceId}`,
+					payload: build,
+					dedupeKey: `${this.id}:${sub.externalResourceId}:${build.id}`,
+				},
+				{ resourceId: sub.resourceId, threadId: sub.threadId },
+			)
+		}
+	}
 }
 ```
 
@@ -119,11 +119,11 @@ import { CiSignals } from '../signals/ci-signals'
 export const ciSignals = new CiSignals()
 
 export const supportAgent = new Agent({
-  id: 'support-agent',
-  name: 'Support Agent',
-  instructions: 'Help the user triage CI updates.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  signals: [ciSignals],
+	id: 'support-agent',
+	name: 'Support Agent',
+	instructions: 'Help the user triage CI updates.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	signals: [ciSignals],
 })
 
 ciSignals.watch({ resourceId: 'user_123', threadId: 'thread_456' }, 'acme-app-main')
@@ -146,27 +146,27 @@ import { SignalProvider } from '@mastra/core/signals'
 import type { SignalProviderWebhookRequest } from '@mastra/core/signals'
 
 export class CiSignals extends SignalProvider<'ci-signals'> {
-  readonly id = 'ci-signals' as const
+	readonly id = 'ci-signals' as const
 
-  async handleWebhook(request: SignalProviderWebhookRequest) {
-    const payload = request.body as { pipeline: string; status: string }
-    const subscriptions = this.getSubscriptionsForResource(payload.pipeline)
+	async handleWebhook(request: SignalProviderWebhookRequest) {
+		const payload = request.body as { pipeline: string; status: string }
+		const subscriptions = this.getSubscriptionsForResource(payload.pipeline)
 
-    for (const sub of subscriptions) {
-      await this.notify(
-        {
-          source: this.id,
-          kind: 'ci-status',
-          priority: 'high',
-          summary: `Build ${payload.status} for ${payload.pipeline}`,
-          payload,
-        },
-        { resourceId: sub.resourceId, threadId: sub.threadId },
-      )
-    }
+		for (const sub of subscriptions) {
+			await this.notify(
+				{
+					source: this.id,
+					kind: 'ci-status',
+					priority: 'high',
+					summary: `Build ${payload.status} for ${payload.pipeline}`,
+					payload,
+				},
+				{ resourceId: sub.resourceId, threadId: sub.threadId },
+			)
+		}
 
-    return { status: 200, body: { matched: subscriptions.length } }
-  }
+		return { status: 200, body: { matched: subscriptions.length } }
+	}
 }
 ```
 
@@ -185,21 +185,21 @@ import { Agent } from '@mastra/core/agent'
 import { WebhookSignalProvider } from '@mastra/core/signals'
 
 const webhooks = new WebhookSignalProvider({
-  extractResourceId: payload => (payload as { repository: string }).repository,
-  buildNotification: (payload, sub) => ({
-    source: 'ci',
-    kind: 'build-status',
-    priority: 'medium',
-    summary: `Build ${(payload as { status: string }).status} for ${sub.externalResourceId}`,
-  }),
+	extractResourceId: payload => (payload as { repository: string }).repository,
+	buildNotification: (payload, sub) => ({
+		source: 'ci',
+		kind: 'build-status',
+		priority: 'medium',
+		summary: `Build ${(payload as { status: string }).status} for ${sub.externalResourceId}`,
+	}),
 })
 
 export const supportAgent = new Agent({
-  id: 'support-agent',
-  name: 'Support Agent',
-  instructions: 'Help the user triage updates.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  signals: [webhooks],
+	id: 'support-agent',
+	name: 'Support Agent',
+	instructions: 'Help the user triage updates.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	signals: [webhooks],
 })
 
 webhooks.subscribeThread({ resourceId: 'user_123', threadId: 'thread_456' }, 'acme/app')
@@ -222,11 +222,11 @@ import { Agent } from '@mastra/core/agent'
 import { GithubSignals } from '@mastra/github-signals'
 
 export const devAgent = new Agent({
-  id: 'dev-agent',
-  name: 'Dev Agent',
-  instructions: 'Help triage pull request activity.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  signals: [new GithubSignals()],
+	id: 'dev-agent',
+	name: 'Dev Agent',
+	instructions: 'Help triage pull request activity.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	signals: [new GithubSignals()],
 })
 ```
 

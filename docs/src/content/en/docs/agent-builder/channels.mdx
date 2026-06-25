@@ -34,17 +34,17 @@ import { createBuilderAgent } from '@mastra/editor/ee'
 import { SlackProvider } from '@mastra/slack'
 
 export const mastra = new Mastra({
-  storage,
-  channels: {
-    slack: new SlackProvider({
-      refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
-      baseUrl: process.env.SLACK_BASE_URL,
-    }),
-  },
-  agents: { builderAgent: createBuilderAgent() },
-  editor: new MastraEditor({
-    builder: { enabled: true },
-  }),
+	storage,
+	channels: {
+		slack: new SlackProvider({
+			refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
+			baseUrl: process.env.SLACK_BASE_URL,
+		}),
+	},
+	agents: { builderAgent: createBuilderAgent() },
+	editor: new MastraEditor({
+		builder: { enabled: true },
+	}),
 })
 ```
 

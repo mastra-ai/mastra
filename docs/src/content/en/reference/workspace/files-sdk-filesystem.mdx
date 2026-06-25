@@ -37,20 +37,20 @@ import { Files } from 'files-sdk'
 import { s3 } from 'files-sdk/s3'
 
 const files = new Files({
-  adapter: s3({
-    bucket: 'my-bucket',
-    region: 'us-east-1',
-  }),
+	adapter: s3({
+		bucket: 'my-bucket',
+		region: 'us-east-1',
+	}),
 })
 
 const workspace = new Workspace({
-  filesystem: new FilesSDKFilesystem({ files }),
+	filesystem: new FilesSDKFilesystem({ files }),
 })
 
 const agent = new Agent({
-  name: 'file-agent',
-  model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
-  workspace,
+	name: 'file-agent',
+	model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
+	workspace,
 })
 ```
 
@@ -84,8 +84,8 @@ See the [FilesSDK documentation](https://files-sdk.dev) for the full adapter cat
 
 ```typescript
 const filesystem = new FilesSDKFilesystem({
-  files,
-  readOnly: true,
+	files,
+	readOnly: true,
 })
 ```
 
@@ -95,43 +95,43 @@ All write operations (`writeFile`, `appendFile`, `deleteFile`, `copyFile`, `move
 
 <PropertiesTable
   content={[
-  {
-    name: 'files',
-    type: 'Files',
-    description: 'A pre-configured FilesSDK `Files` instance bound to the adapter and credentials you want to use.',
-  },
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Unique identifier for this filesystem instance.',
-    isOptional: true,
-    defaultValue: 'Auto-generated',
-  },
-  {
-    name: 'displayName',
-    type: 'string',
-    description: 'Human-friendly display name for the UI.',
-    isOptional: true,
-  },
-  {
-    name: 'icon',
-    type: 'FilesystemIcon',
-    description: 'Icon identifier for the UI.',
-    isOptional: true,
-  },
-  {
-    name: 'description',
-    type: 'string',
-    description: 'Short description of this filesystem for the UI.',
-    isOptional: true,
-  },
-  {
-    name: 'readOnly',
-    type: 'boolean',
-    description: 'When true, all write operations are blocked.',
-    isOptional: true,
-    defaultValue: 'false',
-  },
+	{
+		name: 'files',
+		type: 'Files',
+		description: 'A pre-configured FilesSDK `Files` instance bound to the adapter and credentials you want to use.',
+	},
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Unique identifier for this filesystem instance.',
+		isOptional: true,
+		defaultValue: 'Auto-generated',
+	},
+	{
+		name: 'displayName',
+		type: 'string',
+		description: 'Human-friendly display name for the UI.',
+		isOptional: true,
+	},
+	{
+		name: 'icon',
+		type: 'FilesystemIcon',
+		description: 'Icon identifier for the UI.',
+		isOptional: true,
+	},
+	{
+		name: 'description',
+		type: 'string',
+		description: 'Short description of this filesystem for the UI.',
+		isOptional: true,
+	},
+	{
+		name: 'readOnly',
+		type: 'boolean',
+		description: 'When true, all write operations are blocked.',
+		isOptional: true,
+		defaultValue: 'false',
+	},
 ]}
 />
 
@@ -139,26 +139,26 @@ All write operations (`writeFile`, `appendFile`, `deleteFile`, `copyFile`, `move
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Filesystem instance identifier.',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: "Provider name ('FilesSDKFilesystem').",
-  },
-  {
-    name: 'provider',
-    type: 'string',
-    description: "Provider identifier ('files-sdk').",
-  },
-  {
-    name: 'readOnly',
-    type: 'boolean | undefined',
-    description: 'Whether the filesystem is in read-only mode.',
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Filesystem instance identifier.',
+	},
+	{
+		name: 'name',
+		type: 'string',
+		description: "Provider name ('FilesSDKFilesystem').",
+	},
+	{
+		name: 'provider',
+		type: 'string',
+		description: "Provider identifier ('files-sdk').",
+	},
+	{
+		name: 'readOnly',
+		type: 'boolean | undefined',
+		description: 'Whether the filesystem is in read-only mode.',
+	},
 ]}
 />
 

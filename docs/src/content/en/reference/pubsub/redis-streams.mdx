@@ -31,9 +31,9 @@ import { Mastra } from '@mastra/core'
 import { RedisStreamsPubSub } from '@mastra/redis-streams'
 
 export const mastra = new Mastra({
-  pubsub: new RedisStreamsPubSub({
-    url: 'redis://localhost:6379',
-  }),
+	pubsub: new RedisStreamsPubSub({
+		url: 'redis://localhost:6379',
+	}),
 })
 ```
 
@@ -41,70 +41,70 @@ export const mastra = new Mastra({
 
 <PropertiesTable
   content={[
-  {
-    name: 'url',
-    type: 'string',
-    description: 'Redis connection URL. Falls back to `redisOptions.url`.',
-    isOptional: true,
-    defaultValue: 'redis://localhost:6379',
-  },
-  {
-    name: 'keyPrefix',
-    type: 'string',
-    description: 'Prefix for stream keys. Each topic maps to `<keyPrefix>:<topic>`.',
-    isOptional: true,
-    defaultValue: 'mastra:topic',
-  },
-  {
-    name: 'blockMs',
-    type: 'number',
-    description: 'How long, in milliseconds, each read blocks while waiting for new events.',
-    isOptional: true,
-    defaultValue: '1000',
-  },
-  {
-    name: 'redisOptions',
-    type: 'RedisClientOptions',
-    description: 'Options passed to the underlying `redis` client for advanced configuration.',
-    isOptional: true,
-  },
-  {
-    name: 'maxStreamLength',
-    type: 'number',
-    description: 'Approximate maximum number of entries kept per stream. Set to 0 to disable trimming.',
-    isOptional: true,
-    defaultValue: '10000',
-  },
-  {
-    name: 'reclaimIntervalMs',
-    type: 'number',
-    description:
-      'How often, in milliseconds, a subscription reclaims events that an earlier consumer read but never acknowledged. Set to 0 to disable.',
-    isOptional: true,
-    defaultValue: '30000',
-  },
-  {
-    name: 'reclaimIdleMs',
-    type: 'number',
-    description:
-      'Minimum idle time, in milliseconds, before a pending event is eligible for reclaim. Keep this well above typical processing time to avoid double delivery.',
-    isOptional: true,
-    defaultValue: '60000',
-  },
-  {
-    name: 'maxDeliveryAttempts',
-    type: 'number',
-    description:
-      'Maximum times an event is redelivered through `nack` before it is dropped. Pass `Infinity` to disable the cap.',
-    isOptional: true,
-    defaultValue: '5',
-  },
-  {
-    name: 'logger',
-    type: '{ debug?: Function; warn?: Function }',
-    description: 'Optional logger for diagnostics. When omitted, suppressed errors are silent.',
-    isOptional: true,
-  },
+	{
+		name: 'url',
+		type: 'string',
+		description: 'Redis connection URL. Falls back to `redisOptions.url`.',
+		isOptional: true,
+		defaultValue: 'redis://localhost:6379',
+	},
+	{
+		name: 'keyPrefix',
+		type: 'string',
+		description: 'Prefix for stream keys. Each topic maps to `<keyPrefix>:<topic>`.',
+		isOptional: true,
+		defaultValue: 'mastra:topic',
+	},
+	{
+		name: 'blockMs',
+		type: 'number',
+		description: 'How long, in milliseconds, each read blocks while waiting for new events.',
+		isOptional: true,
+		defaultValue: '1000',
+	},
+	{
+		name: 'redisOptions',
+		type: 'RedisClientOptions',
+		description: 'Options passed to the underlying `redis` client for advanced configuration.',
+		isOptional: true,
+	},
+	{
+		name: 'maxStreamLength',
+		type: 'number',
+		description: 'Approximate maximum number of entries kept per stream. Set to 0 to disable trimming.',
+		isOptional: true,
+		defaultValue: '10000',
+	},
+	{
+		name: 'reclaimIntervalMs',
+		type: 'number',
+		description:
+			'How often, in milliseconds, a subscription reclaims events that an earlier consumer read but never acknowledged. Set to 0 to disable.',
+		isOptional: true,
+		defaultValue: '30000',
+	},
+	{
+		name: 'reclaimIdleMs',
+		type: 'number',
+		description:
+			'Minimum idle time, in milliseconds, before a pending event is eligible for reclaim. Keep this well above typical processing time to avoid double delivery.',
+		isOptional: true,
+		defaultValue: '60000',
+	},
+	{
+		name: 'maxDeliveryAttempts',
+		type: 'number',
+		description:
+			'Maximum times an event is redelivered through `nack` before it is dropped. Pass `Infinity` to disable the cap.',
+		isOptional: true,
+		defaultValue: '5',
+	},
+	{
+		name: 'logger',
+		type: '{ debug?: Function; warn?: Function }',
+		description: 'Optional logger for diagnostics. When omitted, suppressed errors are silent.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -112,11 +112,11 @@ export const mastra = new Mastra({
 
 <PropertiesTable
   content={[
-  {
-    name: 'supportedModes',
-    type: 'ReadonlyArray<"pull" | "push">',
-    description: 'Returns `["pull"]`.',
-  },
+	{
+		name: 'supportedModes',
+		type: 'ReadonlyArray<"pull" | "push">',
+		description: 'Returns `["pull"]`.',
+	},
 ]}
 />
 
@@ -130,7 +130,7 @@ Subscribes to a topic. With `options.group`, members of the group share events t
 
 ```typescript
 await pubsub.subscribe('workflow.events', (event, ack, nack) => {
-  console.log(event)
+	console.log(event)
 })
 ```
 

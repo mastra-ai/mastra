@@ -47,9 +47,9 @@ BM25 scores documents based on term frequency and document length. It works well
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  // highlight-next-line
-  bm25: true,
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	// highlight-next-line
+	bm25: true,
 })
 ```
 
@@ -57,11 +57,11 @@ For custom BM25 parameters (`k1` is term frequency saturation, `b` is document l
 
 ```typescript title="src/mastra/workspaces.ts"
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  bm25: {
-    k1: 1.5,
-    b: 0.75,
-  },
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	bm25: {
+		k1: 1.5,
+		b: 0.75,
+	},
 })
 ```
 
@@ -76,18 +76,18 @@ import { embed } from 'ai'
 import { openai } from '@ai-sdk/openai'
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  vectorStore: new PineconeVector({
-    apiKey: process.env.PINECONE_API_KEY,
-    index: 'workspace-index',
-  }),
-  embedder: async (text: string) => {
-    const { embedding } = await embed({
-      model: openai.embedding('text-embedding-3-small'),
-      value: text,
-    })
-    return embedding
-  },
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	vectorStore: new PineconeVector({
+		apiKey: process.env.PINECONE_API_KEY,
+		index: 'workspace-index',
+	}),
+	embedder: async (text: string) => {
+		const { embedding } = await embed({
+			model: openai.embedding('text-embedding-3-small'),
+			value: text,
+		})
+		return embedding
+	},
 })
 ```
 
@@ -111,18 +111,18 @@ import { openai } from '@ai-sdk/openai'
 const model = openai.embedding('text-embedding-3-small')
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  vectorStore: new PineconeVector({
-    apiKey: process.env.PINECONE_API_KEY,
-    index: 'workspace-index',
-  }),
-  embedder: Object.assign(
-    async (texts: string[]) => {
-      const { embeddings } = await embedMany({ model, values: texts })
-      return embeddings
-    },
-    { batch: true as const, maxBatchSize: 2048 },
-  ),
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	vectorStore: new PineconeVector({
+		apiKey: process.env.PINECONE_API_KEY,
+		index: 'workspace-index',
+	}),
+	embedder: Object.assign(
+		async (texts: string[]) => {
+			const { embeddings } = await embedMany({ model, values: texts })
+			return embeddings
+		},
+		{ batch: true as const, maxBatchSize: 2048 },
+	),
 })
 ```
 
@@ -136,10 +136,10 @@ Configure both BM25 and vector search to enable hybrid mode, which combines keyw
 
 ```typescript title="src/mastra/workspaces.ts"
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  bm25: true,
-  vectorStore: pineconeVector,
-  embedder: embedderFn,
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	bm25: true,
+	vectorStore: pineconeVector,
+	embedder: embedderFn,
 })
 ```
 
@@ -149,10 +149,10 @@ By default, the search index name is derived from the workspace ID. To set a cus
 
 ```typescript
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  bm25: true,
-  // highlight-next-line
-  searchIndexName: 'my_workspace_vectors',
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	bm25: true,
+	// highlight-next-line
+	searchIndexName: 'my_workspace_vectors',
 })
 ```
 
@@ -170,10 +170,10 @@ await workspace.index('/docs/guide.md', 'Content of the guide...')
 
 // Index with metadata for filtering or context
 await workspace.index('/docs/api.md', apiDocContent, {
-  metadata: {
-    category: 'api',
-    version: '2.0',
-  },
+	metadata: {
+		category: 'api',
+		version: '2.0',
+	},
 })
 ```
 
@@ -189,9 +189,9 @@ Configure `autoIndexPaths` to automatically index files when the workspace initi
 
 ```typescript
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  bm25: true,
-  autoIndexPaths: ['docs', 'support/faq'],
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	bm25: true,
+	autoIndexPaths: ['docs', 'support/faq'],
 })
 
 await workspace.init()
@@ -203,10 +203,10 @@ Glob patterns let you index specific file types:
 
 ```typescript
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  bm25: true,
-  // highlight-next-line
-  autoIndexPaths: ['docs/**/*.md', 'support/**/*.txt'],
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	bm25: true,
+	// highlight-next-line
+	autoIndexPaths: ['docs/**/*.md', 'support/**/*.txt'],
 })
 ```
 
@@ -218,8 +218,8 @@ Use `workspace.search()` to find relevant content. Results are ranked by relevan
 const results = await workspace.search('password reset')
 
 for (const result of results) {
-  console.log(`${result.id}: ${result.score}`)
-  console.log(result.content)
+	console.log(`${result.id}: ${result.score}`)
+	console.log(result.content)
 }
 ```
 
@@ -229,10 +229,10 @@ You can customize the search behavior with options:
 
 ```typescript
 const results = await workspace.search('authentication flow', {
-  topK: 10,
-  mode: 'hybrid',
-  minScore: 0.5,
-  vectorWeight: 0.5,
+	topK: 10,
+	mode: 'hybrid',
+	minScore: 0.5,
+	vectorWeight: 0.5,
 })
 ```
 
@@ -249,20 +249,20 @@ Each result contains:
 
 ```typescript
 interface SearchResult {
-  id: string // Document ID (typically file path)
-  content: string // The matching content
-  score: number // Relevance score (0-1)
-  lineRange?: {
-    // Lines where the match was found
-    start: number
-    end: number
-  }
-  metadata?: Record<string, unknown> // Metadata stored with the document
-  scoreDetails?: {
-    // Score breakdown (hybrid mode only)
-    vector?: number
-    bm25?: number
-  }
+	id: string // Document ID (typically file path)
+	content: string // The matching content
+	score: number // Relevance score (0-1)
+	lineRange?: {
+		// Lines where the match was found
+		start: number
+		end: number
+	}
+	metadata?: Record<string, unknown> // Metadata stored with the document
+	scoreDetails?: {
+		// Score breakdown (hybrid mode only)
+		vector?: number
+		bm25?: number
+	}
 }
 ```
 

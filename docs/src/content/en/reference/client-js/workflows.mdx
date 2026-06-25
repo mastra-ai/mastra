@@ -23,7 +23,7 @@ Get an instance of a specific workflow by its ID:
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 export const testWorkflow = createWorkflow({
-  id: 'city-workflow',
+	id: 'city-workflow',
 })
 ```
 
@@ -53,8 +53,8 @@ const run = await workflow.createRun({ runId: 'existing-run-id' })
 
 // Or with a resourceId to associate the run with a specific resource
 const run = await workflow.createRun({
-  runId: 'my-run-id',
-  resourceId: 'user-123',
+	runId: 'my-run-id',
+	resourceId: 'user-123',
 })
 ```
 
@@ -68,9 +68,9 @@ Start a workflow run and await its completion, returning the full result as the 
 const run = await workflow.createRun()
 
 const result = await run.startAsync({
-  inputData: {
-    city: 'New York',
-  },
+	inputData: {
+		city: 'New York',
+	},
 })
 ```
 
@@ -78,13 +78,13 @@ You can also pass `initialState` to set the starting values for the workflow's s
 
 ```typescript
 const result = await run.startAsync({
-  inputData: {
-    city: 'New York',
-  },
-  initialState: {
-    count: 0,
-    items: [],
-  },
+	inputData: {
+		city: 'New York',
+	},
+	initialState: {
+		count: 0,
+		items: [],
+	},
 })
 ```
 
@@ -96,9 +96,9 @@ To associate a run with a specific resource, pass `resourceId` to `createRun()`:
 const run = await workflow.createRun({ resourceId: 'user-123' })
 
 const result = await run.startAsync({
-  inputData: {
-    city: 'New York',
-  },
+	inputData: {
+		city: 'New York',
+	},
 })
 ```
 
@@ -110,9 +110,9 @@ Start a workflow run without waiting for completion (fire-and-forget). Returns i
 const run = await workflow.createRun()
 
 await run.start({
-  inputData: {
-    city: 'New York',
-  },
+	inputData: {
+		city: 'New York',
+	},
 })
 
 // Poll for results later
@@ -129,8 +129,8 @@ Resume a suspended workflow step and await the full result:
 const run = await workflow.createRun({ runId: prevRunId })
 
 const result = await run.resumeAsync({
-  step: 'step-id',
-  resumeData: { key: 'value' },
+	step: 'step-id',
+	resumeData: { key: 'value' },
 })
 ```
 
@@ -142,8 +142,8 @@ Resume a suspended workflow step without waiting for completion:
 const run = await workflow.createRun({ runId: prevRunId })
 
 await run.resume({
-  step: 'step-id',
-  resumeData: { key: 'value' },
+	step: 'step-id',
+	resumeData: { key: 'value' },
 })
 ```
 
@@ -151,9 +151,9 @@ When a [`.foreach()`](/reference/workflows/workflow-methods/foreach) step suspen
 
 ```typescript
 await run.resume({
-  step: 'approve',
-  resumeData: { ok: true },
-  forEachIndex: 1, // resumes the second iteration
+	step: 'approve',
+	resumeData: { ok: true },
+	forEachIndex: 1, // resumes the second iteration
 })
 ```
 
@@ -182,13 +182,13 @@ Stream workflow execution for real-time updates:
 const run = await workflow.createRun()
 
 const stream = await run.stream({
-  inputData: {
-    city: 'New York',
-  },
+	inputData: {
+		city: 'New York',
+	},
 })
 
 for await (const chunk of stream) {
-  console.log(JSON.stringify(chunk, null, 2))
+	console.log(JSON.stringify(chunk, null, 2))
 }
 ```
 
@@ -201,9 +201,9 @@ const result = await workflow.runById(runId)
 
 // Or with options for performance optimization:
 const result = await workflow.runById(runId, {
-  fields: ['status', 'result'], // Only fetch specific fields
-  withNestedWorkflows: false, // Skip expensive nested workflow data
-  requestContext: { userId: 'user-123' }, // Optional request context
+	fields: ['status', 'result'], // Only fetch specific fields
+	withNestedWorkflows: false, // Skip expensive nested workflow data
+	requestContext: { userId: 'user-123' }, // Optional request context
 })
 ```
 
@@ -213,21 +213,21 @@ A workflow run result yields the following:
 
 <PropertiesTable
   content={[
-  {
-    name: 'runId',
-    type: 'string',
-    description: 'Unique identifier for this workflow run instance',
-  },
-  {
-    name: 'eventTimestamp',
-    type: 'Date',
-    description: 'The timestamp of the event',
-  },
-  {
-    name: 'payload',
-    type: 'object',
-    description: 'Contains currentStep (id, status, output, payload) and workflowState (status, steps record)',
-  },
+	{
+		name: 'runId',
+		type: 'string',
+		description: 'Unique identifier for this workflow run instance',
+	},
+	{
+		name: 'eventTimestamp',
+		type: 'Date',
+		description: 'The timestamp of the event',
+	},
+	{
+		name: 'payload',
+		type: 'object',
+		description: 'Contains currentStep (id, status, output, payload) and workflowState (status, steps record)',
+	},
 ]}
 />
 
@@ -241,8 +241,8 @@ List all schedules, optionally filtered by workflow id or status.
 
 ```typescript
 const schedules = await mastraClient.listSchedules({
-  workflowId: 'daily-report',
-  status: 'active',
+	workflowId: 'daily-report',
+	status: 'active',
 })
 ```
 
@@ -276,6 +276,6 @@ List the trigger history for a schedule, including the joined run summary for ea
 
 ```typescript
 const { triggers } = await mastraClient.listScheduleTriggers('daily-report', {
-  limit: 50,
+	limit: 50,
 })
 ```

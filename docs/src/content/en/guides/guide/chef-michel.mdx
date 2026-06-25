@@ -33,12 +33,12 @@ To create an agent in Mastra use the `Agent` class to define it and then registe
     import { Agent } from '@mastra/core/agent'
 
     export const chefAgent = new Agent({
-      id: 'chef-agent',
-      name: 'chef-agent',
-      instructions:
-        'You are Michel, a practical and experienced home chef' +
-        'You help people cook with whatever ingredients they have available.',
-      model: '__GATEWAY_OPENAI_MODEL__',
+    	id: 'chef-agent',
+    	name: 'chef-agent',
+    	instructions:
+    		'You are Michel, a practical and experienced home chef' +
+    		'You help people cook with whatever ingredients they have available.',
+    	model: '__GATEWAY_OPENAI_MODEL__',
     })
     ```
   </StepItem>
@@ -51,7 +51,7 @@ To create an agent in Mastra use the `Agent` class to define it and then registe
     import { chefAgent } from './agents/chefAgent'
 
     export const mastra = new Mastra({
-      agents: { chefAgent },
+    	agents: { chefAgent },
     })
     ```
   </StepItem>
@@ -69,12 +69,12 @@ Depending on your requirements you can interact and get responses from the agent
     import { chefAgent } from './mastra/agents/chefAgent'
 
     async function main() {
-      const query =
-        'In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?'
-      console.log(`Query: ${query}`)
+    	const query =
+    		'In my kitchen I have: pasta, canned tomatoes, garlic, olive oil, and some dried herbs (basil and oregano). What can I make?'
+    	console.log(`Query: ${query}`)
 
-      const response = await chefAgent.generate([{ role: 'user', content: query }])
-      console.log('\n👨‍🍳 Chef Michel:', response.text)
+    	const response = await chefAgent.generate([{ role: 'user', content: query }])
+    	console.log('\n👨‍🍳 Chef Michel:', response.text)
     }
 
     main()
@@ -102,19 +102,19 @@ Depending on your requirements you can interact and get responses from the agent
     import { chefAgent } from './mastra/agents/chefAgent'
 
     async function main() {
-      const query =
-        "Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder."
-      console.log(`Query: ${query}`)
+    	const query =
+    		"Now I'm over at my friend's house, and they have: chicken thighs, coconut milk, sweet potatoes, and some curry powder."
+    	console.log(`Query: ${query}`)
 
-      const stream = await chefAgent.stream([{ role: 'user', content: query }])
+    	const stream = await chefAgent.stream([{ role: 'user', content: query }])
 
-      console.log('\n Chef Michel: ')
+    	console.log('\n Chef Michel: ')
 
-      for await (const chunk of stream.textStream) {
-        process.stdout.write(chunk)
-      }
+    	for await (const chunk of stream.textStream) {
+    		process.stdout.write(chunk)
+    	}
 
-      console.log('\n\n✅ Recipe complete!')
+    	console.log('\n\n✅ Recipe complete!')
     }
 
     main()
@@ -148,26 +148,26 @@ Depending on your requirements you can interact and get responses from the agent
     import { z } from 'zod'
 
     async function main() {
-      const query = 'I want to make lasagna, can you generate a lasagna recipe for me?'
-      console.log(`Query: ${query}`)
+    	const query = 'I want to make lasagna, can you generate a lasagna recipe for me?'
+    	console.log(`Query: ${query}`)
 
-      // Define the Zod schema
-      const schema = z.object({
-        ingredients: z.array(
-          z.object({
-            name: z.string(),
-            amount: z.string(),
-          }),
-        ),
-        steps: z.array(z.string()),
-      })
+    	// Define the Zod schema
+    	const schema = z.object({
+    		ingredients: z.array(
+    			z.object({
+    				name: z.string(),
+    				amount: z.string(),
+    			}),
+    		),
+    		steps: z.array(z.string()),
+    	})
 
-      const response = await chefAgent.generate([{ role: 'user', content: query }], {
-        structuredOutput: {
-          schema,
-        },
-      })
-      console.log('\n👨‍🍳 Chef Michel:', response.object)
+    	const response = await chefAgent.generate([{ role: 'user', content: query }], {
+    		structuredOutput: {
+    			schema,
+    		},
+    	})
+    	console.log('\n👨‍🍳 Chef Michel:', response.object)
     }
 
     main()
@@ -235,7 +235,7 @@ Learn how to interact with your agent through Mastra's API.
 
     ```json
     {
-      "text": "You can make delicious pancakes! Here's a simple recipe..."
+    	"text": "You can make delicious pancakes! Here's a simple recipe..."
     }
     ```
   </StepItem>

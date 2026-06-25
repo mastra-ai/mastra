@@ -84,9 +84,9 @@ Your package's `build` script should run `mastra build`:
 
 ```json title="apps/api/package.json"
 {
-  "scripts": {
-    "build": "mastra build"
-  }
+	"scripts": {
+		"build": "mastra build"
+	}
 }
 ```
 
@@ -101,9 +101,9 @@ For most setups, this works without configuration. If you encounter issues with 
 
 ```typescript title="src/mastra/index.ts"
 export const mastra = new Mastra({
-  bundler: {
-    transpilePackages: ['@my-org/utils'],
-  },
+	bundler: {
+		transpilePackages: ['@my-org/utils'],
+	},
 })
 ```
 

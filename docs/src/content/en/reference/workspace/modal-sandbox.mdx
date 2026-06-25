@@ -31,17 +31,17 @@ import { Workspace } from '@mastra/core/workspace'
 import { ModalSandbox } from '@mastra/modal'
 
 const workspace = new Workspace({
-  sandbox: new ModalSandbox({
-    id: 'dev-sandbox',
-    baseImage: 'ubuntu:22.04',
-    timeoutMs: 60_000,
-  }),
+	sandbox: new ModalSandbox({
+		id: 'dev-sandbox',
+		baseImage: 'ubuntu:22.04',
+		timeoutMs: 60_000,
+	}),
 })
 
 const agent = new Agent({
-  id: 'dev-agent',
-  model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
-  workspace,
+	id: 'dev-agent',
+	model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
+	workspace,
 })
 ```
 
@@ -58,8 +58,8 @@ Or pass them directly:
 
 ```typescript
 const sandbox = new ModalSandbox({
-  tokenId: process.env.MODAL_TOKEN_ID,
-  tokenSecret: process.env.MODAL_TOKEN_SECRET,
+	tokenId: process.env.MODAL_TOKEN_ID,
+	tokenSecret: process.env.MODAL_TOKEN_SECRET,
 })
 ```
 
@@ -69,85 +69,85 @@ Get your credentials from the [Modal dashboard](https://modal.com/settings/token
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description:
-      'Unique identifier / name for this sandbox. Used as the Modal sandbox name so the sandbox can be reconnected on subsequent start() calls.',
-    isOptional: true,
-    defaultValue: 'Auto-generated',
-  },
-  {
-    name: 'appName',
-    type: 'string',
-    description: 'Modal App name to associate sandboxes with.',
-    isOptional: true,
-    defaultValue: "'mastra'",
-  },
-  {
-    name: 'baseImage',
-    type: 'string',
-    description: 'Docker image to use for the sandbox.',
-    isOptional: true,
-    defaultValue: "'ubuntu:22.04'",
-  },
-  {
-    name: 'timeoutMs',
-    type: 'number',
-    description:
-      "Wall-clock max lifetime in milliseconds. The sandbox is terminated when this expires, regardless of activity. Modal's maximum is 24 hours (86_400_000).",
-    isOptional: true,
-    defaultValue: '300000 (5 minutes)',
-  },
-  {
-    name: 'env',
-    type: 'Record<string, string>',
-    description: 'Environment variables baked into the sandbox at create time.',
-    isOptional: true,
-  },
-  {
-    name: 'workdir',
-    type: 'string',
-    description: 'Default working directory inside the sandbox.',
-    isOptional: true,
-  },
-  {
-    name: 'tokenId',
-    type: 'string',
-    description: 'Modal token ID. Falls back to MODAL_TOKEN_ID environment variable.',
-    isOptional: true,
-  },
-  {
-    name: 'tokenSecret',
-    type: 'string',
-    description: 'Modal token secret. Falls back to MODAL_TOKEN_SECRET environment variable.',
-    isOptional: true,
-  },
-  {
-    name: 'instructions',
-    type: 'string | function',
-    description:
-      'Custom instructions returned by getInstructions(). Pass a string to fully replace the default, or a function to extend it.',
-    isOptional: true,
-  },
-  {
-    name: 'onStart',
-    type: 'function',
-    description: 'Lifecycle hook called after the sandbox reaches running status.',
-    isOptional: true,
-  },
-  {
-    name: 'onStop',
-    type: 'function',
-    description: 'Lifecycle hook called before the sandbox stops.',
-    isOptional: true,
-  },
-  {
-    name: 'onDestroy',
-    type: 'function',
-    description: 'Lifecycle hook called before the sandbox is destroyed.',
-    isOptional: true,
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description:
+			'Unique identifier / name for this sandbox. Used as the Modal sandbox name so the sandbox can be reconnected on subsequent start() calls.',
+		isOptional: true,
+		defaultValue: 'Auto-generated',
+	},
+	{
+		name: 'appName',
+		type: 'string',
+		description: 'Modal App name to associate sandboxes with.',
+		isOptional: true,
+		defaultValue: "'mastra'",
+	},
+	{
+		name: 'baseImage',
+		type: 'string',
+		description: 'Docker image to use for the sandbox.',
+		isOptional: true,
+		defaultValue: "'ubuntu:22.04'",
+	},
+	{
+		name: 'timeoutMs',
+		type: 'number',
+		description:
+			"Wall-clock max lifetime in milliseconds. The sandbox is terminated when this expires, regardless of activity. Modal's maximum is 24 hours (86_400_000).",
+		isOptional: true,
+		defaultValue: '300000 (5 minutes)',
+	},
+	{
+		name: 'env',
+		type: 'Record<string, string>',
+		description: 'Environment variables baked into the sandbox at create time.',
+		isOptional: true,
+	},
+	{
+		name: 'workdir',
+		type: 'string',
+		description: 'Default working directory inside the sandbox.',
+		isOptional: true,
+	},
+	{
+		name: 'tokenId',
+		type: 'string',
+		description: 'Modal token ID. Falls back to MODAL_TOKEN_ID environment variable.',
+		isOptional: true,
+	},
+	{
+		name: 'tokenSecret',
+		type: 'string',
+		description: 'Modal token secret. Falls back to MODAL_TOKEN_SECRET environment variable.',
+		isOptional: true,
+	},
+	{
+		name: 'instructions',
+		type: 'string | function',
+		description:
+			'Custom instructions returned by getInstructions(). Pass a string to fully replace the default, or a function to extend it.',
+		isOptional: true,
+	},
+	{
+		name: 'onStart',
+		type: 'function',
+		description: 'Lifecycle hook called after the sandbox reaches running status.',
+		isOptional: true,
+	},
+	{
+		name: 'onStop',
+		type: 'function',
+		description: 'Lifecycle hook called before the sandbox stops.',
+		isOptional: true,
+	},
+	{
+		name: 'onDestroy',
+		type: 'function',
+		description: 'Lifecycle hook called before the sandbox is destroyed.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -155,38 +155,38 @@ Get your credentials from the [Modal dashboard](https://modal.com/settings/token
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Sandbox instance identifier.',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: "Provider name ('ModalSandbox')",
-  },
-  {
-    name: 'provider',
-    type: 'string',
-    description: "Provider identifier ('modal')",
-  },
-  {
-    name: 'status',
-    type: 'ProviderStatus',
-    description: "'pending' | 'starting' | 'running' | 'stopping' | 'stopped' | 'destroying' | 'destroyed' | 'error'",
-  },
-  {
-    name: 'modal',
-    type: 'Sandbox',
-    description:
-      'The underlying Modal Sandbox instance. Throws SandboxNotReadyError if the sandbox has not been started.',
-  },
-  {
-    name: 'processes',
-    type: 'ModalProcessManager',
-    description:
-      'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Sandbox instance identifier.',
+	},
+	{
+		name: 'name',
+		type: 'string',
+		description: "Provider name ('ModalSandbox')",
+	},
+	{
+		name: 'provider',
+		type: 'string',
+		description: "Provider identifier ('modal')",
+	},
+	{
+		name: 'status',
+		type: 'ProviderStatus',
+		description: "'pending' | 'starting' | 'running' | 'stopping' | 'stopped' | 'destroying' | 'destroyed' | 'error'",
+	},
+	{
+		name: 'modal',
+		type: 'Sandbox',
+		description:
+			'The underlying Modal Sandbox instance. Throws SandboxNotReadyError if the sandbox has not been started.',
+	},
+	{
+		name: 'processes',
+		type: 'ModalProcessManager',
+		description:
+			'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
+	},
 ]}
 />
 
@@ -198,9 +198,9 @@ Get your credentials from the [Modal dashboard](https://modal.com/settings/token
 
 ```typescript
 const sandbox = new ModalSandbox({
-  id: 'dev-sandbox',
-  baseImage: 'ubuntu:22.04',
-  timeoutMs: 300_000,
+	id: 'dev-sandbox',
+	baseImage: 'ubuntu:22.04',
+	timeoutMs: 300_000,
 })
 
 await sandbox._start()
@@ -219,8 +219,8 @@ await sandbox._start()
 
 // Spawn a background process
 const handle = await sandbox.processes.spawn('node script.js', {
-  env: { PORT: '3000' },
-  onStdout: data => console.log(data),
+	env: { PORT: '3000' },
+	onStdout: data => console.log(data),
 })
 
 // Wait for the process to complete

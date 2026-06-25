@@ -102,11 +102,11 @@ Set the shell in global `settings.json` with the `shellPassthrough` block:
 
 ```json title="settings.json"
 {
-  "shellPassthrough": {
-    "mode": "path",
-    "executable": "/bin/zsh",
-    "family": "posix"
-  }
+	"shellPassthrough": {
+		"mode": "path",
+		"executable": "/bin/zsh",
+		"family": "posix"
+	}
 }
 ```
 
@@ -206,15 +206,15 @@ Launch a local process that communicates via stdin/stdout. Requires a `command` 
 
 ```json title=".mastracode/mcp.json"
 {
-  "mcpServers": {
-    "my-server": {
-      "command": "npx",
-      "args": ["-y", "@my-org/mcp-server"],
-      "env": {
-        "API_KEY": "your-key"
-      }
-    }
-  }
+	"mcpServers": {
+		"my-server": {
+			"command": "npx",
+			"args": ["-y", "@my-org/mcp-server"],
+			"env": {
+				"API_KEY": "your-key"
+			}
+		}
+	}
 }
 ```
 
@@ -224,14 +224,14 @@ Connect to a remote MCP server via URL. Requires a `url` field. The optional `he
 
 ```json title=".mastracode/mcp.json"
 {
-  "mcpServers": {
-    "remote-api": {
-      "url": "https://mcp.example.com/sse",
-      "headers": {
-        "Authorization": "Bearer your-token"
-      }
-    }
-  }
+	"mcpServers": {
+		"remote-api": {
+			"url": "https://mcp.example.com/sse",
+			"headers": {
+				"Authorization": "Bearer your-token"
+			}
+		}
+	}
 }
 ```
 
@@ -243,16 +243,16 @@ Mastra Code passes this configuration to `@mastra/mcp` when connecting. The redi
 
 ```json title=".mastracode/mcp.json"
 {
-  "mcpServers": {
-    "remote-api": {
-      "url": "https://mcp.example.com/mcp",
-      "oauth": {
-        "redirectUrl": "http://localhost:3000/oauth/callback",
-        "clientName": "Remote MCP",
-        "scopes": ["mcp:read", "mcp:write"]
-      }
-    }
-  }
+	"mcpServers": {
+		"remote-api": {
+			"url": "https://mcp.example.com/mcp",
+			"oauth": {
+				"redirectUrl": "http://localhost:3000/oauth/callback",
+				"clientName": "Remote MCP",
+				"scopes": ["mcp:read", "mcp:write"]
+			}
+		}
+	}
 }
 ```
 
@@ -260,16 +260,16 @@ Use `clientId` and `clientSecret` when the MCP server requires a pre-registered 
 
 ```json title=".mastracode/mcp.json"
 {
-  "mcpServers": {
-    "remote-api": {
-      "url": "https://mcp.example.com/mcp",
-      "oauth": {
-        "redirectUrl": "http://localhost:3000/oauth/callback",
-        "clientId": "your-client-id",
-        "clientSecret": "your-client-secret"
-      }
-    }
-  }
+	"mcpServers": {
+		"remote-api": {
+			"url": "https://mcp.example.com/mcp",
+			"oauth": {
+				"redirectUrl": "http://localhost:3000/oauth/callback",
+				"clientId": "your-client-id",
+				"clientSecret": "your-client-secret"
+			}
+		}
+	}
 }
 ```
 
@@ -299,24 +299,24 @@ Hooks are user-configured shell commands that run at specific lifecycle events. 
 
 ```json title=".mastracode/hooks.json"
 {
-  "PreToolUse": [
-    {
-      "type": "command",
-      "command": "node scripts/validate-tool.js",
-      "matcher": {
-        "tool_name": "execute_command"
-      },
-      "timeout": 5000,
-      "description": "Validate shell commands before execution"
-    }
-  ],
-  "PostToolUse": [
-    {
-      "type": "command",
-      "command": "node scripts/log-tool.js",
-      "description": "Log tool usage"
-    }
-  ]
+	"PreToolUse": [
+		{
+			"type": "command",
+			"command": "node scripts/validate-tool.js",
+			"matcher": {
+				"tool_name": "execute_command"
+			},
+			"timeout": 5000,
+			"description": "Validate shell commands before execution"
+		}
+	],
+	"PostToolUse": [
+		{
+			"type": "command",
+			"command": "node scripts/log-tool.js",
+			"description": "Log tool usage"
+		}
+	]
 }
 ```
 
@@ -340,11 +340,11 @@ Hook processes receive a JSON payload on stdin with context about the event:
 
 ```json
 {
-  "session_id": "thread-abc123",
-  "cwd": "/path/to/project",
-  "hook_event_name": "PreToolUse",
-  "tool_name": "execute_command",
-  "tool_input": { "command": "npm test" }
+	"session_id": "thread-abc123",
+	"cwd": "/path/to/project",
+	"hook_event_name": "PreToolUse",
+	"tool_name": "execute_command",
+	"tool_input": { "command": "npm test" }
 }
 ```
 
@@ -352,8 +352,8 @@ For blocking events (`PreToolUse`, `Stop`, `UserPromptSubmit`), the hook can res
 
 ```json
 {
-  "decision": "block",
-  "reason": "This command is not allowed"
+	"decision": "block",
+	"reason": "This command is not allowed"
 }
 ```
 
@@ -551,7 +551,7 @@ Resource IDs determine how threads are grouped. By default, Mastra Code generate
 
 ```json title=".mastracode/database.json"
 {
-  "resourceId": "my-custom-project-id"
+	"resourceId": "my-custom-project-id"
 }
 ```
 

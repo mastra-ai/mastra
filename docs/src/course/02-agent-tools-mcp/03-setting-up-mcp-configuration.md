@@ -10,9 +10,9 @@ Then, create a basic MCP configuration object:
 
 ```typescript
 const mcp = new MCPClient({
-  servers: {
-    // We'll add servers in the next steps
-  },
+	servers: {
+		// We'll add servers in the next steps
+	},
 })
 ```
 

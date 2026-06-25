@@ -234,12 +234,12 @@ The `writer` parameter passed to step `execute` functions isn't affected by this
 
 ```ts
 createStep({
-  id: 'my-step',
-  execute: async ({ writer }) => {
-    // This API is unchanged
-    await writer.write({ data: 'some output' })
-    await writer.custom({ type: 'custom-event', payload: {} })
-  },
+	id: 'my-step',
+	execute: async ({ writer }) => {
+		// This API is unchanged
+		await writer.write({ data: 'some output' })
+		await writer.custom({ type: 'custom-event', payload: {} })
+	},
 })
 ```
 

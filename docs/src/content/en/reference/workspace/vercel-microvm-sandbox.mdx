@@ -59,9 +59,9 @@ The `@vercel/sandbox` SDK uses a Vercel OIDC token automatically when available.
   <TabItem value="constructor" label="Constructor">
     ```typescript
     new VercelMicroVMSandbox({
-      token: 'your-token',
-      teamId: 'your-team-id',
-      projectId: 'your-project-id',
+    	token: 'your-token',
+    	teamId: 'your-team-id',
+    	projectId: 'your-project-id',
     })
     ```
   </TabItem>
@@ -77,18 +77,18 @@ import { Workspace } from '@mastra/core/workspace'
 import { VercelMicroVMSandbox } from '@mastra/vercel'
 
 const workspace = new Workspace({
-  sandbox: new VercelMicroVMSandbox({
-    runtime: 'node24',
-    timeout: 600_000,
-  }),
+	sandbox: new VercelMicroVMSandbox({
+		runtime: 'node24',
+		timeout: 600_000,
+	}),
 })
 
 const agent = new Agent({
-  id: 'code-agent',
-  name: 'Code Agent',
-  instructions: 'You are a coding assistant working in this workspace.',
-  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
-  workspace,
+	id: 'code-agent',
+	name: 'Code Agent',
+	instructions: 'You are a coding assistant working in this workspace.',
+	model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+	workspace,
 })
 
 const response = await agent.generate('Print "Hello, world!" and show the Node.js version.')
@@ -102,9 +102,9 @@ Allocate vCPUs (2048 MB of memory per vCPU) and expose ports to reach network se
 
 ```typescript
 const sandbox = new VercelMicroVMSandbox({
-  runtime: 'node24',
-  resources: { vcpus: 4 },
-  ports: [3000],
+	runtime: 'node24',
+	resources: { vcpus: 4 },
+	ports: [3000],
 })
 
 const workspace = new Workspace({ sandbox })
@@ -121,8 +121,8 @@ Stream command output in real time via `onStdout` and `onStderr` callbacks:
 
 ```typescript
 await sandbox.executeCommand('sh', ['-c', 'for i in 1 2 3; do echo "line $i"; sleep 1; done'], {
-  onStdout: chunk => process.stdout.write(chunk),
-  onStderr: chunk => process.stderr.write(chunk),
+	onStdout: chunk => process.stdout.write(chunk),
+	onStderr: chunk => process.stderr.write(chunk),
 })
 ```
 
@@ -132,85 +132,85 @@ Both callbacks are optional and can be used independently.
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Unique identifier for this sandbox instance.',
-    isOptional: true,
-    defaultValue: 'Auto-generated',
-  },
-  {
-    name: 'sandboxName',
-    type: 'string',
-    description: 'Optional name passed to the Vercel API. Auto-generated if omitted.',
-    isOptional: true,
-  },
-  {
-    name: 'token',
-    type: 'string',
-    description: 'Vercel API token. Falls back to the VERCEL_TOKEN environment variable. Omit to use the OIDC token.',
-    isOptional: true,
-  },
-  {
-    name: 'teamId',
-    type: 'string',
-    description: 'Vercel team ID. Falls back to the VERCEL_TEAM_ID environment variable.',
-    isOptional: true,
-  },
-  {
-    name: 'projectId',
-    type: 'string',
-    description: 'Vercel project ID. Falls back to the VERCEL_PROJECT_ID environment variable.',
-    isOptional: true,
-  },
-  {
-    name: 'runtime',
-    type: "'node24' | 'node22' | 'node26' | 'python3.13'",
-    description: 'Sandbox runtime.',
-    isOptional: true,
-    defaultValue: "'node24'",
-  },
-  {
-    name: 'timeout',
-    type: 'number',
-    description: 'Timeout in milliseconds before the sandbox auto-terminates.',
-    isOptional: true,
-    defaultValue: '300000 (5 minutes)',
-  },
-  {
-    name: 'resources',
-    type: '{ vcpus?: number }',
-    description: 'Resource allocation. Each vCPU comes with 2048 MB of memory.',
-    isOptional: true,
-  },
-  {
-    name: 'ports',
-    type: 'number[]',
-    description:
-      'Ports to expose from the sandbox (up to 4). Public HTTPS domains are available via getInfo().metadata.domains.',
-    isOptional: true,
-  },
-  {
-    name: 'env',
-    type: 'Record<string, string>',
-    description: 'Default environment variables inherited by all commands.',
-    isOptional: true,
-    defaultValue: '{}',
-  },
-  {
-    name: 'metadata',
-    type: 'Record<string, unknown>',
-    description: 'Custom metadata surfaced via getInfo().',
-    isOptional: true,
-    defaultValue: '{}',
-  },
-  {
-    name: 'instructions',
-    type: 'string | ((opts) => string)',
-    description:
-      'Override the default instructions returned by getInstructions(). Pass a string to replace them, or a function to extend the defaults.',
-    isOptional: true,
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Unique identifier for this sandbox instance.',
+		isOptional: true,
+		defaultValue: 'Auto-generated',
+	},
+	{
+		name: 'sandboxName',
+		type: 'string',
+		description: 'Optional name passed to the Vercel API. Auto-generated if omitted.',
+		isOptional: true,
+	},
+	{
+		name: 'token',
+		type: 'string',
+		description: 'Vercel API token. Falls back to the VERCEL_TOKEN environment variable. Omit to use the OIDC token.',
+		isOptional: true,
+	},
+	{
+		name: 'teamId',
+		type: 'string',
+		description: 'Vercel team ID. Falls back to the VERCEL_TEAM_ID environment variable.',
+		isOptional: true,
+	},
+	{
+		name: 'projectId',
+		type: 'string',
+		description: 'Vercel project ID. Falls back to the VERCEL_PROJECT_ID environment variable.',
+		isOptional: true,
+	},
+	{
+		name: 'runtime',
+		type: "'node24' | 'node22' | 'node26' | 'python3.13'",
+		description: 'Sandbox runtime.',
+		isOptional: true,
+		defaultValue: "'node24'",
+	},
+	{
+		name: 'timeout',
+		type: 'number',
+		description: 'Timeout in milliseconds before the sandbox auto-terminates.',
+		isOptional: true,
+		defaultValue: '300000 (5 minutes)',
+	},
+	{
+		name: 'resources',
+		type: '{ vcpus?: number }',
+		description: 'Resource allocation. Each vCPU comes with 2048 MB of memory.',
+		isOptional: true,
+	},
+	{
+		name: 'ports',
+		type: 'number[]',
+		description:
+			'Ports to expose from the sandbox (up to 4). Public HTTPS domains are available via getInfo().metadata.domains.',
+		isOptional: true,
+	},
+	{
+		name: 'env',
+		type: 'Record<string, string>',
+		description: 'Default environment variables inherited by all commands.',
+		isOptional: true,
+		defaultValue: '{}',
+	},
+	{
+		name: 'metadata',
+		type: 'Record<string, unknown>',
+		description: 'Custom metadata surfaced via getInfo().',
+		isOptional: true,
+		defaultValue: '{}',
+	},
+	{
+		name: 'instructions',
+		type: 'string | ((opts) => string)',
+		description:
+			'Override the default instructions returned by getInstructions(). Pass a string to replace them, or a function to extend the defaults.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -218,38 +218,38 @@ Both callbacks are optional and can be used independently.
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Sandbox instance identifier.',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: "Provider name ('VercelMicroVMSandbox').",
-  },
-  {
-    name: 'provider',
-    type: 'string',
-    description: "Provider identifier ('vercel-microvm').",
-  },
-  {
-    name: 'status',
-    type: 'ProviderStatus',
-    description: "'pending' | 'starting' | 'running' | 'stopping' | 'stopped' | 'destroying' | 'destroyed' | 'error'",
-  },
-  {
-    name: 'sandbox',
-    type: 'Sandbox',
-    description:
-      'The underlying @vercel/sandbox Sandbox instance. Throws SandboxNotReadyError if the sandbox has not been started.',
-  },
-  {
-    name: 'processes',
-    type: 'VercelMicroVMProcessManager',
-    description:
-      'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Sandbox instance identifier.',
+	},
+	{
+		name: 'name',
+		type: 'string',
+		description: "Provider name ('VercelMicroVMSandbox').",
+	},
+	{
+		name: 'provider',
+		type: 'string',
+		description: "Provider identifier ('vercel-microvm').",
+	},
+	{
+		name: 'status',
+		type: 'ProviderStatus',
+		description: "'pending' | 'starting' | 'running' | 'stopping' | 'stopped' | 'destroying' | 'destroyed' | 'error'",
+	},
+	{
+		name: 'sandbox',
+		type: 'Sandbox',
+		description:
+			'The underlying @vercel/sandbox Sandbox instance. Throws SandboxNotReadyError if the sandbox has not been started.',
+	},
+	{
+		name: 'processes',
+		type: 'VercelMicroVMProcessManager',
+		description:
+			'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
+	},
 ]}
 />
 
@@ -262,8 +262,8 @@ const sandbox = new VercelMicroVMSandbox({ runtime: 'node24', ports: [3000] })
 await sandbox.start()
 
 const handle = await sandbox.processes.spawn('node server.js', {
-  env: { PORT: '3000' },
-  onStdout: data => console.log(data),
+	env: { PORT: '3000' },
+	onStdout: data => console.log(data),
 })
 
 console.log(handle.stdout)

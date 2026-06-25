@@ -21,13 +21,13 @@ To opt out or customize the auto-applied filter, use the `sensitiveDataFilter` o
 import { Observability } from '@mastra/observability'
 
 new Observability({
-  configs: {
-    /* ... */
-  },
-  // disable the auto-applied filter
-  sensitiveDataFilter: false,
-  // or customize it
-  // sensitiveDataFilter: { sensitiveFields: ['mySecret'], redactionStyle: 'partial' },
+	configs: {
+		/* ... */
+	},
+	// disable the auto-applied filter
+	sensitiveDataFilter: false,
+	// or customize it
+	// sensitiveDataFilter: { sensitiveFields: ['mySecret'], redactionStyle: 'partial' },
 })
 ```
 
@@ -43,52 +43,52 @@ new SensitiveDataFilter(options?: SensitiveDataFilterOptions)
 
 ```typescript
 interface SensitiveDataFilterOptions {
-  /**
-   * List of sensitive field names to redact.
-   * Matching is case-insensitive and normalizes separators
-   * (api-key, api_key, Api Key → apikey).
-   * Defaults include: password, token, secret, key, apikey, auth,
-   * authorization, bearer, bearertoken, jwt, credential,
-   * clientsecret, privatekey, refresh, ssn.
-   */
-  sensitiveFields?: string[]
+	/**
+	 * List of sensitive field names to redact.
+	 * Matching is case-insensitive and normalizes separators
+	 * (api-key, api_key, Api Key → apikey).
+	 * Defaults include: password, token, secret, key, apikey, auth,
+	 * authorization, bearer, bearertoken, jwt, credential,
+	 * clientsecret, privatekey, refresh, ssn.
+	 */
+	sensitiveFields?: string[]
 
-  /**
-   * The token used for full redaction.
-   * Default: "[REDACTED]"
-   */
-  redactionToken?: string
+	/**
+	 * The token used for full redaction.
+	 * Default: "[REDACTED]"
+	 */
+	redactionToken?: string
 
-  /**
-   * Style of redaction to use:
-   * - "full": always replace with redactionToken
-   * - "partial": show 3 characters from the start and end, redact the middle
-   * Default: "full"
-   */
-  redactionStyle?: RedactionStyle
+	/**
+	 * Style of redaction to use:
+	 * - "full": always replace with redactionToken
+	 * - "partial": show 3 characters from the start and end, redact the middle
+	 * Default: "full"
+	 */
+	redactionStyle?: RedactionStyle
 }
 ```
 
 <PropertiesTable
   props={[
-  {
-    name: 'sensitiveFields',
-    type: 'string[]',
-    description: 'Field names to redact (case-insensitive, separator-agnostic)',
-    required: false,
-  },
-  {
-    name: 'redactionToken',
-    type: 'string',
-    description: 'Replacement token for full redaction',
-    required: false,
-  },
-  {
-    name: 'redactionStyle',
-    type: "'full' | 'partial'",
-    description: 'Redaction style',
-    required: false,
-  },
+	{
+		name: 'sensitiveFields',
+		type: 'string[]',
+		description: 'Field names to redact (case-insensitive, separator-agnostic)',
+		required: false,
+	},
+	{
+		name: 'redactionToken',
+		type: 'string',
+		description: 'Replacement token for full redaction',
+		required: false,
+	},
+	{
+		name: 'redactionStyle',
+		type: "'full' | 'partial'",
+		description: 'Redaction style',
+		required: false,
+	},
 ]}
 />
 
@@ -110,12 +110,12 @@ Process a span by filtering sensitive data across its key fields: attributes, me
 
 <PropertiesTable
   props={[
-  {
-    name: 'span',
-    type: 'AnySpan',
-    description: 'The input span to filter',
-    required: true,
-  },
+	{
+		name: 'span',
+		type: 'AnySpan',
+		description: 'The input span to filter',
+		required: true,
+	},
 ]}
 />
 
@@ -141,21 +141,21 @@ When no custom fields are provided:
 
 ```typescript
 [
-  'password',
-  'token',
-  'secret',
-  'key',
-  'apikey',
-  'auth',
-  'authorization',
-  'bearer',
-  'bearertoken',
-  'jwt',
-  'credential',
-  'clientsecret',
-  'privatekey',
-  'refresh',
-  'ssn',
+	'password',
+	'token',
+	'secret',
+	'key',
+	'apikey',
+	'auth',
+	'authorization',
+	'bearer',
+	'bearertoken',
+	'jwt',
+	'credential',
+	'clientsecret',
+	'privatekey',
+	'refresh',
+	'ssn',
 ]
 ```
 
@@ -187,9 +187,9 @@ If filtering a field fails, the field is replaced with:
 
 ```typescript
 {
-  error: {
-    processor: 'sensitive-data-filter'
-  }
+	error: {
+		processor: 'sensitive-data-filter'
+	}
 }
 ```
 

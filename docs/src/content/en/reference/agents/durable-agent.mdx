@@ -19,16 +19,16 @@ import { Agent } from '@mastra/core/agent'
 import { createDurableAgent } from '@mastra/core/agent/durable'
 
 const agent = new Agent({
-  id: 'my-agent',
-  name: 'My Agent',
-  instructions: 'You are a helpful assistant',
-  model: '__GATEWAY_OPENAI_MODEL__',
+	id: 'my-agent',
+	name: 'My Agent',
+	instructions: 'You are a helpful assistant',
+	model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 const durableAgent = createDurableAgent({ agent })
 
 export const mastra = new Mastra({
-  agents: { myAgent: durableAgent },
+	agents: { myAgent: durableAgent },
 })
 ```
 
@@ -58,46 +58,46 @@ Returns: `DurableAgent`
 
 <PropertiesTable
   content={[
-  {
-    name: 'agent',
-    type: 'Agent',
-    isOptional: false,
-    description: 'The Agent to wrap with durable execution capabilities. Agent methods delegate to this agent.',
-  },
-  {
-    name: 'id',
-    type: 'string',
-    isOptional: true,
-    description: 'ID override.',
-    defaultValue: 'agent.id',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    isOptional: true,
-    description: 'Name override.',
-    defaultValue: 'agent.name',
-  },
-  {
-    name: 'cache',
-    type: 'MastraServerCache | false',
-    isOptional: true,
-    description:
-      'Cache for stored stream events, which enables resumable streams. If omitted, the agent inherits the cache from the Mastra instance, or uses an InMemoryServerCache. Set to `false` to disable caching, which makes streams non-resumable.',
-  },
-  {
-    name: 'pubsub',
-    type: 'PubSub',
-    isOptional: true,
-    description: 'PubSub instance for streaming events.',
-    defaultValue: 'EventEmitterPubSub',
-  },
-  {
-    name: 'maxSteps',
-    type: 'number',
-    isOptional: true,
-    description: 'Maximum number of steps for the agentic loop.',
-  },
+	{
+		name: 'agent',
+		type: 'Agent',
+		isOptional: false,
+		description: 'The Agent to wrap with durable execution capabilities. Agent methods delegate to this agent.',
+	},
+	{
+		name: 'id',
+		type: 'string',
+		isOptional: true,
+		description: 'ID override.',
+		defaultValue: 'agent.id',
+	},
+	{
+		name: 'name',
+		type: 'string',
+		isOptional: true,
+		description: 'Name override.',
+		defaultValue: 'agent.name',
+	},
+	{
+		name: 'cache',
+		type: 'MastraServerCache | false',
+		isOptional: true,
+		description:
+			'Cache for stored stream events, which enables resumable streams. If omitted, the agent inherits the cache from the Mastra instance, or uses an InMemoryServerCache. Set to `false` to disable caching, which makes streams non-resumable.',
+	},
+	{
+		name: 'pubsub',
+		type: 'PubSub',
+		isOptional: true,
+		description: 'PubSub instance for streaming events.',
+		defaultValue: 'EventEmitterPubSub',
+	},
+	{
+		name: 'maxSteps',
+		type: 'number',
+		isOptional: true,
+		description: 'Maximum number of steps for the agentic loop.',
+	},
 ]}
 />
 
@@ -117,32 +117,32 @@ Returns: `EventedAgent` (a subclass of `DurableAgent`)
 
 <PropertiesTable
   content={[
-  {
-    name: 'agent',
-    type: 'Agent',
-    isOptional: false,
-    description: 'The Agent to wrap with evented durable execution capabilities.',
-  },
-  {
-    name: 'cache',
-    type: 'MastraServerCache | false',
-    isOptional: true,
-    description:
-      'Cache for stored stream events, which enables resumable streams. If omitted, the agent inherits the cache from the Mastra instance, or uses an InMemoryServerCache. Set to `false` to disable caching.',
-  },
-  {
-    name: 'pubsub',
-    type: 'PubSub',
-    isOptional: true,
-    description: 'PubSub instance for streaming events.',
-    defaultValue: 'EventEmitterPubSub',
-  },
-  {
-    name: 'maxSteps',
-    type: 'number',
-    isOptional: true,
-    description: 'Maximum number of steps for the agentic loop.',
-  },
+	{
+		name: 'agent',
+		type: 'Agent',
+		isOptional: false,
+		description: 'The Agent to wrap with evented durable execution capabilities.',
+	},
+	{
+		name: 'cache',
+		type: 'MastraServerCache | false',
+		isOptional: true,
+		description:
+			'Cache for stored stream events, which enables resumable streams. If omitted, the agent inherits the cache from the Mastra instance, or uses an InMemoryServerCache. Set to `false` to disable caching.',
+	},
+	{
+		name: 'pubsub',
+		type: 'PubSub',
+		isOptional: true,
+		description: 'PubSub instance for streaming events.',
+		defaultValue: 'EventEmitterPubSub',
+	},
+	{
+		name: 'maxSteps',
+		type: 'number',
+		isOptional: true,
+		description: 'Maximum number of steps for the agentic loop.',
+	},
 ]}
 />
 
@@ -152,54 +152,54 @@ The `DurableAgent` class accepts the same options as `createDurableAgent`, plus 
 
 <PropertiesTable
   content={[
-  {
-    name: 'agent',
-    type: 'Agent',
-    isOptional: false,
-    description: 'The Agent to wrap with durable execution capabilities.',
-  },
-  {
-    name: 'id',
-    type: 'string',
-    isOptional: true,
-    description: 'ID override.',
-    defaultValue: 'agent.id',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    isOptional: true,
-    description: 'Name override.',
-    defaultValue: 'agent.name',
-  },
-  {
-    name: 'cache',
-    type: 'MastraServerCache | false',
-    isOptional: true,
-    description:
-      'Cache for stored stream events. If omitted, inherits from the Mastra instance or uses an InMemoryServerCache. Set to `false` to disable caching.',
-  },
-  {
-    name: 'pubsub',
-    type: 'PubSub',
-    isOptional: true,
-    description: 'PubSub instance for streaming events.',
-    defaultValue: 'EventEmitterPubSub',
-  },
-  {
-    name: 'maxSteps',
-    type: 'number',
-    isOptional: true,
-    description: 'Maximum number of steps for the agentic loop.',
-  },
-  {
-    name: 'cleanupTimeoutMs',
-    type: 'number',
-    isOptional: true,
-    description:
-      'Grace period in milliseconds before registry entries are cleaned up automatically after a stream finishes or errors. Set to 0 to disable auto-cleanup and require a manual `cleanup()` call. Auto-cleanup does not fire on suspended events.',
-    defaultValue: '30000',
-  },
+	{
+		name: 'agent',
+		type: 'Agent',
+		isOptional: false,
+		description: 'The Agent to wrap with durable execution capabilities.',
+	},
+	{
+		name: 'id',
+		type: 'string',
+		isOptional: true,
+		description: 'ID override.',
+		defaultValue: 'agent.id',
+	},
+	{
+		name: 'name',
+		type: 'string',
+		isOptional: true,
+		description: 'Name override.',
+		defaultValue: 'agent.name',
+	},
+	{
+		name: 'cache',
+		type: 'MastraServerCache | false',
+		isOptional: true,
+		description:
+			'Cache for stored stream events. If omitted, inherits from the Mastra instance or uses an InMemoryServerCache. Set to `false` to disable caching.',
+	},
+	{
+		name: 'pubsub',
+		type: 'PubSub',
+		isOptional: true,
+		description: 'PubSub instance for streaming events.',
+		defaultValue: 'EventEmitterPubSub',
+	},
+	{
+		name: 'maxSteps',
+		type: 'number',
+		isOptional: true,
+		description: 'Maximum number of steps for the agentic loop.',
+	},
+	{
+		name: 'cleanupTimeoutMs',
+		type: 'number',
+		isOptional: true,
+		description:
+			'Grace period in milliseconds before registry entries are cleaned up automatically after a stream finishes or errors. Set to 0 to disable auto-cleanup and require a manual `cleanup()` call. Auto-cleanup does not fire on suspended events.',
+		defaultValue: '30000',
+	},
 ]}
 />
 
@@ -213,8 +213,8 @@ Streams a response using durable execution. Returns immediately with a result wh
 
 ```typescript
 const { output, runId, cleanup } = await durableAgent.stream('Hello!', {
-  onChunk: chunk => console.log(chunk),
-  onFinish: result => console.log('done', result),
+	onChunk: chunk => console.log(chunk),
+	onFinish: result => console.log('done', result),
 })
 
 const text = await output.text
@@ -229,7 +229,7 @@ Resumes a suspended run, for example after a tool approval. Pass the `runId` fro
 
 ```typescript
 const { output, cleanup } = await durableAgent.resume(runId, {
-  approved: true,
+	approved: true,
 })
 
 await output.text
@@ -244,8 +244,8 @@ Reconnects to an existing run, replaying cached events before delivering live on
 
 ```typescript
 const { output, cleanup } = await durableAgent.observe(runId, {
-  offset: 0,
-  onChunk: chunk => console.log(chunk),
+	offset: 0,
+	onChunk: chunk => console.log(chunk),
 })
 
 await output.text
@@ -265,10 +265,10 @@ Prepares a run for durable execution without starting it. Registers the run in t
 
 ```typescript
 const { runId, messageId, workflowInput, threadId, resourceId } = await durableAgent.prepare(
-  'Summarize the document',
-  {
-    memory: { threadId: 'thread-1', resourceId: 'user-1' },
-  },
+	'Summarize the document',
+	{
+		memory: { threadId: 'thread-1', resourceId: 'user-1' },
+	},
 )
 ```
 
@@ -276,12 +276,12 @@ Returns:
 
 ```typescript
 interface PrepareResult {
-  runId: string
-  messageId: string
-  workflowInput: any
-  registryEntry: object
-  threadId?: string
-  resourceId?: string
+	runId: string
+	messageId: string
+	workflowInput: any
+	registryEntry: object
+	threadId?: string
+	resourceId?: string
 }
 ```
 
@@ -291,152 +291,152 @@ interface PrepareResult {
 
 <PropertiesTable
   content={[
-  {
-    name: 'runId',
-    type: 'string',
-    isOptional: true,
-    description: 'Unique identifier for this run. Use it later with `resume()` or `observe()`.',
-  },
-  {
-    name: 'instructions',
-    type: "AgentExecutionOptions['instructions']",
-    isOptional: true,
-    description:
-      "Overrides the agent's default instructions for this run. Accepts a static string or the same dynamic instructions value the agent supports.",
-  },
-  {
-    name: 'context',
-    type: 'ModelMessage[]',
-    isOptional: true,
-    description: 'Additional context messages to provide to the agent.',
-  },
-  {
-    name: 'memory',
-    type: 'object',
-    isOptional: true,
-    description: 'Memory configuration for conversation persistence and retrieval.',
-  },
-  {
-    name: 'requestContext',
-    type: 'RequestContext',
-    isOptional: true,
-    description: 'Request context carrying dynamic configuration and state for this run.',
-  },
-  {
-    name: 'maxSteps',
-    type: 'number',
-    isOptional: true,
-    description: 'Maximum number of steps to run for this stream.',
-  },
-  {
-    name: 'toolsets',
-    type: 'object',
-    isOptional: true,
-    description: 'Additional tool sets available for this run.',
-  },
-  {
-    name: 'clientTools',
-    type: 'object',
-    isOptional: true,
-    description: 'Client-side tools available during execution.',
-  },
-  {
-    name: 'toolChoice',
-    type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
-    isOptional: true,
-    description: 'Tool selection strategy.',
-  },
-  {
-    name: 'activeTools',
-    type: 'string[]',
-    isOptional: true,
-    description: "Restricts execution to the named subset of the agent's tools.",
-  },
-  {
-    name: 'modelSettings',
-    type: 'object',
-    isOptional: true,
-    description: 'Model-specific settings such as temperature.',
-  },
-  {
-    name: 'requireToolApproval',
-    type: 'boolean',
-    isOptional: true,
-    description: 'Require approval for all tool calls, which suspends the run until resumed.',
-  },
-  {
-    name: 'autoResumeSuspendedTools',
-    type: 'boolean',
-    isOptional: true,
-    description: 'Automatically resume tools that suspended, instead of waiting for an external `resume()` call.',
-  },
-  {
-    name: 'toolCallConcurrency',
-    type: 'number',
-    isOptional: true,
-    description: 'Maximum number of tool calls to execute concurrently.',
-  },
-  {
-    name: 'includeRawChunks',
-    type: 'boolean',
-    isOptional: true,
-    description: 'Include raw provider chunks in the stream output.',
-  },
-  {
-    name: 'maxProcessorRetries',
-    type: 'number',
-    isOptional: true,
-    description: 'Maximum number of processor retries per generation.',
-  },
-  {
-    name: 'structuredOutput',
-    type: 'object',
-    isOptional: true,
-    description: 'Structured output configuration.',
-  },
-  {
-    name: 'untilIdle',
-    type: 'boolean | { maxIdleMs?: number }',
-    isOptional: true,
-    description:
-      'When set, keeps the stream open across background-task continuations until the agent is idle. Pass `true` for the default 5-minute idle timeout, or `{ maxIdleMs }` to customise. Equivalent to the deprecated `streamUntilIdle()` method.',
-  },
-  {
-    name: 'versions',
-    type: 'object',
-    isOptional: true,
-    description: 'Version overrides for sub-agent delegation.',
-  },
-  {
-    name: 'onChunk',
-    type: '(chunk: ChunkType) => void | Promise<void>',
-    isOptional: true,
-    description: 'Called for each streamed chunk.',
-  },
-  {
-    name: 'onStepFinish',
-    type: '(result: AgentStepFinishEventData) => void | Promise<void>',
-    isOptional: true,
-    description: 'Called when a step in the agentic loop finishes.',
-  },
-  {
-    name: 'onFinish',
-    type: '(result: AgentFinishEventData) => void | Promise<void>',
-    isOptional: true,
-    description: 'Called when the run finishes.',
-  },
-  {
-    name: 'onError',
-    type: '(error: Error) => void | Promise<void>',
-    isOptional: true,
-    description: 'Called when the run errors.',
-  },
-  {
-    name: 'onSuspended',
-    type: '(data: AgentSuspendedEventData) => void | Promise<void>',
-    isOptional: true,
-    description: 'Called when the run suspends, for example for tool approval.',
-  },
+	{
+		name: 'runId',
+		type: 'string',
+		isOptional: true,
+		description: 'Unique identifier for this run. Use it later with `resume()` or `observe()`.',
+	},
+	{
+		name: 'instructions',
+		type: "AgentExecutionOptions['instructions']",
+		isOptional: true,
+		description:
+			"Overrides the agent's default instructions for this run. Accepts a static string or the same dynamic instructions value the agent supports.",
+	},
+	{
+		name: 'context',
+		type: 'ModelMessage[]',
+		isOptional: true,
+		description: 'Additional context messages to provide to the agent.',
+	},
+	{
+		name: 'memory',
+		type: 'object',
+		isOptional: true,
+		description: 'Memory configuration for conversation persistence and retrieval.',
+	},
+	{
+		name: 'requestContext',
+		type: 'RequestContext',
+		isOptional: true,
+		description: 'Request context carrying dynamic configuration and state for this run.',
+	},
+	{
+		name: 'maxSteps',
+		type: 'number',
+		isOptional: true,
+		description: 'Maximum number of steps to run for this stream.',
+	},
+	{
+		name: 'toolsets',
+		type: 'object',
+		isOptional: true,
+		description: 'Additional tool sets available for this run.',
+	},
+	{
+		name: 'clientTools',
+		type: 'object',
+		isOptional: true,
+		description: 'Client-side tools available during execution.',
+	},
+	{
+		name: 'toolChoice',
+		type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
+		isOptional: true,
+		description: 'Tool selection strategy.',
+	},
+	{
+		name: 'activeTools',
+		type: 'string[]',
+		isOptional: true,
+		description: "Restricts execution to the named subset of the agent's tools.",
+	},
+	{
+		name: 'modelSettings',
+		type: 'object',
+		isOptional: true,
+		description: 'Model-specific settings such as temperature.',
+	},
+	{
+		name: 'requireToolApproval',
+		type: 'boolean',
+		isOptional: true,
+		description: 'Require approval for all tool calls, which suspends the run until resumed.',
+	},
+	{
+		name: 'autoResumeSuspendedTools',
+		type: 'boolean',
+		isOptional: true,
+		description: 'Automatically resume tools that suspended, instead of waiting for an external `resume()` call.',
+	},
+	{
+		name: 'toolCallConcurrency',
+		type: 'number',
+		isOptional: true,
+		description: 'Maximum number of tool calls to execute concurrently.',
+	},
+	{
+		name: 'includeRawChunks',
+		type: 'boolean',
+		isOptional: true,
+		description: 'Include raw provider chunks in the stream output.',
+	},
+	{
+		name: 'maxProcessorRetries',
+		type: 'number',
+		isOptional: true,
+		description: 'Maximum number of processor retries per generation.',
+	},
+	{
+		name: 'structuredOutput',
+		type: 'object',
+		isOptional: true,
+		description: 'Structured output configuration.',
+	},
+	{
+		name: 'untilIdle',
+		type: 'boolean | { maxIdleMs?: number }',
+		isOptional: true,
+		description:
+			'When set, keeps the stream open across background-task continuations until the agent is idle. Pass `true` for the default 5-minute idle timeout, or `{ maxIdleMs }` to customise. Equivalent to the deprecated `streamUntilIdle()` method.',
+	},
+	{
+		name: 'versions',
+		type: 'object',
+		isOptional: true,
+		description: 'Version overrides for sub-agent delegation.',
+	},
+	{
+		name: 'onChunk',
+		type: '(chunk: ChunkType) => void | Promise<void>',
+		isOptional: true,
+		description: 'Called for each streamed chunk.',
+	},
+	{
+		name: 'onStepFinish',
+		type: '(result: AgentStepFinishEventData) => void | Promise<void>',
+		isOptional: true,
+		description: 'Called when a step in the agentic loop finishes.',
+	},
+	{
+		name: 'onFinish',
+		type: '(result: AgentFinishEventData) => void | Promise<void>',
+		isOptional: true,
+		description: 'Called when the run finishes.',
+	},
+	{
+		name: 'onError',
+		type: '(error: Error) => void | Promise<void>',
+		isOptional: true,
+		description: 'Called when the run errors.',
+	},
+	{
+		name: 'onSuspended',
+		type: '(data: AgentSuspendedEventData) => void | Promise<void>',
+		isOptional: true,
+		description: 'Called when the run suspends, for example for tool approval.',
+	},
 ]}
 />
 
@@ -448,49 +448,49 @@ The object returned by `stream()`, `resume()`, and `observe()`.
 
 ```typescript
 interface DurableAgentStreamResult<OUTPUT = undefined> {
-  output: MastraModelOutput<OUTPUT>
-  readonly fullStream: ReadableStream<any>
-  runId: string
-  threadId?: string
-  resourceId?: string
-  cleanup: () => void
+	output: MastraModelOutput<OUTPUT>
+	readonly fullStream: ReadableStream<any>
+	runId: string
+	threadId?: string
+	resourceId?: string
+	cleanup: () => void
 }
 ```
 
 <PropertiesTable
   content={[
-  {
-    name: 'output',
-    type: 'MastraModelOutput',
-    description: 'The streaming output. Await `output.text` for the full text, or consume `output.fullStream`.',
-  },
-  {
-    name: 'fullStream',
-    type: 'ReadableStream',
-    description: 'The full event stream, delegating to `output.fullStream`.',
-  },
-  {
-    name: 'runId',
-    type: 'string',
-    description: 'The unique run ID. Pass it to `resume()` or `observe()` to reconnect.',
-  },
-  {
-    name: 'threadId',
-    type: 'string',
-    isOptional: true,
-    description: 'Thread ID when using memory.',
-  },
-  {
-    name: 'resourceId',
-    type: 'string',
-    isOptional: true,
-    description: 'Resource ID when using memory.',
-  },
-  {
-    name: 'cleanup',
-    type: '() => void',
-    description: 'Unsubscribes from PubSub and clears registry entries for the run. Call it when done with the run.',
-  },
+	{
+		name: 'output',
+		type: 'MastraModelOutput',
+		description: 'The streaming output. Await `output.text` for the full text, or consume `output.fullStream`.',
+	},
+	{
+		name: 'fullStream',
+		type: 'ReadableStream',
+		description: 'The full event stream, delegating to `output.fullStream`.',
+	},
+	{
+		name: 'runId',
+		type: 'string',
+		description: 'The unique run ID. Pass it to `resume()` or `observe()` to reconnect.',
+	},
+	{
+		name: 'threadId',
+		type: 'string',
+		isOptional: true,
+		description: 'Thread ID when using memory.',
+	},
+	{
+		name: 'resourceId',
+		type: 'string',
+		isOptional: true,
+		description: 'Resource ID when using memory.',
+	},
+	{
+		name: 'cleanup',
+		type: '() => void',
+		description: 'Unsubscribes from PubSub and clears registry entries for the run. Call it when done with the run.',
+	},
 ]}
 />
 

@@ -70,8 +70,8 @@ Enable skill discovery by setting the `skills` option on your workspace:
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  skills: ['skills'],
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	skills: ['skills'],
 })
 ```
 
@@ -79,11 +79,11 @@ You can specify multiple skill directories:
 
 ```typescript title="src/mastra/workspaces.ts"
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  skills: [
-    'skills', // Project skills
-    'team-skills', // Shared team skills
-  ],
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	skills: [
+		'skills', // Project skills
+		'team-skills', // Shared team skills
+	],
 })
 ```
 
@@ -91,8 +91,8 @@ You can also pass a direct path to a skill directory or `SKILL.md` file:
 
 ```typescript
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  skills: ['path/to/my-skill'],
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	skills: ['path/to/my-skill'],
 })
 ```
 
@@ -100,8 +100,8 @@ Glob patterns let you discover skills across nested directories:
 
 ```typescript
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  skills: ['./**/skills'],
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	skills: ['./**/skills'],
 })
 ```
 
@@ -111,14 +111,14 @@ For dynamic skill paths based on context, pass a function:
 
 ```typescript
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  skills: ctx => {
-    const paths = ['skills']
-    if (ctx.requestContext?.get('userRole') === 'developer') {
-      paths.push('dev-skills')
-    }
-    return paths
-  },
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	skills: ctx => {
+		const paths = ['skills']
+		if (ctx.requestContext?.get('userRole') === 'developer') {
+			paths.push('dev-skills')
+		}
+		return paths
+	},
 })
 ```
 
@@ -146,11 +146,11 @@ When the agent activates a skill by name, tie-breaking determines which one is r
 
 ```typescript title="Example: local skill shadows an external package skill"
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  skills: [
-    'node_modules/@myorg/skills', // external: provides "brand-guidelines"
-    'skills', // local: also provides "brand-guidelines"
-  ],
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	skills: [
+		'node_modules/@myorg/skills', // external: provides "brand-guidelines"
+		'skills', // local: also provides "brand-guidelines"
+	],
 })
 
 // get('brand-guidelines') returns the local copy (local > external)
@@ -163,10 +163,10 @@ If BM25 or vector search is enabled on the workspace, skills are automatically i
 
 ```typescript
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  skills: ['skills'],
-  // highlight-next-line
-  bm25: true,
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	skills: ['skills'],
+	// highlight-next-line
+	bm25: true,
 })
 ```
 
@@ -182,10 +182,10 @@ import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 import { VersionedSkillSource } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './workspace' }),
-  skills: ['skills'],
-  // highlight-next-line
-  skillSource: new VersionedSkillSource(versionTree, blobStore, versionCreatedAt),
+	filesystem: new LocalFilesystem({ basePath: './workspace' }),
+	skills: ['skills'],
+	// highlight-next-line
+	skillSource: new VersionedSkillSource(versionTree, blobStore, versionCreatedAt),
 })
 ```
 

@@ -22,7 +22,7 @@ import { Mastra } from '@mastra/core'
 import { UnixSocketPubSub } from '@mastra/core/events'
 
 export const mastra = new Mastra({
-  pubsub: new UnixSocketPubSub('/tmp/mastra/events.sock'),
+	pubsub: new UnixSocketPubSub('/tmp/mastra/events.sock'),
 })
 ```
 
@@ -30,28 +30,28 @@ export const mastra = new Mastra({
 
 <PropertiesTable
   content={[
-  {
-    name: 'socketPath',
-    type: 'string',
-    description: 'Path to the Unix domain socket. All processes that share a stream must use the same path.',
-    isOptional: false,
-  },
-  {
-    name: 'options',
-    type: 'UnixSocketPubSubOptions',
-    description: 'Optional configuration.',
-    isOptional: true,
-    properties: [
-      {
-        name: 'maxRemoteClientQueuedBytes',
-        type: 'number',
-        description:
-          'Maximum bytes buffered for a slow remote client before its frames are dropped, which keeps one stuck subscriber from blocking others.',
-        isOptional: true,
-        defaultValue: '67108864',
-      },
-    ],
-  },
+	{
+		name: 'socketPath',
+		type: 'string',
+		description: 'Path to the Unix domain socket. All processes that share a stream must use the same path.',
+		isOptional: false,
+	},
+	{
+		name: 'options',
+		type: 'UnixSocketPubSubOptions',
+		description: 'Optional configuration.',
+		isOptional: true,
+		properties: [
+			{
+				name: 'maxRemoteClientQueuedBytes',
+				type: 'number',
+				description:
+					'Maximum bytes buffered for a slow remote client before its frames are dropped, which keeps one stuck subscriber from blocking others.',
+				isOptional: true,
+				defaultValue: '67108864',
+			},
+		],
+	},
 ]}
 />
 
@@ -59,26 +59,26 @@ export const mastra = new Mastra({
 
 <PropertiesTable
   content={[
-  {
-    name: 'socketPath',
-    type: 'string',
-    description: 'The socket path passed to the constructor.',
-  },
-  {
-    name: 'supportedModes',
-    type: 'ReadonlyArray<"pull" | "push">',
-    description: 'Returns `["push"]`.',
-  },
-  {
-    name: 'isBroker',
-    type: 'boolean',
-    description: 'Whether this instance currently acts as the broker.',
-  },
-  {
-    name: 'remoteClientCount',
-    type: 'number',
-    description: 'Number of remote clients connected to this broker. Always 0 when this instance is not the broker.',
-  },
+	{
+		name: 'socketPath',
+		type: 'string',
+		description: 'The socket path passed to the constructor.',
+	},
+	{
+		name: 'supportedModes',
+		type: 'ReadonlyArray<"pull" | "push">',
+		description: 'Returns `["push"]`.',
+	},
+	{
+		name: 'isBroker',
+		type: 'boolean',
+		description: 'Whether this instance currently acts as the broker.',
+	},
+	{
+		name: 'remoteClientCount',
+		type: 'number',
+		description: 'Number of remote clients connected to this broker. Always 0 when this instance is not the broker.',
+	},
 ]}
 />
 

@@ -31,17 +31,17 @@ If you're using the old `telemetry:` configuration in Mastra, the system has bee
 import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
-  telemetry: {
-    serviceName: 'my-app',
-    enabled: true,
-    sampling: {
-      type: 'always_on',
-    },
-    export: {
-      type: 'otlp',
-      endpoint: 'http://localhost:4318',
-    },
-  },
+	telemetry: {
+		serviceName: 'my-app',
+		enabled: true,
+		sampling: {
+			type: 'always_on',
+		},
+		export: {
+			type: 'otlp',
+			endpoint: 'http://localhost:4318',
+		},
+	},
 })
 ```
 
@@ -50,27 +50,27 @@ export const mastra = new Mastra({
 ```typescript
 import { Mastra } from '@mastra/core'
 import {
-  Observability,
-  MastraStorageExporter,
-  MastraPlatformExporter,
-  SensitiveDataFilter,
+	Observability,
+	MastraStorageExporter,
+	MastraPlatformExporter,
+	SensitiveDataFilter,
 } from '@mastra/observability'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'mastra',
-        exporters: [
-          new MastraStorageExporter(), // Persists observability events to Mastra Storage
-          new MastraPlatformExporter(), // Sends observability events to Mastra platform (if MASTRA_PLATFORM_ACCESS_TOKEN is set)
-        ],
-        spanOutputProcessors: [
-          new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
-        ],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			default: {
+				serviceName: 'mastra',
+				exporters: [
+					new MastraStorageExporter(), // Persists observability events to Mastra Storage
+					new MastraPlatformExporter(), // Sends observability events to Mastra platform (if MASTRA_PLATFORM_ACCESS_TOKEN is set)
+				],
+				spanOutputProcessors: [
+					new SensitiveDataFilter(), // Redacts sensitive data like passwords, tokens, keys
+				],
+			},
+		},
+	}),
 })
 ```
 
@@ -90,24 +90,24 @@ import { Observability } from '@mastra/observability'
 import { OtelExporter } from '@mastra/otel-exporter'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      production: {
-        serviceName: 'my-app',
-        sampling: { type: 'always' },
-        exporters: [
-          new OtelExporter({
-            provider: {
-              custom: {
-                endpoint: 'http://localhost:4318/v1/traces',
-                protocol: 'http/protobuf',
-              },
-            },
-          }),
-        ],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			production: {
+				serviceName: 'my-app',
+				sampling: { type: 'always' },
+				exporters: [
+					new OtelExporter({
+						provider: {
+							custom: {
+								endpoint: 'http://localhost:4318/v1/traces',
+								protocol: 'http/protobuf',
+							},
+						},
+					}),
+				],
+			},
+		},
+	}),
 })
 ```
 
@@ -130,9 +130,9 @@ If you already upgraded to AI tracing (the intermediate system), you need to ins
 import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
-  observability: {
-    default: { enabled: true },
-  },
+	observability: {
+		default: { enabled: true },
+	},
 })
 ```
 
@@ -141,22 +141,22 @@ export const mastra = new Mastra({
 ```typescript
 import { Mastra } from '@mastra/core'
 import {
-  Observability,
-  MastraStorageExporter,
-  MastraPlatformExporter,
-  SensitiveDataFilter,
+	Observability,
+	MastraStorageExporter,
+	MastraPlatformExporter,
+	SensitiveDataFilter,
 } from '@mastra/observability'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'mastra',
-        exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
-        spanOutputProcessors: [new SensitiveDataFilter()],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			default: {
+				serviceName: 'mastra',
+				exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
+				spanOutputProcessors: [new SensitiveDataFilter()],
+			},
+		},
+	}),
 })
 ```
 
@@ -292,22 +292,22 @@ Simply remove the `instrumentation.mjs` file and configure observability in your
 ```typescript
 // src/mastra/index.ts
 import {
-  Observability,
-  MastraStorageExporter,
-  MastraPlatformExporter,
-  SensitiveDataFilter,
+	Observability,
+	MastraStorageExporter,
+	MastraPlatformExporter,
+	SensitiveDataFilter,
 } from '@mastra/observability'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'mastra',
-        exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
-        spanOutputProcessors: [new SensitiveDataFilter()],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			default: {
+				serviceName: 'mastra',
+				exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
+				spanOutputProcessors: [new SensitiveDataFilter()],
+			},
+		},
+	}),
 })
 ```
 

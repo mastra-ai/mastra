@@ -39,15 +39,15 @@ const memory = await supportAgent.getMemory()
 await memory!.createThread({ threadId: 'eval-thread', resourceId: 'ci-user' })
 
 const result = await runEvals({
-  target: supportAgent,
-  scorers: [recallScorer],
-  targetOptions: {
-    memory: { thread: 'eval-thread', resource: 'ci-user' },
-  },
-  data: [
-    { input: 'My order number is 12345' },
-    { input: 'What is my order number?', groundTruth: '12345' },
-  ],
+	target: supportAgent,
+	scorers: [recallScorer],
+	targetOptions: {
+		memory: { thread: 'eval-thread', resource: 'ci-user' },
+	},
+	data: [
+		{ input: 'My order number is 12345' },
+		{ input: 'What is my order number?', groundTruth: '12345' },
+	],
 })
 ```
 
@@ -67,24 +67,24 @@ const memory = await supportAgent.getMemory()
 const resourceId = 'ci-user'
 
 const items = [
-  { input: 'Cats are mammals', groundTruth: 'mammals' },
-  { input: 'Dogs are mammals too', groundTruth: 'mammals' },
+	{ input: 'Cats are mammals', groundTruth: 'mammals' },
+	{ input: 'Dogs are mammals too', groundTruth: 'mammals' },
 ]
 
 // `runEvals` returns `{ scores: Record<string, number>; summary: { totalItems } }`.
 const scores: number[] = []
 for (const item of items) {
-  const threadId = `eval-${randomUUID()}`
-  await memory!.createThread({ threadId, resourceId, title: item.input })
+	const threadId = `eval-${randomUUID()}`
+	await memory!.createThread({ threadId, resourceId, title: item.input })
 
-  const result = await runEvals({
-    target: supportAgent,
-    scorers: [recallScorer],
-    targetOptions: { memory: { thread: threadId, resource: resourceId } },
-    data: [item],
-  })
+	const result = await runEvals({
+		target: supportAgent,
+		scorers: [recallScorer],
+		targetOptions: { memory: { thread: threadId, resource: resourceId } },
+		data: [item],
+	})
 
-  scores.push(result.scores[recallScorer.id])
+	scores.push(result.scores[recallScorer.id])
 }
 
 const average = scores.reduce((a, b) => a + b, 0) / scores.length
@@ -108,39 +108,39 @@ const memory = await supportAgent.getMemory()
 const resourceId = 'ci-user'
 
 const items = [
-  { input: 'Cats are mammals', groundTruth: 'mammals', thread: `ds-${randomUUID()}` },
-  { input: 'Dogs are mammals too', groundTruth: 'mammals', thread: `ds-${randomUUID()}` },
+	{ input: 'Cats are mammals', groundTruth: 'mammals', thread: `ds-${randomUUID()}` },
+	{ input: 'Dogs are mammals too', groundTruth: 'mammals', thread: `ds-${randomUUID()}` },
 ]
 
 for (const it of items) {
-  await memory!.createThread({ threadId: it.thread, resourceId, title: it.input })
+	await memory!.createThread({ threadId: it.thread, resourceId, title: it.input })
 }
 
 const dataset = await mastra.datasets.create({
-  name: 'support-recall',
-  description: 'Per-item memory via inline task + item metadata',
+	name: 'support-recall',
+	description: 'Per-item memory via inline task + item metadata',
 })
 
 await dataset.addItems({
-  items: items.map(it => ({
-    input: it.input,
-    groundTruth: it.groundTruth,
-    metadata: { threadId: it.thread, resourceId },
-  })),
+	items: items.map(it => ({
+		input: it.input,
+		groundTruth: it.groundTruth,
+		metadata: { threadId: it.thread, resourceId },
+	})),
 })
 
 const summary = await dataset.startExperiment({
-  scorers: [recallScorer],
-  task: async ({ input, metadata }) => {
-    const { threadId, resourceId: rid } = (metadata ?? {}) as {
-      threadId: string
-      resourceId: string
-    }
-    const result = await supportAgent.generate(input as string, {
-      memory: { thread: threadId, resource: rid },
-    })
-    return result.text
-  },
+	scorers: [recallScorer],
+	task: async ({ input, metadata }) => {
+		const { threadId, resourceId: rid } = (metadata ?? {}) as {
+			threadId: string
+			resourceId: string
+		}
+		const result = await supportAgent.generate(input as string, {
+			memory: { thread: threadId, resource: rid },
+		})
+		return result.text
+	},
 })
 ```
 

@@ -20,20 +20,20 @@ import { createWorkflow, createStep } from '@mastra/core/workflows'
 import { z } from 'zod'
 
 const step1 = createStep({
-  id: 'step-1',
-  description: 'passes value from input to output',
-  inputSchema: z.object({
-    value: z.number(),
-  }),
-  outputSchema: z.object({
-    value: z.number(),
-  }),
-  execute: async ({ inputData }) => {
-    const { value } = inputData
-    return {
-      value,
-    }
-  },
+	id: 'step-1',
+	description: 'passes value from input to output',
+	inputSchema: z.object({
+		value: z.number(),
+	}),
+	outputSchema: z.object({
+		value: z.number(),
+	}),
+	execute: async ({ inputData }) => {
+		const { value } = inputData
+		return {
+			value,
+		}
+	},
 })
 ```
 
@@ -48,20 +48,20 @@ You can define the step's `inputSchema` and `outputSchema` with any library that
     import { z } from 'zod'
 
     const step1 = createStep({
-      id: 'step-1',
-      inputSchema: z.object({
-        message: z.string(),
-      }),
-      outputSchema: z.object({
-        formatted: z.string(),
-      }),
-      execute: async ({ inputData }) => {
-        const { message } = inputData
+    	id: 'step-1',
+    	inputSchema: z.object({
+    		message: z.string(),
+    	}),
+    	outputSchema: z.object({
+    		formatted: z.string(),
+    	}),
+    	execute: async ({ inputData }) => {
+    		const { message } = inputData
 
-        return {
-          formatted: message.toUpperCase(),
-        }
-      },
+    		return {
+    			formatted: message.toUpperCase(),
+    		}
+    	},
     })
     ```
   </TabItem>
@@ -73,24 +73,24 @@ You can define the step's `inputSchema` and `outputSchema` with any library that
     import { toStandardJsonSchema } from '@valibot/to-json-schema'
 
     const step1 = createStep({
-      id: 'step-1',
-      inputSchema: toStandardJsonSchema(
-        v.object({
-          message: v.string(),
-        }),
-      ),
-      outputSchema: toStandardJsonSchema(
-        v.object({
-          formatted: v.string(),
-        }),
-      ),
-      execute: async ({ inputData }) => {
-        const { message } = inputData
+    	id: 'step-1',
+    	inputSchema: toStandardJsonSchema(
+    		v.object({
+    			message: v.string(),
+    		}),
+    	),
+    	outputSchema: toStandardJsonSchema(
+    		v.object({
+    			formatted: v.string(),
+    		}),
+    	),
+    	execute: async ({ inputData }) => {
+    		const { message } = inputData
 
-        return {
-          formatted: message.toUpperCase(),
-        }
-      },
+    		return {
+    			formatted: message.toUpperCase(),
+    		}
+    	},
     })
     ```
   </TabItem>
@@ -101,20 +101,20 @@ You can define the step's `inputSchema` and `outputSchema` with any library that
     import { type } from 'arktype'
 
     const step1 = createStep({
-      id: 'step-1',
-      inputSchema: type({
-        message: 'string',
-      }),
-      outputSchema: type({
-        formatted: 'string',
-      }),
-      execute: async ({ inputData }) => {
-        const { message } = inputData
+    	id: 'step-1',
+    	inputSchema: type({
+    		message: 'string',
+    	}),
+    	outputSchema: type({
+    		formatted: 'string',
+    	}),
+    	execute: async ({ inputData }) => {
+    		const { message } = inputData
 
-        return {
-          formatted: message.toUpperCase(),
-        }
-      },
+    		return {
+    			formatted: message.toUpperCase(),
+    		}
+    	},
     })
     ```
   </TabItem>
@@ -140,13 +140,13 @@ Pass `structuredOutput` to have the agent return typed structured data:
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 const articleSchema = z.object({
-  title: z.string(),
-  summary: z.string(),
-  tags: z.array(z.string()),
+	title: z.string(),
+	summary: z.string(),
+	tags: z.array(z.string()),
 })
 
 const agentStep = createStep(testAgent, {
-  structuredOutput: { schema: articleSchema },
+	structuredOutput: { schema: articleSchema },
 })
 // inputSchema: { prompt: string }
 // outputSchema: { title: string, summary: string, tags: string[] }
@@ -156,19 +156,19 @@ const agentStep = createStep(testAgent, {
 
 <PropertiesTable
   content={[
-  {
-    name: 'structuredOutput',
-    type: '{ schema: StandardJSONSchemaV1 }',
-    description:
-      "When provided, the agent returns structured data matching this schema instead of plain text. The step's outputSchema is set to the provided schema.",
-    required: false,
-  },
-  {
-    name: 'onFinish',
-    type: '(result: AgentResult) => void',
-    description: 'Callback invoked when the agent completes generation.',
-    required: false,
-  },
+	{
+		name: 'structuredOutput',
+		type: '{ schema: StandardJSONSchemaV1 }',
+		description:
+			"When provided, the agent returns structured data matching this schema instead of plain text. The step's outputSchema is set to the provided schema.",
+		required: false,
+	},
+	{
+		name: 'onFinish',
+		type: '(result: AgentResult) => void',
+		description: 'Callback invoked when the agent completes generation.',
+		required: false,
+	},
 ]}
 />
 
@@ -176,143 +176,143 @@ const agentStep = createStep(testAgent, {
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Unique identifier for the step',
-    required: true,
-  },
-  {
-    name: 'description',
-    type: 'string',
-    description: 'Optional description of what the step does',
-    required: false,
-  },
-  {
-    name: 'inputSchema',
-    type: 'StandardJSONSchemaV1',
-    description: 'Standard JSON Schema defining the input structure',
-    required: true,
-  },
-  {
-    name: 'outputSchema',
-    type: 'StandardJSONSchemaV1',
-    description: 'Standard JSON Schema defining the output structure',
-    required: true,
-  },
-  {
-    name: 'resumeSchema',
-    type: 'StandardJSONSchemaV1',
-    description: 'Optional Standard JSON Schema for resuming the step',
-    required: false,
-  },
-  {
-    name: 'suspendSchema',
-    type: 'StandardJSONSchemaV1',
-    description: 'Optional Standard JSON Schema for suspending the step',
-    required: false,
-  },
-  {
-    name: 'stateSchema',
-    type: 'StandardJSONSchemaV1',
-    description:
-      "Optional Standard JSON Schema for the step state. Automatically injected when using Mastra's state system. The stateSchema must be a subset of the workflow's stateSchema. If not specified, type is 'any'.",
-    required: false,
-  },
-  {
-    name: 'requestContextSchema',
-    type: 'StandardJSONSchemaV1',
-    description:
-      "Standard JSON Schema for validating request context values. When provided, the context is validated before the step's execute() runs, failing the step if validation fails.",
-    required: false,
-  },
-  {
-    name: 'execute',
-    type: '(params: ExecuteParams) => Promise<any>',
-    description: 'Async function containing step logic',
-    required: true,
-    properties: [
-      {
-        type: 'ExecuteParams',
-        parameters: [
-          {
-            name: 'inputData',
-            type: 'z.infer<TStepInput>',
-            description: 'The input data matching the inputSchema',
-          },
-          {
-            name: 'resumeData',
-            type: 'z.infer<TResumeSchema>',
-            description:
-              'The resume data matching the resumeSchema, when resuming the step from a suspended state. Only exists if the step is being resumed.',
-          },
-          {
-            name: 'suspendData',
-            type: 'z.infer<TSuspendSchema>',
-            description:
-              'The suspend data that was originally passed to suspend() when the step was suspended. Only exists if the step is being resumed and was previously suspended with data.',
-          },
-          {
-            name: 'mastra',
-            type: 'Mastra',
-            description: 'Access to Mastra services (agents, tools, etc.)',
-          },
-          {
-            name: 'getStepResult',
-            type: '(step: Step | string) => any',
-            description: 'Function to access results from other steps',
-          },
-          {
-            name: 'getInitData',
-            type: '() => any',
-            description: 'Function to access the initial input data of the workflow in any step',
-          },
-          {
-            name: 'suspend',
-            type: '(suspendPayload: any, suspendOptions?: { resumeLabel?: string }) => Promise<void>',
-            description: 'Function to pause workflow execution',
-          },
-          {
-            name: 'state',
-            type: 'z.infer<TState>',
-            description:
-              "The current workflow state. Contains shared values that persist across all steps and suspend/resume cycles. The structure is defined by the step's stateSchema.",
-          },
-          {
-            name: 'setState',
-            type: '(state: z.infer<TState>) => void',
-            description:
-              "Function to set the state of the workflow. Inject via reducer-like pattern, such as 'setState({ ...state, ...newState })'",
-          },
-          {
-            name: 'runId',
-            type: 'string',
-            description: 'Current run id',
-          },
-          {
-            name: 'requestContext',
-            type: 'RequestContext',
-            isOptional: true,
-            description: 'Request Context for dependency injection and contextual information.',
-          },
-          {
-            name: 'retryCount',
-            type: 'number',
-            description:
-              'The retry count for this specific step, it automatically increases each time the step is retried',
-            isOptional: true,
-          },
-        ],
-      },
-    ],
-  },
-  {
-    name: 'metadata',
-    type: 'Record<string, any>',
-    description:
-      'Optional key-value pairs for storing additional step information. Values must be serializable (no functions, circular references, etc.).',
-    required: false,
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Unique identifier for the step',
+		required: true,
+	},
+	{
+		name: 'description',
+		type: 'string',
+		description: 'Optional description of what the step does',
+		required: false,
+	},
+	{
+		name: 'inputSchema',
+		type: 'StandardJSONSchemaV1',
+		description: 'Standard JSON Schema defining the input structure',
+		required: true,
+	},
+	{
+		name: 'outputSchema',
+		type: 'StandardJSONSchemaV1',
+		description: 'Standard JSON Schema defining the output structure',
+		required: true,
+	},
+	{
+		name: 'resumeSchema',
+		type: 'StandardJSONSchemaV1',
+		description: 'Optional Standard JSON Schema for resuming the step',
+		required: false,
+	},
+	{
+		name: 'suspendSchema',
+		type: 'StandardJSONSchemaV1',
+		description: 'Optional Standard JSON Schema for suspending the step',
+		required: false,
+	},
+	{
+		name: 'stateSchema',
+		type: 'StandardJSONSchemaV1',
+		description:
+			"Optional Standard JSON Schema for the step state. Automatically injected when using Mastra's state system. The stateSchema must be a subset of the workflow's stateSchema. If not specified, type is 'any'.",
+		required: false,
+	},
+	{
+		name: 'requestContextSchema',
+		type: 'StandardJSONSchemaV1',
+		description:
+			"Standard JSON Schema for validating request context values. When provided, the context is validated before the step's execute() runs, failing the step if validation fails.",
+		required: false,
+	},
+	{
+		name: 'execute',
+		type: '(params: ExecuteParams) => Promise<any>',
+		description: 'Async function containing step logic',
+		required: true,
+		properties: [
+			{
+				type: 'ExecuteParams',
+				parameters: [
+					{
+						name: 'inputData',
+						type: 'z.infer<TStepInput>',
+						description: 'The input data matching the inputSchema',
+					},
+					{
+						name: 'resumeData',
+						type: 'z.infer<TResumeSchema>',
+						description:
+							'The resume data matching the resumeSchema, when resuming the step from a suspended state. Only exists if the step is being resumed.',
+					},
+					{
+						name: 'suspendData',
+						type: 'z.infer<TSuspendSchema>',
+						description:
+							'The suspend data that was originally passed to suspend() when the step was suspended. Only exists if the step is being resumed and was previously suspended with data.',
+					},
+					{
+						name: 'mastra',
+						type: 'Mastra',
+						description: 'Access to Mastra services (agents, tools, etc.)',
+					},
+					{
+						name: 'getStepResult',
+						type: '(step: Step | string) => any',
+						description: 'Function to access results from other steps',
+					},
+					{
+						name: 'getInitData',
+						type: '() => any',
+						description: 'Function to access the initial input data of the workflow in any step',
+					},
+					{
+						name: 'suspend',
+						type: '(suspendPayload: any, suspendOptions?: { resumeLabel?: string }) => Promise<void>',
+						description: 'Function to pause workflow execution',
+					},
+					{
+						name: 'state',
+						type: 'z.infer<TState>',
+						description:
+							"The current workflow state. Contains shared values that persist across all steps and suspend/resume cycles. The structure is defined by the step's stateSchema.",
+					},
+					{
+						name: 'setState',
+						type: '(state: z.infer<TState>) => void',
+						description:
+							"Function to set the state of the workflow. Inject via reducer-like pattern, such as 'setState({ ...state, ...newState })'",
+					},
+					{
+						name: 'runId',
+						type: 'string',
+						description: 'Current run id',
+					},
+					{
+						name: 'requestContext',
+						type: 'RequestContext',
+						isOptional: true,
+						description: 'Request Context for dependency injection and contextual information.',
+					},
+					{
+						name: 'retryCount',
+						type: 'number',
+						description:
+							'The retry count for this specific step, it automatically increases each time the step is retried',
+						isOptional: true,
+					},
+				],
+			},
+		],
+	},
+	{
+		name: 'metadata',
+		type: 'Record<string, any>',
+		description:
+			'Optional key-value pairs for storing additional step information. Values must be serializable (no functions, circular references, etc.).',
+		required: false,
+	},
 ]}
 />
 

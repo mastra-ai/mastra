@@ -24,10 +24,10 @@ import { mastra } from '../index'
 const dataset = await mastra.datasets.get({ id: 'translation-dataset-id' })
 
 const summary = await dataset.startExperiment({
-  name: 'gpt-5.1-baseline',
-  targetType: 'agent',
-  targetId: 'translation-agent',
-  scorers: ['accuracy', 'fluency'],
+	name: 'gpt-5.1-baseline',
+	targetType: 'agent',
+	targetId: 'translation-agent',
+	scorers: ['accuracy', 'fluency'],
 })
 
 console.log(summary.status) // 'completed' | 'failed'
@@ -55,10 +55,10 @@ Point to an agent registered on your Mastra instance:
 
 ```typescript title="src/mastra/experiments/agent-target.ts"
 const summary = await dataset.startExperiment({
-  name: 'agent-v2-eval',
-  targetType: 'agent',
-  targetId: 'translation-agent',
-  scorers: ['accuracy'],
+	name: 'agent-v2-eval',
+	targetType: 'agent',
+	targetId: 'translation-agent',
+	scorers: ['accuracy'],
 })
 ```
 
@@ -70,10 +70,10 @@ Point to a workflow registered on your Mastra instance:
 
 ```typescript title="src/mastra/experiments/workflow-target.ts"
 const summary = await dataset.startExperiment({
-  name: 'workflow-eval',
-  targetType: 'workflow',
-  targetId: 'translation-workflow',
-  scorers: ['accuracy'],
+	name: 'workflow-eval',
+	targetType: 'workflow',
+	targetId: 'translation-workflow',
+	scorers: ['accuracy'],
 })
 ```
 
@@ -85,9 +85,9 @@ Point to a scorer to evaluate an LLM judge against ground truth:
 
 ```typescript title="src/mastra/experiments/scorer-target.ts"
 const summary = await dataset.startExperiment({
-  name: 'judge-accuracy-eval',
-  targetType: 'scorer',
-  targetId: 'accuracy',
+	name: 'judge-accuracy-eval',
+	targetType: 'scorer',
+	targetId: 'accuracy',
 })
 ```
 
@@ -102,10 +102,10 @@ Scorers automatically run after each item's target execution. Pass scorer instan
     ```typescript
     // Reference scorers registered on the Mastra instance
     const summary = await dataset.startExperiment({
-      name: 'with-registered-scorers',
-      targetType: 'agent',
-      targetId: 'translation-agent',
-      scorers: ['accuracy', 'fluency'],
+    	name: 'with-registered-scorers',
+    	targetType: 'agent',
+    	targetId: 'translation-agent',
+    	scorers: ['accuracy', 'fluency'],
     })
     ```
   </TabItem>
@@ -117,10 +117,10 @@ Scorers automatically run after each item's target execution. Pass scorer instan
     const relevancy = createAnswerRelevancyScorer({ model: '__GATEWAY_OPENAI_MODEL_MINI__' })
 
     const summary = await dataset.startExperiment({
-      name: 'with-scorer-instances',
-      targetType: 'agent',
-      targetId: 'translation-agent',
-      scorers: [relevancy],
+    	name: 'with-scorer-instances',
+    	targetType: 'agent',
+    	targetId: 'translation-agent',
+    	scorers: [relevancy],
     })
     ```
   </TabItem>
@@ -130,10 +130,10 @@ Each item's results include per-scorer scores:
 
 ```typescript
 for (const item of summary.results) {
-  console.log(item.itemId, item.output)
-  for (const score of item.scores) {
-    console.log(`  ${score.scorerName}: ${score.score} — ${score.reason}`)
-  }
+	console.log(item.itemId, item.output)
+	for (const score of item.scores) {
+		console.log(`  ${score.scorerName}: ${score.score} — ${score.reason}`)
+	}
 }
 ```
 
@@ -151,14 +151,14 @@ Mocks live on the dataset item, so they version with the row and travel with the
 
 ```typescript title="src/mastra/experiments/tool-mocks.ts"
 await dataset.addItem({
-  input: 'What is the weather in Seattle?',
-  toolMocks: [
-    {
-      toolName: 'getWeather',
-      args: { city: 'Seattle' },
-      output: { temperature: 60, conditions: 'rainy' },
-    },
-  ],
+	input: 'What is the weather in Seattle?',
+	toolMocks: [
+		{
+			toolName: 'getWeather',
+			args: { city: 'Seattle' },
+			output: { temperature: 60, conditions: 'rainy' },
+		},
+	],
 })
 ```
 
@@ -176,10 +176,10 @@ By default each mock matches strictly on its `args`. Set `matchArgs: 'ignore'` t
 
 ```typescript
 const subAgentMock = {
-  toolName: 'agent-balanceAgent',
-  args: { prompt: 'look up the balance for YJ' },
-  output: { text: "YJ's balance is $100." },
-  matchArgs: 'ignore',
+	toolName: 'agent-balanceAgent',
+	args: { prompt: 'look up the balance for YJ' },
+	output: { text: "YJ's balance is $100." },
+	matchArgs: 'ignore',
 }
 ```
 
@@ -202,13 +202,13 @@ Each item result carries a `toolMockReport` describing what the run did with the
 
 ```typescript
 for (const item of summary.results) {
-  const report = item.toolMockReport
-  if (!report) continue
+	const report = item.toolMockReport
+	if (!report) continue
 
-  console.log(report.served) // mocks matched and returned
-  console.log(report.unconsumed) // mocks declared but never used
-  console.log(report.liveCalls) // unmocked tools that ran live
-  console.log(report.failure) // the mismatch/exhausted failure, if any
+	console.log(report.served) // mocks matched and returned
+	console.log(report.unconsumed) // mocks declared but never used
+	console.log(report.liveCalls) // unmocked tools that ran live
+	console.log(report.failure) // the mismatch/exhausted failure, if any
 }
 ```
 
@@ -225,10 +225,10 @@ In [Studio](/docs/studio/overview), edit a dataset item to author tool mocks as 
 
 ```typescript title="src/mastra/experiments/async.ts"
 const { experimentId, status } = await dataset.startExperimentAsync({
-  name: 'large-dataset-run',
-  targetType: 'agent',
-  targetId: 'translation-agent',
-  scorers: ['accuracy'],
+	name: 'large-dataset-run',
+	targetType: 'agent',
+	targetId: 'translation-agent',
+	scorers: ['accuracy'],
 })
 
 console.log(experimentId) // UUID
@@ -241,8 +241,8 @@ Poll for completion using [`getExperiment()`](/reference/datasets/getExperiment)
 let experiment = await dataset.getExperiment({ experimentId })
 
 while (experiment.status === 'pending' || experiment.status === 'running') {
-  await new Promise(resolve => setTimeout(resolve, 5000))
-  experiment = await dataset.getExperiment({ experimentId })
+	await new Promise(resolve => setTimeout(resolve, 5000))
+	experiment = await dataset.getExperiment({ experimentId })
 }
 
 console.log(experiment.status) // 'completed' | 'failed'
@@ -256,9 +256,9 @@ Control how many items run in parallel (default: 5):
 
 ```typescript
 const summary = await dataset.startExperiment({
-  targetType: 'agent',
-  targetId: 'translation-agent',
-  maxConcurrency: 10,
+	targetType: 'agent',
+	targetId: 'translation-agent',
+	maxConcurrency: 10,
 })
 ```
 
@@ -268,10 +268,10 @@ Set a per-item timeout (in milliseconds) and retry count:
 
 ```typescript
 const summary = await dataset.startExperiment({
-  targetType: 'agent',
-  targetId: 'translation-agent',
-  itemTimeout: 30_000, // 30 seconds per item
-  maxRetries: 2, // retry failed items up to 2 times
+	targetType: 'agent',
+	targetId: 'translation-agent',
+	itemTimeout: 30_000, // 30 seconds per item
+	maxRetries: 2, // retry failed items up to 2 times
 })
 ```
 
@@ -288,9 +288,9 @@ const controller = new AbortController()
 setTimeout(() => controller.abort(), 60_000)
 
 const summary = await dataset.startExperiment({
-  targetType: 'agent',
-  targetId: 'translation-agent',
-  signal: controller.signal,
+	targetType: 'agent',
+	targetId: 'translation-agent',
+	signal: controller.signal,
 })
 ```
 
@@ -302,9 +302,9 @@ Run against a specific snapshot of the dataset:
 
 ```typescript
 const summary = await dataset.startExperiment({
-  targetType: 'agent',
-  targetId: 'translation-agent',
-  version: 3, // use items from dataset version 3
+	targetType: 'agent',
+	targetId: 'translation-agent',
+	version: 3, // use items from dataset version 3
 })
 ```
 
@@ -314,12 +314,12 @@ const summary = await dataset.startExperiment({
 
 ```typescript
 const { experiments, pagination } = await dataset.listExperiments({
-  page: 0,
-  perPage: 10,
+	page: 0,
+	perPage: 10,
 })
 
 for (const exp of experiments) {
-  console.log(`${exp.name} — ${exp.status} (${exp.succeededCount}/${exp.totalItems})`)
+	console.log(`${exp.name} — ${exp.status} (${exp.succeededCount}/${exp.totalItems})`)
 }
 ```
 
@@ -327,7 +327,7 @@ for (const exp of experiments) {
 
 ```typescript
 const experiment = await dataset.getExperiment({
-  experimentId: 'exp-abc-123',
+	experimentId: 'exp-abc-123',
 })
 
 console.log(experiment.status)
@@ -339,13 +339,13 @@ console.log(experiment.completedAt)
 
 ```typescript
 const { results, pagination } = await dataset.listExperimentResults({
-  experimentId: 'exp-abc-123',
-  page: 0,
-  perPage: 50,
+	experimentId: 'exp-abc-123',
+	page: 0,
+	perPage: 50,
 })
 
 for (const result of results) {
-  console.log(result.itemId, result.output, result.error)
+	console.log(result.itemId, result.output, result.error)
 }
 ```
 

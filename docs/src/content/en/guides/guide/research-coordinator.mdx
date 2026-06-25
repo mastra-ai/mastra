@@ -28,17 +28,17 @@ Create a new file `src/mastra/agents/research-agent.ts`:
 import { Agent } from '@mastra/core/agent'
 
 export const researchAgent = new Agent({
-  id: 'research-agent',
-  name: 'Research Specialist',
-  description:
-    'Specializes in gathering factual information and data on any topic. ' +
-    'Returns concise bullet-point summaries with key facts and sources. ' +
-    'Does not write full articles or narrative content.',
-  instructions:
-    'You are a research specialist. When given a topic, gather key facts, ' +
-    'statistics, and information. Present findings as clear bullet points. ' +
-    'Include sources when possible. Focus on accuracy and completeness.',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+	id: 'research-agent',
+	name: 'Research Specialist',
+	description:
+		'Specializes in gathering factual information and data on any topic. ' +
+		'Returns concise bullet-point summaries with key facts and sources. ' +
+		'Does not write full articles or narrative content.',
+	instructions:
+		'You are a research specialist. When given a topic, gather key facts, ' +
+		'statistics, and information. Present findings as clear bullet points. ' +
+		'Include sources when possible. Focus on accuracy and completeness.',
+	model: '__GATEWAY_OPENAI_MODEL_MINI__',
 })
 ```
 
@@ -54,18 +54,18 @@ Create a new file `src/mastra/agents/writing-agent.ts`:
 import { Agent } from '@mastra/core/agent'
 
 export const writingAgent = new Agent({
-  id: 'writing-agent',
-  name: 'Writing Specialist',
-  description:
-    'Transforms research material into well-structured written content. ' +
-    'Produces full paragraphs and complete articles with proper flow. ' +
-    'Best used after research has been gathered.',
-  instructions:
-    'You are a writing specialist. Transform research and information into ' +
-    'well-written articles. Use complete paragraphs, clear structure, and ' +
-    'engaging language. Maintain a professional yet accessible tone. ' +
-    'Ensure the content flows naturally from introduction to conclusion.',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+	id: 'writing-agent',
+	name: 'Writing Specialist',
+	description:
+		'Transforms research material into well-structured written content. ' +
+		'Produces full paragraphs and complete articles with proper flow. ' +
+		'Best used after research has been gathered.',
+	instructions:
+		'You are a writing specialist. Transform research and information into ' +
+		'well-written articles. Use complete paragraphs, clear structure, and ' +
+		'engaging language. Maintain a professional yet accessible tone. ' +
+		'Ensure the content flows naturally from introduction to conclusion.',
+	model: '__GATEWAY_OPENAI_MODEL_MINI__',
 })
 ```
 
@@ -83,9 +83,9 @@ import { researchAgent } from './research-agent'
 import { writingAgent } from './writing-agent'
 
 export const supervisorAgent = new Agent({
-  id: 'supervisor-agent',
-  name: 'Research Coordinator',
-  instructions: `You coordinate research and writing tasks using specialized agents.
+	id: 'supervisor-agent',
+	name: 'Research Coordinator',
+	instructions: `You coordinate research and writing tasks using specialized agents.
 
 Available resources:
 - research-agent: Gathers factual data and sources (returns bullet points)
@@ -102,65 +102,65 @@ Success criteria:
 - Information is accurate and well-sourced
 - Final output is well-formatted and complete
 - If anything is missing or uncertain, continue gathering information`,
-  model: '__GATEWAY_OPENAI_MODEL__',
-  agents: {
-    researchAgent,
-    writingAgent,
-  },
-  memory: new Memory({
-    storage: new LibSQLStore({
-      id: 'mastra-storage',
-      url: 'file:mastra.db',
-    }),
-  }),
-  defaultOptions: {
-    maxSteps: 10,
+	model: '__GATEWAY_OPENAI_MODEL__',
+	agents: {
+		researchAgent,
+		writingAgent,
+	},
+	memory: new Memory({
+		storage: new LibSQLStore({
+			id: 'mastra-storage',
+			url: 'file:mastra.db',
+		}),
+	}),
+	defaultOptions: {
+		maxSteps: 10,
 
-    // Monitor progress after each iteration
-    onIterationComplete: async context => {
-      console.log(`\n✓ Iteration ${context.iteration} complete`)
-      console.log(`  Finish reason: ${context.finishReason}`)
-      console.log(`  Response length: ${context.text.length} chars\n`)
+		// Monitor progress after each iteration
+		onIterationComplete: async context => {
+			console.log(`\n✓ Iteration ${context.iteration} complete`)
+			console.log(`  Finish reason: ${context.finishReason}`)
+			console.log(`  Response length: ${context.text.length} chars\n`)
 
-      // Continue until task is complete
-      return { continue: true }
-    },
+			// Continue until task is complete
+			return { continue: true }
+		},
 
-    // Control delegations
-    delegation: {
-      onDelegationStart: async context => {
-        console.log(`→ Delegating to: ${context.primitiveId}`)
+		// Control delegations
+		delegation: {
+			onDelegationStart: async context => {
+				console.log(`→ Delegating to: ${context.primitiveId}`)
 
-        // Add context for specific agents
-        if (context.primitiveId === 'research-agent') {
-          return {
-            proceed: true,
-            modifiedPrompt: `${context.prompt}\n\nFocus on recent developments (2024-2025) and include statistics.`,
-          }
-        }
+				// Add context for specific agents
+				if (context.primitiveId === 'research-agent') {
+					return {
+						proceed: true,
+						modifiedPrompt: `${context.prompt}\n\nFocus on recent developments (2024-2025) and include statistics.`,
+					}
+				}
 
-        return { proceed: true }
-      },
+				return { proceed: true }
+			},
 
-      onDelegationComplete: async context => {
-        console.log(`✓ Completed: ${context.primitiveId}\n`)
+			onDelegationComplete: async context => {
+				console.log(`✓ Completed: ${context.primitiveId}\n`)
 
-        // Handle errors: bail to stop execution and provide feedback
-        if (context.error) {
-          console.error('Delegation failed:', context.error)
-          context.bail() // Stop further delegations
-          return {
-            feedback: `Delegation to ${context.primitiveId} failed: ${context.error}. Try a different approach.`,
-          }
-        }
-      },
+				// Handle errors: bail to stop execution and provide feedback
+				if (context.error) {
+					console.error('Delegation failed:', context.error)
+					context.bail() // Stop further delegations
+					return {
+						feedback: `Delegation to ${context.primitiveId} failed: ${context.error}. Try a different approach.`,
+					}
+				}
+			},
 
-      // Only pass last 10 messages to subagents
-      messageFilter: ({ messages }) => {
-        return messages.slice(-10)
-      },
-    },
-  },
+			// Only pass last 10 messages to subagents
+			messageFilter: ({ messages }) => {
+				return messages.slice(-10)
+			},
+		},
+	},
 })
 ```
 
@@ -172,8 +172,8 @@ import { Mastra } from '@mastra/core'
 import { supervisorAgent } from './agents/supervisor-agent'
 
 export const mastra = new Mastra({
-  // highlight-next-line
-  agents: { supervisorAgent },
+	// highlight-next-line
+	agents: { supervisorAgent },
 })
 ```
 
@@ -192,19 +192,19 @@ Create a file to interact with the supervisor in `src/index.ts`:
 import { supervisorAgent } from './mastra/agents/supervisor-agent'
 
 async function main() {
-  const topic = 'artificial intelligence in education'
-  console.log(`\nTopic: ${topic}\n`)
+	const topic = 'artificial intelligence in education'
+	console.log(`\nTopic: ${topic}\n`)
 
-  const stream = await supervisorAgent.stream(
-    `Research ${topic} and write a comprehensive article about it`,
-  )
+	const stream = await supervisorAgent.stream(
+		`Research ${topic} and write a comprehensive article about it`,
+	)
 
-  // Stream the response
-  console.log('📝 Final Report:\n')
-  for await (const chunk of stream.textStream) {
-    process.stdout.write(chunk)
-  }
-  console.log('\n')
+	// Stream the response
+	console.log('📝 Final Report:\n')
+	for await (const chunk of stream.textStream) {
+		process.stdout.write(chunk)
+	}
+	console.log('\n')
 }
 
 main()
@@ -222,23 +222,23 @@ Create a scorer in `src/mastra/scorers/task-complete-scorer.ts`:
 import { createScorer } from '@mastra/core/evals'
 
 export const taskCompleteScorer = createScorer({
-  id: 'task-complete',
-  name: 'Task Completeness',
-  description: 'Checks if the research and writing task has been fully completed',
+	id: 'task-complete',
+	name: 'Task Completeness',
+	description: 'Checks if the research and writing task has been fully completed',
 }).generateScore(async context => {
-  const text = (context.run.output || '').toString()
+	const text = (context.run.output || '').toString()
 
-  // Check if response contains required elements
-  const hasSubstantialContent = text.length > 500
-  const hasStructure = text.includes('\n\n') // Multiple paragraphs
-  const hasContext = /\d{4}/.test(text) // Contains years/dates
+	// Check if response contains required elements
+	const hasSubstantialContent = text.length > 500
+	const hasStructure = text.includes('\n\n') // Multiple paragraphs
+	const hasContext = /\d{4}/.test(text) // Contains years/dates
 
-  // Return 1 if complete, 0 if not
-  if (hasSubstantialContent && hasStructure && hasContext) {
-    return 1
-  }
+	// Return 1 if complete, 0 if not
+	if (hasSubstantialContent && hasStructure && hasContext) {
+		return 1
+	}
 
-  return 0
+	return 0
 })
 ```
 
@@ -260,9 +260,9 @@ import { writingAgent } from './writing-agent'
 import { taskCompleteScorer } from '../scorers/task-complete-scorer'
 
 export const supervisorAgent = new Agent({
-  id: 'supervisor-agent',
-  name: 'Research Coordinator',
-  instructions: `You coordinate research and writing tasks using specialized agents.
+	id: 'supervisor-agent',
+	name: 'Research Coordinator',
+	instructions: `You coordinate research and writing tasks using specialized agents.
 
 Available resources:
 - research-agent: Gathers factual data and sources (returns bullet points)
@@ -279,71 +279,71 @@ Success criteria:
 - Information is accurate and well-sourced
 - Final output is well-formatted and complete
 - If anything is missing or uncertain, continue gathering information`,
-  model: '__GATEWAY_OPENAI_MODEL__',
-  agents: {
-    researchAgent,
-    writingAgent,
-  },
-  memory: new Memory({
-    storage: new LibSQLStore({
-      id: 'mastra-storage',
-      url: 'file:mastra.db',
-    }),
-  }),
-  defaultOptions: {
-    maxSteps: 10,
+	model: '__GATEWAY_OPENAI_MODEL__',
+	agents: {
+		researchAgent,
+		writingAgent,
+	},
+	memory: new Memory({
+		storage: new LibSQLStore({
+			id: 'mastra-storage',
+			url: 'file:mastra.db',
+		}),
+	}),
+	defaultOptions: {
+		maxSteps: 10,
 
-    onIterationComplete: async context => {
-      console.log(`\n✓ Iteration ${context.iteration} complete`)
-      console.log(`  Finish reason: ${context.finishReason}`)
-      console.log(`  Response length: ${context.text.length} chars\n`)
-      return { continue: true }
-    },
+		onIterationComplete: async context => {
+			console.log(`\n✓ Iteration ${context.iteration} complete`)
+			console.log(`  Finish reason: ${context.finishReason}`)
+			console.log(`  Response length: ${context.text.length} chars\n`)
+			return { continue: true }
+		},
 
-    delegation: {
-      onDelegationStart: async context => {
-        console.log(`→ Delegating to: ${context.primitiveId}`)
+		delegation: {
+			onDelegationStart: async context => {
+				console.log(`→ Delegating to: ${context.primitiveId}`)
 
-        if (context.primitiveId === 'research-agent') {
-          return {
-            proceed: true,
-            modifiedPrompt: `${context.prompt}\n\nFocus on recent developments (2024-2025) and include statistics.`,
-          }
-        }
+				if (context.primitiveId === 'research-agent') {
+					return {
+						proceed: true,
+						modifiedPrompt: `${context.prompt}\n\nFocus on recent developments (2024-2025) and include statistics.`,
+					}
+				}
 
-        return { proceed: true }
-      },
+				return { proceed: true }
+			},
 
-      onDelegationComplete: async context => {
-        console.log(`✓ Completed: ${context.primitiveId}\n`)
+			onDelegationComplete: async context => {
+				console.log(`✓ Completed: ${context.primitiveId}\n`)
 
-        if (context.error) {
-          console.error('Delegation failed:', context.error)
-          context.bail() // Stop further delegations
-          return {
-            feedback: `Delegation to ${context.primitiveId} failed: ${context.error}. Try a different approach.`,
-          }
-        }
-      },
+				if (context.error) {
+					console.error('Delegation failed:', context.error)
+					context.bail() // Stop further delegations
+					return {
+						feedback: `Delegation to ${context.primitiveId} failed: ${context.error}. Try a different approach.`,
+					}
+				}
+			},
 
-      messageFilter: ({ messages }) => {
-        return messages.slice(-10)
-      },
-    },
+			messageFilter: ({ messages }) => {
+				return messages.slice(-10)
+			},
+		},
 
-    // highlight-start
-    // Validate task completion
-    isTaskComplete: {
-      scorers: [taskCompleteScorer],
-      strategy: 'all',
-      onComplete: async result => {
-        console.log('\n🎯 Completion Check:')
-        console.log(`  Complete: ${result.complete}`)
-        console.log(`  Score: ${result.scorers[0]?.score}\n`)
-      },
-    },
-    // highlight-end
-  },
+		// highlight-start
+		// Validate task completion
+		isTaskComplete: {
+			scorers: [taskCompleteScorer],
+			strategy: 'all',
+			onComplete: async result => {
+				console.log('\n🎯 Completion Check:')
+				console.log(`  Complete: ${result.complete}`)
+				console.log(`  Score: ${result.scorers[0]?.score}\n`)
+			},
+		},
+		// highlight-end
+	},
 })
 ```
 

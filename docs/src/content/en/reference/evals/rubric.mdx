@@ -19,56 +19,56 @@ This scorer is designed to drop into [`isTaskComplete`](/reference/streaming/age
 
 <PropertiesTable
   content={[
-  {
-    name: 'model',
-    type: 'MastraModelConfig',
-    description:
-      'The language model used to grade the output against the rubric. A smaller, cheaper model is usually sufficient for grading.',
-    required: true,
-  },
-  {
-    name: 'criteria',
-    type: 'RubricCriterion[] | string',
-    description:
-      'The rubric to grade against. A string is treated as a newline-delimited checklist (each line becomes a required criterion). If omitted, the rubric is read at run time from a `rubric` value on request/additional context; if none resolves, the scorer is a no-op and returns 1.',
-    required: false,
-    children: [
-      {
-        name: 'description',
-        type: 'string',
-        description: 'What the output must satisfy, e.g. "All tests pass" or "Includes a recommendations section".',
-        required: true,
-      },
-      {
-        name: 'required',
-        type: 'boolean',
-        description:
-          'Whether this criterion must be satisfied for the task to be complete. Defaults to true. Optional criteria are graded and reported but do not gate completion.',
-        required: false,
-      },
-      {
-        name: 'id',
-        type: 'string',
-        description: 'Optional stable identifier for the criterion.',
-        required: false,
-      },
-    ],
-  },
-  {
-    name: 'options',
-    type: 'RubricScorerOptions',
-    description: 'Configuration options for the scorer',
-    required: false,
-    children: [
-      {
-        name: 'scale',
-        type: 'number',
-        description:
-          'Scale factor applied to the score (default: 1). Only relevant for standalone evals — isTaskComplete gates on a score equal to 1.',
-        required: false,
-      },
-    ],
-  },
+	{
+		name: 'model',
+		type: 'MastraModelConfig',
+		description:
+			'The language model used to grade the output against the rubric. A smaller, cheaper model is usually sufficient for grading.',
+		required: true,
+	},
+	{
+		name: 'criteria',
+		type: 'RubricCriterion[] | string',
+		description:
+			'The rubric to grade against. A string is treated as a newline-delimited checklist (each line becomes a required criterion). If omitted, the rubric is read at run time from a `rubric` value on request/additional context; if none resolves, the scorer is a no-op and returns 1.',
+		required: false,
+		children: [
+			{
+				name: 'description',
+				type: 'string',
+				description: 'What the output must satisfy, e.g. "All tests pass" or "Includes a recommendations section".',
+				required: true,
+			},
+			{
+				name: 'required',
+				type: 'boolean',
+				description:
+					'Whether this criterion must be satisfied for the task to be complete. Defaults to true. Optional criteria are graded and reported but do not gate completion.',
+				required: false,
+			},
+			{
+				name: 'id',
+				type: 'string',
+				description: 'Optional stable identifier for the criterion.',
+				required: false,
+			},
+		],
+	},
+	{
+		name: 'options',
+		type: 'RubricScorerOptions',
+		description: 'Configuration options for the scorer',
+		required: false,
+		children: [
+			{
+				name: 'scale',
+				type: 'number',
+				description:
+					'Scale factor applied to the score (default: 1). Only relevant for standalone evals — isTaskComplete gates on a score equal to 1.',
+				required: false,
+			},
+		],
+	},
 ]}
 />
 
@@ -76,17 +76,17 @@ This scorer is designed to drop into [`isTaskComplete`](/reference/streaming/age
 
 <PropertiesTable
   content={[
-  {
-    name: 'score',
-    type: 'number',
-    description: '1 when every required criterion is satisfied, otherwise 0 (multiplied by scale).',
-  },
-  {
-    name: 'reason',
-    type: 'string',
-    description:
-      'A per-criterion explanation listing which criteria are met or unmet and why. This is the text that isTaskComplete injects back into the conversation as feedback.',
-  },
+	{
+		name: 'score',
+		type: 'number',
+		description: '1 when every required criterion is satisfied, otherwise 0 (multiplied by scale).',
+	},
+	{
+		name: 'reason',
+		type: 'string',
+		description:
+			'A per-criterion explanation listing which criteria are met or unmet and why. This is the text that isTaskComplete injects back into the conversation as feedback.',
+	},
 ]}
 />
 
@@ -100,30 +100,30 @@ import { Agent } from '@mastra/core/agent'
 import { createRubricScorer } from '@mastra/evals/scorers/prebuilt'
 
 const supervisor = new Agent({
-  id: 'supervisor',
-  instructions: `You coordinate research and writing using specialized agents. Delegate to research-agent for facts, then writing-agent for content.`,
-  model: '__GATEWAY_OPENAI_MODEL__',
-  agents: { researchAgent, writingAgent },
+	id: 'supervisor',
+	instructions: `You coordinate research and writing using specialized agents. Delegate to research-agent for facts, then writing-agent for content.`,
+	model: '__GATEWAY_OPENAI_MODEL__',
+	agents: { researchAgent, writingAgent },
 })
 
 // highlight-start
 const rubricScorer = createRubricScorer({
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
-  criteria: [
-    { description: 'The response includes an analysis section' },
-    { description: 'The response includes concrete recommendations' },
-  ],
+	model: '__GATEWAY_OPENAI_MODEL_MINI__',
+	criteria: [
+		{ description: 'The response includes an analysis section' },
+		{ description: 'The response includes concrete recommendations' },
+	],
 })
 // highlight-end
 
 const stream = await supervisor.stream('Research AI in education', {
-  maxSteps: 10,
-  // highlight-start
-  isTaskComplete: {
-    scorers: [rubricScorer],
-    strategy: 'all',
-  },
-  // highlight-end
+	maxSteps: 10,
+	// highlight-start
+	isTaskComplete: {
+		scorers: [rubricScorer],
+		strategy: 'all',
+	},
+	// highlight-end
 })
 ```
 
@@ -133,8 +133,8 @@ A newline-delimited string is parsed into criteria, with common list markers (`-
 
 ```typescript
 const rubricScorer = createRubricScorer({
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
-  criteria: `- All tests pass in the test suite
+	model: '__GATEWAY_OPENAI_MODEL_MINI__',
+	criteria: `- All tests pass in the test suite
 - The function is named find_duplicates and accepts a single list argument`,
 })
 ```
@@ -145,11 +145,11 @@ Mark a criterion as optional to have it graded and reported without gating compl
 
 ```typescript
 const rubricScorer = createRubricScorer({
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
-  criteria: [
-    { description: 'Includes an analysis section', required: true },
-    { description: 'Includes citations', required: false },
-  ],
+	model: '__GATEWAY_OPENAI_MODEL_MINI__',
+	criteria: [
+		{ description: 'Includes an analysis section', required: true },
+		{ description: 'Includes citations', required: false },
+	],
 })
 ```
 
@@ -159,14 +159,14 @@ When no `criteria` is passed to the factory, the scorer resolves a `rubric` valu
 
 ```typescript
 const rubricScorer = createRubricScorer({
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+	model: '__GATEWAY_OPENAI_MODEL_MINI__',
 })
 
 await supervisor.stream('Write find_duplicates', {
-  isTaskComplete: { scorers: [rubricScorer] },
-  requestContext: {
-    rubric: '- All tests pass\n- The function is named find_duplicates',
-  },
+	isTaskComplete: { scorers: [rubricScorer] },
+	requestContext: {
+		rubric: '- All tests pass\n- The function is named find_duplicates',
+	},
 })
 ```
 

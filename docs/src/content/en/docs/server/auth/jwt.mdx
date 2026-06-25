@@ -43,11 +43,11 @@ import { Mastra } from '@mastra/core'
 import { MastraJwtAuth } from '@mastra/auth'
 
 export const mastra = new Mastra({
-  server: {
-    auth: new MastraJwtAuth({
-      secret: process.env.MASTRA_JWT_SECRET,
-    }),
-  },
+	server: {
+		auth: new MastraJwtAuth({
+			secret: process.env.MASTRA_JWT_SECRET,
+		}),
+	},
 })
 ```
 
@@ -67,10 +67,10 @@ When `auth` is enabled, all requests made with `MastraClient` must include a val
 import { MastraClient } from '@mastra/client-js'
 
 export const mastraClient = new MastraClient({
-  baseUrl: 'https://<mastra-api-url>',
-  headers: {
-    Authorization: `Bearer ${process.env.MASTRA_JWT_TOKEN}`,
-  },
+	baseUrl: 'https://<mastra-api-url>',
+	headers: {
+		Authorization: `Bearer ${process.env.MASTRA_JWT_TOKEN}`,
+	},
 })
 ```
 
@@ -90,15 +90,15 @@ Once `MastraClient` is configured, you can send authenticated requests from your
     import { mastraClient } from '../../lib/mastra-client'
 
     export const TestAgent = () => {
-      async function handleClick() {
-        const agent = mastraClient.getAgent('weatherAgent')
+    	async function handleClick() {
+    		const agent = mastraClient.getAgent('weatherAgent')
 
-        const response = await agent.generate('Weather in London')
+    		const response = await agent.generate('Weather in London')
 
-        console.log(response)
-      }
+    		console.log(response)
+    	}
 
-      return <button onClick={handleClick}>Test Agent</button>
+    	return <button onClick={handleClick}>Test Agent</button>
     }
     ```
   </TabItem>

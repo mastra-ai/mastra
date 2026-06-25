@@ -187,11 +187,11 @@ import { Mastra } from '@mastra/core/mastra'
 import { LibSQLStore } from '@mastra/libsql'
 
 export const mastra = new Mastra({
-  storage: new LibSQLStore({
-    id: 'libsql-storage',
-    url: process.env.TURSO_DATABASE_URL!,
-    authToken: process.env.TURSO_AUTH_TOKEN,
-  }),
+	storage: new LibSQLStore({
+		id: 'libsql-storage',
+		url: process.env.TURSO_DATABASE_URL!,
+		authToken: process.env.TURSO_AUTH_TOKEN,
+	}),
 })
 ```
 
@@ -222,8 +222,8 @@ import { Mastra } from '@mastra/core/mastra'
 import { PinoLogger } from '@mastra/loggers'
 
 export const mastra = new Mastra({
-  logger: new PinoLogger({ name: 'my-app', level: 'info' }),
-  // traces appear in Cloud dashboard automatically
+	logger: new PinoLogger({ name: 'my-app', level: 'info' }),
+	// traces appear in Cloud dashboard automatically
 })
 ```
 
@@ -232,22 +232,22 @@ export const mastra = new Mastra({
 ```ts title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
 import {
-  Observability,
-  MastraStorageExporter,
-  MastraPlatformExporter,
-  SensitiveDataFilter,
+	Observability,
+	MastraStorageExporter,
+	MastraPlatformExporter,
+	SensitiveDataFilter,
 } from '@mastra/observability'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'my-app',
-        exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
-        spanOutputProcessors: [new SensitiveDataFilter()],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			default: {
+				serviceName: 'my-app',
+				exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
+				spanOutputProcessors: [new SensitiveDataFilter()],
+			},
+		},
+	}),
 })
 ```
 

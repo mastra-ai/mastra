@@ -24,11 +24,11 @@ If you explicitly configure `SkillsProcessor` alongside `SkillSearchProcessor`, 
 import { SkillSearchProcessor } from '@mastra/core/processors'
 
 const skillSearch = new SkillSearchProcessor({
-  workspace,
-  search: {
-    topK: 5,
-    minScore: 0.1,
-  },
+	workspace,
+	search: {
+		topK: 5,
+		minScore: 0.1,
+	},
 })
 ```
 
@@ -36,53 +36,53 @@ const skillSearch = new SkillSearchProcessor({
 
 <PropertiesTable
   content={[
-  {
-    name: 'options',
-    type: 'SkillSearchProcessorOptions',
-    description: 'Configuration options for the skill search processor',
-    isOptional: false,
-    properties: [
-      {
-        type: 'SkillSearchProcessorOptions',
-        parameters: [
-          {
-            name: 'workspace',
-            type: 'Workspace',
-            description: 'Workspace instance containing skills. Skills are accessed via workspace.skills.',
-            isOptional: false,
-          },
-          {
-            name: 'search',
-            type: '{ topK?: number; minScore?: number }',
-            description: 'Configuration for the search behavior.',
-            isOptional: true,
-          },
-          {
-            name: 'search.topK',
-            type: 'number',
-            description: 'Maximum number of skills to return in search results.',
-            isOptional: true,
-            default: '5',
-          },
-          {
-            name: 'search.minScore',
-            type: 'number',
-            description: 'Minimum relevance score for including a skill in search results.',
-            isOptional: true,
-            default: '0',
-          },
-          {
-            name: 'ttl',
-            type: 'number',
-            description:
-              'Time-to-live for thread state in milliseconds. After this duration of inactivity, thread state will be cleaned up. Set to 0 to disable cleanup.',
-            isOptional: true,
-            default: '3600000',
-          },
-        ],
-      },
-    ],
-  },
+	{
+		name: 'options',
+		type: 'SkillSearchProcessorOptions',
+		description: 'Configuration options for the skill search processor',
+		isOptional: false,
+		properties: [
+			{
+				type: 'SkillSearchProcessorOptions',
+				parameters: [
+					{
+						name: 'workspace',
+						type: 'Workspace',
+						description: 'Workspace instance containing skills. Skills are accessed via workspace.skills.',
+						isOptional: false,
+					},
+					{
+						name: 'search',
+						type: '{ topK?: number; minScore?: number }',
+						description: 'Configuration for the search behavior.',
+						isOptional: true,
+					},
+					{
+						name: 'search.topK',
+						type: 'number',
+						description: 'Maximum number of skills to return in search results.',
+						isOptional: true,
+						default: '5',
+					},
+					{
+						name: 'search.minScore',
+						type: 'number',
+						description: 'Minimum relevance score for including a skill in search results.',
+						isOptional: true,
+						default: '0',
+					},
+					{
+						name: 'ttl',
+						type: 'number',
+						description:
+							'Time-to-live for thread state in milliseconds. After this duration of inactivity, thread state will be cleaned up. Set to 0 to disable cleanup.',
+						isOptional: true,
+						default: '3600000',
+					},
+				],
+			},
+		],
+	},
 ]}
 />
 
@@ -90,31 +90,31 @@ const skillSearch = new SkillSearchProcessor({
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: "Processor identifier set to 'skill-search'",
-    isOptional: false,
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: "Processor display name set to 'Skill Search Processor'",
-    isOptional: false,
-  },
-  {
-    name: 'providesSkillDiscovery',
-    type: "'on-demand'",
-    description: 'Signals to the agent that this processor owns skill discovery and instruction loading.',
-    isOptional: false,
-  },
-  {
-    name: 'processInputStep',
-    type: '(args: ProcessInputStepArgs) => Promise<ProcessInputStepResult>',
-    description:
-      'Processes each step to inject search/load meta-tools and any previously loaded skill instructions as system messages.',
-    isOptional: false,
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: "Processor identifier set to 'skill-search'",
+		isOptional: false,
+	},
+	{
+		name: 'name',
+		type: 'string',
+		description: "Processor display name set to 'Skill Search Processor'",
+		isOptional: false,
+	},
+	{
+		name: 'providesSkillDiscovery',
+		type: "'on-demand'",
+		description: 'Signals to the agent that this processor owns skill discovery and instruction loading.',
+		isOptional: false,
+	},
+	{
+		name: 'processInputStep',
+		type: '(args: ProcessInputStepArgs) => Promise<ProcessInputStepResult>',
+		description:
+			'Processes each step to inject search/load meta-tools and any previously loaded skill instructions as system messages.',
+		isOptional: false,
+	},
 ]}
 />
 
@@ -126,26 +126,26 @@ import { SkillSearchProcessor } from '@mastra/core/processors'
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: './project' }),
-  skills: ['skills'],
-  bm25: true,
+	filesystem: new LocalFilesystem({ basePath: './project' }),
+	skills: ['skills'],
+	bm25: true,
 })
 
 const skillSearch = new SkillSearchProcessor({
-  workspace,
-  search: {
-    topK: 5,
-    minScore: 0.1,
-  },
+	workspace,
+	search: {
+		topK: 5,
+		minScore: 0.1,
+	},
 })
 
 const agent = new Agent({
-  name: 'skill-agent',
-  instructions:
-    'You are a helpful assistant. Use search_skills to find relevant skills, then load_skill to load their instructions.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  workspace,
-  inputProcessors: [skillSearch],
+	name: 'skill-agent',
+	instructions:
+		'You are a helpful assistant. Use search_skills to find relevant skills, then load_skill to load their instructions.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	workspace,
+	inputProcessors: [skillSearch],
 })
 ```
 

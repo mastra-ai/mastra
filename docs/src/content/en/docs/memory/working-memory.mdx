@@ -37,17 +37,17 @@ import { Memory } from '@mastra/memory'
 
 // Create agent with working memory enabled
 const agent = new Agent({
-  id: 'personal-assistant',
-  name: 'PersonalAssistant',
-  instructions: 'You are a helpful personal assistant.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  memory: new Memory({
-    options: {
-      workingMemory: {
-        enabled: true,
-      },
-    },
-  }),
+	id: 'personal-assistant',
+	name: 'PersonalAssistant',
+	instructions: 'You are a helpful personal assistant.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	memory: new Memory({
+		options: {
+			workingMemory: {
+				enabled: true,
+			},
+		},
+	}),
 })
 ```
 
@@ -67,20 +67,20 @@ By default, working memory persists across all conversation threads for the same
 
 ```typescript
 const memory = new Memory({
-  storage,
-  options: {
-    workingMemory: {
-      enabled: true,
-      scope: 'resource', // Memory persists across all user threads
-      template: `# User Profile
+	storage,
+	options: {
+		workingMemory: {
+			enabled: true,
+			scope: 'resource', // Memory persists across all user threads
+			template: `# User Profile
 - **Name**:
 - **Location**:
 - **Interests**:
 - **Preferences**:
 - **Long-term Goals**:
 `,
-    },
-  },
+		},
+	},
 })
 ```
 
@@ -97,10 +97,10 @@ When using resource-scoped memory, make sure to pass the `resource` parameter in
 ```typescript
 // Resource-scoped memory requires resource
 const response = await agent.generate('Hello!', {
-  memory: {
-    thread: 'conversation-123',
-    resource: 'user-alice-456', // Same user across different threads
-  },
+	memory: {
+		thread: 'conversation-123',
+		resource: 'user-alice-456', // Same user across different threads
+	},
 })
 ```
 
@@ -110,18 +110,18 @@ Thread-scoped memory isolates working memory to individual conversation threads.
 
 ```typescript
 const memory = new Memory({
-  storage,
-  options: {
-    workingMemory: {
-      enabled: true,
-      scope: 'thread', // Memory is isolated per thread
-      template: `# User Profile
+	storage,
+	options: {
+		workingMemory: {
+			enabled: true,
+			scope: 'thread', // Memory is isolated per thread
+			template: `# User Profile
 - **Name**:
 - **Interests**:
 - **Current Goal**:
 `,
-    },
-  },
+		},
+	},
 })
 ```
 
@@ -150,10 +150,10 @@ Here's an example of a custom template. In this example the agent will store the
 
 ```typescript {5-28}
 const memory = new Memory({
-  options: {
-    workingMemory: {
-      enabled: true,
-      template: `
+	options: {
+		workingMemory: {
+			enabled: true,
+			template: `
 # User Profile
 
 ## Personal info
@@ -177,8 +177,8 @@ const memory = new Memory({
   - [Question 1]
   - [Question 2]
 `,
-    },
-  },
+		},
+	},
 })
 ```
 
@@ -204,12 +204,12 @@ Use a shorter single block if you only need a few items:
 
 ```typescript
 const basicMemory = new Memory({
-  options: {
-    workingMemory: {
-      enabled: true,
-      template: `User Facts:\n- Name:\n- Favorite Color:\n- Current Topic:`,
-    },
-  },
+	options: {
+		workingMemory: {
+			enabled: true,
+			template: `User Facts:\n- Name:\n- Favorite Color:\n- Current Topic:`,
+		},
+	},
 })
 ```
 
@@ -217,12 +217,12 @@ You can also store the key facts in a short paragraph format if you prefer a mor
 
 ```typescript
 const paragraphMemory = new Memory({
-  options: {
-    workingMemory: {
-      enabled: true,
-      template: `Important Details:\n\nKeep a short paragraph capturing the user's important facts (name, main goal, current task).`,
-    },
-  },
+	options: {
+		workingMemory: {
+			enabled: true,
+			template: `Important Details:\n\nKeep a short paragraph capturing the user's important facts (name, main goal, current task).`,
+		},
+	},
 })
 ```
 
@@ -239,26 +239,26 @@ import { z } from 'zod'
 import { Memory } from '@mastra/memory'
 
 const userProfileSchema = z.object({
-  name: z.string().optional(),
-  location: z.string().optional(),
-  timezone: z.string().optional(),
-  preferences: z
-    .object({
-      communicationStyle: z.string().optional(),
-      projectGoal: z.string().optional(),
-      deadlines: z.array(z.string()).optional(),
-    })
-    .optional(),
+	name: z.string().optional(),
+	location: z.string().optional(),
+	timezone: z.string().optional(),
+	preferences: z
+		.object({
+			communicationStyle: z.string().optional(),
+			projectGoal: z.string().optional(),
+			deadlines: z.array(z.string()).optional(),
+		})
+		.optional(),
 })
 
 const memory = new Memory({
-  options: {
-    workingMemory: {
-      enabled: true,
-      schema: userProfileSchema,
-      // template: ... (do not set)
-    },
-  },
+	options: {
+		workingMemory: {
+			enabled: true,
+			schema: userProfileSchema,
+			// template: ... (do not set)
+		},
+	},
 })
 ```
 
@@ -266,14 +266,14 @@ When a schema is provided, the agent receives the working memory as a JSON objec
 
 ```json
 {
-  "name": "Sam",
-  "location": "Berlin",
-  "timezone": "CET",
-  "preferences": {
-    "communicationStyle": "Formal",
-    "projectGoal": "Launch MVP",
-    "deadlines": ["2025-07-01"]
-  }
+	"name": "Sam",
+	"location": "Berlin",
+	"timezone": "CET",
+	"preferences": {
+		"communicationStyle": "Formal",
+		"projectGoal": "Launch MVP",
+		"deadlines": ["2025-07-01"]
+	}
 }
 ```
 
@@ -337,26 +337,26 @@ When creating a thread, you can provide initial working memory through the metad
 ```typescript title="src/app/medical-consultation.ts"
 // Create a thread with initial working memory
 const thread = await memory.createThread({
-  threadId: 'thread-123',
-  resourceId: 'user-456',
-  title: 'Medical Consultation',
-  metadata: {
-    workingMemory: `# Patient Profile
+	threadId: 'thread-123',
+	resourceId: 'user-456',
+	title: 'Medical Consultation',
+	metadata: {
+		workingMemory: `# Patient Profile
 - Name: John Doe
 - Blood Type: O+
 - Allergies: Penicillin
 - Current Medications: None
 - Medical History: Hypertension (controlled)
 `,
-  },
+	},
 })
 
 // The agent will now have access to this information in all messages
 await agent.generate("What's my blood type?", {
-  memory: {
-    thread: thread.id,
-    resource: 'user-456',
-  },
+	memory: {
+		thread: thread.id,
+		resource: 'user-456',
+	},
 })
 // Response: "Your blood type is O+."
 ```
@@ -368,18 +368,18 @@ You can also update an existing thread's working memory:
 ```typescript title="src/app/medical-consultation.ts"
 // Update thread metadata to add/modify working memory
 await memory.updateThread({
-  id: 'thread-123',
-  title: thread.title,
-  metadata: {
-    ...thread.metadata,
-    workingMemory: `# Patient Profile
+	id: 'thread-123',
+	title: thread.title,
+	metadata: {
+		...thread.metadata,
+		workingMemory: `# Patient Profile
 - Name: John Doe
 - Blood Type: O+
 - Allergies: Penicillin, Ibuprofen  // Updated
 - Current Medications: Lisinopril 10mg daily  // Added
 - Medical History: Hypertension (controlled)
 `,
-  },
+	},
 })
 ```
 
@@ -389,9 +389,9 @@ Alternatively, use the `updateWorkingMemory` method directly:
 
 ```typescript title="src/app/medical-consultation.ts"
 await memory.updateWorkingMemory({
-  threadId: 'thread-123',
-  resourceId: 'user-456', // Required for resource-scoped memory
-  workingMemory: 'Updated memory content...',
+	threadId: 'thread-123',
+	resourceId: 'user-456', // Required for resource-scoped memory
+	workingMemory: 'Updated memory content...',
 })
 ```
 
@@ -406,13 +406,13 @@ To enable read-only mode, set `readOnly: true` in the memory options:
 
 ```typescript
 const response = await agent.generate('What do you know about me?', {
-  memory: {
-    thread: 'conversation-123',
-    resource: 'user-alice-456',
-    options: {
-      readOnly: true, // Working memory is provided but cannot be updated
-    },
-  },
+	memory: {
+		thread: 'conversation-123',
+		resource: 'user-alice-456',
+		options: {
+			readOnly: true, // Working memory is provided but cannot be updated
+		},
+	},
 })
 ```
 
@@ -422,14 +422,14 @@ By default, working memory reaches the model as part of the system message. You 
 
 ```typescript
 const memory = new Memory({
-  storage: new LibSQLStore({ url: 'file:./mastra.db' }),
-  options: {
-    workingMemory: {
-      enabled: true,
-      template: '# User\n- name:\n- location:',
-      useStateSignals: true, // experimental: deliver as state signal
-    },
-  },
+	storage: new LibSQLStore({ url: 'file:./mastra.db' }),
+	options: {
+		workingMemory: {
+			enabled: true,
+			template: '# User\n- name:\n- location:',
+			useStateSignals: true, // experimental: deliver as state signal
+		},
+	},
 })
 ```
 

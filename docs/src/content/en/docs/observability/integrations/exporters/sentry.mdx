@@ -42,14 +42,14 @@ import { Observability } from '@mastra/observability'
 import { SentryExporter } from '@mastra/sentry'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      sentry: {
-        serviceName: 'my-service',
-        exporters: [new SentryExporter()],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			sentry: {
+				serviceName: 'my-service',
+				exporters: [new SentryExporter()],
+			},
+		},
+	}),
 })
 ```
 
@@ -63,20 +63,20 @@ import { Observability } from '@mastra/observability'
 import { SentryExporter } from '@mastra/sentry'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      sentry: {
-        serviceName: 'my-service',
-        exporters: [
-          new SentryExporter({
-            dsn: process.env.SENTRY_DSN!,
-            environment: 'production',
-            tracesSampleRate: 1.0, // Send 100% of transactions to Sentry
-          }),
-        ],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			sentry: {
+				serviceName: 'my-service',
+				exporters: [
+					new SentryExporter({
+						dsn: process.env.SENTRY_DSN!,
+						environment: 'production',
+						tracesSampleRate: 1.0, // Send 100% of transactions to Sentry
+					}),
+				],
+			},
+		},
+	}),
 })
 ```
 
@@ -86,24 +86,24 @@ export const mastra = new Mastra({
 
 ```typescript
 new SentryExporter({
-  // Required settings
-  dsn: process.env.SENTRY_DSN!, // Data Source Name - tells the SDK where to send events
+	// Required settings
+	dsn: process.env.SENTRY_DSN!, // Data Source Name - tells the SDK where to send events
 
-  // Optional settings
-  environment: 'production', // Deployment environment (enables filtering issues and alerts by environment)
-  tracesSampleRate: 1.0, // Percentage of transactions sent to Sentry (0.0 = 0%, 1.0 = 100%)
-  release: '1.0.0', // Version of your code deployed (helps identify regressions and track deployments)
+	// Optional settings
+	environment: 'production', // Deployment environment (enables filtering issues and alerts by environment)
+	tracesSampleRate: 1.0, // Percentage of transactions sent to Sentry (0.0 = 0%, 1.0 = 100%)
+	release: '1.0.0', // Version of your code deployed (helps identify regressions and track deployments)
 
-  // Advanced Sentry options
-  options: {
-    // Any additional Sentry.NodeOptions
-    integrations: [],
-    beforeSend: event => event,
-    // ... other Sentry SDK options
-  },
+	// Advanced Sentry options
+	options: {
+		// Any additional Sentry.NodeOptions
+		integrations: [],
+		beforeSend: event => event,
+		// ... other Sentry SDK options
+	},
 
-  // Diagnostic logging
-  logLevel: 'info', // debug | info | warn | error
+	// Diagnostic logging
+	logLevel: 'info', // debug | info | warn | error
 })
 ```
 
@@ -113,8 +113,8 @@ Control the percentage of transactions sent to Sentry. This is useful for high-v
 
 ```typescript
 new SentryExporter({
-  dsn: process.env.SENTRY_DSN!,
-  tracesSampleRate: 0.1, // Send 10% of transactions to Sentry (recommended for high-load backends)
+	dsn: process.env.SENTRY_DSN!,
+	tracesSampleRate: 0.1, // Send 10% of transactions to Sentry (recommended for high-load backends)
 })
 ```
 

@@ -26,32 +26,32 @@ import { z } from 'zod'
 import { dataProcessingWorkflow } from '../workflows/dataProcessingWorkflow'
 
 const myAgent = new Agent({
-  id: 'my-example-agent',
-  name: 'MyExampleAgent',
-  description: 'A generalist to help with basic questions.',
-  instructions: 'You are a helpful assistant.',
-  model: '__GATEWAY_OPENAI_MODEL__',
+	id: 'my-example-agent',
+	name: 'MyExampleAgent',
+	description: 'A generalist to help with basic questions.',
+	instructions: 'You are a helpful assistant.',
+	model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 const weatherTool = createTool({
-  id: 'getWeather',
-  description: 'Gets the current weather for a location.',
-  inputSchema: z.object({ location: z.string() }),
-  execute: async inputData => `Weather in ${inputData.location} is sunny.`,
+	id: 'getWeather',
+	description: 'Gets the current weather for a location.',
+	inputSchema: z.object({ location: z.string() }),
+	execute: async inputData => `Weather in ${inputData.location} is sunny.`,
 })
 
 const server = new MCPServer({
-  id: 'my-custom-server',
-  name: 'My Custom Server',
-  version: '1.0.0',
-  description: 'A server that provides weather data and agent capabilities',
-  instructions:
-    'Use the available tools to help users with weather information and data processing tasks.',
-  tools: { weatherTool },
-  agents: { myAgent }, // this agent will become tool "ask_myAgent"
-  workflows: {
-    dataProcessingWorkflow, // this workflow will become tool "run_dataProcessingWorkflow"
-  },
+	id: 'my-custom-server',
+	name: 'My Custom Server',
+	version: '1.0.0',
+	description: 'A server that provides weather data and agent capabilities',
+	instructions:
+		'Use the available tools to help users with weather information and data processing tasks.',
+	tools: { weatherTool },
+	agents: { myAgent }, // this agent will become tool "ask_myAgent"
+	workflows: {
+		dataProcessingWorkflow, // this workflow will become tool "run_dataProcessingWorkflow"
+	},
 })
 ```
 
@@ -61,131 +61,131 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    isOptional: false,
-    description:
-      'Unique identifier for the server. This ID is preserved when the server is registered with Mastra and can be used to retrieve the server via getMCPServerById().',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    isOptional: false,
-    description: "A descriptive name for your server (e.g., 'My Weather and Agent Server').",
-  },
-  {
-    name: 'version',
-    type: 'string',
-    isOptional: false,
-    description: "The semantic version of your server (e.g., '1.0.0').",
-  },
-  {
-    name: 'tools',
-    type: 'ToolsInput',
-    isOptional: false,
-    description:
-      'An object where keys are tool names and values are Mastra tool definitions (created with `createTool` or Vercel AI SDK). These tools will be directly exposed.',
-  },
-  {
-    name: 'agents',
-    type: 'Record<string, Agent>',
-    isOptional: true,
-    description:
-      "An object where keys are agent identifiers and values are Mastra Agent instances. Each agent will be automatically converted into a tool named `ask_<agentIdentifier>`. The agent **must** have a non-empty `description` string property defined in its constructor configuration. This description will be used in the tool's description. If an agent's description is missing or empty, an error will be thrown during MCPServer initialization.",
-  },
-  {
-    name: 'workflows',
-    type: 'Record<string, Workflow>',
-    isOptional: true,
-    description:
-      "An object where keys are workflow identifiers and values are Mastra Workflow instances. Each workflow is converted into a tool named `run_<workflowKey>`. The workflow's `inputSchema` becomes the tool's input schema. The workflow **must** have a non-empty `description` string property, which is used for the tool's description. If a workflow's description is missing or empty, an error will be thrown. The tool executes the workflow by calling `workflow.createRun()` followed by `run.start({ inputData: <tool_input> })`. If a tool name derived from an agent or workflow (e.g., `ask_myAgent` or `run_myWorkflow`) collides with an explicitly defined tool name or another derived name, the explicitly defined tool takes precedence, and a warning is logged. Agents/workflows leading to subsequent collisions are skipped.",
-  },
-  {
-    name: 'description',
-    type: 'string',
-    isOptional: true,
-    description: 'Optional description of what the MCP server does.',
-  },
-  {
-    name: 'instructions',
-    type: 'string',
-    isOptional: true,
-    description: 'Optional instructions describing how to use the server and its features.',
-  },
-  {
-    name: 'mapAuthInfoToUser',
-    type: '({ authInfo, extra, requestContext }) => unknown | null | undefined | Promise<unknown | null | undefined>',
-    isOptional: true,
-    description:
-      'Maps MCP transport auth data from `extra.authInfo` into the `user` value used by Mastra FGA checks. Use this when an OAuth-protected MCP server is registered on a Mastra instance with an FGA provider.',
-  },
-  {
-    name: 'fga',
-    type: "{ resourceMapping?: Partial<Record<'tool' | 'tools', { fgaResourceType: string; deriveId?: ({ user, resourceId, requestContext }) => string | undefined }>>; permissionMapping?: Record<string, string> }",
-    isOptional: true,
-    description:
-      "Overrides resource and permission mappings for this MCP server's `tools/list` and `tools/call` FGA checks. Use this when MCP authorization should be scoped differently from internal agent or workflow tool execution.",
-  },
-  {
-    name: 'repository',
-    type: 'Repository', // { url: string; source: string; id: string; }
-    isOptional: true,
-    description: "Optional repository information for the server's source code.",
-  },
-  {
-    name: 'releaseDate',
-    type: 'string', // ISO 8601
-    isOptional: true,
-    description:
-      'Optional release date of this server version (ISO 8601 string). Defaults to the time of instantiation if not provided.',
-  },
-  {
-    name: 'isLatest',
-    type: 'boolean',
-    isOptional: true,
-    description: 'Optional flag indicating if this is the latest version. Defaults to true if not provided.',
-  },
-  {
-    name: 'packageCanonical',
-    type: "'npm' | 'docker' | 'pypi' | 'crates' | string",
-    isOptional: true,
-    description:
-      "Optional canonical packaging format if the server is distributed as a package (e.g., 'npm', 'docker').",
-  },
-  {
-    name: 'packages',
-    type: 'PackageInfo[]',
-    isOptional: true,
-    description: 'Optional list of installable packages for this server.',
-  },
-  {
-    name: 'remotes',
-    type: 'RemoteInfo[]',
-    isOptional: true,
-    description: 'Optional list of remote access points for this server.',
-  },
-  {
-    name: 'resources',
-    type: 'MCPServerResources',
-    isOptional: true,
-    description:
-      'An object defining how the server should handle MCP resources. See Resource Handling section for details.',
-  },
-  {
-    name: 'prompts',
-    type: 'MCPServerPrompts',
-    isOptional: true,
-    description:
-      'An object defining how the server should handle MCP prompts. See Prompt Handling section for details.',
-  },
-  {
-    name: 'appResources',
-    type: 'AppResources',
-    isOptional: true,
-    description:
-      'A map of `ui://` URIs to app resource configurations. Each entry defines an interactive HTML UI served via the MCP Apps extension (SEP-1865). See the MCP Apps section for details.',
-  },
+	{
+		name: 'id',
+		type: 'string',
+		isOptional: false,
+		description:
+			'Unique identifier for the server. This ID is preserved when the server is registered with Mastra and can be used to retrieve the server via getMCPServerById().',
+	},
+	{
+		name: 'name',
+		type: 'string',
+		isOptional: false,
+		description: "A descriptive name for your server (e.g., 'My Weather and Agent Server').",
+	},
+	{
+		name: 'version',
+		type: 'string',
+		isOptional: false,
+		description: "The semantic version of your server (e.g., '1.0.0').",
+	},
+	{
+		name: 'tools',
+		type: 'ToolsInput',
+		isOptional: false,
+		description:
+			'An object where keys are tool names and values are Mastra tool definitions (created with `createTool` or Vercel AI SDK). These tools will be directly exposed.',
+	},
+	{
+		name: 'agents',
+		type: 'Record<string, Agent>',
+		isOptional: true,
+		description:
+			"An object where keys are agent identifiers and values are Mastra Agent instances. Each agent will be automatically converted into a tool named `ask_<agentIdentifier>`. The agent **must** have a non-empty `description` string property defined in its constructor configuration. This description will be used in the tool's description. If an agent's description is missing or empty, an error will be thrown during MCPServer initialization.",
+	},
+	{
+		name: 'workflows',
+		type: 'Record<string, Workflow>',
+		isOptional: true,
+		description:
+			"An object where keys are workflow identifiers and values are Mastra Workflow instances. Each workflow is converted into a tool named `run_<workflowKey>`. The workflow's `inputSchema` becomes the tool's input schema. The workflow **must** have a non-empty `description` string property, which is used for the tool's description. If a workflow's description is missing or empty, an error will be thrown. The tool executes the workflow by calling `workflow.createRun()` followed by `run.start({ inputData: <tool_input> })`. If a tool name derived from an agent or workflow (e.g., `ask_myAgent` or `run_myWorkflow`) collides with an explicitly defined tool name or another derived name, the explicitly defined tool takes precedence, and a warning is logged. Agents/workflows leading to subsequent collisions are skipped.",
+	},
+	{
+		name: 'description',
+		type: 'string',
+		isOptional: true,
+		description: 'Optional description of what the MCP server does.',
+	},
+	{
+		name: 'instructions',
+		type: 'string',
+		isOptional: true,
+		description: 'Optional instructions describing how to use the server and its features.',
+	},
+	{
+		name: 'mapAuthInfoToUser',
+		type: '({ authInfo, extra, requestContext }) => unknown | null | undefined | Promise<unknown | null | undefined>',
+		isOptional: true,
+		description:
+			'Maps MCP transport auth data from `extra.authInfo` into the `user` value used by Mastra FGA checks. Use this when an OAuth-protected MCP server is registered on a Mastra instance with an FGA provider.',
+	},
+	{
+		name: 'fga',
+		type: "{ resourceMapping?: Partial<Record<'tool' | 'tools', { fgaResourceType: string; deriveId?: ({ user, resourceId, requestContext }) => string | undefined }>>; permissionMapping?: Record<string, string> }",
+		isOptional: true,
+		description:
+			"Overrides resource and permission mappings for this MCP server's `tools/list` and `tools/call` FGA checks. Use this when MCP authorization should be scoped differently from internal agent or workflow tool execution.",
+	},
+	{
+		name: 'repository',
+		type: 'Repository', // { url: string; source: string; id: string; }
+		isOptional: true,
+		description: "Optional repository information for the server's source code.",
+	},
+	{
+		name: 'releaseDate',
+		type: 'string', // ISO 8601
+		isOptional: true,
+		description:
+			'Optional release date of this server version (ISO 8601 string). Defaults to the time of instantiation if not provided.',
+	},
+	{
+		name: 'isLatest',
+		type: 'boolean',
+		isOptional: true,
+		description: 'Optional flag indicating if this is the latest version. Defaults to true if not provided.',
+	},
+	{
+		name: 'packageCanonical',
+		type: "'npm' | 'docker' | 'pypi' | 'crates' | string",
+		isOptional: true,
+		description:
+			"Optional canonical packaging format if the server is distributed as a package (e.g., 'npm', 'docker').",
+	},
+	{
+		name: 'packages',
+		type: 'PackageInfo[]',
+		isOptional: true,
+		description: 'Optional list of installable packages for this server.',
+	},
+	{
+		name: 'remotes',
+		type: 'RemoteInfo[]',
+		isOptional: true,
+		description: 'Optional list of remote access points for this server.',
+	},
+	{
+		name: 'resources',
+		type: 'MCPServerResources',
+		isOptional: true,
+		description:
+			'An object defining how the server should handle MCP resources. See Resource Handling section for details.',
+	},
+	{
+		name: 'prompts',
+		type: 'MCPServerPrompts',
+		isOptional: true,
+		description:
+			'An object defining how the server should handle MCP prompts. See Prompt Handling section for details.',
+	},
+	{
+		name: 'appResources',
+		type: 'AppResources',
+		isOptional: true,
+		description:
+			'A map of `ui://` URIs to app resource configurations. Each entry defines an interactive HTML UI served via the MCP Apps extension (SEP-1865). See the MCP Apps section for details.',
+	},
 ]}
 />
 
@@ -238,30 +238,30 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 const fetchUserData = createTool({
-  id: 'fetchUserData',
-  description: 'Fetches user data using authentication from MCP context',
-  inputSchema: z.object({
-    userId: z.string().describe('The ID of the user to fetch'),
-  }),
-  execute: async (inputData, context) => {
-    // Access MCP authentication context
-    // When called directly via MCP: context.mcp.extra
-    // When called via agent: context.requestContext.get('mcp.extra')
-    const mcpExtra = context?.mcp?.extra || context?.requestContext?.get('mcp.extra')
-    const authInfo = mcpExtra?.authInfo
+	id: 'fetchUserData',
+	description: 'Fetches user data using authentication from MCP context',
+	inputSchema: z.object({
+		userId: z.string().describe('The ID of the user to fetch'),
+	}),
+	execute: async (inputData, context) => {
+		// Access MCP authentication context
+		// When called directly via MCP: context.mcp.extra
+		// When called via agent: context.requestContext.get('mcp.extra')
+		const mcpExtra = context?.mcp?.extra || context?.requestContext?.get('mcp.extra')
+		const authInfo = mcpExtra?.authInfo
 
-    if (!authInfo?.token) {
-      throw new Error('Authentication required')
-    }
+		if (!authInfo?.token) {
+			throw new Error('Authentication required')
+		}
 
-    const response = await fetch(`https://api.example.com/users/${inputData.userId}`, {
-      headers: {
-        Authorization: `Bearer ${authInfo.token}`,
-      },
-    })
+		const response = await fetch(`https://api.example.com/users/${inputData.userId}`, {
+			headers: {
+				Authorization: `Bearer ${authInfo.token}`,
+			},
+		})
 
-    return response.json()
-  },
+		return response.json()
+	},
 })
 ```
 
@@ -281,12 +281,12 @@ Here's how you would start the server using stdio:
 
 ```typescript
 const server = new MCPServer({
-  id: 'my-server',
-  name: 'My Server',
-  version: '1.0.0',
-  tools: {
-    /* ... */
-  },
+	id: 'my-server',
+	name: 'My Server',
+	version: '1.0.0',
+	tools: {
+		/* ... */
+	},
 })
 await server.startStdio()
 ```
@@ -317,17 +317,17 @@ Here's an example of how you might use `startSSE` within an HTTP server request 
 import http from 'http'
 
 const httpServer = http.createServer(async (req, res) => {
-  await server.startSSE({
-    url: new URL(req.url || '', `http://localhost:1234`),
-    ssePath: '/sse',
-    messagePath: '/message',
-    req,
-    res,
-  })
+	await server.startSSE({
+		url: new URL(req.url || '', `http://localhost:1234`),
+		ssePath: '/sse',
+		messagePath: '/message',
+		req,
+		res,
+	})
 })
 
 httpServer.listen(PORT, () => {
-  console.log(`HTTP server listening on port ${PORT}`)
+	console.log(`HTTP server listening on port ${PORT}`)
 })
 ```
 
@@ -335,31 +335,31 @@ Here are the details for the values needed by the `startSSE` method:
 
 <PropertiesTable
   content={[
-  {
-    name: 'url',
-    type: 'URL',
-    description: 'The web address the user is requesting.',
-  },
-  {
-    name: 'ssePath',
-    type: 'string',
-    description: "The specific part of the URL where clients will connect for SSE (e.g., '/sse').",
-  },
-  {
-    name: 'messagePath',
-    type: 'string',
-    description: "The specific part of the URL where clients will send messages (e.g., '/message').",
-  },
-  {
-    name: 'req',
-    type: 'any',
-    description: 'The incoming request object from your web server.',
-  },
-  {
-    name: 'res',
-    type: 'any',
-    description: 'The response object from your web server, used to send data back.',
-  },
+	{
+		name: 'url',
+		type: 'URL',
+		description: 'The web address the user is requesting.',
+	},
+	{
+		name: 'ssePath',
+		type: 'string',
+		description: "The specific part of the URL where clients will connect for SSE (e.g., '/sse').",
+	},
+	{
+		name: 'messagePath',
+		type: 'string',
+		description: "The specific part of the URL where clients will send messages (e.g., '/message').",
+	},
+	{
+		name: 'req',
+		type: 'any',
+		description: 'The incoming request object from your web server.',
+	},
+	{
+		name: 'res',
+		type: 'any',
+		description: 'The response object from your web server, used to send data back.',
+	},
 ]}
 />
 
@@ -389,17 +389,17 @@ Here's an example of how you might use `startHonoSSE` within an HTTP server requ
 import http from 'http'
 
 const httpServer = http.createServer(async (req, res) => {
-  await server.startHonoSSE({
-    url: new URL(req.url || '', `http://localhost:1234`),
-    ssePath: '/hono-sse',
-    messagePath: '/message',
-    req,
-    res,
-  })
+	await server.startHonoSSE({
+		url: new URL(req.url || '', `http://localhost:1234`),
+		ssePath: '/hono-sse',
+		messagePath: '/message',
+		req,
+		res,
+	})
 })
 
 httpServer.listen(PORT, () => {
-  console.log(`HTTP server listening on port ${PORT}`)
+	console.log(`HTTP server listening on port ${PORT}`)
 })
 ```
 
@@ -407,31 +407,31 @@ Here are the details for the values needed by the `startHonoSSE` method:
 
 <PropertiesTable
   content={[
-  {
-    name: 'url',
-    type: 'URL',
-    description: 'The web address the user is requesting.',
-  },
-  {
-    name: 'ssePath',
-    type: 'string',
-    description: "The specific part of the URL where clients will connect for SSE (e.g., '/hono-sse').",
-  },
-  {
-    name: 'messagePath',
-    type: 'string',
-    description: "The specific part of the URL where clients will send messages (e.g., '/message').",
-  },
-  {
-    name: 'req',
-    type: 'any',
-    description: 'The incoming request object from your web server.',
-  },
-  {
-    name: 'res',
-    type: 'any',
-    description: 'The response object from your web server, used to send data back.',
-  },
+	{
+		name: 'url',
+		type: 'URL',
+		description: 'The web address the user is requesting.',
+	},
+	{
+		name: 'ssePath',
+		type: 'string',
+		description: "The specific part of the URL where clients will connect for SSE (e.g., '/hono-sse').",
+	},
+	{
+		name: 'messagePath',
+		type: 'string',
+		description: "The specific part of the URL where clients will send messages (e.g., '/message').",
+	},
+	{
+		name: 'req',
+		type: 'any',
+		description: 'The incoming request object from your web server.',
+	},
+	{
+		name: 'res',
+		type: 'any',
+		description: 'The response object from your web server, used to send data back.',
+	},
 ]}
 />
 
@@ -461,19 +461,19 @@ Here's an example of how you might use `startHTTP` within an HTTP server request
 import http from 'http'
 
 const httpServer = http.createServer(async (req, res) => {
-  await server.startHTTP({
-    url: new URL(req.url || '', 'http://localhost:1234'),
-    httpPath: `/mcp`,
-    req,
-    res,
-    options: {
-      sessionIdGenerator: () => randomUUID(),
-    },
-  })
+	await server.startHTTP({
+		url: new URL(req.url || '', 'http://localhost:1234'),
+		httpPath: `/mcp`,
+		req,
+		res,
+		options: {
+			sessionIdGenerator: () => randomUUID(),
+		},
+	})
 })
 
 httpServer.listen(PORT, () => {
-  console.log(`HTTP server listening on port ${PORT}`)
+	console.log(`HTTP server listening on port ${PORT}`)
 })
 ```
 
@@ -487,35 +487,35 @@ import { MCPServer } from '@mastra/mcp'
 import { toReqRes, toFetchResponse } from 'fetch-to-node'
 
 const server = new MCPServer({
-  id: 'my-serverless-mcp',
-  name: 'My Serverless MCP',
-  version: '1.0.0',
-  tools: {
-    /* your tools */
-  },
+	id: 'my-serverless-mcp',
+	name: 'My Serverless MCP',
+	version: '1.0.0',
+	tools: {
+		/* your tools */
+	},
 })
 
 serve(async req => {
-  const url = new URL(req.url)
+	const url = new URL(req.url)
 
-  if (url.pathname === '/mcp') {
-    // Convert Deno Request to Node.js-compatible format
-    const { req: nodeReq, res: nodeRes } = toReqRes(req)
+	if (url.pathname === '/mcp') {
+		// Convert Deno Request to Node.js-compatible format
+		const { req: nodeReq, res: nodeRes } = toReqRes(req)
 
-    await server.startHTTP({
-      url,
-      httpPath: '/mcp',
-      req: nodeReq,
-      res: nodeRes,
-      options: {
-        serverless: true, // ← Enable stateless mode for serverless
-      },
-    })
+		await server.startHTTP({
+			url,
+			httpPath: '/mcp',
+			req: nodeReq,
+			res: nodeRes,
+			options: {
+				serverless: true, // ← Enable stateless mode for serverless
+			},
+		})
 
-    return toFetchResponse(nodeRes)
-  }
+		return toFetchResponse(nodeRes)
+	}
 
-  return new Response('Not found', { status: 404 })
+	return new Response('Not found', { status: 404 })
 })
 ```
 
@@ -553,32 +553,32 @@ Here are the details for the values needed by the `startHTTP` method:
 
 <PropertiesTable
   content={[
-  {
-    name: 'url',
-    type: 'URL',
-    description: 'The web address the user is requesting.',
-  },
-  {
-    name: 'httpPath',
-    type: 'string',
-    description: "The specific part of the URL where the MCP server will handle HTTP requests (e.g., '/mcp').",
-  },
-  {
-    name: 'req',
-    type: 'http.IncomingMessage',
-    description: 'The incoming request object from your web server.',
-  },
-  {
-    name: 'res',
-    type: 'http.ServerResponse',
-    description: 'The response object from your web server, used to send data back.',
-  },
-  {
-    name: 'options',
-    type: 'StreamableHTTPServerTransportOptions',
-    description: 'Optional configuration for the HTTP transport. See the options table below for more details.',
-    optional: true,
-  },
+	{
+		name: 'url',
+		type: 'URL',
+		description: 'The web address the user is requesting.',
+	},
+	{
+		name: 'httpPath',
+		type: 'string',
+		description: "The specific part of the URL where the MCP server will handle HTTP requests (e.g., '/mcp').",
+	},
+	{
+		name: 'req',
+		type: 'http.IncomingMessage',
+		description: 'The incoming request object from your web server.',
+	},
+	{
+		name: 'res',
+		type: 'http.ServerResponse',
+		description: 'The response object from your web server, used to send data back.',
+	},
+	{
+		name: 'options',
+		type: 'StreamableHTTPServerTransportOptions',
+		description: 'Optional configuration for the HTTP transport. See the options table below for more details.',
+		optional: true,
+	},
 ]}
 />
 
@@ -586,40 +586,40 @@ The `StreamableHTTPServerTransportOptions` object allows you to customize the be
 
 <PropertiesTable
   content={[
-  {
-    name: 'serverless',
-    type: 'boolean',
-    description:
-      'If `true`, runs in stateless mode without session management. Each request is handled independently with a fresh server instance. Essential for serverless environments (Cloudflare Workers, Supabase Edge Functions, Vercel Edge, etc.) where sessions cannot persist between invocations. Defaults to `false`.',
-    optional: true,
-  },
-  {
-    name: 'sessionIdGenerator',
-    type: '(() => string) | undefined',
-    description:
-      'A function that generates a unique session ID. This should be a cryptographically secure, globally unique string. Return `undefined` to disable session management.',
-  },
-  {
-    name: 'onsessioninitialized',
-    type: '(sessionId: string) => void',
-    description:
-      'A callback that is invoked when a new session is initialized. This is useful for tracking active MCP sessions.',
-    optional: true,
-  },
-  {
-    name: 'enableJsonResponse',
-    type: 'boolean',
-    description:
-      'If `true`, the server will return plain JSON responses instead of using Server-Sent Events (SSE) for streaming. Defaults to `false`.',
-    optional: true,
-  },
-  {
-    name: 'eventStore',
-    type: 'EventStore',
-    description:
-      'An event store for message resumability. Providing this enables clients to reconnect and resume message streams.',
-    optional: true,
-  },
+	{
+		name: 'serverless',
+		type: 'boolean',
+		description:
+			'If `true`, runs in stateless mode without session management. Each request is handled independently with a fresh server instance. Essential for serverless environments (Cloudflare Workers, Supabase Edge Functions, Vercel Edge, etc.) where sessions cannot persist between invocations. Defaults to `false`.',
+		optional: true,
+	},
+	{
+		name: 'sessionIdGenerator',
+		type: '(() => string) | undefined',
+		description:
+			'A function that generates a unique session ID. This should be a cryptographically secure, globally unique string. Return `undefined` to disable session management.',
+	},
+	{
+		name: 'onsessioninitialized',
+		type: '(sessionId: string) => void',
+		description:
+			'A callback that is invoked when a new session is initialized. This is useful for tracking active MCP sessions.',
+		optional: true,
+	},
+	{
+		name: 'enableJsonResponse',
+		type: 'boolean',
+		description:
+			'If `true`, the server will return plain JSON responses instead of using Server-Sent Events (SSE) for streaming. Defaults to `false`.',
+		optional: true,
+	},
+	{
+		name: 'eventStore',
+		type: 'EventStore',
+		description:
+			'An event store for message resumability. Providing this enables clients to reconnect and resume message streams.',
+		optional: true,
+	},
 ]}
 />
 
@@ -717,22 +717,22 @@ async executeTool(
 
 <PropertiesTable
   content={[
-  {
-    name: 'toolId',
-    type: 'string',
-    description: 'The ID/name of the tool to execute.',
-  },
-  {
-    name: 'args',
-    type: 'any',
-    description: "The arguments to pass to the tool\'s execute function.",
-  },
-  {
-    name: 'executionContext',
-    type: 'object',
-    isOptional: true,
-    description: 'Optional context for the tool execution, like messages or a toolCallId.',
-  },
+	{
+		name: 'toolId',
+		type: 'string',
+		description: 'The ID/name of the tool to execute.',
+	},
+	{
+		name: 'args',
+		type: 'any',
+		description: "The arguments to pass to the tool\'s execute function.",
+	},
+	{
+		name: 'executionContext',
+		type: 'object',
+		isOptional: true,
+		description: 'Optional context for the tool execution, like messages or a toolCallId.',
+	},
 ]}
 />
 
@@ -766,18 +766,18 @@ The `resources` option takes an object of type `MCPServerResources`. This type d
 
 ```typescript
 export type MCPServerResources = {
-  // Callback to list available resources
-  listResources: () => Promise<Resource[]>
+	// Callback to list available resources
+	listResources: () => Promise<Resource[]>
 
-  // Callback to get the content of a specific resource
-  getResourceContent: ({
-    uri,
-  }: {
-    uri: string
-  }) => Promise<MCPServerResourceContent | MCPServerResourceContent[]>
+	// Callback to get the content of a specific resource
+	getResourceContent: ({
+		uri,
+	}: {
+		uri: string
+	}) => Promise<MCPServerResourceContent | MCPServerResourceContent[]>
 
-  // Optional callback to list available resource templates
-  resourceTemplates?: () => Promise<ResourceTemplate[]>
+	// Optional callback to list available resource templates
+	resourceTemplates?: () => Promise<ResourceTemplate[]>
 }
 
 export type MCPServerResourceContent = { text?: string } | { blob?: string }
@@ -791,41 +791,41 @@ import type { MCPServerResourceContent, Resource, ResourceTemplate } from '@mast
 
 // Resources/resource templates will generally be dynamically fetched.
 const myResources: Resource[] = [
-  { uri: 'file://data/123.txt', name: 'Data File', mimeType: 'text/plain' },
+	{ uri: 'file://data/123.txt', name: 'Data File', mimeType: 'text/plain' },
 ]
 
 const myResourceContents: Record<string, MCPServerResourceContent> = {
-  'file://data.txt/123': { text: 'This is the content of the data file.' },
+	'file://data.txt/123': { text: 'This is the content of the data file.' },
 }
 
 const myResourceTemplates: ResourceTemplate[] = [
-  {
-    uriTemplate: 'file://data/{id}',
-    name: 'Data File',
-    description: 'A file containing data.',
-    mimeType: 'text/plain',
-  },
+	{
+		uriTemplate: 'file://data/{id}',
+		name: 'Data File',
+		description: 'A file containing data.',
+		mimeType: 'text/plain',
+	},
 ]
 
 const myResourceHandlers: MCPServerResources = {
-  listResources: async () => myResources,
-  getResourceContent: async ({ uri }) => {
-    if (myResourceContents[uri]) {
-      return myResourceContents[uri]
-    }
-    throw new Error(`Resource content not found for ${uri}`)
-  },
-  resourceTemplates: async () => myResourceTemplates,
+	listResources: async () => myResources,
+	getResourceContent: async ({ uri }) => {
+		if (myResourceContents[uri]) {
+			return myResourceContents[uri]
+		}
+		throw new Error(`Resource content not found for ${uri}`)
+	},
+	resourceTemplates: async () => myResourceTemplates,
 }
 
 const serverWithResources = new MCPServer({
-  id: 'resourceful-server',
-  name: 'Resourceful Server',
-  version: '1.0.0',
-  tools: {
-    /* ... your tools ... */
-  },
-  resources: myResourceHandlers,
+	id: 'resourceful-server',
+	name: 'Resourceful Server',
+	version: '1.0.0',
+	tools: {
+		/* ... your tools ... */
+	},
+	resources: myResourceHandlers,
 })
 ```
 
@@ -877,19 +877,19 @@ The `prompts` option takes an object of type `MCPServerPrompts`. This type defin
 
 ```typescript
 export type MCPServerPrompts = {
-  // Callback to list available prompts
-  listPrompts: () => Promise<Prompt[]>
+	// Callback to list available prompts
+	listPrompts: () => Promise<Prompt[]>
 
-  // Callback to get the messages/content for a specific prompt
-  getPromptMessages?: ({
-    name,
-    version,
-    args,
-  }: {
-    name: string
-    version?: string
-    args?: any
-  }) => Promise<{ prompt: Prompt; messages: PromptMessage[] }>
+	// Callback to get the messages/content for a specific prompt
+	getPromptMessages?: ({
+		name,
+		version,
+		args,
+	}: {
+		name: string
+		version?: string
+		args?: any
+	}) => Promise<{ prompt: Prompt; messages: PromptMessage[] }>
 }
 ```
 
@@ -900,63 +900,63 @@ import { MCPServer } from '@mastra/mcp'
 import type { Prompt, PromptMessage, MCPServerPrompts } from '@mastra/mcp'
 
 const prompts: Prompt[] = [
-  {
-    name: 'analyze-code',
-    description: 'Analyze code for improvements',
-    version: 'v1',
-  },
-  {
-    name: 'analyze-code',
-    description: 'Analyze code for improvements (new logic)',
-    version: 'v2',
-  },
+	{
+		name: 'analyze-code',
+		description: 'Analyze code for improvements',
+		version: 'v1',
+	},
+	{
+		name: 'analyze-code',
+		description: 'Analyze code for improvements (new logic)',
+		version: 'v2',
+	},
 ]
 
 const myPromptHandlers: MCPServerPrompts = {
-  listPrompts: async () => prompts,
-  getPromptMessages: async ({ name, version, args }) => {
-    if (name === 'analyze-code') {
-      if (version === 'v2') {
-        const prompt = prompts.find(p => p.name === name && p.version === 'v2')
-        if (!prompt) throw new Error('Prompt version not found')
-        return {
-          prompt,
-          messages: [
-            {
-              role: 'user',
-              content: {
-                type: 'text',
-                text: `Analyze this code with the new logic: ${args.code}`,
-              },
-            },
-          ],
-        }
-      }
-      // Default or v1
-      const prompt = prompts.find(p => p.name === name && p.version === 'v1')
-      if (!prompt) throw new Error('Prompt version not found')
-      return {
-        prompt,
-        messages: [
-          {
-            role: 'user',
-            content: { type: 'text', text: `Analyze this code: ${args.code}` },
-          },
-        ],
-      }
-    }
-    throw new Error('Prompt not found')
-  },
+	listPrompts: async () => prompts,
+	getPromptMessages: async ({ name, version, args }) => {
+		if (name === 'analyze-code') {
+			if (version === 'v2') {
+				const prompt = prompts.find(p => p.name === name && p.version === 'v2')
+				if (!prompt) throw new Error('Prompt version not found')
+				return {
+					prompt,
+					messages: [
+						{
+							role: 'user',
+							content: {
+								type: 'text',
+								text: `Analyze this code with the new logic: ${args.code}`,
+							},
+						},
+					],
+				}
+			}
+			// Default or v1
+			const prompt = prompts.find(p => p.name === name && p.version === 'v1')
+			if (!prompt) throw new Error('Prompt version not found')
+			return {
+				prompt,
+				messages: [
+					{
+						role: 'user',
+						content: { type: 'text', text: `Analyze this code: ${args.code}` },
+					},
+				],
+			}
+		}
+		throw new Error('Prompt not found')
+	},
 }
 
 const serverWithPrompts = new MCPServer({
-  id: 'promptful-server',
-  name: 'Promptful Server',
-  version: '1.0.0',
-  tools: {
-    /* ... */
-  },
-  prompts: myPromptHandlers,
+	id: 'promptful-server',
+	name: 'Promptful Server',
+	version: '1.0.0',
+	tools: {
+		/* ... */
+	},
+	prompts: myPromptHandlers,
 })
 ```
 
@@ -1002,23 +1002,23 @@ When tools are executed within an MCP server context, they receive MCP-specific 
 
 ```typescript
 execute: async (inputData, context) => {
-  // input contains the tool's inputData parameters
-  // context.mcp contains server capabilities like elicitation and authentication info
+	// input contains the tool's inputData parameters
+	// context.mcp contains server capabilities like elicitation and authentication info
 
-  // Access authentication information (when available)
-  if (context.mcp?.extra?.authInfo) {
-    console.log('Authenticated request from:', context.mcp.extra.authInfo.clientId)
-  }
+	// Access authentication information (when available)
+	if (context.mcp?.extra?.authInfo) {
+		console.log('Authenticated request from:', context.mcp.extra.authInfo.clientId)
+	}
 
-  // Use elicitation capabilities
-  const result = await context.mcp.elicitation.sendRequest({
-    message: 'Please provide information',
-    requestedSchema: {
-      /* schema */
-    },
-  })
+	// Use elicitation capabilities
+	const result = await context.mcp.elicitation.sendRequest({
+		message: 'Please provide information',
+		requestedSchema: {
+			/* schema */
+		},
+	})
 
-  return result
+	return result
 }
 ```
 
@@ -1043,66 +1043,66 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 const server = new MCPServer({
-  id: 'interactive-server',
-  name: 'Interactive Server',
-  version: '1.0.0',
-  tools: {
-    collectContactInfo: createTool({
-      id: 'collectContactInfo',
-      description: 'Collects user contact information through elicitation',
-      inputSchema: z.object({
-        reason: z.string().optional().describe('Reason for collecting contact info'),
-      }),
-      execute: async (inputData, context) => {
-        const { reason } = inputData
+	id: 'interactive-server',
+	name: 'Interactive Server',
+	version: '1.0.0',
+	tools: {
+		collectContactInfo: createTool({
+			id: 'collectContactInfo',
+			description: 'Collects user contact information through elicitation',
+			inputSchema: z.object({
+				reason: z.string().optional().describe('Reason for collecting contact info'),
+			}),
+			execute: async (inputData, context) => {
+				const { reason } = inputData
 
-        // Log session info if available
-        console.log('Request from session:', context.mcp?.extra?.sessionId)
+				// Log session info if available
+				console.log('Request from session:', context.mcp?.extra?.sessionId)
 
-        try {
-          // Request user input via elicitation
-          const result = await context.mcp.elicitation.sendRequest({
-            message: reason
-              ? `Please provide your contact information. ${reason}`
-              : 'Please provide your contact information',
-            requestedSchema: {
-              type: 'object',
-              properties: {
-                name: {
-                  type: 'string',
-                  title: 'Full Name',
-                  description: 'Your full name',
-                },
-                email: {
-                  type: 'string',
-                  title: 'Email Address',
-                  description: 'Your email address',
-                  format: 'email',
-                },
-                phone: {
-                  type: 'string',
-                  title: 'Phone Number',
-                  description: 'Your phone number (optional)',
-                },
-              },
-              required: ['name', 'email'],
-            },
-          })
+				try {
+					// Request user input via elicitation
+					const result = await context.mcp.elicitation.sendRequest({
+						message: reason
+							? `Please provide your contact information. ${reason}`
+							: 'Please provide your contact information',
+						requestedSchema: {
+							type: 'object',
+							properties: {
+								name: {
+									type: 'string',
+									title: 'Full Name',
+									description: 'Your full name',
+								},
+								email: {
+									type: 'string',
+									title: 'Email Address',
+									description: 'Your email address',
+									format: 'email',
+								},
+								phone: {
+									type: 'string',
+									title: 'Phone Number',
+									description: 'Your phone number (optional)',
+								},
+							},
+							required: ['name', 'email'],
+						},
+					})
 
-          // Handle the user's response
-          if (result.action === 'accept') {
-            return `Contact information collected: ${JSON.stringify(result.content, null, 2)}`
-          } else if (result.action === 'decline') {
-            return 'Contact information collection was declined by the user.'
-          } else {
-            return 'Contact information collection was cancelled by the user.'
-          }
-        } catch (error) {
-          return `Error collecting contact information: ${error}`
-        }
-      },
-    }),
-  },
+					// Handle the user's response
+					if (result.action === 'accept') {
+						return `Contact information collected: ${JSON.stringify(result.content, null, 2)}`
+					} else if (result.action === 'decline') {
+						return 'Contact information collection was declined by the user.'
+					} else {
+						return 'Contact information collection was cancelled by the user.'
+					}
+				} catch (error) {
+					return `Error collecting contact information: ${error}`
+				}
+			},
+		}),
+	},
 })
 ```
 
@@ -1189,8 +1189,8 @@ The `ElicitResult` type:
 
 ```typescript
 type ElicitResult = {
-  action: 'accept' | 'decline' | 'cancel'
-  content?: any // Only present when action is 'accept'
+	action: 'accept' | 'decline' | 'cancel'
+	content?: any // Only present when action is 'accept'
 }
 ```
 
@@ -1203,36 +1203,36 @@ import http from 'node:http'
 import { MCPServer, createOAuthMiddleware, createStaticTokenValidator } from '@mastra/mcp'
 
 const mcpServer = new MCPServer({
-  id: 'protected-server',
-  name: 'Protected MCP Server',
-  version: '1.0.0',
-  tools: {
-    /* your tools */
-  },
+	id: 'protected-server',
+	name: 'Protected MCP Server',
+	version: '1.0.0',
+	tools: {
+		/* your tools */
+	},
 })
 
 // Create OAuth middleware
 const oauthMiddleware = createOAuthMiddleware({
-  oauth: {
-    resource: 'https://mcp.example.com/mcp',
-    authorizationServers: ['https://auth.example.com'],
-    scopesSupported: ['mcp:read', 'mcp:write'],
-    resourceName: 'My Protected MCP Server',
-    validateToken: createStaticTokenValidator(['allowed-token-1']),
-  },
-  mcpPath: '/mcp',
+	oauth: {
+		resource: 'https://mcp.example.com/mcp',
+		authorizationServers: ['https://auth.example.com'],
+		scopesSupported: ['mcp:read', 'mcp:write'],
+		resourceName: 'My Protected MCP Server',
+		validateToken: createStaticTokenValidator(['allowed-token-1']),
+	},
+	mcpPath: '/mcp',
 })
 
 // Create HTTP server with OAuth protection
 const httpServer = http.createServer(async (req, res) => {
-  const url = new URL(req.url || '', 'https://mcp.example.com')
+	const url = new URL(req.url || '', 'https://mcp.example.com')
 
-  // Apply OAuth middleware first
-  const result = await oauthMiddleware(req, res, url)
-  if (!result.proceed) return // Middleware handled response (401, metadata, etc.)
+	// Apply OAuth middleware first
+	const result = await oauthMiddleware(req, res, url)
+	if (!result.proceed) return // Middleware handled response (401, metadata, etc.)
 
-  // Token is valid, proceed to MCP handler
-  await mcpServer.startHTTP({ url, httpPath: '/mcp', req, res })
+	// Token is valid, proceed to MCP handler
+	await mcpServer.startHTTP({ url, httpPath: '/mcp', req, res })
 })
 
 httpServer.listen(3000)
@@ -1253,33 +1253,33 @@ import { createOAuthMiddleware, createIntrospectionValidator } from '@mastra/mcp
 
 // Option 1: Token introspection (RFC 7662)
 const middleware = createOAuthMiddleware({
-  oauth: {
-    resource: 'https://mcp.example.com/mcp',
-    authorizationServers: ['https://auth.example.com'],
-    validateToken: createIntrospectionValidator('https://auth.example.com/oauth/introspect', {
-      clientId: 'mcp-server',
-      clientSecret: 'secret',
-    }),
-  },
+	oauth: {
+		resource: 'https://mcp.example.com/mcp',
+		authorizationServers: ['https://auth.example.com'],
+		validateToken: createIntrospectionValidator('https://auth.example.com/oauth/introspect', {
+			clientId: 'mcp-server',
+			clientSecret: 'secret',
+		}),
+	},
 })
 
 // Option 2: Custom validation (JWT, database lookup, etc.)
 const customMiddleware = createOAuthMiddleware({
-  oauth: {
-    resource: 'https://mcp.example.com/mcp',
-    authorizationServers: ['https://auth.example.com'],
-    validateToken: async (token, resource) => {
-      const decoded = await verifyJWT(token)
-      if (!decoded) {
-        return { valid: false, error: 'invalid_token' }
-      }
-      return {
-        valid: true,
-        scopes: decoded.scope?.split(' ') || [],
-        subject: decoded.sub,
-      }
-    },
-  },
+	oauth: {
+		resource: 'https://mcp.example.com/mcp',
+		authorizationServers: ['https://auth.example.com'],
+		validateToken: async (token, resource) => {
+			const decoded = await verifyJWT(token)
+			if (!decoded) {
+				return { valid: false, error: 'invalid_token' }
+			}
+			return {
+				valid: true,
+				scopes: decoded.scope?.split(' ') || [],
+				subject: decoded.sub,
+			}
+		},
+	},
 })
 ```
 
@@ -1287,43 +1287,43 @@ const customMiddleware = createOAuthMiddleware({
 
 <PropertiesTable
   content={[
-  {
-    name: 'oauth.resource',
-    type: 'string',
-    description: 'The canonical URL of your MCP server. This is returned in Protected Resource Metadata.',
-  },
-  {
-    name: 'oauth.authorizationServers',
-    type: 'string[]',
-    description: 'URLs of authorization servers that can issue tokens for this resource.',
-  },
-  {
-    name: 'oauth.scopesSupported',
-    type: 'string[]',
-    isOptional: true,
-    defaultValue: "['mcp:read', 'mcp:write']",
-    description: 'Scopes supported by this MCP server.',
-  },
-  {
-    name: 'oauth.resourceName',
-    type: 'string',
-    isOptional: true,
-    description: 'Human-readable name for this resource server.',
-  },
-  {
-    name: 'oauth.validateToken',
-    type: '(token: string, resource: string) => Promise<TokenValidationResult>',
-    isOptional: true,
-    description:
-      'Function to validate access tokens. If not provided, tokens are accepted without validation (NOT recommended for production).',
-  },
-  {
-    name: 'mcpPath',
-    type: 'string',
-    isOptional: true,
-    defaultValue: "'/mcp'",
-    description: 'Path where the MCP endpoint is served. Only requests to this path require authentication.',
-  },
+	{
+		name: 'oauth.resource',
+		type: 'string',
+		description: 'The canonical URL of your MCP server. This is returned in Protected Resource Metadata.',
+	},
+	{
+		name: 'oauth.authorizationServers',
+		type: 'string[]',
+		description: 'URLs of authorization servers that can issue tokens for this resource.',
+	},
+	{
+		name: 'oauth.scopesSupported',
+		type: 'string[]',
+		isOptional: true,
+		defaultValue: "['mcp:read', 'mcp:write']",
+		description: 'Scopes supported by this MCP server.',
+	},
+	{
+		name: 'oauth.resourceName',
+		type: 'string',
+		isOptional: true,
+		description: 'Human-readable name for this resource server.',
+	},
+	{
+		name: 'oauth.validateToken',
+		type: '(token: string, resource: string) => Promise<TokenValidationResult>',
+		isOptional: true,
+		description:
+			'Function to validate access tokens. If not provided, tokens are accepted without validation (NOT recommended for production).',
+	},
+	{
+		name: 'mcpPath',
+		type: 'string',
+		isOptional: true,
+		defaultValue: "'/mcp'",
+		description: 'Path where the MCP endpoint is served. Only requests to this path require authentication.',
+	},
 ]}
 />
 
@@ -1345,27 +1345,27 @@ When an `MCPServer` is registered on a Mastra instance with a fine-grained autho
 
 ```typescript
 const server = new MCPServer({
-  id: 'my-server',
-  name: 'My Server',
-  version: '1.0.0',
-  tools: { getUserData },
-  mapAuthInfoToUser: ({ authInfo }) => {
-    const user = authInfo as {
-      extra?: {
-        userId?: string
-        organizationMembershipId?: string
-      }
-    }
+	id: 'my-server',
+	name: 'My Server',
+	version: '1.0.0',
+	tools: { getUserData },
+	mapAuthInfoToUser: ({ authInfo }) => {
+		const user = authInfo as {
+			extra?: {
+				userId?: string
+				organizationMembershipId?: string
+			}
+		}
 
-    if (!user.extra?.userId) {
-      return null
-    }
+		if (!user.extra?.userId) {
+			return null
+		}
 
-    return {
-      id: user.extra.userId,
-      organizationMembershipId: user.extra.organizationMembershipId,
-    }
-  },
+		return {
+			id: user.extra.userId,
+			organizationMembershipId: user.extra.organizationMembershipId,
+		}
+	},
 })
 ```
 
@@ -1377,38 +1377,38 @@ Use `fga.resourceMapping` and `fga.permissionMapping` when MCP clients need a di
 import { MastraFGAPermissions } from '@mastra/core/auth/ee'
 
 const server = new MCPServer({
-  id: 'my-server',
-  name: 'My Server',
-  version: '1.0.0',
-  tools: { getUserData },
-  mapAuthInfoToUser: ({ authInfo }) => {
-    const user = authInfo as {
-      extra?: {
-        userId?: string
-        organizationMembershipId?: string
-      }
-    }
+	id: 'my-server',
+	name: 'My Server',
+	version: '1.0.0',
+	tools: { getUserData },
+	mapAuthInfoToUser: ({ authInfo }) => {
+		const user = authInfo as {
+			extra?: {
+				userId?: string
+				organizationMembershipId?: string
+			}
+		}
 
-    if (!user.extra?.userId) {
-      return null
-    }
+		if (!user.extra?.userId) {
+			return null
+		}
 
-    return {
-      id: user.extra.userId,
-      organizationMembershipId: user.extra.organizationMembershipId,
-    }
-  },
-  fga: {
-    resourceMapping: {
-      tool: {
-        fgaResourceType: 'user',
-        deriveId: ({ user }) => (user as { id: string }).id,
-      },
-    },
-    permissionMapping: {
-      [MastraFGAPermissions.TOOLS_EXECUTE]: 'read',
-    },
-  },
+		return {
+			id: user.extra.userId,
+			organizationMembershipId: user.extra.organizationMembershipId,
+		}
+	},
+	fga: {
+		resourceMapping: {
+			tool: {
+				fgaResourceType: 'user',
+				deriveId: ({ user }) => (user as { id: string }).id,
+			},
+		},
+		permissionMapping: {
+			[MastraFGAPermissions.TOOLS_EXECUTE]: 'read',
+		},
+	},
 })
 ```
 
@@ -1423,22 +1423,22 @@ const app = express()
 
 // Auth middleware - set req.auth before the MCP handler
 app.use('/mcp', (req, res, next) => {
-  const token = req.headers.authorization?.replace('Bearer ', '')
-  const user = verifyToken(token)
+	const token = req.headers.authorization?.replace('Bearer ', '')
+	const user = verifyToken(token)
 
-  // This entire object becomes context.mcp.extra.authInfo
-  // @ts-ignore - req.auth is read by the MCP SDK
-  req.auth = {
-    token,
-    userId: user.userId,
-    email: user.email,
-  }
-  next()
+	// This entire object becomes context.mcp.extra.authInfo
+	// @ts-ignore - req.auth is read by the MCP SDK
+	req.auth = {
+		token,
+		userId: user.userId,
+		email: user.email,
+	}
+	next()
 })
 
 app.all('/mcp', async (req, res) => {
-  const url = new URL(req.url, `http://${req.headers.host}`)
-  await server.startHTTP({ url, httpPath: '/mcp', req, res })
+	const url = new URL(req.url, `http://${req.headers.host}`)
+	await server.startHTTP({ url, httpPath: '/mcp', req, res })
 })
 ```
 
@@ -1448,23 +1448,23 @@ The `req.auth` object is available as `context.mcp.extra.authInfo` in your tool'
 
 ```typescript
 execute: async (inputData, context) => {
-  // Access the auth data you set in middleware
-  const authInfo = context?.mcp?.extra?.authInfo
+	// Access the auth data you set in middleware
+	const authInfo = context?.mcp?.extra?.authInfo
 
-  if (!authInfo?.extra?.userId) {
-    return { error: 'Authentication required' }
-  }
+	if (!authInfo?.extra?.userId) {
+		return { error: 'Authentication required' }
+	}
 
-  // Use the auth data
-  console.log('User ID:', authInfo.extra.userId)
-  console.log('Email:', authInfo.extra.email)
+	// Use the auth data
+	console.log('User ID:', authInfo.extra.userId)
+	console.log('Email:', authInfo.extra.email)
 
-  const response = await fetch('/api/data', {
-    headers: { Authorization: `Bearer ${authInfo.token}` },
-    signal: context?.mcp?.extra?.signal,
-  })
+	const response = await fetch('/api/data', {
+		headers: { Authorization: `Bearer ${authInfo.token}` },
+		signal: context?.mcp?.extra?.signal,
+	})
 
-  return response.json()
+	return response.json()
 }
 ```
 
@@ -1472,28 +1472,28 @@ execute: async (inputData, context) => {
 
 ```typescript
 execute: async (inputData, context) => {
-  // Access the auth data you set in middleware
-  const authInfo = context?.mcp?.extra?.authInfo
+	// Access the auth data you set in middleware
+	const authInfo = context?.mcp?.extra?.authInfo
 
-  const requestContext = context.requestContext || new RequestContext().set('someKey', authInfo)
+	const requestContext = context.requestContext || new RequestContext().set('someKey', authInfo)
 
-  if (!authInfo?.extra?.userId) {
-    return { error: 'Authentication required' }
-  }
+	if (!authInfo?.extra?.userId) {
+		return { error: 'Authentication required' }
+	}
 
-  // Use the auth data
-  console.log('User ID:', authInfo.extra.userId)
-  console.log('Email:', authInfo.extra.email)
+	// Use the auth data
+	console.log('User ID:', authInfo.extra.userId)
+	console.log('Email:', authInfo.extra.email)
 
-  const agent = context?.mastra?.getAgentById('some-agent-id')
+	const agent = context?.mastra?.getAgentById('some-agent-id')
 
-  if (!agent) {
-    return { error: "Agent 'some-agent-id' not found" }
-  }
+	if (!agent) {
+		return { error: "Agent 'some-agent-id' not found" }
+	}
 
-  const response = await agent.generate(prompt, { requestContext })
+	const response = await agent.generate(prompt, { requestContext })
 
-  return response.text
+	return response.text
 }
 ```
 
@@ -1520,61 +1520,61 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 const verifyToken = (token: string) => {
-  // TODO: Implement token verification
-  return {
-    userId: '123',
-    email: 'test@test.com',
-  }
+	// TODO: Implement token verification
+	return {
+		userId: '123',
+		email: 'test@test.com',
+	}
 }
 
 // 1. Define your tool that uses auth context
 const getUserData = createTool({
-  id: 'get-user-data',
-  description: 'Fetches data for the authenticated user',
-  inputSchema: z.object({}),
-  execute: async (inputData, context) => {
-    const authInfo = context?.mcp?.extra?.authInfo
+	id: 'get-user-data',
+	description: 'Fetches data for the authenticated user',
+	inputSchema: z.object({}),
+	execute: async (inputData, context) => {
+		const authInfo = context?.mcp?.extra?.authInfo
 
-    if (!authInfo?.extra?.userId) {
-      return { error: 'Authentication required' }
-    }
+		if (!authInfo?.extra?.userId) {
+			return { error: 'Authentication required' }
+		}
 
-    // Access the data you set in middleware
-    return {
-      userId: authInfo.extra.userId,
-      email: authInfo.extra.email,
-    }
-  },
+		// Access the data you set in middleware
+		return {
+			userId: authInfo.extra.userId,
+			email: authInfo.extra.email,
+		}
+	},
 })
 
 // 2. Create the MCP server with your tools
 const server = new MCPServer({
-  id: 'my-server',
-  name: 'My Server',
-  version: '1.0.0',
-  tools: { getUserData },
+	id: 'my-server',
+	name: 'My Server',
+	version: '1.0.0',
+	tools: { getUserData },
 })
 
 // 3. Set up Express with auth middleware
 const app = express()
 
 app.use('/mcp', (req, res, next) => {
-  const token = req.headers.authorization?.replace('Bearer ', '')
-  const user = verifyToken(token)
+	const token = req.headers.authorization?.replace('Bearer ', '')
+	const user = verifyToken(token)
 
-  // This entire object becomes context.mcp.extra.authInfo
-  // @ts-ignore - req.auth is read by the MCP SDK
-  req.auth = {
-    token,
-    userId: user.userId,
-    email: user.email,
-  }
-  next()
+	// This entire object becomes context.mcp.extra.authInfo
+	// @ts-ignore - req.auth is read by the MCP SDK
+	req.auth = {
+		token,
+		userId: user.userId,
+		email: user.email,
+	}
+	next()
 })
 
 app.all('/mcp', async (req, res) => {
-  const url = new URL(req.url, `http://${req.headers.host}`)
-  await server.startHTTP({ url, httpPath: '/mcp', req, res })
+	const url = new URL(req.url, `http://${req.headers.host}`)
+	await server.startHTTP({ url, httpPath: '/mcp', req, res })
 })
 
 app.listen(3000)
@@ -1588,11 +1588,11 @@ The `appResources` option lets you serve interactive HTML UIs from your MCP serv
 
 <PropertiesTable
   content={[
-  {
-    name: 'Key (URI)',
-    type: 'string',
-    description: 'A `ui://` URI that identifies the app resource (e.g., `ui://calculator/main`).',
-  },
+	{
+		name: 'Key (URI)',
+		type: 'string',
+		description: 'A `ui://` URI that identifies the app resource (e.g., `ui://calculator/main`).',
+	},
 ]}
 />
 
@@ -1600,36 +1600,36 @@ Each value is an `AppResource` object:
 
 <PropertiesTable
   content={[
-  {
-    name: 'name',
-    type: 'string',
-    isOptional: false,
-    description: 'Display name for the UI resource.',
-  },
-  {
-    name: 'description',
-    type: 'string',
-    isOptional: true,
-    description: 'Optional description of the UI resource.',
-  },
-  {
-    name: 'html',
-    type: 'string',
-    isOptional: true,
-    description: 'Inline HTML content for the UI. Provide either `html` or `htmlPath`.',
-  },
-  {
-    name: 'htmlPath',
-    type: 'string',
-    isOptional: true,
-    description: 'Path to an HTML file. Resolved at server startup. Provide either `html` or `htmlPath`.',
-  },
-  {
-    name: 'meta',
-    type: 'McpUiResourceMeta',
-    isOptional: true,
-    description: 'UI resource metadata (CSP, permissions, rendering preferences) from the official ext-apps SDK.',
-  },
+	{
+		name: 'name',
+		type: 'string',
+		isOptional: false,
+		description: 'Display name for the UI resource.',
+	},
+	{
+		name: 'description',
+		type: 'string',
+		isOptional: true,
+		description: 'Optional description of the UI resource.',
+	},
+	{
+		name: 'html',
+		type: 'string',
+		isOptional: true,
+		description: 'Inline HTML content for the UI. Provide either `html` or `htmlPath`.',
+	},
+	{
+		name: 'htmlPath',
+		type: 'string',
+		isOptional: true,
+		description: 'Path to an HTML file. Resolved at server startup. Provide either `html` or `htmlPath`.',
+	},
+	{
+		name: 'meta',
+		type: 'McpUiResourceMeta',
+		isOptional: true,
+		description: 'UI resource metadata (CSP, permissions, rendering preferences) from the official ext-apps SDK.',
+	},
 ]}
 />
 
@@ -1641,33 +1641,33 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 const calculatorTool = createTool({
-  id: 'calculatorWithUI',
-  description: 'An interactive calculator',
-  inputSchema: z.object({
-    num1: z.number(),
-    num2: z.number(),
-    operation: z.enum(['add', 'subtract']),
-  }),
-  execute: async ({ num1, num2, operation }) => {
-    const result = operation === 'add' ? num1 + num2 : num1 - num2
-    return {
-      content: [{ type: 'text', text: 'An interactive calculator is displayed.' }],
-      structuredContent: { result },
-    }
-  },
+	id: 'calculatorWithUI',
+	description: 'An interactive calculator',
+	inputSchema: z.object({
+		num1: z.number(),
+		num2: z.number(),
+		operation: z.enum(['add', 'subtract']),
+	}),
+	execute: async ({ num1, num2, operation }) => {
+		const result = operation === 'add' ? num1 + num2 : num1 - num2
+		return {
+			content: [{ type: 'text', text: 'An interactive calculator is displayed.' }],
+			structuredContent: { result },
+		}
+	},
 })
 
 const server = new MCPServer({
-  id: 'app-server',
-  name: 'App Server',
-  version: '1.0.0',
-  tools: { calculatorTool },
-  appResources: {
-    'ui://calculator/main': {
-      name: 'Interactive Calculator',
-      html: '<html><body><h2>Calculator</h2>...</body></html>',
-    },
-  },
+	id: 'app-server',
+	name: 'App Server',
+	version: '1.0.0',
+	tools: { calculatorTool },
+	appResources: {
+		'ui://calculator/main': {
+			name: 'Interactive Calculator',
+			html: '<html><body><h2>Calculator</h2>...</body></html>',
+		},
+	},
 })
 ```
 

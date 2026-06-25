@@ -20,27 +20,27 @@ function. If it returns a `Response` the request is short-circuited. Calling
 import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
-  server: {
-    middleware: [
-      {
-        handler: async (c, next) => {
-          // Example: Add authentication check
-          const authHeader = c.req.header('Authorization')
-          if (!authHeader) {
-            return new Response('Unauthorized', { status: 401 })
-          }
+	server: {
+		middleware: [
+			{
+				handler: async (c, next) => {
+					// Example: Add authentication check
+					const authHeader = c.req.header('Authorization')
+					if (!authHeader) {
+						return new Response('Unauthorized', { status: 401 })
+					}
 
-          await next()
-        },
-        path: '/api/*',
-      },
-      // Add a global request logger
-      async (c, next) => {
-        console.log(`${c.req.method} ${c.req.url}`)
-        await next()
-      },
-    ],
-  },
+					await next()
+				},
+				path: '/api/*',
+			},
+			// Add a global request logger
+			async (c, next) => {
+				console.log(`${c.req.method} ${c.req.url}`)
+				await next()
+			},
+		],
+	},
 })
 ```
 
@@ -49,17 +49,17 @@ To attach middleware to a single route pass the `middleware` option to
 
 ```typescript
 registerApiRoute('/my-custom-route', {
-  method: 'GET',
-  middleware: [
-    async (c, next) => {
-      console.log(`${c.req.method} ${c.req.url}`)
-      await next()
-    },
-  ],
-  handler: async c => {
-    const mastra = c.get('mastra')
-    return c.json({ message: 'Hello, world!' })
-  },
+	method: 'GET',
+	middleware: [
+		async (c, next) => {
+			console.log(`${c.req.method} ${c.req.url}`)
+			await next()
+		},
+	],
+	handler: async c => {
+		const mastra = c.get('mastra')
+		return c.json({ message: 'Hello, world!' })
+	},
 })
 ```
 
@@ -75,19 +75,19 @@ import { RequestContext } from '@mastra/core/request-context'
 import { testWeatherAgent } from './agents/test-weather-agent'
 
 export const mastra = new Mastra({
-  agents: { testWeatherAgent },
-  server: {
-    middleware: [
-      async (context, next) => {
-        const country = context.req.header('CF-IPCountry')
-        const requestContext = context.get('requestContext')
+	agents: { testWeatherAgent },
+	server: {
+		middleware: [
+			async (context, next) => {
+				const country = context.req.header('CF-IPCountry')
+				const requestContext = context.get('requestContext')
 
-        requestContext.set('temperature-unit', country === 'US' ? 'fahrenheit' : 'celsius')
+				requestContext.set('temperature-unit', country === 'US' ? 'fahrenheit' : 'celsius')
 
-        await next()
-      },
-    ],
-  },
+				await next()
+			},
+		],
+	},
 })
 ```
 
@@ -118,14 +118,14 @@ The simplest way to scope memory and threads to the authenticated user is the `m
 import { Mastra } from '@mastra/core'
 
 export const mastra = new Mastra({
-  server: {
-    auth: {
-      authenticateToken: async token => {
-        return verifyToken(token) // { id: 'user-123', orgId: 'org-456', ... }
-      },
-      mapUserToResourceId: user => user.id,
-    },
-  },
+	server: {
+		auth: {
+			authenticateToken: async token => {
+				return verifyToken(token) // { id: 'user-123', orgId: 'org-456', ... }
+			},
+			mapUserToResourceId: user => user.id,
+		},
+	},
 })
 ```
 
@@ -163,36 +163,36 @@ import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context'
 import { getAuthenticatedUser } from '@mastra/server/auth'
 
 export const mastra = new Mastra({
-  server: {
-    auth: {
-      authenticateToken: async token => verifyToken(token),
-    },
-    middleware: [
-      {
-        path: '/api/*',
-        handler: async (c, next) => {
-          const token = c.req.header('Authorization')
-          if (!token) {
-            return c.json({ error: 'Unauthorized' }, 401)
-          }
+	server: {
+		auth: {
+			authenticateToken: async token => verifyToken(token),
+		},
+		middleware: [
+			{
+				path: '/api/*',
+				handler: async (c, next) => {
+					const token = c.req.header('Authorization')
+					if (!token) {
+						return c.json({ error: 'Unauthorized' }, 401)
+					}
 
-          const user = await getAuthenticatedUser<{ id: string }>({
-            mastra: c.get('mastra'),
-            token,
-            request: c.req.raw,
-          })
-          const requestContext = c.get('requestContext')
+					const user = await getAuthenticatedUser<{ id: string }>({
+						mastra: c.get('mastra'),
+						token,
+						request: c.req.raw,
+					})
+					const requestContext = c.get('requestContext')
 
-          if (!user) {
-            return c.json({ error: 'Unauthorized' }, 401)
-          }
+					if (!user) {
+						return c.json({ error: 'Unauthorized' }, 401)
+					}
 
-          requestContext.set(MASTRA_RESOURCE_ID_KEY, user.id)
-          return next()
-        },
-      },
-    ],
-  },
+					requestContext.set(MASTRA_RESOURCE_ID_KEY, user.id)
+					return next()
+				},
+			},
+		],
+	},
 })
 ```
 

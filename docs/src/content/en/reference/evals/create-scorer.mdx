@@ -19,97 +19,97 @@ Use the `createScorer` factory to define your scorer with a name, description, a
 import { createScorer } from '@mastra/core/evals'
 
 const scorer = createScorer({
-  id: 'my-custom-scorer',
-  name: 'My Custom Scorer', // Optional, defaults to id
-  description: 'Evaluates responses based on custom criteria',
-  type: 'agent', // Optional: for agent evaluation with automatic typing
-  judge: {
-    model: myModel,
-    instructions: 'You are an expert evaluator...',
-  },
+	id: 'my-custom-scorer',
+	name: 'My Custom Scorer', // Optional, defaults to id
+	description: 'Evaluates responses based on custom criteria',
+	type: 'agent', // Optional: for agent evaluation with automatic typing
+	judge: {
+		model: myModel,
+		instructions: 'You are an expert evaluator...',
+	},
 })
-  .preprocess({
-    /* step config */
-  })
-  .analyze({
-    /* step config */
-  })
-  .generateScore(({ run, results }) => {
-    // Return a number
-  })
-  .generateReason({
-    /* step config */
-  })
+	.preprocess({
+		/* step config */
+	})
+	.analyze({
+		/* step config */
+	})
+	.generateScore(({ run, results }) => {
+		// Return a number
+	})
+	.generateReason({
+		/* step config */
+	})
 ```
 
 ## `createScorer` options
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    isOptional: false,
-    description: 'Unique identifier for the scorer. Used as the name if `name` is not provided.',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    isOptional: true,
-    description: 'Name of the scorer. Defaults to `id` if not provided.',
-  },
-  {
-    name: 'description',
-    type: 'string',
-    isOptional: false,
-    description: 'Description of what the scorer does.',
-  },
-  {
-    name: 'judge',
-    type: 'object',
-    isOptional: true,
-    description: 'Optional judge configuration for LLM-based steps.',
-    properties: [
-      {
-        type: 'object',
-        parameters: [
-          {
-            name: 'model',
-            type: 'LanguageModel',
-            isOptional: false,
-            description: 'The LLM model instance to use for evaluation.',
-          },
-          {
-            name: 'instructions',
-            type: 'string',
-            isOptional: false,
-            description: 'System prompt/instructions for the LLM.',
-          },
-          {
-            name: 'jsonPromptInjection',
-            type: 'boolean',
-            isOptional: true,
-            description:
-              "When true, inject the JSON schema into the prompt instead of using the provider's native `response_format` API. Set this for models that don't support native structured output (e.g. some Groq Llama models) to avoid a wasted 400 call.",
-          },
-        ],
-      },
-    ],
-  },
-  {
-    name: 'type',
-    type: 'string',
-    isOptional: true,
-    description:
-      "Type specification for input/output. Use 'agent' for automatic agent types. For custom types, use the generic approach instead.",
-  },
-  {
-    name: 'prepareRun',
-    type: '(run: ScorerRun) => ScorerRun | Promise<ScorerRun>',
-    isOptional: true,
-    description:
-      "Transform the scorer run data before the pipeline executes. Use this to filter messages, limit context size, or drop fields the scorer doesn't need. The [`filterRun()`](/reference/evals/filter-run) utility creates this function from declarative options. Can be async.",
-  },
+	{
+		name: 'id',
+		type: 'string',
+		isOptional: false,
+		description: 'Unique identifier for the scorer. Used as the name if `name` is not provided.',
+	},
+	{
+		name: 'name',
+		type: 'string',
+		isOptional: true,
+		description: 'Name of the scorer. Defaults to `id` if not provided.',
+	},
+	{
+		name: 'description',
+		type: 'string',
+		isOptional: false,
+		description: 'Description of what the scorer does.',
+	},
+	{
+		name: 'judge',
+		type: 'object',
+		isOptional: true,
+		description: 'Optional judge configuration for LLM-based steps.',
+		properties: [
+			{
+				type: 'object',
+				parameters: [
+					{
+						name: 'model',
+						type: 'LanguageModel',
+						isOptional: false,
+						description: 'The LLM model instance to use for evaluation.',
+					},
+					{
+						name: 'instructions',
+						type: 'string',
+						isOptional: false,
+						description: 'System prompt/instructions for the LLM.',
+					},
+					{
+						name: 'jsonPromptInjection',
+						type: 'boolean',
+						isOptional: true,
+						description:
+							"When true, inject the JSON schema into the prompt instead of using the provider's native `response_format` API. Set this for models that don't support native structured output (e.g. some Groq Llama models) to avoid a wasted 400 call.",
+					},
+				],
+			},
+		],
+	},
+	{
+		name: 'type',
+		type: 'string',
+		isOptional: true,
+		description:
+			"Type specification for input/output. Use 'agent' for automatic agent types. For custom types, use the generic approach instead.",
+	},
+	{
+		name: 'prepareRun',
+		type: '(run: ScorerRun) => ScorerRun | Promise<ScorerRun>',
+		isOptional: true,
+		description:
+			"Transform the scorer run data before the pipeline executes. Use this to filter messages, limit context size, or drop fields the scorer doesn't need. The [`filterRun()`](/reference/evals/filter-run) utility creates this function from declarative options. Can be async.",
+	},
 ]}
 />
 
@@ -132,20 +132,20 @@ import { createScorer } from '@mastra/core/evals'
 
 // Agent scorer with automatic typing
 const agentScorer = createScorer({
-  id: 'agent-response-quality',
-  description: 'Evaluates agent responses',
-  type: 'agent', // Automatically provides ScorerRunInputForAgent/ScorerRunOutputForAgent
+	id: 'agent-response-quality',
+	description: 'Evaluates agent responses',
+	type: 'agent', // Automatically provides ScorerRunInputForAgent/ScorerRunOutputForAgent
 })
-  .preprocess(({ run }) => {
-    // run.input is automatically typed as ScorerRunInputForAgent
-    const userMessage = run.inputData.inputMessages[0]?.content
-    return { userMessage }
-  })
-  .generateScore(({ run, results }) => {
-    // run.output is automatically typed as ScorerRunOutputForAgent
-    const response = run.output[0]?.content
-    return response.length > 10 ? 1.0 : 0.5
-  })
+	.preprocess(({ run }) => {
+		// run.input is automatically typed as ScorerRunInputForAgent
+		const userMessage = run.inputData.inputMessages[0]?.content
+		return { userMessage }
+	})
+	.generateScore(({ run, results }) => {
+		// run.output is automatically typed as ScorerRunOutputForAgent
+		const response = run.output[0]?.content
+		return response.length > 10 ? 1.0 : 0.5
+	})
 ```
 
 ### Custom Types with Generics
@@ -159,12 +159,12 @@ type CustomInput = { query: string; context: string[] }
 type CustomOutput = { answer: string; confidence: number }
 
 const customScorer = createScorer<CustomInput, CustomOutput>({
-  id: 'custom-scorer',
-  description: 'Evaluates custom data',
+	id: 'custom-scorer',
+	description: 'Evaluates custom data',
 }).generateScore(({ run }) => {
-  // run.input is typed as CustomInput
-  // run.output is typed as CustomOutput
-  return run.output.confidence
+	// run.input is typed as CustomInput
+	// run.output is typed as CustomOutput
+	return run.output.confidence
 })
 ```
 
@@ -181,23 +181,23 @@ When you use `type: 'agent'`, your scorer is compatible for both adding directly
 
 ```typescript
 const agentTraceScorer = createScorer({
-  id: 'agent-trace-length',
-  description: 'Evaluates agent response length',
-  type: 'agent',
+	id: 'agent-trace-length',
+	description: 'Evaluates agent response length',
+	type: 'agent',
 }).generateScore(({ run }) => {
-  // Trace data is automatically transformed to agent format
-  const userMessages = run.inputData.inputMessages
-  const agentResponse = run.output[0]?.content
+	// Trace data is automatically transformed to agent format
+	const userMessages = run.inputData.inputMessages
+	const agentResponse = run.output[0]?.content
 
-  // Score based on response length
-  return agentResponse?.length > 50 ? 0 : 1
+	// Score based on response length
+	return agentResponse?.length > 50 ? 0 : 1
 })
 
 // Register with Mastra for trace scoring
 const mastra = new Mastra({
-  scorers: {
-    agentTraceScorer,
-  },
+	scorers: {
+		agentTraceScorer,
+	},
 })
 ```
 
@@ -212,38 +212,38 @@ Function: `({ run, results }) => any`
 
 <PropertiesTable
   content={[
-  {
-    name: 'run.input',
-    type: 'any',
-    isOptional: false,
-    description:
-      "Input records provided to the scorer. If the scorer is added to an agent, this will be an array of user messages, e.g. `[{ role: 'user', content: 'hello world' }]`. If the scorer is used in a workflow, this will be the input of the workflow.",
-  },
-  {
-    name: 'run.output',
-    type: 'any',
-    isOptional: false,
-    description:
-      "Output record provided to the scorer. For agents, this is usually the agent's response. For workflows, this is the workflow's output.",
-  },
-  {
-    name: 'run.runId',
-    type: 'string',
-    isOptional: false,
-    description: 'Unique identifier for this scoring run.',
-  },
-  {
-    name: 'run.requestContext',
-    type: 'object',
-    isOptional: true,
-    description: 'Request Context from the agent or workflow step being evaluated (optional).',
-  },
-  {
-    name: 'results',
-    type: 'object',
-    isOptional: false,
-    description: 'Empty object (no previous steps).',
-  },
+	{
+		name: 'run.input',
+		type: 'any',
+		isOptional: false,
+		description:
+			"Input records provided to the scorer. If the scorer is added to an agent, this will be an array of user messages, e.g. `[{ role: 'user', content: 'hello world' }]`. If the scorer is used in a workflow, this will be the input of the workflow.",
+	},
+	{
+		name: 'run.output',
+		type: 'any',
+		isOptional: false,
+		description:
+			"Output record provided to the scorer. For agents, this is usually the agent's response. For workflows, this is the workflow's output.",
+	},
+	{
+		name: 'run.runId',
+		type: 'string',
+		isOptional: false,
+		description: 'Unique identifier for this scoring run.',
+	},
+	{
+		name: 'run.requestContext',
+		type: 'object',
+		isOptional: true,
+		description: 'Request Context from the agent or workflow step being evaluated (optional).',
+	},
+	{
+		name: 'results',
+		type: 'object',
+		isOptional: false,
+		description: 'Empty object (no previous steps).',
+	},
 ]}
 />
 
@@ -254,30 +254,30 @@ The method can return any value. The returned value will be available to subsequ
 
 <PropertiesTable
   content={[
-  {
-    name: 'description',
-    type: 'string',
-    isOptional: false,
-    description: 'Description of what this preprocessing step does.',
-  },
-  {
-    name: 'outputSchema',
-    type: 'StandardJSONSchemaV1',
-    isOptional: false,
-    description: 'Standard JSON Schema for the expected output of the preprocess step.',
-  },
-  {
-    name: 'createPrompt',
-    type: 'function',
-    isOptional: false,
-    description: 'Function: ({ run, results }) => string. Returns the prompt for the LLM.',
-  },
-  {
-    name: 'judge',
-    type: 'object',
-    isOptional: true,
-    description: '(Optional) LLM judge for this step (can override main judge). See Judge Object section.',
-  },
+	{
+		name: 'description',
+		type: 'string',
+		isOptional: false,
+		description: 'Description of what this preprocessing step does.',
+	},
+	{
+		name: 'outputSchema',
+		type: 'StandardJSONSchemaV1',
+		isOptional: false,
+		description: 'Standard JSON Schema for the expected output of the preprocess step.',
+	},
+	{
+		name: 'createPrompt',
+		type: 'function',
+		isOptional: false,
+		description: 'Function: ({ run, results }) => string. Returns the prompt for the LLM.',
+	},
+	{
+		name: 'judge',
+		type: 'object',
+		isOptional: true,
+		description: '(Optional) LLM judge for this step (can override main judge). See Judge Object section.',
+	},
 ]}
 />
 
@@ -290,38 +290,38 @@ Function: `({ run, results }) => any`
 
 <PropertiesTable
   content={[
-  {
-    name: 'run.input',
-    type: 'any',
-    isOptional: false,
-    description:
-      "Input records provided to the scorer. If the scorer is added to an agent, this will be an array of user messages, e.g. `[{ role: 'user', content: 'hello world' }]`. If the scorer is used in a workflow, this will be the input of the workflow.",
-  },
-  {
-    name: 'run.output',
-    type: 'any',
-    isOptional: false,
-    description:
-      "Output record provided to the scorer. For agents, this is usually the agent's response. For workflows, this is the workflow's output.",
-  },
-  {
-    name: 'run.runId',
-    type: 'string',
-    isOptional: false,
-    description: 'Unique identifier for this scoring run.',
-  },
-  {
-    name: 'run.requestContext',
-    type: 'object',
-    isOptional: true,
-    description: 'Request Context from the agent or workflow step being evaluated (optional).',
-  },
-  {
-    name: 'results.preprocessStepResult',
-    type: 'any',
-    isOptional: true,
-    description: 'Result from preprocess step, if defined (optional).',
-  },
+	{
+		name: 'run.input',
+		type: 'any',
+		isOptional: false,
+		description:
+			"Input records provided to the scorer. If the scorer is added to an agent, this will be an array of user messages, e.g. `[{ role: 'user', content: 'hello world' }]`. If the scorer is used in a workflow, this will be the input of the workflow.",
+	},
+	{
+		name: 'run.output',
+		type: 'any',
+		isOptional: false,
+		description:
+			"Output record provided to the scorer. For agents, this is usually the agent's response. For workflows, this is the workflow's output.",
+	},
+	{
+		name: 'run.runId',
+		type: 'string',
+		isOptional: false,
+		description: 'Unique identifier for this scoring run.',
+	},
+	{
+		name: 'run.requestContext',
+		type: 'object',
+		isOptional: true,
+		description: 'Request Context from the agent or workflow step being evaluated (optional).',
+	},
+	{
+		name: 'results.preprocessStepResult',
+		type: 'any',
+		isOptional: true,
+		description: 'Result from preprocess step, if defined (optional).',
+	},
 ]}
 />
 
@@ -332,30 +332,30 @@ The method can return any value. The returned value will be available to subsequ
 
 <PropertiesTable
   content={[
-  {
-    name: 'description',
-    type: 'string',
-    isOptional: false,
-    description: 'Description of what this analysis step does.',
-  },
-  {
-    name: 'outputSchema',
-    type: 'StandardJSONSchemaV1',
-    isOptional: false,
-    description: 'Standard JSON Schema for the expected output of the analyze step.',
-  },
-  {
-    name: 'createPrompt',
-    type: 'function',
-    isOptional: false,
-    description: 'Function: ({ run, results }) => string. Returns the prompt for the LLM.',
-  },
-  {
-    name: 'judge',
-    type: 'object',
-    isOptional: true,
-    description: '(Optional) LLM judge for this step (can override main judge). See Judge Object section.',
-  },
+	{
+		name: 'description',
+		type: 'string',
+		isOptional: false,
+		description: 'Description of what this analysis step does.',
+	},
+	{
+		name: 'outputSchema',
+		type: 'StandardJSONSchemaV1',
+		isOptional: false,
+		description: 'Standard JSON Schema for the expected output of the analyze step.',
+	},
+	{
+		name: 'createPrompt',
+		type: 'function',
+		isOptional: false,
+		description: 'Function: ({ run, results }) => string. Returns the prompt for the LLM.',
+	},
+	{
+		name: 'judge',
+		type: 'object',
+		isOptional: true,
+		description: '(Optional) LLM judge for this step (can override main judge). See Judge Object section.',
+	},
 ]}
 />
 
@@ -368,44 +368,44 @@ Function: `({ run, results }) => number`
 
 <PropertiesTable
   content={[
-  {
-    name: 'run.input',
-    type: 'any',
-    isOptional: false,
-    description:
-      "Input records provided to the scorer. If the scorer is added to an agent, this will be an array of user messages, e.g. `[{ role: 'user', content: 'hello world' }]`. If the scorer is used in a workflow, this will be the input of the workflow.",
-  },
-  {
-    name: 'run.output',
-    type: 'any',
-    isOptional: false,
-    description:
-      "Output record provided to the scorer. For agents, this is usually the agent's response. For workflows, this is the workflow's output.",
-  },
-  {
-    name: 'run.runId',
-    type: 'string',
-    isOptional: false,
-    description: 'Unique identifier for this scoring run.',
-  },
-  {
-    name: 'run.requestContext',
-    type: 'object',
-    isOptional: true,
-    description: 'Request Context from the agent or workflow step being evaluated (optional).',
-  },
-  {
-    name: 'results.preprocessStepResult',
-    type: 'any',
-    isOptional: true,
-    description: 'Result from preprocess step, if defined (optional).',
-  },
-  {
-    name: 'results.analyzeStepResult',
-    type: 'any',
-    isOptional: true,
-    description: 'Result from analyze step, if defined (optional).',
-  },
+	{
+		name: 'run.input',
+		type: 'any',
+		isOptional: false,
+		description:
+			"Input records provided to the scorer. If the scorer is added to an agent, this will be an array of user messages, e.g. `[{ role: 'user', content: 'hello world' }]`. If the scorer is used in a workflow, this will be the input of the workflow.",
+	},
+	{
+		name: 'run.output',
+		type: 'any',
+		isOptional: false,
+		description:
+			"Output record provided to the scorer. For agents, this is usually the agent's response. For workflows, this is the workflow's output.",
+	},
+	{
+		name: 'run.runId',
+		type: 'string',
+		isOptional: false,
+		description: 'Unique identifier for this scoring run.',
+	},
+	{
+		name: 'run.requestContext',
+		type: 'object',
+		isOptional: true,
+		description: 'Request Context from the agent or workflow step being evaluated (optional).',
+	},
+	{
+		name: 'results.preprocessStepResult',
+		type: 'any',
+		isOptional: true,
+		description: 'Result from preprocess step, if defined (optional).',
+	},
+	{
+		name: 'results.analyzeStepResult',
+		type: 'any',
+		isOptional: true,
+		description: 'Result from analyze step, if defined (optional).',
+	},
 ]}
 />
 
@@ -416,30 +416,30 @@ The method must return a numerical score.
 
 <PropertiesTable
   content={[
-  {
-    name: 'description',
-    type: 'string',
-    isOptional: false,
-    description: 'Description of what this scoring step does.',
-  },
-  {
-    name: 'outputSchema',
-    type: 'StandardJSONSchemaV1',
-    isOptional: false,
-    description: 'Standard JSON Schema for the expected output of the generateScore step.',
-  },
-  {
-    name: 'createPrompt',
-    type: 'function',
-    isOptional: false,
-    description: 'Function: ({ run, results }) => string. Returns the prompt for the LLM.',
-  },
-  {
-    name: 'judge',
-    type: 'object',
-    isOptional: true,
-    description: '(Optional) LLM judge for this step (can override main judge). See Judge Object section.',
-  },
+	{
+		name: 'description',
+		type: 'string',
+		isOptional: false,
+		description: 'Description of what this scoring step does.',
+	},
+	{
+		name: 'outputSchema',
+		type: 'StandardJSONSchemaV1',
+		isOptional: false,
+		description: 'Standard JSON Schema for the expected output of the generateScore step.',
+	},
+	{
+		name: 'createPrompt',
+		type: 'function',
+		isOptional: false,
+		description: 'Function: ({ run, results }) => string. Returns the prompt for the LLM.',
+	},
+	{
+		name: 'judge',
+		type: 'object',
+		isOptional: true,
+		description: '(Optional) LLM judge for this step (can override main judge). See Judge Object section.',
+	},
 ]}
 />
 
@@ -447,13 +447,13 @@ When using prompt object mode, you must also provide a `calculateScore` function
 
 <PropertiesTable
   content={[
-  {
-    name: 'calculateScore',
-    type: 'function',
-    isOptional: false,
-    description:
-      "Function: ({ run, results, analyzeStepResult }) => number. Converts the LLM's structured output into a numerical score.",
-  },
+	{
+		name: 'calculateScore',
+		type: 'function',
+		isOptional: false,
+		description:
+			"Function: ({ run, results, analyzeStepResult }) => number. Converts the LLM's structured output into a numerical score.",
+	},
 ]}
 />
 
@@ -466,50 +466,50 @@ Function: `({ run, results, score }) => string`
 
 <PropertiesTable
   content={[
-  {
-    name: 'run.input',
-    type: 'any',
-    isOptional: false,
-    description:
-      "Input records provided to the scorer. If the scorer is added to an agent, this will be an array of user messages, e.g. `[{ role: 'user', content: 'hello world' }]`. If the scorer is used in a workflow, this will be the input of the workflow.",
-  },
-  {
-    name: 'run.output',
-    type: 'any',
-    isOptional: false,
-    description:
-      "Output record provided to the scorer. For agents, this is usually the agent's response. For workflows, this is the workflow's output.",
-  },
-  {
-    name: 'run.runId',
-    type: 'string',
-    isOptional: false,
-    description: 'Unique identifier for this scoring run.',
-  },
-  {
-    name: 'run.requestContext',
-    type: 'object',
-    isOptional: true,
-    description: 'Request Context from the agent or workflow step being evaluated (optional).',
-  },
-  {
-    name: 'results.preprocessStepResult',
-    type: 'any',
-    isOptional: true,
-    description: 'Result from preprocess step, if defined (optional).',
-  },
-  {
-    name: 'results.analyzeStepResult',
-    type: 'any',
-    isOptional: true,
-    description: 'Result from analyze step, if defined (optional).',
-  },
-  {
-    name: 'score',
-    type: 'number',
-    isOptional: false,
-    description: 'Score computed by the generateScore step.',
-  },
+	{
+		name: 'run.input',
+		type: 'any',
+		isOptional: false,
+		description:
+			"Input records provided to the scorer. If the scorer is added to an agent, this will be an array of user messages, e.g. `[{ role: 'user', content: 'hello world' }]`. If the scorer is used in a workflow, this will be the input of the workflow.",
+	},
+	{
+		name: 'run.output',
+		type: 'any',
+		isOptional: false,
+		description:
+			"Output record provided to the scorer. For agents, this is usually the agent's response. For workflows, this is the workflow's output.",
+	},
+	{
+		name: 'run.runId',
+		type: 'string',
+		isOptional: false,
+		description: 'Unique identifier for this scoring run.',
+	},
+	{
+		name: 'run.requestContext',
+		type: 'object',
+		isOptional: true,
+		description: 'Request Context from the agent or workflow step being evaluated (optional).',
+	},
+	{
+		name: 'results.preprocessStepResult',
+		type: 'any',
+		isOptional: true,
+		description: 'Result from preprocess step, if defined (optional).',
+	},
+	{
+		name: 'results.analyzeStepResult',
+		type: 'any',
+		isOptional: true,
+		description: 'Result from analyze step, if defined (optional).',
+	},
+	{
+		name: 'score',
+		type: 'number',
+		isOptional: false,
+		description: 'Score computed by the generateScore step.',
+	},
 ]}
 />
 
@@ -520,24 +520,24 @@ The method must return a string explaining the score.
 
 <PropertiesTable
   content={[
-  {
-    name: 'description',
-    type: 'string',
-    isOptional: false,
-    description: 'Description of what this reasoning step does.',
-  },
-  {
-    name: 'createPrompt',
-    type: 'function',
-    isOptional: false,
-    description: 'Function: ({ run, results, score }) => string. Returns the prompt for the LLM.',
-  },
-  {
-    name: 'judge',
-    type: 'object',
-    isOptional: true,
-    description: '(Optional) LLM judge for this step (can override main judge). See Judge Object section.',
-  },
+	{
+		name: 'description',
+		type: 'string',
+		isOptional: false,
+		description: 'Description of what this reasoning step does.',
+	},
+	{
+		name: 'createPrompt',
+		type: 'function',
+		isOptional: false,
+		description: 'Function: ({ run, results, score }) => string. Returns the prompt for the LLM.',
+	},
+	{
+		name: 'judge',
+		type: 'object',
+		isOptional: true,
+		description: '(Optional) LLM judge for this step (can override main judge). See Judge Object section.',
+	},
 ]}
 />
 

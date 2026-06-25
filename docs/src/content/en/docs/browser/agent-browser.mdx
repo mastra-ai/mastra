@@ -33,15 +33,15 @@ import { Agent } from '@mastra/core/agent'
 import { AgentBrowser } from '@mastra/agent-browser'
 
 const browser = new AgentBrowser({
-  headless: false,
+	headless: false,
 })
 
 export const browserAgent = new Agent({
-  id: 'browser-agent',
-  name: 'Browser Agent',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  browser,
-  instructions: `You are a web automation assistant.
+	id: 'browser-agent',
+	name: 'Browser Agent',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	browser,
+	instructions: `You are a web automation assistant.
 
 When interacting with pages:
 1. Use browser_snapshot to get the current page state and element refs
@@ -66,8 +66,8 @@ To disable the screenshot tool for models that don't support vision, use `exclud
 
 ```typescript
 const browser = new AgentBrowser({
-  headless: false,
-  excludeTools: ['browser_screenshot'],
+	headless: false,
+	excludeTools: ['browser_screenshot'],
 })
 ```
 
@@ -81,10 +81,10 @@ AgentBrowser can opt into alpha browser recording tools:
 
 ```typescript
 const browser = new AgentBrowser({
-  headless: false,
-  recording: {
-    outputDir: './browser-recordings',
-  },
+	headless: false,
+	recording: {
+		outputDir: './browser-recordings',
+	},
 })
 ```
 

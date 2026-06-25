@@ -18,8 +18,8 @@ const memory = mastra.getMemory('conversationMemory')
 
 // Use the memory instance
 const thread = await memory.createThread({
-  resourceId: 'user-123',
-  title: 'New Conversation',
+	resourceId: 'user-123',
+	title: 'New Conversation',
 })
 ```
 
@@ -27,12 +27,12 @@ const thread = await memory.createThread({
 
 <PropertiesTable
   content={[
-  {
-    name: 'key',
-    type: 'TMemoryKey extends keyof TMemory',
-    description:
-      'The registry key of the memory instance to retrieve. Must match a key used when registering memory in the Mastra constructor.',
-  },
+	{
+		name: 'key',
+		type: 'TMemoryKey extends keyof TMemory',
+		description:
+			'The registry key of the memory instance to retrieve. Must match a key used when registering memory in the Mastra constructor.',
+	},
 ]}
 />
 
@@ -40,11 +40,11 @@ const thread = await memory.createThread({
 
 <PropertiesTable
   content={[
-  {
-    name: 'memory',
-    type: 'TMemory[TMemoryKey]',
-    description: 'The memory instance with the specified key. Throws an error if the memory is not found.',
-  },
+	{
+		name: 'memory',
+		type: 'TMemory[TMemoryKey]',
+		description: 'The memory instance with the specified key. Throws an error if the memory is not found.',
+	},
 ]}
 />
 
@@ -56,13 +56,13 @@ import { Memory } from '@mastra/memory'
 import { LibSQLStore } from '@mastra/libsql'
 
 const conversationMemory = new Memory({
-  storage: new LibSQLStore({ id: 'conversation-store', url: ':memory:' }),
+	storage: new LibSQLStore({ id: 'conversation-store', url: ':memory:' }),
 })
 
 const mastra = new Mastra({
-  memory: {
-    conversationMemory,
-  },
+	memory: {
+		conversationMemory,
+	},
 })
 
 // Later, retrieve the memory instance

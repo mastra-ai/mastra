@@ -34,14 +34,14 @@ npm install @mastra/mcp @mastra/core tsup
     import { weatherTool } from './tools'
 
     const server = new MCPServer({
-      name: 'my-mcp-server',
-      version: '1.0.0',
-      tools: { weatherTool },
+    	name: 'my-mcp-server',
+    	version: '1.0.0',
+    	tools: { weatherTool },
     })
 
     server.startStdio().catch(error => {
-      console.error('Error running MCP server:', error)
-      process.exit(1)
+    	console.error('Error running MCP server:', error)
+    	process.exit(1)
     })
     ```
   </StepItem>
@@ -51,10 +51,10 @@ npm install @mastra/mcp @mastra/core tsup
 
     ```json title="package.json"
     {
-      "bin": "dist/stdio.mjs",
-      "scripts": {
-        "build:mcp": "tsup src/mastra/stdio.ts --format esm,cjs --no-splitting --dts && echo '#!/usr/bin/env node' | cat - dist/stdio.mjs > temp && mv temp dist/stdio.mjs && chmod +x dist/stdio.mjs"
-      }
+    	"bin": "dist/stdio.mjs",
+    	"scripts": {
+    		"build:mcp": "tsup src/mastra/stdio.ts --format esm,cjs --no-splitting --dts && echo '#!/usr/bin/env node' | cat - dist/stdio.mjs > temp && mv temp dist/stdio.mjs && chmod +x dist/stdio.mjs"
+    	}
     }
     ```
 
@@ -104,13 +104,13 @@ Once published, your MCP server can be used by an `MCPClient` by specifying the 
 import { MCPClient } from '@mastra/mcp'
 
 const mcp = new MCPClient({
-  servers: {
-    // Give this MCP server instance a name
-    yourServerName: {
-      command: 'npx',
-      args: ['-y', '@your-org-name/your-package-name@latest'], // Replace with your package name
-    },
-  },
+	servers: {
+		// Give this MCP server instance a name
+		yourServerName: {
+			command: 'npx',
+			args: ['-y', '@your-org-name/your-package-name@latest'], // Replace with your package name
+		},
+	},
 })
 
 // You can then get tools or toolsets from this configuration to use in your agent

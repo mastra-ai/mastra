@@ -10,26 +10,26 @@ import { LibSQLStore, LibSQLVector } from '@mastra/libsql'
 
 // Create a specialized memory configuration for the learning assistant
 const learningMemory = new Memory({
-  storage: new LibSQLStore({
-    id: 'learning-memory-storage',
-    url: 'file:../../memory.db', // relative path from the `.mastra/output` directory
-  }),
-  vector: new LibSQLVector({
-    url: 'file:../../vector.db', // relative path from the `.mastra/output` directory
-  }),
-  embedder: 'openai/text-embedding-3-small',
-  options: {
-    lastMessages: 20,
-    semanticRecall: {
-      topK: 3,
-      messageRange: {
-        before: 2,
-        after: 1,
-      },
-    },
-    workingMemory: {
-      enabled: true,
-      template: `
+	storage: new LibSQLStore({
+		id: 'learning-memory-storage',
+		url: 'file:../../memory.db', // relative path from the `.mastra/output` directory
+	}),
+	vector: new LibSQLVector({
+		url: 'file:../../vector.db', // relative path from the `.mastra/output` directory
+	}),
+	embedder: 'openai/text-embedding-3-small',
+	options: {
+		lastMessages: 20,
+		semanticRecall: {
+			topK: 3,
+			messageRange: {
+				before: 2,
+				after: 1,
+			},
+		},
+		workingMemory: {
+			enabled: true,
+			template: `
 # Learner Profile
 
 ## Personal Info
@@ -56,14 +56,14 @@ const learningMemory = new Memory({
 - Questions to Revisit:
 - Recommended Next Steps:
 `,
-    },
-  },
+		},
+	},
 })
 
 // Create the learning assistant agent
 export const learningAssistantAgent = new Agent({
-  name: 'Learning Assistant',
-  instructions: `
+	name: 'Learning Assistant',
+	instructions: `
     You are a personal learning assistant that helps users learn new skills and tracks their progress.
     
     ## Your Capabilities
@@ -87,8 +87,8 @@ export const learningAssistantAgent = new Agent({
     Always be encouraging and supportive. Focus on building the user's confidence
     and celebrating their progress.
   `,
-  model: 'openai/gpt-5.4',
-  memory: learningMemory,
+	model: 'openai/gpt-5.4',
+	memory: learningMemory,
 })
 
 // Don't forget to export this agent in your src/mastra/index.ts file

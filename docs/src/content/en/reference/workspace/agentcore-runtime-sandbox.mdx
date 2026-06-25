@@ -39,18 +39,18 @@ import { Workspace } from '@mastra/core/workspace'
 import { AgentCoreRuntimeSandbox } from '@mastra/agentcore'
 
 const workspace = new Workspace({
-  sandbox: new AgentCoreRuntimeSandbox({
-    region: 'us-west-2',
-    agentRuntimeArn: process.env.AGENTCORE_RUNTIME_ARN!,
-    runtimeSessionId: '12345678-1234-1234-1234-123456789012',
-  }),
+	sandbox: new AgentCoreRuntimeSandbox({
+		region: 'us-west-2',
+		agentRuntimeArn: process.env.AGENTCORE_RUNTIME_ARN!,
+		runtimeSessionId: '12345678-1234-1234-1234-123456789012',
+	}),
 })
 
 const agent = new Agent({
-  name: 'dev-agent',
-  model: 'anthropic/claude-sonnet-4-6',
-  instructions: 'You are a helpful development assistant.',
-  workspace,
+	name: 'dev-agent',
+	model: 'anthropic/claude-sonnet-4-6',
+	instructions: 'You are a helpful development assistant.',
+	workspace,
 })
 ```
 
@@ -58,15 +58,15 @@ Run commands programmatically through the sandbox:
 
 ```typescript
 const result = await workspace.sandbox?.executeCommand?.('npm', ['test'], {
-  cwd: '/workspace',
-  env: {
-    NODE_ENV: 'test',
-  },
-  timeout: 300_000,
+	cwd: '/workspace',
+	env: {
+		NODE_ENV: 'test',
+	},
+	timeout: 300_000,
 })
 
 if (!result?.success) {
-  console.error(result?.stderr)
+	console.error(result?.stderr)
 }
 ```
 
@@ -74,81 +74,81 @@ if (!result?.success) {
 
 <PropertiesTable
   content={[
-  {
-    name: 'agentRuntimeArn',
-    type: 'string',
-    description: 'AgentCore Runtime ARN where commands execute.',
-  },
-  {
-    name: 'region',
-    type: 'string',
-    description: 'AWS region for the Bedrock AgentCore client. Falls back to the AWS SDK default region chain.',
-    isOptional: true,
-  },
-  {
-    name: 'runtimeSessionId',
-    type: 'string',
-    description:
-      'AgentCore Runtime session ID. Defaults to a generated UUID, which satisfies AgentCore Runtime session ID length requirements.',
-    isOptional: true,
-    defaultValue: 'Generated UUID',
-  },
-  {
-    name: 'qualifier',
-    type: 'string',
-    description: 'Agent runtime qualifier or endpoint.',
-    isOptional: true,
-    defaultValue: 'DEFAULT',
-  },
-  {
-    name: 'contentType',
-    type: 'string',
-    description: 'MIME type sent for command requests.',
-    isOptional: true,
-    defaultValue: 'application/json',
-  },
-  {
-    name: 'accept',
-    type: 'string',
-    description: 'Accept header used for command event streams.',
-    isOptional: true,
-    defaultValue: 'application/vnd.amazon.eventstream',
-  },
-  {
-    name: 'commandTimeout',
-    type: 'number',
-    description: 'Default command timeout in milliseconds.',
-    isOptional: true,
-    defaultValue: '300000',
-  },
-  {
-    name: 'stopSessionOnLifecycle',
-    type: 'boolean',
-    description:
-      'Whether `stop()` and `destroy()` should call `StopRuntimeSession`. Defaults to false because AgentCore Runtime sessions are often shared with agent invocations outside the sandbox instance.',
-    isOptional: true,
-    defaultValue: 'false',
-  },
-  {
-    name: 'stopClientToken',
-    type: 'string',
-    description: 'Client token used when `StopRuntimeSession` is called.',
-    isOptional: true,
-    defaultValue: 'Generated UUID',
-  },
-  {
-    name: 'client',
-    type: 'BedrockAgentCoreClient',
-    description: 'Preconfigured AWS SDK client. Use this for custom credentials, retry behavior, or tests.',
-    isOptional: true,
-  },
-  {
-    name: 'instructions',
-    type: 'string | ((opts) => string)',
-    description:
-      'Custom instructions that override the default instructions returned by `getInstructions()`. Pass a string to replace the defaults, or a function to extend them.',
-    isOptional: true,
-  },
+	{
+		name: 'agentRuntimeArn',
+		type: 'string',
+		description: 'AgentCore Runtime ARN where commands execute.',
+	},
+	{
+		name: 'region',
+		type: 'string',
+		description: 'AWS region for the Bedrock AgentCore client. Falls back to the AWS SDK default region chain.',
+		isOptional: true,
+	},
+	{
+		name: 'runtimeSessionId',
+		type: 'string',
+		description:
+			'AgentCore Runtime session ID. Defaults to a generated UUID, which satisfies AgentCore Runtime session ID length requirements.',
+		isOptional: true,
+		defaultValue: 'Generated UUID',
+	},
+	{
+		name: 'qualifier',
+		type: 'string',
+		description: 'Agent runtime qualifier or endpoint.',
+		isOptional: true,
+		defaultValue: 'DEFAULT',
+	},
+	{
+		name: 'contentType',
+		type: 'string',
+		description: 'MIME type sent for command requests.',
+		isOptional: true,
+		defaultValue: 'application/json',
+	},
+	{
+		name: 'accept',
+		type: 'string',
+		description: 'Accept header used for command event streams.',
+		isOptional: true,
+		defaultValue: 'application/vnd.amazon.eventstream',
+	},
+	{
+		name: 'commandTimeout',
+		type: 'number',
+		description: 'Default command timeout in milliseconds.',
+		isOptional: true,
+		defaultValue: '300000',
+	},
+	{
+		name: 'stopSessionOnLifecycle',
+		type: 'boolean',
+		description:
+			'Whether `stop()` and `destroy()` should call `StopRuntimeSession`. Defaults to false because AgentCore Runtime sessions are often shared with agent invocations outside the sandbox instance.',
+		isOptional: true,
+		defaultValue: 'false',
+	},
+	{
+		name: 'stopClientToken',
+		type: 'string',
+		description: 'Client token used when `StopRuntimeSession` is called.',
+		isOptional: true,
+		defaultValue: 'Generated UUID',
+	},
+	{
+		name: 'client',
+		type: 'BedrockAgentCoreClient',
+		description: 'Preconfigured AWS SDK client. Use this for custom credentials, retry behavior, or tests.',
+		isOptional: true,
+	},
+	{
+		name: 'instructions',
+		type: 'string | ((opts) => string)',
+		description:
+			'Custom instructions that override the default instructions returned by `getInstructions()`. Pass a string to replace the defaults, or a function to extend them.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -156,37 +156,37 @@ if (!result?.success) {
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Runtime session ID used by this sandbox instance.',
-  },
-  {
-    name: 'name',
-    type: "'AgentCoreRuntimeSandbox'",
-    description: 'Human-readable name.',
-  },
-  {
-    name: 'provider',
-    type: "'agentcore'",
-    description: 'Provider type identifier.',
-  },
-  {
-    name: 'status',
-    type: 'ProviderStatus',
-    description:
-      "Current lifecycle status: `'pending'`, `'starting'`, `'running'`, `'stopping'`, `'stopped'`, `'destroying'`, `'destroyed'`, or `'error'`.",
-  },
-  {
-    name: 'runtimeSessionId',
-    type: 'string',
-    description: 'AgentCore Runtime session ID used for command execution.',
-  },
-  {
-    name: 'agentRuntimeArn',
-    type: 'string',
-    description: 'AgentCore Runtime ARN where commands execute.',
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Runtime session ID used by this sandbox instance.',
+	},
+	{
+		name: 'name',
+		type: "'AgentCoreRuntimeSandbox'",
+		description: 'Human-readable name.',
+	},
+	{
+		name: 'provider',
+		type: "'agentcore'",
+		description: 'Provider type identifier.',
+	},
+	{
+		name: 'status',
+		type: 'ProviderStatus',
+		description:
+			"Current lifecycle status: `'pending'`, `'starting'`, `'running'`, `'stopping'`, `'stopped'`, `'destroying'`, `'destroyed'`, or `'error'`.",
+	},
+	{
+		name: 'runtimeSessionId',
+		type: 'string',
+		description: 'AgentCore Runtime session ID used for command execution.',
+	},
+	{
+		name: 'agentRuntimeArn',
+		type: 'string',
+		description: 'AgentCore Runtime ARN where commands execute.',
+	},
 ]}
 />
 
@@ -200,11 +200,11 @@ Runs a one-shot shell command in the AgentCore Runtime session and returns stdou
 
 ```typescript
 const result = await sandbox.executeCommand('npm', ['test'], {
-  cwd: '/workspace',
-  env: {
-    NODE_ENV: 'test',
-  },
-  timeout: 300_000,
+	cwd: '/workspace',
+	env: {
+		NODE_ENV: 'test',
+	},
+	timeout: 300_000,
 })
 ```
 

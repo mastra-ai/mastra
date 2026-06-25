@@ -4,8 +4,8 @@ Next, let's update your agent's instructions to include information about the Fi
 
 ```typescript
 export const personalAssistantAgent = new Agent({
-  name: 'Personal Assistant',
-  instructions: `
+	name: 'Personal Assistant',
+	instructions: `
     You are a helpful personal assistant that can help with various tasks such as email, 
     monitoring github activity, scheduling social media posts, providing tech news,
     and managing notes and to-do lists.
@@ -34,9 +34,9 @@ export const personalAssistantAgent = new Agent({
     
     Keep your responses concise and friendly.
   `,
-  model: 'openai/gpt-5.4',
-  tools: { ...mcpTools },
-  memory,
+	model: 'openai/gpt-5.4',
+	tools: { ...mcpTools },
+	memory,
 })
 ```
 

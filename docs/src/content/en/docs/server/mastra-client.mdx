@@ -41,7 +41,7 @@ Once initialized with a `baseUrl`, `MastraClient` exposes a type-safe interface 
 import { MastraClient } from '@mastra/client-js'
 
 export const mastraClient = new MastraClient({
-  baseUrl: process.env.MASTRA_API_URL || 'http://localhost:4111',
+	baseUrl: process.env.MASTRA_API_URL || 'http://localhost:4111',
 })
 ```
 
@@ -68,15 +68,15 @@ Call `.generate()` with a string prompt:
 import { mastraClient } from 'lib/mastra-client'
 
 const testAgent = async () => {
-  try {
-    const agent = mastraClient.getAgent('testAgent')
+	try {
+		const agent = mastraClient.getAgent('testAgent')
 
-    const response = await agent.generate('Hello')
+		const response = await agent.generate('Hello')
 
-    console.log(response.text)
-  } catch (error) {
-    return 'Error occurred while generating response'
-  }
+		console.log(response.text)
+	} catch (error) {
+		return 'Error occurred while generating response'
+	}
 }
 ```
 
@@ -94,19 +94,19 @@ Use `.stream()` for real-time responses with a string prompt:
 import { mastraClient } from 'lib/mastra-client'
 
 const testAgent = async () => {
-  try {
-    const agent = mastraClient.getAgent('testAgent')
+	try {
+		const agent = mastraClient.getAgent('testAgent')
 
-    const stream = await agent.stream('Hello')
+		const stream = await agent.stream('Hello')
 
-    stream.processDataStream({
-      onTextPart: text => {
-        console.log(text)
-      },
-    })
-  } catch (error) {
-    return 'Error occurred while generating response'
-  }
+		stream.processDataStream({
+			onTextPart: text => {
+				console.log(text)
+			},
+		})
+	} catch (error) {
+		return 'Error occurred while generating response'
+	}
 }
 ```
 
@@ -124,12 +124,12 @@ You can also call `.stream()` with an array of message objects that include `rol
 import { MastraClient } from '@mastra/client-js'
 
 export const mastraClient = new MastraClient({
-  retries: 3,
-  backoffMs: 300,
-  maxBackoffMs: 5000,
-  headers: {
-    'X-Development': 'true',
-  },
+	retries: 3,
+	backoffMs: 300,
+	maxBackoffMs: 5000,
+	headers: {
+		'X-Development': 'true',
+	},
 })
 ```
 
@@ -147,8 +147,8 @@ Visit [MastraClient](/reference/client-js/mastra-client) for more configuration 
 import { MastraClient } from '@mastra/client-js'
 
 export const mastraClient = new MastraClient({
-  baseUrl: process.env.MASTRA_API_URL || 'http://localhost:4111',
-  credentials: 'include',
+	baseUrl: process.env.MASTRA_API_URL || 'http://localhost:4111',
+	credentials: 'include',
 })
 ```
 
@@ -168,8 +168,8 @@ import { MastraClient } from '@mastra/client-js'
 export const controller = new AbortController()
 
 export const mastraClient = new MastraClient({
-  baseUrl: process.env.MASTRA_API_URL || 'http://localhost:4111',
-  abortSignal: controller.signal,
+	baseUrl: process.env.MASTRA_API_URL || 'http://localhost:4111',
+	abortSignal: controller.signal,
 })
 ```
 
@@ -181,7 +181,7 @@ Calling `.abort()` will cancel any ongoing requests tied to that signal.
 import { mastraClient, controller } from 'lib/mastra-client'
 
 const handleAbort = () => {
-  controller.abort()
+	controller.abort()
 }
 ```
 
@@ -196,34 +196,34 @@ import { createTool } from '@mastra/client-js'
 import { z } from 'zod'
 
 const handleClientTool = async () => {
-  try {
-    const agent = mastraClient.getAgent('colorAgent')
+	try {
+		const agent = mastraClient.getAgent('colorAgent')
 
-    const colorChangeTool = createTool({
-      id: 'color-change-tool',
-      description: 'Changes the HTML background color',
-      inputSchema: z.object({
-        color: z.string(),
-      }),
-      outputSchema: z.object({
-        success: z.boolean(),
-      }),
-      execute: async inputData => {
-        const { color } = inputData
+		const colorChangeTool = createTool({
+			id: 'color-change-tool',
+			description: 'Changes the HTML background color',
+			inputSchema: z.object({
+				color: z.string(),
+			}),
+			outputSchema: z.object({
+				success: z.boolean(),
+			}),
+			execute: async inputData => {
+				const { color } = inputData
 
-        document.body.style.backgroundColor = color
-        return { success: true }
-      },
-    })
+				document.body.style.backgroundColor = color
+				return { success: true }
+			},
+		})
 
-    const response = await agent.generate('Change the background to blue', {
-      clientTools: { colorChangeTool },
-    })
+		const response = await agent.generate('Change the background to blue', {
+			clientTools: { colorChangeTool },
+		})
 
-    console.log(response)
-  } catch (error) {
-    console.error(error)
-  }
+		console.log(response)
+	} catch (error) {
+		console.error(error)
+	}
 }
 ```
 
@@ -235,12 +235,12 @@ This is a standard Mastra [agent](../agents/overview#quickstart) configured to r
 import { Agent } from '@mastra/core/agent'
 
 export const colorAgent = new Agent({
-  id: 'color-agent',
-  name: 'Color Agent',
-  instructions: `You are a helpful CSS assistant.
+	id: 'color-agent',
+	name: 'Color Agent',
+	instructions: `You are a helpful CSS assistant.
   You can change the background color of web pages.
   Respond with a hex reference for the color requested by the user`,
-  model: '__GATEWAY_OPENAI_MODEL__',
+	model: '__GATEWAY_OPENAI_MODEL__',
 })
 ```
 
@@ -250,11 +250,11 @@ You can also use `MastraClient` in server-side environments such as API routes, 
 
 ```typescript {8}
 export async function action() {
-  const agent = mastraClient.getAgent('testAgent')
+	const agent = mastraClient.getAgent('testAgent')
 
-  const stream = await agent.stream('Hello')
+	const stream = await agent.stream('Hello')
 
-  return new Response(stream.body)
+	return new Response(stream.body)
 }
 ```
 

@@ -19,27 +19,27 @@ await agent.getMetadata()
 
 <PropertiesTable
   content={[
-  {
-    name: 'options',
-    type: '{ requestContext?: RequestContext }',
-    isOptional: true,
-    defaultValue: '{}',
-    description: 'Optional configuration object containing request context.',
-    properties: [
-      {
-        type: '{ requestContext?: RequestContext }',
-        parameters: [
-          {
-            name: 'requestContext',
-            type: 'RequestContext',
-            isOptional: true,
-            defaultValue: 'undefined',
-            description: 'Request Context passed to dynamic metadata functions. Ignored when metadata is static.',
-          },
-        ],
-      },
-    ],
-  },
+	{
+		name: 'options',
+		type: '{ requestContext?: RequestContext }',
+		isOptional: true,
+		defaultValue: '{}',
+		description: 'Optional configuration object containing request context.',
+		properties: [
+			{
+				type: '{ requestContext?: RequestContext }',
+				parameters: [
+					{
+						name: 'requestContext',
+						type: 'RequestContext',
+						isOptional: true,
+						defaultValue: 'undefined',
+						description: 'Request Context passed to dynamic metadata functions. Ignored when metadata is static.',
+					},
+				],
+			},
+		],
+	},
 ]}
 />
 
@@ -47,12 +47,12 @@ await agent.getMetadata()
 
 <PropertiesTable
   content={[
-  {
-    name: 'metadata',
-    type: 'Record<string, unknown> | Promise<Record<string, unknown>>',
-    description:
-      'The metadata configured for the agent, or `undefined` if no metadata was configured. Returns either directly or as a promise that resolves to the metadata when defined as a function.',
-  },
+	{
+		name: 'metadata',
+		type: 'Record<string, unknown> | Promise<Record<string, unknown>>',
+		description:
+			'The metadata configured for the agent, or `undefined` if no metadata was configured. Returns either directly or as a promise that resolves to the metadata when defined as a function.',
+	},
 ]}
 />
 
@@ -64,11 +64,11 @@ Static metadata:
 import { Agent } from '@mastra/core/agent'
 
 export const supportAgent = new Agent({
-  id: 'support-agent',
-  name: 'Support Agent',
-  instructions: 'You help customers with support requests.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  metadata: { type: 'support' },
+	id: 'support-agent',
+	name: 'Support Agent',
+	instructions: 'You help customers with support requests.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	metadata: { type: 'support' },
 })
 
 const metadata = supportAgent.getMetadata()
@@ -80,14 +80,14 @@ Dynamic metadata resolved from the request context:
 import { Agent } from '@mastra/core/agent'
 
 export const supportAgent = new Agent({
-  id: 'support-agent',
-  name: 'Support Agent',
-  instructions: 'You help customers with support requests.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  metadata: ({ requestContext }) => ({
-    type: 'support',
-    tenant: requestContext.get('tenant'),
-  }),
+	id: 'support-agent',
+	name: 'Support Agent',
+	instructions: 'You help customers with support requests.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	metadata: ({ requestContext }) => ({
+		type: 'support',
+		tenant: requestContext.get('tenant'),
+	}),
 })
 
 const metadata = await supportAgent.getMetadata({ requestContext })

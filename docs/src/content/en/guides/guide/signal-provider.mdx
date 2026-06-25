@@ -32,9 +32,9 @@ import { Mastra } from '@mastra/core'
 import { LibSQLStore } from '@mastra/libsql'
 
 export const mastra = new Mastra({
-  storage: new LibSQLStore({
-    url: 'file:./mastra.db',
-  }),
+	storage: new LibSQLStore({
+		url: 'file:./mastra.db',
+	}),
 })
 ```
 
@@ -46,16 +46,16 @@ Real providers call an external API. To keep this guide self-contained, create a
 
 ```typescript title="src/mastra/signals/ci-client.ts"
 export type BuildStatus = {
-  id: string
-  pipeline: string
-  status: 'passed' | 'failed' | 'running'
+	id: string
+	pipeline: string
+	status: 'passed' | 'failed' | 'running'
 }
 
 // Returns a random status so you can see notifications fire while testing.
 export async function fetchBuildStatus(pipeline: string): Promise<BuildStatus> {
-  const states: BuildStatus['status'][] = ['passed', 'failed', 'running']
-  const status = states[Math.floor(Math.random() * states.length)]!
-  return { id: `build_${Date.now()}`, pipeline, status }
+	const states: BuildStatus['status'][] = ['passed', 'failed', 'running']
+	const status = states[Math.floor(Math.random() * states.length)]!
+	return { id: `build_${Date.now()}`, pipeline, status }
 }
 ```
 
@@ -71,36 +71,36 @@ import type { SignalProviderTarget, SignalSubscription } from '@mastra/core/sign
 import { fetchBuildStatus } from './ci-client'
 
 export class CiSignals extends SignalProvider<'ci-signals'> {
-  readonly id = 'ci-signals' as const
-  readonly pollInterval = 10_000 // poll every 10 seconds
+	readonly id = 'ci-signals' as const
+	readonly pollInterval = 10_000 // poll every 10 seconds
 
-  // Public API so callers can subscribe a thread to a pipeline.
-  watch(target: SignalProviderTarget, pipeline: string): SignalSubscription {
-    return this.subscribe(target, pipeline)
-  }
+	// Public API so callers can subscribe a thread to a pipeline.
+	watch(target: SignalProviderTarget, pipeline: string): SignalSubscription {
+		return this.subscribe(target, pipeline)
+	}
 
-  unwatch(target: SignalProviderTarget, pipeline: string): boolean {
-    return this.unsubscribe(target, pipeline)
-  }
+	unwatch(target: SignalProviderTarget, pipeline: string): boolean {
+		return this.unsubscribe(target, pipeline)
+	}
 
-  async poll(subscriptions: SignalSubscription[]): Promise<void> {
-    for (const sub of subscriptions) {
-      const build = await fetchBuildStatus(sub.externalResourceId)
-      if (build.status !== 'failed') continue
+	async poll(subscriptions: SignalSubscription[]): Promise<void> {
+		for (const sub of subscriptions) {
+			const build = await fetchBuildStatus(sub.externalResourceId)
+			if (build.status !== 'failed') continue
 
-      await this.notify(
-        {
-          source: this.id,
-          kind: 'ci-status',
-          priority: 'high',
-          summary: `Build failed for ${sub.externalResourceId}`,
-          payload: build,
-          dedupeKey: `${this.id}:${sub.externalResourceId}:${build.id}`,
-        },
-        { resourceId: sub.resourceId, threadId: sub.threadId },
-      )
-    }
-  }
+			await this.notify(
+				{
+					source: this.id,
+					kind: 'ci-status',
+					priority: 'high',
+					summary: `Build failed for ${sub.externalResourceId}`,
+					payload: build,
+					dedupeKey: `${this.id}:${sub.externalResourceId}:${build.id}`,
+				},
+				{ resourceId: sub.resourceId, threadId: sub.threadId },
+			)
+		}
+	}
 }
 ```
 
@@ -122,12 +122,12 @@ import { CiSignals } from '../signals/ci-signals'
 export const ciSignals = new CiSignals()
 
 export const devAgent = new Agent({
-  id: 'dev-agent',
-  name: 'Dev Agent',
-  instructions: 'Help the user triage CI build failures.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  // highlight-next-line
-  signals: [ciSignals],
+	id: 'dev-agent',
+	name: 'Dev Agent',
+	instructions: 'Help the user triage CI build failures.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	// highlight-next-line
+	signals: [ciSignals],
 })
 ```
 
@@ -140,11 +140,11 @@ import { LibSQLStore } from '@mastra/libsql'
 import { devAgent } from './agents/dev-agent'
 
 export const mastra = new Mastra({
-  // highlight-next-line
-  agents: { devAgent },
-  storage: new LibSQLStore({
-    url: 'file:./mastra.db',
-  }),
+	// highlight-next-line
+	agents: { devAgent },
+	storage: new LibSQLStore({
+		url: 'file:./mastra.db',
+	}),
 })
 ```
 
@@ -174,12 +174,12 @@ To see the agent react to the notification, subscribe to the thread and stream i
 
 ```typescript title="src/mastra/watch-thread.ts"
 const subscription = await devAgent.subscribeToThread({
-  resourceId: 'user_123',
-  threadId: 'thread_456',
+	resourceId: 'user_123',
+	threadId: 'thread_456',
 })
 
 for await (const chunk of subscription.stream) {
-  console.log(chunk)
+	console.log(chunk)
 }
 ```
 

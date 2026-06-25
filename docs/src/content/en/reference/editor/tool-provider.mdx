@@ -17,27 +17,27 @@ Tool providers implement these methods:
 
 <PropertiesTable
   content={[
-  {
-    name: 'listToolkits()',
-    type: '() => Promise<Toolkit[]>',
-    description: 'Returns a list of available toolkits (tool categories) from the provider.',
-  },
-  {
-    name: 'listTools(params?)',
-    type: '(params?) => Promise<Tool[]>',
-    description: 'Returns a list of available tools. Accepts optional filtering by toolkit, search query, and limit.',
-  },
-  {
-    name: 'getToolSchema(slug)',
-    type: '(slug: string) => Promise<JSONSchema>',
-    description: 'Returns the JSON schema for a specific tool identified by its slug.',
-  },
-  {
-    name: 'resolveTools(slugs, options?)',
-    type: '(slugs: string[], options?) => Promise<Record<string, ToolAction>>',
-    description:
-      'Resolves tool slugs into executable Mastra tool actions. Built-in providers use resourceId from request context for per-user authentication.',
-  },
+	{
+		name: 'listToolkits()',
+		type: '() => Promise<Toolkit[]>',
+		description: 'Returns a list of available toolkits (tool categories) from the provider.',
+	},
+	{
+		name: 'listTools(params?)',
+		type: '(params?) => Promise<Tool[]>',
+		description: 'Returns a list of available tools. Accepts optional filtering by toolkit, search query, and limit.',
+	},
+	{
+		name: 'getToolSchema(slug)',
+		type: '(slug: string) => Promise<JSONSchema>',
+		description: 'Returns the JSON schema for a specific tool identified by its slug.',
+	},
+	{
+		name: 'resolveTools(slugs, options?)',
+		type: '(slugs: string[], options?) => Promise<Record<string, ToolAction>>',
+		description:
+			'Resolves tool slugs into executable Mastra tool actions. Built-in providers use resourceId from request context for per-user authentication.',
+	},
 ]}
 />
 
@@ -54,11 +54,11 @@ import { MastraEditor } from '@mastra/editor'
 import { ComposioToolProvider } from '@mastra/editor/providers/composio'
 
 const editor = new MastraEditor({
-  toolProviders: {
-    composio: new ComposioToolProvider({
-      apiKey: process.env.COMPOSIO_API_KEY!,
-    }),
-  },
+	toolProviders: {
+		composio: new ComposioToolProvider({
+			apiKey: process.env.COMPOSIO_API_KEY!,
+		}),
+	},
 })
 ```
 
@@ -66,11 +66,11 @@ const editor = new MastraEditor({
 
 <PropertiesTable
   content={[
-  {
-    name: 'apiKey',
-    type: 'string',
-    description: 'Your Composio API key.',
-  },
+	{
+		name: 'apiKey',
+		type: 'string',
+		description: 'Your Composio API key.',
+	},
 ]}
 />
 
@@ -95,11 +95,11 @@ import { MastraEditor } from '@mastra/editor'
 import { ArcadeToolProvider } from '@mastra/editor/providers/arcade'
 
 const editor = new MastraEditor({
-  toolProviders: {
-    arcade: new ArcadeToolProvider({
-      apiKey: process.env.ARCADE_API_KEY!,
-    }),
-  },
+	toolProviders: {
+		arcade: new ArcadeToolProvider({
+			apiKey: process.env.ARCADE_API_KEY!,
+		}),
+	},
 })
 ```
 
@@ -107,17 +107,17 @@ const editor = new MastraEditor({
 
 <PropertiesTable
   content={[
-  {
-    name: 'apiKey',
-    type: 'string',
-    description: 'Your Arcade API key.',
-  },
-  {
-    name: 'baseURL',
-    type: 'string',
-    description: 'Custom base URL for the Arcade API.',
-    isOptional: true,
-  },
+	{
+		name: 'apiKey',
+		type: 'string',
+		description: 'Your Arcade API key.',
+	},
+	{
+		name: 'baseURL',
+		type: 'string',
+		description: 'Custom base URL for the Arcade API.',
+		isOptional: true,
+	},
 ]}
 />
 

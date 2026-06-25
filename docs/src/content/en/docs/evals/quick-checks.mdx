@@ -29,9 +29,9 @@ import { runEvals } from '@mastra/core/evals'
 import { weatherAgent } from '../agents'
 
 const result = await runEvals({
-  data: [{ input: 'What is the weather in Brooklyn?' }],
-  target: weatherAgent,
-  scorers: [checks.includes('Brooklyn'), checks.calledTool('get_weather'), checks.noToolErrors()],
+	data: [{ input: 'What is the weather in Brooklyn?' }],
+	target: weatherAgent,
+	scorers: [checks.includes('Brooklyn'), checks.calledTool('get_weather'), checks.noToolErrors()],
 })
 
 console.log(result.scores)
@@ -78,23 +78,23 @@ import { runEvals } from '@mastra/core/evals'
 import { myAgent } from '../agents'
 
 const result = await runEvals({
-  data: [
-    {
-      input: 'What is the weather in Brooklyn?',
-      context: ['Brooklyn weather data: sunny, 72°F'],
-    },
-  ],
-  target: myAgent,
-  scorers: [
-    // Deterministic checks (instant, free)
-    checks.includes('Brooklyn'),
-    checks.calledTool('get_weather'),
-    checks.excludes('error'),
-    checks.noToolErrors(),
+	data: [
+		{
+			input: 'What is the weather in Brooklyn?',
+			context: ['Brooklyn weather data: sunny, 72°F'],
+		},
+	],
+	target: myAgent,
+	scorers: [
+		// Deterministic checks (instant, free)
+		checks.includes('Brooklyn'),
+		checks.calledTool('get_weather'),
+		checks.excludes('error'),
+		checks.noToolErrors(),
 
-    // LLM-based scorer (semantic, costs tokens)
-    createFaithfulnessScorer({ model: '__GATEWAY_OPENAI_MODEL_MINI__' }),
-  ],
+		// LLM-based scorer (semantic, costs tokens)
+		createFaithfulnessScorer({ model: '__GATEWAY_OPENAI_MODEL_MINI__' }),
+	],
 })
 ```
 
@@ -107,20 +107,20 @@ import { Agent } from '@mastra/core/agent'
 import { checks } from '@mastra/evals/checks'
 
 export const weatherAgent = new Agent({
-  name: 'Weather Agent',
-  instructions: 'Answer weather questions using the get_weather tool.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  tools: { get_weather: weatherTool },
-  scorers: {
-    noErrors: {
-      scorer: checks.noToolErrors(),
-      sampling: { type: 'ratio', rate: 1 },
-    },
-    mentionCity: {
-      scorer: checks.includes('Brooklyn'),
-      sampling: { type: 'ratio', rate: 0.5 },
-    },
-  },
+	name: 'Weather Agent',
+	instructions: 'Answer weather questions using the get_weather tool.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	tools: { get_weather: weatherTool },
+	scorers: {
+		noErrors: {
+			scorer: checks.noToolErrors(),
+			sampling: { type: 'ratio', rate: 1 },
+		},
+		mentionCity: {
+			scorer: checks.includes('Brooklyn'),
+			sampling: { type: 'ratio', rate: 0.5 },
+		},
+	},
 })
 ```
 

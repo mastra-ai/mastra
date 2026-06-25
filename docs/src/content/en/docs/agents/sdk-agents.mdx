@@ -51,13 +51,13 @@ Configure Claude Agent SDK through `sdkOptions`.
 import { ClaudeSDKAgent } from '@mastra/claude'
 
 export const claudeSDKAgent = new ClaudeSDKAgent({
-  id: 'claude-sdk-agent',
-  name: 'Claude SDK Agent',
-  description: 'Use Claude Agent SDK through Mastra.',
-  sdkOptions: {
-    model: '__AI_SDK_ANTHROPIC_MODEL_SONNET__',
-    cwd: process.cwd(),
-  },
+	id: 'claude-sdk-agent',
+	name: 'Claude SDK Agent',
+	description: 'Use Claude Agent SDK through Mastra.',
+	sdkOptions: {
+		model: '__AI_SDK_ANTHROPIC_MODEL_SONNET__',
+		cwd: process.cwd(),
+	},
 })
 ```
 
@@ -71,23 +71,23 @@ import { ClaudeSDKAgent } from '@mastra/claude'
 import { getTemperature } from '../tools/get-temperature'
 
 const weatherServer = createSdkMcpServer({
-  name: 'weather',
-  version: '1.0.0',
-  tools: [getTemperature],
+	name: 'weather',
+	version: '1.0.0',
+	tools: [getTemperature],
 })
 
 export const claudeSDKAgent = new ClaudeSDKAgent({
-  id: 'claude-sdk-agent',
-  name: 'Claude SDK Agent',
-  description: 'Use Claude Agent SDK through Mastra.',
-  sdkOptions: {
-    model: '__AI_SDK_ANTHROPIC_MODEL_SONNET__',
-    cwd: process.cwd(),
-    mcpServers: {
-      weather: weatherServer,
-    },
-    allowedTools: ['mcp__weather__get_temperature'],
-  },
+	id: 'claude-sdk-agent',
+	name: 'Claude SDK Agent',
+	description: 'Use Claude Agent SDK through Mastra.',
+	sdkOptions: {
+		model: '__AI_SDK_ANTHROPIC_MODEL_SONNET__',
+		cwd: process.cwd(),
+		mcpServers: {
+			weather: weatherServer,
+		},
+		allowedTools: ['mcp__weather__get_temperature'],
+	},
 })
 ```
 
@@ -119,18 +119,18 @@ Configure Cursor Agent SDK through `sdkOptions`.
 import { CursorSDKAgent } from '@mastra/cursor'
 
 export const cursorSDKAgent = new CursorSDKAgent({
-  id: 'cursor-sdk-agent',
-  name: 'Cursor SDK Agent',
-  description: 'Use Cursor Agent SDK through Mastra.',
-  sdkOptions: {
-    apiKey: process.env.CURSOR_API_KEY,
-    model: {
-      id: '__AI_SDK_OPENAI_MODEL_BASE__',
-    },
-    local: {
-      cwd: process.cwd(),
-    },
-  },
+	id: 'cursor-sdk-agent',
+	name: 'Cursor SDK Agent',
+	description: 'Use Cursor Agent SDK through Mastra.',
+	sdkOptions: {
+		apiKey: process.env.CURSOR_API_KEY,
+		model: {
+			id: '__AI_SDK_OPENAI_MODEL_BASE__',
+		},
+		local: {
+			cwd: process.cwd(),
+		},
+	},
 })
 ```
 
@@ -145,20 +145,20 @@ import { Agent as CursorAgent } from '@cursor/sdk'
 import { CursorSDKAgent } from '@mastra/cursor'
 
 const cursorAgent = CursorAgent.create({
-  apiKey: process.env.CURSOR_API_KEY,
-  model: {
-    id: '__AI_SDK_OPENAI_MODEL_BASE__',
-  },
-  local: {
-    cwd: process.cwd(),
-  },
+	apiKey: process.env.CURSOR_API_KEY,
+	model: {
+		id: '__AI_SDK_OPENAI_MODEL_BASE__',
+	},
+	local: {
+		cwd: process.cwd(),
+	},
 })
 
 export const cursorSDKAgent = new CursorSDKAgent({
-  id: 'cursor-sdk-agent',
-  name: 'Cursor SDK Agent',
-  description: 'Use Cursor Agent SDK through Mastra.',
-  agent: cursorAgent,
+	id: 'cursor-sdk-agent',
+	name: 'Cursor SDK Agent',
+	description: 'Use Cursor Agent SDK through Mastra.',
+	agent: cursorAgent,
 })
 ```
 
@@ -171,19 +171,19 @@ import { CursorSDKAgent } from '@mastra/cursor'
 import { mcpServers } from '../mcp/cursor'
 
 export const cursorSDKAgent = new CursorSDKAgent({
-  id: 'cursor-sdk-agent',
-  name: 'Cursor SDK Agent',
-  description: 'Use Cursor Agent SDK through Mastra.',
-  sdkOptions: {
-    apiKey: process.env.CURSOR_API_KEY,
-    model: {
-      id: '__AI_SDK_OPENAI_MODEL_BASE__',
-    },
-    local: {
-      cwd: process.cwd(),
-    },
-    mcpServers,
-  },
+	id: 'cursor-sdk-agent',
+	name: 'Cursor SDK Agent',
+	description: 'Use Cursor Agent SDK through Mastra.',
+	sdkOptions: {
+		apiKey: process.env.CURSOR_API_KEY,
+		model: {
+			id: '__AI_SDK_OPENAI_MODEL_BASE__',
+		},
+		local: {
+			cwd: process.cwd(),
+		},
+		mcpServers,
+	},
 })
 ```
 
@@ -213,14 +213,14 @@ Configure OpenAI Agents SDK through `sdkOptions`. `OpenAISDKAgent` creates the O
 import { OpenAISDKAgent } from '@mastra/openai'
 
 export const openaiSDKAgent = new OpenAISDKAgent({
-  id: 'openai-sdk-agent',
-  name: 'OpenAI SDK Agent',
-  description: 'Use OpenAI Agents SDK through Mastra.',
-  sdkOptions: {
-    name: 'Repository assistant',
-    instructions: 'Answer clearly and cite the relevant files.',
-    model: '__AI_SDK_OPENAI_MODEL_BASE__',
-  },
+	id: 'openai-sdk-agent',
+	name: 'OpenAI SDK Agent',
+	description: 'Use OpenAI Agents SDK through Mastra.',
+	sdkOptions: {
+		name: 'Repository assistant',
+		instructions: 'Answer clearly and cite the relevant files.',
+		model: '__AI_SDK_OPENAI_MODEL_BASE__',
+	},
 })
 ```
 
@@ -233,16 +233,16 @@ import { Agent as OpenAIAgent } from '@openai/agents'
 import { OpenAISDKAgent } from '@mastra/openai'
 
 const sdkAgent = new OpenAIAgent({
-  name: 'Repository assistant',
-  instructions: 'Answer clearly and cite the relevant files.',
-  model: '__AI_SDK_OPENAI_MODEL_BASE__',
+	name: 'Repository assistant',
+	instructions: 'Answer clearly and cite the relevant files.',
+	model: '__AI_SDK_OPENAI_MODEL_BASE__',
 })
 
 export const openaiSDKAgent = new OpenAISDKAgent({
-  id: 'openai-sdk-agent',
-  name: 'OpenAI SDK Agent',
-  description: 'Use OpenAI Agents SDK through Mastra.',
-  agent: sdkAgent,
+	id: 'openai-sdk-agent',
+	name: 'OpenAI SDK Agent',
+	description: 'Use OpenAI Agents SDK through Mastra.',
+	agent: sdkAgent,
 })
 ```
 
@@ -256,25 +256,25 @@ import { OpenAISDKAgent } from '@mastra/openai'
 import { z } from 'zod'
 
 const getTemperature = tool({
-  name: 'get_temperature',
-  description: 'Get the current temperature for a city.',
-  parameters: z.object({
-    city: z.string(),
-  }),
-  execute: async ({ city }) => {
-    return `${city}: 27 C`
-  },
+	name: 'get_temperature',
+	description: 'Get the current temperature for a city.',
+	parameters: z.object({
+		city: z.string(),
+	}),
+	execute: async ({ city }) => {
+		return `${city}: 27 C`
+	},
 })
 
 export const openaiSDKAgent = new OpenAISDKAgent({
-  id: 'openai-sdk-agent',
-  name: 'OpenAI SDK Agent',
-  description: 'Use OpenAI Agents SDK through Mastra.',
-  sdkOptions: {
-    name: 'Weather assistant',
-    model: '__AI_SDK_OPENAI_MODEL_BASE__',
-    tools: [getTemperature],
-  },
+	id: 'openai-sdk-agent',
+	name: 'OpenAI SDK Agent',
+	description: 'Use OpenAI Agents SDK through Mastra.',
+	sdkOptions: {
+		name: 'Weather assistant',
+		model: '__AI_SDK_OPENAI_MODEL_BASE__',
+		tools: [getTemperature],
+	},
 })
 ```
 
@@ -289,11 +289,11 @@ import { cursorSDKAgent } from './agents/cursor-sdk-agent'
 import { openaiSDKAgent } from './agents/openai-sdk-agent'
 
 export const mastra = new Mastra({
-  agents: {
-    claudeSDKAgent,
-    cursorSDKAgent,
-    openaiSDKAgent,
-  },
+	agents: {
+		claudeSDKAgent,
+		cursorSDKAgent,
+		openaiSDKAgent,
+	},
 })
 ```
 
@@ -306,7 +306,7 @@ const agent = mastra.getAgentById('cursor-sdk-agent')
 const stream = await agent.stream('Inspect this project and describe the test setup.')
 
 for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk)
+	process.stdout.write(chunk)
 }
 ```
 
@@ -318,8 +318,8 @@ Claude SDK agents can resume a known session with `sessionId`:
 
 ```typescript title="src/mastra/resume-claude.ts"
 const result = await claudeSDKAgent.resumeGenerate({
-  message: 'Continue the previous task.',
-  sessionId: 'claude-session-id',
+	message: 'Continue the previous task.',
+	sessionId: 'claude-session-id',
 })
 
 console.log(result.text)
@@ -329,12 +329,12 @@ OpenAI SDK agents can resume with a previous response, conversation, or session:
 
 ```typescript title="src/mastra/resume-openai.ts"
 const stream = await openaiSDKAgent.resumeStream({
-  message: 'Continue the previous task.',
-  previousResponseId: 'resp_123',
+	message: 'Continue the previous task.',
+	previousResponseId: 'resp_123',
 })
 
 for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk)
+	process.stdout.write(chunk)
 }
 ```
 
@@ -348,11 +348,11 @@ Claude and OpenAI SDK agents support Mastra `structuredOutput` through their pro
 import { z } from 'zod'
 
 const result = await openaiSDKAgent.generate<{ summary: string }>('Summarize this project.', {
-  structuredOutput: {
-    schema: z.object({
-      summary: z.string(),
-    }),
-  },
+	structuredOutput: {
+		schema: z.object({
+			summary: z.string(),
+		}),
+	},
 })
 
 console.log(result.object.summary)

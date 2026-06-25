@@ -29,7 +29,7 @@ Track cumulative cost per resource (default scope):
 import { CostGuardProcessor } from '@mastra/core/processors'
 
 const costGuard = new CostGuardProcessor({
-  maxCost: 1.0,
+	maxCost: 1.0,
 })
 ```
 
@@ -39,9 +39,9 @@ Track cumulative cost per thread with a 24-hour window:
 import { CostGuardProcessor } from '@mastra/core/processors'
 
 const costGuard = new CostGuardProcessor({
-  maxCost: 5.0,
-  scope: 'thread',
-  window: '24h',
+	maxCost: 5.0,
+	scope: 'thread',
+	window: '24h',
 })
 ```
 
@@ -52,21 +52,21 @@ import { Agent } from '@mastra/core/agent'
 import { CostGuardProcessor } from '@mastra/core/processors'
 
 const costGuard = new CostGuardProcessor({
-  maxCost: 5.0,
-  scope: 'resource',
-  window: '30d',
+	maxCost: 5.0,
+	scope: 'resource',
+	window: '30d',
 })
 
 costGuard.onViolation = ({ detail }) => {
-  console.log(`Cost exceeded for ${detail.scopeKey}: $${detail.usage}/$${detail.limit}`)
+	console.log(`Cost exceeded for ${detail.scopeKey}: $${detail.usage}/$${detail.limit}`)
 }
 
 const agent = new Agent({
-  name: 'my-agent',
-  model: '__GATEWAY_OPENAI_MODEL_NANO__',
-  processors: {
-    input: [costGuard],
-  },
+	name: 'my-agent',
+	model: '__GATEWAY_OPENAI_MODEL_NANO__',
+	processors: {
+		input: [costGuard],
+	},
 })
 ```
 
@@ -74,44 +74,44 @@ const agent = new Agent({
 
 <PropertiesTable
   content={[
-  {
-    name: 'maxCost',
-    type: 'number',
-    description:
-      'Maximum estimated cost allowed (e.g. 0.50 for $0.50 USD). Must be a positive number. Uses cost data from observability metrics. This is an approximate limit due to metric persistence delays.',
-    isOptional: false,
-  },
-  {
-    name: 'scope',
-    type: "'run' | 'resource' | 'thread'",
-    description:
-      "Scope for cost tracking. 'run' tracks cost within the current agent run via trace ID. 'resource' tracks cumulative cost per resourceId across runs (default). 'thread' tracks cumulative cost per threadId across runs. All scopes require observability storage with getMetricAggregate support.",
-    isOptional: true,
-    defaultValue: "'resource'",
-  },
-  {
-    name: 'window',
-    type: "'1h' | '6h' | '24h' | '7d' | '30d' | '365d'",
-    description:
-      "Time window for cost aggregation when using 'resource' or 'thread' scope. Only applicable to non-run scopes.",
-    isOptional: true,
-    defaultValue: "'7d'",
-  },
-  {
-    name: 'strategy',
-    type: "'block' | 'warn'",
-    description:
-      "Strategy when the cost limit is exceeded. 'block' aborts with a TripWire error. 'warn' logs a warning but allows the step to proceed.",
-    isOptional: true,
-    defaultValue: "'block'",
-  },
-  {
-    name: 'message',
-    type: 'string',
-    description: 'Custom message template for the abort reason. Supports {usage} and {limit} placeholders.',
-    isOptional: true,
-    defaultValue: "'Cost guard: cost limit exceeded ({usage}/{limit})'",
-  },
+	{
+		name: 'maxCost',
+		type: 'number',
+		description:
+			'Maximum estimated cost allowed (e.g. 0.50 for $0.50 USD). Must be a positive number. Uses cost data from observability metrics. This is an approximate limit due to metric persistence delays.',
+		isOptional: false,
+	},
+	{
+		name: 'scope',
+		type: "'run' | 'resource' | 'thread'",
+		description:
+			"Scope for cost tracking. 'run' tracks cost within the current agent run via trace ID. 'resource' tracks cumulative cost per resourceId across runs (default). 'thread' tracks cumulative cost per threadId across runs. All scopes require observability storage with getMetricAggregate support.",
+		isOptional: true,
+		defaultValue: "'resource'",
+	},
+	{
+		name: 'window',
+		type: "'1h' | '6h' | '24h' | '7d' | '30d' | '365d'",
+		description:
+			"Time window for cost aggregation when using 'resource' or 'thread' scope. Only applicable to non-run scopes.",
+		isOptional: true,
+		defaultValue: "'7d'",
+	},
+	{
+		name: 'strategy',
+		type: "'block' | 'warn'",
+		description:
+			"Strategy when the cost limit is exceeded. 'block' aborts with a TripWire error. 'warn' logs a warning but allows the step to proceed.",
+		isOptional: true,
+		defaultValue: "'block'",
+	},
+	{
+		name: 'message',
+		type: 'string',
+		description: 'Custom message template for the abort reason. Supports {usage} and {limit} placeholders.',
+		isOptional: true,
+		defaultValue: "'Cost guard: cost limit exceeded ({usage}/{limit})'",
+	},
 ]}
 />
 
@@ -119,32 +119,32 @@ const agent = new Agent({
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: "'cost-guard'",
-    description: 'Processor identifier.',
-    isOptional: false,
-  },
-  {
-    name: 'name',
-    type: "'Cost Guard'",
-    description: 'Processor display name.',
-    isOptional: false,
-  },
-  {
-    name: 'onViolation',
-    type: '(violation: ProcessorViolation) => void | Promise<void>',
-    description:
-      'Callback invoked when a cost violation is detected, regardless of strategy. Part of the generalized Processor interface. Use for side effects like alerting, logging to external systems, or emailing users. Errors thrown by this callback are silently caught.',
-    isOptional: true,
-  },
-  {
-    name: 'processInputStep',
-    type: '(args: ProcessInputStepArgs) => Promise<void>',
-    description:
-      'Checks cumulative estimated cost against maxCost before each LLM call. Queries observability storage for cost data: run scope filters by trace ID, resource/thread scopes filter by their respective IDs with a time window. Calls abort() when the limit is exceeded (block strategy) or logs a warning (warn strategy). Cost checks are approximate due to metric persistence delays.',
-    isOptional: false,
-  },
+	{
+		name: 'id',
+		type: "'cost-guard'",
+		description: 'Processor identifier.',
+		isOptional: false,
+	},
+	{
+		name: 'name',
+		type: "'Cost Guard'",
+		description: 'Processor display name.',
+		isOptional: false,
+	},
+	{
+		name: 'onViolation',
+		type: '(violation: ProcessorViolation) => void | Promise<void>',
+		description:
+			'Callback invoked when a cost violation is detected, regardless of strategy. Part of the generalized Processor interface. Use for side effects like alerting, logging to external systems, or emailing users. Errors thrown by this callback are silently caught.',
+		isOptional: true,
+	},
+	{
+		name: 'processInputStep',
+		type: '(args: ProcessInputStepArgs) => Promise<void>',
+		description:
+			'Checks cumulative estimated cost against maxCost before each LLM call. Queries observability storage for cost data: run scope filters by trace ID, resource/thread scopes filter by their respective IDs with a time window. Calls abort() when the limit is exceeded (block strategy) or logs a warning (warn strategy). Cost checks are approximate due to metric persistence delays.',
+		isOptional: false,
+	},
 ]}
 />
 

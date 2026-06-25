@@ -18,9 +18,9 @@ import { MastraEditor } from '@mastra/editor'
 import { e2bSandboxProvider } from '@mastra/e2b'
 
 new MastraEditor({
-  sandboxes: {
-    [e2bSandboxProvider.id]: e2bSandboxProvider,
-  },
+	sandboxes: {
+		[e2bSandboxProvider.id]: e2bSandboxProvider,
+	},
 })
 ```
 
@@ -28,35 +28,35 @@ new MastraEditor({
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description:
-      'Unique provider identifier (for example, `"local"`, `"e2b"`). Must match `StorageSandboxConfig.provider` on every stored workspace that uses this provider.',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: 'Human-readable name for UI display.',
-  },
-  {
-    name: 'description',
-    type: 'string',
-    description: 'Short description shown in the workspace sandbox picker.',
-    isOptional: true,
-  },
-  {
-    name: 'configSchema',
-    type: 'Record<string, unknown>',
-    description: 'JSON Schema describing provider-specific configuration. Used by the UI to render config forms.',
-    isOptional: true,
-  },
-  {
-    name: 'createSandbox',
-    type: '(config: TConfig) => WorkspaceSandbox | Promise<WorkspaceSandbox>',
-    description:
-      'Create a runtime `WorkspaceSandbox` instance from the stored config. Called at workspace hydration time.',
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description:
+			'Unique provider identifier (for example, `"local"`, `"e2b"`). Must match `StorageSandboxConfig.provider` on every stored workspace that uses this provider.',
+	},
+	{
+		name: 'name',
+		type: 'string',
+		description: 'Human-readable name for UI display.',
+	},
+	{
+		name: 'description',
+		type: 'string',
+		description: 'Short description shown in the workspace sandbox picker.',
+		isOptional: true,
+	},
+	{
+		name: 'configSchema',
+		type: 'Record<string, unknown>',
+		description: 'JSON Schema describing provider-specific configuration. Used by the UI to render config forms.',
+		isOptional: true,
+	},
+	{
+		name: 'createSandbox',
+		type: '(config: TConfig) => WorkspaceSandbox | Promise<WorkspaceSandbox>',
+		description:
+			'Create a runtime `WorkspaceSandbox` instance from the stored config. Called at workspace hydration time.',
+	},
 ]}
 />
 
@@ -66,19 +66,19 @@ new MastraEditor({
 import type { SandboxProvider, WorkspaceSandbox } from '@mastra/core/editor'
 
 export const mySandboxProvider: SandboxProvider<{ apiKey: string }> = {
-  id: 'my-sandbox',
-  name: 'My Sandbox',
-  description: 'Cloud sandbox for command execution.',
-  configSchema: {
-    type: 'object',
-    required: ['apiKey'],
-    properties: {
-      apiKey: { type: 'string' },
-    },
-  },
-  async createSandbox(config): Promise<WorkspaceSandbox> {
-    return createMySandbox({ apiKey: config.apiKey })
-  },
+	id: 'my-sandbox',
+	name: 'My Sandbox',
+	description: 'Cloud sandbox for command execution.',
+	configSchema: {
+		type: 'object',
+		required: ['apiKey'],
+		properties: {
+			apiKey: { type: 'string' },
+		},
+	},
+	async createSandbox(config): Promise<WorkspaceSandbox> {
+		return createMySandbox({ apiKey: config.apiKey })
+	},
 }
 ```
 

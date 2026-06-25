@@ -58,7 +58,7 @@ Start the action and wait for completion. Returns the final `AgentBuilderActionR
 
 ```typescript
 const result = await action.startAsync({
-  inputData: { agentName: 'support-bot' },
+	inputData: { agentName: 'support-bot' },
 })
 ```
 
@@ -87,7 +87,7 @@ const { runId } = await action.createRun()
 const stream = await action.stream({ inputData }, runId)
 
 for await (const event of stream) {
-  console.log(event.type, event.payload)
+	console.log(event.type, event.payload)
 }
 ```
 
@@ -113,9 +113,9 @@ Resume a suspended step and stream subsequent events.
 
 ```typescript
 const stream = await action.resumeStream({
-  runId,
-  step: 'review',
-  resumeData: { approved: true },
+	runId,
+	step: 'review',
+	resumeData: { approved: true },
 })
 ```
 
@@ -151,8 +151,8 @@ Fetch a specific run by ID. Use `fields` to limit the returned payload and `with
 
 ```typescript
 const run = await action.runById(runId, {
-  fields: ['result', 'steps'],
-  withNestedWorkflows: false,
+	fields: ['result', 'steps'],
+	withNestedWorkflows: false,
 })
 ```
 

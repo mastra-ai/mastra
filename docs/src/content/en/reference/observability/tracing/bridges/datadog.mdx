@@ -29,14 +29,14 @@ new DatadogBridge(config?: DatadogBridgeConfig)
 
 ```typescript
 interface DatadogBridgeConfig extends BaseExporterConfig {
-  apiKey?: string
-  mlApp?: string
-  site?: string
-  service?: string
-  env?: string
-  agentless?: boolean
-  integrationsEnabled?: boolean
-  requestContextKeys?: string[]
+	apiKey?: string
+	mlApp?: string
+	site?: string
+	service?: string
+	env?: string
+	agentless?: boolean
+	integrationsEnabled?: boolean
+	requestContextKeys?: string[]
 }
 ```
 
@@ -47,59 +47,59 @@ Extends `BaseExporterConfig`, which includes:
 
 <PropertiesTable
   props={[
-  {
-    name: 'mlApp',
-    type: 'string',
-    description:
-      'ML application name for grouping LLM Observability traces. Required if DD_LLMOBS_ML_APP is not set; otherwise falls back to the env var.',
-    required: false,
-  },
-  {
-    name: 'apiKey',
-    type: 'string',
-    description: 'Datadog API key. Required only when agentless mode is enabled. Falls back to DD_API_KEY env var.',
-    required: false,
-  },
-  {
-    name: 'site',
-    type: 'string',
-    description:
-      "Datadog site (e.g., 'datadoghq.com', 'datadoghq.eu', 'us3.datadoghq.com'). Falls back to DD_SITE env var. Default: 'datadoghq.com'.",
-    required: false,
-  },
-  {
-    name: 'service',
-    type: 'string',
-    description: 'Service name for the application. Defaults to mlApp value.',
-    required: false,
-  },
-  {
-    name: 'env',
-    type: 'string',
-    description: "Environment name (e.g., 'production', 'staging'). Falls back to DD_ENV env var.",
-    required: false,
-  },
-  {
-    name: 'agentless',
-    type: 'boolean',
-    description:
-      'Use direct HTTPS intake (true) or local Datadog Agent (false). Default: false. Most bridge users should leave this as false because dd-trace APM data always routes through the agent.',
-    required: false,
-  },
-  {
-    name: 'integrationsEnabled',
-    type: 'boolean',
-    description:
-      'Enable dd-trace automatic integrations (HTTP, database, etc.). Default: true. The bridge enables this by default because APM context propagation depends on auto-instrumentation.',
-    required: false,
-  },
-  {
-    name: 'requestContextKeys',
-    type: 'string[]',
-    description:
-      'Keys from request context or span attributes to promote into flat, searchable LLM Observability tags (e.g., tenantId, agentId). Promoted keys are removed from annotations.metadata.',
-    required: false,
-  },
+	{
+		name: 'mlApp',
+		type: 'string',
+		description:
+			'ML application name for grouping LLM Observability traces. Required if DD_LLMOBS_ML_APP is not set; otherwise falls back to the env var.',
+		required: false,
+	},
+	{
+		name: 'apiKey',
+		type: 'string',
+		description: 'Datadog API key. Required only when agentless mode is enabled. Falls back to DD_API_KEY env var.',
+		required: false,
+	},
+	{
+		name: 'site',
+		type: 'string',
+		description:
+			"Datadog site (e.g., 'datadoghq.com', 'datadoghq.eu', 'us3.datadoghq.com'). Falls back to DD_SITE env var. Default: 'datadoghq.com'.",
+		required: false,
+	},
+	{
+		name: 'service',
+		type: 'string',
+		description: 'Service name for the application. Defaults to mlApp value.',
+		required: false,
+	},
+	{
+		name: 'env',
+		type: 'string',
+		description: "Environment name (e.g., 'production', 'staging'). Falls back to DD_ENV env var.",
+		required: false,
+	},
+	{
+		name: 'agentless',
+		type: 'boolean',
+		description:
+			'Use direct HTTPS intake (true) or local Datadog Agent (false). Default: false. Most bridge users should leave this as false because dd-trace APM data always routes through the agent.',
+		required: false,
+	},
+	{
+		name: 'integrationsEnabled',
+		type: 'boolean',
+		description:
+			'Enable dd-trace automatic integrations (HTTP, database, etc.). Default: true. The bridge enables this by default because APM context propagation depends on auto-instrumentation.',
+		required: false,
+	},
+	{
+		name: 'requestContextKeys',
+		type: 'string[]',
+		description:
+			'Keys from request context or span attributes to promote into flat, searchable LLM Observability tags (e.g., tenantId, agentId). Promoted keys are removed from annotations.metadata.',
+		required: false,
+	},
 ]}
 />
 
@@ -125,18 +125,18 @@ Executes an async function within the dd-trace context of a Mastra span. dd-trac
 
 <PropertiesTable
   props={[
-  {
-    name: 'spanId',
-    type: 'string',
-    description: 'The ID of the Mastra span to use as context',
-    required: true,
-  },
-  {
-    name: 'fn',
-    type: '() => Promise<T>',
-    description: 'The async function to execute within the span context',
-    required: true,
-  },
+	{
+		name: 'spanId',
+		type: 'string',
+		description: 'The ID of the Mastra span to use as context',
+		required: true,
+	},
+	{
+		name: 'fn',
+		type: '() => Promise<T>',
+		description: 'The async function to execute within the span context',
+		required: true,
+	},
 ]}
 />
 
@@ -152,18 +152,18 @@ Executes a synchronous function within the dd-trace context of a Mastra span.
 
 <PropertiesTable
   props={[
-  {
-    name: 'spanId',
-    type: 'string',
-    description: 'The ID of the Mastra span to use as context',
-    required: true,
-  },
-  {
-    name: 'fn',
-    type: '() => T',
-    description: 'The synchronous function to execute within the span context',
-    required: true,
-  },
+	{
+		name: 'spanId',
+		type: 'string',
+		description: 'The ID of the Mastra span to use as context',
+		required: true,
+	},
+	{
+		name: 'fn',
+		type: '() => T',
+		description: 'The synchronous function to execute within the span context',
+		required: true,
+	},
 ]}
 />
 
@@ -193,8 +193,8 @@ Force-finishes any APM spans that weren't properly closed, flushes pending LLM O
 import tracer from 'dd-trace'
 
 tracer.init({
-  service: process.env.DD_SERVICE || 'my-mastra-app',
-  env: process.env.DD_ENV || 'production',
+	service: process.env.DD_SERVICE || 'my-mastra-app',
+	env: process.env.DD_ENV || 'production',
 })
 
 import { Mastra } from '@mastra/core'
@@ -202,17 +202,17 @@ import { Observability } from '@mastra/observability'
 import { DatadogBridge } from '@mastra/datadog'
 
 const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'my-mastra-app',
-        bridge: new DatadogBridge({
-          mlApp: process.env.DD_LLMOBS_ML_APP!,
-        }),
-      },
-    },
-  }),
-  agents: { myAgent },
+	observability: new Observability({
+		configs: {
+			default: {
+				serviceName: 'my-mastra-app',
+				bridge: new DatadogBridge({
+					mlApp: process.env.DD_LLMOBS_ML_APP!,
+				}),
+			},
+		},
+	}),
+	agents: { myAgent },
 })
 ```
 
@@ -222,9 +222,9 @@ If you don't have a local Datadog Agent and only want LLM Observability data, en
 
 ```typescript
 new DatadogBridge({
-  mlApp: process.env.DD_LLMOBS_ML_APP!,
-  apiKey: process.env.DD_API_KEY!,
-  agentless: true,
+	mlApp: process.env.DD_LLMOBS_ML_APP!,
+	apiKey: process.env.DD_API_KEY!,
+	agentless: true,
 })
 ```
 
@@ -240,19 +240,19 @@ import { Observability, MastraStorageExporter } from '@mastra/observability'
 import { DatadogBridge } from '@mastra/datadog'
 
 const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'my-mastra-app',
-        bridge: new DatadogBridge({
-          mlApp: process.env.DD_LLMOBS_ML_APP!,
-        }),
-        exporters: [
-          new MastraStorageExporter(), // Studio access
-        ],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			default: {
+				serviceName: 'my-mastra-app',
+				bridge: new DatadogBridge({
+					mlApp: process.env.DD_LLMOBS_ML_APP!,
+				}),
+				exporters: [
+					new MastraStorageExporter(), // Studio access
+				],
+			},
+		},
+	}),
 })
 ```
 
@@ -286,9 +286,9 @@ Mastra span types are mapped to Datadog LLM Observability span kinds:
 
 ```typescript
 const result = await agent.generate('Hello', {
-  tracingOptions: {
-    tags: ['production', 'instance_name:career-scout-api'],
-  },
+	tracingOptions: {
+		tags: ['production', 'instance_name:career-scout-api'],
+	},
 })
 ```
 
@@ -296,8 +296,8 @@ This produces:
 
 ```json
 {
-  "production": true,
-  "instance_name": "career-scout-api"
+	"production": true,
+	"instance_name": "career-scout-api"
 }
 ```
 

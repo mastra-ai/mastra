@@ -4,24 +4,24 @@ Now, let's update your MCP configuration in `src/mastra/agents/index.ts` to incl
 
 ```typescript
 const mcp = new MCPClient({
-  servers: {
-    zapier: {
-      url: new URL(process.env.ZAPIER_MCP_URL || ''),
-      requestInit: {
-        headers: {
-          Authorization: `Bearer ${process.env.ZAPIER_MCP_API_KEY}`,
-        },
-      },
-    },
-    github: {
-      url: new URL('https://api.githubcopilot.com/mcp/'),
-      requestInit: {
-        headers: {
-          Authorization: `Bearer ${process.env.GITHUB_PERSONAL_ACCESS_TOKEN}`,
-        },
-      },
-    },
-  },
+	servers: {
+		zapier: {
+			url: new URL(process.env.ZAPIER_MCP_URL || ''),
+			requestInit: {
+				headers: {
+					Authorization: `Bearer ${process.env.ZAPIER_MCP_API_KEY}`,
+				},
+			},
+		},
+		github: {
+			url: new URL('https://api.githubcopilot.com/mcp/'),
+			requestInit: {
+				headers: {
+					Authorization: `Bearer ${process.env.GITHUB_PERSONAL_ACCESS_TOKEN}`,
+				},
+			},
+		},
+	},
 })
 ```
 

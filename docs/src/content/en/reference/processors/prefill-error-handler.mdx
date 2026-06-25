@@ -31,10 +31,10 @@ import { Agent } from '@mastra/core/agent'
 import { PrefillErrorHandler } from '@mastra/core/processors'
 
 export const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant.',
-  model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
-  errorProcessors: [new PrefillErrorHandler()],
+	name: 'my-agent',
+	instructions: 'You are a helpful assistant.',
+	model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
+	errorProcessors: [new PrefillErrorHandler()],
 })
 ```
 
@@ -45,17 +45,17 @@ import { Agent } from '@mastra/core/agent'
 import type { Processor } from '@mastra/core/processors'
 
 const customErrorHandler: Processor = {
-  id: 'custom-prefill-error-handler',
-  processAPIError({ error, messageList, retryCount }) {
-    // Your custom logic here
-  },
+	id: 'custom-prefill-error-handler',
+	processAPIError({ error, messageList, retryCount }) {
+		// Your custom logic here
+	},
 }
 
 export const agent = new Agent({
-  name: 'my-agent',
-  instructions: 'You are a helpful assistant.',
-  model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
-  errorProcessors: [customErrorHandler],
+	name: 'my-agent',
+	instructions: 'You are a helpful assistant.',
+	model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
+	errorProcessors: [customErrorHandler],
 })
 ```
 
@@ -67,25 +67,25 @@ The `PrefillErrorHandler` takes no constructor parameters.
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: "'prefill-error-handler'",
-    description: 'Processor identifier.',
-    isOptional: false,
-  },
-  {
-    name: 'name',
-    type: "'Prefill Error Handler'",
-    description: 'Processor display name.',
-    isOptional: false,
-  },
-  {
-    name: 'processAPIError',
-    type: '(args: ProcessAPIErrorArgs) => ProcessAPIErrorResult | void',
-    description:
-      'Handles known assistant-prefill errors by sending a hidden system reminder signal and signaling retry. Only triggers on the first retry attempt.',
-    isOptional: false,
-  },
+	{
+		name: 'id',
+		type: "'prefill-error-handler'",
+		description: 'Processor identifier.',
+		isOptional: false,
+	},
+	{
+		name: 'name',
+		type: "'Prefill Error Handler'",
+		description: 'Processor display name.',
+		isOptional: false,
+	},
+	{
+		name: 'processAPIError',
+		type: '(args: ProcessAPIErrorArgs) => ProcessAPIErrorResult | void',
+		description:
+			'Handles known assistant-prefill errors by sending a hidden system reminder signal and signaling retry. Only triggers on the first retry attempt.',
+		isOptional: false,
+	},
 ]}
 />
 

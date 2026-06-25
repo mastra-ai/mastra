@@ -43,17 +43,17 @@ import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace
 
 // highlight-start
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: resolve(import.meta.dirname, '../../workspace') }),
-  sandbox: new LocalSandbox({ workingDirectory: resolve(import.meta.dirname, '../../workspace') }),
-  skills: ['skills'],
-  bm25: true,
-  autoIndexPaths: ['docs', 'src'],
+	filesystem: new LocalFilesystem({ basePath: resolve(import.meta.dirname, '../../workspace') }),
+	sandbox: new LocalSandbox({ workingDirectory: resolve(import.meta.dirname, '../../workspace') }),
+	skills: ['skills'],
+	bm25: true,
+	autoIndexPaths: ['docs', 'src'],
 })
 // highlight-end
 
 export const mastra = new Mastra({
-  // highlight-next-line
-  workspace,
+	// highlight-next-line
+	workspace,
 })
 ```
 
@@ -72,15 +72,15 @@ Get started by creating a `workspace/src/utils/string-helpers.ts` file with some
 
 ```typescript title="workspace/src/utils/string-helpers.ts"
 export function capitalize(str: string): string {
-  if (!str) return str
-  return str.charAt(0).toUpperCase() + str.slice(1)
+	if (!str) return str
+	return str.charAt(0).toUpperCase() + str.slice(1)
 }
 
 export function slugify(str: string): string {
-  return str
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, '')
-    .replace(/\s+/g, '-')
+	return str
+		.toLowerCase()
+		.replace(/[^\w\s-]/g, '')
+		.replace(/\s+/g, '-')
 }
 ```
 
@@ -89,17 +89,17 @@ import { describe, it, expect } from 'vitest'
 import { capitalize, slugify } from '../src/utils/string-helpers'
 
 describe('String Helpers', () => {
-  describe('capitalize', () => {
-    it('capitalizes first letter', () => {
-      expect(capitalize('hello')).toBe('Hello')
-    })
-  })
+	describe('capitalize', () => {
+		it('capitalizes first letter', () => {
+			expect(capitalize('hello')).toBe('Hello')
+		})
+	})
 
-  describe('slugify', () => {
-    it('converts to lowercase and replaces spaces', () => {
-      expect(slugify('Hello World')).toBe('hello-world')
-    })
-  })
+	describe('slugify', () => {
+		it('converts to lowercase and replaces spaces', () => {
+			expect(slugify('Hello World')).toBe('hello-world')
+		})
+	})
 })
 ```
 
@@ -142,14 +142,14 @@ Create a reference file at `workspace/skills/coding-standards/references/testing
 
 ```typescript
 it('descriptive test name', () => {
-  // Arrange: Set up test data
-  const input = 'test'
+	// Arrange: Set up test data
+	const input = 'test'
 
-  // Act: Execute the function
-  const result = doSomething(input)
+	// Act: Execute the function
+	const result = doSomething(input)
 
-  // Assert: Verify the result
-  expect(result).toBe('expected')
+	// Assert: Verify the result
+	expect(result).toBe('expected')
 })
 ```
 
@@ -170,9 +170,9 @@ Create a new file `src/mastra/agents/dev-assistant.ts` and define the agent:
 import { Agent } from '@mastra/core/agent'
 
 export const devAssistant = new Agent({
-  id: 'dev-assistant',
-  name: 'Dev Assistant',
-  instructions: `You are a development assistant.
+	id: 'dev-assistant',
+	name: 'Dev Assistant',
+	instructions: `You are a development assistant.
 
 When adding features:
 1. Activate 'coding-standards' skill
@@ -185,7 +185,7 @@ When adding features:
 For every new feature: Write code → Write tests → Run tests → Update docs
 
 Always explain your reasoning and steps.`,
-  model: '__GATEWAY_OPENAI_MODEL__',
+	model: '__GATEWAY_OPENAI_MODEL__',
 })
 ```
 
@@ -199,17 +199,17 @@ import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace
 import { devAssistant } from './agents/dev-assistant'
 
 const workspace = new Workspace({
-  filesystem: new LocalFilesystem({ basePath: resolve(import.meta.dirname, '../../workspace') }),
-  sandbox: new LocalSandbox({ workingDirectory: resolve(import.meta.dirname, '../../workspace') }),
-  skills: ['skills'],
-  bm25: true,
-  autoIndexPaths: ['docs', 'src'],
+	filesystem: new LocalFilesystem({ basePath: resolve(import.meta.dirname, '../../workspace') }),
+	sandbox: new LocalSandbox({ workingDirectory: resolve(import.meta.dirname, '../../workspace') }),
+	skills: ['skills'],
+	bm25: true,
+	autoIndexPaths: ['docs', 'src'],
 })
 
 export const mastra = new Mastra({
-  workspace,
-  // highlight-next-line
-  agents: { devAssistant },
+	workspace,
+	// highlight-next-line
+	agents: { devAssistant },
 })
 ```
 
@@ -241,17 +241,17 @@ Since agent responses are non-deterministic, the exact output will vary. However
 
    ```typescript
    describe('truncate', () => {
-     it('truncates long strings', () => {
-       expect(truncate('Hello World', 5)).toBe('He...')
-     })
+   	it('truncates long strings', () => {
+   		expect(truncate('Hello World', 5)).toBe('He...')
+   	})
 
-     it('keeps short strings unchanged', () => {
-       expect(truncate('Hi', 10)).toBe('Hi')
-     })
+   	it('keeps short strings unchanged', () => {
+   		expect(truncate('Hi', 10)).toBe('Hi')
+   	})
 
-     it('handles edge cases', () => {
-       expect(truncate('', 5)).toBe('')
-     })
+   	it('handles edge cases', () => {
+   		expect(truncate('', 5)).toBe('')
+   	})
    })
    ```
 
@@ -259,10 +259,10 @@ Since agent responses are non-deterministic, the exact output will vary. However
 
    ```typescript
    export function truncate(str: string, maxLength: number): string {
-     if (!str || maxLength < 0) return str
-     if (str.length <= maxLength) return str
-     if (maxLength === 0) return '...'
-     return str.slice(0, maxLength - 3) + '...'
+   	if (!str || maxLength < 0) return str
+   	if (str.length <= maxLength) return str
+   	if (maxLength === 0) return '...'
+   	return str.slice(0, maxLength - 3) + '...'
    }
    ```
 

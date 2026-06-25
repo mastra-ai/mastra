@@ -38,8 +38,8 @@ import { Mastra } from '@mastra/core'
 import { NetlifyDeployer } from '@mastra/deployer-netlify'
 
 export const mastra = new Mastra({
-  // highlight-next-line
-  deployer: new NetlifyDeployer(),
+	// highlight-next-line
+	deployer: new NetlifyDeployer(),
 })
 ```
 
@@ -50,9 +50,9 @@ import { Mastra } from '@mastra/core'
 import { NetlifyDeployer } from '@mastra/deployer-netlify'
 
 export const mastra = new Mastra({
-  deployer: new NetlifyDeployer({
-    target: 'edge',
-  }),
+	deployer: new NetlifyDeployer({
+		target: 'edge',
+	}),
 })
 ```
 

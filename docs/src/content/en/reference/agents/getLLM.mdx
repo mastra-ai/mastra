@@ -17,7 +17,7 @@ await agent.getLLM()
 
 ```typescript
 await agent.getLLM({
-  model: '__GATEWAY_OPENAI_MODEL__',
+	model: '__GATEWAY_OPENAI_MODEL__',
 })
 ```
 
@@ -25,34 +25,34 @@ await agent.getLLM({
 
 <PropertiesTable
   content={[
-  {
-    name: 'options',
-    type: '{ requestContext?: RequestContext; model?: MastraModelConfig | DynamicArgument<MastraModelConfig> }',
-    isOptional: true,
-    defaultValue: '{}',
-    description:
-      'Optional configuration object containing request context and an optional request-scoped model override.',
-    properties: [
-      {
-        type: '{ requestContext?: RequestContext; model?: MastraModelConfig | DynamicArgument<MastraModelConfig> }',
-        parameters: [
-          {
-            name: 'requestContext',
-            type: 'RequestContext',
-            isOptional: true,
-            defaultValue: 'new RequestContext()',
-            description: 'Request Context for dependency injection and contextual information.',
-          },
-          {
-            name: 'model',
-            type: 'MastraModelConfig | DynamicArgument<MastraModelConfig>',
-            isOptional: true,
-            description: "Optional request-scoped model override. The agent's configured model is not mutated.",
-          },
-        ],
-      },
-    ],
-  },
+	{
+		name: 'options',
+		type: '{ requestContext?: RequestContext; model?: MastraModelConfig | DynamicArgument<MastraModelConfig> }',
+		isOptional: true,
+		defaultValue: '{}',
+		description:
+			'Optional configuration object containing request context and an optional request-scoped model override.',
+		properties: [
+			{
+				type: '{ requestContext?: RequestContext; model?: MastraModelConfig | DynamicArgument<MastraModelConfig> }',
+				parameters: [
+					{
+						name: 'requestContext',
+						type: 'RequestContext',
+						isOptional: true,
+						defaultValue: 'new RequestContext()',
+						description: 'Request Context for dependency injection and contextual information.',
+					},
+					{
+						name: 'model',
+						type: 'MastraModelConfig | DynamicArgument<MastraModelConfig>',
+						isOptional: true,
+						description: "Optional request-scoped model override. The agent's configured model is not mutated.",
+					},
+				],
+			},
+		],
+	},
 ]}
 />
 
@@ -60,12 +60,12 @@ await agent.getLLM({
 
 <PropertiesTable
   content={[
-  {
-    name: 'llm',
-    type: 'MastraLLMV1 | Promise<MastraLLMV1>',
-    description:
-      'The language model instance configured for the agent, either as a direct instance or a promise that resolves to the LLM.',
-  },
+	{
+		name: 'llm',
+		type: 'MastraLLMV1 | Promise<MastraLLMV1>',
+		description:
+			'The language model instance configured for the agent, either as a direct instance or a promise that resolves to the LLM.',
+	},
 ]}
 />
 
@@ -73,8 +73,8 @@ await agent.getLLM({
 
 ```typescript
 await agent.getLLM({
-  requestContext: new RequestContext(),
-  model: '__GATEWAY_OPENAI_MODEL__',
+	requestContext: new RequestContext(),
+	model: '__GATEWAY_OPENAI_MODEL__',
 })
 ```
 

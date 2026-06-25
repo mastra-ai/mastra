@@ -15,13 +15,13 @@ The `WorkspaceSandbox` interface defines how workspaces execute commands and man
 
 <PropertiesTable
   content={[
-  {
-    name: 'processes',
-    type: 'SandboxProcessManager',
-    description:
-      "Background process manager. If not implemented, process management tools won't be available. See SandboxProcessManager reference.",
-    isOptional: true,
-  },
+	{
+		name: 'processes',
+		type: 'SandboxProcessManager',
+		description:
+			"Background process manager. If not implemented, process management tools won't be available. See SandboxProcessManager reference.",
+		isOptional: true,
+	},
 ]}
 />
 
@@ -66,60 +66,60 @@ const result = await sandbox.executeCommand('npm', ['install', 'lodash'])
 
 <PropertiesTable
   content={[
-  {
-    name: 'command',
-    type: 'string',
-    description: 'Command to execute',
-  },
-  {
-    name: 'args',
-    type: 'string[]',
-    description: 'Command arguments',
-    isOptional: true,
-  },
-  {
-    name: 'options',
-    type: 'Options',
-    description: 'Configuration options.',
-    isOptional: true,
-    properties: [
-      {
-        type: 'Options',
-        parameters: [
-          {
-            name: 'timeout',
-            type: 'number',
-            description: 'Execution timeout in milliseconds',
-            isOptional: true,
-          },
-          {
-            name: 'cwd',
-            type: 'string',
-            description: 'Working directory for the command',
-            isOptional: true,
-          },
-          {
-            name: 'env',
-            type: 'Record<string, string>',
-            description: 'Additional environment variables',
-            isOptional: true,
-          },
-          {
-            name: 'onStdout',
-            type: '(data: string) => void',
-            description: 'Callback for stdout streaming',
-            isOptional: true,
-          },
-          {
-            name: 'onStderr',
-            type: '(data: string) => void',
-            description: 'Callback for stderr streaming',
-            isOptional: true,
-          },
-        ],
-      },
-    ],
-  },
+	{
+		name: 'command',
+		type: 'string',
+		description: 'Command to execute',
+	},
+	{
+		name: 'args',
+		type: 'string[]',
+		description: 'Command arguments',
+		isOptional: true,
+	},
+	{
+		name: 'options',
+		type: 'Options',
+		description: 'Configuration options.',
+		isOptional: true,
+		properties: [
+			{
+				type: 'Options',
+				parameters: [
+					{
+						name: 'timeout',
+						type: 'number',
+						description: 'Execution timeout in milliseconds',
+						isOptional: true,
+					},
+					{
+						name: 'cwd',
+						type: 'string',
+						description: 'Working directory for the command',
+						isOptional: true,
+					},
+					{
+						name: 'env',
+						type: 'Record<string, string>',
+						description: 'Additional environment variables',
+						isOptional: true,
+					},
+					{
+						name: 'onStdout',
+						type: '(data: string) => void',
+						description: 'Callback for stdout streaming',
+						isOptional: true,
+					},
+					{
+						name: 'onStderr',
+						type: '(data: string) => void',
+						description: 'Callback for stderr streaming',
+						isOptional: true,
+					},
+				],
+			},
+		],
+	},
 ]}
 />
 
@@ -145,12 +145,12 @@ const instructions = sandbox.getInstructions?.()
 
 <PropertiesTable
   content={[
-  {
-    name: 'opts.requestContext',
-    type: 'RequestContext',
-    description: 'Forwarded to the `instructions` function if one was provided in the constructor.',
-    isOptional: true,
-  },
+	{
+		name: 'opts.requestContext',
+		type: 'RequestContext',
+		description: 'Forwarded to the `instructions` function if one was provided in the constructor.',
+		isOptional: true,
+	},
 ]}
 />
 

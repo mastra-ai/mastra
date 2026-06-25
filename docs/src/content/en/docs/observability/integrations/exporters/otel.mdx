@@ -58,15 +58,15 @@ All providers support zero-config setup via environment variables. Set the appro
 
 ```typescript title="src/mastra/index.ts"
 new OtelExporter({
-  provider: {
-    custom: {
-      endpoint: `${process.env.MLFLOW_TRACKING_URI}/v1/traces`,
-      protocol: 'http/protobuf',
-      headers: {
-        'x-mlflow-experiment-id': process.env.MLFLOW_EXPERIMENT_ID,
-      },
-    },
-  },
+	provider: {
+		custom: {
+			endpoint: `${process.env.MLFLOW_TRACKING_URI}/v1/traces`,
+			protocol: 'http/protobuf',
+			headers: {
+				'x-mlflow-experiment-id': process.env.MLFLOW_EXPERIMENT_ID,
+			},
+		},
+	},
 })
 ```
 
@@ -93,14 +93,14 @@ import { Observability } from '@mastra/observability'
 import { OtelExporter } from '@mastra/otel-exporter'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      otel: {
-        serviceName: 'my-service',
-        exporters: [new OtelExporter({ provider: { dash0: {} } })],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			otel: {
+				serviceName: 'my-service',
+				exporters: [new OtelExporter({ provider: { dash0: {} } })],
+			},
+		},
+	}),
 })
 ```
 
@@ -112,28 +112,28 @@ import { Observability } from '@mastra/observability'
 import { OtelExporter } from '@mastra/otel-exporter'
 
 export const mastra = new Mastra({
-  observability: new Observability({
-    configs: {
-      otel: {
-        serviceName: 'my-service',
-        exporters: [
-          new OtelExporter({
-            provider: {
-              dash0: {
-                apiKey: process.env.DASH0_API_KEY,
-                endpoint: process.env.DASH0_ENDPOINT, // e.g., 'ingress.us-west-2.aws.dash0.com:4317'
-                dataset: 'production', // Optional dataset name
-              },
-            },
-            resourceAttributes: {
-              // Optional OpenTelemetry Resource Attributes for the trace
-              ['deployment.environment']: 'dev',
-            },
-          }),
-        ],
-      },
-    },
-  }),
+	observability: new Observability({
+		configs: {
+			otel: {
+				serviceName: 'my-service',
+				exporters: [
+					new OtelExporter({
+						provider: {
+							dash0: {
+								apiKey: process.env.DASH0_API_KEY,
+								endpoint: process.env.DASH0_ENDPOINT, // e.g., 'ingress.us-west-2.aws.dash0.com:4317'
+								dataset: 'production', // Optional dataset name
+							},
+						},
+						resourceAttributes: {
+							// Optional OpenTelemetry Resource Attributes for the trace
+							['deployment.environment']: 'dev',
+						},
+					}),
+				],
+			},
+		},
+	}),
 })
 ```
 
@@ -166,13 +166,13 @@ new OtelExporter({ provider: { signoz: {} } })
 
 ```typescript title="src/mastra/index.ts"
 new OtelExporter({
-  provider: {
-    signoz: {
-      apiKey: process.env.SIGNOZ_API_KEY,
-      region: 'us', // 'us' | 'eu' | 'in'
-      // endpoint: 'https://my-signoz.example.com', // For self-hosted
-    },
-  },
+	provider: {
+		signoz: {
+			apiKey: process.env.SIGNOZ_API_KEY,
+			region: 'us', // 'us' | 'eu' | 'in'
+			// endpoint: 'https://my-signoz.example.com', // For self-hosted
+		},
+	},
 })
 ```
 
@@ -198,12 +198,12 @@ new OtelExporter({ provider: { newrelic: {} } })
 
 ```typescript title="src/mastra/index.ts"
 new OtelExporter({
-  provider: {
-    newrelic: {
-      apiKey: process.env.NEW_RELIC_LICENSE_KEY,
-      // endpoint: 'https://otlp.eu01.nr-data.net', // For EU region
-    },
-  },
+	provider: {
+		newrelic: {
+			apiKey: process.env.NEW_RELIC_LICENSE_KEY,
+			// endpoint: 'https://otlp.eu01.nr-data.net', // For EU region
+		},
+	},
 })
 ```
 
@@ -230,12 +230,12 @@ new OtelExporter({ provider: { traceloop: {} } })
 
 ```typescript title="src/mastra/index.ts"
 new OtelExporter({
-  provider: {
-    traceloop: {
-      apiKey: process.env.TRACELOOP_API_KEY,
-      destinationId: 'my-destination', // Optional
-    },
-  },
+	provider: {
+		traceloop: {
+			apiKey: process.env.TRACELOOP_API_KEY,
+			destinationId: 'my-destination', // Optional
+		},
+	},
 })
 ```
 
@@ -261,11 +261,11 @@ new OtelExporter({ provider: { laminar: {} } })
 
 ```typescript title="src/mastra/index.ts"
 new OtelExporter({
-  provider: {
-    laminar: {
-      apiKey: process.env.LMNR_PROJECT_API_KEY,
-    },
-  },
+	provider: {
+		laminar: {
+			apiKey: process.env.LMNR_PROJECT_API_KEY,
+		},
+	},
 })
 ```
 
@@ -290,28 +290,28 @@ import { Observability } from '@mastra/observability'
 import { OtelExporter, type ExportProtocol } from '@mastra/otel-exporter'
 
 export const mastra = new Mastra({
-  // Add grpc-js to externals so it's handled at runtime
-  bundler: {
-    externals: ['@grpc/grpc-js'],
-  },
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'my-service',
-        exporters: [
-          new OtelExporter({
-            provider: {
-              custom: {
-                endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4317',
-                protocol: (process.env.OTEL_EXPORTER_OTLP_PROTOCOL || 'grpc') as ExportProtocol,
-                headers: {},
-              },
-            },
-          }),
-        ],
-      },
-    },
-  }),
+	// Add grpc-js to externals so it's handled at runtime
+	bundler: {
+		externals: ['@grpc/grpc-js'],
+	},
+	observability: new Observability({
+		configs: {
+			default: {
+				serviceName: 'my-service',
+				exporters: [
+					new OtelExporter({
+						provider: {
+							custom: {
+								endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4317',
+								protocol: (process.env.OTEL_EXPORTER_OTLP_PROTOCOL || 'grpc') as ExportProtocol,
+								headers: {},
+							},
+						},
+					}),
+				],
+			},
+		},
+	}),
 })
 ```
 
@@ -349,15 +349,15 @@ For other OTEL-compatible platforms or custom collectors:
 
 ```typescript title="src/mastra/index.ts"
 new OtelExporter({
-  provider: {
-    custom: {
-      endpoint: 'https://your-collector.example.com/v1/traces',
-      protocol: 'http/protobuf', // 'http/json' | 'http/protobuf' | 'grpc'
-      headers: {
-        'x-api-key': process.env.API_KEY,
-      },
-    },
-  },
+	provider: {
+		custom: {
+			endpoint: 'https://your-collector.example.com/v1/traces',
+			protocol: 'http/protobuf', // 'http/json' | 'http/protobuf' | 'grpc'
+			headers: {
+				'x-api-key': process.env.API_KEY,
+			},
+		},
+	},
 })
 ```
 
@@ -374,13 +374,13 @@ To disable a signal, set the `signals` option:
 
 ```typescript title="src/mastra/index.ts"
 new OtelExporter({
-  provider: {
-    /* ... */
-  },
-  signals: {
-    traces: true, // default
-    logs: false, // disable log export
-  },
+	provider: {
+		/* ... */
+	},
+	signals: {
+		traces: true, // default
+		logs: false, // disable log export
+	},
 })
 ```
 
@@ -403,23 +403,23 @@ If the matching log exporter package isn't installed, log export is silently dis
 
 ```typescript
 new OtelExporter({
-  // Provider configuration (required)
-  provider: {
-    // Use one of: dash0, signoz, newrelic, traceloop, laminar, custom
-  },
+	// Provider configuration (required)
+	provider: {
+		// Use one of: dash0, signoz, newrelic, traceloop, laminar, custom
+	},
 
-  // Per-signal toggles. Both default to true.
-  signals: {
-    traces: true,
-    logs: true,
-  },
+	// Per-signal toggles. Both default to true.
+	signals: {
+		traces: true,
+		logs: true,
+	},
 
-  // Export configuration
-  timeout: 30000, // Export timeout in milliseconds
-  batchSize: 100, // Number of spans/logs per batch
+	// Export configuration
+	timeout: 30000, // Export timeout in milliseconds
+	batchSize: 100, // Number of spans/logs per batch
 
-  // Debug options
-  logLevel: 'info', // 'debug' | 'info' | 'warn' | 'error'
+	// Debug options
+	logLevel: 'info', // 'debug' | 'info' | 'warn' | 'error'
 })
 ```
 

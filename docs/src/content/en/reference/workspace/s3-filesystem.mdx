@@ -31,18 +31,18 @@ import { Workspace } from '@mastra/core/workspace'
 import { S3Filesystem } from '@mastra/s3'
 
 const workspace = new Workspace({
-  filesystem: new S3Filesystem({
-    bucket: 'my-bucket',
-    region: 'us-east-1',
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  }),
+	filesystem: new S3Filesystem({
+		bucket: 'my-bucket',
+		region: 'us-east-1',
+		accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+		secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+	}),
 })
 
 const agent = new Agent({
-  name: 'file-agent',
-  model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
-  workspace,
+	name: 'file-agent',
+	model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
+	workspace,
 })
 ```
 
@@ -55,8 +55,8 @@ import { S3Filesystem } from '@mastra/s3'
 
 // SDK discovers credentials from the environment automatically
 const filesystem = new S3Filesystem({
-  bucket: 'my-bucket',
-  region: 'us-east-1',
+	bucket: 'my-bucket',
+	region: 'us-east-1',
 })
 ```
 
@@ -73,9 +73,9 @@ import { S3Filesystem } from '@mastra/s3'
 import { fromNodeProviderChain } from '@aws-sdk/credential-providers'
 
 const filesystem = new S3Filesystem({
-  bucket: 'my-bucket',
-  region: 'us-east-1',
-  credentials: fromNodeProviderChain(),
+	bucket: 'my-bucket',
+	region: 'us-east-1',
+	credentials: fromNodeProviderChain(),
 })
 ```
 
@@ -87,11 +87,11 @@ Provider functions only apply to `S3Filesystem` API calls. When mounting the fil
 import { S3Filesystem } from '@mastra/s3'
 
 const filesystem = new S3Filesystem({
-  bucket: 'my-r2-bucket',
-  region: 'auto',
-  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-  accessKeyId: process.env.R2_ACCESS_KEY_ID,
-  secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+	bucket: 'my-r2-bucket',
+	region: 'auto',
+	endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+	accessKeyId: process.env.R2_ACCESS_KEY_ID,
+	secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
 })
 ```
 
@@ -101,11 +101,11 @@ const filesystem = new S3Filesystem({
 import { S3Filesystem } from '@mastra/s3'
 
 const filesystem = new S3Filesystem({
-  bucket: 'my-bucket',
-  region: 'us-east-1',
-  endpoint: 'http://localhost:9000',
-  accessKeyId: 'minioadmin',
-  secretAccessKey: 'minioadmin',
+	bucket: 'my-bucket',
+	region: 'us-east-1',
+	endpoint: 'http://localhost:9000',
+	accessKeyId: 'minioadmin',
+	secretAccessKey: 'minioadmin',
 })
 ```
 
@@ -115,12 +115,12 @@ const filesystem = new S3Filesystem({
 import { S3Filesystem } from '@mastra/s3'
 
 const filesystem = new S3Filesystem({
-  bucket: 'my-bucket',
-  region: 'auto',
-  endpoint: 'https://t3.storage.dev',
-  accessKeyId: process.env.TIGRIS_ACCESS_KEY_ID,
-  secretAccessKey: process.env.TIGRIS_SECRET_ACCESS_KEY,
-  forcePathStyle: false,
+	bucket: 'my-bucket',
+	region: 'auto',
+	endpoint: 'https://t3.storage.dev',
+	accessKeyId: process.env.TIGRIS_ACCESS_KEY_ID,
+	secretAccessKey: process.env.TIGRIS_SECRET_ACCESS_KEY,
+	forcePathStyle: false,
 })
 ```
 
@@ -130,96 +130,96 @@ Tigris uses virtual-hosted-style addressing, so `forcePathStyle` must be set to 
 
 <PropertiesTable
   content={[
-  {
-    name: 'bucket',
-    type: 'string',
-    description: 'S3 bucket name',
-  },
-  {
-    name: 'region',
-    type: 'string',
-    description: "AWS region (use 'auto' for R2)",
-  },
-  {
-    name: 'credentials',
-    type: 'AwsCredentialIdentity | AwsCredentialIdentityProvider',
-    description:
-      'AWS credentials or credential provider function. Accepts static credentials or a provider that auto-refreshes (e.g. `fromNodeProviderChain()` from `@aws-sdk/credential-providers`). Takes precedence over `accessKeyId`/`secretAccessKey`/`sessionToken`. When all credential options are omitted, the SDK default credential provider chain is used.',
-    isOptional: true,
-  },
-  {
-    name: 'accessKeyId',
-    type: 'string',
-    description:
-      'AWS access key ID. When omitted along with `secretAccessKey` and `credentials`, the SDK default credential provider chain is used.',
-    isOptional: true,
-  },
-  {
-    name: 'secretAccessKey',
-    type: 'string',
-    description:
-      'AWS secret access key. When omitted along with `accessKeyId` and `credentials`, the SDK default credential provider chain is used.',
-    isOptional: true,
-  },
-  {
-    name: 'sessionToken',
-    type: 'string',
-    description:
-      'AWS session token for static temporary credentials. Use with `accessKeyId`/`secretAccessKey` only when passing a complete temporary credential set manually. For auto-refreshing SSO, AssumeRole, or container credentials, use the `credentials` provider parameter or the SDK default credential provider chain.',
-    isOptional: true,
-  },
-  {
-    name: 'endpoint',
-    type: 'string',
-    description: 'Custom endpoint URL for S3-compatible storage (R2, MinIO, Tigris, etc.)',
-    isOptional: true,
-  },
-  {
-    name: 'forcePathStyle',
-    type: 'boolean',
-    description:
-      'Force path-style URLs instead of virtual-hosted-style. Required for some S3-compatible services like MinIO. Defaults to true when a custom endpoint is provided.',
-    isOptional: true,
-    defaultValue: 'true (when endpoint is set)',
-  },
-  {
-    name: 'prefix',
-    type: 'string',
-    description: 'Optional prefix for all keys (acts like a subdirectory)',
-    isOptional: true,
-  },
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Unique identifier for this filesystem instance',
-    isOptional: true,
-    defaultValue: 'Auto-generated',
-  },
-  {
-    name: 'displayName',
-    type: 'string',
-    description: 'Human-friendly display name for the UI',
-    isOptional: true,
-  },
-  {
-    name: 'icon',
-    type: 'FilesystemIcon',
-    description: 'Icon identifier for the UI',
-    isOptional: true,
-  },
-  {
-    name: 'description',
-    type: 'string',
-    description: 'Short description of this filesystem for the UI',
-    isOptional: true,
-  },
-  {
-    name: 'readOnly',
-    type: 'boolean',
-    description: 'When true, all write operations are blocked',
-    isOptional: true,
-    defaultValue: 'false',
-  },
+	{
+		name: 'bucket',
+		type: 'string',
+		description: 'S3 bucket name',
+	},
+	{
+		name: 'region',
+		type: 'string',
+		description: "AWS region (use 'auto' for R2)",
+	},
+	{
+		name: 'credentials',
+		type: 'AwsCredentialIdentity | AwsCredentialIdentityProvider',
+		description:
+			'AWS credentials or credential provider function. Accepts static credentials or a provider that auto-refreshes (e.g. `fromNodeProviderChain()` from `@aws-sdk/credential-providers`). Takes precedence over `accessKeyId`/`secretAccessKey`/`sessionToken`. When all credential options are omitted, the SDK default credential provider chain is used.',
+		isOptional: true,
+	},
+	{
+		name: 'accessKeyId',
+		type: 'string',
+		description:
+			'AWS access key ID. When omitted along with `secretAccessKey` and `credentials`, the SDK default credential provider chain is used.',
+		isOptional: true,
+	},
+	{
+		name: 'secretAccessKey',
+		type: 'string',
+		description:
+			'AWS secret access key. When omitted along with `accessKeyId` and `credentials`, the SDK default credential provider chain is used.',
+		isOptional: true,
+	},
+	{
+		name: 'sessionToken',
+		type: 'string',
+		description:
+			'AWS session token for static temporary credentials. Use with `accessKeyId`/`secretAccessKey` only when passing a complete temporary credential set manually. For auto-refreshing SSO, AssumeRole, or container credentials, use the `credentials` provider parameter or the SDK default credential provider chain.',
+		isOptional: true,
+	},
+	{
+		name: 'endpoint',
+		type: 'string',
+		description: 'Custom endpoint URL for S3-compatible storage (R2, MinIO, Tigris, etc.)',
+		isOptional: true,
+	},
+	{
+		name: 'forcePathStyle',
+		type: 'boolean',
+		description:
+			'Force path-style URLs instead of virtual-hosted-style. Required for some S3-compatible services like MinIO. Defaults to true when a custom endpoint is provided.',
+		isOptional: true,
+		defaultValue: 'true (when endpoint is set)',
+	},
+	{
+		name: 'prefix',
+		type: 'string',
+		description: 'Optional prefix for all keys (acts like a subdirectory)',
+		isOptional: true,
+	},
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Unique identifier for this filesystem instance',
+		isOptional: true,
+		defaultValue: 'Auto-generated',
+	},
+	{
+		name: 'displayName',
+		type: 'string',
+		description: 'Human-friendly display name for the UI',
+		isOptional: true,
+	},
+	{
+		name: 'icon',
+		type: 'FilesystemIcon',
+		description: 'Icon identifier for the UI',
+		isOptional: true,
+	},
+	{
+		name: 'description',
+		type: 'string',
+		description: 'Short description of this filesystem for the UI',
+		isOptional: true,
+	},
+	{
+		name: 'readOnly',
+		type: 'boolean',
+		description: 'When true, all write operations are blocked',
+		isOptional: true,
+		defaultValue: 'false',
+	},
 ]}
 />
 
@@ -227,31 +227,31 @@ Tigris uses virtual-hosted-style addressing, so `forcePathStyle` must be set to 
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Filesystem instance identifier',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: "Provider name ('S3Filesystem')",
-  },
-  {
-    name: 'provider',
-    type: 'string',
-    description: "Provider identifier ('s3')",
-  },
-  {
-    name: 'bucket',
-    type: 'string',
-    description: 'The S3 bucket name',
-  },
-  {
-    name: 'readOnly',
-    type: 'boolean | undefined',
-    description: 'Whether the filesystem is in read-only mode',
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Filesystem instance identifier',
+	},
+	{
+		name: 'name',
+		type: 'string',
+		description: "Provider name ('S3Filesystem')",
+	},
+	{
+		name: 'provider',
+		type: 'string',
+		description: "Provider identifier ('s3')",
+	},
+	{
+		name: 'bucket',
+		type: 'string',
+		description: 'The S3 bucket name',
+	},
+	{
+		name: 'readOnly',
+		type: 'boolean | undefined',
+		description: 'Whether the filesystem is in read-only mode',
+	},
 ]}
 />
 
@@ -307,15 +307,15 @@ import { S3Filesystem } from '@mastra/s3'
 import { E2BSandbox } from '@mastra/e2b'
 
 const workspace = new Workspace({
-  mounts: {
-    '/data': new S3Filesystem({
-      bucket: 'my-bucket',
-      region: 'us-east-1',
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    }),
-  },
-  sandbox: new E2BSandbox({ id: 'dev-sandbox' }),
+	mounts: {
+		'/data': new S3Filesystem({
+			bucket: 'my-bucket',
+			region: 'us-east-1',
+			accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+			secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+		}),
+	},
+	sandbox: new E2BSandbox({ id: 'dev-sandbox' }),
 })
 ```
 

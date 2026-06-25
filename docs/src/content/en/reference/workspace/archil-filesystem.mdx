@@ -31,17 +31,17 @@ import { Workspace } from '@mastra/core/workspace'
 import { ArchilFilesystem } from '@mastra/archil'
 
 const workspace = new Workspace({
-  filesystem: new ArchilFilesystem({
-    diskId: 'dsk-0123456789abcdef',
-    apiKey: process.env.ARCHIL_API_KEY,
-    region: 'aws-us-east-1',
-  }),
+	filesystem: new ArchilFilesystem({
+		diskId: 'dsk-0123456789abcdef',
+		apiKey: process.env.ARCHIL_API_KEY,
+		region: 'aws-us-east-1',
+	}),
 })
 
 const agent = new Agent({
-  name: 'file-agent',
-  model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
-  workspace,
+	name: 'file-agent',
+	model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
+	workspace,
 })
 ```
 
@@ -53,11 +53,11 @@ If you don't have an existing disk, provide `createDiskOptions` to create one au
 import { ArchilFilesystem } from '@mastra/archil'
 
 const filesystem = new ArchilFilesystem({
-  apiKey: process.env.ARCHIL_API_KEY,
-  region: 'aws-us-east-1',
-  createDiskOptions: {
-    name: 'my-agent-workspace',
-  },
+	apiKey: process.env.ARCHIL_API_KEY,
+	region: 'aws-us-east-1',
+	createDiskOptions: {
+		name: 'my-agent-workspace',
+	},
 })
 
 await filesystem.init()
@@ -77,7 +77,7 @@ import { ArchilFilesystem } from '@mastra/archil'
 
 // Uses ARCHIL_API_KEY and ARCHIL_REGION from environment
 const filesystem = new ArchilFilesystem({
-  diskId: 'dsk-0123456789abcdef',
+	diskId: 'dsk-0123456789abcdef',
 })
 ```
 
@@ -85,74 +85,74 @@ const filesystem = new ArchilFilesystem({
 
 <PropertiesTable
   content={[
-  {
-    name: 'diskId',
-    type: 'string',
-    description: 'Existing Archil disk ID (e.g. "dsk-0123456789abcdef"). Mutually exclusive with `createDiskOptions`.',
-    isOptional: true,
-  },
-  {
-    name: 'createDiskOptions',
-    type: 'CreateDiskRequest',
-    description: 'Options for creating a new disk on init. Mutually exclusive with `diskId`.',
-    isOptional: true,
-  },
-  {
-    name: 'apiKey',
-    type: 'string',
-    description: 'Archil API key. Falls back to `ARCHIL_API_KEY` environment variable.',
-    isOptional: true,
-  },
-  {
-    name: 'region',
-    type: 'string',
-    description: 'Archil region (e.g. "aws-us-east-1"). Falls back to `ARCHIL_REGION` environment variable.',
-    isOptional: true,
-  },
-  {
-    name: 'baseUrl',
-    type: 'string',
-    description: 'Custom Archil control-plane URL (for testing or self-hosted deployments).',
-    isOptional: true,
-  },
-  {
-    name: 's3BaseUrl',
-    type: 'string',
-    description: 'Custom S3-compatible API URL. Falls back to `ARCHIL_S3_BASE_URL` environment variable.',
-    isOptional: true,
-  },
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Unique identifier for this filesystem instance.',
-    isOptional: true,
-    defaultValue: 'Auto-generated',
-  },
-  {
-    name: 'displayName',
-    type: 'string',
-    description: 'Human-friendly display name for the UI.',
-    isOptional: true,
-  },
-  {
-    name: 'icon',
-    type: 'FilesystemIcon',
-    description: 'Icon identifier for the UI.',
-    isOptional: true,
-  },
-  {
-    name: 'description',
-    type: 'string',
-    description: 'Short description of this filesystem for the UI.',
-    isOptional: true,
-  },
-  {
-    name: 'readOnly',
-    type: 'boolean',
-    description: 'When true, all write operations are blocked.',
-    isOptional: true,
-    defaultValue: 'false',
-  },
+	{
+		name: 'diskId',
+		type: 'string',
+		description: 'Existing Archil disk ID (e.g. "dsk-0123456789abcdef"). Mutually exclusive with `createDiskOptions`.',
+		isOptional: true,
+	},
+	{
+		name: 'createDiskOptions',
+		type: 'CreateDiskRequest',
+		description: 'Options for creating a new disk on init. Mutually exclusive with `diskId`.',
+		isOptional: true,
+	},
+	{
+		name: 'apiKey',
+		type: 'string',
+		description: 'Archil API key. Falls back to `ARCHIL_API_KEY` environment variable.',
+		isOptional: true,
+	},
+	{
+		name: 'region',
+		type: 'string',
+		description: 'Archil region (e.g. "aws-us-east-1"). Falls back to `ARCHIL_REGION` environment variable.',
+		isOptional: true,
+	},
+	{
+		name: 'baseUrl',
+		type: 'string',
+		description: 'Custom Archil control-plane URL (for testing or self-hosted deployments).',
+		isOptional: true,
+	},
+	{
+		name: 's3BaseUrl',
+		type: 'string',
+		description: 'Custom S3-compatible API URL. Falls back to `ARCHIL_S3_BASE_URL` environment variable.',
+		isOptional: true,
+	},
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Unique identifier for this filesystem instance.',
+		isOptional: true,
+		defaultValue: 'Auto-generated',
+	},
+	{
+		name: 'displayName',
+		type: 'string',
+		description: 'Human-friendly display name for the UI.',
+		isOptional: true,
+	},
+	{
+		name: 'icon',
+		type: 'FilesystemIcon',
+		description: 'Icon identifier for the UI.',
+		isOptional: true,
+	},
+	{
+		name: 'description',
+		type: 'string',
+		description: 'Short description of this filesystem for the UI.',
+		isOptional: true,
+	},
+	{
+		name: 'readOnly',
+		type: 'boolean',
+		description: 'When true, all write operations are blocked.',
+		isOptional: true,
+		defaultValue: 'false',
+	},
 ]}
 />
 
@@ -160,31 +160,31 @@ const filesystem = new ArchilFilesystem({
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Filesystem instance identifier.',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: "Provider name ('ArchilFilesystem').",
-  },
-  {
-    name: 'provider',
-    type: 'string',
-    description: "Provider identifier ('archil').",
-  },
-  {
-    name: 'diskId',
-    type: 'string | undefined',
-    description: 'The Archil disk ID (available after init).',
-  },
-  {
-    name: 'readOnly',
-    type: 'boolean | undefined',
-    description: 'Whether the filesystem is in read-only mode.',
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Filesystem instance identifier.',
+	},
+	{
+		name: 'name',
+		type: 'string',
+		description: "Provider name ('ArchilFilesystem').",
+	},
+	{
+		name: 'provider',
+		type: 'string',
+		description: "Provider identifier ('archil').",
+	},
+	{
+		name: 'diskId',
+		type: 'string | undefined',
+		description: 'The Archil disk ID (available after init).',
+	},
+	{
+		name: 'readOnly',
+		type: 'boolean | undefined',
+		description: 'Whether the filesystem is in read-only mode.',
+	},
 ]}
 />
 
@@ -238,10 +238,10 @@ Run a parallel server-side search across files on the disk.
 
 ```typescript
 const results = await filesystem.grep({
-  directory: '/logs',
-  pattern: 'ERROR',
-  recursive: true,
-  glob: '*.log',
+	directory: '/logs',
+	pattern: 'ERROR',
+	recursive: true,
+	glob: '*.log',
 })
 // { matches: [...], stoppedReason: null }
 ```
@@ -252,7 +252,7 @@ Generate a signed URL for sharing a file.
 
 ```typescript
 const { url } = await filesystem.share('/reports/output.pdf', {
-  expiresIn: 3600,
+	expiresIn: 3600,
 })
 ```
 

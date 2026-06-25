@@ -21,10 +21,10 @@ import { Mastra } from '@mastra/core/mastra'
 import { PinoLogger } from '@mastra/loggers'
 
 export const mastra = new Mastra({
-  logger: new PinoLogger({
-    name: 'Mastra',
-    level: 'info',
-  }),
+	logger: new PinoLogger({
+		name: 'Mastra',
+		level: 'info',
+	}),
 })
 ```
 
@@ -50,19 +50,19 @@ import { PinoLogger } from '@mastra/loggers'
 import { Observability, MastraStorageExporter } from '@mastra/observability'
 
 export const mastra = new Mastra({
-  logger: new PinoLogger({ name: 'Mastra', level: 'debug' }),
-  observability: new Observability({
-    configs: {
-      default: {
-        serviceName: 'my-app',
-        exporters: [new MastraStorageExporter()],
-        logging: {
-          enabled: true, // set to false to disable log forwarding
-          level: 'info', // minimum level: 'debug' | 'info' | 'warn' | 'error' | 'fatal'
-        },
-      },
-    },
-  }),
+	logger: new PinoLogger({ name: 'Mastra', level: 'debug' }),
+	observability: new Observability({
+		configs: {
+			default: {
+				serviceName: 'my-app',
+				exporters: [new MastraStorageExporter()],
+				logging: {
+					enabled: true, // set to false to disable log forwarding
+					level: 'info', // minimum level: 'debug' | 'info' | 'warn' | 'error' | 'fatal'
+				},
+			},
+		},
+	}),
 })
 ```
 
@@ -83,9 +83,9 @@ import { MastraClient } from '@mastra/client-js'
 const client = new MastraClient()
 
 const logs = await client.listLogsVNext({
-  filters: { level: 'error' },
-  pagination: { page: 1, perPage: 50 },
-  orderBy: { field: 'timestamp', direction: 'desc' },
+	filters: { level: 'error' },
+	pagination: { page: 1, perPage: 50 },
+	orderBy: { field: 'timestamp', direction: 'desc' },
 })
 ```
 
@@ -128,14 +128,14 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 export const testTool = createTool({
-  execute: async (inputData, context) => {
-    const logger = context?.mastra.getLogger()
-    logger?.info('tool info log')
+	execute: async (inputData, context) => {
+		const logger = context?.mastra.getLogger()
+		logger?.info('tool info log')
 
-    return {
-      output: '',
-    }
-  },
+		return {
+			output: '',
+		}
+	},
 })
 ```
 

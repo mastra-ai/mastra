@@ -44,8 +44,8 @@ Set your Railway credentials in one of three ways.
   <TabItem value="constructor" label="Constructor">
     ```typescript
     new RailwaySandbox({
-      token: 'your-api-token',
-      environmentId: 'your-environment-id',
+    	token: 'your-api-token',
+    	environmentId: 'your-environment-id',
     })
     ```
   </TabItem>
@@ -61,22 +61,22 @@ import { Workspace } from '@mastra/core/workspace'
 import { RailwaySandbox } from '@mastra/railway'
 
 const workspace = new Workspace({
-  sandbox: new RailwaySandbox({
-    // token + environmentId read from RAILWAY_API_TOKEN / RAILWAY_ENVIRONMENT_ID
-    idleTimeoutMinutes: 30,
-  }),
+	sandbox: new RailwaySandbox({
+		// token + environmentId read from RAILWAY_API_TOKEN / RAILWAY_ENVIRONMENT_ID
+		idleTimeoutMinutes: 30,
+	}),
 })
 
 const agent = new Agent({
-  id: 'code-agent',
-  name: 'Code Agent',
-  instructions: 'You are a coding assistant working in this workspace.',
-  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
-  workspace,
+	id: 'code-agent',
+	name: 'Code Agent',
+	instructions: 'You are a coding assistant working in this workspace.',
+	model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+	workspace,
 })
 
 const response = await agent.generate(
-  'Print "Hello, world!" and show the current working directory.',
+	'Print "Hello, world!" and show the current working directory.',
 )
 
 console.log(response.text)
@@ -88,10 +88,10 @@ Join the environment's private network to reach other Railway services (for exam
 
 ```typescript
 const workspace = new Workspace({
-  sandbox: new RailwaySandbox({
-    networkIsolation: 'PRIVATE',
-    env: { NODE_ENV: 'production' },
-  }),
+	sandbox: new RailwaySandbox({
+		networkIsolation: 'PRIVATE',
+		env: { NODE_ENV: 'production' },
+	}),
 })
 ```
 
@@ -103,9 +103,9 @@ Pre-install packages and run setup steps so every sandbox starts ready. Pass a b
 
 ```typescript
 const workspace = new Workspace({
-  sandbox: new RailwaySandbox({
-    template: t => t.withPackages('git', 'curl').run('npm i -g pnpm').workdir('/app'),
-  }),
+	sandbox: new RailwaySandbox({
+		template: t => t.withPackages('git', 'curl').run('npm i -g pnpm').workdir('/app'),
+	}),
 })
 ```
 
@@ -130,8 +130,8 @@ Stream command output in real time via `onStdout` and `onStderr` callbacks:
 
 ```typescript
 await sandbox.executeCommand('bash', ['-c', 'for i in 1 2 3; do echo "line $i"; sleep 1; done'], {
-  onStdout: chunk => process.stdout.write(chunk),
-  onStderr: chunk => process.stderr.write(chunk),
+	onStdout: chunk => process.stdout.write(chunk),
+	onStderr: chunk => process.stderr.write(chunk),
 })
 ```
 
@@ -152,75 +152,75 @@ const result = await sandbox.executeCommand('cat', ['/tmp/state.txt'])
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Unique identifier for this sandbox instance.',
-    isOptional: true,
-    defaultValue: 'Auto-generated',
-  },
-  {
-    name: 'token',
-    type: 'string',
-    description: 'Railway API token for authentication. Falls back to the RAILWAY_API_TOKEN environment variable.',
-    isOptional: true,
-  },
-  {
-    name: 'environmentId',
-    type: 'string',
-    description: 'Railway environment ID. Falls back to the RAILWAY_ENVIRONMENT_ID environment variable.',
-    isOptional: true,
-  },
-  {
-    name: 'sandboxId',
-    type: 'string',
-    description:
-      'Reattach to an existing Railway sandbox by its Railway ID instead of creating a new one. When set, start() calls Sandbox.connect().',
-    isOptional: true,
-  },
-  {
-    name: 'idleTimeoutMinutes',
-    type: 'number',
-    description:
-      'How long the sandbox can sit idle (no exec interaction) before Railway destroys it automatically. The valid range and default depend on your Railway plan.',
-    isOptional: true,
-  },
-  {
-    name: 'networkIsolation',
-    type: "'ISOLATED' | 'PRIVATE'",
-    description:
-      "Network access mode. 'ISOLATED' allows outbound internet only; 'PRIVATE' joins the environment's private network.",
-    isOptional: true,
-    defaultValue: "'ISOLATED'",
-  },
-  {
-    name: 'env',
-    type: 'Record<string, string>',
-    description: 'Environment variables baked into the sandbox, available to every command.',
-    isOptional: true,
-    defaultValue: '{}',
-  },
-  {
-    name: 'template',
-    type: 'SandboxTemplate | (base: SandboxTemplate) => SandboxTemplate',
-    description:
-      'Provision the sandbox from a custom base image built with the Railway template builder. Accepts a builder callback or a pre-built template. Ignored when sandboxId is set.',
-    isOptional: true,
-  },
-  {
-    name: 'timeout',
-    type: 'number',
-    description:
-      'Default execution timeout in milliseconds applied to commands that do not specify their own timeout. Commands run until they exit when omitted.',
-    isOptional: true,
-  },
-  {
-    name: 'instructions',
-    type: 'string | (opts) => string',
-    description:
-      'Override the default agent instructions. A string replaces them entirely; a function receives the default instructions and returns the final text.',
-    isOptional: true,
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Unique identifier for this sandbox instance.',
+		isOptional: true,
+		defaultValue: 'Auto-generated',
+	},
+	{
+		name: 'token',
+		type: 'string',
+		description: 'Railway API token for authentication. Falls back to the RAILWAY_API_TOKEN environment variable.',
+		isOptional: true,
+	},
+	{
+		name: 'environmentId',
+		type: 'string',
+		description: 'Railway environment ID. Falls back to the RAILWAY_ENVIRONMENT_ID environment variable.',
+		isOptional: true,
+	},
+	{
+		name: 'sandboxId',
+		type: 'string',
+		description:
+			'Reattach to an existing Railway sandbox by its Railway ID instead of creating a new one. When set, start() calls Sandbox.connect().',
+		isOptional: true,
+	},
+	{
+		name: 'idleTimeoutMinutes',
+		type: 'number',
+		description:
+			'How long the sandbox can sit idle (no exec interaction) before Railway destroys it automatically. The valid range and default depend on your Railway plan.',
+		isOptional: true,
+	},
+	{
+		name: 'networkIsolation',
+		type: "'ISOLATED' | 'PRIVATE'",
+		description:
+			"Network access mode. 'ISOLATED' allows outbound internet only; 'PRIVATE' joins the environment's private network.",
+		isOptional: true,
+		defaultValue: "'ISOLATED'",
+	},
+	{
+		name: 'env',
+		type: 'Record<string, string>',
+		description: 'Environment variables baked into the sandbox, available to every command.',
+		isOptional: true,
+		defaultValue: '{}',
+	},
+	{
+		name: 'template',
+		type: 'SandboxTemplate | (base: SandboxTemplate) => SandboxTemplate',
+		description:
+			'Provision the sandbox from a custom base image built with the Railway template builder. Accepts a builder callback or a pre-built template. Ignored when sandboxId is set.',
+		isOptional: true,
+	},
+	{
+		name: 'timeout',
+		type: 'number',
+		description:
+			'Default execution timeout in milliseconds applied to commands that do not specify their own timeout. Commands run until they exit when omitted.',
+		isOptional: true,
+	},
+	{
+		name: 'instructions',
+		type: 'string | (opts) => string',
+		description:
+			'Override the default agent instructions. A string replaces them entirely; a function receives the default instructions and returns the final text.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -228,38 +228,38 @@ const result = await sandbox.executeCommand('cat', ['/tmp/state.txt'])
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'Sandbox instance identifier.',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: "Provider name ('RailwaySandbox').",
-  },
-  {
-    name: 'provider',
-    type: 'string',
-    description: "Provider identifier ('railway').",
-  },
-  {
-    name: 'status',
-    type: 'ProviderStatus',
-    description: "'pending' | 'initializing' | 'ready' | 'stopped' | 'destroyed' | 'error'",
-  },
-  {
-    name: 'railway',
-    type: 'Sandbox',
-    description:
-      'The underlying Railway Sandbox instance for direct SDK access. Throws SandboxNotReadyError if the sandbox has not been started.',
-  },
-  {
-    name: 'processes',
-    type: 'RailwayProcessManager',
-    description:
-      'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'Sandbox instance identifier.',
+	},
+	{
+		name: 'name',
+		type: 'string',
+		description: "Provider name ('RailwaySandbox').",
+	},
+	{
+		name: 'provider',
+		type: 'string',
+		description: "Provider identifier ('railway').",
+	},
+	{
+		name: 'status',
+		type: 'ProviderStatus',
+		description: "'pending' | 'initializing' | 'ready' | 'stopped' | 'destroyed' | 'error'",
+	},
+	{
+		name: 'railway',
+		type: 'Sandbox',
+		description:
+			'The underlying Railway Sandbox instance for direct SDK access. Throws SandboxNotReadyError if the sandbox has not been started.',
+	},
+	{
+		name: 'processes',
+		type: 'RailwayProcessManager',
+		description:
+			'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
+	},
 ]}
 />
 
@@ -267,12 +267,12 @@ const result = await sandbox.executeCommand('cat', ['/tmp/state.txt'])
 
 <PropertiesTable
   content={[
-  {
-    name: 'fork',
-    type: '(options?) => Promise<RailwaySandbox>',
-    description:
-      'Clone this running sandbox into a new, independent RailwaySandbox. The returned sandbox is already started and reattached to the forked Railway sandbox. Accepts optional id, idleTimeoutMinutes, networkIsolation, and env overrides. Throws SandboxNotReadyError if this sandbox has not been started.',
-  },
+	{
+		name: 'fork',
+		type: '(options?) => Promise<RailwaySandbox>',
+		description:
+			'Clone this running sandbox into a new, independent RailwaySandbox. The returned sandbox is already started and reattached to the forked Railway sandbox. Accepts optional id, idleTimeoutMinutes, networkIsolation, and env overrides. Throws SandboxNotReadyError if this sandbox has not been started.',
+	},
 ]}
 />
 
@@ -286,8 +286,8 @@ await sandbox.start()
 
 // Spawn a background process
 const handle = await sandbox.processes.spawn('node server.js', {
-  env: { PORT: '3000' },
-  onStdout: data => console.log(data),
+	env: { PORT: '3000' },
+	onStdout: data => console.log(data),
 })
 
 // Interact with the process
@@ -307,7 +307,7 @@ Register the provider with `MastraEditor` to hydrate stored sandbox configs into
 import { railwaySandboxProvider } from '@mastra/railway'
 
 const editor = new MastraEditor({
-  sandboxes: { [railwaySandboxProvider.id]: railwaySandboxProvider },
+	sandboxes: { [railwaySandboxProvider.id]: railwaySandboxProvider },
 })
 ```
 

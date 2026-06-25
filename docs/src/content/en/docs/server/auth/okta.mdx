@@ -57,9 +57,9 @@ import { Mastra } from '@mastra/core'
 import { MastraAuthOkta } from '@mastra/auth-okta'
 
 export const mastra = new Mastra({
-  server: {
-    auth: new MastraAuthOkta(),
-  },
+	server: {
+		auth: new MastraAuthOkta(),
+	},
 })
 ```
 
@@ -72,17 +72,17 @@ import { Mastra } from '@mastra/core'
 import { MastraAuthOkta, MastraRBACOkta } from '@mastra/auth-okta'
 
 export const mastra = new Mastra({
-  server: {
-    auth: new MastraAuthOkta(),
-    rbac: new MastraRBACOkta({
-      roleMapping: {
-        Admin: ['*'],
-        Engineering: ['agents:*', 'workflows:*', 'tools:*'],
-        Viewer: ['agents:read', 'workflows:read'],
-        _default: [], // users with unmapped groups get no permissions
-      },
-    }),
-  },
+	server: {
+		auth: new MastraAuthOkta(),
+		rbac: new MastraRBACOkta({
+			roleMapping: {
+				Admin: ['*'],
+				Engineering: ['agents:*', 'workflows:*', 'tools:*'],
+				Viewer: ['agents:read', 'workflows:read'],
+				_default: [], // users with unmapped groups get no permissions
+			},
+		}),
+	},
 })
 ```
 
@@ -96,17 +96,17 @@ import { MastraAuthAuth0 } from '@mastra/auth-auth0'
 import { MastraRBACOkta } from '@mastra/auth-okta'
 
 export const mastra = new Mastra({
-  server: {
-    auth: new MastraAuthAuth0(),
-    rbac: new MastraRBACOkta({
-      getUserId: user => user.metadata?.oktaUserId || user.email,
-      roleMapping: {
-        Engineering: ['agents:*', 'workflows:*'],
-        Admin: ['*'],
-        _default: [],
-      },
-    }),
-  },
+	server: {
+		auth: new MastraAuthAuth0(),
+		rbac: new MastraRBACOkta({
+			getUserId: user => user.metadata?.oktaUserId || user.email,
+			roleMapping: {
+				Engineering: ['agents:*', 'workflows:*'],
+				Admin: ['*'],
+				_default: [],
+			},
+		}),
+	},
 })
 ```
 
@@ -128,19 +128,19 @@ The `roleMapping` option maps Okta group names to arrays of Mastra permission st
 
 ```typescript
 const rbac = new MastraRBACOkta({
-  roleMapping: {
-    // full access to everything
-    Admin: ['*'],
+	roleMapping: {
+		// full access to everything
+		Admin: ['*'],
 
-    // full access to agents and workflows
-    Engineering: ['agents:*', 'workflows:*'],
+		// full access to agents and workflows
+		Engineering: ['agents:*', 'workflows:*'],
 
-    // read-only access
-    Viewer: ['agents:read', 'workflows:read'],
+		// read-only access
+		Viewer: ['agents:read', 'workflows:read'],
 
-    // users whose groups don't match any key above
-    _default: [],
-  },
+		// users whose groups don't match any key above
+		_default: [],
+	},
 })
 ```
 
@@ -156,13 +156,13 @@ For cross-origin requests (e.g. a frontend on `:3000` calling Mastra on `:4111`)
 
 ```typescript title="src/mastra/index.ts"
 export const mastra = new Mastra({
-  server: {
-    auth: new MastraAuthOkta(),
-    cors: {
-      origin: 'http://localhost:3000',
-      credentials: true,
-    },
-  },
+	server: {
+		auth: new MastraAuthOkta(),
+		cors: {
+			origin: 'http://localhost:3000',
+			credentials: true,
+		},
+	},
 })
 ```
 
@@ -172,8 +172,8 @@ Configure the client to include credentials:
 import { MastraClient } from '@mastra/client-js'
 
 export const mastraClient = new MastraClient({
-  baseUrl: 'http://localhost:4111',
-  credentials: 'include',
+	baseUrl: 'http://localhost:4111',
+	credentials: 'include',
 })
 ```
 
@@ -185,12 +185,12 @@ You can also pass an Okta access token as a Bearer token. The token is verified 
 import { MastraClient } from '@mastra/client-js'
 
 export const createMastraClient = (accessToken: string) => {
-  return new MastraClient({
-    baseUrl: 'http://localhost:4111',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  })
+	return new MastraClient({
+		baseUrl: 'http://localhost:4111',
+		headers: {
+			Authorization: `Bearer ${accessToken}`,
+		},
+	})
 }
 ```
 

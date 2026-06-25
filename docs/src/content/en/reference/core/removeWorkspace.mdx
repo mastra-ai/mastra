@@ -19,18 +19,18 @@ await mastra.removeWorkspace('workspace-123', { destroy: true })
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'The ID of the workspace to remove.',
-  },
-  {
-    name: 'options',
-    type: '{ destroy?: boolean }',
-    description:
-      'Optional cleanup behavior. Set `destroy` to `true` to call `workspace.destroy()` before removing the workspace.',
-    isOptional: true,
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'The ID of the workspace to remove.',
+	},
+	{
+		name: 'options',
+		type: '{ destroy?: boolean }',
+		description:
+			'Optional cleanup behavior. Set `destroy` to `true` to call `workspace.destroy()` before removing the workspace.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -38,11 +38,11 @@ await mastra.removeWorkspace('workspace-123', { destroy: true })
 
 <PropertiesTable
   content={[
-  {
-    name: 'removed',
-    type: 'Promise<boolean>',
-    description: '`true` when a workspace was removed. `false` when no workspace exists for the ID.',
-  },
+	{
+		name: 'removed',
+		type: 'Promise<boolean>',
+		description: '`true` when a workspace was removed. `false` when no workspace exists for the ID.',
+	},
 ]}
 />
 

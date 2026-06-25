@@ -32,8 +32,8 @@ const workflow = mastra.getWorkflow('myWorkflow')
 const run = await workflow.createRun()
 
 const result = await run.timeTravel({
-  step: 'step2',
-  inputData: { previousStepResult: 'custom value' },
+	step: 'step2',
+	inputData: { previousStepResult: 'custom value' },
 })
 ```
 
@@ -45,8 +45,8 @@ You can specify the target step using either a step reference or a step ID:
 
 ```typescript
 const result = await run.timeTravel({
-  step: step2,
-  inputData: { value: 10 },
+	step: step2,
+	inputData: { value: 10 },
 })
 ```
 
@@ -54,8 +54,8 @@ const result = await run.timeTravel({
 
 ```typescript
 const result = await run.timeTravel({
-  step: 'step2',
-  inputData: { value: 10 },
+	step: 'step2',
+	inputData: { value: 10 },
 })
 ```
 
@@ -66,20 +66,20 @@ For steps inside nested workflows, use dot notation, an array of step IDS or an 
 ```typescript
 // Using dot notation
 const result = await run.timeTravel({
-  step: 'nestedWorkflow.step3',
-  inputData: { value: 10 },
+	step: 'nestedWorkflow.step3',
+	inputData: { value: 10 },
 })
 
 // Using array of step IDs
 const result = await run.timeTravel({
-  step: ['nestedWorkflow', 'step3'],
-  inputData: { value: 10 },
+	step: ['nestedWorkflow', 'step3'],
+	inputData: { value: 10 },
 })
 
 // Using array of step references
 const result = await run.timeTravel({
-  step: [nestedWorkflow, step3],
-  inputData: { value: 10 },
+	step: [nestedWorkflow, step3],
+	inputData: { value: 10 },
 })
 ```
 
@@ -89,16 +89,16 @@ You can provide context to specify the state of previous steps when time traveli
 
 ```typescript {3-13}
 const result = await run.timeTravel({
-  step: 'step2',
-  context: {
-    step1: {
-      status: 'success',
-      payload: { value: 0 },
-      output: { step1Result: 2 },
-      startedAt: Date.now(),
-      endedAt: Date.now(),
-    },
-  },
+	step: 'step2',
+	context: {
+		step1: {
+			status: 'success',
+			payload: { value: 0 },
+			output: { step1Result: 2 },
+			startedAt: Date.now(),
+			endedAt: Date.now(),
+		},
+	},
 })
 ```
 
@@ -122,15 +122,15 @@ const run = await workflow.createRun()
 
 // Initial run fails at step2
 const failedResult = await run.start({
-  inputData: { value: 1 },
+	inputData: { value: 1 },
 })
 
 if (failedResult.status === 'failed') {
-  // Re-run from step2 with corrected input
-  const recoveredResult = await run.timeTravel({
-    step: 'step2',
-    inputData: { step1Result: 5 }, // Provide corrected input
-  })
+	// Re-run from step2 with corrected input
+	const recoveredResult = await run.timeTravel({
+		step: 'step2',
+		inputData: { step1Result: 5 }, // Provide corrected input
+	})
 }
 ```
 
@@ -143,17 +143,17 @@ const run = await workflow.createRun()
 
 // Start workflow - suspends at promptAgent step
 const initialResult = await run.start({
-  inputData: { input: 'test' },
+	inputData: { input: 'test' },
 })
 
 if (initialResult.status === 'suspended') {
-  // Time travel back to an earlier step with resume data
-  const result = await run.timeTravel({
-    step: 'getUserInput',
-    resumeData: {
-      userInput: 'corrected input',
-    },
-  })
+	// Time travel back to an earlier step with resume data
+	const result = await run.timeTravel({
+		step: 'getUserInput',
+		resumeData: {
+			userInput: 'corrected input',
+		},
+	})
 }
 ```
 
@@ -165,18 +165,18 @@ Use `timeTravelStream()` to receive streaming events during time travel executio
 const run = await workflow.createRun()
 
 const stream = run.timeTravelStream({
-  step: 'step2',
-  inputData: { value: 10 },
+	step: 'step2',
+	inputData: { value: 10 },
 })
 
 for await (const event of stream.fullStream) {
-  console.log(event.type, event.payload)
+	console.log(event.type, event.payload)
 }
 
 const result = await stream.result
 
 if (result.status === 'success') {
-  console.log(result.result)
+	console.log(result.result)
 }
 ```
 
@@ -186,12 +186,12 @@ You can provide initial state when time traveling to set workflow-level state:
 
 ```typescript
 const result = await run.timeTravel({
-  step: 'step2',
-  inputData: { value: 10 },
-  initialState: {
-    counter: 5,
-    metadata: { source: 'time-travel' },
-  },
+	step: 'step2',
+	inputData: { value: 10 },
+	initialState: {
+		counter: 5,
+		metadata: { source: 'time-travel' },
+	},
 })
 ```
 
@@ -205,9 +205,9 @@ You can't time travel to a workflow that's currently running:
 
 ```typescript
 try {
-  await run.timeTravel({ step: 'step2' })
+	await run.timeTravel({ step: 'step2' })
 } catch (error) {
-  // "This workflow run is still running, cannot time travel"
+	// "This workflow run is still running, cannot time travel"
 }
 ```
 
@@ -217,9 +217,9 @@ Time travel throws if the target step doesn't exist in the workflow:
 
 ```typescript
 try {
-  await run.timeTravel({ step: 'nonExistentStep' })
+	await run.timeTravel({ step: 'nonExistentStep' })
 } catch (error) {
-  // "Time travel target step not found in execution graph: 'nonExistentStep'. Verify the step id/path."
+	// "Time travel target step not found in execution graph: 'nonExistentStep'. Verify the step id/path."
 }
 ```
 
@@ -229,12 +229,12 @@ When `validateInputs` is enabled, time travel validates the input data against t
 
 ```typescript
 try {
-  await run.timeTravel({
-    step: 'step2',
-    inputData: { invalidField: 'value' },
-  })
+	await run.timeTravel({
+		step: 'step2',
+		inputData: { invalidField: 'value' },
+	})
 } catch (error) {
-  // "Invalid inputData: \n- step1Result: Required"
+	// "Invalid inputData: \n- step1Result: Required"
 }
 ```
 
@@ -244,32 +244,32 @@ When time traveling into a nested workflow, you can provide context for both the
 
 ```typescript
 const result = await run.timeTravel({
-  step: 'nestedWorkflow.step3',
-  context: {
-    step1: {
-      status: 'success',
-      payload: { value: 0 },
-      output: { step1Result: 2 },
-      startedAt: Date.now(),
-      endedAt: Date.now(),
-    },
-    nestedWorkflow: {
-      status: 'running',
-      payload: { step1Result: 2 },
-      startedAt: Date.now(),
-    },
-  },
-  nestedStepsContext: {
-    nestedWorkflow: {
-      step2: {
-        status: 'success',
-        payload: { step1Result: 2 },
-        output: { step2Result: 3 },
-        startedAt: Date.now(),
-        endedAt: Date.now(),
-      },
-    },
-  },
+	step: 'nestedWorkflow.step3',
+	context: {
+		step1: {
+			status: 'success',
+			payload: { value: 0 },
+			output: { step1Result: 2 },
+			startedAt: Date.now(),
+			endedAt: Date.now(),
+		},
+		nestedWorkflow: {
+			status: 'running',
+			payload: { step1Result: 2 },
+			startedAt: Date.now(),
+		},
+	},
+	nestedStepsContext: {
+		nestedWorkflow: {
+			step2: {
+				status: 'success',
+				payload: { step1Result: 2 },
+				output: { step2Result: 3 },
+				startedAt: Date.now(),
+				endedAt: Date.now(),
+			},
+		},
+	},
 })
 ```
 
@@ -281,8 +281,8 @@ Re-run a failed step with the same or modified input to diagnose issues:
 
 ```typescript
 const result = await run.timeTravel({
-  step: failedStepId,
-  context: originalContext, // Use context from the failed run
+	step: failedStepId,
+	context: originalContext, // Use context from the failed run
 })
 ```
 
@@ -292,8 +292,8 @@ Test individual steps with specific inputs on a new workflow run, useful for tes
 
 ```typescript
 const result = await run.timeTravel({
-  step: 'processData',
-  inputData: { testData: 'specific test case' },
+	step: 'processData',
+	inputData: { testData: 'specific test case' },
 })
 ```
 
@@ -304,8 +304,8 @@ Re-run steps that failed due to temporary issues (network errors, rate limits):
 ```typescript
 // After fixing the external service issue
 const result = await run.timeTravel({
-  step: 'callExternalApi',
-  inputData: savedInputData,
+	step: 'callExternalApi',
+	inputData: savedInputData,
 })
 ```
 

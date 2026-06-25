@@ -30,10 +30,10 @@ Create an agent by instantiating the `Agent` class from `@mastra/core` and provi
 import { Agent } from '@mastra/core/agent'
 
 export const testAgent = new Agent({
-  id: 'test-agent',
-  name: 'Test Agent',
-  instructions: 'You are a helpful assistant.',
-  model: '__GATEWAY_OPENAI_MODEL__',
+	id: 'test-agent',
+	name: 'Test Agent',
+	instructions: 'You are a helpful assistant.',
+	model: '__GATEWAY_OPENAI_MODEL__',
 })
 ```
 
@@ -46,7 +46,7 @@ import { Mastra } from '@mastra/core'
 import { testAgent } from './agents/test-agent'
 
 export const mastra = new Mastra({
-  agents: { testAgent },
+	agents: { testAgent },
 })
 ```
 
@@ -93,7 +93,7 @@ When referencing an agent from your Mastra instance, use `mastra.getAgentById()`
     const stream = await agent.stream('Help me organize my day')
 
     for await (const chunk of stream.textStream) {
-      process.stdout.write(chunk)
+    	process.stdout.write(chunk)
     }
     ```
   </TabItem>

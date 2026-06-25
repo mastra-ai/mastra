@@ -15,8 +15,8 @@ Retrieve all memory threads for a specific resource:
 
 ```typescript
 const threads = await mastraClient.listMemoryThreads({
-  resourceId: 'resource-1',
-  agentId: 'agent-1', // Optional - can be omitted if storage is configured
+	resourceId: 'resource-1',
+	agentId: 'agent-1', // Optional - can be omitted if storage is configured
 })
 ```
 
@@ -28,10 +28,10 @@ Create a new memory thread:
 
 ```typescript
 const thread = await mastraClient.createMemoryThread({
-  title: 'New Conversation',
-  metadata: { category: 'support' },
-  resourceId: 'resource-1',
-  agentId: 'agent-1',
+	title: 'New Conversation',
+	metadata: { category: 'support' },
+	resourceId: 'resource-1',
+	agentId: 'agent-1',
 })
 ```
 
@@ -59,9 +59,9 @@ Update thread properties:
 
 ```typescript
 const updated = await thread.update({
-  title: 'Updated Title',
-  metadata: { status: 'resolved' },
-  resourceId: 'resource-1',
+	title: 'Updated Title',
+	metadata: { status: 'resolved' },
+	resourceId: 'resource-1',
 })
 ```
 
@@ -85,12 +85,12 @@ Clone with options:
 
 ```typescript
 const { thread: clonedThread, clonedMessages } = await thread.clone({
-  newThreadId: 'custom-clone-id',
-  title: 'Cloned Conversation',
-  metadata: { branch: 'experiment-1' },
-  options: {
-    messageLimit: 10, // Only clone last 10 messages
-  },
+	newThreadId: 'custom-clone-id',
+	title: 'Cloned Conversation',
+	metadata: { branch: 'experiment-1' },
+	options: {
+		messageLimit: 10, // Only clone last 10 messages
+	},
 })
 ```
 
@@ -98,12 +98,12 @@ Clone with message filtering:
 
 ```typescript
 const { thread: clonedThread } = await thread.clone({
-  options: {
-    messageFilter: {
-      startDate: new Date('2024-01-01'),
-      endDate: new Date('2024-01-31'),
-    },
-  },
+	options: {
+		messageFilter: {
+			startDate: new Date('2024-01-01'),
+			endDate: new Date('2024-01-31'),
+		},
+	},
 })
 ```
 
@@ -120,18 +120,18 @@ Save messages to memory:
 
 ```typescript
 const result = await mastraClient.saveMessageToMemory({
-  messages: [
-    {
-      role: 'user',
-      content: 'Hello!',
-      id: '1',
-      threadId: 'thread-1',
-      resourceId: 'resource-1',
-      createdAt: new Date(),
-      format: 2,
-    },
-  ],
-  agentId: 'agent-1',
+	messages: [
+		{
+			role: 'user',
+			content: 'Hello!',
+			id: '1',
+			threadId: 'thread-1',
+			resourceId: 'resource-1',
+			createdAt: new Date(),
+			format: 2,
+		},
+	],
+	agentId: 'agent-1',
 })
 
 // result.messages contains the saved messages
@@ -151,13 +151,13 @@ console.log(result.hasMore) // Whether more pages exist
 
 // Get messages with pagination
 const result = await thread.listMessages({
-  page: 0,
-  perPage: 20,
+	page: 0,
+	perPage: 20,
 })
 
 // Get messages with ordering
 const result = await thread.listMessages({
-  orderBy: { field: 'createdAt', direction: 'ASC' },
+	orderBy: { field: 'createdAt', direction: 'ASC' },
 })
 ```
 
@@ -185,9 +185,9 @@ Retrieve the current working memory for a thread:
 
 ```typescript
 const workingMemory = await mastraClient.getWorkingMemory({
-  agentId: 'agent-1',
-  threadId: 'thread-1',
-  resourceId: 'user-123', // Optional, required for resource-scoped memory
+	agentId: 'agent-1',
+	threadId: 'thread-1',
+	resourceId: 'user-123', // Optional, required for resource-scoped memory
 })
 ```
 
@@ -204,14 +204,14 @@ Update the working memory content for a thread:
 
 ```typescript
 await mastraClient.updateWorkingMemory({
-  agentId: 'agent-1',
-  threadId: 'thread-1',
-  workingMemory: `# User Profile
+	agentId: 'agent-1',
+	threadId: 'thread-1',
+	workingMemory: `# User Profile
 - Name: John Doe
 - Location: New York
 - Preferences: Prefers formal communication
 `,
-  resourceId: 'user-123', // Optional, required for resource-scoped memory
+	resourceId: 'user-123', // Optional, required for resource-scoped memory
 })
 
 // Returns: { success: true }

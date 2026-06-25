@@ -18,10 +18,10 @@ import { getMicrophoneStream } from '@mastra/node-audio'
 
 // Initialize a real-time voice provider
 const voice = new OpenAIRealtimeVoice({
-  realtimeConfig: {
-    model: 'gpt-5.1-realtime',
-    apiKey: process.env.OPENAI_API_KEY,
-  },
+	realtimeConfig: {
+		model: 'gpt-5.1-realtime',
+		apiKey: process.env.OPENAI_API_KEY,
+	},
 })
 
 // Connect to the real-time service
@@ -36,9 +36,9 @@ voice.send(microphoneStream)
 
 // When the conversation is complete
 setTimeout(() => {
-  // Close the connection and clean up resources
-  voice.close()
-  console.log('Voice session ended')
+	// Close the connection and clean up resources
+	voice.close()
+	console.log('Voice session ended')
 }, 60000) // End after 1 minute
 ```
 

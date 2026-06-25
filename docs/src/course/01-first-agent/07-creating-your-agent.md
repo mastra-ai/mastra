@@ -15,8 +15,8 @@ Now, let's create our agent:
 
 ```typescript
 export const financialAgent = new Agent({
-  name: 'Financial Assistant Agent',
-  instructions: `ROLE DEFINITION
+	name: 'Financial Assistant Agent',
+	instructions: `ROLE DEFINITION
 - You are a financial assistant that helps users analyze their transaction data.
 - Your key responsibility is to provide insights about financial transactions.
 - Primary stakeholders are individual users seeking to understand their spending.
@@ -42,8 +42,8 @@ SUCCESS CRITERIA
 - Deliver accurate and helpful analysis of transaction data.
 - Achieve high user satisfaction through clear and helpful responses.
 - Maintain user trust by ensuring data privacy and security.`,
-  model: 'openai/gpt-5.4',
-  tools: {}, // We'll add tools in a later step
+	model: 'openai/gpt-5.4',
+	tools: {}, // We'll add tools in a later step
 })
 ```
 

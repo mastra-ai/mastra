@@ -53,9 +53,9 @@ import { Mastra } from '@mastra/core'
 import { MastraAuthWorkos } from '@mastra/auth-workos'
 
 export const mastra = new Mastra({
-  server: {
-    auth: new MastraAuthWorkos(),
-  },
+	server: {
+		auth: new MastraAuthWorkos(),
+	},
 })
 ```
 
@@ -66,12 +66,12 @@ import { Mastra } from '@mastra/core'
 import { MastraAuthWorkos } from '@mastra/auth-workos'
 
 export const mastra = new Mastra({
-  server: {
-    auth: new MastraAuthWorkos({
-      apiKey: process.env.WORKOS_API_KEY,
-      clientId: process.env.WORKOS_CLIENT_ID,
-    }),
-  },
+	server: {
+		auth: new MastraAuthWorkos({
+			apiKey: process.env.WORKOS_API_KEY,
+			clientId: process.env.WORKOS_CLIENT_ID,
+		}),
+	},
 })
 ```
 
@@ -89,14 +89,14 @@ Set `fetchMemberships: true` when you use [`MastraFGAWorkos`](/docs/server/auth/
 import { MastraAuthWorkos, MastraFGAWorkos } from '@mastra/auth-workos'
 
 const workosAuth = new MastraAuthWorkos({
-  apiKey: process.env.WORKOS_API_KEY,
-  clientId: process.env.WORKOS_CLIENT_ID,
-  fetchMemberships: true,
+	apiKey: process.env.WORKOS_API_KEY,
+	clientId: process.env.WORKOS_CLIENT_ID,
+	fetchMemberships: true,
 })
 
 const workosFga = new MastraFGAWorkos({
-  apiKey: process.env.WORKOS_API_KEY,
-  clientId: process.env.WORKOS_CLIENT_ID,
+	apiKey: process.env.WORKOS_API_KEY,
+	clientId: process.env.WORKOS_CLIENT_ID,
 })
 ```
 
@@ -110,14 +110,14 @@ For machine-to-machine or service-account access, you can configure `MastraAuthW
 import { MastraAuthWorkos } from '@mastra/auth-workos'
 
 const workosAuth = new MastraAuthWorkos({
-  apiKey: process.env.WORKOS_API_KEY,
-  clientId: process.env.WORKOS_CLIENT_ID,
-  redirectUri: process.env.WORKOS_REDIRECT_URI,
-  trustJwtClaims: true,
-  jwtClaims: {
-    organizationId: 'org_id',
-    organizationMembershipId: 'urn:mastra:organization_membership_id',
-  },
+	apiKey: process.env.WORKOS_API_KEY,
+	clientId: process.env.WORKOS_CLIENT_ID,
+	redirectUri: process.env.WORKOS_REDIRECT_URI,
+	trustJwtClaims: true,
+	jwtClaims: {
+		organizationId: 'org_id',
+		organizationMembershipId: 'urn:mastra:organization_membership_id',
+	},
 })
 ```
 
@@ -132,14 +132,14 @@ import { MastraAuthWorkos } from '@mastra/auth-workos'
 import type { HonoRequest } from 'hono'
 
 class AdminOnlyWorkosAuth extends MastraAuthWorkos {
-  async authorizeUser(user: any, _request: HonoRequest): Promise<boolean> {
-    return user?.metadata?.role === 'admin'
-  }
+	async authorizeUser(user: any, _request: HonoRequest): Promise<boolean> {
+		return user?.metadata?.role === 'admin'
+	}
 }
 
 const workosAuth = new AdminOnlyWorkosAuth({
-  apiKey: process.env.WORKOS_API_KEY,
-  clientId: process.env.WORKOS_CLIENT_ID,
+	apiKey: process.env.WORKOS_API_KEY,
+	clientId: process.env.WORKOS_CLIENT_ID,
 })
 ```
 
@@ -171,12 +171,12 @@ import { WorkOS } from '@workos-inc/node'
 const workos = new WorkOS(process.env.WORKOS_API_KEY)
 
 export const authenticateWithWorkos = async (code: string, clientId: string) => {
-  const authenticationResponse = await workos.userManagement.authenticateWithCode({
-    code,
-    clientId,
-  })
+	const authenticationResponse = await workos.userManagement.authenticateWithCode({
+		code,
+		clientId,
+	})
 
-  return authenticationResponse.accessToken
+	return authenticationResponse.accessToken
 }
 ```
 
@@ -194,12 +194,12 @@ When `auth` is enabled, all requests made with `MastraClient` must include a val
 import { MastraClient } from '@mastra/client-js'
 
 export const createMastraClient = (accessToken: string) => {
-  return new MastraClient({
-    baseUrl: 'https://<mastra-api-url>',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  })
+	return new MastraClient({
+		baseUrl: 'https://<mastra-api-url>',
+		headers: {
+			Authorization: `Bearer ${accessToken}`,
+		},
+	})
 }
 ```
 
@@ -224,24 +224,24 @@ Once `MastraClient` is configured with the WorkOS access token, you can send aut
     const workos = new WorkOS(process.env.WORKOS_API_KEY)
 
     export const callMastraWithWorkos = async (code: string, clientId: string) => {
-      const authenticationResponse = await workos.userManagement.authenticateWithCode({
-        code,
-        clientId,
-      })
+    	const authenticationResponse = await workos.userManagement.authenticateWithCode({
+    		code,
+    		clientId,
+    	})
 
-      const token = authenticationResponse.accessToken
+    	const token = authenticationResponse.accessToken
 
-      const mastra = new MastraClient({
-        baseUrl: 'http://localhost:4111',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
+    	const mastra = new MastraClient({
+    		baseUrl: 'http://localhost:4111',
+    		headers: {
+    			Authorization: `Bearer ${token}`,
+    		},
+    	})
 
-      const weatherAgent = mastra.getAgent('weatherAgent')
-      const response = await weatherAgent.generate("What's the weather like in Nairobi")
+    	const weatherAgent = mastra.getAgent('weatherAgent')
+    	const response = await weatherAgent.generate("What's the weather like in Nairobi")
 
-      return response.text
+    	return response.text
     }
     ```
   </TabItem>

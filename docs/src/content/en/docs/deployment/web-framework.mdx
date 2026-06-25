@@ -26,7 +26,7 @@ If you've integrated Mastra with Next.js [by following our guide](/guides/gettin
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['@mastra/*'],
+	serverExternalPackages: ['@mastra/*'],
 }
 
 export default nextConfig
@@ -41,8 +41,8 @@ import { defineConfig } from 'astro/config'
 import vercel from '@astrojs/vercel'
 
 export default defineConfig({
-  adapter: vercel(),
-  output: 'server',
+	adapter: vercel(),
+	output: 'server',
 })
 ```
 
@@ -55,7 +55,7 @@ import { defineConfig } from 'astro/config'
 import netlify from '@astrojs/netlify'
 
 export default defineConfig({
-  adapter: netlify(),
-  output: 'server',
+	adapter: netlify(),
+	output: 'server',
 })
 ```

@@ -45,13 +45,13 @@ import { Mastra } from '@mastra/core'
 import { MastraAuthClerk } from '@mastra/auth-clerk'
 
 export const mastra = new Mastra({
-  server: {
-    auth: new MastraAuthClerk({
-      publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
-      secretKey: process.env.CLERK_SECRET_KEY,
-      jwksUri: process.env.CLERK_JWKS_URI,
-    }),
-  },
+	server: {
+		auth: new MastraAuthClerk({
+			publishableKey: process.env.CLERK_PUBLISHABLE_KEY,
+			secretKey: process.env.CLERK_SECRET_KEY,
+			jwksUri: process.env.CLERK_JWKS_URI,
+		}),
+	},
 })
 ```
 
@@ -75,14 +75,14 @@ Use the Clerk React hooks to authenticate users and retrieve their access token:
 import { useAuth } from '@clerk/nextjs'
 
 export const useClerkAuth = () => {
-  const { getToken } = useAuth()
+	const { getToken } = useAuth()
 
-  const getAccessToken = async () => {
-    const token = await getToken()
-    return token
-  }
+	const getAccessToken = async () => {
+		const token = await getToken()
+		return token
+	}
 
-  return { getAccessToken }
+	return { getAccessToken }
 }
 ```
 
@@ -100,10 +100,10 @@ When `auth` is enabled, all requests made with `MastraClient` must include a val
 import { MastraClient } from '@mastra/client-js'
 
 export const mastraClient = new MastraClient({
-  baseUrl: 'https://<mastra-api-url>',
-  headers: {
-    Authorization: `Bearer ${accessToken}`,
-  },
+	baseUrl: 'https://<mastra-api-url>',
+	headers: {
+		Authorization: `Bearer ${accessToken}`,
+	},
 })
 ```
 
@@ -128,23 +128,23 @@ Once `MastraClient` is configured with the Clerk access token, you can send auth
     import { MastraClient } from '@mastra/client-js'
 
     export const TestAgent = () => {
-      const { getToken } = useAuth()
+    	const { getToken } = useAuth()
 
-      async function handleClick() {
-        const token = await getToken()
+    	async function handleClick() {
+    		const token = await getToken()
 
-        const client = new MastraClient({
-          baseUrl: 'http://localhost:4111',
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        })
+    		const client = new MastraClient({
+    			baseUrl: 'http://localhost:4111',
+    			headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    		})
 
-        const weatherAgent = client.getAgent('weatherAgent')
-        const response = await weatherAgent.generate("What's the weather like in New York")
+    		const weatherAgent = client.getAgent('weatherAgent')
+    		const response = await weatherAgent.generate("What's the weather like in New York")
 
-        console.log({ response })
-      }
+    		console.log({ response })
+    	}
 
-      return <button onClick={handleClick}>Test Agent</button>
+    	return <button onClick={handleClick}>Test Agent</button>
     }
     ```
   </TabItem>

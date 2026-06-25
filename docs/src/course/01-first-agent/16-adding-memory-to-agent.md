@@ -15,18 +15,18 @@ import { getTransactionsTool } from '../tools'
 
 ```typescript
 export const financialAgent = new Agent({
-  name: 'Financial Assistant Agent',
-  instructions: `ROLE DEFINITION
+	name: 'Financial Assistant Agent',
+	instructions: `ROLE DEFINITION
   // ... existing instructions ...
   `,
-  model: 'openai/gpt-5.4',
-  tools: { getTransactionsTool },
-  memory: new Memory({
-    storage: new LibSQLStore({
-      id: 'learning-memory-storage',
-      url: 'file:../../memory.db', // local file-system database. Location is relative to the output directory `.mastra/output`
-    }),
-  }), // Add memory here
+	model: 'openai/gpt-5.4',
+	tools: { getTransactionsTool },
+	memory: new Memory({
+		storage: new LibSQLStore({
+			id: 'learning-memory-storage',
+			url: 'file:../../memory.db', // local file-system database. Location is relative to the output directory `.mastra/output`
+		}),
+	}), // Add memory here
 })
 ```
 

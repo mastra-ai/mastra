@@ -58,22 +58,22 @@ import { AcpAgent } from '@mastra/acp'
 import { Agent } from '@mastra/core/agent'
 
 const codeAgent = new AcpAgent({
-  id: 'code-agent',
-  name: 'Code Agent',
-  description: 'An ACP-compatible coding agent that can inspect and edit files',
-  command: 'acp-agent',
-  args: ['--stdio'],
-  cwd: process.cwd(),
+	id: 'code-agent',
+	name: 'Code Agent',
+	description: 'An ACP-compatible coding agent that can inspect and edit files',
+	command: 'acp-agent',
+	args: ['--stdio'],
+	cwd: process.cwd(),
 })
 
 export const codeSupervisor = new Agent({
-  id: 'code-supervisor',
-  name: 'Code Supervisor',
-  instructions: 'Delegate code editing tasks to the code-agent subagent.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  agents: {
-    codeAgent,
-  },
+	id: 'code-supervisor',
+	name: 'Code Supervisor',
+	instructions: 'Delegate code editing tasks to the code-agent subagent.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	agents: {
+		codeAgent,
+	},
 })
 ```
 
@@ -88,21 +88,21 @@ import { createACPTool } from '@mastra/acp'
 import { Agent } from '@mastra/core/agent'
 
 const codeAgentTool = createACPTool({
-  id: 'code-agent',
-  description: 'Use an ACP-compatible coding agent to inspect and edit code',
-  command: 'acp-agent',
-  args: ['--stdio'],
-  cwd: process.cwd(),
+	id: 'code-agent',
+	description: 'Use an ACP-compatible coding agent to inspect and edit code',
+	command: 'acp-agent',
+	args: ['--stdio'],
+	cwd: process.cwd(),
 })
 
 export const codeSupervisor = new Agent({
-  id: 'code-supervisor',
-  name: 'Code Supervisor',
-  instructions: 'Use the code-agent tool when a task requires repository inspection or code edits.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  tools: {
-    codeAgentTool,
-  },
+	id: 'code-supervisor',
+	name: 'Code Supervisor',
+	instructions: 'Use the code-agent tool when a task requires repository inspection or code edits.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	tools: {
+		codeAgentTool,
+	},
 })
 ```
 

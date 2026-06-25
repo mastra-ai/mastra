@@ -44,12 +44,12 @@ import { Mastra } from '@mastra/core'
 import { MastraAuthSupabase } from '@mastra/auth-supabase'
 
 export const mastra = new Mastra({
-  server: {
-    auth: new MastraAuthSupabase({
-      url: process.env.SUPABASE_URL,
-      anonKey: process.env.SUPABASE_ANON_KEY,
-    }),
-  },
+	server: {
+		auth: new MastraAuthSupabase({
+			url: process.env.SUPABASE_URL,
+			anonKey: process.env.SUPABASE_ANON_KEY,
+		}),
+	},
 })
 ```
 
@@ -75,8 +75,8 @@ import { createClient } from '@supabase/supabase-js'
 const supabase = createClient('<supabase-url>', '<supabase-key>')
 
 const authTokenResponse = await supabase.auth.signInWithPassword({
-  email: "<user's email>",
-  password: "<user's password>",
+	email: "<user's email>",
+	password: "<user's password>",
 })
 
 const accessToken = authTokenResponse.data?.session?.access_token
@@ -96,10 +96,10 @@ When `auth` is enabled, all requests made with `MastraClient` must include a val
 import { MastraClient } from '@mastra/client-js'
 
 export const mastraClient = new MastraClient({
-  baseUrl: 'https://<mastra-api-url>',
-  headers: {
-    Authorization: `Bearer ${accessToken}`,
-  },
+	baseUrl: 'https://<mastra-api-url>',
+	headers: {
+		Authorization: `Bearer ${accessToken}`,
+	},
 })
 ```
 
@@ -121,15 +121,15 @@ Once `MastraClient` is configured with the Supabase access token, you can send a
     import { mastraClient } from '../../lib/mastra-client'
 
     export const TestAgent = () => {
-      async function handleClick() {
-        const agent = mastraClient.getAgent('weatherAgent')
+    	async function handleClick() {
+    		const agent = mastraClient.getAgent('weatherAgent')
 
-        const response = await agent.generate("What's the weather like in New York")
+    		const response = await agent.generate("What's the weather like in New York")
 
-        console.log(response)
-      }
+    		console.log(response)
+    	}
 
-      return <button onClick={handleClick}>Test Agent</button>
+    	return <button onClick={handleClick}>Test Agent</button>
     }
     ```
   </TabItem>

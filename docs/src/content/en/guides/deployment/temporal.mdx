@@ -49,8 +49,8 @@ const connection = await Connection.connect(config.connectionOptions)
 const client = new Client({ connection })
 
 export const { createWorkflow, createStep } = init({
-  client,
-  taskQueue: 'mastra',
+	client,
+	taskQueue: 'mastra',
 })
 ```
 
@@ -65,16 +65,16 @@ import { z } from 'zod'
 import { createWorkflow, createStep } from '../temporal'
 
 const incrementStep = createStep({
-  id: 'increment',
-  inputSchema: z.object({
-    value: z.number(),
-  }),
-  outputSchema: z.object({
-    value: z.number(),
-  }),
-  execute: async ({ inputData }) => {
-    return { value: inputData.value + 1 }
-  },
+	id: 'increment',
+	inputSchema: z.object({
+		value: z.number(),
+	}),
+	outputSchema: z.object({
+		value: z.number(),
+	}),
+	execute: async ({ inputData }) => {
+		return { value: inputData.value + 1 }
+	},
 })
 ```
 
@@ -84,14 +84,14 @@ Compose the steps into a workflow. The workflow `id` must be a static string lit
 
 ```ts title="src/mastra/workflows/index.ts"
 const workflow = createWorkflow({
-  id: 'increment-workflow',
-  steps: [incrementStep],
-  inputSchema: z.object({
-    value: z.number(),
-  }),
-  outputSchema: z.object({
-    value: z.number(),
-  }),
+	id: 'increment-workflow',
+	steps: [incrementStep],
+	inputSchema: z.object({
+		value: z.number(),
+	}),
+	outputSchema: z.object({
+		value: z.number(),
+	}),
 }).then(incrementStep)
 
 workflow.commit()
@@ -109,8 +109,8 @@ import { PinoLogger } from '@mastra/loggers'
 import { incrementWorkflow } from './workflows'
 
 export const mastra = new Mastra({
-  workflows: { incrementWorkflow },
-  logger: new PinoLogger({ name: 'Mastra', level: 'info' }),
+	workflows: { incrementWorkflow },
+	logger: new PinoLogger({ name: 'Mastra', level: 'info' }),
 })
 ```
 
@@ -123,20 +123,20 @@ import { MastraPlugin } from '@mastra/temporal/worker'
 import { NativeConnection, Worker } from '@temporalio/worker'
 
 const connection = await NativeConnection.connect({
-  address: 'localhost:7233',
+	address: 'localhost:7233',
 })
 
 const mastraPlugin = new MastraPlugin()
 
 await mastraPlugin.prebuild({
-  entryFile: import.meta.resolve('./index.ts'),
+	entryFile: import.meta.resolve('./index.ts'),
 })
 
 const worker = await Worker.create({
-  connection,
-  namespace: 'default',
-  taskQueue: 'mastra',
-  plugins: [mastraPlugin],
+	connection,
+	namespace: 'default',
+	taskQueue: 'mastra',
+	plugins: [mastraPlugin],
 })
 
 await worker.run()
@@ -203,9 +203,9 @@ Optional. Sets the maximum time a single activity (step) is allowed to run befor
 
 ```ts title="src/mastra/temporal/index.ts"
 export const { createWorkflow, createStep } = init({
-  client,
-  taskQueue: 'mastra',
-  startToCloseTimeout: '5 minutes',
+	client,
+	taskQueue: 'mastra',
+	startToCloseTimeout: '5 minutes',
 })
 ```
 

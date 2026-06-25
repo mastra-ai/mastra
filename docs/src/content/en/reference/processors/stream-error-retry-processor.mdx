@@ -20,10 +20,10 @@ import { Agent } from '@mastra/core/agent'
 import { StreamErrorRetryProcessor } from '@mastra/core/processors'
 
 export const agent = new Agent({
-  name: 'openai-agent',
-  instructions: 'You are a helpful assistant.',
-  model: '__GATEWAY_OPENAI_MODEL_BASE__',
-  errorProcessors: [new StreamErrorRetryProcessor()],
+	name: 'openai-agent',
+	instructions: 'You are a helpful assistant.',
+	model: '__GATEWAY_OPENAI_MODEL_BASE__',
+	errorProcessors: [new StreamErrorRetryProcessor()],
 })
 ```
 
@@ -48,24 +48,24 @@ import { Agent } from '@mastra/core/agent'
 import { StreamErrorRetryProcessor } from '@mastra/core/processors'
 
 const isECONNRESET = (error: unknown) => {
-  if (!error || typeof error !== 'object') return false
-  const code = (error as { code?: unknown }).code
-  if (typeof code === 'string' && code.toUpperCase() === 'ECONNRESET') return true
-  const message = error instanceof Error ? error.message : undefined
-  return typeof message === 'string' && /econnreset|socket hang up/i.test(message)
+	if (!error || typeof error !== 'object') return false
+	const code = (error as { code?: unknown }).code
+	if (typeof code === 'string' && code.toUpperCase() === 'ECONNRESET') return true
+	const message = error instanceof Error ? error.message : undefined
+	return typeof message === 'string' && /econnreset|socket hang up/i.test(message)
 }
 
 export const agent = new Agent({
-  name: 'resilient-agent',
-  instructions: 'You are a helpful assistant.',
-  model: '__GATEWAY_OPENAI_MODEL_BASE__',
-  errorProcessors: [
-    new StreamErrorRetryProcessor({
-      maxRetries: 2,
-      delayMs: ({ retryCount }) => Math.min(1000 * 2 ** retryCount, 30000),
-      matchers: [isECONNRESET],
-    }),
-  ],
+	name: 'resilient-agent',
+	instructions: 'You are a helpful assistant.',
+	model: '__GATEWAY_OPENAI_MODEL_BASE__',
+	errorProcessors: [
+		new StreamErrorRetryProcessor({
+			maxRetries: 2,
+			delayMs: ({ retryCount }) => Math.min(1000 * 2 ** retryCount, 30000),
+			matchers: [isECONNRESET],
+		}),
+	],
 })
 ```
 
@@ -79,36 +79,36 @@ export const agent = new Agent({
 
 <PropertiesTable
   content={[
-  {
-    name: 'options',
-    type: 'StreamErrorRetryProcessorOptions',
-    description: 'Configuration for retry handling.',
-    isOptional: true,
-    properties: [
-      {
-        name: 'maxRetries',
-        type: 'number',
-        description: 'Maximum number of retries requested by this processor.',
-        isOptional: true,
-        defaultValue: '1',
-      },
-      {
-        name: 'matchers',
-        type: 'StreamErrorRetryMatcher[]',
-        description: 'Additional functions that identify provider-specific retryable stream errors.',
-        isOptional: true,
-        defaultValue: '[]',
-      },
-      {
-        name: 'delayMs',
-        type: 'number | ((args: ProcessAPIErrorArgs) => number | Promise<number>)',
-        description:
-          'Delay in milliseconds to wait before signaling a retry. Accepts a fixed number or a function evaluated with the current error args (for example, for exponential backoff). Negative or non-finite values are clamped to 0.',
-        isOptional: true,
-        defaultValue: '0',
-      },
-    ],
-  },
+	{
+		name: 'options',
+		type: 'StreamErrorRetryProcessorOptions',
+		description: 'Configuration for retry handling.',
+		isOptional: true,
+		properties: [
+			{
+				name: 'maxRetries',
+				type: 'number',
+				description: 'Maximum number of retries requested by this processor.',
+				isOptional: true,
+				defaultValue: '1',
+			},
+			{
+				name: 'matchers',
+				type: 'StreamErrorRetryMatcher[]',
+				description: 'Additional functions that identify provider-specific retryable stream errors.',
+				isOptional: true,
+				defaultValue: '[]',
+			},
+			{
+				name: 'delayMs',
+				type: 'number | ((args: ProcessAPIErrorArgs) => number | Promise<number>)',
+				description:
+					'Delay in milliseconds to wait before signaling a retry. Accepts a fixed number or a function evaluated with the current error args (for example, for exponential backoff). Negative or non-finite values are clamped to 0.',
+				isOptional: true,
+				defaultValue: '0',
+			},
+		],
+	},
 ]}
 />
 
@@ -116,24 +116,24 @@ export const agent = new Agent({
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: "'stream-error-retry-processor'",
-    description: 'Processor identifier.',
-    isOptional: false,
-  },
-  {
-    name: 'name',
-    type: "'Stream Error Retry Processor'",
-    description: 'Processor display name.',
-    isOptional: false,
-  },
-  {
-    name: 'processAPIError',
-    type: '(args: ProcessAPIErrorArgs) => ProcessAPIErrorResult | void',
-    description: 'Retries stream errors up to the configured retry limit.',
-    isOptional: false,
-  },
+	{
+		name: 'id',
+		type: "'stream-error-retry-processor'",
+		description: 'Processor identifier.',
+		isOptional: false,
+	},
+	{
+		name: 'name',
+		type: "'Stream Error Retry Processor'",
+		description: 'Processor display name.',
+		isOptional: false,
+	},
+	{
+		name: 'processAPIError',
+		type: '(args: ProcessAPIErrorArgs) => ProcessAPIErrorResult | void',
+		description: 'Retries stream errors up to the configured retry limit.',
+		isOptional: false,
+	},
 ]}
 />
 

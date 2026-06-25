@@ -32,28 +32,28 @@ import { SimpleAuth } from '@mastra/core/server'
 
 // Define your user type
 type User = {
-  id: string
-  name: string
-  role: 'admin' | 'user'
+	id: string
+	name: string
+	role: 'admin' | 'user'
 }
 
 export const mastra = new Mastra({
-  server: {
-    auth: new SimpleAuth<User>({
-      tokens: {
-        'sk-admin-token-123': {
-          id: 'user-1',
-          name: 'Admin User',
-          role: 'admin',
-        },
-        'sk-user-token-456': {
-          id: 'user-2',
-          name: 'Regular User',
-          role: 'user',
-        },
-      },
-    }),
-  },
+	server: {
+		auth: new SimpleAuth<User>({
+			tokens: {
+				'sk-admin-token-123': {
+					id: 'user-1',
+					name: 'Admin User',
+					role: 'admin',
+				},
+				'sk-user-token-456': {
+					id: 'user-2',
+					name: 'Regular User',
+					role: 'user',
+				},
+			},
+		}),
+	},
 })
 ```
 
@@ -79,10 +79,10 @@ Add custom headers using the `headers` option:
 
 ```typescript
 new SimpleAuth({
-  tokens: {
-    /* ... */
-  },
-  headers: ['X-API-Key', 'X-Custom-Auth'],
+	tokens: {
+		/* ... */
+	},
+	headers: ['X-API-Key', 'X-Custom-Auth'],
 })
 ```
 
@@ -112,17 +112,17 @@ Add role-based or custom authorization logic:
 
 ```typescript
 new SimpleAuth<User>({
-  tokens: {
-    'sk-admin-token': { id: '1', name: 'Admin', role: 'admin' },
-    'sk-user-token': { id: '2', name: 'User', role: 'user' },
-  },
-  authorizeUser: (user, request) => {
-    // Only admins can access /admin routes
-    if (request.url.includes('/admin')) {
-      return user.role === 'admin'
-    }
-    return true
-  },
+	tokens: {
+		'sk-admin-token': { id: '1', name: 'Admin', role: 'admin' },
+		'sk-user-token': { id: '2', name: 'User', role: 'user' },
+	},
+	authorizeUser: (user, request) => {
+		// Only admins can access /admin routes
+		if (request.url.includes('/admin')) {
+			return user.role === 'admin'
+		}
+		return true
+	},
 })
 ```
 
@@ -136,18 +136,18 @@ const tokens: Record<string, User> = {}
 // Load from environment
 const adminToken = process.env.ADMIN_API_KEY
 if (adminToken) {
-  tokens[adminToken] = { id: 'admin', name: 'Admin', role: 'admin' }
+	tokens[adminToken] = { id: 'admin', name: 'Admin', role: 'admin' }
 }
 
 const userToken = process.env.USER_API_KEY
 if (userToken) {
-  tokens[userToken] = { id: 'user', name: 'User', role: 'user' }
+	tokens[userToken] = { id: 'user', name: 'User', role: 'user' }
 }
 
 export const mastra = new Mastra({
-  server: {
-    auth: new SimpleAuth({ tokens }),
-  },
+	server: {
+		auth: new SimpleAuth({ tokens }),
+	},
 })
 ```
 
@@ -159,10 +159,10 @@ Configure the client with your token:
 import { MastraClient } from '@mastra/client-js'
 
 const client = new MastraClient({
-  baseUrl: 'http://localhost:4111',
-  headers: {
-    Authorization: 'Bearer sk-admin-token-123',
-  },
+	baseUrl: 'http://localhost:4111',
+	headers: {
+		Authorization: 'Bearer sk-admin-token-123',
+	},
 })
 
 const agent = client.getAgent('myAgent')

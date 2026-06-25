@@ -27,11 +27,11 @@ The **`speaker`** option allows you to select different voices for speech synthe
 
 ```typescript
 const voice = new OpenAIVoice({
-  speechModel: {
-    name: 'tts-1-hd',
-    apiKey: process.env.OPENAI_API_KEY,
-  },
-  speaker: 'alloy',
+	speechModel: {
+		name: 'tts-1-hd',
+		apiKey: process.env.OPENAI_API_KEY,
+	},
+	speaker: 'alloy',
 })
 
 // If using default settings the configuration can be simplified to:
@@ -70,22 +70,22 @@ import { OpenAIVoice } from '@mastra/voice-openai'
 const voice = new OpenAIVoice()
 
 const agent = new Agent({
-  id: 'voice-agent',
-  name: 'Voice Agent',
-  instructions: 'You are a voice assistant that can help users with their tasks.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  voice,
+	id: 'voice-agent',
+	name: 'Voice Agent',
+	instructions: 'You are a voice assistant that can help users with their tasks.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	voice,
 })
 
 const { text } = await agent.generate('What color is the sky?')
 
 // Convert text to speech to an Audio Stream
 const readableStream = await voice.speak(text, {
-  speaker: 'default', // Optional: specify a speaker
-  properties: {
-    speed: 1.0, // Optional: adjust speech speed
-    pitch: 'default', // Optional: specify pitch if supported
-  },
+	speaker: 'default', // Optional: specify a speaker
+	properties: {
+		speed: 1.0, // Optional: adjust speech speed
+		pitch: 'default', // Optional: specify pitch if supported
+	},
 })
 ```
 

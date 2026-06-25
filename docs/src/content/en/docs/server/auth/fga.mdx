@@ -239,27 +239,27 @@ import { FGADeniedError } from '@mastra/core/auth/ee'
 import type { FGACheckParams, IFGAProvider, MastraFGAPermissionInput } from '@mastra/core/auth/ee'
 
 class MyFGAProvider implements IFGAProvider {
-  async check(user: any, params: FGACheckParams): Promise<boolean> {
-    // Your authorization logic
-    return true
-  }
+	async check(user: any, params: FGACheckParams): Promise<boolean> {
+		// Your authorization logic
+		return true
+	}
 
-  async require(user: any, params: FGACheckParams): Promise<void> {
-    const allowed = await this.check(user, params)
-    if (!allowed) {
-      throw new FGADeniedError(user, params.resource, params.permission)
-    }
-  }
+	async require(user: any, params: FGACheckParams): Promise<void> {
+		const allowed = await this.check(user, params)
+		if (!allowed) {
+			throw new FGADeniedError(user, params.resource, params.permission)
+		}
+	}
 
-  async filterAccessible<T extends { id: string }>(
-    user: any,
-    resources: T[],
-    resourceType: string,
-    permission: MastraFGAPermissionInput,
-  ): Promise<T[]> {
-    // Filter resources the user can access
-    return resources
-  }
+	async filterAccessible<T extends { id: string }>(
+		user: any,
+		resources: T[],
+		resourceType: string,
+		permission: MastraFGAPermissionInput,
+	): Promise<T[]> {
+		// Filter resources the user can access
+		return resources
+	}
 }
 ```
 

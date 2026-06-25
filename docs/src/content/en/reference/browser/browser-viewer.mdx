@@ -20,21 +20,21 @@ import { BrowserViewer } from '@mastra/browser-viewer'
 import { Agent } from '@mastra/core/agent'
 
 const workspace = new Workspace({
-  sandbox: new LocalSandbox({
-    workingDirectory: './workspace',
-  }),
-  browser: new BrowserViewer({
-    cli: 'browser-use',
-    headless: false,
-  }),
+	sandbox: new LocalSandbox({
+		workingDirectory: './workspace',
+	}),
+	browser: new BrowserViewer({
+		cli: 'browser-use',
+		headless: false,
+	}),
 })
 
 const browserAgent = new Agent({
-  id: 'browser-agent',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  workspace,
-  instructions: 'You are a web automation assistant.',
-  memory: new Memory(),
+	id: 'browser-agent',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	workspace,
+	instructions: 'You are a web automation assistant.',
+	memory: new Memory(),
 })
 ```
 
@@ -42,8 +42,8 @@ const browserAgent = new Agent({
 
 ```typescript
 const viewer = new BrowserViewer({
-  cli: 'browser-use',
-  cdpUrl: 'ws://127.0.0.1:9222/devtools/browser/abc123',
+	cli: 'browser-use',
+	cdpUrl: 'ws://127.0.0.1:9222/devtools/browser/abc123',
 })
 ```
 
@@ -53,70 +53,70 @@ When `cdpUrl` is provided, `BrowserViewer` connects to the existing browser inst
 
 <PropertiesTable
   content={[
-  {
-    name: 'cli',
-    type: "'agent-browser' | 'browser-use' | 'browse' | 'browse-cli'",
-    description: 'Which CLI the agent uses for browser automation. The CLI connects to Chrome via the CDP URL.',
-  },
-  {
-    name: 'headless',
-    type: 'boolean',
-    description: 'Whether to run Chrome in headless mode.',
-    isOptional: true,
-    defaultValue: 'true',
-  },
-  {
-    name: 'cdpUrl',
-    type: 'string | (() => string | Promise<string>)',
-    description: 'CDP WebSocket URL for connecting to an existing browser instead of launching one.',
-    isOptional: true,
-  },
-  {
-    name: 'cdpPort',
-    type: 'number',
-    description: 'Port for Chrome remote debugging. Only used when launching Chrome (not when connecting via cdpUrl).',
-    isOptional: true,
-    defaultValue: '0 (auto-assign)',
-  },
-  {
-    name: 'scope',
-    type: "'shared' | 'thread'",
-    description:
-      "Browser instance scope. 'thread' gives each thread its own browser. 'shared' shares one browser across all threads. Defaults to 'shared' when cdpUrl is provided.",
-    isOptional: true,
-    defaultValue: "'thread'",
-  },
-  {
-    name: 'viewport',
-    type: '{ width: number; height: number }',
-    description: 'Browser viewport dimensions.',
-    isOptional: true,
-    defaultValue: '{ width: 1280, height: 720 }',
-  },
-  {
-    name: 'executablePath',
-    type: 'string',
-    description: "Path to a Chrome executable. Uses Playwright's bundled Chromium by default.",
-    isOptional: true,
-  },
-  {
-    name: 'onLaunch',
-    type: '(args: { browser: MastraBrowser }) => void | Promise<void>',
-    description: 'Callback invoked after the browser is ready.',
-    isOptional: true,
-  },
-  {
-    name: 'onClose',
-    type: '(args: { browser: MastraBrowser }) => void | Promise<void>',
-    description: 'Callback invoked before the browser closes.',
-    isOptional: true,
-  },
-  {
-    name: 'screencast',
-    type: 'ScreencastOptions',
-    description: 'Configuration for streaming browser frames to Studio.',
-    isOptional: true,
-  },
+	{
+		name: 'cli',
+		type: "'agent-browser' | 'browser-use' | 'browse' | 'browse-cli'",
+		description: 'Which CLI the agent uses for browser automation. The CLI connects to Chrome via the CDP URL.',
+	},
+	{
+		name: 'headless',
+		type: 'boolean',
+		description: 'Whether to run Chrome in headless mode.',
+		isOptional: true,
+		defaultValue: 'true',
+	},
+	{
+		name: 'cdpUrl',
+		type: 'string | (() => string | Promise<string>)',
+		description: 'CDP WebSocket URL for connecting to an existing browser instead of launching one.',
+		isOptional: true,
+	},
+	{
+		name: 'cdpPort',
+		type: 'number',
+		description: 'Port for Chrome remote debugging. Only used when launching Chrome (not when connecting via cdpUrl).',
+		isOptional: true,
+		defaultValue: '0 (auto-assign)',
+	},
+	{
+		name: 'scope',
+		type: "'shared' | 'thread'",
+		description:
+			"Browser instance scope. 'thread' gives each thread its own browser. 'shared' shares one browser across all threads. Defaults to 'shared' when cdpUrl is provided.",
+		isOptional: true,
+		defaultValue: "'thread'",
+	},
+	{
+		name: 'viewport',
+		type: '{ width: number; height: number }',
+		description: 'Browser viewport dimensions.',
+		isOptional: true,
+		defaultValue: '{ width: 1280, height: 720 }',
+	},
+	{
+		name: 'executablePath',
+		type: 'string',
+		description: "Path to a Chrome executable. Uses Playwright's bundled Chromium by default.",
+		isOptional: true,
+	},
+	{
+		name: 'onLaunch',
+		type: '(args: { browser: MastraBrowser }) => void | Promise<void>',
+		description: 'Callback invoked after the browser is ready.',
+		isOptional: true,
+	},
+	{
+		name: 'onClose',
+		type: '(args: { browser: MastraBrowser }) => void | Promise<void>',
+		description: 'Callback invoked before the browser closes.',
+		isOptional: true,
+	},
+	{
+		name: 'screencast',
+		type: 'ScreencastOptions',
+		description: 'Configuration for streaming browser frames to Studio.',
+		isOptional: true,
+	},
 ]}
 />
 
@@ -124,36 +124,36 @@ When `cdpUrl` is provided, `BrowserViewer` connects to the existing browser inst
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: "Unique identifier for this browser instance. Generated as 'browser-viewer-{timestamp}'.",
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: "'BrowserViewer'",
-  },
-  {
-    name: 'provider',
-    type: 'string',
-    description: "'browser-viewer'",
-  },
-  {
-    name: 'providerType',
-    type: "'cli'",
-    description: "Always 'cli'. Distinguishes BrowserViewer from SDK-based providers like AgentBrowser.",
-  },
-  {
-    name: 'cli',
-    type: "'agent-browser' | 'browser-use' | 'browse' | 'browse-cli'",
-    description: 'The CLI provider this instance is configured for.',
-  },
-  {
-    name: 'status',
-    type: 'BrowserStatus',
-    description: "Current browser status: 'pending', 'launching', 'ready', 'error', 'closing', or 'closed'.",
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: "Unique identifier for this browser instance. Generated as 'browser-viewer-{timestamp}'.",
+	},
+	{
+		name: 'name',
+		type: 'string',
+		description: "'BrowserViewer'",
+	},
+	{
+		name: 'provider',
+		type: 'string',
+		description: "'browser-viewer'",
+	},
+	{
+		name: 'providerType',
+		type: "'cli'",
+		description: "Always 'cli'. Distinguishes BrowserViewer from SDK-based providers like AgentBrowser.",
+	},
+	{
+		name: 'cli',
+		type: "'agent-browser' | 'browser-use' | 'browse' | 'browse-cli'",
+		description: 'The CLI provider this instance is configured for.',
+	},
+	{
+		name: 'status',
+		type: 'BrowserStatus',
+		description: "Current browser status: 'pending', 'launching', 'ready', 'error', 'closing', or 'closed'.",
+	},
 ]}
 />
 
@@ -226,16 +226,16 @@ Starts streaming browser frames. Returns a `ScreencastStream` that emits frame e
 
 ```typescript
 const stream = await viewer.startScreencast({
-  format: 'jpeg',
-  quality: 80,
+	format: 'jpeg',
+	quality: 80,
 })
 
 stream.on('frame', frame => {
-  console.log('Frame received:', frame.data.length, 'bytes')
+	console.log('Frame received:', frame.data.length, 'bytes')
 })
 
 stream.on('stop', reason => {
-  console.log('Screencast stopped:', reason)
+	console.log('Screencast stopped:', reason)
 })
 ```
 
@@ -249,11 +249,11 @@ Injects a mouse event into the browser via CDP. Used by Studio for live interact
 
 ```typescript
 await viewer.injectMouseEvent({
-  type: 'mousePressed',
-  x: 100,
-  y: 200,
-  button: 'left',
-  clickCount: 1,
+	type: 'mousePressed',
+	x: 100,
+	y: 200,
+	button: 'left',
+	clickCount: 1,
 })
 ```
 
@@ -263,9 +263,9 @@ Injects a keyboard event into the browser via CDP. Used by Studio for live inter
 
 ```typescript
 await viewer.injectKeyboardEvent({
-  type: 'keyDown',
-  key: 'Enter',
-  code: 'Enter',
+	type: 'keyDown',
+	key: 'Enter',
+	code: 'Enter',
 })
 ```
 

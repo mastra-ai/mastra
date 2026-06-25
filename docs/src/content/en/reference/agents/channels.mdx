@@ -19,16 +19,16 @@ import { createSlackAdapter } from '@chat-adapter/slack'
 import { createDiscordAdapter } from '@chat-adapter/discord'
 
 export const supportAgent = new Agent({
-  id: 'support-agent',
-  name: 'Support Agent',
-  instructions: 'You are a helpful support assistant.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  channels: {
-    adapters: {
-      slack: createSlackAdapter(),
-      discord: createDiscordAdapter(),
-    },
-  },
+	id: 'support-agent',
+	name: 'Support Agent',
+	instructions: 'You are a helpful support assistant.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	channels: {
+		adapters: {
+			slack: createSlackAdapter(),
+			discord: createDiscordAdapter(),
+		},
+	},
 })
 ```
 
@@ -36,94 +36,94 @@ export const supportAgent = new Agent({
 
 <PropertiesTable
   content={[
-  {
-    name: 'adapters',
-    type: 'Record<string, Adapter | ChannelAdapterConfig>',
-    isOptional: false,
-    description:
-      'Platform adapters keyed by name (e.g. `slack`, `discord`). Pass an `Adapter` directly for defaults, or a `ChannelAdapterConfig` object to customize per-adapter options.',
-  },
-  {
-    name: 'handlers',
-    type: 'ChannelHandlers',
-    isOptional: true,
-    description: 'Override default message handlers for DMs, mentions, and subscribed threads.',
-  },
-  {
-    name: 'inlineMedia',
-    type: 'string[] | ((mimeType: string) => boolean)',
-    isOptional: true,
-    defaultValue: "['image/png', 'image/jpeg', 'image/webp', 'application/pdf']",
-    description:
-      'Controls which attachment types are sent as file parts to the model. Types that do not match are described as text summaries. Accepts an array of mime type globs or a predicate function. The default matches the formats supported by major vision models.',
-  },
-  {
-    name: 'inlineLinks',
-    type: 'InlineLinkEntry[]',
-    isOptional: true,
-    description:
-      'Promote URLs found in message text to file parts so the model can process linked content. Each entry matches a domain. Disabled by default.',
-  },
-  {
-    name: 'tools',
-    type: 'boolean',
-    isOptional: true,
-    defaultValue: 'true',
-    description:
-      'Include channel-specific tools (`add_reaction`, `remove_reaction`). Set to `false` for models that do not support function calling.',
-  },
-  {
-    name: 'state',
-    type: 'StateAdapter',
-    isOptional: true,
-    defaultValue: 'MastraStateAdapter (from Mastra storage)',
-    description:
-      'State adapter for subscriptions and deduplication. Defaults to `MastraStateAdapter` backed by the Mastra instance storage. Channels require storage to be configured.',
-  },
-  {
-    name: 'userName',
-    type: 'string',
-    isOptional: true,
-    defaultValue: "agent's `name`",
-    description:
-      "Bot display name shown in platform messages. Defaults to the agent's `name`, or `'Mastra'` if no name is set.",
-  },
-  {
-    name: 'threadContext',
-    type: '{ maxMessages?: number; addSystemMessage?: boolean }',
-    isOptional: true,
-    defaultValue: '{ maxMessages: 10, addSystemMessage: true }',
-    description:
-      'How the agent picks up context about the current thread. `maxMessages` controls how many recent platform messages are fetched on first mention (set to `0` to disable; only applies to non-DM threads). `addSystemMessage: false` skips the built-in system message that tells the agent which channel/platform a request came from.',
-  },
-  {
-    name: 'chatOptions',
-    type: "Omit<ChatConfig, 'adapters' | 'state' | 'userName'>",
-    isOptional: true,
-    description:
-      'Additional options passed directly to the [Chat SDK](https://chat-sdk.dev/docs/usage). Use for advanced configuration such as `dedupeTtlMs`, `fallbackStreamingPlaceholderText`, `lockScope`, and `messageHistory`.',
-  },
-  {
-    name: 'resolveResourceId',
-    type: '(ctx: ResolveResourceIdContext) => string | Promise<string>',
-    isOptional: true,
-    description:
-      'Decide which `resourceId` owns resource-level memory for a channel thread, separately from who sent the message. Runs only when a new thread is created; reused threads keep their stored owner and never call the hook. Return `ctx.defaultResourceId` (`${platform}:${message.author.userId}`) to keep the built-in behavior.',
-  },
-  {
-    name: 'waitUntil',
-    type: '(promise: Promise<unknown>) => void',
-    isOptional: true,
-    description:
-      'Platform `waitUntil` function. Required on Vercel so background agent runs survive after the webhook returns 200. On Vercel pass `waitUntil` from `@vercel/functions`. Cloudflare Workers and Netlify Functions are detected automatically from the request context. AWS Lambda does not need `waitUntil` because it waits for the event loop to drain naturally.',
-  },
-  {
-    name: 'resolveWaitUntil',
-    type: '(c: Context) => ((promise: Promise<unknown>) => void) | undefined',
-    isOptional: true,
-    description:
-      'Resolver for runtimes where `waitUntil` lives on the Hono request context but is not covered by the built-in helper. Resolution order: bare `waitUntil` → `resolveWaitUntil(c)` → default (Cloudflare Workers, Netlify).',
-  },
+	{
+		name: 'adapters',
+		type: 'Record<string, Adapter | ChannelAdapterConfig>',
+		isOptional: false,
+		description:
+			'Platform adapters keyed by name (e.g. `slack`, `discord`). Pass an `Adapter` directly for defaults, or a `ChannelAdapterConfig` object to customize per-adapter options.',
+	},
+	{
+		name: 'handlers',
+		type: 'ChannelHandlers',
+		isOptional: true,
+		description: 'Override default message handlers for DMs, mentions, and subscribed threads.',
+	},
+	{
+		name: 'inlineMedia',
+		type: 'string[] | ((mimeType: string) => boolean)',
+		isOptional: true,
+		defaultValue: "['image/png', 'image/jpeg', 'image/webp', 'application/pdf']",
+		description:
+			'Controls which attachment types are sent as file parts to the model. Types that do not match are described as text summaries. Accepts an array of mime type globs or a predicate function. The default matches the formats supported by major vision models.',
+	},
+	{
+		name: 'inlineLinks',
+		type: 'InlineLinkEntry[]',
+		isOptional: true,
+		description:
+			'Promote URLs found in message text to file parts so the model can process linked content. Each entry matches a domain. Disabled by default.',
+	},
+	{
+		name: 'tools',
+		type: 'boolean',
+		isOptional: true,
+		defaultValue: 'true',
+		description:
+			'Include channel-specific tools (`add_reaction`, `remove_reaction`). Set to `false` for models that do not support function calling.',
+	},
+	{
+		name: 'state',
+		type: 'StateAdapter',
+		isOptional: true,
+		defaultValue: 'MastraStateAdapter (from Mastra storage)',
+		description:
+			'State adapter for subscriptions and deduplication. Defaults to `MastraStateAdapter` backed by the Mastra instance storage. Channels require storage to be configured.',
+	},
+	{
+		name: 'userName',
+		type: 'string',
+		isOptional: true,
+		defaultValue: "agent's `name`",
+		description:
+			"Bot display name shown in platform messages. Defaults to the agent's `name`, or `'Mastra'` if no name is set.",
+	},
+	{
+		name: 'threadContext',
+		type: '{ maxMessages?: number; addSystemMessage?: boolean }',
+		isOptional: true,
+		defaultValue: '{ maxMessages: 10, addSystemMessage: true }',
+		description:
+			'How the agent picks up context about the current thread. `maxMessages` controls how many recent platform messages are fetched on first mention (set to `0` to disable; only applies to non-DM threads). `addSystemMessage: false` skips the built-in system message that tells the agent which channel/platform a request came from.',
+	},
+	{
+		name: 'chatOptions',
+		type: "Omit<ChatConfig, 'adapters' | 'state' | 'userName'>",
+		isOptional: true,
+		description:
+			'Additional options passed directly to the [Chat SDK](https://chat-sdk.dev/docs/usage). Use for advanced configuration such as `dedupeTtlMs`, `fallbackStreamingPlaceholderText`, `lockScope`, and `messageHistory`.',
+	},
+	{
+		name: 'resolveResourceId',
+		type: '(ctx: ResolveResourceIdContext) => string | Promise<string>',
+		isOptional: true,
+		description:
+			'Decide which `resourceId` owns resource-level memory for a channel thread, separately from who sent the message. Runs only when a new thread is created; reused threads keep their stored owner and never call the hook. Return `ctx.defaultResourceId` (`${platform}:${message.author.userId}`) to keep the built-in behavior.',
+	},
+	{
+		name: 'waitUntil',
+		type: '(promise: Promise<unknown>) => void',
+		isOptional: true,
+		description:
+			'Platform `waitUntil` function. Required on Vercel so background agent runs survive after the webhook returns 200. On Vercel pass `waitUntil` from `@vercel/functions`. Cloudflare Workers and Netlify Functions are detected automatically from the request context. AWS Lambda does not need `waitUntil` because it waits for the event loop to drain naturally.',
+	},
+	{
+		name: 'resolveWaitUntil',
+		type: '(c: Context) => ((promise: Promise<unknown>) => void) | undefined',
+		isOptional: true,
+		description:
+			'Resolver for runtimes where `waitUntil` lives on the Hono request context but is not covered by the built-in helper. Resolution order: bare `waitUntil` → `resolveWaitUntil(c)` → default (Cloudflare Workers, Netlify).',
+	},
 ]}
 />
 
@@ -137,95 +137,95 @@ import { createDiscordAdapter } from '@chat-adapter/discord'
 import { createSlackAdapter } from '@chat-adapter/slack'
 
 const agent = new Agent({
-  name: 'Example',
-  instructions: '...',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  channels: {
-    adapters: {
-      discord: {
-        adapter: createDiscordAdapter(),
-        toolDisplay: 'text',
-        cors: {
-          origin: ['https://customer-saas.example'],
-          credentials: true,
-        },
-        gateway: false,
-      },
-      slack: createSlackAdapter(), // Plain adapter uses defaults
-    },
-  },
+	name: 'Example',
+	instructions: '...',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	channels: {
+		adapters: {
+			discord: {
+				adapter: createDiscordAdapter(),
+				toolDisplay: 'text',
+				cors: {
+					origin: ['https://customer-saas.example'],
+					credentials: true,
+				},
+				gateway: false,
+			},
+			slack: createSlackAdapter(), // Plain adapter uses defaults
+		},
+	},
 })
 ```
 
 <PropertiesTable
   content={[
-  {
-    name: 'adapter',
-    type: 'Adapter',
-    isOptional: false,
-    description: 'The Chat SDK adapter instance for this platform.',
-  },
-  {
-    name: 'gateway',
-    type: 'boolean',
-    isOptional: true,
-    defaultValue: 'true',
-    description:
-      'Start a persistent Gateway WebSocket listener for receiving DMs, @mentions, and reactions. Set to `false` for serverless deployments that only need webhook-based interactions.',
-  },
-  {
-    name: 'cards',
-    type: 'boolean',
-    isOptional: true,
-    description:
-      '**Deprecated** — use `toolDisplay` instead. When `toolDisplay` is not set, `cards: true` maps to `toolDisplay: "cards"` and `cards: false` maps to `toolDisplay: "text"`. IDEs flag the field with a strikethrough; runtime behavior is preserved.',
-  },
-  {
-    name: 'cors',
-    type: 'CorsOptions',
-    isOptional: true,
-    description:
-      'CORS configuration for this adapter webhook route. Use this for browser-based channel adapters that need cross-origin credentials.',
-  },
-  {
-    name: 'formatError',
-    type: '(error: Error) => PostableMessage',
-    isOptional: true,
-    defaultValue: '"❌ Error: <error.message>"',
-    description:
-      'Override how errors are rendered in the chat. Return a user-friendly message instead of exposing the raw error.',
-  },
-  {
-    name: 'formatToolCall',
-    type: '(args: { toolName: string; args: unknown; result: unknown; isError: boolean }) => PostableMessage | null',
-    isOptional: true,
-    description:
-      '**Deprecated** — use `toolDisplay` (function form) instead. When set, runs as a `ToolDisplayFn` that only fires on `result`/`error` events; `running` and `approval` events fall through to no render. Mutually exclusive with `toolDisplay` at the type level.',
-  },
-  {
-    name: 'streaming',
-    type: 'boolean | { updateIntervalMs?: number }',
-    isOptional: true,
-    defaultValue: 'false (true for Slack)',
-    description:
-      'Stream agent text deltas to the channel as the agent generates them instead of buffering and posting once per step. Requires the underlying adapter to support post-and-edit streaming. Slack defaults to `true`; other adapters default to `false`.',
-  },
-  {
-    name: 'toolDisplay',
-    type: "'cards' | 'text' | 'timeline' | 'grouped' | 'hidden' | ToolDisplayFn",
-    isOptional: true,
-    defaultValue: "'cards' ('grouped' for Slack)",
-    description:
-      'How tool calls are rendered in the channel. `"cards"` posts per-tool running/result cards as rich Block Kit. `"text"` posts the same lifecycle as plain text (no Block Kit). `"timeline"` and `"grouped"` stream tool state as inline `task_update` chunks (requires `streaming: true`; Slack only today — other adapters may render a placeholder). `"hidden"` executes tools silently. Pass a function to render tool events yourself; return `{ kind: "post", message }` for a discrete post/edit, `{ kind: "stream", chunk }` to push into the active streaming widget, or `undefined` to skip rendering that event. Approve/deny prompts always render as a separate card regardless of mode.',
-  },
-  {
-    name: 'typingStatus',
-    type: 'boolean | ((chunk: AgentChunkType, ctx: TypingStatusContext) => string | false | null | undefined | void)',
-    isOptional: true,
-    defaultValue: 'true',
-    description:
-      'Control the platform typing indicator. `true` uses built-in defaults (`is typing…` on text, `is calling {tool}…` on tool-call, `is waiting for approval…` on tool-call-approval). `false` suppresses typing entirely — useful when a live streaming widget (e.g. `toolDisplay: "grouped"` in Slack) already conveys progress. Pass a function to set custom status copy per chunk; return a string to set the status, or `false`/`null`/`undefined` to leave it unchanged. Compose with `defaultTypingStatus` (exported from `@mastra/core/channels`) to fall back to defaults for chunks you don\'t handle.',
-  },
+	{
+		name: 'adapter',
+		type: 'Adapter',
+		isOptional: false,
+		description: 'The Chat SDK adapter instance for this platform.',
+	},
+	{
+		name: 'gateway',
+		type: 'boolean',
+		isOptional: true,
+		defaultValue: 'true',
+		description:
+			'Start a persistent Gateway WebSocket listener for receiving DMs, @mentions, and reactions. Set to `false` for serverless deployments that only need webhook-based interactions.',
+	},
+	{
+		name: 'cards',
+		type: 'boolean',
+		isOptional: true,
+		description:
+			'**Deprecated** — use `toolDisplay` instead. When `toolDisplay` is not set, `cards: true` maps to `toolDisplay: "cards"` and `cards: false` maps to `toolDisplay: "text"`. IDEs flag the field with a strikethrough; runtime behavior is preserved.',
+	},
+	{
+		name: 'cors',
+		type: 'CorsOptions',
+		isOptional: true,
+		description:
+			'CORS configuration for this adapter webhook route. Use this for browser-based channel adapters that need cross-origin credentials.',
+	},
+	{
+		name: 'formatError',
+		type: '(error: Error) => PostableMessage',
+		isOptional: true,
+		defaultValue: '"❌ Error: <error.message>"',
+		description:
+			'Override how errors are rendered in the chat. Return a user-friendly message instead of exposing the raw error.',
+	},
+	{
+		name: 'formatToolCall',
+		type: '(args: { toolName: string; args: unknown; result: unknown; isError: boolean }) => PostableMessage | null',
+		isOptional: true,
+		description:
+			'**Deprecated** — use `toolDisplay` (function form) instead. When set, runs as a `ToolDisplayFn` that only fires on `result`/`error` events; `running` and `approval` events fall through to no render. Mutually exclusive with `toolDisplay` at the type level.',
+	},
+	{
+		name: 'streaming',
+		type: 'boolean | { updateIntervalMs?: number }',
+		isOptional: true,
+		defaultValue: 'false (true for Slack)',
+		description:
+			'Stream agent text deltas to the channel as the agent generates them instead of buffering and posting once per step. Requires the underlying adapter to support post-and-edit streaming. Slack defaults to `true`; other adapters default to `false`.',
+	},
+	{
+		name: 'toolDisplay',
+		type: "'cards' | 'text' | 'timeline' | 'grouped' | 'hidden' | ToolDisplayFn",
+		isOptional: true,
+		defaultValue: "'cards' ('grouped' for Slack)",
+		description:
+			'How tool calls are rendered in the channel. `"cards"` posts per-tool running/result cards as rich Block Kit. `"text"` posts the same lifecycle as plain text (no Block Kit). `"timeline"` and `"grouped"` stream tool state as inline `task_update` chunks (requires `streaming: true`; Slack only today — other adapters may render a placeholder). `"hidden"` executes tools silently. Pass a function to render tool events yourself; return `{ kind: "post", message }` for a discrete post/edit, `{ kind: "stream", chunk }` to push into the active streaming widget, or `undefined` to skip rendering that event. Approve/deny prompts always render as a separate card regardless of mode.',
+	},
+	{
+		name: 'typingStatus',
+		type: 'boolean | ((chunk: AgentChunkType, ctx: TypingStatusContext) => string | false | null | undefined | void)',
+		isOptional: true,
+		defaultValue: 'true',
+		description:
+			'Control the platform typing indicator. `true` uses built-in defaults (`is typing…` on text, `is calling {tool}…` on tool-call, `is waiting for approval…` on tool-call-approval). `false` suppresses typing entirely — useful when a live streaming widget (e.g. `toolDisplay: "grouped"` in Slack) already conveys progress. Pass a function to set custom status copy per chunk; return a string to set the status, or `false`/`null`/`undefined` to leave it unchanged. Compose with `defaultTypingStatus` (exported from `@mastra/core/channels`) to fall back to defaults for chunks you don\'t handle.',
+	},
 ]}
 />
 
@@ -260,18 +260,18 @@ import { Agent } from '@mastra/core/agent'
 import { createSlackAdapter } from '@chat-adapter/slack'
 
 const agent = new Agent({
-  name: 'Streaming Agent',
-  instructions: '...',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  channels: {
-    adapters: {
-      slack: {
-        adapter: createSlackAdapter(),
-        streaming: true, // already the Slack default
-        toolDisplay: 'timeline',
-      },
-    },
-  },
+	name: 'Streaming Agent',
+	instructions: '...',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	channels: {
+		adapters: {
+			slack: {
+				adapter: createSlackAdapter(),
+				streaming: true, // already the Slack default
+				toolDisplay: 'timeline',
+			},
+		},
+	},
 })
 ```
 
@@ -291,22 +291,22 @@ import { defaultTypingStatus } from '@mastra/core/channels'
 import { createDiscordAdapter } from '@chat-adapter/discord'
 
 const agent = new Agent({
-  name: 'Custom Typing Agent',
-  instructions: '...',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  channels: {
-    adapters: {
-      discord: {
-        adapter: createDiscordAdapter(),
-        typingStatus: (chunk, ctx) => {
-          if (chunk.type === 'tool-call' && chunk.payload.toolName === 'searchDocs') {
-            return 'is searching docs…'
-          }
-          return defaultTypingStatus(chunk, ctx)
-        },
-      },
-    },
-  },
+	name: 'Custom Typing Agent',
+	instructions: '...',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	channels: {
+		adapters: {
+			discord: {
+				adapter: createDiscordAdapter(),
+				typingStatus: (chunk, ctx) => {
+					if (chunk.type === 'tool-call' && chunk.payload.toolName === 'searchDocs') {
+						return 'is searching docs…'
+					}
+					return defaultTypingStatus(chunk, ctx)
+				},
+			},
+		},
+	},
 })
 ```
 
@@ -323,44 +323,44 @@ import { Agent } from '@mastra/core/agent'
 import { createSlackAdapter } from '@chat-adapter/slack'
 
 const agent = new Agent({
-  name: 'Custom Handler Agent',
-  instructions: '...',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  channels: {
-    adapters: {
-      slack: createSlackAdapter(),
-    },
-    handlers: {
-      onMention: async (thread, message, defaultHandler) => {
-        console.log('Received mention:', message.text)
-        await defaultHandler(thread, message)
-      },
-      onDirectMessage: false,
-    },
-  },
+	name: 'Custom Handler Agent',
+	instructions: '...',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	channels: {
+		adapters: {
+			slack: createSlackAdapter(),
+		},
+		handlers: {
+			onMention: async (thread, message, defaultHandler) => {
+				console.log('Received mention:', message.text)
+				await defaultHandler(thread, message)
+			},
+			onDirectMessage: false,
+		},
+	},
 })
 ```
 
 <PropertiesTable
   content={[
-  {
-    name: 'onDirectMessage',
-    type: 'ChannelHandler | false',
-    isOptional: true,
-    description: 'Called when the bot receives a direct message.',
-  },
-  {
-    name: 'onMention',
-    type: 'ChannelHandler | false',
-    isOptional: true,
-    description: 'Called when the bot is @mentioned in a channel or thread.',
-  },
-  {
-    name: 'onSubscribedMessage',
-    type: 'ChannelHandler | false',
-    isOptional: true,
-    description: 'Called for messages in threads the agent has subscribed to.',
-  },
+	{
+		name: 'onDirectMessage',
+		type: 'ChannelHandler | false',
+		isOptional: true,
+		description: 'Called when the bot receives a direct message.',
+	},
+	{
+		name: 'onMention',
+		type: 'ChannelHandler | false',
+		isOptional: true,
+		description: 'Called when the bot is @mentioned in a channel or thread.',
+	},
+	{
+		name: 'onSubscribedMessage',
+		type: 'ChannelHandler | false',
+		isOptional: true,
+		description: 'Called for messages in threads the agent has subscribed to.',
+	},
 ]}
 />
 
@@ -368,9 +368,9 @@ The `ChannelHandler` function signature:
 
 ```typescript
 type ChannelHandler = (
-  thread: Thread,
-  message: Message,
-  defaultHandler: (thread: Thread, message: Message) => Promise<void>,
+	thread: Thread,
+	message: Message,
+	defaultHandler: (thread: Thread, message: Message) => Promise<void>,
 ) => Promise<void>
 ```
 
@@ -385,22 +385,22 @@ import { Agent } from '@mastra/core/agent'
 import { createSlackAdapter } from '@chat-adapter/slack'
 
 const agent = new Agent({
-  name: 'SSO Agent',
-  instructions: '...',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  channels: {
-    adapters: {
-      slack: createSlackAdapter(),
-    },
-    resolveResourceId: async ({ thread, message }) => {
-      // DM: share resource-level memory with the web app by using the bare SSO id
-      if (thread.isDM) {
-        return await resolveSsoUserId(message)
-      }
-      // Group chat: the conversation owns the memory; the sender stays the actor
-      return thread.channelId
-    },
-  },
+	name: 'SSO Agent',
+	instructions: '...',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	channels: {
+		adapters: {
+			slack: createSlackAdapter(),
+		},
+		resolveResourceId: async ({ thread, message }) => {
+			// DM: share resource-level memory with the web app by using the bare SSO id
+			if (thread.isDM) {
+				return await resolveSsoUserId(message)
+			}
+			// Group chat: the conversation owns the memory; the sender stays the actor
+			return thread.channelId
+		},
+	},
 })
 ```
 
@@ -408,28 +408,28 @@ The `ResolveResourceIdContext` passed to the function:
 
 <PropertiesTable
   content={[
-  {
-    name: 'platform',
-    type: 'string',
-    description: 'Platform name (e.g. `slack`, `discord`).',
-  },
-  {
-    name: 'thread',
-    type: 'Thread',
-    description:
-      'The channel thread the message arrived on. Use `thread.isDM` to tell DMs apart from group/channel threads.',
-  },
-  {
-    name: 'message',
-    type: 'Message',
-    description: 'The incoming message. `message.author.userId` is the actor/sender, not necessarily the memory owner.',
-  },
-  {
-    name: 'defaultResourceId',
-    type: 'string',
-    description:
-      'The built-in default (`${platform}:${message.author.userId}`). Return this to keep the current behavior.',
-  },
+	{
+		name: 'platform',
+		type: 'string',
+		description: 'Platform name (e.g. `slack`, `discord`).',
+	},
+	{
+		name: 'thread',
+		type: 'Thread',
+		description:
+			'The channel thread the message arrived on. Use `thread.isDM` to tell DMs apart from group/channel threads.',
+	},
+	{
+		name: 'message',
+		type: 'Message',
+		description: 'The incoming message. `message.author.userId` is the actor/sender, not necessarily the memory owner.',
+	},
+	{
+		name: 'defaultResourceId',
+		type: 'string',
+		description:
+			'The built-in default (`${platform}:${message.author.userId}`). Return this to keep the current behavior.',
+	},
 ]}
 />
 
@@ -460,8 +460,8 @@ Promotes URLs found in message text to file parts so the model can process linke
 
 ```typescript
 type InlineLinkEntry =
-  | string // Domain pattern (HEAD determines mime type)
-  | { match: string; mimeType: string } // Domain + forced mime type (skips HEAD)
+	| string // Domain pattern (HEAD determines mime type)
+	| { match: string; mimeType: string } // Domain + forced mime type (skips HEAD)
 ```
 
 ## Related

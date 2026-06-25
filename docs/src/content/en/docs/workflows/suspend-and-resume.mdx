@@ -20,41 +20,41 @@ Use `suspend()` to pause workflow execution at a specific step. You can define a
 
 ```typescript {9-11,16-18} title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
-  id: 'step-1',
-  inputSchema: z.object({
-    userEmail: z.string(),
-  }),
-  outputSchema: z.object({
-    output: z.string(),
-  }),
-  resumeSchema: z.object({
-    approved: z.boolean(),
-  }),
-  execute: async ({ inputData, resumeData, suspend }) => {
-    const { userEmail } = inputData
-    const { approved } = resumeData ?? {}
+	id: 'step-1',
+	inputSchema: z.object({
+		userEmail: z.string(),
+	}),
+	outputSchema: z.object({
+		output: z.string(),
+	}),
+	resumeSchema: z.object({
+		approved: z.boolean(),
+	}),
+	execute: async ({ inputData, resumeData, suspend }) => {
+		const { userEmail } = inputData
+		const { approved } = resumeData ?? {}
 
-    if (!approved) {
-      return await suspend({})
-    }
+		if (!approved) {
+			return await suspend({})
+		}
 
-    return {
-      output: `Email sent to ${userEmail}`,
-    }
-  },
+		return {
+			output: `Email sent to ${userEmail}`,
+		}
+	},
 })
 
 export const testWorkflow = createWorkflow({
-  id: 'test-workflow',
-  inputSchema: z.object({
-    userEmail: z.string(),
-  }),
-  outputSchema: z.object({
-    output: z.string(),
-  }),
+	id: 'test-workflow',
+	inputSchema: z.object({
+		userEmail: z.string(),
+	}),
+	outputSchema: z.object({
+		output: z.string(),
+	}),
 })
-  .then(step1)
-  .commit()
+	.then(step1)
+	.commit()
 ```
 
 ## Restarting a workflow with `resume()`
@@ -70,16 +70,16 @@ const workflow = mastra.getWorkflow('testWorkflow')
 const run = await workflow.createRun()
 
 await run.start({
-  inputData: {
-    userEmail: 'alex@example.com',
-  },
+	inputData: {
+		userEmail: 'alex@example.com',
+	},
 })
 
 const handleResume = async () => {
-  const result = await run.resume({
-    step: step1,
-    resumeData: { approved: true },
-  })
+	const result = await run.resume({
+		step: step1,
+		resumeData: { approved: true },
+	})
 }
 ```
 
@@ -87,8 +87,8 @@ Passing the `step` object provides full type-safety for `resumeData`. Alternativ
 
 ```typescript
 const result = await run.resume({
-  step: 'step-1',
-  resumeData: { approved: true },
+	step: 'step-1',
+	resumeData: { approved: true },
 })
 ```
 
@@ -101,7 +101,7 @@ const workflow = mastra.getWorkflow('testWorkflow')
 const run = await workflow.createRun({ runId: '123' })
 
 const stream = run.resume({
-  resumeData: { approved: true },
+	resumeData: { approved: true },
 })
 ```
 
@@ -112,10 +112,10 @@ const midnight = new Date()
 midnight.setUTCHours(24, 0, 0, 0)
 
 setTimeout(async () => {
-  await run.resume({
-    step: 'step-1',
-    resumeData: { approved: true },
-  })
+	await run.resume({
+		step: 'step-1',
+		resumeData: { approved: true },
+	})
 }, midnight.getTime() - Date.now())
 ```
 
@@ -125,40 +125,40 @@ When a step is suspended, you may want to access the data that was provided to `
 
 ```typescript {22-25,29-30} title="src/mastra/workflows/user-approval.ts"
 const approvalStep = createStep({
-  id: 'user-approval',
-  inputSchema: z.object({
-    requestId: z.string(),
-  }),
-  resumeSchema: z.object({
-    approved: z.boolean(),
-  }),
-  suspendSchema: z.object({
-    reason: z.string(),
-    requestDetails: z.string(),
-  }),
-  outputSchema: z.object({
-    result: z.string(),
-  }),
-  execute: async ({ inputData, resumeData, suspend, suspendData }) => {
-    const { requestId } = inputData
-    const { approved } = resumeData ?? {}
+	id: 'user-approval',
+	inputSchema: z.object({
+		requestId: z.string(),
+	}),
+	resumeSchema: z.object({
+		approved: z.boolean(),
+	}),
+	suspendSchema: z.object({
+		reason: z.string(),
+		requestDetails: z.string(),
+	}),
+	outputSchema: z.object({
+		result: z.string(),
+	}),
+	execute: async ({ inputData, resumeData, suspend, suspendData }) => {
+		const { requestId } = inputData
+		const { approved } = resumeData ?? {}
 
-    // On first execution, suspend with context
-    if (!approved) {
-      return await suspend({
-        reason: 'User approval required',
-        requestDetails: `Request ${requestId} pending review`,
-      })
-    }
+		// On first execution, suspend with context
+		if (!approved) {
+			return await suspend({
+				reason: 'User approval required',
+				requestDetails: `Request ${requestId} pending review`,
+			})
+		}
 
-    // On resume, access the original suspend data
-    const suspendReason = suspendData?.reason || 'Unknown'
-    const details = suspendData?.requestDetails || 'No details'
+		// On resume, access the original suspend data
+		const suspendReason = suspendData?.reason || 'Unknown'
+		const details = suspendData?.requestDetails || 'No details'
 
-    return {
-      result: `${details} - ${suspendReason} - Decision: ${approved ? 'Approved' : 'Rejected'}`,
-    }
-  },
+		return {
+			result: `${details} - ${suspendReason} - Decision: ${approved ? 'Approved' : 'Rejected'}`,
+		}
+	},
 })
 ```
 
@@ -173,17 +173,17 @@ const workflow = mastra.getWorkflow('testWorkflow')
 const run = await workflow.createRun()
 
 const result = await run.start({
-  inputData: {
-    userEmail: 'alex@example.com',
-  },
+	inputData: {
+		userEmail: 'alex@example.com',
+	},
 })
 
 if (result.status === 'suspended') {
-  console.log(result.suspended[0])
-  await run.resume({
-    step: result.suspended[0],
-    resumeData: { approved: true },
-  })
+	console.log(result.suspended[0])
+	await run.resume({
+		step: result.suspended[0],
+		resumeData: { approved: true },
+	})
 }
 ```
 
@@ -206,16 +206,16 @@ const workflow = mastra.getWorkflow('testWorkflow')
 const state = await workflow.getWorkflowRunById('run-123')
 
 if (state?.status === 'suspended') {
-  const reader = createWorkflowStateReader(state)
-  const suspendedStep = reader.getSuspendedStep()
-  const approvalLabel = reader.getResumeLabel('approve')
-  const run = await workflow.createRun({ runId: state.runId })
+	const reader = createWorkflowStateReader(state)
+	const suspendedStep = reader.getSuspendedStep()
+	const approvalLabel = reader.getResumeLabel('approve')
+	const run = await workflow.createRun({ runId: state.runId })
 
-  await run.resume({
-    step: approvalLabel?.stepId ?? suspendedStep?.path,
-    resumeData: { approved: true },
-    forEachIndex: approvalLabel?.foreachIndex,
-  })
+	await run.resume({
+		step: approvalLabel?.stepId ?? suspendedStep?.path,
+		resumeData: { approved: true },
+		forEachIndex: approvalLabel?.foreachIndex,
+	})
 }
 ```
 

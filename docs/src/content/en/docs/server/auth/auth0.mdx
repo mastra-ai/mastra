@@ -53,9 +53,9 @@ import { Mastra } from '@mastra/core'
 import { MastraAuthAuth0 } from '@mastra/auth-auth0'
 
 export const mastra = new Mastra({
-  server: {
-    auth: new MastraAuthAuth0(),
-  },
+	server: {
+		auth: new MastraAuthAuth0(),
+	},
 })
 ```
 
@@ -66,12 +66,12 @@ import { Mastra } from '@mastra/core'
 import { MastraAuthAuth0 } from '@mastra/auth-auth0'
 
 export const mastra = new Mastra({
-  server: {
-    auth: new MastraAuthAuth0({
-      domain: process.env.AUTH0_DOMAIN,
-      audience: process.env.AUTH0_AUDIENCE,
-    }),
-  },
+	server: {
+		auth: new MastraAuthAuth0({
+			domain: process.env.AUTH0_DOMAIN,
+			audience: process.env.AUTH0_AUDIENCE,
+		}),
+	},
 })
 ```
 
@@ -92,10 +92,10 @@ To customize user authorization, provide a custom `authorizeUser` function:
 import { MastraAuthAuth0 } from '@mastra/auth-auth0'
 
 const auth0Provider = new MastraAuthAuth0({
-  authorizeUser: async user => {
-    // Custom authorization logic
-    return user.email?.endsWith('@yourcompany.com') || false
-  },
+	authorizeUser: async user => {
+		// Custom authorization logic
+		return user.email?.endsWith('@yourcompany.com') || false
+	},
 })
 ```
 
@@ -122,19 +122,19 @@ import React from 'react'
 import { Auth0Provider } from '@auth0/auth0-react'
 
 const Auth0ProviderWithHistory = ({ children }) => {
-  return (
-    <Auth0Provider
-      domain={process.env.REACT_APP_AUTH0_DOMAIN}
-      clientId={process.env.REACT_APP_AUTH0_CLIENT_ID}
-      authorizationParams={{
-        redirect_uri: window.location.origin,
-        audience: process.env.REACT_APP_AUTH0_AUDIENCE,
-        scope: 'read:current_user update:current_user_metadata',
-      }}
-    >
-      {children}
-    </Auth0Provider>
-  )
+	return (
+		<Auth0Provider
+			domain={process.env.REACT_APP_AUTH0_DOMAIN}
+			clientId={process.env.REACT_APP_AUTH0_CLIENT_ID}
+			authorizationParams={{
+				redirect_uri: window.location.origin,
+				audience: process.env.REACT_APP_AUTH0_AUDIENCE,
+				scope: 'read:current_user update:current_user_metadata',
+			}}
+		>
+			{children}
+		</Auth0Provider>
+	)
 }
 
 export default Auth0ProviderWithHistory
@@ -148,14 +148,14 @@ Use the Auth0 React SDK to authenticate users and retrieve their access tokens:
 import { useAuth0 } from '@auth0/auth0-react'
 
 export const useAuth0Token = () => {
-  const { getAccessTokenSilently } = useAuth0()
+	const { getAccessTokenSilently } = useAuth0()
 
-  const getAccessToken = async () => {
-    const token = await getAccessTokenSilently()
-    return token
-  }
+	const getAccessToken = async () => {
+		const token = await getAccessTokenSilently()
+		return token
+	}
 
-  return { getAccessToken }
+	return { getAccessToken }
 }
 ```
 
@@ -173,12 +173,12 @@ When `auth` is enabled, all requests made with `MastraClient` must include a val
 import { MastraClient } from '@mastra/client-js'
 
 export const createMastraClient = (accessToken: string) => {
-  return new MastraClient({
-    baseUrl: 'https://<mastra-api-url>',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  })
+	return new MastraClient({
+		baseUrl: 'https://<mastra-api-url>',
+		headers: {
+			Authorization: `Bearer ${accessToken}`,
+		},
+	})
 }
 ```
 
@@ -202,37 +202,37 @@ Once `MastraClient` is configured with the Auth0 access token, you can send auth
     import { MastraClient } from '@mastra/client-js'
 
     export const MastraApiTest = () => {
-      const { getAccessTokenSilently } = useAuth0()
-      const [result, setResult] = useState(null)
+    	const { getAccessTokenSilently } = useAuth0()
+    	const [result, setResult] = useState(null)
 
-      const callMastraApi = async () => {
-        const token = await getAccessTokenSilently()
+    	const callMastraApi = async () => {
+    		const token = await getAccessTokenSilently()
 
-        const mastra = new MastraClient({
-          baseUrl: 'http://localhost:4111',
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        })
+    		const mastra = new MastraClient({
+    			baseUrl: 'http://localhost:4111',
+    			headers: {
+    				Authorization: `Bearer ${token}`,
+    			},
+    		})
 
-        const weatherAgent = mastra.getAgent('weatherAgent')
-        const response = await weatherAgent.generate("What's the weather like in New York")
+    		const weatherAgent = mastra.getAgent('weatherAgent')
+    		const response = await weatherAgent.generate("What's the weather like in New York")
 
-        setResult(response.text)
-      }
+    		setResult(response.text)
+    	}
 
-      return (
-        <div>
-          <button onClick={callMastraApi}>Test Mastra API</button>
+    	return (
+    		<div>
+    			<button onClick={callMastraApi}>Test Mastra API</button>
 
-          {result && (
-            <div className="result">
-              <h6>Result:</h6>
-              <pre>{result}</pre>
-            </div>
-          )}
-        </div>
-      )
+    			{result && (
+    				<div className="result">
+    					<h6>Result:</h6>
+    					<pre>{result}</pre>
+    				</div>
+    			)}
+    		</div>
+    	)
     }
     ```
   </TabItem>

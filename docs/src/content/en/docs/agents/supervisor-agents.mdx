@@ -38,38 +38,38 @@ import { Memory } from '@mastra/memory'
 import { LibSQLStore } from '@mastra/libsql'
 
 const researchAgent = new Agent({
-  id: 'research-agent',
-  // highlight-next-line
-  description: 'Gathers factual information and returns bullet-point summaries.',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+	id: 'research-agent',
+	// highlight-next-line
+	description: 'Gathers factual information and returns bullet-point summaries.',
+	model: '__GATEWAY_OPENAI_MODEL_MINI__',
 })
 
 const writingAgent = new Agent({
-  id: 'writing-agent',
-  // highlight-next-line
-  description: 'Transforms research into well-structured articles.',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+	id: 'writing-agent',
+	// highlight-next-line
+	description: 'Transforms research into well-structured articles.',
+	model: '__GATEWAY_OPENAI_MODEL_MINI__',
 })
 
 // highlight-start
 const supervisor = new Agent({
-  id: 'supervisor',
-  instructions: `You coordinate research and writing using specialized agents.
+	id: 'supervisor',
+	instructions: `You coordinate research and writing using specialized agents.
     Delegate to research-agent for facts, then writing-agent for content.`,
-  model: '__GATEWAY_OPENAI_MODEL__',
-  agents: { researchAgent, writingAgent },
-  memory: new Memory({
-    storage: new LibSQLStore({ id: 'storage', url: 'file:mastra.db' }),
-  }),
+	model: '__GATEWAY_OPENAI_MODEL__',
+	agents: { researchAgent, writingAgent },
+	memory: new Memory({
+		storage: new LibSQLStore({ id: 'storage', url: 'file:mastra.db' }),
+	}),
 })
 // highlight-end
 
 const stream = await supervisor.stream('Research AI in education and write an article', {
-  maxSteps: 10,
+	maxSteps: 10,
 })
 
 for await (const chunk of stream.textStream) {
-  process.stdout.write(chunk)
+	process.stdout.write(chunk)
 }
 ```
 
@@ -88,31 +88,31 @@ Called before the supervisor delegates to a subagent. Return an object to contro
 
 ```typescript title="src/mastra/agents/supervisor.ts"
 const stream = await supervisor.stream('Research AI trends', {
-  maxSteps: 10,
-  delegation: {
-    onDelegationStart: async context => {
-      console.log(`Delegating to: ${context.primitiveId}`)
+	maxSteps: 10,
+	delegation: {
+		onDelegationStart: async context => {
+			console.log(`Delegating to: ${context.primitiveId}`)
 
-      // Modify the prompt for a specific agent
-      if (context.primitiveId === 'research-agent') {
-        return {
-          proceed: true,
-          modifiedPrompt: `${context.prompt}\n\nFocus on 2024-2025 data.`,
-          modifiedMaxSteps: 5,
-        }
-      }
+			// Modify the prompt for a specific agent
+			if (context.primitiveId === 'research-agent') {
+				return {
+					proceed: true,
+					modifiedPrompt: `${context.prompt}\n\nFocus on 2024-2025 data.`,
+					modifiedMaxSteps: 5,
+				}
+			}
 
-      // Reject delegation after too many iterations
-      if (context.iteration > 8) {
-        return {
-          proceed: false,
-          rejectionReason: 'Max iterations reached. Synthesize current findings.',
-        }
-      }
+			// Reject delegation after too many iterations
+			if (context.iteration > 8) {
+				return {
+					proceed: false,
+					rejectionReason: 'Max iterations reached. Synthesize current findings.',
+				}
+			}
 
-      return { proceed: true }
-    },
-  },
+			return { proceed: true }
+		},
+	},
 })
 ```
 
@@ -133,20 +133,20 @@ Called after a delegation finishes. Use it to inspect results, provide feedback,
 
 ```typescript title="src/mastra/agents/supervisor.ts"
 const stream = await supervisor.stream('Research AI trends', {
-  maxSteps: 10,
-  delegation: {
-    onDelegationComplete: async context => {
-      console.log(`Completed: ${context.primitiveId}`)
+	maxSteps: 10,
+	delegation: {
+		onDelegationComplete: async context => {
+			console.log(`Completed: ${context.primitiveId}`)
 
-      // Bail on errors
-      if (context.error) {
-        context.bail()
-        return {
-          feedback: `Delegation to ${context.primitiveId} failed: ${context.error}. Try a different approach.`,
-        }
-      }
-    },
-  },
+			// Bail on errors
+			if (context.error) {
+				context.bail()
+				return {
+					feedback: `Delegation to ${context.primitiveId} failed: ${context.error}. Try a different approach.`,
+				}
+			}
+		},
+	},
 })
 ```
 
@@ -165,19 +165,19 @@ By default, subagents receive the full conversation context from the supervisor.
 
 ```typescript title="src/mastra/agents/supervisor.ts"
 const stream = await supervisor.stream('Research AI trends', {
-  maxSteps: 10,
-  delegation: {
-    messageFilter: ({ messages, primitiveId, prompt }) => {
-      // Remove messages containing sensitive data
-      return messages
-        .filter(msg => {
-          const content =
-            typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
-          return !content.includes('confidential')
-        })
-        .slice(-10) // Only pass the last 10 messages
-    },
-  },
+	maxSteps: 10,
+	delegation: {
+		messageFilter: ({ messages, primitiveId, prompt }) => {
+			// Remove messages containing sensitive data
+			return messages
+				.filter(msg => {
+					const content =
+						typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
+					return !content.includes('confidential')
+				})
+				.slice(-10) // Only pass the last 10 messages
+		},
+	},
 })
 ```
 
@@ -193,9 +193,9 @@ Set `includeSubAgentToolResultsInModelContext` to include the full subagent resu
 
 ```typescript title="src/mastra/agents/supervisor.ts"
 await supervisor.generate('Research AI trends', {
-  delegation: {
-    includeSubAgentToolResultsInModelContext: true,
-  },
+	delegation: {
+		includeSubAgentToolResultsInModelContext: true,
+	},
 })
 ```
 
@@ -205,26 +205,26 @@ await supervisor.generate('Research AI trends', {
 
 ```typescript title="src/mastra/agents/supervisor.ts"
 const stream = await supervisor.stream('Research AI trends', {
-  maxSteps: 10,
-  onIterationComplete: async context => {
-    console.log(`Iteration ${context.iteration}/${context.maxIterations}`)
-    console.log(`Finish reason: ${context.finishReason}`)
+	maxSteps: 10,
+	onIterationComplete: async context => {
+		console.log(`Iteration ${context.iteration}/${context.maxIterations}`)
+		console.log(`Finish reason: ${context.finishReason}`)
 
-    // Inject feedback to guide the agent
-    if (!context.text.includes('recommendations')) {
-      return {
-        continue: true,
-        feedback: 'Please include specific recommendations in your analysis.',
-      }
-    }
+		// Inject feedback to guide the agent
+		if (!context.text.includes('recommendations')) {
+			return {
+				continue: true,
+				feedback: 'Please include specific recommendations in your analysis.',
+			}
+		}
 
-    // Stop early when the response is sufficient
-    if (context.text.length > 1000 && context.finishReason === 'stop') {
-      return { continue: false }
-    }
+		// Stop early when the response is sufficient
+		if (context.text.length > 1000 && context.finishReason === 'stop') {
+			return { continue: false }
+		}
 
-    return { continue: true }
-  },
+		return { continue: true }
+	},
 })
 ```
 
@@ -254,30 +254,30 @@ Tool approvals propagate through the delegation chain. When a subagent uses a to
 
 ```typescript
 const sensitiveDataTool = createTool({
-  id: 'get-user-data',
-  requireApproval: true,
-  execute: async input => {
-    return await database.getUserData(input.userId)
-  },
+	id: 'get-user-data',
+	requireApproval: true,
+	execute: async input => {
+		return await database.getUserData(input.userId)
+	},
 })
 
 const dataAgent = new Agent({
-  id: 'data-agent',
-  tools: { sensitiveDataTool },
+	id: 'data-agent',
+	tools: { sensitiveDataTool },
 })
 
 const supervisor = new Agent({
-  id: 'supervisor',
-  agents: { dataAgent },
-  memory: new Memory(),
+	id: 'supervisor',
+	agents: { dataAgent },
+	memory: new Memory(),
 })
 
 const stream = await supervisor.stream('Get data for user 123')
 
 for await (const chunk of stream.fullStream) {
-  if (chunk.type === 'tool-call-approval') {
-    console.log('Tool requires approval:', chunk.payload.toolName)
-  }
+	if (chunk.type === 'tool-call-approval') {
+		console.log('Tool requires approval:', chunk.payload.toolName)
+	}
 }
 ```
 
@@ -289,7 +289,7 @@ When you pass an `abortSignal` to the supervisor's [`stream()`](/reference/strea
 const controller = new AbortController()
 
 const stream = await supervisor.stream('Research AI trends', {
-  abortSignal: controller.signal,
+	abortSignal: controller.signal,
 })
 
 // Cancel the supervisor and any in-flight subagents
@@ -304,24 +304,24 @@ Agents don't always produce a complete, correct output on the first try. Task co
 import { createScorer } from '@mastra/core/evals'
 
 const taskCompleteScorer = createScorer({
-  id: 'task-complete',
-  name: 'Task Completeness',
+	id: 'task-complete',
+	name: 'Task Completeness',
 }).generateScore(async context => {
-  const text = (context.run.output || '').toString()
-  const hasAnalysis = text.includes('analysis')
-  const hasRecommendations = text.includes('recommendation')
-  return hasAnalysis && hasRecommendations ? 1 : 0
+	const text = (context.run.output || '').toString()
+	const hasAnalysis = text.includes('analysis')
+	const hasRecommendations = text.includes('recommendation')
+	return hasAnalysis && hasRecommendations ? 1 : 0
 })
 
 const stream = await supervisor.stream('Research AI in education', {
-  maxSteps: 10,
-  isTaskComplete: {
-    scorers: [taskCompleteScorer],
-    strategy: 'all',
-    onComplete: async result => {
-      console.log('Task complete:', result.complete)
-    },
-  },
+	maxSteps: 10,
+	isTaskComplete: {
+		scorers: [taskCompleteScorer],
+		strategy: 'all',
+		onComplete: async result => {
+			console.log('Task complete:', result.complete)
+		},
+	},
 })
 ```
 
@@ -338,26 +338,26 @@ import { Agent } from '@mastra/core/agent'
 import { createRubricScorer } from '@mastra/evals/scorers/prebuilt'
 
 const supervisor = new Agent({
-  id: 'supervisor',
-  instructions: 'You coordinate research and writing using specialized agents.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  agents: { researchAgent, writingAgent },
+	id: 'supervisor',
+	instructions: 'You coordinate research and writing using specialized agents.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	agents: { researchAgent, writingAgent },
 })
 
 const rubricScorer = createRubricScorer({
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
-  criteria: [
-    { description: 'The response includes an analysis section' },
-    { description: 'The response includes concrete recommendations' },
-  ],
+	model: '__GATEWAY_OPENAI_MODEL_MINI__',
+	criteria: [
+		{ description: 'The response includes an analysis section' },
+		{ description: 'The response includes concrete recommendations' },
+	],
 })
 
 const stream = await supervisor.stream('Research AI in education', {
-  maxSteps: 10,
-  isTaskComplete: {
-    scorers: [rubricScorer],
-    strategy: 'all',
-  },
+	maxSteps: 10,
+	isTaskComplete: {
+		scorers: [rubricScorer],
+		strategy: 'all',
+	},
 })
 ```
 
@@ -371,7 +371,7 @@ Each subagent should have a clear `description` that explains what it does, what
 
 ```typescript
 const supervisor = new Agent({
-  instructions: `You coordinate research and writing tasks.
+	instructions: `You coordinate research and writing tasks.
 
 Available resources:
 - researchAgent: Gathers factual data and sources (returns bullet points)
@@ -385,7 +385,7 @@ Delegation strategy:
 Success criteria:
 - All user questions are fully answered
 - Response is well-formatted and complete`,
-  agents: { researchAgent, writingAgent },
+	agents: { researchAgent, writingAgent },
 })
 ```
 
@@ -397,22 +397,22 @@ Enable the [backgroundTasks manager](/reference/configuration#backgroundtasks) o
 
 ```typescript title="src/mastra/agents/supervisor.ts"
 const supervisor = new Agent({
-  id: 'supervisor',
-  instructions: 'Coordinate research and writing using the available agents.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  agents: { researchAgent, writingAgent },
-  // highlight-start
-  backgroundTasks: {
-    tools: {
-      researchAgent: { enabled: true, timeoutMs: 900_000 },
-      writingAgent: { enabled: true, timeoutMs: 900_000 },
-    },
-  },
-  // highlight-end
+	id: 'supervisor',
+	instructions: 'Coordinate research and writing using the available agents.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	agents: { researchAgent, writingAgent },
+	// highlight-start
+	backgroundTasks: {
+		tools: {
+			researchAgent: { enabled: true, timeoutMs: 900_000 },
+			writingAgent: { enabled: true, timeoutMs: 900_000 },
+		},
+	},
+	// highlight-end
 })
 
 const stream = await supervisor.streamUntilIdle('Research AI in education and write an article', {
-  memory: { thread: 't1', resource: 'u1' },
+	memory: { thread: 't1', resource: 'u1' },
 })
 ```
 
@@ -426,12 +426,12 @@ When using the [editor](/docs/editor/overview), you can control which stored ver
 
 ```typescript
 const result = await supervisor.generate('Research and write about AI safety', {
-  versions: {
-    agents: {
-      'research-agent': { status: 'published' },
-      'writing-agent': { versionId: 'draft-456' },
-    },
-  },
+	versions: {
+		agents: {
+			'research-agent': { status: 'published' },
+			'writing-agent': { versionId: 'draft-456' },
+		},
+	},
 })
 ```
 

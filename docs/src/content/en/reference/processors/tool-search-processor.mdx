@@ -15,16 +15,16 @@ The `ToolSearchProcessor` is an **input processor** that enables dynamic tool di
 import { ToolSearchProcessor } from '@mastra/core/processors'
 
 const toolSearch = new ToolSearchProcessor({
-  tools: {
-    createIssue: githubTools.createIssue,
-    sendEmail: emailTools.send,
-    getWeather: weatherTools.forecast,
-    // ... many more tools
-  },
-  search: {
-    topK: 5,
-    minScore: 0.1,
-  },
+	tools: {
+		createIssue: githubTools.createIssue,
+		sendEmail: emailTools.send,
+		getWeather: weatherTools.forecast,
+		// ... many more tools
+	},
+	search: {
+		topK: 5,
+		minScore: 0.1,
+	},
 })
 ```
 
@@ -32,77 +32,77 @@ const toolSearch = new ToolSearchProcessor({
 
 <PropertiesTable
   content={[
-  {
-    name: 'options',
-    type: 'ToolSearchProcessorOptions',
-    description: 'Configuration options for the tool search processor',
-    isOptional: false,
-    properties: [
-      {
-        type: 'ToolSearchProcessorOptions',
-        parameters: [
-          {
-            name: 'tools',
-            type: 'Record<string, Tool>',
-            description:
-              'All tools that can be searched and loaded dynamically. These tools are not immediately available to the agent — they must be discovered via search and loaded on demand.',
-            isOptional: false,
-          },
-          {
-            name: 'search',
-            type: '{ topK?: number; minScore?: number; autoLoad?: boolean }',
-            description: 'Configuration for the search behavior.',
-            isOptional: true,
-          },
-          {
-            name: 'search.topK',
-            type: 'number',
-            description: 'Maximum number of tools to return in search results.',
-            isOptional: true,
-            default: '5',
-          },
-          {
-            name: 'search.minScore',
-            type: 'number',
-            description: 'Minimum relevance score (0-1) for including a tool in search results.',
-            isOptional: true,
-            default: '0',
-          },
-          {
-            name: 'search.autoLoad',
-            type: 'boolean',
-            description:
-              'When true, tools returned by search_tools are activated immediately as part of the search. The load_tool meta-tool is not exposed, collapsing the two-step search then load flow into a single search step. Discovered tools become available on the next turn. Keep topK conservative since every match is activated.',
-            isOptional: true,
-            default: 'false',
-          },
-          {
-            name: 'storage',
-            type: "'in-memory' | 'context'",
-            description:
-              "Where loaded-tool state lives. 'in-memory' (default) tracks loaded tools in an in-memory map per thread with TTL cleanup (see ttl); state is lost on restart and anonymous requests share a 'default' entry. 'context' derives loaded state from the conversation messages — a tool is loaded while a search_tools/load_tool result naming it remains in the messages; it is restart-safe, requires no memory, and de-loads automatically once that result is no longer present in the messages. The 'context' store is opt-in.",
-            isOptional: true,
-            default: "'in-memory'",
-          },
-          {
-            name: 'ttl',
-            type: 'number',
-            description:
-              "Time-to-live for in-memory thread state, in milliseconds. Only applies to the default storage: 'in-memory' store; after this duration of inactivity thread state is cleaned up. Set to 0 to disable cleanup. Ignored by the 'context' store.",
-            isOptional: true,
-            default: '3600000',
-          },
-          {
-            name: 'filter',
-            type: '(args: ToolSearchFilterArgs) => boolean | Promise<boolean>',
-            description:
-              'Optional request-aware hook for hiding tools from search results, blocking tool loading, or hiding already-loaded tools for the current request.',
-            isOptional: true,
-          },
-        ],
-      },
-    ],
-  },
+	{
+		name: 'options',
+		type: 'ToolSearchProcessorOptions',
+		description: 'Configuration options for the tool search processor',
+		isOptional: false,
+		properties: [
+			{
+				type: 'ToolSearchProcessorOptions',
+				parameters: [
+					{
+						name: 'tools',
+						type: 'Record<string, Tool>',
+						description:
+							'All tools that can be searched and loaded dynamically. These tools are not immediately available to the agent — they must be discovered via search and loaded on demand.',
+						isOptional: false,
+					},
+					{
+						name: 'search',
+						type: '{ topK?: number; minScore?: number; autoLoad?: boolean }',
+						description: 'Configuration for the search behavior.',
+						isOptional: true,
+					},
+					{
+						name: 'search.topK',
+						type: 'number',
+						description: 'Maximum number of tools to return in search results.',
+						isOptional: true,
+						default: '5',
+					},
+					{
+						name: 'search.minScore',
+						type: 'number',
+						description: 'Minimum relevance score (0-1) for including a tool in search results.',
+						isOptional: true,
+						default: '0',
+					},
+					{
+						name: 'search.autoLoad',
+						type: 'boolean',
+						description:
+							'When true, tools returned by search_tools are activated immediately as part of the search. The load_tool meta-tool is not exposed, collapsing the two-step search then load flow into a single search step. Discovered tools become available on the next turn. Keep topK conservative since every match is activated.',
+						isOptional: true,
+						default: 'false',
+					},
+					{
+						name: 'storage',
+						type: "'in-memory' | 'context'",
+						description:
+							"Where loaded-tool state lives. 'in-memory' (default) tracks loaded tools in an in-memory map per thread with TTL cleanup (see ttl); state is lost on restart and anonymous requests share a 'default' entry. 'context' derives loaded state from the conversation messages — a tool is loaded while a search_tools/load_tool result naming it remains in the messages; it is restart-safe, requires no memory, and de-loads automatically once that result is no longer present in the messages. The 'context' store is opt-in.",
+						isOptional: true,
+						default: "'in-memory'",
+					},
+					{
+						name: 'ttl',
+						type: 'number',
+						description:
+							"Time-to-live for in-memory thread state, in milliseconds. Only applies to the default storage: 'in-memory' store; after this duration of inactivity thread state is cleaned up. Set to 0 to disable cleanup. Ignored by the 'context' store.",
+						isOptional: true,
+						default: '3600000',
+					},
+					{
+						name: 'filter',
+						type: '(args: ToolSearchFilterArgs) => boolean | Promise<boolean>',
+						description:
+							'Optional request-aware hook for hiding tools from search results, blocking tool loading, or hiding already-loaded tools for the current request.',
+						isOptional: true,
+					},
+				],
+			},
+		],
+	},
 ]}
 />
 
@@ -110,25 +110,25 @@ const toolSearch = new ToolSearchProcessor({
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: "Processor identifier set to 'tool-search'",
-    isOptional: false,
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: "Processor display name set to 'Tool Search Processor'",
-    isOptional: false,
-  },
-  {
-    name: 'processInputStep',
-    type: '(args: ProcessInputStepArgs) => Promise<ProcessInputStepResult>',
-    description:
-      "Processes each step to inject search/load meta-tools and any previously loaded tools into the agent's tool set.",
-    isOptional: false,
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: "Processor identifier set to 'tool-search'",
+		isOptional: false,
+	},
+	{
+		name: 'name',
+		type: 'string',
+		description: "Processor display name set to 'Tool Search Processor'",
+		isOptional: false,
+	},
+	{
+		name: 'processInputStep',
+		type: '(args: ProcessInputStepArgs) => Promise<ProcessInputStepResult>',
+		description:
+			"Processes each step to inject search/load meta-tools and any previously loaded tools into the agent's tool set.",
+		isOptional: false,
+	},
 ]}
 />
 
@@ -182,16 +182,16 @@ Use `filter` to apply request-specific policy to dynamic tools. The hook receive
 import { ToolSearchProcessor } from '@mastra/core/processors'
 
 const toolSearch = new ToolSearchProcessor({
-  tools: allTools,
-  filter: ({ toolName, requestContext, phase }) => {
-    const plan = requestContext?.get('plan')
+	tools: allTools,
+	filter: ({ toolName, requestContext, phase }) => {
+		const plan = requestContext?.get('plan')
 
-    if (phase === 'search') {
-      return true
-    }
+		if (phase === 'search') {
+			return true
+		}
 
-    return plan === 'pro' || !toolName.startsWith('premium_')
-  },
+		return plan === 'pro' || !toolName.startsWith('premium_')
+	},
 })
 ```
 
@@ -215,23 +215,23 @@ import { slackTools } from './tools/slack'
 import { dbTools } from './tools/database'
 
 const toolSearch = new ToolSearchProcessor({
-  tools: {
-    ...githubTools, // createIssue, listPRs, mergePR, ...
-    ...slackTools, // sendMessage, createChannel, ...
-    ...dbTools, // query, insert, update, ...
-  },
-  search: {
-    topK: 5,
-    minScore: 0.1,
-  },
+	tools: {
+		...githubTools, // createIssue, listPRs, mergePR, ...
+		...slackTools, // sendMessage, createChannel, ...
+		...dbTools, // query, insert, update, ...
+	},
+	search: {
+		topK: 5,
+		minScore: 0.1,
+	},
 })
 
 const agent = new Agent({
-  name: 'dynamic-tools-agent',
-  instructions:
-    'You are a helpful assistant with access to many tools. Use search_tools to find relevant tools, then load_tool to make them available.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  inputProcessors: [toolSearch],
+	name: 'dynamic-tools-agent',
+	instructions:
+		'You are a helpful assistant with access to many tools. Use search_tools to find relevant tools, then load_tool to make them available.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	inputProcessors: [toolSearch],
 })
 ```
 
@@ -249,11 +249,11 @@ Set `search.autoLoad` to `true` to skip the separate load step. The tools return
 
 ```typescript
 const toolSearch = new ToolSearchProcessor({
-  tools: allTools,
-  search: {
-    topK: 3,
-    autoLoad: true,
-  },
+	tools: allTools,
+	search: {
+		topK: 3,
+		autoLoad: true,
+	},
 })
 ```
 
@@ -292,8 +292,8 @@ Loaded state is derived from the conversation messages: a tool is loaded while a
 import { ToolSearchProcessor } from '@mastra/core/processors'
 
 const toolSearch = new ToolSearchProcessor({
-  tools: allTools,
-  storage: 'context',
+	tools: allTools,
+	storage: 'context',
 })
 ```
 
@@ -308,16 +308,16 @@ import { Agent } from '@mastra/core/agent'
 import { ToolSearchProcessor, TokenLimiter } from '@mastra/core/processors'
 
 const agent = new Agent({
-  name: 'my-agent',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  inputProcessors: [
-    new ToolSearchProcessor({
-      tools: allTools,
-      search: { topK: 5 },
-    }),
-    // Place TokenLimiter last to ensure context fits
-    new TokenLimiter(127000),
-  ],
+	name: 'my-agent',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	inputProcessors: [
+		new ToolSearchProcessor({
+			tools: allTools,
+			search: { topK: 5 },
+		}),
+		// Place TokenLimiter last to ensure context fits
+		new TokenLimiter(127000),
+	],
 })
 ```
 

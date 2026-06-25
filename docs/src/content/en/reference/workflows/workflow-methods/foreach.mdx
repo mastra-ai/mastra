@@ -19,27 +19,27 @@ workflow.foreach(step1, { concurrency: 2 })
 
 <PropertiesTable
   content={[
-  {
-    name: 'step',
-    type: 'Step',
-    description: 'The step instance to execute in the loop. The previous step must return an array type.',
-    isOptional: false,
-  },
-  {
-    name: 'opts',
-    type: 'object',
-    description:
-      'Optional configuration for the loop. The concurrency option controls how many iterations can run in parallel (default: 1)',
-    isOptional: true,
-    properties: [
-      {
-        name: 'concurrency',
-        type: 'number',
-        description: 'The number of concurrent iterations allowed (default: 1)',
-        isOptional: true,
-      },
-    ],
-  },
+	{
+		name: 'step',
+		type: 'Step',
+		description: 'The step instance to execute in the loop. The previous step must return an array type.',
+		isOptional: false,
+	},
+	{
+		name: 'opts',
+		type: 'object',
+		description:
+			'Optional configuration for the loop. The concurrency option controls how many iterations can run in parallel (default: 1)',
+		isOptional: true,
+		properties: [
+			{
+				name: 'concurrency',
+				type: 'number',
+				description: 'The number of concurrent iterations allowed (default: 1)',
+				isOptional: true,
+			},
+		],
+	},
 ]}
 />
 
@@ -47,11 +47,11 @@ workflow.foreach(step1, { concurrency: 2 })
 
 <PropertiesTable
   content={[
-  {
-    name: 'workflow',
-    type: 'Workflow',
-    description: "The workflow instance for method chaining. The output type is an array of the step's output type.",
-  },
+	{
+		name: 'workflow',
+		type: 'Workflow',
+		description: "The workflow instance for method chaining. The output type is an array of the step's output type.",
+	},
 ]}
 />
 
@@ -79,9 +79,9 @@ When you chain `.then()` after `.foreach()`, the next step receives the entire o
 
 ```typescript
 workflow
-  .foreach(processItemStep) // Output: array of processed items
-  .then(aggregateStep) // Input: the entire array
-  .commit()
+	.foreach(processItemStep) // Output: array of processed items
+	.then(aggregateStep) // Input: the entire array
+	.commit()
 ```
 
 ### Using `.map()` after `.foreach()`
@@ -90,13 +90,13 @@ Use `.map()` to transform the array output before passing it to the next step:
 
 ```typescript
 workflow
-  .foreach(processItemStep)
-  .map(async ({ inputData }) => ({
-    total: inputData.reduce((sum, item) => sum + item.value, 0),
-    count: inputData.length,
-  }))
-  .then(nextStep)
-  .commit()
+	.foreach(processItemStep)
+	.map(async ({ inputData }) => ({
+		total: inputData.reduce((sum, item) => sum + item.value, 0),
+		count: inputData.length,
+	}))
+	.then(nextStep)
+	.commit()
 ```
 
 ### Chaining multiple `.foreach()` calls
@@ -105,19 +105,19 @@ When you chain `.foreach()` calls, each operates on the array from the previous 
 
 ```typescript
 workflow
-  .foreach(stepA) // If input is [a, b, c], output is [A, B, C]
-  .foreach(stepB) // Operates on [A, B, C], output is [A', B', C']
-  .commit()
+	.foreach(stepA) // If input is [a, b, c], output is [A, B, C]
+	.foreach(stepB) // Operates on [A, B, C], output is [A', B', C']
+	.commit()
 ```
 
 If a step inside `.foreach()` returns an array, the output becomes an array of arrays. Use `.map()` with `.flat()` to flatten:
 
 ```typescript
 workflow
-  .foreach(chunkStep) // Output: [[chunk1, chunk2], [chunk3, chunk4]]
-  .map(async ({ inputData }) => inputData.flat()) // Output: [chunk1, chunk2, chunk3, chunk4]
-  .foreach(embedStep)
-  .commit()
+	.foreach(chunkStep) // Output: [[chunk1, chunk2], [chunk3, chunk4]]
+	.map(async ({ inputData }) => inputData.flat()) // Output: [chunk1, chunk2, chunk3, chunk4]
+	.foreach(embedStep)
+	.commit()
 ```
 
 ### Progress events during streaming
@@ -129,10 +129,10 @@ const run = await workflow.createRun()
 const stream = run.stream({ inputData })
 
 for await (const chunk of stream) {
-  if (chunk.type === 'workflow-step-progress') {
-    console.log(`${chunk.payload.completedCount}/${chunk.payload.totalCount}`)
-    // e.g. "1/3", "2/3", "3/3"
-  }
+	if (chunk.type === 'workflow-step-progress') {
+		console.log(`${chunk.payload.completedCount}/${chunk.payload.totalCount}`)
+		// e.g. "1/3", "2/3", "3/3"
+	}
 }
 ```
 
@@ -140,37 +140,37 @@ Each progress event payload contains:
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'The step ID of the foreach step',
-  },
-  {
-    name: 'completedCount',
-    type: 'number',
-    description: 'Number of iterations completed so far',
-  },
-  {
-    name: 'totalCount',
-    type: 'number',
-    description: 'Total number of iterations',
-  },
-  {
-    name: 'currentIndex',
-    type: 'number',
-    description: 'Index of the iteration that just completed',
-  },
-  {
-    name: 'iterationStatus',
-    type: "'success' | 'failed' | 'suspended'",
-    description: 'Status of the iteration that just completed',
-  },
-  {
-    name: 'iterationOutput',
-    type: 'Record<string, any>',
-    description: "Output of the iteration (present when iterationStatus is 'success')",
-    isOptional: true,
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'The step ID of the foreach step',
+	},
+	{
+		name: 'completedCount',
+		type: 'number',
+		description: 'Number of iterations completed so far',
+	},
+	{
+		name: 'totalCount',
+		type: 'number',
+		description: 'Total number of iterations',
+	},
+	{
+		name: 'currentIndex',
+		type: 'number',
+		description: 'Index of the iteration that just completed',
+	},
+	{
+		name: 'iterationStatus',
+		type: "'success' | 'failed' | 'suspended'",
+		description: 'Status of the iteration that just completed',
+	},
+	{
+		name: 'iterationOutput',
+		type: 'Record<string, any>',
+		description: "Output of the iteration (present when iterationStatus is 'success')",
+		isOptional: true,
+	},
 ]}
 />
 
@@ -180,9 +180,9 @@ When a step inside `.foreach()` suspends, each iteration suspends independently.
 
 ```typescript
 await run.resume({
-  step: 'approve',
-  resumeData: { ok: true },
-  forEachIndex: 1,
+	step: 'approve',
+	resumeData: { ok: true },
+	forEachIndex: 1,
 })
 ```
 

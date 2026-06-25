@@ -9,20 +9,20 @@ Update your Mastra configuration to include your new workflow workflows:
 ```typescript
 // In src/mastra/index.ts
 import {
-  contentWorkflow,
-  aiContentWorkflow,
-  parallelAnalysisWorkflow,
-  conditionalWorkflow,
+	contentWorkflow,
+	aiContentWorkflow,
+	parallelAnalysisWorkflow,
+	conditionalWorkflow,
 } from './workflows/content-workflow'
 
 export const mastra = new Mastra({
-  workflows: {
-    contentWorkflow,
-    aiContentWorkflow,
-    parallelAnalysisWorkflow,
-    conditionalWorkflow, // Add the conditional workflow
-  },
-  // ... rest of configuration
+	workflows: {
+		contentWorkflow,
+		aiContentWorkflow,
+		parallelAnalysisWorkflow,
+		conditionalWorkflow, // Add the conditional workflow
+	},
+	// ... rest of configuration
 })
 ```
 

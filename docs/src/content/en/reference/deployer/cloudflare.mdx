@@ -26,33 +26,33 @@ import { Mastra } from '@mastra/core'
 import { CloudflareDeployer } from '@mastra/deployer-cloudflare'
 
 export const mastra = new Mastra({
-  deployer: new CloudflareDeployer({
-    name: 'your-project-name',
-    routes: [
-      {
-        pattern: 'example.com/*',
-        zone_name: 'example.com',
-        custom_domain: true,
-      },
-    ],
-    vars: {
-      NODE_ENV: 'production',
-    },
-    d1_databases: [
-      {
-        binding: 'DB',
-        database_name: 'my-database',
-        database_id: 'd1-database-id',
-        preview_database_id: 'your-preview-database-id',
-      },
-    ],
-    kv_namespaces: [
-      {
-        binding: 'CACHE',
-        id: 'kv-namespace-id',
-      },
-    ],
-  }),
+	deployer: new CloudflareDeployer({
+		name: 'your-project-name',
+		routes: [
+			{
+				pattern: 'example.com/*',
+				zone_name: 'example.com',
+				custom_domain: true,
+			},
+		],
+		vars: {
+			NODE_ENV: 'production',
+		},
+		d1_databases: [
+			{
+				binding: 'DB',
+				database_name: 'my-database',
+				database_id: 'd1-database-id',
+				preview_database_id: 'your-preview-database-id',
+			},
+		],
+		kv_namespaces: [
+			{
+				binding: 'CACHE',
+				id: 'kv-namespace-id',
+			},
+		],
+	}),
 })
 ```
 
@@ -87,22 +87,22 @@ import { registerApiRoute } from '@mastra/core/server'
 import { CloudflareDeployer } from '@mastra/deployer-cloudflare'
 
 export const mastra = new Mastra({
-  deployer: new CloudflareDeployer({
-    name: 'my-worker',
-    kv_namespaces: [{ binding: 'CACHE', id: 'your-kv-namespace-id' }],
-  }),
-  server: {
-    apiRoutes: [
-      registerApiRoute('/bindings', {
-        method: 'GET',
-        requiresAuth: false,
-        handler: async c => {
-          await env.CACHE.put('status', 'ok')
-          return c.json({ status: await env.CACHE.get('status') })
-        },
-      }),
-    ],
-  },
+	deployer: new CloudflareDeployer({
+		name: 'my-worker',
+		kv_namespaces: [{ binding: 'CACHE', id: 'your-kv-namespace-id' }],
+	}),
+	server: {
+		apiRoutes: [
+			registerApiRoute('/bindings', {
+				method: 'GET',
+				requiresAuth: false,
+				handler: async c => {
+					await env.CACHE.put('status', 'ok')
+					return c.json({ status: await env.CACHE.get('status') })
+				},
+			}),
+		],
+	},
 })
 ```
 
@@ -112,7 +112,7 @@ Mastra's Babel plugin defers `new Mastra(...)` so that `env` is available when i
 ```typescript
 // ✅ Works — binding is inside new Mastra(), so it's deferred
 export const mastra = new Mastra({
-  storage: new D1Store({ binding: env.DB }),
+	storage: new D1Store({ binding: env.DB }),
 })
 
 // ❌ Breaks — env.DB is undefined at module load

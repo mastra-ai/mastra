@@ -33,9 +33,9 @@ Create a new vector index:
 
 ```typescript
 const result = await vector.createIndex({
-  indexName: 'new-index',
-  dimension: 128,
-  metric: 'cosine', // 'cosine', 'euclidean', or 'dotproduct'
+	indexName: 'new-index',
+	dimension: 128,
+	metric: 'cosine', // 'cosine', 'euclidean', or 'dotproduct'
 })
 ```
 
@@ -45,13 +45,13 @@ Add or update vectors in an index:
 
 ```typescript
 const ids = await vector.upsert({
-  indexName: 'my-index',
-  vectors: [
-    [0.1, 0.2, 0.3], // First vector
-    [0.4, 0.5, 0.6], // Second vector
-  ],
-  metadata: [{ label: 'first' }, { label: 'second' }],
-  ids: ['id1', 'id2'], // Optional: Custom IDs
+	indexName: 'my-index',
+	vectors: [
+		[0.1, 0.2, 0.3], // First vector
+		[0.4, 0.5, 0.6], // Second vector
+	],
+	metadata: [{ label: 'first' }, { label: 'second' }],
+	ids: ['id1', 'id2'], // Optional: Custom IDs
 })
 ```
 
@@ -61,11 +61,11 @@ Search for similar vectors:
 
 ```typescript
 const results = await vector.query({
-  indexName: 'my-index',
-  queryVector: [0.1, 0.2, 0.3],
-  topK: 10,
-  filter: { label: 'first' }, // Optional: Metadata filter
-  includeVector: true, // Optional: Include vectors in results
+	indexName: 'my-index',
+	queryVector: [0.1, 0.2, 0.3],
+	topK: 10,
+	filter: { label: 'first' }, // Optional: Metadata filter
+	includeVector: true, // Optional: Include vectors in results
 })
 ```
 

@@ -33,14 +33,14 @@ import { Mastra } from '@mastra/core'
 import { workflowRoute } from '@mastra/ai-sdk'
 
 export const mastra = new Mastra({
-  server: {
-    apiRoutes: [
-      workflowRoute({
-        path: '/workflow',
-        workflow: 'weatherWorkflow',
-      }),
-    ],
-  },
+	server: {
+		apiRoutes: [
+			workflowRoute({
+				path: '/workflow',
+				workflow: 'weatherWorkflow',
+			}),
+		],
+	},
 })
 ```
 
@@ -51,13 +51,13 @@ import { Mastra } from '@mastra/core'
 import { workflowRoute } from '@mastra/ai-sdk'
 
 export const mastra = new Mastra({
-  server: {
-    apiRoutes: [
-      workflowRoute({
-        path: '/workflow/:workflowId',
-      }),
-    ],
-  },
+	server: {
+		apiRoutes: [
+			workflowRoute({
+				path: '/workflow/:workflowId',
+			}),
+		],
+	},
 })
 ```
 
@@ -65,36 +65,36 @@ export const mastra = new Mastra({
 
 <PropertiesTable
   content={[
-  {
-    name: 'version',
-    type: "'v5' | 'v6'",
-    description:
-      "Selects the AI SDK stream contract to emit. Omit it or pass `'v5'` for the existing default behavior. Pass `'v6'` when your app is typed against AI SDK v6 response helpers.",
-    isOptional: true,
-    defaultValue: "'v5'",
-  },
-  {
-    name: 'path',
-    type: 'string',
-    description:
-      'The route path (e.g., `/workflow` or `/workflow/:workflowId`). Include `:workflowId` for dynamic workflow routing.',
-    isOptional: true,
-    defaultValue: "'/api/workflows/:workflowId/stream'",
-  },
-  {
-    name: 'workflow',
-    type: 'string',
-    description: 'Fixed workflow ID when not using dynamic routing.',
-    isOptional: true,
-    defaultValue: 'undefined',
-  },
-  {
-    name: 'includeTextStreamParts',
-    type: 'boolean',
-    description: 'Whether to include text stream parts in the output.',
-    isOptional: true,
-    defaultValue: 'true',
-  },
+	{
+		name: 'version',
+		type: "'v5' | 'v6'",
+		description:
+			"Selects the AI SDK stream contract to emit. Omit it or pass `'v5'` for the existing default behavior. Pass `'v6'` when your app is typed against AI SDK v6 response helpers.",
+		isOptional: true,
+		defaultValue: "'v5'",
+	},
+	{
+		name: 'path',
+		type: 'string',
+		description:
+			'The route path (e.g., `/workflow` or `/workflow/:workflowId`). Include `:workflowId` for dynamic workflow routing.',
+		isOptional: true,
+		defaultValue: "'/api/workflows/:workflowId/stream'",
+	},
+	{
+		name: 'workflow',
+		type: 'string',
+		description: 'Fixed workflow ID when not using dynamic routing.',
+		isOptional: true,
+		defaultValue: 'undefined',
+	},
+	{
+		name: 'includeTextStreamParts',
+		type: 'boolean',
+		description: 'Whether to include text stream parts in the output.',
+		isOptional: true,
+		defaultValue: 'true',
+	},
 ]}
 />
 
@@ -104,21 +104,21 @@ You can use [`prepareSendMessagesRequest`](https://ai-sdk.dev/docs/reference/ai-
 
 ```typescript
 const { error, status, sendMessage, messages, regenerate, stop } = useChat({
-  transport: new DefaultChatTransport({
-    api: 'http://localhost:4111/workflow',
-    prepareSendMessagesRequest({ messages }) {
-      return {
-        body: {
-          inputData: {
-            city: messages[messages.length - 1].parts[0].text,
-          },
-          // Or resumeData for resuming a suspended workflow
-          resumeData: {
-            confirmation: messages[messages.length - 1].parts[0].text,
-          },
-        },
-      }
-    },
-  }),
+	transport: new DefaultChatTransport({
+		api: 'http://localhost:4111/workflow',
+		prepareSendMessagesRequest({ messages }) {
+			return {
+				body: {
+					inputData: {
+						city: messages[messages.length - 1].parts[0].text,
+					},
+					// Or resumeData for resuming a suspended workflow
+					resumeData: {
+						confirmation: messages[messages.length - 1].parts[0].text,
+					},
+				},
+			}
+		},
+	}),
 })
 ```

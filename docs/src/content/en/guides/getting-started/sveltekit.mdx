@@ -71,39 +71,39 @@ const THREAD_ID = 'example-user-id'
 const RESOURCE_ID = 'weather-chat'
 
 export const POST: RequestHandler = async ({ request }) => {
-  const params = await request.json()
-  const stream = await handleChatStream({
-    mastra,
-    agentId: 'weather-agent',
-    params: {
-      ...params,
-      memory: {
-        ...params.memory,
-        thread: THREAD_ID,
-        resource: RESOURCE_ID,
-      },
-    },
-  })
+	const params = await request.json()
+	const stream = await handleChatStream({
+		mastra,
+		agentId: 'weather-agent',
+		params: {
+			...params,
+			memory: {
+				...params.memory,
+				thread: THREAD_ID,
+				resource: RESOURCE_ID,
+			},
+		},
+	})
 
-  return createUIMessageStreamResponse({ stream })
+	return createUIMessageStreamResponse({ stream })
 }
 
 export const GET: RequestHandler = async () => {
-  const memory = await mastra.getAgentById('weather-agent').getMemory()
-  let response = null
+	const memory = await mastra.getAgentById('weather-agent').getMemory()
+	let response = null
 
-  try {
-    response = await memory?.recall({
-      threadId: THREAD_ID,
-      resourceId: RESOURCE_ID,
-    })
-  } catch {
-    console.log('No previous messages found.')
-  }
+	try {
+		response = await memory?.recall({
+			threadId: THREAD_ID,
+			resourceId: RESOURCE_ID,
+		})
+	} catch {
+		console.log('No previous messages found.')
+	}
 
-  const uiMessages = toAISdkV5Messages(response?.messages || [])
+	const uiMessages = toAISdkV5Messages(response?.messages || [])
 
-  return Response.json(uiMessages)
+	return Response.json(uiMessages)
 }
 ```
 
@@ -116,9 +116,9 @@ import type { UIDataTypes, UIMessage, UITools } from 'ai'
 import type { PageLoad } from './$types'
 
 export const load: PageLoad = async ({ fetch }) => {
-  const response = await fetch('/api/chat')
-  const initialMessages = (await response.json()) as UIMessage<unknown, UIDataTypes, UITools>[]
-  return { initialMessages }
+	const response = await fetch('/api/chat')
+	const initialMessages = (await response.json()) as UIMessage<unknown, UIDataTypes, UITools>[]
+	return { initialMessages }
 }
 ```
 

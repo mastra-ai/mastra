@@ -24,25 +24,25 @@ import { Inngest } from 'inngest'
 const inngest = new Inngest({ id: 'my-app' })
 
 const agent = new Agent({
-  id: 'my-agent',
-  name: 'My Agent',
-  instructions: 'You are a helpful assistant',
-  model: '__GATEWAY_OPENAI_MODEL__',
+	id: 'my-agent',
+	name: 'My Agent',
+	instructions: 'You are a helpful assistant',
+	model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 const durableAgent = createInngestAgent({ agent, inngest })
 
 export const mastra = new Mastra({
-  agents: { myAgent: durableAgent },
-  server: {
-    apiRoutes: [
-      {
-        path: '/inngest/api',
-        method: 'ALL',
-        createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
-      },
-    ],
-  },
+	agents: { myAgent: durableAgent },
+	server: {
+		apiRoutes: [
+			{
+				path: '/inngest/api',
+				method: 'ALL',
+				createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+			},
+		],
+	},
 })
 ```
 
@@ -72,55 +72,55 @@ Returns: [`InngestAgent`](#inngestagent-interface)
 
 <PropertiesTable
   content={[
-  {
-    name: 'agent',
-    type: 'Agent',
-    isOptional: false,
-    description:
-      'The Agent to wrap with Inngest durable execution. Agent methods (e.g., `generate()`, `listTools()`, `getMemory()`) delegate to this agent via a Proxy.',
-  },
-  {
-    name: 'inngest',
-    type: 'Inngest',
-    isOptional: false,
-    description:
-      'The Inngest client instance. Used to send workflow events and, in SDK v4, publish realtime stream events.',
-  },
-  {
-    name: 'id',
-    type: 'string',
-    isOptional: true,
-    description: 'ID override.',
-    defaultValue: 'agent.id',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    isOptional: true,
-    description: 'Name override.',
-    defaultValue: 'agent.name',
-  },
-  {
-    name: 'pubsub',
-    type: 'PubSub',
-    isOptional: true,
-    description:
-      'PubSub instance for streaming events. The default `InngestPubSub` uses Inngest Realtime, which works across processes.',
-    defaultValue: 'InngestPubSub',
-  },
-  {
-    name: 'cache',
-    type: 'MastraServerCache',
-    isOptional: true,
-    description:
-      'Cache for stored stream events, which enables resumable streams. When provided, the PubSub is automatically wrapped with `CachingPubSub`. If omitted, the agent inherits the cache from the Mastra instance.',
-  },
-  {
-    name: 'mastra',
-    type: 'Mastra',
-    isOptional: true,
-    description: 'Mastra instance for observability. Set automatically when the agent is registered with Mastra.',
-  },
+	{
+		name: 'agent',
+		type: 'Agent',
+		isOptional: false,
+		description:
+			'The Agent to wrap with Inngest durable execution. Agent methods (e.g., `generate()`, `listTools()`, `getMemory()`) delegate to this agent via a Proxy.',
+	},
+	{
+		name: 'inngest',
+		type: 'Inngest',
+		isOptional: false,
+		description:
+			'The Inngest client instance. Used to send workflow events and, in SDK v4, publish realtime stream events.',
+	},
+	{
+		name: 'id',
+		type: 'string',
+		isOptional: true,
+		description: 'ID override.',
+		defaultValue: 'agent.id',
+	},
+	{
+		name: 'name',
+		type: 'string',
+		isOptional: true,
+		description: 'Name override.',
+		defaultValue: 'agent.name',
+	},
+	{
+		name: 'pubsub',
+		type: 'PubSub',
+		isOptional: true,
+		description:
+			'PubSub instance for streaming events. The default `InngestPubSub` uses Inngest Realtime, which works across processes.',
+		defaultValue: 'InngestPubSub',
+	},
+	{
+		name: 'cache',
+		type: 'MastraServerCache',
+		isOptional: true,
+		description:
+			'Cache for stored stream events, which enables resumable streams. When provided, the PubSub is automatically wrapped with `CachingPubSub`. If omitted, the agent inherits the cache from the Mastra instance.',
+	},
+	{
+		name: 'mastra',
+		type: 'Mastra',
+		isOptional: true,
+		description: 'Mastra instance for observability. Set automatically when the agent is registered with Mastra.',
+	},
 ]}
 />
 
@@ -132,36 +132,36 @@ The object returned by `createInngestAgent()`. It implements the full `Agent` in
 
 <PropertiesTable
   content={[
-  {
-    name: 'id',
-    type: 'string',
-    description: 'The agent ID.',
-  },
-  {
-    name: 'name',
-    type: 'string',
-    description: 'The agent name.',
-  },
-  {
-    name: 'agent',
-    type: 'Agent',
-    description: 'The underlying Mastra Agent.',
-  },
-  {
-    name: 'inngest',
-    type: 'Inngest',
-    description: 'The Inngest client.',
-  },
-  {
-    name: 'cache',
-    type: 'MastraServerCache | undefined',
-    description: 'The resolved cache instance, if resumable streams are enabled.',
-  },
-  {
-    name: 'pubsub',
-    type: 'PubSub',
-    description: 'The PubSub instance used for streaming events.',
-  },
+	{
+		name: 'id',
+		type: 'string',
+		description: 'The agent ID.',
+	},
+	{
+		name: 'name',
+		type: 'string',
+		description: 'The agent name.',
+	},
+	{
+		name: 'agent',
+		type: 'Agent',
+		description: 'The underlying Mastra Agent.',
+	},
+	{
+		name: 'inngest',
+		type: 'Inngest',
+		description: 'The Inngest client.',
+	},
+	{
+		name: 'cache',
+		type: 'MastraServerCache | undefined',
+		description: 'The resolved cache instance, if resumable streams are enabled.',
+	},
+	{
+		name: 'pubsub',
+		type: 'PubSub',
+		description: 'The PubSub instance used for streaming events.',
+	},
 ]}
 />
 
@@ -175,8 +175,8 @@ Streams a response using Inngest's durable execution engine. The workflow is tri
 
 ```typescript
 const { output, runId, cleanup } = await durableAgent.stream('Hello!', {
-  onChunk: chunk => console.log(chunk),
-  onFinish: result => console.log('done', result),
+	onChunk: chunk => console.log(chunk),
+	onFinish: result => console.log('done', result),
 })
 
 const text = await output.text
@@ -191,11 +191,11 @@ Resumes a suspended Inngest run, for example after a tool approval. Loads the wo
 
 ```typescript
 const { output, cleanup } = await durableAgent.resume(
-  runId,
-  {
-    approved: true,
-  },
-  { threadId: 'thread-1', resourceId: 'user-1' },
+	runId,
+	{
+		approved: true,
+	},
+	{ threadId: 'thread-1', resourceId: 'user-1' },
 )
 
 await output.text
@@ -206,48 +206,48 @@ The third argument accepts `threadId` and `resourceId` in addition to the lifecy
 
 <PropertiesTable
   content={[
-  {
-    name: 'threadId',
-    type: 'string',
-    isOptional: true,
-    description: 'Thread ID to associate with the resumed run.',
-  },
-  {
-    name: 'resourceId',
-    type: 'string',
-    isOptional: true,
-    description: 'Resource ID to associate with the resumed run.',
-  },
-  {
-    name: 'onChunk',
-    type: '(chunk: ChunkType) => void | Promise<void>',
-    isOptional: true,
-    description: 'Called for each streamed chunk.',
-  },
-  {
-    name: 'onStepFinish',
-    type: '(result: AgentStepFinishEventData) => void | Promise<void>',
-    isOptional: true,
-    description: 'Called when a step in the agentic loop finishes.',
-  },
-  {
-    name: 'onFinish',
-    type: '(result: AgentFinishEventData) => void | Promise<void>',
-    isOptional: true,
-    description: 'Called when the run finishes.',
-  },
-  {
-    name: 'onError',
-    type: '(error: Error) => void | Promise<void>',
-    isOptional: true,
-    description: 'Called when the run errors.',
-  },
-  {
-    name: 'onSuspended',
-    type: '(data: AgentSuspendedEventData) => void | Promise<void>',
-    isOptional: true,
-    description: 'Called when the run suspends.',
-  },
+	{
+		name: 'threadId',
+		type: 'string',
+		isOptional: true,
+		description: 'Thread ID to associate with the resumed run.',
+	},
+	{
+		name: 'resourceId',
+		type: 'string',
+		isOptional: true,
+		description: 'Resource ID to associate with the resumed run.',
+	},
+	{
+		name: 'onChunk',
+		type: '(chunk: ChunkType) => void | Promise<void>',
+		isOptional: true,
+		description: 'Called for each streamed chunk.',
+	},
+	{
+		name: 'onStepFinish',
+		type: '(result: AgentStepFinishEventData) => void | Promise<void>',
+		isOptional: true,
+		description: 'Called when a step in the agentic loop finishes.',
+	},
+	{
+		name: 'onFinish',
+		type: '(result: AgentFinishEventData) => void | Promise<void>',
+		isOptional: true,
+		description: 'Called when the run finishes.',
+	},
+	{
+		name: 'onError',
+		type: '(error: Error) => void | Promise<void>',
+		isOptional: true,
+		description: 'Called when the run errors.',
+	},
+	{
+		name: 'onSuspended',
+		type: '(data: AgentSuspendedEventData) => void | Promise<void>',
+		isOptional: true,
+		description: 'Called when the run suspends.',
+	},
 ]}
 />
 
@@ -259,8 +259,8 @@ Reconnects to an existing run, replaying cached events before delivering live on
 
 ```typescript
 const { output, cleanup } = await durableAgent.observe(runId, {
-  offset: 0,
-  onChunk: chunk => console.log(chunk),
+	offset: 0,
+	onChunk: chunk => console.log(chunk),
 })
 
 await output.text
@@ -282,10 +282,10 @@ Prepares a run for durable execution without triggering it. Returns the serializ
 
 ```typescript
 const { runId, messageId, workflowInput, threadId, resourceId } = await durableAgent.prepare(
-  'Summarize the document',
-  {
-    memory: { threadId: 'thread-1', resourceId: 'user-1' },
-  },
+	'Summarize the document',
+	{
+		memory: { threadId: 'thread-1', resourceId: 'user-1' },
+	},
 )
 ```
 
@@ -293,11 +293,11 @@ Returns:
 
 ```typescript
 interface PrepareResult {
-  runId: string
-  messageId: string
-  workflowInput: any
-  threadId?: string
-  resourceId?: string
+	runId: string
+	messageId: string
+	workflowInput: any
+	threadId?: string
+	resourceId?: string
 }
 ```
 
@@ -311,7 +311,7 @@ Type guard that checks whether an object is an `InngestAgent`.
 import { isInngestAgent } from '@mastra/inngest'
 
 if (isInngestAgent(agent)) {
-  // agent is InngestAgent
+	// agent is InngestAgent
 }
 ```
 
@@ -323,133 +323,133 @@ Returns: `boolean`
 
 <PropertiesTable
   content={[
-  {
-    name: 'runId',
-    type: 'string',
-    isOptional: true,
-    description: 'Unique identifier for this run. Use it later with `resume()` or `observe()`.',
-  },
-  {
-    name: 'instructions',
-    type: "AgentExecutionOptions['instructions']",
-    isOptional: true,
-    description: "Overrides the agent's default instructions for this run.",
-  },
-  {
-    name: 'context',
-    type: 'ModelMessage[]',
-    isOptional: true,
-    description: 'Additional context messages to provide to the agent.',
-  },
-  {
-    name: 'memory',
-    type: 'object',
-    isOptional: true,
-    description: 'Memory configuration for conversation persistence and retrieval.',
-  },
-  {
-    name: 'requestContext',
-    type: 'RequestContext',
-    isOptional: true,
-    description: 'Request context carrying dynamic configuration and state for this run.',
-  },
-  {
-    name: 'maxSteps',
-    type: 'number',
-    isOptional: true,
-    description: 'Maximum number of steps to run.',
-  },
-  {
-    name: 'toolsets',
-    type: 'object',
-    isOptional: true,
-    description: 'Additional tool sets available for this run.',
-  },
-  {
-    name: 'clientTools',
-    type: 'object',
-    isOptional: true,
-    description: 'Client-side tools available during execution.',
-  },
-  {
-    name: 'toolChoice',
-    type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
-    isOptional: true,
-    description: 'Tool selection strategy.',
-  },
-  {
-    name: 'modelSettings',
-    type: 'object',
-    isOptional: true,
-    description: 'Model-specific settings such as temperature.',
-  },
-  {
-    name: 'requireToolApproval',
-    type: 'boolean',
-    isOptional: true,
-    description: 'Require approval for all tool calls, which suspends the run until resumed.',
-  },
-  {
-    name: 'autoResumeSuspendedTools',
-    type: 'boolean',
-    isOptional: true,
-    description: 'Automatically resume tools that suspended, instead of waiting for an external `resume()` call.',
-  },
-  {
-    name: 'toolCallConcurrency',
-    type: 'number',
-    isOptional: true,
-    description: 'Maximum number of tool calls to execute concurrently.',
-  },
-  {
-    name: 'includeRawChunks',
-    type: 'boolean',
-    isOptional: true,
-    description: 'Include raw provider chunks in the stream output.',
-  },
-  {
-    name: 'maxProcessorRetries',
-    type: 'number',
-    isOptional: true,
-    description: 'Maximum number of processor retries per generation.',
-  },
-  {
-    name: 'untilIdle',
-    type: 'boolean | { maxIdleMs?: number }',
-    isOptional: true,
-    description:
-      'When set, keeps the stream open across background-task continuations until the agent is idle. Pass `true` for the default 5-minute idle timeout, or `{ maxIdleMs }` to customise.',
-  },
-  {
-    name: 'onChunk',
-    type: '(chunk: ChunkType) => void | Promise<void>',
-    isOptional: true,
-    description: 'Called for each streamed chunk.',
-  },
-  {
-    name: 'onStepFinish',
-    type: '(result: AgentStepFinishEventData) => void | Promise<void>',
-    isOptional: true,
-    description: 'Called when a step in the agentic loop finishes.',
-  },
-  {
-    name: 'onFinish',
-    type: '(result: AgentFinishEventData) => void | Promise<void>',
-    isOptional: true,
-    description: 'Called when the run finishes.',
-  },
-  {
-    name: 'onError',
-    type: '(error: Error) => void | Promise<void>',
-    isOptional: true,
-    description: 'Called when the run errors.',
-  },
-  {
-    name: 'onSuspended',
-    type: '(data: AgentSuspendedEventData) => void | Promise<void>',
-    isOptional: true,
-    description: 'Called when the run suspends, for example for tool approval.',
-  },
+	{
+		name: 'runId',
+		type: 'string',
+		isOptional: true,
+		description: 'Unique identifier for this run. Use it later with `resume()` or `observe()`.',
+	},
+	{
+		name: 'instructions',
+		type: "AgentExecutionOptions['instructions']",
+		isOptional: true,
+		description: "Overrides the agent's default instructions for this run.",
+	},
+	{
+		name: 'context',
+		type: 'ModelMessage[]',
+		isOptional: true,
+		description: 'Additional context messages to provide to the agent.',
+	},
+	{
+		name: 'memory',
+		type: 'object',
+		isOptional: true,
+		description: 'Memory configuration for conversation persistence and retrieval.',
+	},
+	{
+		name: 'requestContext',
+		type: 'RequestContext',
+		isOptional: true,
+		description: 'Request context carrying dynamic configuration and state for this run.',
+	},
+	{
+		name: 'maxSteps',
+		type: 'number',
+		isOptional: true,
+		description: 'Maximum number of steps to run.',
+	},
+	{
+		name: 'toolsets',
+		type: 'object',
+		isOptional: true,
+		description: 'Additional tool sets available for this run.',
+	},
+	{
+		name: 'clientTools',
+		type: 'object',
+		isOptional: true,
+		description: 'Client-side tools available during execution.',
+	},
+	{
+		name: 'toolChoice',
+		type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
+		isOptional: true,
+		description: 'Tool selection strategy.',
+	},
+	{
+		name: 'modelSettings',
+		type: 'object',
+		isOptional: true,
+		description: 'Model-specific settings such as temperature.',
+	},
+	{
+		name: 'requireToolApproval',
+		type: 'boolean',
+		isOptional: true,
+		description: 'Require approval for all tool calls, which suspends the run until resumed.',
+	},
+	{
+		name: 'autoResumeSuspendedTools',
+		type: 'boolean',
+		isOptional: true,
+		description: 'Automatically resume tools that suspended, instead of waiting for an external `resume()` call.',
+	},
+	{
+		name: 'toolCallConcurrency',
+		type: 'number',
+		isOptional: true,
+		description: 'Maximum number of tool calls to execute concurrently.',
+	},
+	{
+		name: 'includeRawChunks',
+		type: 'boolean',
+		isOptional: true,
+		description: 'Include raw provider chunks in the stream output.',
+	},
+	{
+		name: 'maxProcessorRetries',
+		type: 'number',
+		isOptional: true,
+		description: 'Maximum number of processor retries per generation.',
+	},
+	{
+		name: 'untilIdle',
+		type: 'boolean | { maxIdleMs?: number }',
+		isOptional: true,
+		description:
+			'When set, keeps the stream open across background-task continuations until the agent is idle. Pass `true` for the default 5-minute idle timeout, or `{ maxIdleMs }` to customise.',
+	},
+	{
+		name: 'onChunk',
+		type: '(chunk: ChunkType) => void | Promise<void>',
+		isOptional: true,
+		description: 'Called for each streamed chunk.',
+	},
+	{
+		name: 'onStepFinish',
+		type: '(result: AgentStepFinishEventData) => void | Promise<void>',
+		isOptional: true,
+		description: 'Called when a step in the agentic loop finishes.',
+	},
+	{
+		name: 'onFinish',
+		type: '(result: AgentFinishEventData) => void | Promise<void>',
+		isOptional: true,
+		description: 'Called when the run finishes.',
+	},
+	{
+		name: 'onError',
+		type: '(error: Error) => void | Promise<void>',
+		isOptional: true,
+		description: 'Called when the run errors.',
+	},
+	{
+		name: 'onSuspended',
+		type: '(data: AgentSuspendedEventData) => void | Promise<void>',
+		isOptional: true,
+		description: 'Called when the run suspends, for example for tool approval.',
+	},
 ]}
 />
 
@@ -461,49 +461,49 @@ The object returned by `stream()` and `resume()`. The `observe()` method returns
 
 ```typescript
 interface InngestAgentStreamResult<OUTPUT = undefined> {
-  output: MastraModelOutput<OUTPUT>
-  readonly fullStream: ReadableStream<any>
-  runId: string
-  threadId?: string
-  resourceId?: string
-  cleanup: () => void
+	output: MastraModelOutput<OUTPUT>
+	readonly fullStream: ReadableStream<any>
+	runId: string
+	threadId?: string
+	resourceId?: string
+	cleanup: () => void
 }
 ```
 
 <PropertiesTable
   content={[
-  {
-    name: 'output',
-    type: 'MastraModelOutput',
-    description: 'The streaming output. Await `output.text` for the full text, or consume `output.fullStream`.',
-  },
-  {
-    name: 'fullStream',
-    type: 'ReadableStream',
-    description: 'The full event stream, delegating to `output.fullStream`.',
-  },
-  {
-    name: 'runId',
-    type: 'string',
-    description: 'The unique run ID. Pass it to `resume()` or `observe()` to reconnect.',
-  },
-  {
-    name: 'threadId',
-    type: 'string',
-    isOptional: true,
-    description: 'Thread ID when using memory.',
-  },
-  {
-    name: 'resourceId',
-    type: 'string',
-    isOptional: true,
-    description: 'Resource ID when using memory.',
-  },
-  {
-    name: 'cleanup',
-    type: '() => void',
-    description: 'Unsubscribes from PubSub and clears registry entries for the run. Call it when done with the run.',
-  },
+	{
+		name: 'output',
+		type: 'MastraModelOutput',
+		description: 'The streaming output. Await `output.text` for the full text, or consume `output.fullStream`.',
+	},
+	{
+		name: 'fullStream',
+		type: 'ReadableStream',
+		description: 'The full event stream, delegating to `output.fullStream`.',
+	},
+	{
+		name: 'runId',
+		type: 'string',
+		description: 'The unique run ID. Pass it to `resume()` or `observe()` to reconnect.',
+	},
+	{
+		name: 'threadId',
+		type: 'string',
+		isOptional: true,
+		description: 'Thread ID when using memory.',
+	},
+	{
+		name: 'resourceId',
+		type: 'string',
+		isOptional: true,
+		description: 'Resource ID when using memory.',
+	},
+	{
+		name: 'cleanup',
+		type: '() => void',
+		description: 'Unsubscribes from PubSub and clears registry entries for the run. Call it when done with the run.',
+	},
 ]}
 />
 
@@ -519,7 +519,7 @@ Serves Mastra workflows with Hono (the default framework). Collects all Inngest-
 import { serve } from '@mastra/inngest'
 
 app.use('/inngest/api', async c => {
-  return serve({ mastra, inngest })(c)
+	return serve({ mastra, inngest })(c)
 })
 ```
 
@@ -547,30 +547,30 @@ export const { GET, POST, PUT } = serveNext({ mastra, inngest })
 
 <PropertiesTable
   content={[
-  {
-    name: 'mastra',
-    type: 'Mastra',
-    isOptional: false,
-    description: 'The Mastra instance containing registered agents and workflows.',
-  },
-  {
-    name: 'inngest',
-    type: 'Inngest',
-    isOptional: false,
-    description: 'The Inngest client instance.',
-  },
-  {
-    name: 'functions',
-    type: 'InngestFunction.Like[]',
-    isOptional: true,
-    description: 'Additional Inngest functions to serve alongside Mastra workflows.',
-  },
-  {
-    name: 'registerOptions',
-    type: 'RegisterOptions',
-    isOptional: true,
-    description: 'Options passed to the Inngest registration handler.',
-  },
+	{
+		name: 'mastra',
+		type: 'Mastra',
+		isOptional: false,
+		description: 'The Mastra instance containing registered agents and workflows.',
+	},
+	{
+		name: 'inngest',
+		type: 'Inngest',
+		isOptional: false,
+		description: 'The Inngest client instance.',
+	},
+	{
+		name: 'functions',
+		type: 'InngestFunction.Like[]',
+		isOptional: true,
+		description: 'Additional Inngest functions to serve alongside Mastra workflows.',
+	},
+	{
+		name: 'registerOptions',
+		type: 'RegisterOptions',
+		isOptional: true,
+		description: 'Options passed to the Inngest registration handler.',
+	},
 ]}
 />
 

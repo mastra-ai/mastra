@@ -36,25 +36,25 @@ const voice = new OpenAIVoice()
 
 // Create an agent with voice capabilities
 export const agent = new Agent({
-  id: 'voice-agent',
-  name: 'Voice Agent',
-  instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
-  model: '__GATEWAY_OPENAI_MODEL__',
-  voice,
+	id: 'voice-agent',
+	name: 'Voice Agent',
+	instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
+	model: '__GATEWAY_OPENAI_MODEL__',
+	voice,
 })
 
 // The agent can now use voice for interaction
 const audioStream = await agent.voice.speak("Hello, I'm your AI assistant!", {
-  filetype: 'm4a',
+	filetype: 'm4a',
 })
 
 playAudio(audioStream!)
 
 try {
-  const transcription = await agent.voice.listen(audioStream)
-  console.log(transcription)
+	const transcription = await agent.voice.listen(audioStream)
+	console.log(transcription)
 } catch (error) {
-  console.error('Error transcribing audio:', error)
+	console.error('Error transcribing audio:', error)
 }
 ```
 
@@ -78,8 +78,8 @@ const writer = createWriteStream(filePath)
 audio.pipe(writer)
 
 await new Promise<void>((resolve, reject) => {
-  writer.on('finish', () => resolve())
-  writer.on('error', reject)
+	writer.on('finish', () => resolve())
+	writer.on('error', reject)
 })
 ```
 
@@ -96,13 +96,13 @@ const audioFilePath = path.join(process.cwd(), '/agent.m4a')
 const audioStream = createReadStream(audioFilePath)
 
 try {
-  console.log('Transcribing audio file...')
-  const transcription = await agent.voice.listen(audioStream, {
-    filetype: 'm4a',
-  })
-  console.log('Transcription:', transcription)
+	console.log('Transcribing audio file...')
+	const transcription = await agent.voice.listen(audioStream, {
+		filetype: 'm4a',
+	})
+	console.log('Transcription:', transcription)
 } catch (error) {
-  console.error('Error transcribing audio:', error)
+	console.error('Error transcribing audio:', error)
 }
 ```
 
@@ -118,23 +118,23 @@ import { search, calculate } from '../tools'
 
 // Initialize the realtime voice provider
 const voice = new OpenAIRealtimeVoice({
-  apiKey: process.env.OPENAI_API_KEY,
-  model: 'gpt-5.1-realtime',
-  speaker: 'alloy',
+	apiKey: process.env.OPENAI_API_KEY,
+	model: 'gpt-5.1-realtime',
+	speaker: 'alloy',
 })
 
 // Create an agent with speech-to-speech voice capabilities
 export const agent = new Agent({
-  id: 'speech-to-speech-agent',
-  name: 'Speech-to-Speech Agent',
-  instructions: `You are a helpful assistant with speech-to-speech capabilities.`,
-  model: '__GATEWAY_OPENAI_MODEL__',
-  tools: {
-    // Tools configured on Agent are passed to voice provider
-    search,
-    calculate,
-  },
-  voice,
+	id: 'speech-to-speech-agent',
+	name: 'Speech-to-Speech Agent',
+	instructions: `You are a helpful assistant with speech-to-speech capabilities.`,
+	model: '__GATEWAY_OPENAI_MODEL__',
+	tools: {
+		// Tools configured on Agent are passed to voice provider
+		search,
+		calculate,
+	},
+	voice,
 })
 
 // Establish a WebSocket connection
@@ -162,11 +162,11 @@ import { Agent } from '@mastra/core/agent'
 import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime'
 
 export const agent = new Agent({
-  id: 'support-line',
-  name: 'Support Line',
-  instructions: ({ requestContext }) => `Help user ${requestContext.get('user')}.`,
-  model: '__GATEWAY_OPENAI_MODEL__',
-  voice: ({ requestContext }) => new OpenAIRealtimeVoice({ apiKey: requestContext.get('apiKey') }),
+	id: 'support-line',
+	name: 'Support Line',
+	instructions: ({ requestContext }) => `Help user ${requestContext.get('user')}.`,
+	model: '__GATEWAY_OPENAI_MODEL__',
+	voice: ({ requestContext }) => new OpenAIRealtimeVoice({ apiKey: requestContext.get('apiKey') }),
 })
 
 // Each concurrent session resolves its own voice instance
@@ -189,17 +189,17 @@ The realtime voice provider emits several events you can listen for:
 ```typescript
 // Listen for speech audio data sent from voice provider
 agent.voice.on('speaking', ({ audio }) => {
-  // audio contains ReadableStream or Int16Array audio data
+	// audio contains ReadableStream or Int16Array audio data
 })
 
 // Listen for transcribed text sent from both voice provider and user
 agent.voice.on('writing', ({ text, role }) => {
-  console.log(`${role} said: ${text}`)
+	console.log(`${role} said: ${text}`)
 })
 
 // Listen for errors
 agent.voice.on('error', error => {
-  console.error('Voice error:', error)
+	console.error('Voice error:', error)
 })
 ```
 
@@ -226,57 +226,57 @@ import { Mastra } from '@mastra/core'
 
 // Saves an audio stream to a file in the audio directory, creating the directory if it doesn't exist.
 export const saveAudioToFile = async (
-  audio: NodeJS.ReadableStream,
-  filename: string,
+	audio: NodeJS.ReadableStream,
+	filename: string,
 ): Promise<void> => {
-  const audioDir = path.join(process.cwd(), 'audio')
-  const filePath = path.join(audioDir, filename)
+	const audioDir = path.join(process.cwd(), 'audio')
+	const filePath = path.join(audioDir, filename)
 
-  await fs.promises.mkdir(audioDir, { recursive: true })
+	await fs.promises.mkdir(audioDir, { recursive: true })
 
-  const writer = createWriteStream(filePath)
-  audio.pipe(writer)
-  return new Promise((resolve, reject) => {
-    writer.on('finish', resolve)
-    writer.on('error', reject)
-  })
+	const writer = createWriteStream(filePath)
+	audio.pipe(writer)
+	return new Promise((resolve, reject) => {
+		writer.on('finish', resolve)
+		writer.on('error', reject)
+	})
 }
 
 // Saves an audio stream to a file in the audio directory, creating the directory if it doesn't exist.
 export const convertToText = async (input: string | NodeJS.ReadableStream): Promise<string> => {
-  if (typeof input === 'string') {
-    return input
-  }
+	if (typeof input === 'string') {
+		return input
+	}
 
-  const chunks: Buffer[] = []
-  return new Promise((resolve, reject) => {
-    inputData.on('data', chunk => chunks.push(Buffer.from(chunk)))
-    inputData.on('error', reject)
-    inputData.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')))
-  })
+	const chunks: Buffer[] = []
+	return new Promise((resolve, reject) => {
+		inputData.on('data', chunk => chunks.push(Buffer.from(chunk)))
+		inputData.on('error', reject)
+		inputData.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')))
+	})
 }
 
 export const hybridVoiceAgent = new Agent({
-  id: 'hybrid-voice-agent',
-  name: 'Hybrid Voice Agent',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  instructions: 'You can speak and listen using different providers.',
-  voice: new CompositeVoice({
-    input: new OpenAIVoice(),
-    output: new OpenAIVoice(),
-  }),
+	id: 'hybrid-voice-agent',
+	name: 'Hybrid Voice Agent',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	instructions: 'You can speak and listen using different providers.',
+	voice: new CompositeVoice({
+		input: new OpenAIVoice(),
+		output: new OpenAIVoice(),
+	}),
 })
 
 export const unifiedVoiceAgent = new Agent({
-  id: 'unified-voice-agent',
-  name: 'Unified Voice Agent',
-  instructions: 'You are an agent with both STT and TTS capabilities.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  voice: new OpenAIVoice(),
+	id: 'unified-voice-agent',
+	name: 'Unified Voice Agent',
+	instructions: 'You are an agent with both STT and TTS capabilities.',
+	model: '__GATEWAY_OPENAI_MODEL__',
+	voice: new OpenAIVoice(),
 })
 
 export const mastra = new Mastra({
-  agents: { hybridVoiceAgent, unifiedVoiceAgent },
+	agents: { hybridVoiceAgent, unifiedVoiceAgent },
 })
 
 const hybridVoiceAgent = mastra.getAgent('hybridVoiceAgent')
@@ -310,16 +310,16 @@ import { OpenAIVoice } from '@mastra/voice-openai'
 import { PlayAIVoice } from '@mastra/voice-playai'
 
 export const agent = new Agent({
-  id: 'voice-agent',
-  name: 'Voice Agent',
-  instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
-  model: '__GATEWAY_OPENAI_MODEL__',
+	id: 'voice-agent',
+	name: 'Voice Agent',
+	instructions: `You are a helpful assistant with both STT and TTS capabilities.`,
+	model: '__GATEWAY_OPENAI_MODEL__',
 
-  // Create a composite voice using OpenAI for listening and PlayAI for speaking
-  voice: new CompositeVoice({
-    input: new OpenAIVoice(),
-    output: new PlayAIVoice(),
-  }),
+	// Create a composite voice using OpenAI for listening and PlayAI for speaking
+	voice: new CompositeVoice({
+		input: new OpenAIVoice(),
+		output: new PlayAIVoice(),
+	}),
 })
 ```
 
@@ -335,16 +335,16 @@ import { elevenlabs } from '@ai-sdk/elevenlabs'
 import { groq } from '@ai-sdk/groq'
 
 export const agent = new Agent({
-  id: 'aisdk-voice-agent',
-  name: 'AI SDK Voice Agent',
-  instructions: `You are a helpful assistant with voice capabilities.`,
-  model: '__GATEWAY_OPENAI_MODEL__',
+	id: 'aisdk-voice-agent',
+	name: 'AI SDK Voice Agent',
+	instructions: `You are a helpful assistant with voice capabilities.`,
+	model: '__GATEWAY_OPENAI_MODEL__',
 
-  // Pass AI SDK models directly to CompositeVoice
-  voice: new CompositeVoice({
-    input: openai.transcription('whisper-1'), // AI SDK transcription model
-    output: elevenlabs.speech('eleven_turbo_v2'), // AI SDK speech model
-  }),
+	// Pass AI SDK models directly to CompositeVoice
+	voice: new CompositeVoice({
+		input: openai.transcription('whisper-1'), // AI SDK transcription model
+		output: elevenlabs.speech('eleven_turbo_v2'), // AI SDK speech model
+	}),
 })
 
 // Use voice capabilities as usual
@@ -363,8 +363,8 @@ import { openai } from '@ai-sdk/openai'
 
 // Use AI SDK for transcription and Mastra provider for speech
 const voice = new CompositeVoice({
-  input: openai.transcription('whisper-1'), // AI SDK
-  output: new PlayAIVoice(), // Mastra provider
+	input: openai.transcription('whisper-1'), // AI SDK
+	output: new PlayAIVoice(), // Mastra provider
 })
 ```
 

@@ -10,39 +10,39 @@ Add this step to your workflow file:
 
 ```typescript
 const aiAnalysisStep = createStep({
-  id: 'ai-analysis',
-  description: 'AI-powered content analysis',
-  inputSchema: z.object({
-    content: z.string(),
-    type: z.string(),
-    wordCount: z.number(),
-    metadata: z.object({
-      readingTime: z.number(),
-      difficulty: z.enum(['easy', 'medium', 'hard']),
-      processedAt: z.string(),
-    }),
-    summary: z.string(),
-  }),
-  outputSchema: z.object({
-    content: z.string(),
-    type: z.string(),
-    wordCount: z.number(),
-    metadata: z.object({
-      readingTime: z.number(),
-      difficulty: z.enum(['easy', 'medium', 'hard']),
-      processedAt: z.string(),
-    }),
-    summary: z.string(),
-    aiAnalysis: z.object({
-      score: z.number(),
-      feedback: z.string(),
-    }),
-  }),
-  execute: async ({ inputData, mastra }) => {
-    const { content, type, wordCount, metadata, summary } = inputData
+	id: 'ai-analysis',
+	description: 'AI-powered content analysis',
+	inputSchema: z.object({
+		content: z.string(),
+		type: z.string(),
+		wordCount: z.number(),
+		metadata: z.object({
+			readingTime: z.number(),
+			difficulty: z.enum(['easy', 'medium', 'hard']),
+			processedAt: z.string(),
+		}),
+		summary: z.string(),
+	}),
+	outputSchema: z.object({
+		content: z.string(),
+		type: z.string(),
+		wordCount: z.number(),
+		metadata: z.object({
+			readingTime: z.number(),
+			difficulty: z.enum(['easy', 'medium', 'hard']),
+			processedAt: z.string(),
+		}),
+		summary: z.string(),
+		aiAnalysis: z.object({
+			score: z.number(),
+			feedback: z.string(),
+		}),
+	}),
+	execute: async ({ inputData, mastra }) => {
+		const { content, type, wordCount, metadata, summary } = inputData
 
-    // Create prompt for the AI agent
-    const prompt = `
+		// Create prompt for the AI agent
+		const prompt = `
 Analyze this ${type} content:
 
 Content: "${content}"
@@ -57,32 +57,32 @@ Please provide:
 Format as JSON: {"score": number, "feedback": "your feedback here"}
     `
 
-    // Get the contentAgent from the mastra instance.
-    const contentAgent = mastra.getAgent('contentAgent')
-    const { text } = await contentAgent.generate([{ role: 'user', content: prompt }])
+		// Get the contentAgent from the mastra instance.
+		const contentAgent = mastra.getAgent('contentAgent')
+		const { text } = await contentAgent.generate([{ role: 'user', content: prompt }])
 
-    // Parse AI response (with fallback)
-    let aiAnalysis
-    try {
-      aiAnalysis = JSON.parse(text)
-    } catch {
-      aiAnalysis = {
-        score: 7,
-        feedback: 'AI analysis completed. ' + text,
-      }
-    }
+		// Parse AI response (with fallback)
+		let aiAnalysis
+		try {
+			aiAnalysis = JSON.parse(text)
+		} catch {
+			aiAnalysis = {
+				score: 7,
+				feedback: 'AI analysis completed. ' + text,
+			}
+		}
 
-    console.log(`🤖 AI Score: ${aiAnalysis.score}/10`)
+		console.log(`🤖 AI Score: ${aiAnalysis.score}/10`)
 
-    return {
-      content,
-      type,
-      wordCount,
-      metadata,
-      summary,
-      aiAnalysis,
-    }
-  },
+		return {
+			content,
+			type,
+			wordCount,
+			metadata,
+			summary,
+			aiAnalysis,
+		}
+	},
 })
 ```
 
