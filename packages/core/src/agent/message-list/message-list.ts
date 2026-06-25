@@ -78,12 +78,6 @@ function mergeSignalDataParts<T extends { role: string; parts: Array<{ type: str
   return result;
 }
 
-type LlmPromptOptions = {
-  downloadConcurrency?: number;
-  downloadRetries?: number;
-  supportedUrls?: Record<string, RegExp[]>;
-};
-
 type MessageListAddOptions = {
   merge?: boolean;
 };
@@ -535,11 +529,16 @@ export class MessageList {
         return ensureGeminiCompatibleMessages(messages, this.logger);
       },
 
-      // Used for creating LLM prompt messages without AI SDK streamText/generateText.
-      // Produces a prompt for AI SDK v5 (spec 'v2') providers, which accept
-      // tool-result `media` parts as-is.
+      // Used for creating LLM prompt messages without AI SDK streamText/generateText
       llmPrompt: async (
-        options: LlmPromptOptions = { downloadConcurrency: 10, downloadRetries: 3 },
+        options: {
+          downloadConcurrency?: number;
+          downloadRetries?: number;
+          supportedUrls?: Record<string, RegExp[]>;
+        } = {
+          downloadConcurrency: 10,
+          downloadRetries: 3,
+        },
       ): Promise<LanguageModelV2Prompt> => {
         const promptMessages = this.getMessagesForModelPrompt();
         const modelMessages = convertAIV5UIToModelMessages(
@@ -583,7 +582,6 @@ export class MessageList {
             }
           }
         }
-
         const systemMessages = convertAIV4CoreToAIV5ModelMessages(
           [...this.systemMessages, ...Object.values(this.taggedSystemMessages).flat()],
           `system`,
@@ -667,8 +665,11 @@ export class MessageList {
 
       // Builds the v5 prompt, then converts it to the shape AI SDK v6 (spec 'v3')
       // providers require (tool-result `media` -> `image-data`/`file-data`).
-      llmPrompt: async (options?: LlmPromptOptions): Promise<LanguageModelV2Prompt> =>
-        aiV5PromptToAIV6Prompt(await this.all.aiV5.llmPrompt(options)),
+      llmPrompt: async (options?: {
+        downloadConcurrency?: number;
+        downloadRetries?: number;
+        supportedUrls?: Record<string, RegExp[]>;
+      }): Promise<LanguageModelV2Prompt> => aiV5PromptToAIV6Prompt(await this.all.aiV5.llmPrompt(options)),
     },
 
     /* @deprecated use list.get.all.aiV4.prompt() instead */
