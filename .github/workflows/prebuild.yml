@@ -254,7 +254,7 @@ jobs:
           fetch-depth: 0
 
       - name: Check for changes that require Mastra Code E2E
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3.0.3
         id: filter
         with:
           base: ${{ github.event.pull_request.base.ref }}
