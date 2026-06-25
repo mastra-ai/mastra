@@ -187,8 +187,12 @@ export async function applyExtractorHooks(opts: {
         sendSignal: opts.sendSignal,
         requestContext: opts.requestContext,
       });
-      const nextValue = hookValue === undefined ? current : hookValue;
-      const parsed = extractor.schema.safeParse(nextValue);
+      if (hookValue === undefined) {
+        // Undefined means the hook handled the side effect and this value should not be persisted as OM metadata.
+        delete values[extractor.slug];
+        continue;
+      }
+      const parsed = extractor.schema.safeParse(hookValue);
       if (parsed.success) {
         values[extractor.slug] = parsed.data;
       } else {

@@ -38,6 +38,7 @@ export type {
   ExtractorRuntimeContext,
   ExtractorSource,
 } from './extractor';
+export { WorkingMemoryExtractor } from './working-memory-extractor';
 
 export type {
   ObservationalMemoryConfig,

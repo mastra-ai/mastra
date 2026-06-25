@@ -17,6 +17,7 @@ import {
   stripExtractorSections,
   validateExtractorList,
 } from '../extractor';
+import { WorkingMemoryExtractor } from '../working-memory-extractor';
 
 describe('Extractor', () => {
   it('creates an inline string carry-forward extractor when no schema is provided', () => {
@@ -150,7 +151,7 @@ describe('Extractor', () => {
     ]);
   });
 
-  it('resolves dynamic instructions and schemas with runtime context', () => {
+  it('resolves dynamic instructions and schemas with runtime context', async () => {
     const schema = z.object({ memoryEnabled: z.boolean() });
     const memory = { marker: 'active-memory' } as any;
     const extractor = new Extractor({
@@ -159,7 +160,7 @@ describe('Extractor', () => {
       schema: context => (context.memory === memory ? schema : undefined),
     });
 
-    const [resolved] = resolveExtractors([extractor], { source: 'observer', memory });
+    const [resolved] = await resolveExtractors([extractor], { source: 'observer', memory });
 
     expect(resolved?.instructions).toBe('Use active memory for observer.');
     expect(resolved?.mode).toBe('structured');
@@ -181,6 +182,76 @@ describe('Extractor', () => {
     });
 
     expect(onExtracted).toHaveBeenCalledWith(expect.objectContaining({ memory }));
+  });
+
+  it('updates markdown working memory from the working memory extractor without persisting OM metadata', async () => {
+    const memory = {
+      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true } })),
+      getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'markdown', content: '# User\n' })),
+      getWorkingMemory: vi.fn(async () => '- Existing fact'),
+      updateWorkingMemory: vi.fn(async () => undefined),
+    } as any;
+    const extractor = new WorkingMemoryExtractor();
+    const [resolved] = await resolveExtractors([extractor], {
+      source: 'observer',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+
+    expect(resolved?.instructions).toContain('Current working memory:\n- Existing fact');
+
+    const result = await applyExtractorHooks({
+      source: 'observer',
+      extractors: [resolved!],
+      values: { 'working-memory': '# User\n- Existing fact\n- New fact' },
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+
+    expect(memory.updateWorkingMemory).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      workingMemory: '# User\n- Existing fact\n- New fact',
+      memoryConfig: undefined,
+    });
+    expect(result.values).toBeUndefined();
+  });
+
+  it('merges JSON working memory updates from the working memory extractor', async () => {
+    const memory = {
+      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema: {} } })),
+      getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'json', content: '{"type":"object"}' })),
+      getWorkingMemory: vi.fn(async () => '{"name":"Tyler","likes":["dogs"]}'),
+      updateWorkingMemory: vi.fn(async () => undefined),
+    } as any;
+    const extractor = new WorkingMemoryExtractor();
+    const [resolved] = await resolveExtractors([extractor], {
+      source: 'observer',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+
+    expect(resolved?.instructions).toContain('Working memory JSON schema:');
+
+    const result = await applyExtractorHooks({
+      source: 'observer',
+      extractors: [resolved!],
+      values: { 'working-memory': '{"location":"Toronto"}' },
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+
+    expect(memory.updateWorkingMemory).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      workingMemory: JSON.stringify({ name: 'Tyler', likes: ['dogs'], location: 'Toronto' }),
+      memoryConfig: undefined,
+    });
+    expect(result.values).toBeUndefined();
   });
 
   it('returns extractor failures when the structured extraction call fails', async () => {

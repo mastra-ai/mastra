@@ -54,6 +54,26 @@ describe('Memory', () => {
     });
   });
 
+  describe('listTools', () => {
+    it('omits working memory tools when injectTools is false', () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: { workingMemory: { enabled: true, injectTools: false } },
+      });
+
+      expect(memory.listTools()).not.toHaveProperty('updateWorkingMemory');
+    });
+
+    it('includes working memory tools by default when working memory is enabled', () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: { workingMemory: { enabled: true } },
+      });
+
+      expect(memory.listTools()).toHaveProperty('updateWorkingMemory');
+    });
+  });
+
   describe('updateMessageToHideWorkingMemoryV2', () => {
     const memory = new TestableMemory();
 

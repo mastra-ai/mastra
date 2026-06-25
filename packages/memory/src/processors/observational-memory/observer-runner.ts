@@ -219,7 +219,7 @@ export class ObserverRunner {
   }> {
     const inputTokens = this.tokenCounter.countMessages(messagesToObserve);
     const resolvedModel = options?.model ? { model: options.model } : this.resolveModel(inputTokens);
-    const activeExtractors = resolveExtractors(
+    const activeExtractors = await resolveExtractors(
       filterObserverExtractors(this.observationConfig.extractors, options?.skipContinuationHints),
       {
         source: 'observer',
@@ -394,8 +394,11 @@ export class ObserverRunner {
       0,
     );
     const resolvedModel = model ? { model } : this.resolveModel(inputTokens);
-    const activeExtractors = resolveExtractors(this.observationConfig.extractors ?? [], {
+    const firstThreadMessages = messagesByThread.get(threadOrder[0] ?? '') ?? [];
+    const activeExtractors = await resolveExtractors(this.observationConfig.extractors ?? [], {
       source: 'observer',
+      threadId: threadOrder[0],
+      resourceId: firstThreadMessages[0]?.resourceId,
       memory: this.memory,
       requestContext,
     });

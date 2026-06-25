@@ -327,7 +327,7 @@ export class ReflectorRunner {
   }> {
     const originalTokens = this.tokenCounter.countObservations(observations);
     const resolvedModel = model ? { model } : this.resolveModel(originalTokens);
-    const activeExtractors = resolveExtractors(
+    const activeExtractors = await resolveExtractors(
       skipContinuationHints
         ? this.reflectionConfig.extractors.filter(
             extractor => extractor.slug !== 'current-task' && extractor.slug !== 'suggested-response',

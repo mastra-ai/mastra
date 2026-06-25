@@ -24,7 +24,8 @@ export interface ExtractorOnExtractedContext<T = unknown> extends ExtractorRunti
   sendSignal?: ProcessorContext['sendSignal'];
 }
 
-type ExtractorConfigValue<TValue> = TValue | ((context: ExtractorRuntimeContext) => TValue);
+type MaybePromise<T> = T | Promise<T>;
+type ExtractorConfigValue<TValue> = TValue | ((context: ExtractorRuntimeContext) => MaybePromise<TValue>);
 
 export interface ExtractorConfig<T = unknown> {
   /** Human-readable extractor name. Converted to a stable kebab-case slug for XML tags and metadata keys. */
@@ -125,16 +126,16 @@ export class Extractor<T = unknown> {
     this.internal = internal;
   }
 
-  resolve(context: ExtractorRuntimeContext): Extractor<T> {
+  async resolve(context: ExtractorRuntimeContext): Promise<Extractor<T>> {
     const instructions =
       typeof this.instructionsConfig === 'function'
-        ? this.instructionsConfig(context).trim()
+        ? (await this.instructionsConfig(context)).trim()
         : this.instructionsConfig.trim();
     if (!instructions) {
       throw new Error(`Extractor "${this.name}" must include instructions.`);
     }
 
-    const schema = typeof this.schemaConfig === 'function' ? this.schemaConfig(context) : this.schemaConfig;
+    const schema = typeof this.schemaConfig === 'function' ? await this.schemaConfig(context) : this.schemaConfig;
     return new Extractor(
       {
         name: this.name,
@@ -148,11 +149,11 @@ export class Extractor<T = unknown> {
   }
 }
 
-export function resolveExtractors(
+export async function resolveExtractors(
   extractors: readonly Extractor<any>[],
   context: ExtractorRuntimeContext,
-): Extractor<any>[] {
-  return extractors.map(extractor => extractor.resolve(context));
+): Promise<Extractor<any>[]> {
+  return Promise.all(extractors.map(extractor => extractor.resolve(context)));
 }
 
 export function validateExtractorList(extractors: readonly Extractor<any>[]): Extractor<any>[] {

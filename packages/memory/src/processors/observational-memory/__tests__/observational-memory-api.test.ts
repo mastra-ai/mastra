@@ -280,7 +280,7 @@ describe('observe()', () => {
     });
 
     it('should persist schema-less inline extracted values and call hooks', async () => {
-      const onExtracted = vi.fn();
+      const onExtracted = vi.fn(({ current }) => current);
       const userInfo = new Extractor({
         name: 'User info',
         instructions: 'Information about the user: name/location/work/etc',
