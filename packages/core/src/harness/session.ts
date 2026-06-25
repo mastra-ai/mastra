@@ -2501,6 +2501,13 @@ export class SessionDisplayState {
 export class SessionBus {
   readonly #listeners: HarnessEventListener[] = [];
   #displayState: SessionDisplayState | undefined;
+  /**
+   * The last workspace lifecycle event group emitted on this bus, replayed to
+   * subscribers that attach after the workspace finished initializing. Without
+   * this, late listeners (the normal pattern: create a session, then subscribe)
+   * would never see the workspace ready/error status.
+   */
+  #lastWorkspaceEvents: HarnessEvent[] = [];
 
   /** Attach the display-state reducer the bus folds events into. Set once by the Session. */
   setDisplayState(displayState: SessionDisplayState): void {
@@ -2508,6 +2515,19 @@ export class SessionBus {
   }
 
   subscribe(listener: HarnessEventListener): () => void {
+    // Replay buffered workspace lifecycle events so late subscribers learn the
+    // current workspace status. The workspace is initialized during session
+    // creation, before any external caller can subscribe.
+    for (const event of this.#lastWorkspaceEvents) {
+      try {
+        const result = listener(event);
+        if (result && typeof result === 'object' && 'catch' in result) {
+          (result as Promise<void>).catch(err => console.error('Error in session event listener:', err));
+        }
+      } catch (err) {
+        console.error('Error in session event listener:', err);
+      }
+    }
     this.#listeners.push(listener);
     return () => {
       const index = this.#listeners.indexOf(listener);
@@ -2518,6 +2538,17 @@ export class SessionBus {
   }
 
   emit(event: HarnessEvent): void {
+    if (
+      event.type === 'workspace_status_changed' ||
+      event.type === 'workspace_ready' ||
+      event.type === 'workspace_error'
+    ) {
+      if (event.type === 'workspace_status_changed') {
+        this.#lastWorkspaceEvents = [event];
+      } else {
+        this.#lastWorkspaceEvents.push(event);
+      }
+    }
     this.#displayState?.apply(event);
     this.#dispatch(event);
     if (event.type !== 'display_state_changed' && this.#displayState) {
@@ -2625,18 +2656,8 @@ export class Session<TState = unknown> {
     this.state = new SessionState(state ?? { initialState: {} as TState }, this.#bus);
 
     if (!workspace || !(workspace instanceof Workspace)) {
-      const error = new Error(`A session requires a valid workspace instance.`);
-      this.emit({ type: 'workspace_status_changed', status: 'error', error });
-      this.emit({ type: 'workspace_error', error });
-      throw error;
+      throw new Error(`A session requires a valid workspace instance.`);
     }
-
-    this.emit({ type: 'workspace_status_changed', status: 'ready' });
-    this.emit({
-      type: 'workspace_ready',
-      workspaceId: workspace.id,
-      workspaceName: workspace.name,
-    });
 
     this.#workspace = workspace;
     this.browser = browser;

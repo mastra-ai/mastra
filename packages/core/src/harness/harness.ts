@@ -178,7 +178,6 @@ export class Harness<TState = {}> {
   private config: HarnessConfig<TState>;
   private workspaceInitialized = false;
   private initPromise: Promise<void> | undefined = undefined;
-  private workspaceError: Error | undefined = undefined;
   private browser: DynamicArgument<MastraBrowser | undefined> = undefined;
   private workspace: DynamicArgument<Workspace | undefined> = undefined;
   private heartbeatTimers = new Map<string, { timer: NodeJS.Timeout; shutdown?: () => void | Promise<void> }>();
@@ -446,6 +445,12 @@ export class Harness<TState = {}> {
     if (workspaceToConnect && workspaceToConnect instanceof Workspace) {
       try {
         await workspaceToConnect.init();
+        session.emit({ type: 'workspace_status_changed', status: 'ready' });
+        session.emit({
+          type: 'workspace_ready',
+          workspaceId: workspaceToConnect.id,
+          workspaceName: workspaceToConnect.name,
+        });
       } catch (error) {
         const initError = getErrorFromUnknown(error);
         session.emit({ type: 'workspace_status_changed', status: 'error', error: initError });
@@ -633,14 +638,11 @@ export class Harness<TState = {}> {
 
         await (this.workspace as Workspace).init();
         this.workspaceInitialized = true;
-        this.workspaceError = undefined;
-      } catch (error) {
-        const err = getErrorFromUnknown(error);
+      } catch {
         this.workspace = undefined;
         this.workspaceInitialized = false;
-        // Remember the failure so sessions created later can surface it; the
-        // Harness holds no session of its own to emit onto during init().
-        this.workspaceError = err;
+        // Sessions created later will call workspace.init() themselves and
+        // surface the error through workspace_error events on the session.
       }
     }
 
