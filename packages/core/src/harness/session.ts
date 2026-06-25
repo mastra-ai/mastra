@@ -76,6 +76,27 @@ const MODE_ID_KEY = 'currentModeId';
 const modeModelKey = (modeId: string) => `modeModelId_${modeId}`;
 
 /**
+ * Internal thread-metadata keys used by `Session.loadMetadata()` to persist
+ * runtime bookkeeping (selected model/mode, observer/reflector config, token
+ * usage). These share the flat thread `metadata` bag with user-provided
+ * session scoping tags, so they must never be treated as tags: they are
+ * skipped when stamping tags onto a thread and excluded when reading tags
+ * back out of thread metadata.
+ */
+export function isReservedThreadMetadataKey(key: string): boolean {
+  return (
+    key === 'currentModelId' ||
+    key === MODE_ID_KEY ||
+    key === 'observerModelId' ||
+    key === 'reflectorModelId' ||
+    key === 'observationThreshold' ||
+    key === 'reflectionThreshold' ||
+    key === 'tokenUsage' ||
+    key.startsWith('modeModelId_')
+  );
+}
+
+/**
  * Owns the session's identity: the memory `resourceId` and the active
  * `threadId` this session reads and writes under. Together they form the memory
  * binding (`{ thread, resource }`) every run uses. In a multi-user host one
@@ -524,7 +545,9 @@ export class SessionThread {
     // sessions that still carry one in their initial state.
     const tags = session.getTags();
     if (Object.keys(tags).length > 0) {
-      Object.assign(metadata, tags);
+      for (const [key, value] of Object.entries(tags)) {
+        if (!isReservedThreadMetadataKey(key)) metadata[key] = value;
+      }
     } else {
       const projectPath = (session.state.get() as any).projectPath;
       if (projectPath) {

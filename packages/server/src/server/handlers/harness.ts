@@ -1,4 +1,5 @@
 import type { Agent } from '@mastra/core/agent';
+import { isReservedThreadMetadataKey } from '@mastra/core/harness';
 import type { Harness, Session } from '@mastra/core/harness';
 import { z } from 'zod/v4';
 
@@ -653,15 +654,16 @@ export const LIST_HARNESS_THREADS_ROUTE = createRoute({
       const session = await getSession(harness, resourceId);
       const threads = await session.thread.list();
       // A thread's metadata mixes the session scoping tags (stamped at creation,
-      // e.g. `projectPath`) with model bookkeeping (`currentModelId`,
-      // `modeModelId_<mode>`). Return only the string-valued scoping tags, so the
-      // response stays valid and the model keys don't leak out as "tags".
-      const isModelMetaKey = (key: string) => key === 'currentModelId' || key.startsWith('modeModelId_');
+      // e.g. `projectPath`) with internal session bookkeeping that
+      // `Session.loadMetadata()` reads back (selected model/mode, observer/
+      // reflector config, token usage). Return only the string-valued scoping
+      // tags, using core's shared reserved-key predicate so internal keys never
+      // leak out as "tags" or become matchable via the `tags` filter.
       const getTags = (t: { metadata?: unknown }): Record<string, string> => {
         const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
         const result: Record<string, string> = {};
         for (const [key, value] of Object.entries(metadata)) {
-          if (typeof value === 'string' && !isModelMetaKey(key)) result[key] = value;
+          if (typeof value === 'string' && !isReservedThreadMetadataKey(key)) result[key] = value;
         }
         return result;
       };
@@ -669,8 +671,9 @@ export const LIST_HARNESS_THREADS_ROUTE = createRoute({
       // (the id is derived from the git URL). When tags are supplied, scope to
       // threads whose metadata matches every tag and drop the rest, so worktree A
       // never shows worktree B's threads. Mirrors the harness's tag-aware
-      // selection and the TUI's worktree-strict listing.
-      const tagEntries = tags ? Object.entries(tags) : [];
+      // selection and the TUI's worktree-strict listing. Reserved internal keys
+      // are ignored as filter tags so callers can't match on session bookkeeping.
+      const tagEntries = tags ? Object.entries(tags).filter(([key]) => !isReservedThreadMetadataKey(key)) : [];
       const scoped =
         tagEntries.length > 0
           ? threads.filter(t => {
