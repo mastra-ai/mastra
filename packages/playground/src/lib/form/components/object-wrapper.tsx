@@ -1,7 +1,8 @@
 import type { ObjectWrapperProps } from '@autoform/react';
-import { Icon, cn } from '@mastra/playground-ui';
+import { Icon } from '@mastra/playground-ui';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Braces, ChevronDownIcon } from 'lucide-react';
 import React, { useState } from 'react';
 

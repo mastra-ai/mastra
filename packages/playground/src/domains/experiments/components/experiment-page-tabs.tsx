@@ -6,7 +6,6 @@ import {
   Icon,
   SpanDataPanelView,
   TraceDataPanelView,
-  cn,
   toast,
   useSpanDetail,
   useTraceSpanNavigation,
@@ -15,6 +14,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Chip } from '@mastra/playground-ui/components/Chip';
 import { Tabs, Tab, TabList, TabContent } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ClipboardCheck } from 'lucide-react';
 import { useState, useMemo, useCallback } from 'react';
 

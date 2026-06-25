@@ -1,6 +1,7 @@
-import { GithubIcon, cn } from '@mastra/playground-ui';
+import { GithubIcon } from '@mastra/playground-ui';
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
 import type { KeyValueListItemData } from '@mastra/playground-ui/components/KeyValueList';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { PackageIcon, GitBranchIcon, InfoIcon } from 'lucide-react';
 
 type TemplateInfoProps = {
