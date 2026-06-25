@@ -137,28 +137,18 @@ function detectPackageRunner(projectPath: string): string | undefined {
   return 'npx --yes';
 }
 
-type DynamicWorkspaceFallbackState = Pick<MastraCodeState, 'projectPath' | 'configDir' | 'homeDir'>;
-
-export function getDynamicWorkspace({
-  requestContext,
-  mastra,
-  fallbackState,
-}: {
-  requestContext: RequestContext;
-  mastra?: Mastra;
-  fallbackState?: DynamicWorkspaceFallbackState;
-}) {
+export function getDynamicWorkspace({ requestContext, mastra }: { requestContext: RequestContext; mastra?: Mastra }) {
   const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
   const state = getHarnessState(ctx);
-  const rawProjectPath = state?.projectPath ?? fallbackState?.projectPath;
+  const rawProjectPath = state?.projectPath;
 
   if (!rawProjectPath) {
     throw new Error('Project path is required');
   }
 
   const projectPath = path.resolve(rawProjectPath);
-  const configDir = state?.configDir ?? fallbackState?.configDir ?? DEFAULT_CONFIG_DIR;
-  const skillPaths = buildSkillPaths(projectPath, configDir, state?.homeDir ?? fallbackState?.homeDir);
+  const configDir = state?.configDir ?? DEFAULT_CONFIG_DIR;
+  const skillPaths = buildSkillPaths(projectPath, configDir, state?.homeDir);
   const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectPath}`;
   const sandboxPaths = state?.sandboxAllowedPaths ?? [];
   const allowedPaths = [...skillPaths, ...DEFAULT_ALLOWED_PATHS, ...sandboxPaths.map((p: string) => path.resolve(p))];
