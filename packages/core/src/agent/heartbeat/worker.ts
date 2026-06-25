@@ -417,8 +417,6 @@ export async function executeHeartbeat(
     let settled;
     try {
       settled = await signalResult.accepted;
-      // eslint-disable-next-line no-console
-      console.log('heartbeat signal accepted', { scheduleId, agentId, settled });
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       await safeHookCall(log, () =>
@@ -509,9 +507,10 @@ export async function executeHeartbeat(
       return { status: 'skipped-thread-blocked', outcome: 'skipped', runId };
     }
 
-    // action === 'wake' — a new run was started for this signal. The run streams
-    // on its own; the heartbeat is fire-and-forget for trigger-row purposes and
-    // does not block on `settled.output.consumeStream()`.
+    // action === 'wake' — a new run was started for this signal. The thread-stream
+    // runtime drives the run's stream to completion on its own (so the active-run
+    // record and thread lease release without requiring a consumer here); the
+    // heartbeat is fire-and-forget for trigger-row purposes.
     await safeHookCall(log, () =>
       hooks?.onFinish?.({
         mastra,
