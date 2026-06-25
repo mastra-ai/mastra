@@ -1,4 +1,5 @@
-import { Collapsible, CollapsibleTrigger, CollapsibleContent, MemoryIcon } from '@mastra/playground-ui';
+import { MemoryIcon } from '@mastra/playground-ui';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';

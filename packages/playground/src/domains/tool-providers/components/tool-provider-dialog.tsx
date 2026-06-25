@@ -1,4 +1,4 @@
-import { Button } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 

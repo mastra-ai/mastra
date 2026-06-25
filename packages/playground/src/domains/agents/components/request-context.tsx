@@ -1,5 +1,6 @@
 import { jsonLanguage } from '@codemirror/lang-json';
-import { Button, Icon, cn, formatJSON, isValidJson, toast } from '@mastra/playground-ui';
+import { Icon, cn, formatJSON, isValidJson, toast } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';

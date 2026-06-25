@@ -1,4 +1,4 @@
-import { PageLayout } from '@mastra/playground-ui';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { BookIcon, EarthIcon, MessageSquareIcon, ExternalLinkIcon, CloudUploadIcon, BuildingIcon } from 'lucide-react';
 
 const resources = [

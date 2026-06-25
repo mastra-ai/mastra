@@ -1,4 +1,4 @@
-import { Button } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { ArrowLeftIcon, PlusIcon } from 'lucide-react';
