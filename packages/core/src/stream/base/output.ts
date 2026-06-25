@@ -242,6 +242,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   };
 
   #consumptionStarted = false;
+  #consumeStreamPromise: Promise<void> | undefined;
   #returnScorerData = false;
   #structuredOutputMode: 'direct' | 'processor' | undefined = undefined;
 
@@ -1376,21 +1377,31 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }
 
   async consumeStream(options?: ConsumeStreamOptions): Promise<void> {
-    if (this.#consumptionStarted) {
-      return;
+    // Drain the base stream exactly once and share that single operation with
+    // every caller. Consumption can be kicked off from several places (an
+    // explicit consumeStream() call, a delayed-promise accessor, or the evented
+    // stream's pull()), but it must only drain #baseStream once. Returning the
+    // shared promise — rather than early-returning nothing — means later callers
+    // await the run to be fully consumed, so `await consumeStream()` keeps its
+    // contract regardless of who started consumption first.
+    if (this.#consumeStreamPromise) {
+      return this.#consumeStreamPromise;
     }
 
     this.#consumptionStarted = true;
+    this.#consumeStreamPromise = (async () => {
+      try {
+        await consumeStream({
+          stream: this.#baseStream as globalThis.ReadableStream<any>,
+          onError: options?.onError,
+          logger: this.logger,
+        });
+      } catch (error) {
+        options?.onError?.(error);
+      }
+    })();
 
-    try {
-      await consumeStream({
-        stream: this.#baseStream as globalThis.ReadableStream<any>,
-        onError: options?.onError,
-        logger: this.logger,
-      });
-    } catch (error) {
-      options?.onError?.(error);
-    }
+    return this.#consumeStreamPromise;
   }
 
   /**
