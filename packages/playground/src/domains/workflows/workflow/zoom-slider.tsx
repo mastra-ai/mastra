@@ -1,4 +1,5 @@
-import { Button, cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Slider } from '@mastra/playground-ui/components/Slider';
 import type { PanelProps } from '@xyflow/react';
 import { Panel, useViewport, useReactFlow } from '@xyflow/react';

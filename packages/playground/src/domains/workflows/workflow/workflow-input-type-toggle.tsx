@@ -1,4 +1,5 @@
-import { Txt, cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Braces, FormInput } from 'lucide-react';
 
 export type WorkflowInputType = 'simple' | 'form' | 'json';

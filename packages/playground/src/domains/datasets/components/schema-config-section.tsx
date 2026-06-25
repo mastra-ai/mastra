@@ -1,5 +1,5 @@
 'use client';
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import type { JSONSchema7 } from 'json-schema';

@@ -1,4 +1,5 @@
-import { Button, cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Chip, ChipsGroup } from '@mastra/playground-ui/components/Chip';
 import { Columns } from '@mastra/playground-ui/components/Columns';
 import { ItemList } from '@mastra/playground-ui/components/ItemList';

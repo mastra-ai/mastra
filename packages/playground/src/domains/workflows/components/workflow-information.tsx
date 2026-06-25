@@ -1,5 +1,7 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import { Button, Icon, ScrollArea, toast } from '@mastra/playground-ui';
+import { Icon, toast } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Plus } from 'lucide-react';
 import type { ContextType, ReactNode } from 'react';
 import { useState, useEffect, useContext } from 'react';

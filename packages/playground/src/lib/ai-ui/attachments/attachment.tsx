@@ -1,4 +1,5 @@
-import { Button, Icon, fileToBase64, isBrowserFetchableUrl } from '@mastra/playground-ui';
+import { Icon, fileToBase64, isBrowserFetchableUrl } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { TooltipProvider } from '@radix-ui/react-tooltip';
