@@ -7,11 +7,10 @@ import type { ExperimentsStorage } from '../storage/domains/experiments/base.js'
 import type {
   DatasetRecord,
   DatasetItem,
+  DatasetItemPayload,
   DatasetItemRow,
-  DatasetItemSource,
-  DatasetItemToolMock,
   DatasetVersion,
-  TargetType,
+  UpdateDatasetInput,
   UpdateExperimentResultInput,
 } from '../storage/types.js';
 import { runExperiment } from './experiment/index.js';
@@ -115,20 +114,19 @@ export class Dataset {
 
   /**
    * Update dataset metadata and/or schemas.
-   * Zod schemas are automatically converted to JSON Schema.
+   *
+   * Accepts Zod schemas for `inputSchema` / `groundTruthSchema` (widened to
+   * `unknown`); they are normalized to JSON Schema before being forwarded to
+   * the storage-canonical {@link UpdateDatasetInput} shape. All other fields
+   * mirror {@link UpdateDatasetInput} exactly (minus `id`, which is supplied
+   * from `this.id`).
    */
-  async update(input: {
-    name?: string;
-    description?: string;
-    metadata?: Record<string, unknown>;
-    inputSchema?: unknown;
-    groundTruthSchema?: unknown;
-    requestContextSchema?: Record<string, unknown> | null;
-    tags?: string[] | null;
-    targetType?: TargetType | null;
-    targetIds?: string[] | null;
-    scorerIds?: string[] | null;
-  }): Promise<DatasetRecord> {
+  async update(
+    input: Omit<UpdateDatasetInput, 'id' | 'inputSchema' | 'groundTruthSchema'> & {
+      inputSchema?: unknown;
+      groundTruthSchema?: unknown;
+    },
+  ): Promise<DatasetRecord> {
     const store = await this.#getDatasetsStore();
 
     let { inputSchema, groundTruthSchema, ...rest } = input;
@@ -155,42 +153,15 @@ export class Dataset {
   /**
    * Add a single item to the dataset.
    */
-  async addItem(input: {
-    input: unknown;
-    groundTruth?: unknown;
-    expectedTrajectory?: unknown;
-    toolMocks?: DatasetItemToolMock[];
-    requestContext?: Record<string, unknown>;
-    metadata?: Record<string, unknown>;
-    source?: DatasetItemSource;
-  }): Promise<DatasetItem> {
+  async addItem(input: DatasetItemPayload): Promise<DatasetItem> {
     const store = await this.#getDatasetsStore();
-    return store.addItem({
-      datasetId: this.id,
-      input: input.input,
-      groundTruth: input.groundTruth,
-      expectedTrajectory: input.expectedTrajectory,
-      toolMocks: input.toolMocks,
-      requestContext: input.requestContext,
-      metadata: input.metadata,
-      source: input.source,
-    });
+    return store.addItem({ datasetId: this.id, ...input });
   }
 
   /**
    * Add multiple items to the dataset in bulk.
    */
-  async addItems(input: {
-    items: Array<{
-      input: unknown;
-      groundTruth?: unknown;
-      expectedTrajectory?: unknown;
-      toolMocks?: DatasetItemToolMock[];
-      requestContext?: Record<string, unknown>;
-      metadata?: Record<string, unknown>;
-      source?: DatasetItemSource;
-    }>;
-  }): Promise<DatasetItem[]> {
+  async addItems(input: { items: DatasetItemPayload[] }): Promise<DatasetItem[]> {
     const store = await this.#getDatasetsStore();
     return store.batchInsertItems({
       datasetId: this.id,
@@ -230,28 +201,13 @@ export class Dataset {
   }
 
   /**
-   * Update an existing item in the dataset.
+   * Update an existing item in the dataset. Only the provided payload fields
+   * are patched.
    */
-  async updateItem(input: {
-    itemId: string;
-    input?: unknown;
-    groundTruth?: unknown;
-    expectedTrajectory?: unknown;
-    toolMocks?: DatasetItemToolMock[];
-    requestContext?: Record<string, unknown>;
-    metadata?: Record<string, unknown>;
-  }): Promise<DatasetItem> {
+  async updateItem(input: { itemId: string } & Partial<DatasetItemPayload>): Promise<DatasetItem> {
     const store = await this.#getDatasetsStore();
-    return store.updateItem({
-      id: input.itemId,
-      datasetId: this.id,
-      input: input.input,
-      groundTruth: input.groundTruth,
-      expectedTrajectory: input.expectedTrajectory,
-      toolMocks: input.toolMocks,
-      requestContext: input.requestContext,
-      metadata: input.metadata,
-    });
+    const { itemId, ...rest } = input;
+    return store.updateItem({ id: itemId, datasetId: this.id, ...rest });
   }
 
   /**

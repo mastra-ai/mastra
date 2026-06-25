@@ -195,7 +195,11 @@ export function buildSeedData(now: number) {
       attributes: {
         model: run.model.model,
         provider: run.model.provider,
-        usage: { promptTokens: run.inputTokens, completionTokens: run.outputTokens, totalTokens: run.inputTokens + run.outputTokens },
+        usage: {
+          promptTokens: run.inputTokens,
+          completionTokens: run.outputTokens,
+          totalTokens: run.inputTokens + run.outputTokens,
+        },
       },
       input: { prompt: run.prompt },
       output: { text: run.reply },
@@ -322,7 +326,9 @@ export function buildSeedData(now: number) {
 
   const scores = runs.slice(0, 10).flatMap((run, i) =>
     scorerDefs.map(def => {
-      const value = round(Math.min(0.99, Math.max(0.55, def.base - (i % 4) * 0.07 + (run.status === 'error' ? -0.2 : 0))));
+      const value = round(
+        Math.min(0.99, Math.max(0.55, def.base - (i % 4) * 0.07 + (run.status === 'error' ? -0.2 : 0))),
+      );
       return {
         scorerId: def.scorerId,
         entityId: AGENT.id,
@@ -343,7 +349,9 @@ export function buildSeedData(now: number) {
   let obsScoreSeq = 0;
   const obsScores = runs.slice(0, 10).flatMap((run, i) =>
     scorerDefs.map(def => {
-      const value = round(Math.min(0.99, Math.max(0.55, def.base - (i % 4) * 0.07 + (run.status === 'error' ? -0.2 : 0))));
+      const value = round(
+        Math.min(0.99, Math.max(0.55, def.base - (i % 4) * 0.07 + (run.status === 'error' ? -0.2 : 0))),
+      );
       return {
         scoreId: `preview-obs-score-${++obsScoreSeq}`,
         scorerId: def.scorerId,
