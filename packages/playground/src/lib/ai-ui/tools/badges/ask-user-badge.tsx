@@ -1,15 +1,16 @@
-import { Button, Icon } from '@mastra/playground-ui';
+import { Icon } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Check, MessageCircleQuestion, Send } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { BadgeWrapper } from './badge-wrapper';
-import type { AskUserSuspendPayload } from './types';
+import type { AskUserResult, AskUserSuspendPayload } from './types';
 import { useToolCall } from '@/services/tool-call-provider';
 
 export interface AskUserBadgeProps {
   toolCallId: string;
   suspendPayload: AskUserSuspendPayload;
-  result: unknown;
+  result: AskUserResult | undefined;
 }
 
 export const AskUserBadge = ({ toolCallId, suspendPayload, result }: AskUserBadgeProps) => {
@@ -70,7 +71,7 @@ export const AskUserBadge = ({ toolCallId, suspendPayload, result }: AskUserBadg
             <Icon>
               <Check className="text-accent1" />
             </Icon>
-            <span className="text-sm text-text2">{typeof result === 'string' ? result : JSON.stringify(result)}</span>
+            <span className="text-sm text-text2">{result.content}</span>
           </div>
         )}
 

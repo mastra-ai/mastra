@@ -2,7 +2,7 @@ import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AskUserBadge } from '../ask-user-badge';
-import type { AskUserSuspendPayload } from '../types';
+import type { AskUserResult, AskUserSuspendPayload } from '../types';
 import { ToolCallProvider } from '@/services/tool-call-provider';
 
 type ProviderOverrides = {
@@ -12,7 +12,7 @@ type ProviderOverrides = {
 };
 
 const renderBadge = (
-  props: { toolCallId: string; suspendPayload: AskUserSuspendPayload; result: unknown },
+  props: { toolCallId: string; suspendPayload: AskUserSuspendPayload; result: AskUserResult | undefined },
   overrides: ProviderOverrides = {},
 ) => {
   const approveToolcall = overrides.approveToolcall ?? vi.fn();
@@ -146,10 +146,15 @@ describe('AskUserBadge', () => {
       selectionMode: 'single_select',
     };
 
-    it('renders the answer and hides the option inputs when a result is present', () => {
-      renderBadge({ toolCallId: 'call-4', suspendPayload, result: 'Apple' });
+    it('renders the answer content and hides the option inputs when a result is present', () => {
+      renderBadge({
+        toolCallId: 'call-4',
+        suspendPayload,
+        result: { content: 'User answered: Apple', isError: false },
+      });
 
-      expect(within(badge()).getAllByText('Apple')).toHaveLength(1);
+      expect(within(badge()).getAllByText('User answered: Apple')).toHaveLength(1);
+      expect(badge().textContent).not.toContain('{"content"');
       expect(within(badge()).queryByRole('button', { name: 'Apple' })).toBeNull();
     });
 

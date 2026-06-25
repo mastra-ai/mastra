@@ -1,13 +1,12 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
+import { AskUserTool } from './ask-user-tool';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
-import { AskUserBadge } from './badges/ask-user-badge';
 import { CodeModeBadge, getCodeModeCall } from './badges/code-mode-badge';
 import { FileTreeBadge } from './badges/file-tree-badge';
 import { ObservationMarkerBadge } from './badges/observation-marker-badge';
 import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
 import { ToolBadge } from './badges/tool-badge';
-import type { AskUserSuspendPayload } from './badges/types';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
 import { useActivatedSkills } from '@/domains/agents/context/activated-skills-context';
 import {
@@ -57,15 +56,6 @@ export interface ToolCardProps {
 }
 
 const TASK_TOOL_NAMES = new Set(['task_write', 'task_update', 'task_complete', 'task_check']);
-
-function isAskUserSuspendPayload(payload: unknown): payload is AskUserSuspendPayload {
-  return (
-    typeof payload === 'object' &&
-    payload !== null &&
-    'question' in payload &&
-    typeof (payload as AskUserSuspendPayload).question === 'string'
-  );
-}
 
 export const ToolCard = (props: ToolCardProps) => {
   return (
@@ -185,16 +175,9 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
     return null;
   }
 
-  // ask_user tool renders a custom interactive badge for answering questions.
-  // Access suspendedTools directly (bypassing the mode check) because when messages
-  // are loaded from the database, metadata.mode may not be persisted.
-  const askUserSuspendMeta = metadata?.suspendedTools?.[toolName] ?? suspendedToolMetadata;
-  if (
-    toolName === 'ask_user' &&
-    askUserSuspendMeta?.suspendPayload &&
-    isAskUserSuspendPayload(askUserSuspendMeta.suspendPayload)
-  ) {
-    return <AskUserBadge toolCallId={toolCallId} suspendPayload={askUserSuspendMeta.suspendPayload} result={result} />;
+  // ask_user tool renders a dedicated interactive component for answering questions.
+  if (toolName === 'ask_user') {
+    return <AskUserTool toolName={toolName} toolCallId={toolCallId} output={output} metadata={metadata} />;
   }
 
   if (isBackgroundTaskResult) {
