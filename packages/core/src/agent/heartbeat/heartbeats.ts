@@ -243,8 +243,14 @@ export class Heartbeats {
       ...(patch.broadcast !== undefined ? { broadcast: patch.broadcast } : {}),
     };
 
+    // Recompute the next fire when the cadence changes OR when this patch
+    // resumes a paused heartbeat. Resuming must follow the same semantics as
+    // resume(): a paused row carries a stale nextFireAt (often in the past),
+    // so flipping status back to 'active' without recomputing would trigger
+    // an immediate spurious fire instead of waiting for the next cron tick.
+    const resuming = patch.status === 'active' && existing.status === 'paused';
     const nextFireAt =
-      patch.cron !== undefined || patch.timezone !== undefined
+      patch.cron !== undefined || patch.timezone !== undefined || resuming
         ? computeNextFireAt(nextCron, { timezone: nextTimezone, after: Date.now() })
         : undefined;
 

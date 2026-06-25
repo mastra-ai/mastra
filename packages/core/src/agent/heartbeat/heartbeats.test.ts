@@ -128,6 +128,41 @@ describe('mastra.heartbeats canonical service', () => {
     expect(typeof resumed.nextFireAt).toBe('number');
   });
 
+  it('update({ status: active }) on a paused heartbeat recomputes nextFireAt like resume()', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-23T12:30:00.000Z'));
+    try {
+      const { mastra } = makeMastra(['a']);
+      const hb = await mastra.heartbeats.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'p' });
+
+      const paused = await mastra.heartbeats.pause(hb.id);
+      expect(paused.status).toBe('paused');
+      const staleNext = paused.nextFireAt;
+
+      // Advance well past the paused nextFireAt so a naive status flip would
+      // leave a stale (past) fire time and trigger an immediate spurious run.
+      vi.advanceTimersByTime(30 * 60 * 1000);
+
+      const resumedViaUpdate = await mastra.heartbeats.update(hb.id, { status: 'active' });
+      expect(resumedViaUpdate.status).toBe('active');
+      // Must be recomputed forward from "now", not the stale paused value.
+      expect(resumedViaUpdate.nextFireAt).not.toBe(staleNext);
+      expect(resumedViaUpdate.nextFireAt).toBeGreaterThan(Date.now());
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('update without a resume does not recompute nextFireAt', async () => {
+    const { mastra } = makeMastra(['a']);
+    const hb = await mastra.heartbeats.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'p' });
+    const prevNext = hb.nextFireAt;
+
+    const patched = await mastra.heartbeats.update(hb.id, { prompt: 'changed' });
+    expect(patched.prompt).toBe('changed');
+    expect(patched.nextFireAt).toBe(prevNext);
+  });
+
   it('delete is idempotent', async () => {
     const { mastra } = makeMastra(['a']);
     const hb = await mastra.heartbeats.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'p' });
