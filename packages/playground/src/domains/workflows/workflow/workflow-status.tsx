@@ -1,5 +1,6 @@
-import { Txt, CheckIcon, CrossIcon, Icon } from '@mastra/playground-ui';
+import { CheckIcon, CrossIcon, Icon } from '@mastra/playground-ui';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
   CirclePause,
   HourglassIcon,

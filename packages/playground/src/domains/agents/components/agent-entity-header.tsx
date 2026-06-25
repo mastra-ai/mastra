@@ -1,5 +1,7 @@
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, AgentIcon, Icon, Txt } from '@mastra/playground-ui';
+import { AgentIcon, Icon } from '@mastra/playground-ui';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { CopyIcon, Check } from 'lucide-react';
 import { useAgent } from '../hooks/use-agent';

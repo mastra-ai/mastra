@@ -65,7 +65,13 @@ export class WorkflowsMySQL extends WorkflowsStorage {
    * Exports DDL statements for all managed tables.
    */
   static getExportDDL(): string[] {
-    return [generateTableSQL({ tableName: TABLE_WORKFLOW_SNAPSHOT, schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT] })];
+    return [
+      generateTableSQL({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+        compositePrimaryKey: ['workflow_name', 'run_id'],
+      }),
+    ];
   }
 
   constructor({
