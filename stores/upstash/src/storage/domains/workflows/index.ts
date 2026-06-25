@@ -408,20 +408,10 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     runId: string;
   }): Promise<WorkflowRunState | null> {
     const { namespace = 'workflows', workflowName, runId } = params;
-    const key = getKey(TABLE_WORKFLOW_SNAPSHOT, {
-      namespace,
-      workflow_name: workflowName,
-      run_id: runId,
-    });
     try {
-      const data = await this.client.get<{
-        namespace: string;
-        workflow_name: string;
-        run_id: string;
-        snapshot: WorkflowRunState;
-      }>(key);
+      const data = await this.getWorkflowRunRecord({ namespace, runId, workflowName });
       if (!data) return null;
-      return data.snapshot;
+      return typeof data.snapshot === 'string' ? (JSON.parse(data.snapshot) as WorkflowRunState) : data.snapshot;
     } catch (error) {
       throw new MastraError(
         {
@@ -468,8 +458,14 @@ export class WorkflowsUpstash extends WorkflowsStorage {
   }
 
   async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
-    const key = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowName, run_id: runId });
     try {
+      const record = await this.getWorkflowRunRecord({ namespace: 'workflows', runId, workflowName });
+      const key = getKey(TABLE_WORKFLOW_SNAPSHOT, {
+        namespace: 'workflows',
+        workflow_name: workflowName,
+        run_id: runId,
+        ...(record?.resourceId ? { resourceId: record.resourceId } : {}),
+      });
       await this.client.del(key);
     } catch (error) {
       throw new MastraError(

@@ -324,7 +324,7 @@ describe('updateMessages keeps msg-idx index in sync', () => {
 });
 
 describe('WorkflowsUpstash.persistWorkflowSnapshot', () => {
-  it('preserves createdAt when re-persisting a resource-scoped workflow run', async () => {
+  it('preserves, loads, and deletes a resource-scoped workflow run', async () => {
     const workflowsDomain = new WorkflowsUpstash({ client: createTestClient() });
     await workflowsDomain.init();
 
@@ -351,9 +351,17 @@ describe('WorkflowsUpstash.persistWorkflowSnapshot', () => {
       updatedAt,
     });
 
+    const loaded = await workflowsDomain.loadWorkflowSnapshot({ namespace: 'workflows', workflowName, runId });
+    expect(loaded?.status).toBe('success');
+
     const fetched = await workflowsDomain.getWorkflowRunById({ runId, workflowName });
     expect(fetched?.createdAt.toISOString()).toBe(createdAt.toISOString());
     expect(fetched?.updatedAt.toISOString()).toBe(updatedAt.toISOString());
     expect(fetched?.resourceId).toBe(resourceId);
+
+    await workflowsDomain.deleteWorkflowRunById({ runId, workflowName });
+
+    await expect(workflowsDomain.loadWorkflowSnapshot({ namespace: 'workflows', workflowName, runId })).resolves.toBeNull();
+    await expect(workflowsDomain.getWorkflowRunById({ runId, workflowName })).resolves.toBeNull();
   });
 });
