@@ -141,13 +141,24 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
       filtered = filtered.filter(e => !e.name.startsWith('.'));
     }
 
-    // Filter by exclude pattern (like tree's -I flag)
+    // Filter by exclude pattern (like tree's -I flag, supports pipe-separated patterns)
     if (exclude) {
-      const patterns = Array.isArray(exclude) ? exclude : [exclude];
+      const patterns = Array.isArray(exclude)
+        ? exclude
+        : exclude
+            .split('|')
+            .map(p => p.trim())
+            .filter(Boolean);
       filtered = filtered.filter(e => {
         return !patterns.some(pattern => e.name.includes(pattern));
       });
     }
+
+    // Always exclude .git internals — they are never useful and waste tokens
+    filtered = filtered.filter(e => {
+      if (e.type === 'directory' && e.name === '.git') return false;
+      return true;
+    });
 
     // Filter by gitignore rules (paths must be relative to workspace root, not listing root)
     if (ignoreFilter) {
