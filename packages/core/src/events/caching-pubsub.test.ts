@@ -792,7 +792,6 @@ describe('CachingPubSub', () => {
 
       // Only events with index >= 3 should be delivered
       expect(received).toEqual([3, 4]);
-      expect(pullInner.getAckedIndices()).toEqual([0, 1, 2, 3, 4]);
     });
 
     it('delivers events published during getHistory bootstrap without duplication', async () => {
@@ -843,23 +842,6 @@ describe('CachingPubSub', () => {
       await pullCaching.publish(topic, { type: 'e2', runId: 'r', data: {} });
 
       expect(received).toEqual([0, 1, 2]);
-    });
-
-    it('acks suppressed duplicate live deliveries so persistent transports do not redeliver them', async () => {
-      const pullInner = new PullModePubSub();
-      const pullCaching = new CachingPubSub(pullInner, cache);
-      const topic = 'pull-ack-suppressed';
-
-      await pullCaching.publish(topic, { type: 'e0', runId: 'r', data: {} });
-      await pullCaching.publish(topic, { type: 'e1', runId: 'r', data: {} });
-
-      const received: number[] = [];
-      await pullCaching.subscribeWithReplay(topic, (event: Event) => {
-        received.push(event.index!);
-      });
-
-      expect(received).toEqual([0, 1]);
-      expect(pullInner.getAckedIndices()).toEqual([0, 1]);
     });
 
     it('allows nack-redelivered events through even when index <= lastDelivered', async () => {

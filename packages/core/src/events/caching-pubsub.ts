@@ -101,13 +101,6 @@ export class CachingPubSub extends PubSub {
     return event.index !== undefined ? `i:${event.index}` : `id:${event.id}`;
   }
 
-  private ackSuppressedEvent(ack?: Parameters<EventCallback>[1]): void {
-    if (!ack) return;
-    void ack().catch(error => {
-      this.logError('[CachingPubSub] Failed to ack suppressed replay event', error);
-    });
-  }
-
   /**
    * Get the cache key for a topic's event list
    */
@@ -212,7 +205,6 @@ export class CachingPubSub extends PubSub {
     const wrappedCb: EventCallback = (event, ack, nack) => {
       // Drop events strictly before the requested offset on the live path.
       if (typeof event.index === 'number' && event.index < offset) {
-        this.ackSuppressedEvent(ack);
         return;
       }
 
@@ -226,7 +218,6 @@ export class CachingPubSub extends PubSub {
       // deliveryAttempt > 1, and the consumer must see them to retry processing.
       const isRetry = typeof event.deliveryAttempt === 'number' && event.deliveryAttempt > 1;
       if (typeof event.index === 'number' && event.index <= lastDelivered && !isRetry) {
-        this.ackSuppressedEvent(ack);
         return;
       }
 
@@ -256,7 +247,6 @@ export class CachingPubSub extends PubSub {
       for (const { event, ack, nack } of buffer) {
         const key = this.dedupKey(event);
         if (seen.has(key)) {
-          this.ackSuppressedEvent(ack);
           continue;
         }
         seen.add(key);
