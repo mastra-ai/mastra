@@ -28,7 +28,7 @@ export const ctrlfQueuedCustomSlashScenario = {
     await runtime.waitForScreenText(/Project: project/i, terminal);
 
     terminal.submit(START_PROMPT);
-    await runtime.waitForScreenText(/Start a slow Ctrl F custom slash queue run\./i, terminal);
+    await runtime.waitForScreenText(/Initial Ctrl F custom slash run is still streaming/i, terminal, 8_000);
 
     terminal.write('/queue-au');
     await runtime.waitForScreenText(/Queue command selected from autocomplete/i, terminal, 8_000);
