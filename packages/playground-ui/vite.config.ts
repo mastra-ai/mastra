@@ -1,5 +1,5 @@
 import { existsSync, readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import nodeExternals from 'rollup-plugin-node-externals';
@@ -55,6 +55,52 @@ const utilityEntries = Object.fromEntries(
       return [`utils/${entryName}`, resolve(utilsDir, fileName)] as const;
     }),
 );
+
+const createPublicFileEntries = (sourceDir: string, entryPrefix: string) => {
+  const entries: Array<readonly [string, string]> = [];
+
+  const walk = (currentDir: string) => {
+    readdirSync(currentDir, { withFileTypes: true }).forEach(dirent => {
+      if (dirent.isDirectory()) {
+        if (dirent.name === '__tests__') return;
+        walk(resolve(currentDir, dirent.name));
+        return;
+      }
+
+      if (!dirent.isFile()) return;
+
+      const fileName = dirent.name;
+      if (
+        !/\.(ts|tsx)$/.test(fileName) ||
+        fileName === 'index.ts' ||
+        fileName === 'index.tsx' ||
+        fileName.endsWith('.test.ts') ||
+        fileName.endsWith('.test.tsx') ||
+        fileName.endsWith('.stories.ts') ||
+        fileName.endsWith('.stories.tsx')
+      ) {
+        return;
+      }
+
+      const file = resolve(currentDir, fileName);
+      const entryName = relative(sourceDir, file)
+        .replace(/\\/g, '/')
+        .replace(/\.(ts|tsx)$/, '');
+
+      entries.push([`${entryPrefix}/${entryName}`, file] as const);
+    });
+  };
+
+  walk(sourceDir);
+
+  return Object.fromEntries(entries);
+};
+
+const domainEntries = createPublicFileEntries(resolve(__dirname, 'src/domains'), 'domains');
+const eeEntries = createPublicFileEntries(resolve(__dirname, 'src/ee'), 'ee');
+const primitiveEntries = createPublicFileEntries(resolve(__dirname, 'src/ds/primitives'), 'primitives');
+const resizeEntries = createPublicFileEntries(resolve(__dirname, 'src/lib/resize'), 'resize');
+const storeEntries = createPublicFileEntries(resolve(__dirname, 'src/store'), 'store');
 
 // Public icon subpath entries, exposed as
 // `@mastra/playground-ui/icons/<IconName>` via the `./icons/*` package export.
@@ -114,6 +160,11 @@ const libConfig: UserConfig = {
         tokens: resolve(__dirname, 'src/ds/tokens/index.ts'),
         // Slashed keys make Rollup emit nested output: dist/components/<Name>.<format>.js
         ...utilityEntries,
+        ...domainEntries,
+        ...eeEntries,
+        ...primitiveEntries,
+        ...resizeEntries,
+        ...storeEntries,
         ...iconEntries,
         ...componentEntries,
         ...hookEntries,

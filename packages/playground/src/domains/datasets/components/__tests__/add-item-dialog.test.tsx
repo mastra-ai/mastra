@@ -14,19 +14,21 @@ import { server } from '@/test/msw-server';
 const BASE_URL = 'http://localhost:4111';
 
 // Thin stubs for playground-ui atoms so this test focuses on the real client + mutation behavior.
-vi.mock('@mastra/playground-ui', () => {
+vi.mock('@mastra/playground-ui/components/Button', () => ({
+  Button: ({ variant: _variant, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: string }) => (
+    <button {...props} />
+  ),
+}));
+
+vi.mock('@mastra/playground-ui/components/Dialog', () => {
   const Dialog = ({ open, children }: PropsWithChildren<{ open: boolean }>) => (open ? <div>{children}</div> : null);
 
   return {
-    Button: ({ variant: _variant, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: string }) => (
-      <button {...props} />
-    ),
     Dialog,
     DialogContent: ({ children }: PropsWithChildren) => <div>{children}</div>,
     DialogHeader: ({ children }: PropsWithChildren) => <div>{children}</div>,
     DialogTitle: ({ children }: PropsWithChildren) => <h2>{children}</h2>,
     DialogBody: ({ children }: PropsWithChildren) => <div>{children}</div>,
-    toast: { error: vi.fn(), success: vi.fn() },
   };
 });
 

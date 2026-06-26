@@ -27,18 +27,17 @@ vi.mock('@/domains/agent-builder/components/agent-starter/agent-builder-starter'
   AgentBuilderStarter: () => <div data-testid="agent-builder-starter" />,
 }));
 
-vi.mock('@mastra/playground-ui', async importOriginal => {
-  const actual = (await importOriginal()) as Record<string, unknown>;
-  return {
-    ...actual,
-    Button: ({ children, onClick, tooltip, ...rest }: any) => (
-      <button onClick={onClick} aria-label={tooltip} {...rest}>
-        {children}
-      </button>
-    ),
-    usePlaygroundStore: () => ({ requestContext: undefined }),
-  };
-});
+vi.mock('@mastra/playground-ui/components/Button', () => ({
+  Button: ({ children, onClick, tooltip, ...rest }: any) => (
+    <button onClick={onClick} aria-label={tooltip} {...rest}>
+      {children}
+    </button>
+  ),
+}));
+
+vi.mock('@mastra/playground-ui/store/playground-store', () => ({
+  usePlaygroundStore: () => ({ requestContext: undefined }),
+}));
 
 vi.mock('react-router', async importOriginal => {
   const actual = (await importOriginal()) as Record<string, unknown>;
