@@ -11,6 +11,7 @@ import type {
 } from '@mastra/client-js';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 
+import { MASTRACODE_WEB_GIT_CLONE_CONTEXT_KEY } from '../git-clone-context';
 import { initialTranscript, transcriptReducer } from './transcript';
 import type { TranscriptState } from './transcript';
 
@@ -20,6 +21,12 @@ export type ConnectionStatus = 'connecting' | 'ready' | 'reconnecting' | 'error'
 const THREAD_PAGE_SIZE = 20;
 
 type Session = ReturnType<ReturnType<MastraClient['getHarness']>['session']>;
+
+function sessionTags(projectPath?: string, gitUrl?: string): Record<string, string> | undefined {
+  if (gitUrl) return { gitUrl };
+  if (projectPath) return { projectPath };
+  return undefined;
+}
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -34,6 +41,8 @@ interface UseHarnessSessionArgs {
    * the same repo. When omitted, all threads for the resource are listed.
    */
   projectPath?: string;
+  gitUrl?: string;
+  cloneParentPath?: string;
   /** Defaults to same-origin (Vite proxies /api → mastra dev). */
   baseUrl?: string;
   /**
@@ -93,6 +102,8 @@ export function useHarnessSession({
   harnessId,
   resourceId,
   projectPath,
+  gitUrl,
+  cloneParentPath,
   baseUrl = '',
   enabled = true,
 }: UseHarnessSessionArgs): HarnessSessionApi {
@@ -126,13 +137,13 @@ export function useHarnessSession({
       setThreads(
         await session.listThreads({
           limit: THREAD_PAGE_SIZE,
-          tags: projectPath ? { projectPath } : undefined,
+          tags: sessionTags(projectPath, gitUrl),
         }),
       );
     } catch {
       /* non-fatal */
     }
-  }, [projectPath]);
+  }, [projectPath, gitUrl]);
 
   useEffect(() => {
     if (!enabled) {
@@ -230,7 +241,12 @@ export function useHarnessSession({
         const [created, harnessModes] = await Promise.all([
           // Scope initial thread selection to the active project so worktrees
           // sharing a resourceId each resume their own thread.
-          session.create({ tags: projectPath ? { projectPath } : undefined }),
+          session.create({
+            tags: sessionTags(projectPath, gitUrl),
+            requestContext: gitUrl
+              ? { [MASTRACODE_WEB_GIT_CLONE_CONTEXT_KEY]: { gitUrl, cloneParentPath } }
+              : undefined,
+          }),
           harness.listModes(),
         ]);
         if (disposed) return;
@@ -291,7 +307,7 @@ export function useHarnessSession({
       unsubscribe?.();
       sessionRef.current = null;
     };
-  }, [harnessId, resourceId, baseUrl, refreshThreads, enabled]);
+  }, [harnessId, resourceId, projectPath, gitUrl, cloneParentPath, baseUrl, refreshThreads, enabled]);
 
   const send = useCallback(async (text: string) => {
     const session = sessionRef.current;

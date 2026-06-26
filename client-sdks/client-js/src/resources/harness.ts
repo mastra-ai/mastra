@@ -1,3 +1,4 @@
+import type { RequestContext } from '@mastra/core/request-context';
 import type { ClientOptions } from '../types';
 
 import { BaseResource } from './base';
@@ -345,10 +346,13 @@ export class HarnessSession extends BaseResource {
    * using a `{ projectPath }` tag) so each resumes its own thread instead of the
    * most recent thread across the whole resource.
    */
-  create(options?: { tags?: Record<string, string> }): Promise<CreateHarnessSessionResponse> {
-    return this.request(`${this.pathPrefix}/${encodeURIComponent(this.harnessId)}/sessions`, {
+  create(options?: {
+    tags?: Record<string, string>;
+    requestContext?: RequestContext;
+  }): Promise<CreateHarnessSessionResponse> {
+    return this.request(`/harness/${encodeURIComponent(this.harnessId)}/sessions`, {
       method: 'POST',
-      body: { resourceId: this.resourceId, tags: options?.tags },
+      body: { resourceId: this.resourceId, tags: options?.tags, requestContext: options?.requestContext },
     });
   }
 

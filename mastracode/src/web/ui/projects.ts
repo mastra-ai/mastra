@@ -12,6 +12,8 @@
  * workspace factory reads it to resolve the working directory.
  */
 
+import { getWebGitCloneDirectoryName, getWebGitRepoName, normalizeWebGitUrl } from '../git-clone-context';
+
 const STORAGE_KEY = 'mastracode-projects';
 const ACTIVE_KEY = 'mastracode-active-project';
 
@@ -20,6 +22,9 @@ export interface Project {
   id: string;
   name: string;
   path: string;
+  source?: 'local' | 'git';
+  gitUrl?: string;
+  cloneParentPath?: string;
   /**
    * Server-resolved resourceId (TUI-compatible). May be absent on projects
    * created before this field existed; `ensureResourceId` backfills it.
@@ -63,7 +68,8 @@ export function loadProjects(): Project[] {
         !!p &&
         typeof p === 'object' &&
         typeof (p as Project).id === 'string' &&
-        typeof (p as Project).path === 'string',
+        typeof (p as Project).path === 'string' &&
+        ((p as Project).source !== 'git' || typeof (p as Project).gitUrl === 'string'),
     );
   } catch {
     return [];
@@ -86,8 +92,52 @@ export async function addProject(name: string, path: string): Promise<Project> {
     id: crypto.randomUUID(),
     name: name.trim() || resolved.name,
     path: path.trim(),
+    source: 'local',
     resourceId: resolved.resourceId,
     gitBranch: resolved.gitBranch,
+    createdAt: Date.now(),
+  };
+  projects.push(project);
+  saveProjects(projects);
+  return project;
+}
+
+function shortHash(value: string): string {
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    hash = Math.imul(31, hash) + value.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
+function joinPath(parentPath: string, childName: string): string {
+  const trimmed = parentPath.trim().replace(/[\\/]+$/, '');
+  if (!trimmed) throw new Error('Clone location is required');
+  return `${trimmed}/${childName}`;
+}
+
+export function addGitProject(gitUrl: string, cloneParentPath: string): Project {
+  const normalizedGitUrl = normalizeWebGitUrl(gitUrl);
+  const normalizedCloneParentPath = cloneParentPath.trim();
+  if (!normalizedCloneParentPath) throw new Error('Choose where to clone the repository');
+
+  const name = getWebGitRepoName(normalizedGitUrl);
+  const resourceId = `${
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || 'repository'
+  }-${shortHash(normalizedGitUrl)}`;
+  const projects = loadProjects();
+  const project: Project = {
+    id: crypto.randomUUID(),
+    name,
+    path: joinPath(normalizedCloneParentPath, getWebGitCloneDirectoryName(normalizedGitUrl)),
+    source: 'git',
+    gitUrl: normalizedGitUrl,
+    cloneParentPath: normalizedCloneParentPath,
+    resourceId,
     createdAt: Date.now(),
   };
   projects.push(project);
@@ -102,8 +152,19 @@ export async function addProject(name: string, path: string): Promise<Project> {
  */
 export async function ensureResourceId(project: Project): Promise<Project> {
   if (project.resourceId) return project;
+  if (project.source === 'git' && project.gitUrl) {
+    const cloneParentPath = project.cloneParentPath || project.path;
+    const updated = addGitProject(project.gitUrl, cloneParentPath);
+    removeProject(project.id);
+    return updated;
+  }
   const resolved = await resolveProjectPath(project.path);
-  const updated: Project = { ...project, resourceId: resolved.resourceId, gitBranch: resolved.gitBranch };
+  const updated: Project = {
+    ...project,
+    source: 'local',
+    resourceId: resolved.resourceId,
+    gitBranch: resolved.gitBranch,
+  };
   const projects = loadProjects().map(p => (p.id === project.id ? updated : p));
   saveProjects(projects);
   return updated;

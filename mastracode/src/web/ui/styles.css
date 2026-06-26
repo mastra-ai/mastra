@@ -2054,6 +2054,10 @@ body::before {
   border-radius: 999px;
   flex-shrink: 0;
 }
+.project-card-badge.secondary {
+  color: var(--fg-dim);
+  background: var(--bg-surface3);
+}
 .project-card-remove {
   display: inline-flex;
   align-items: center;
@@ -2097,6 +2101,83 @@ body::before {
   background: var(--bg-surface2);
   color: var(--fg);
   border-color: var(--accent);
+}
+.projects-add-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 10px 18px 8px;
+}
+.projects-add-tab {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-surface);
+  color: var(--fg-dim);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.projects-add-tab:hover {
+  background: var(--bg-surface3);
+  color: var(--fg);
+}
+.projects-add-tab.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.projects-git-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 18px 18px;
+}
+.projects-git-label {
+  display: block;
+  margin-bottom: -3px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-muted);
+}
+.projects-git-row {
+  display: flex;
+  gap: 8px;
+}
+.projects-git-input {
+  flex: 1;
+  min-width: 0;
+}
+.projects-git-submit {
+  white-space: nowrap;
+}
+.projects-git-hint {
+  margin: -2px 0 2px;
+  color: var(--fg-muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.projects-git-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 2px;
+}
+.projects-git-error {
+  padding: 6px 0;
+  text-align: left;
+}
+.projects-location-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+  color: var(--fg-dim);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 /* ── Directory browser (embedded inside the Projects modal) ─────────── */

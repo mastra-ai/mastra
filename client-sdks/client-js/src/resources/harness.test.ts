@@ -75,6 +75,36 @@ describe('Harness Resource', () => {
     expect(JSON.parse(init.body as string)).toEqual({ resourceId: 'user-1' });
   });
 
+  it('sends tags and request context when creating a session', async () => {
+    mockJson({ harnessId: 'code', resourceId: 'user-1', threadId: 't-123' });
+    await client
+      .getHarness('code')
+      .session('user-1')
+      .create({
+        tags: { gitUrl: 'https://github.com/mastra-ai/mastra.git' },
+        requestContext: {
+          'mastracode.web.gitClone': {
+            gitUrl: 'https://github.com/mastra-ai/mastra.git',
+            cloneParentPath: '/Users/ward/projects',
+          },
+        },
+      });
+
+    const [url, init] = lastCall();
+    expect(url).toBe('http://localhost:4111/api/harness/code/sessions');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      resourceId: 'user-1',
+      tags: { gitUrl: 'https://github.com/mastra-ai/mastra.git' },
+      requestContext: {
+        'mastracode.web.gitClone': {
+          gitUrl: 'https://github.com/mastra-ai/mastra.git',
+          cloneParentPath: '/Users/ward/projects',
+        },
+      },
+    });
+  });
+
   it('sends a message to the resource-scoped session', async () => {
     mockJson({ ok: true });
     await client.getHarness('code').session('user-1').sendMessage('hello');

@@ -1,6 +1,7 @@
 import type { Agent } from '@mastra/core/agent';
 import type { AgentController, Session } from '@mastra/core/agent-controller';
 import type { MastraFGAPermissionInput } from '@mastra/core/auth/ee';
+import type { RequestContext } from '@mastra/core/request-context';
 // Type-only import: erased at runtime, so this cannot crash against an older
 // @mastra/core that lacks the `./agent-controller` subpath export. Controller
 // resolution at runtime goes through mastra.getAgentController?.() with a
@@ -70,9 +71,16 @@ async function getSession(
   harness: AgentController<any>,
   resourceId: string,
   tags?: Record<string, string>,
+  requestContext?: RequestContext,
 ): Promise<Session<any>> {
   await harness.init();
-  return harness.createSession({ resourceId, id: resourceId, ownerId: harness.id, tags });
+  return harness.createSession({
+    resourceId,
+    id: resourceId,
+    ownerId: harness.id,
+    tags,
+    requestContext,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -85,6 +93,7 @@ const sessionPathParams = z.object({ harnessId: z.string(), resourceId: z.string
 const createSessionBodySchema = z.object({
   resourceId: z.string(),
   tags: z.record(z.string(), z.string()).optional(),
+  requestContext: z.record(z.string(), z.unknown()).optional(),
 });
 const sendMessageBodySchema = z.object({ message: z.string() });
 const steerBodySchema = z.object({ message: z.string() });
@@ -304,10 +313,10 @@ export const CREATE_HARNESS_SESSION_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, harnessId, resourceId, tags }) => {
+  handler: async ({ mastra, harnessId, resourceId, tags, requestContext }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
-      const session = await getSession(harness, resourceId, tags);
+      const session = await getSession(harness, resourceId, tags, requestContext);
       return {
         harnessId,
         resourceId,

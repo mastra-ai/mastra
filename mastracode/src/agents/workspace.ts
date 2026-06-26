@@ -12,6 +12,10 @@ import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { loadSettings } from '../onboarding/settings.js';
 import type { MastraCodeState } from '../schema';
 import { getPlansDir } from '../utils/plans.js';
+import { detectProject } from '../utils/project.js';
+import { MASTRACODE_WEB_GIT_CLONE_CONTEXT_KEY } from '../web/git-clone-context.js';
+import type { MastraCodeWebGitCloneContext } from '../web/git-clone-context.js';
+import { ensureWebGitClone } from '../web/git-clone.js';
 import { GOAL_JUDGE_READONLY_TOOLS, MASTRACODE_WORKSPACE_TOOLS } from './tool-availability.js';
 
 // =============================================================================
@@ -128,10 +132,42 @@ function detectPackageRunner(projectPath: string): string | undefined {
   return 'npx --yes';
 }
 
-export function getDynamicWorkspace({ requestContext, mastra }: { requestContext: RequestContext; mastra?: Mastra }) {
+function getGitCloneContext(requestContext: RequestContext): MastraCodeWebGitCloneContext | undefined {
+  const value = requestContext.get(MASTRACODE_WEB_GIT_CLONE_CONTEXT_KEY);
+  if (!value || typeof value !== 'object') return undefined;
+
+  const gitUrl = (value as { gitUrl?: unknown }).gitUrl;
+  const cloneParentPath = (value as { cloneParentPath?: unknown }).cloneParentPath;
+  if (typeof gitUrl !== 'string') return undefined;
+  return typeof cloneParentPath === 'string' ? { gitUrl, cloneParentPath } : { gitUrl };
+}
+
+export async function getDynamicWorkspace({
+  requestContext,
+  mastra,
+}: {
+  requestContext: RequestContext;
+  mastra?: Mastra;
+}) {
   const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
   const state = ctx?.getState();
-  const rawProjectPath = state?.projectPath;
+  const gitClone = getGitCloneContext(requestContext);
+  let rawProjectPath = state?.projectPath;
+
+  if (gitClone) {
+    rawProjectPath = await ensureWebGitClone(gitClone.gitUrl, gitClone.cloneParentPath);
+    try {
+      const project = detectProject(rawProjectPath);
+      await ctx?.setState({
+        projectPath: project.rootPath,
+        projectName: project.name,
+        gitBranch: project.gitBranch,
+      });
+      rawProjectPath = project.rootPath;
+    } catch {
+      await ctx?.setState({ projectPath: rawProjectPath, projectName: path.basename(rawProjectPath) });
+    }
+  }
 
   if (!rawProjectPath) {
     throw new Error('Project path is required');
@@ -206,7 +242,7 @@ export async function getGoalJudgeTools({
 }): Promise<ToolsInput | undefined> {
   let workspace: Workspace<LocalFilesystem, LocalSandbox>;
   try {
-    workspace = getDynamicWorkspace({ requestContext, mastra });
+    workspace = await getDynamicWorkspace({ requestContext, mastra });
   } catch {
     return undefined;
   }

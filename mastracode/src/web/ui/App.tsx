@@ -57,10 +57,17 @@ export default function App() {
   const resourceId = activeProject?.resourceId ?? DEFAULT_RESOURCE_ID;
   const sessionEnabled = !!activeProject?.resourceId;
 
+  const activeProjectGitUrl = activeProject?.source === 'git' ? activeProject.gitUrl : undefined;
+  const activeProjectCloneParentPath = activeProject?.source === 'git' ? activeProject.cloneParentPath : undefined;
+  const activeProjectPath = activeProject?.source === 'git' ? undefined : activeProject?.path;
+  const activeProjectLocation = activeProject?.path;
+
   const session = useHarnessSession({
     harnessId: 'code',
     resourceId,
-    projectPath: activeProject?.path,
+    projectPath: activeProjectPath,
+    gitUrl: activeProjectGitUrl,
+    cloneParentPath: activeProjectCloneParentPath,
     enabled: sessionEnabled,
   });
   const { transcript, status, modes, threads, send, steer, abort, approveTool, respondSuspension } = session;
@@ -251,25 +258,26 @@ export default function App() {
     setActiveProjectId(project.id);
   };
 
-  // After the session connects for a new project, set projectPath.
+  // After the session connects for a new local project, set projectPath. Git
+  // projects resolve their cloned path in the workspace factory.
   const prevResourceId = useRef(resourceId);
   useEffect(() => {
     if (resourceId !== prevResourceId.current) {
       prevResourceId.current = resourceId;
-      if (status === 'ready') {
-        void session.setState({ projectPath: activeProject?.path ?? '' });
+      if (status === 'ready' && activeProjectPath) {
+        void session.setState({ projectPath: activeProjectPath });
       }
     }
-  }, [resourceId, status, activeProject, session]);
+  }, [resourceId, status, activeProjectPath, session]);
 
-  // Also set projectPath on initial connection for the active project.
+  // Also set projectPath on initial connection for the active local project.
   const initialSet = useRef(false);
   useEffect(() => {
-    if (status === 'ready' && !initialSet.current && activeProject) {
+    if (status === 'ready' && !initialSet.current && activeProjectPath) {
       initialSet.current = true;
-      void session.setState({ projectPath: activeProject.path });
+      void session.setState({ projectPath: activeProjectPath });
     }
-  }, [status, activeProject, session]);
+  }, [status, activeProjectPath, session]);
 
   const onSubmit = (e: { preventDefault: () => void }) => {
     e.preventDefault();
@@ -339,7 +347,10 @@ export default function App() {
         case 'settings': {
           const lines = [
             `Project: ${activeProject?.name ?? '(none)'}`,
-            `Path: ${activeProject?.path ?? '(default workspace)'}`,
+            activeProject?.source === 'git'
+              ? `Repository: ${activeProject.gitUrl ?? '—'}`
+              : `Path: ${activeProjectLocation ?? '(default workspace)'}`,
+            ...(activeProject?.source === 'git' ? [`Clone path: ${activeProjectLocation ?? '—'}`] : []),
             `Mode: ${transcript.modeId ?? '—'}`,
             `Model: ${transcript.modelId ?? '—'}`,
             `Thread: ${transcript.threadId ?? '—'}`,
@@ -521,7 +532,7 @@ export default function App() {
           <button
             className="header-title"
             onClick={() => setProjectsOpen(true)}
-            title={activeProject ? `${activeProject.path} — switch project` : 'Select a project'}
+            title={activeProject ? `${activeProjectLocation} — switch project` : 'Select a project'}
           >
             <LogoMark size={24} className="logo-mark" />
             <span className="header-name">{activeProject ? activeProject.name : 'MastraCode'}</span>
@@ -560,8 +571,8 @@ export default function App() {
             </div>
             <h2>Welcome to MastraCode</h2>
             <p>
-              Open a project folder to start a coding session. Each project keeps its own threads, memory, and workspace
-              — shared with the terminal.
+              Open a project folder or clone a Git URL to start a coding session. Each project keeps its own threads,
+              memory, and workspace.
             </p>
             <button className="btn btn-primary no-project-cta" onClick={() => setProjectsOpen(true)}>
               Open a project
@@ -609,9 +620,15 @@ export default function App() {
                         <dd>{activeProject.gitBranch}</dd>
                       </div>
                     )}
+                    {activeProject.source === 'git' && (
+                      <div className="banner-row">
+                        <dt>Repository</dt>
+                        <dd>{activeProject.gitUrl}</dd>
+                      </div>
+                    )}
                     <div className="banner-row">
-                      <dt>Workspace</dt>
-                      <dd>{activeProject.path}</dd>
+                      <dt>{activeProject.source === 'git' ? 'Clone path' : 'Workspace'}</dt>
+                      <dd>{activeProjectLocation}</dd>
                     </div>
                   </dl>
                   <p className="banner-ready">Ready for new conversation</p>

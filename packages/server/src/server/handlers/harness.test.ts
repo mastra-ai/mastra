@@ -1,6 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { Harness } from '@mastra/core/harness';
 import { Mastra } from '@mastra/core/mastra';
+import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { Workspace } from '@mastra/core/workspace';
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -86,6 +87,31 @@ describe('harness routes', () => {
       } as any)) as { threadId?: string };
 
       expect(second.threadId).toBe(first.threadId);
+    });
+
+    it('passes request context to session workspace resolution', async () => {
+      const seen: unknown[] = [];
+      const harness = new Harness({
+        id: 'code',
+        storage: new InMemoryStore(),
+        workspace: ({ requestContext }) => {
+          seen.push(requestContext.get('mastracode.web.gitClone'));
+          return new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] });
+        },
+        modes: [{ id: 'build', name: 'Build', default: true, agent: makeAgent() }],
+      });
+      const scopedMastra = new Mastra({ harnesses: { code: harness }, storage: new InMemoryStore() });
+      const requestContext = new RequestContext();
+      requestContext.set('mastracode.web.gitClone', { gitUrl: 'https://github.com/mastra-ai/mastra.git' });
+
+      await CREATE_HARNESS_SESSION_ROUTE.handler({
+        mastra: scopedMastra,
+        harnessId: 'code',
+        resourceId: 'user-1',
+        requestContext,
+      } as any);
+
+      expect(seen).toEqual([{ gitUrl: 'https://github.com/mastra-ai/mastra.git' }]);
     });
 
     it('404s for an unknown harness id', async () => {
