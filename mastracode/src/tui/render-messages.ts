@@ -11,7 +11,7 @@ import type { TaskItemInput, TaskItemSnapshot } from '@mastra/core/signals';
 import { assignTaskIds } from '@mastra/core/signals';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { TASKS_STATE_ID } from '@mastra/core/tools';
-import { getPlanPathForTitle, getSuggestedPlanRelativePath, readPlanFile } from '../utils/plans.js';
+import { isPlanFilePath, readPlanFile, resolvePlanPath } from '../utils/plans.js';
 import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
@@ -891,7 +891,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
 
           // If this was submit_plan, show the plan with approval status
           if (content.name === 'submit_plan' && toolResult?.type === 'tool_result') {
-            const args = content.args as { title?: string } | undefined;
+            const args = content.args as { path?: string } | undefined;
             // Result could be a string or an object with content property
             let resultText = '';
             let submittedPlan: { title?: string; path?: string; plan?: string } | undefined;
@@ -921,36 +921,34 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
               feedback = feedbackMatch?.[1] || 'Revision requested';
             }
 
-            const submittedTitle = submittedPlan?.title || args?.title;
-            if (submittedTitle) {
+            const submittedPath = submittedPlan?.path || args?.path;
+            if (submittedPath) {
               // Prefer the submitted plan snapshot persisted in the tool result.
-              // Older history entries may not have it, so fall back to deriving the
-              // title-based plan path and reading the current file when safe.
+              // Older history entries may not have it, so fall back to reading the
+              // submitted file — but only after validating it is a plan file, so a
+              // recorded arg can't point the host at an arbitrary file.
               const sessionState = state.session.state.get() as any;
               const projectPath = sessionState?.projectPath as string | undefined;
-              const fallbackPath = getSuggestedPlanRelativePath(submittedTitle);
-              const fallbackAbsPath = projectPath ? getPlanPathForTitle(projectPath, submittedTitle) : undefined;
-              const recovered = submittedPlan?.plan
-                ? undefined
-                : fallbackAbsPath
-                  ? await readPlanFile(fallbackAbsPath)
+              const recoverAbsPath =
+                !submittedPlan?.plan && projectPath && isPlanFilePath(projectPath, submittedPath)
+                  ? resolvePlanPath(projectPath, submittedPath)
                   : undefined;
+              const recovered = recoverAbsPath ? await readPlanFile(recoverAbsPath) : undefined;
               const planBody = submittedPlan?.plan ?? recovered?.plan ?? '';
-              const planTitle = submittedPlan?.title || recovered?.title || submittedTitle;
-              const planPath = submittedPlan?.path || fallbackPath;
+              const planTitle = submittedPlan?.title || recovered?.title || 'Implementation Plan';
               const planResult = new PlanResultComponent({
                 title: planTitle,
                 plan: planBody,
-                planFilename: planPath,
+                planFilename: submittedPath,
                 isApproved,
                 feedback,
               });
               state.chatContainer.addChild(planResult);
               replacedWithInline = true;
-              // Restore previousPlanSnapshot (keyed by derived path) so that if the
+              // Restore previousPlanSnapshot (keyed by submitted path) so that if the
               // agent resubmits after a restart, the diff can be computed against
               // the last submitted plan body, not whatever the mutable file now contains.
-              state.previousPlanSnapshot = { path: planPath, plan: planBody };
+              state.previousPlanSnapshot = { path: submittedPath, plan: planBody };
             }
           }
 

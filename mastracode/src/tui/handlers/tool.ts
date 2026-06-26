@@ -392,7 +392,7 @@ export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: strin
         }
       }
 
-      // For submit_plan, stream the title arg into the inline purple plan box.
+      // For submit_plan, stream the path arg into the inline purple plan box.
       if (buffer.toolName === 'submit_plan') {
         const planComponent = state.pendingSubmitPlanComponents?.get(toolCallId);
         if (planComponent) {

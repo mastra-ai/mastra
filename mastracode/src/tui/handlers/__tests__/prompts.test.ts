@@ -153,8 +153,8 @@ function createPlanApprovalCtx(projectPath?: string) {
   return { state, ctx, sendSignal };
 }
 
-async function renderPlanApproval(ctx: EventHandlerContext, state: any, title = PLAN_TITLE) {
-  const promise = handlePlanApproval(ctx, 'plan-1', title);
+async function renderPlanApproval(ctx: EventHandlerContext, state: any, planPath = PLAN_PATH) {
+  const promise = handlePlanApproval(ctx, 'plan-1', planPath);
   for (let i = 0; i < 10 && state.chatContainer.children.length === 0; i++) {
     await new Promise(r => setTimeout(r, 5));
   }
@@ -166,7 +166,7 @@ describe('handlePlanApproval goal mode', () => {
     const projectPath = createTmpProjectWithPlan('Ship it', '1. Build\n2. Test');
     const { state, ctx } = createPlanApprovalCtx(projectPath);
 
-    const promise = handlePlanApproval(ctx, 'plan-1', 'Ship it');
+    const promise = handlePlanApproval(ctx, 'plan-1', '.mastracode/plans/ship-it.md');
     // The handler reads the plan from disk asynchronously before creating the
     // component, so wait for it to be added to the chat container.
     for (let i = 0; i < 10 && state.chatContainer.children.length === 0; i++) {
@@ -205,7 +205,7 @@ describe('handlePlanApproval goal mode', () => {
     const { state, ctx } = createPlanApprovalCtx(projectPath);
     state.goalManager.getGoal = vi.fn(() => undefined);
 
-    const { promise, component } = await renderPlanApproval(ctx, state, PLAN_TITLE);
+    const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
 
     await (component as any).onGoal();
     await promise;
@@ -220,11 +220,11 @@ describe('handlePlanApproval regular approval', () => {
     const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
     const { state, ctx } = createPlanApprovalCtx(projectPath);
     const streamedComponent = PlanApprovalInlineComponent.createStreaming(state.ui);
-    streamedComponent.updateArgs({ title: 'Ship it', plan: 'Build the feature' });
+    streamedComponent.updateArgs({ path: PLAN_PATH });
     state.lastSubmitPlanComponent = streamedComponent;
     state.chatContainer.children.push(streamedComponent);
 
-    handlePlanApproval(ctx, 'plan-1', PLAN_TITLE);
+    handlePlanApproval(ctx, 'plan-1', PLAN_PATH);
     for (let i = 0; i < 10 && !state.activeInlinePlanApproval; i++) {
       await new Promise(r => setTimeout(r, 5));
     }
@@ -239,7 +239,7 @@ describe('handlePlanApproval regular approval', () => {
     const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
     const { state, ctx, sendSignal } = createPlanApprovalCtx(projectPath);
 
-    const { promise, component } = await renderPlanApproval(ctx, state, PLAN_TITLE);
+    const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
 
     await (component as any).onApprove();
     await promise;
@@ -248,8 +248,8 @@ describe('handlePlanApproval regular approval', () => {
       toolCallId: 'plan-1',
       resumeData: {
         action: 'approved',
-        title: PLAN_TITLE,
         path: PLAN_PATH,
+        title: PLAN_TITLE,
         plan: 'Build the feature',
       },
     });
@@ -266,7 +266,7 @@ describe('handlePlanApproval regular approval', () => {
     const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
     const { state, ctx } = createPlanApprovalCtx(projectPath);
 
-    const { promise, component } = await renderPlanApproval(ctx, state, PLAN_TITLE);
+    const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
 
     await (component as any).onReject();
     // onReject resumes fire-and-forget then aborts; let the async IIFE settle.
@@ -277,8 +277,8 @@ describe('handlePlanApproval regular approval', () => {
       toolCallId: 'plan-1',
       resumeData: {
         action: 'rejected',
-        title: PLAN_TITLE,
         path: PLAN_PATH,
+        title: PLAN_TITLE,
         plan: 'Build the feature',
       },
     });
@@ -299,7 +299,7 @@ describe('handlePlanApproval regular approval', () => {
       plan: 'Delete something unrelated\nRewrite old feature',
     };
 
-    const { component } = await renderPlanApproval(ctx, state, 'New Plan');
+    const { component } = await renderPlanApproval(ctx, state, '.mastracode/plans/new-plan.md');
     const output = component.render(100).join('\n');
 
     expect(output).toContain('Build the new thing');
@@ -316,7 +316,7 @@ describe('handlePlanApproval regular approval', () => {
     const { state, ctx } = createPlanApprovalCtx(projectPath);
     state.previousPlanSnapshot = { path: '.mastracode/plans/old-plan.md', plan: 'Old stale plan' };
 
-    const { component } = await renderPlanApproval(ctx, state, PLAN_TITLE);
+    const { component } = await renderPlanApproval(ctx, state, PLAN_PATH);
     const output = component.render(100).join('\n');
 
     expect(output).not.toContain('Changes from previous plan:');
@@ -329,7 +329,7 @@ describe('handlePlanApproval regular approval', () => {
     const samePlanPath = getSuggestedPlanRelativePath('Same Plan');
     state.previousPlanSnapshot = { path: samePlanPath, plan: 'Build the feature\nRun tests\nUpdate docs' };
 
-    const { component } = await renderPlanApproval(ctx, state, 'Same Plan');
+    const { component } = await renderPlanApproval(ctx, state, samePlanPath);
     const output = component.render(100).join('\n');
 
     expect(output).toContain('Changes from previous plan:');

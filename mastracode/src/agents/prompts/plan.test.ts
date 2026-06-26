@@ -9,11 +9,11 @@ describe('planModePrompt', () => {
     expect(prompt).toContain('.mastracode/plans/add-dark-mode.md');
   });
 
-  it('tells the agent to submit_plan with a title, not a path or body', () => {
+  it('tells the agent to submit_plan with a path, not the plan body', () => {
     const prompt = planModePrompt({ state: {} });
 
     expect(prompt).toContain('submit_plan');
-    expect(prompt).toMatch(/submit_plan\(\{\s*\n?\s*title:/);
-    expect(prompt).toContain('Reuse the same title and file');
+    expect(prompt).toMatch(/submit_plan\(\{\s*\n?\s*path:/);
+    expect(prompt).toContain('Reuse the same file');
   });
 });

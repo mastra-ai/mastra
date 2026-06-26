@@ -190,13 +190,10 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
 
   updateArgs(args: unknown): void {
     if (!args || typeof args !== 'object' || this.resolved) return;
-    const partial = args as { title?: unknown; plan?: unknown };
-    // submit_plan streams only the `title` arg; path/plan are filled from disk on suspend.
-    if (typeof partial.title === 'string') {
-      this.planTitle = partial.title || 'Untitled plan';
-    }
-    if (typeof partial.plan === 'string') {
-      this.planContent = partial.plan;
+    const partial = args as { path?: unknown };
+    // submit_plan streams only the `path` arg; title/plan are read from disk on suspend.
+    if (typeof partial.path === 'string' && partial.path) {
+      this.planFilename = partial.path;
     }
     if (this.mode === 'streaming') {
       this.renderStreaming();

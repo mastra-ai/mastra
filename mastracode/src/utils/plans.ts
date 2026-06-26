@@ -40,11 +40,6 @@ export function getSuggestedPlanRelativePath(title?: string): string {
   return path.join(getLocalPlansRelativeDir(), filename);
 }
 
-/** Absolute path for a plan title in the local project plans directory. */
-export function getPlanPathForTitle(projectPath: string, title: string): string {
-  return path.join(getLocalPlansDir(projectPath), getPlanFilename(title));
-}
-
 /**
  * Resolve a plan path submitted by the agent (absolute or project-relative) to an
  * absolute path. Returns `undefined` when no usable path was provided.

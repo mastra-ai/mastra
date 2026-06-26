@@ -883,7 +883,7 @@ describe('renderExistingMessages submit_plan approval status', () => {
             type: 'tool_call',
             id: 'call-1',
             name: 'submit_plan',
-            args: { title: PLAN_TITLE },
+            args: { path: PLAN_PATH },
           },
           {
             type: 'tool_result',
@@ -925,7 +925,7 @@ describe('renderExistingMessages submit_plan approval status', () => {
             type: 'tool_call',
             id: 'call-1',
             name: 'submit_plan',
-            args: { title: PLAN_TITLE },
+            args: { path: PLAN_PATH },
           },
           {
             type: 'tool_result',
