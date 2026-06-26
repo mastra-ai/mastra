@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 
-import type { OmCycleParts, OmIndexablePart } from './om-types';
+import type { OmCycleParts, OmCycleViewModel, OmIndexablePart } from './om-types';
 
 /**
  * Converts a data-om-* part to dynamic-tool format so toAssistantUIMessage can transform it.
@@ -57,18 +57,40 @@ export type OmTerminalExtractionCache = Map<
   >
 >;
 
-const hasExtractionData = (data: any) => data?.extractedValues || data?.extractionFailures;
+const hasExtractedValues = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length > 0;
+
+const hasExtractionFailures = (value: unknown): value is Array<{ slug: string; error: string }> =>
+  Array.isArray(value) && value.length > 0;
+
+const getExtractionData = (data: any) => ({
+  ...(hasExtractedValues(data?.extractedValues) ? { extractedValues: data.extractedValues } : {}),
+  ...(hasExtractionFailures(data?.extractionFailures) ? { extractionFailures: data.extractionFailures } : {}),
+});
+
+const hasExtractionData = (data: any) => Object.keys(getExtractionData(data)).length > 0;
 
 const mergeCachedExtractionData = (part: OmIndexablePart | undefined, cachedData: any) => {
   if (!part?.data || !cachedData) return part;
-  if (hasExtractionData(part.data)) return part;
+
+  const currentExtractionData = getExtractionData(part.data);
+  const cachedExtractionData = getExtractionData(cachedData);
+  if (!Object.keys(cachedExtractionData).length) return part;
+
+  const mergedExtractionData = {
+    ...((currentExtractionData.extractedValues ?? cachedExtractionData.extractedValues)
+      ? { extractedValues: currentExtractionData.extractedValues ?? cachedExtractionData.extractedValues }
+      : {}),
+    ...((currentExtractionData.extractionFailures ?? cachedExtractionData.extractionFailures)
+      ? { extractionFailures: currentExtractionData.extractionFailures ?? cachedExtractionData.extractionFailures }
+      : {}),
+  };
 
   return {
     ...part,
     data: {
       ...part.data,
-      ...(cachedData.extractedValues ? { extractedValues: cachedData.extractedValues } : {}),
-      ...(cachedData.extractionFailures ? { extractionFailures: cachedData.extractionFailures } : {}),
+      ...mergedExtractionData,
     },
   } as OmIndexablePart;
 };
@@ -93,10 +115,13 @@ export const retainOmTerminalExtractionData = (
     }
 
     const nextCached = { ...(cached ?? {}) };
-    if (hasExtractionData(cycle.end?.data)) nextCached.end = cycle.end?.data as any;
-    if (hasExtractionData(cycle.failed?.data)) nextCached.failed = cycle.failed?.data as any;
-    if (hasExtractionData(cycle.bufferingEnd?.data)) nextCached.bufferingEnd = cycle.bufferingEnd?.data as any;
-    if (hasExtractionData(cycle.bufferingFailed?.data)) nextCached.bufferingFailed = cycle.bufferingFailed?.data as any;
+    if (hasExtractionData(cycle.end?.data)) nextCached.end = getExtractionData(cycle.end?.data);
+    if (hasExtractionData(cycle.failed?.data)) nextCached.failed = getExtractionData(cycle.failed?.data);
+    if (hasExtractionData(cycle.bufferingEnd?.data))
+      nextCached.bufferingEnd = getExtractionData(cycle.bufferingEnd?.data);
+    if (hasExtractionData(cycle.bufferingFailed?.data)) {
+      nextCached.bufferingFailed = getExtractionData(cycle.bufferingFailed?.data);
+    }
 
     if (Object.keys(nextCached).length > 0) {
       cache.set(cycleId, nextCached);
@@ -118,6 +143,88 @@ export const buildGlobalOmPartsByCycleId = (
   }
   return extractionCache ? retainOmTerminalExtractionData(map, extractionCache) : map;
 };
+
+const normalizeObservationCycle = (cycleId: string, cycle: OmCycleParts): OmCycleViewModel | undefined => {
+  const startData = cycle.start?.data;
+  if (!startData) return undefined;
+
+  const endData = cycle.end?.data;
+  const failedData = cycle.failed?.data;
+  const isFailed = !!cycle.failed;
+  const isComplete = !!cycle.end;
+  const isDisconnected = !!startData.disconnectedAt || (isComplete && !!endData?.disconnectedAt);
+  const status = isFailed ? 'failed' : isDisconnected ? 'disconnected' : isComplete ? 'observed' : 'observing';
+  const omData = {
+    ...startData,
+    ...(isComplete ? endData : {}),
+    ...(isFailed ? failedData : {}),
+    _state: isFailed ? 'failed' : isDisconnected ? 'disconnected' : isComplete ? 'complete' : 'loading',
+  };
+
+  return {
+    cycleId,
+    recordId: typeof omData.recordId === 'string' ? omData.recordId : undefined,
+    status,
+    operationType: omData.operationType,
+    observations: omData.observations,
+    extractedValues: hasExtractedValues(omData.extractedValues) ? omData.extractedValues : undefined,
+    extractionFailures: hasExtractionFailures(omData.extractionFailures) ? omData.extractionFailures : undefined,
+    omData,
+    isLoading: status === 'observing',
+  };
+};
+
+const normalizeBufferingCycle = (cycleId: string, cycle: OmCycleParts): OmCycleViewModel | undefined => {
+  const startData = cycle.bufferingStart?.data;
+  if (!startData) return undefined;
+
+  const endData = cycle.bufferingEnd?.data;
+  const failedData = cycle.bufferingFailed?.data;
+  const activationData = cycle.activation?.data;
+  const isFailed = !!cycle.bufferingFailed;
+  const isActivated = !!cycle.activation;
+  const isComplete = !!cycle.bufferingEnd;
+  const isDisconnected = !!startData.disconnectedAt;
+  const status = isFailed
+    ? 'buffering-failed'
+    : isActivated
+      ? 'activated'
+      : isDisconnected
+        ? 'disconnected'
+        : isComplete
+          ? 'buffering-complete'
+          : 'buffering';
+  const omData: Record<string, unknown> = {
+    ...startData,
+    ...(isComplete ? endData : {}),
+    ...(isFailed ? failedData : {}),
+    ...(isActivated ? activationData : {}),
+    _state: status,
+  };
+
+  if (!omData.tokensObserved && omData.tokensActivated) {
+    omData.tokensObserved = omData.tokensActivated;
+  }
+
+  return {
+    cycleId,
+    recordId: typeof omData.recordId === 'string' ? omData.recordId : undefined,
+    status,
+    operationType: omData.operationType,
+    observations: omData.observations,
+    extractedValues: hasExtractedValues(omData.extractedValues) ? omData.extractedValues : undefined,
+    extractionFailures: hasExtractionFailures(omData.extractionFailures) ? omData.extractionFailures : undefined,
+    omData,
+    isLoading: status === 'buffering',
+  };
+};
+
+export const normalizeOmCycle = (
+  cycleId: string,
+  cycle: OmCycleParts,
+  type: 'observation' | 'buffering',
+): OmCycleViewModel | undefined =>
+  type === 'observation' ? normalizeObservationCycle(cycleId, cycle) : normalizeBufferingCycle(cycleId, cycle);
 
 /**
  * Combines data-om-* parts in a message into single tool calls by cycleId.
@@ -156,92 +263,45 @@ export const convertOmPartsInMastraMessage = (
     if (partType === 'data-om-observation-start' && cycleId) {
       const cycle = globalOmParts.get(cycleId);
       if (!cycle) continue;
-
-      const startData = cycle.start?.data;
-      const endData = cycle.end?.data;
-      const failedData = cycle.failed?.data;
-
-      const isFailed = !!cycle.failed;
-      const isComplete = !!cycle.end;
-      const isDisconnected = !!startData?.disconnectedAt || (isComplete && !!endData?.disconnectedAt);
-      const isLoading = !isFailed && !isComplete && !isDisconnected;
-
-      const mergedData = {
-        ...startData,
-        ...(isComplete ? endData : {}),
-        ...(isFailed ? failedData : {}),
-        _state: isFailed ? 'failed' : isDisconnected ? 'disconnected' : isComplete ? 'complete' : 'loading',
-      };
+      const viewModel = normalizeOmCycle(cycleId, cycle, 'observation');
+      if (!viewModel) continue;
 
       convertedParts.push({
         type: 'dynamic-tool',
         toolCallId: `om-observation-${cycleId}`,
         toolName: OM_TOOL_NAME,
-        input: mergedData,
-        output: isLoading
+        input: viewModel.omData,
+        output: viewModel.isLoading
           ? undefined
           : {
-              status: isFailed ? 'failed' : isDisconnected ? 'disconnected' : 'complete',
-              omData: mergedData,
+              status:
+                viewModel.status === 'failed'
+                  ? 'failed'
+                  : viewModel.status === 'disconnected'
+                    ? 'disconnected'
+                    : 'complete',
+              omData: viewModel.omData,
             },
-        state: isLoading ? 'input-available' : 'output-available',
+        state: viewModel.isLoading ? 'input-available' : 'output-available',
       });
     } else if (partType === 'data-om-buffering-start' && cycleId) {
       const cycle = globalOmParts.get(cycleId);
       if (!cycle) continue;
-
-      const startData = cycle.bufferingStart?.data;
-      const endData = cycle.bufferingEnd?.data;
-      const failedData = cycle.bufferingFailed?.data;
-      const activationData = cycle.activation?.data;
-
-      const isFailed = !!cycle.bufferingFailed;
-      const isActivated = !!cycle.activation;
-      const isComplete = !!cycle.bufferingEnd;
-      const isDisconnected = !!startData?.disconnectedAt;
-      const isLoading = !isFailed && !isActivated && !isComplete && !isDisconnected;
-
-      const mergedData: Record<string, unknown> = {
-        ...startData,
-        ...(isComplete ? endData : {}),
-        ...(isFailed ? failedData : {}),
-        ...(isActivated ? activationData : {}),
-        _state: isFailed
-          ? 'buffering-failed'
-          : isActivated
-            ? 'activated'
-            : isDisconnected
-              ? 'disconnected'
-              : isComplete
-                ? 'buffering-complete'
-                : 'buffering',
-      };
-      // Map activation fields to badge fields so they display correctly on reload
-      // (activation markers use tokensActivated, but the badge reads tokensObserved)
-      if (!mergedData.tokensObserved && mergedData.tokensActivated) {
-        mergedData.tokensObserved = mergedData.tokensActivated;
-      }
-
-      const bufferingStatus = isFailed
-        ? 'buffering-failed'
-        : isActivated
-          ? 'activated'
-          : isDisconnected
-            ? 'disconnected'
-            : 'buffering-complete';
+      const viewModel = normalizeOmCycle(cycleId, cycle, 'buffering');
+      if (!viewModel) continue;
 
       convertedParts.push({
         type: 'dynamic-tool',
         toolCallId: `om-buffering-${cycleId}`,
         toolName: OM_TOOL_NAME,
-        input: mergedData,
-        output: isLoading
+        input: viewModel.omData,
+        output: viewModel.isLoading
           ? undefined
           : {
-              status: bufferingStatus,
-              omData: mergedData,
+              status: viewModel.status,
+              omData: viewModel.omData,
             },
-        state: isLoading ? 'input-available' : 'output-available',
+        state: viewModel.isLoading ? 'input-available' : 'output-available',
       });
     } else if (partType?.startsWith('data-om-')) {
       // Silently skip all other OM parts (end, failed, activation, status).

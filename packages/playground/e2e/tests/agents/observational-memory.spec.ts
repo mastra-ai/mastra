@@ -174,6 +174,32 @@ test.describe('Observational Memory - Behavior Tests', () => {
       // Use .first() because multiple observation cycles may trigger across messages
       const observationMarker = threadWrapper.getByText(/Observed.*→.*tokens/i).first();
       await expect(observationMarker).toBeVisible({ timeout: 15000 });
+
+      // ASSERT: Extracted values from the fixture are visible when the marker is expanded.
+      await observationMarker.click();
+      await expect(threadWrapper.getByText(/Extractions \([1-9]\d*\)/).first()).toBeVisible({ timeout: 10000 });
+    });
+  });
+
+  test.describe('Observation Failure Markers', () => {
+    /**
+     * BEHAVIOR: Failed observation runs render a failure marker.
+     * OUTCOME: User can diagnose a failed OM cycle in the chat timeline.
+     */
+    test('should show a failure marker when observation fails', async ({ page }) => {
+      // ARRANGE
+      await selectFixture(page, 'om-observation-success');
+      await page.goto('/agents/om-agent/chat/new');
+
+      const chatInput = page.locator('textarea[placeholder*="message"]').first();
+      const threadWrapper = page.locator('[data-testid="thread-wrapper"]');
+
+      // ACT: The kitchen-sink observer model throws when this prompt is observed.
+      await chatInput.fill('Trigger a failed observation.');
+      await chatInput.press('Enter');
+
+      // ASSERT: The failure marker is visible in the timeline.
+      await expect(threadWrapper.getByText('Observation failed').first()).toBeVisible({ timeout: 15000 });
     });
   });
 
@@ -222,14 +248,13 @@ test.describe('Observational Memory - Behavior Tests', () => {
 
       // ASSERT: The observation marker should still be visible after reload
       // This verifies the data-om-* parts were persisted to storage
-      await expect(
-        page
-          .locator('[data-testid="thread-wrapper"]')
-          .getByText(/Observed.*→.*tokens/i)
-          .first(),
-      ).toBeVisible({
+      const reloadedThreadWrapper = page.locator('[data-testid="thread-wrapper"]');
+      const reloadedObservationMarker = reloadedThreadWrapper.getByText(/Observed.*→.*tokens/i).first();
+      await expect(reloadedObservationMarker).toBeVisible({
         timeout: 10000,
       });
+      await reloadedObservationMarker.click();
+      await expect(reloadedThreadWrapper.getByText(/Extractions \([1-9]\d*\)/).first()).toBeVisible({ timeout: 10000 });
 
       // ASSERT: OM sidebar should show the observations
       await openMemorySidebar(page);
