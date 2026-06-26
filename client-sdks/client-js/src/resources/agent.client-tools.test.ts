@@ -30,7 +30,7 @@ function sseResponse(chunks: Array<object | string>, { status = 200 }: { status?
   });
 }
 
-describe('Agent vNext', () => {
+describe('Agent client-side tools', () => {
   const client = new MastraClient({ baseUrl: 'http://localhost:4111', headers: { Authorization: 'Bearer test-key' } });
   const agent = client.getAgent('agent-1');
   const traceparent = '00-1234567890abcdef1234567890abcdef-1234567890abcdef-01';
@@ -142,7 +142,7 @@ describe('Agent vNext', () => {
     expect(recursiveMessagesJson).toContain(traceparent);
   });
 
-  it('stream: applies client tool toModelOutput and sends it as part providerMetadata in the recursive call', async () => {
+  it('stream: applies client tool toModelOutput and sends it as tool-result providerOptions in the recursive call', async () => {
     const toolCallId = 'call_1';
 
     const firstCycle = [
@@ -181,15 +181,15 @@ describe('Agent vNext', () => {
     await resp.processDataStream({ onChunk: async () => {} });
 
     const secondCallBody = JSON.parse((global.fetch as any).mock.calls[1][1].body);
-    const toolInvocationPart = secondCallBody.messages
-      .flatMap((m: any) => m.parts ?? [])
-      .find((p: any) => p.type === 'tool-invocation' && p.toolInvocation?.toolCallId === toolCallId);
+    const toolResultPart = secondCallBody.messages
+      .flatMap((m: any) => (Array.isArray(m.content) ? m.content : []))
+      .find((p: any) => p.type === 'tool-result' && p.toolCallId === toolCallId);
 
-    expect(toolInvocationPart).toBeDefined();
-    // Raw result preserved on the invocation itself
-    expect(toolInvocationPart.toolInvocation.result).toEqual({ ok: true, _b64: 'base64imagedata' });
-    // Transformed output travels via part-level providerMetadata
-    expect(toolInvocationPart.providerMetadata).toEqual({
+    expect(toolResultPart).toBeDefined();
+    expect(toolResultPart.input).toEqual({ url: 'https://example.com' });
+    expect(toolResultPart.result).toEqual({ ok: true, _b64: 'base64imagedata' });
+    // Transformed output travels via providerOptions on the tool-result.
+    expect(toolResultPart.providerOptions).toEqual({
       mastra: {
         modelOutput: {
           type: 'content',
@@ -473,6 +473,101 @@ describe('Agent vNext', () => {
 
     // Verify three requests were made
     expect(global.fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('stream: executes multiple client tool calls emitted in one streamed step', async () => {
+    const firstCycle = [
+      { type: 'step-start', payload: { messageId: 'm1' } },
+      {
+        type: 'tool-call',
+        payload: { toolCallId: 'call_weather', toolName: 'weatherTool', args: { location: 'NYC' } },
+      },
+      {
+        type: 'tool-call',
+        payload: { toolCallId: 'call_news', toolName: 'newsTool', args: { topic: 'tech' } },
+      },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 4 } } },
+    ];
+
+    const secondCycle = [
+      { type: 'step-start', payload: { messageId: 'm2' } },
+      { type: 'text-delta', payload: { text: 'done' } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 5 } } },
+    ];
+
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse(firstCycle))
+      .mockResolvedValueOnce(sseResponse(secondCycle));
+
+    const weatherExecuteSpy = vi.fn(async () => ({ temperature: 72 }));
+    const newsExecuteSpy = vi.fn(async () => ({ headline: 'AI advances' }));
+
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Get weather',
+      inputSchema: z.object({ location: z.string() }),
+      outputSchema: z.object({ temperature: z.number() }),
+      execute: weatherExecuteSpy,
+    });
+
+    const newsTool = createTool({
+      id: 'newsTool',
+      description: 'Get news',
+      inputSchema: z.object({ topic: z.string() }),
+      outputSchema: z.object({ headline: z.string() }),
+      execute: newsExecuteSpy,
+    });
+
+    const resp = await agent.stream('Give me weather and news', {
+      clientTools: { weatherTool, newsTool },
+    });
+
+    const receivedChunks: any[] = [];
+    await resp.processDataStream({
+      onChunk: async chunk => {
+        receivedChunks.push(chunk);
+      },
+    });
+
+    expect(weatherExecuteSpy).toHaveBeenCalledTimes(1);
+    expect(weatherExecuteSpy).toHaveBeenCalledWith(
+      { location: 'NYC' },
+      expect.objectContaining({ agent: expect.objectContaining({ toolCallId: 'call_weather' }) }),
+    );
+    expect(newsExecuteSpy).toHaveBeenCalledTimes(1);
+    expect(newsExecuteSpy).toHaveBeenCalledWith(
+      { topic: 'tech' },
+      expect.objectContaining({ agent: expect.objectContaining({ toolCallId: 'call_news' }) }),
+    );
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+
+    const toolResultChunks = receivedChunks.filter(chunk => chunk.type === 'tool-result');
+    expect(toolResultChunks.map(chunk => chunk.payload.toolCallId)).toEqual(['call_weather', 'call_news']);
+
+    const secondCallBody = JSON.parse((global.fetch as any).mock.calls[1][1].body);
+    const toolResultParts = secondCallBody.messages.flatMap((msg: any) =>
+      msg.role === 'tool' && Array.isArray(msg.content) ? msg.content : [],
+    );
+    expect(toolResultParts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'tool-result',
+          toolCallId: 'call_weather',
+          toolName: 'weatherTool',
+          input: { location: 'NYC' },
+          result: { temperature: 72 },
+        }),
+        expect.objectContaining({
+          type: 'tool-result',
+          toolCallId: 'call_news',
+          toolName: 'newsTool',
+          input: { topic: 'tech' },
+          result: { headline: 'AI advances' },
+        }),
+      ]),
+    );
   });
 
   it('stream: step execution when client tool is present without an execute function', async () => {
@@ -1513,7 +1608,9 @@ describe('Agent vNext', () => {
     // Original messages should NOT be present in the recursive call
     expect(hasOriginalUserMessage).toBe(false);
 
-    // But tool result should still be present
+    // But tool result should still be present — either embedded in an
+    // assistant message's tool-invocation, or as a standalone role: 'tool'
+    // message with tool-result content.
     const hasToolResult = secondCallBody.messages.some(
       (msg: any) =>
         (Array.isArray(msg.toolInvocations) &&
@@ -1522,9 +1619,29 @@ describe('Agent vNext', () => {
           msg.parts.some(
             (p: any) =>
               p.type === 'tool-invocation' && p.toolInvocation?.state === 'result' && p.toolInvocation?.result,
-          )),
+          )) ||
+        (msg.role === 'tool' &&
+          Array.isArray(msg.content) &&
+          msg.content.some((p: any) => p.type === 'tool-result' && p.result !== undefined)),
     );
     expect(hasToolResult).toBe(true);
+
+    // Regression for #16017: the recursive tool-result must carry the original
+    // call args (as `input`), not be fabricated as empty. This is what lets the
+    // server-side adapter persist real args instead of `{}` and stops the model
+    // from in-context-learning empty-argument tool calls.
+    const toolResultInputs = secondCallBody.messages.flatMap((msg: any) => {
+      if (msg.role === 'tool' && Array.isArray(msg.content)) {
+        return msg.content
+          .filter((p: any) => p.type === 'tool-result' && p.toolCallId === toolCallId)
+          .map((p: any) => p.input);
+      }
+      return [];
+    });
+    expect(toolResultInputs.length).toBeGreaterThan(0);
+    for (const input of toolResultInputs) {
+      expect(input).toEqual({ location: 'NYC' });
+    }
   });
 
   it('stream: should receive error chunks with serialized error properties', async () => {
