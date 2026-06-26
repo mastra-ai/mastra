@@ -33,6 +33,8 @@ afterEach(() => {
   server.resetHandlers();
   delete (window as { MASTRA_CLOUD_API_ENDPOINT?: string }).MASTRA_CLOUD_API_ENDPOINT;
   delete (window as { MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT?: string }).MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT;
+  delete (window as { MASTRA_ORGANIZATION_ID?: string }).MASTRA_ORGANIZATION_ID;
+  delete (window as { MASTRA_PLATFORM_PROJECT_ID?: string }).MASTRA_PLATFORM_PROJECT_ID;
 });
 
 afterAll(() => server.close());
@@ -172,5 +174,49 @@ describe('observability endpoint', () => {
 
     await waitFor(() => expect(result.current.fetchStatus).toBe('idle'));
     expect(handler).not.toHaveBeenCalled();
+  });
+});
+
+describe('org/project scoping headers', () => {
+  it('attaches x-organization-id and x-project-id when set', async () => {
+    enablePlatform();
+    window.MASTRA_ORGANIZATION_ID = 'org_123';
+    window.MASTRA_PLATFORM_PROJECT_ID = 'resource_456';
+
+    let organizationId: string | null = null;
+    let projectId: string | null = null;
+    server.use(
+      http.get(`${PLATFORM_URL}/entity-learning/entities`, ({ request }) => {
+        organizationId = request.headers.get('x-organization-id');
+        projectId = request.headers.get('x-project-id');
+        return HttpResponse.json(entitiesResponse);
+      }),
+    );
+
+    const { result } = renderHook(() => useEntities(), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(organizationId).toBe('org_123');
+    expect(projectId).toBe('resource_456');
+  });
+
+  it('omits the scoping headers when not set', async () => {
+    enablePlatform();
+
+    let hasOrganizationId = true;
+    let hasProjectId = true;
+    server.use(
+      http.get(`${PLATFORM_URL}/entity-learning/entities`, ({ request }) => {
+        hasOrganizationId = request.headers.has('x-organization-id');
+        hasProjectId = request.headers.has('x-project-id');
+        return HttpResponse.json(entitiesResponse);
+      }),
+    );
+
+    const { result } = renderHook(() => useEntities(), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(hasOrganizationId).toBe(false);
+    expect(hasProjectId).toBe(false);
   });
 });

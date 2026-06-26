@@ -648,4 +648,56 @@ describe('injectStudioHtmlConfig', () => {
 
     expect(result).toBe("window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = '';");
   });
+
+  it('should inject MASTRA_ORGANIZATION_ID and MASTRA_PLATFORM_PROJECT_ID placeholders when provided', () => {
+    const html =
+      "window.MASTRA_ORGANIZATION_ID = '%%MASTRA_ORGANIZATION_ID%%'; window.MASTRA_PLATFORM_PROJECT_ID = '%%MASTRA_PLATFORM_PROJECT_ID%%';";
+
+    const result = injectStudioHtmlConfig(html, {
+      host: "'localhost'",
+      port: "'4111'",
+      protocol: "'http'",
+      apiPrefix: "'/api'",
+      basePath: '',
+      hideCloudCta: "'false'",
+      cloudApiEndpoint: "''",
+      organizationId: "'org_123'",
+      platformProjectId: "'resource_456'",
+      experimentalFeatures: "'false'",
+      templates: "'false'",
+      telemetryDisabled: "''",
+      requestContextPresets: "''",
+      experimentalUI: "'false'",
+      agentSignals: "'true'",
+      autoDetectUrl: "'false'",
+    });
+
+    expect(result).toBe(
+      "window.MASTRA_ORGANIZATION_ID = 'org_123'; window.MASTRA_PLATFORM_PROJECT_ID = 'resource_456';",
+    );
+  });
+
+  it('should default MASTRA_ORGANIZATION_ID and MASTRA_PLATFORM_PROJECT_ID to empty when not provided', () => {
+    const html =
+      "window.MASTRA_ORGANIZATION_ID = '%%MASTRA_ORGANIZATION_ID%%'; window.MASTRA_PLATFORM_PROJECT_ID = '%%MASTRA_PLATFORM_PROJECT_ID%%';";
+
+    const result = injectStudioHtmlConfig(html, {
+      host: "'localhost'",
+      port: "'4111'",
+      protocol: "'http'",
+      apiPrefix: "'/api'",
+      basePath: '',
+      hideCloudCta: "'false'",
+      cloudApiEndpoint: "''",
+      experimentalFeatures: "'false'",
+      templates: "'false'",
+      telemetryDisabled: "''",
+      requestContextPresets: "''",
+      experimentalUI: "'false'",
+      agentSignals: "'true'",
+      autoDetectUrl: "'false'",
+    });
+
+    expect(result).toBe("window.MASTRA_ORGANIZATION_ID = ''; window.MASTRA_PLATFORM_PROJECT_ID = '';");
+  });
 });

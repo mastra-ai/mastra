@@ -467,6 +467,8 @@ export async function createHonoServer(
 
       const cloudApiEndpoint = process.env.MASTRA_CLOUD_API_ENDPOINT || '';
       const platformObservabilityEndpoint = process.env.PLATFORM_OBSERVABILITY_ENDPOINT || '';
+      const organizationId = process.env.MASTRA_ORGANIZATION_ID || '';
+      const platformProjectId = process.env.MASTRA_PLATFORM_PROJECT_ID || '';
       const experimentalFeatures = process.env.EXPERIMENTAL_FEATURES === 'true' ? 'true' : 'false';
       const experimentalUI = process.env.MASTRA_EXPERIMENTAL_UI === 'true' ? 'true' : 'false';
       const templatesEnabled = process.env.MASTRA_TEMPLATES === 'true' ? 'true' : 'false';
@@ -497,6 +499,8 @@ export async function createHonoServer(
         hideCloudCta: `'${hideCloudCta}'`,
         cloudApiEndpoint: `'${cloudApiEndpoint}'`,
         platformObservabilityEndpoint: `'${platformObservabilityEndpoint}'`,
+        organizationId: `'${organizationId}'`,
+        platformProjectId: `'${platformProjectId}'`,
         experimentalFeatures: `'${experimentalFeatures}'`,
         templates: `'${templatesEnabled}'`,
         telemetryDisabled: `'${process.env.MASTRA_TELEMETRY_DISABLED ?? ''}'`,

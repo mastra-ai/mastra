@@ -12,11 +12,26 @@ export function useTopicExamples(
   signalName: string | undefined,
   runId: string | undefined,
 ) {
-  const { mastraPlatformApiEndpoint, mastraPlatformObservabilityEndpoint } = useMastraPlatform();
+  const {
+    mastraPlatformApiEndpoint,
+    mastraPlatformObservabilityEndpoint,
+    mastraOrganizationId,
+    mastraPlatformProjectId,
+  } = useMastraPlatform();
   const endpoint = mastraPlatformObservabilityEndpoint ?? mastraPlatformApiEndpoint;
+  const scope = { organizationId: mastraOrganizationId, projectId: mastraPlatformProjectId };
 
   return useQuery<EntityLearningExample[]>({
-    queryKey: ['entity-learning', 'topic-examples', entityId, topicId, signalName, runId],
+    queryKey: [
+      'entity-learning',
+      'topic-examples',
+      entityId,
+      topicId,
+      signalName,
+      runId,
+      mastraOrganizationId,
+      mastraPlatformProjectId,
+    ],
     enabled: Boolean(endpoint) && Boolean(entityId) && Boolean(topicId) && Boolean(signalName) && Boolean(runId),
     retry: false,
     queryFn: async () => {
@@ -24,6 +39,7 @@ export function useTopicExamples(
         endpoint!,
         `/entities/${entityId}/topics/${topicId}/examples`,
         { signalName, runId },
+        scope,
       );
       return examples;
     },

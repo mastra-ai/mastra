@@ -19,6 +19,8 @@ const studioStandalonePlugin = (targetPort: string, targetHost: string): PluginO
       .replace(/%%MASTRA_SERVER_PROTOCOL%%/g, 'http')
       .replace(/%%MASTRA_CLOUD_API_ENDPOINT%%/g, '')
       .replace(/%%MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT%%/g, process.env.PLATFORM_OBSERVABILITY_ENDPOINT || '')
+      .replace(/%%MASTRA_ORGANIZATION_ID%%/g, process.env.MASTRA_ORGANIZATION_ID || '')
+      .replace(/%%MASTRA_PLATFORM_PROJECT_ID%%/g, process.env.MASTRA_PLATFORM_PROJECT_ID || '')
       .replace(/%%MASTRA_AUTO_DETECT_URL%%/g, 'true')
       .replace(/%%MASTRA_EXPERIMENTAL_FEATURES%%/g, process.env.EXPERIMENTAL_FEATURES || 'false')
       .replace(/%%MASTRA_EXPERIMENTAL_UI%%/g, process.env.MASTRA_EXPERIMENTAL_UI || 'false')

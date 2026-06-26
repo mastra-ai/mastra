@@ -12,17 +12,28 @@ export function useSignalTopics(
   signalName: string | undefined,
   runId: string | undefined,
 ) {
-  const { mastraPlatformApiEndpoint, mastraPlatformObservabilityEndpoint } = useMastraPlatform();
+  const {
+    mastraPlatformApiEndpoint,
+    mastraPlatformObservabilityEndpoint,
+    mastraOrganizationId,
+    mastraPlatformProjectId,
+  } = useMastraPlatform();
   const endpoint = mastraPlatformObservabilityEndpoint ?? mastraPlatformApiEndpoint;
+  const scope = { organizationId: mastraOrganizationId, projectId: mastraPlatformProjectId };
 
   return useQuery<EntityLearningTopicsResponse>({
-    queryKey: ['entity-learning', 'topics', entityId, signalName, runId],
+    queryKey: ['entity-learning', 'topics', entityId, signalName, runId, mastraOrganizationId, mastraPlatformProjectId],
     enabled: Boolean(endpoint) && Boolean(entityId) && Boolean(signalName) && Boolean(runId),
     retry: false,
     queryFn: () =>
-      entityLearningFetch<EntityLearningTopicsResponse>(endpoint!, `/entities/${entityId}/topics`, {
-        signalName,
-        runId,
-      }),
+      entityLearningFetch<EntityLearningTopicsResponse>(
+        endpoint!,
+        `/entities/${entityId}/topics`,
+        {
+          signalName,
+          runId,
+        },
+        scope,
+      ),
   });
 }
