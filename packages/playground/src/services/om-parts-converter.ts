@@ -437,6 +437,29 @@ export const markOmMarkersAsDisconnected = (messages: MastraDBMessage[]): Mastra
  * `convertOmPartsInMastraMessage` sees a matching end for each in-progress start.
  * Uses the record from `awaitBufferStatus` to populate token counts/observations.
  */
+export const hasInProgressBufferingMarkers = (messages: MastraDBMessage[]) => {
+  const terminalCycleIds = collectTerminalCycleIds(messages).buffering;
+
+  for (const msg of messages) {
+    const parts = msg.content?.parts;
+    if (!Array.isArray(parts)) continue;
+
+    for (const part of parts as any[]) {
+      const cycleId = part?.data?.cycleId;
+      if (
+        part.type === 'data-om-buffering-start' &&
+        cycleId &&
+        !part.data?.disconnectedAt &&
+        !terminalCycleIds.has(cycleId)
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+};
+
 export const injectBufferingEnds = (messages: MastraDBMessage[], record?: any): MastraDBMessage[] => {
   const chunksByCycleId = new Map<string, any>();
   const terminalCycleIds = collectTerminalCycleIds(messages).buffering;

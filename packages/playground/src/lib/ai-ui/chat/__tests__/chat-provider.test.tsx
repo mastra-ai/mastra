@@ -387,6 +387,88 @@ describe('ChatProvider', () => {
     expect(canSendValues.at(-1)).toBe(true);
   });
 
+  it('completes persisted buffering markers on reload when buffer status already has the finished chunk', async () => {
+    const renderSnapshots: MastraDBMessage[][] = [];
+    const MessagesProbe = () => {
+      renderSnapshots.push(useChatMessages());
+      return null;
+    };
+
+    const initialMessages = [
+      {
+        id: 'msg-buffering-start',
+        role: 'assistant',
+        createdAt: new Date('2026-05-29T00:00:00.000Z'),
+        threadId: 'thread-1',
+        resourceId: 'agent-1',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'data-om-buffering-start',
+              data: {
+                cycleId: 'cycle-reload',
+                operationType: 'observation',
+                recordId: 'record-1',
+                threadId: 'thread-1',
+              },
+            },
+          ],
+          metadata: {},
+        },
+      },
+    ] satisfies MastraDBMessage[];
+
+    const bufferStatusRequests: string[] = [];
+    server.use(
+      ...baseHandlers([]),
+      http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: { observationalMemory: true } })),
+      http.post(`${BASE_URL}/api/memory/observational-memory/buffer-status`, ({ request }) => {
+        bufferStatusRequests.push(request.url);
+        return HttpResponse.json({
+          record: {
+            bufferedObservationChunks: [
+              {
+                cycleId: 'cycle-reload',
+                messageTokens: 120,
+                tokenCount: 40,
+                observations: ['remembered after reload'],
+                extractedValues: { priority: 'high' },
+              },
+            ],
+          },
+        });
+      }),
+    );
+
+    await act(async () => {
+      render(
+        <Wrapper>
+          <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={initialMessages}>
+            <MessagesProbe />
+          </ChatProvider>
+        </Wrapper>,
+      );
+    });
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 200));
+    });
+
+    expect(bufferStatusRequests).toHaveLength(1);
+
+    const latestMessages = renderSnapshots.at(-1) ?? [];
+    const omPart = latestMessages
+      .flatMap(message => (Array.isArray(message.content?.parts) ? message.content.parts : []))
+      .find(part => (part as { toolCallId?: string }).toolCallId === 'om-buffering-cycle-reload') as
+      | { state?: string; output?: { omData?: Record<string, unknown> } }
+      | undefined;
+
+    expect(omPart?.state).toBe('output-available');
+    expect(omPart?.output?.omData?.observations).toEqual(['remembered after reload']);
+    expect(omPart?.output?.omData?.extractedValues).toEqual({ priority: 'high' });
+  });
+
   it('keeps streamed OM extraction data on the rendered chat marker while refreshing panel queries', async () => {
     const renderSnapshots: MastraDBMessage[][] = [];
     const MessagesProbe = () => {
