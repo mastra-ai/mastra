@@ -19,6 +19,7 @@ import {
 } from './fixtures/entity-learning';
 
 const PLATFORM_URL = 'https://platform.test';
+const OBSERVABILITY_URL = 'https://observability.test';
 const server = setupServer();
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -31,12 +32,17 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => {
   server.resetHandlers();
   delete (window as { MASTRA_CLOUD_API_ENDPOINT?: string }).MASTRA_CLOUD_API_ENDPOINT;
+  delete (window as { MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT?: string }).MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT;
 });
 
 afterAll(() => server.close());
 
 function enablePlatform() {
   window.MASTRA_CLOUD_API_ENDPOINT = PLATFORM_URL;
+}
+
+function enableObservability() {
+  window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = OBSERVABILITY_URL;
 }
 
 describe('useEntities / useEntity', () => {
@@ -129,5 +135,42 @@ describe('useSignalPoints', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.some(point => point.isOutlier)).toBe(true);
+  });
+});
+
+describe('observability endpoint', () => {
+  it('fetches from MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT when set', async () => {
+    enableObservability();
+    server.use(http.get(`${OBSERVABILITY_URL}/entity-learning/entities`, () => HttpResponse.json(entitiesResponse)));
+
+    const { result } = renderHook(() => useEntities(), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.[0].entityId).toBe(ENTITY_ID);
+  });
+
+  it('takes precedence over MASTRA_CLOUD_API_ENDPOINT', async () => {
+    enablePlatform();
+    enableObservability();
+    const cloudHandler = vi.fn(() => HttpResponse.json(entitiesResponse));
+    server.use(
+      http.get(`${PLATFORM_URL}/entity-learning/entities`, cloudHandler),
+      http.get(`${OBSERVABILITY_URL}/entity-learning/entities`, () => HttpResponse.json(entitiesResponse)),
+    );
+
+    const { result } = renderHook(() => useEntities(), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(cloudHandler).not.toHaveBeenCalled();
+  });
+
+  it('does not fetch when neither endpoint is set', async () => {
+    const handler = vi.fn(() => HttpResponse.json(entitiesResponse));
+    server.use(http.get(`${OBSERVABILITY_URL}/entity-learning/entities`, handler));
+
+    const { result } = renderHook(() => useEntities(), { wrapper });
+
+    await waitFor(() => expect(result.current.fetchStatus).toBe('idle'));
+    expect(handler).not.toHaveBeenCalled();
   });
 });

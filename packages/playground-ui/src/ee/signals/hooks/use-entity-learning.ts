@@ -8,14 +8,15 @@ import { entityLearningFetch } from './entity-learning-fetch';
  * `availableSignals` and `latestRunId`. Gated on platform availability.
  */
 export function useEntities() {
-  const { isMastraPlatform, mastraPlatformApiEndpoint } = useMastraPlatform();
+  const { mastraPlatformApiEndpoint, mastraPlatformObservabilityEndpoint } = useMastraPlatform();
+  const endpoint = mastraPlatformObservabilityEndpoint ?? mastraPlatformApiEndpoint;
 
   return useQuery<EntityLearningEntity[]>({
     queryKey: ['entity-learning', 'entities'],
-    enabled: isMastraPlatform,
+    enabled: Boolean(endpoint),
     retry: false,
     queryFn: async () => {
-      const { entities } = await entityLearningFetch<EntitiesResponse>(mastraPlatformApiEndpoint!, '/entities');
+      const { entities } = await entityLearningFetch<EntitiesResponse>(endpoint!, '/entities');
       return entities;
     },
   });

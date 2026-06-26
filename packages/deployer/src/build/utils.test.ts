@@ -626,4 +626,53 @@ describe('injectStudioHtmlConfig', () => {
 
     expect(result).toBe("window.MASTRA_SIGNALS_UI = 'true';");
   });
+
+  it('should inject MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT placeholder when provided', () => {
+    const html = "window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = '%%MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT%%';";
+
+    const result = injectStudioHtmlConfig(html, {
+      host: "'localhost'",
+      port: "'4111'",
+      protocol: "'http'",
+      apiPrefix: "'/api'",
+      basePath: '',
+      hideCloudCta: "'false'",
+      cloudApiEndpoint: "''",
+      platformObservabilityEndpoint: "'http://127.0.0.1:3210'",
+      experimentalFeatures: "'false'",
+      templates: "'false'",
+      telemetryDisabled: "''",
+      requestContextPresets: "''",
+      experimentalUI: "'false'",
+      agentSignals: "'true'",
+      signalsUI: "'false'",
+      autoDetectUrl: "'false'",
+    });
+
+    expect(result).toBe("window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = 'http://127.0.0.1:3210';");
+  });
+
+  it('should default MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT to empty when not provided', () => {
+    const html = "window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = '%%MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT%%';";
+
+    const result = injectStudioHtmlConfig(html, {
+      host: "'localhost'",
+      port: "'4111'",
+      protocol: "'http'",
+      apiPrefix: "'/api'",
+      basePath: '',
+      hideCloudCta: "'false'",
+      cloudApiEndpoint: "''",
+      experimentalFeatures: "'false'",
+      templates: "'false'",
+      telemetryDisabled: "''",
+      requestContextPresets: "''",
+      experimentalUI: "'false'",
+      agentSignals: "'true'",
+      signalsUI: "'false'",
+      autoDetectUrl: "'false'",
+    });
+
+    expect(result).toBe("window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = '';");
+  });
 });

@@ -1,6 +1,7 @@
 declare global {
   interface Window {
     MASTRA_CLOUD_API_ENDPOINT: string;
+    MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT?: string;
     MASTRA_PLATFORM_PROJECT_ID?: string;
   }
 }
@@ -10,6 +11,7 @@ declare global {
  */
 export const useMastraPlatform = () => {
   const mastraPlatformEndpoint = window.MASTRA_CLOUD_API_ENDPOINT;
+  const mastraPlatformObservabilityEndpoint = window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || undefined;
   const mastraPlatformProjectId = window.MASTRA_PLATFORM_PROJECT_ID;
   const isMastraPlatform = Boolean(mastraPlatformEndpoint);
 
@@ -17,6 +19,7 @@ export const useMastraPlatform = () => {
     isMastraPlatform,
     mastraPlatformEndpoint,
     mastraPlatformApiEndpoint: mastraPlatformEndpoint,
+    mastraPlatformObservabilityEndpoint,
     mastraPlatformProjectId,
   };
 };

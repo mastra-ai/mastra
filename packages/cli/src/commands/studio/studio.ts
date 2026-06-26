@@ -104,6 +104,7 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
   const templatesEnabled = process.env.MASTRA_TEMPLATES === 'true' ? 'true' : 'false';
   const agentSignals = process.env.MASTRA_AGENT_SIGNALS === 'false' ? 'false' : 'true';
   const signalsUI = process.env.MASTRA_SIGNALS_UI === 'true' ? 'true' : 'false';
+  const platformObservabilityEndpoint = process.env.PLATFORM_OBSERVABILITY_ENDPOINT || '';
 
   let html = readFileSync(indexHtmlPath, 'utf8')
     .replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', basePath)
@@ -114,6 +115,7 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
     .replaceAll('%%MASTRA_EXPERIMENTAL_FEATURES%%', experimentalFeatures)
     .replaceAll('%%MASTRA_TEMPLATES%%', templatesEnabled)
     .replaceAll('%%MASTRA_CLOUD_API_ENDPOINT%%', '')
+    .replaceAll('%%MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT%%', platformObservabilityEndpoint)
     .replaceAll('%%MASTRA_HIDE_CLOUD_CTA%%', '')
     .replaceAll('%%MASTRA_TELEMETRY_DISABLED%%', process.env.MASTRA_TELEMETRY_DISABLED ?? '')
     .replaceAll('%%MASTRA_REQUEST_CONTEXT_PRESETS%%', escapeJsonForHtml(requestContextPresetsJson))

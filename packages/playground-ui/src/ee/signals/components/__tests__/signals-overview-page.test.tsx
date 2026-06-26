@@ -49,6 +49,7 @@ afterEach(() => {
   cleanup();
   server.resetHandlers();
   delete (window as { MASTRA_CLOUD_API_ENDPOINT?: string }).MASTRA_CLOUD_API_ENDPOINT;
+  delete (window as { MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT?: string }).MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT;
 });
 
 afterAll(() => server.close());

@@ -12,18 +12,19 @@ export function useSignalPoints(
   runId: string | undefined,
   includeOutliers = true,
 ) {
-  const { isMastraPlatform, mastraPlatformApiEndpoint } = useMastraPlatform();
+  const { mastraPlatformApiEndpoint, mastraPlatformObservabilityEndpoint } = useMastraPlatform();
+  const endpoint = mastraPlatformObservabilityEndpoint ?? mastraPlatformApiEndpoint;
 
   return useQuery<EntityLearningPoint[]>({
     queryKey: ['entity-learning', 'points', entityId, signalName, runId, includeOutliers],
-    enabled: isMastraPlatform && Boolean(entityId) && Boolean(signalName) && Boolean(runId),
+    enabled: Boolean(endpoint) && Boolean(entityId) && Boolean(signalName) && Boolean(runId),
     retry: false,
     queryFn: async () => {
-      const { points } = await entityLearningFetch<PointsResponse>(
-        mastraPlatformApiEndpoint!,
-        `/entities/${entityId}/points`,
-        { signalName, runId, includeOutliers },
-      );
+      const { points } = await entityLearningFetch<PointsResponse>(endpoint!, `/entities/${entityId}/points`, {
+        signalName,
+        runId,
+        includeOutliers,
+      });
       return points;
     },
   });
