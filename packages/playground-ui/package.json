@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "36.1.0-alpha.2",
+  "version": "37.0.0-alpha.5",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
@@ -57,6 +57,12 @@
       "import": {
         "types": "./dist/hooks/*.d.ts",
         "default": "./dist/hooks/*.es.js"
+      }
+    },
+    "./icons/*": {
+      "import": {
+        "types": "./dist/icons/*.d.ts",
+        "default": "./dist/icons/*.es.js"
       }
     },
     "./components/*": {

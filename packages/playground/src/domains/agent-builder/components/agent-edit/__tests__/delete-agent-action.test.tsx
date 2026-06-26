@@ -30,7 +30,11 @@ vi.mock('@mastra/playground-ui', async () => {
   };
 });
 
-const { toast } = await import('@mastra/playground-ui');
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
+
+const { toast } = await import('@mastra/playground-ui/utils/toast');
 
 const BASE_URL = 'http://localhost:4111';
 

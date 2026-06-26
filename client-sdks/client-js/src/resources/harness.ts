@@ -3,17 +3,19 @@ import type { ClientOptions } from '../types';
 import { BaseResource } from './base';
 
 /**
- * Harness session client.
+ * Agent controller session client.
  *
- * Mirrors the harness HTTP routes served when a Harness is registered on a
- * Mastra instance (`new Mastra({ harnesses })`):
+ * Mirrors the controller HTTP routes served when an AgentController is
+ * registered on a Mastra instance (`new Mastra({ agentControllers })`). The
+ * canonical routes are served under `/agent-controller`; the legacy `/harness`
+ * routes remain available for backwards compatibility:
  *
- *   GET  /harness                                          listHarnesses
- *   POST /harness/:id/sessions                             session().create()
- *   GET  /harness/:id/sessions/:resourceId/stream          session().subscribe()
- *   POST /harness/:id/sessions/:resourceId/messages        session().sendMessage()
- *   POST /harness/:id/sessions/:resourceId/abort           session().abort()
- *   POST /harness/:id/sessions/:resourceId/tool-approval   session().approveTool()
+ *   GET  /agent-controller                                          listAgentControllers
+ *   POST /agent-controller/:id/sessions                             session().create()
+ *   GET  /agent-controller/:id/sessions/:resourceId/stream          session().subscribe()
+ *   POST /agent-controller/:id/sessions/:resourceId/messages        session().sendMessage()
+ *   POST /agent-controller/:id/sessions/:resourceId/abort           session().abort()
+ *   POST /agent-controller/:id/sessions/:resourceId/tool-approval   session().approveTool()
  */
 
 export interface HarnessInfo {
@@ -323,12 +325,17 @@ export class HarnessSession extends BaseResource {
     options: ClientOptions,
     private readonly harnessId: string,
     private readonly resourceId: string,
+    /**
+     * Route prefix this session targets. Defaults to the legacy `/harness`
+     * surface; {@link AgentControllerSession} overrides it to `/agent-controller`.
+     */
+    protected readonly pathPrefix: string = '/harness',
   ) {
     super(options);
   }
 
   private base() {
-    return `/harness/${encodeURIComponent(this.harnessId)}/sessions/${encodeURIComponent(this.resourceId)}`;
+    return `${this.pathPrefix}/${encodeURIComponent(this.harnessId)}/sessions/${encodeURIComponent(this.resourceId)}`;
   }
 
   /**
@@ -339,7 +346,7 @@ export class HarnessSession extends BaseResource {
    * most recent thread across the whole resource.
    */
   create(options?: { tags?: Record<string, string> }): Promise<CreateHarnessSessionResponse> {
-    return this.request(`/harness/${encodeURIComponent(this.harnessId)}/sessions`, {
+    return this.request(`${this.pathPrefix}/${encodeURIComponent(this.harnessId)}/sessions`, {
       method: 'POST',
       body: { resourceId: this.resourceId, tags: options?.tags },
     });
@@ -629,12 +636,17 @@ export class Harness extends BaseResource {
   constructor(
     options: ClientOptions,
     private readonly harnessId: string,
+    /**
+     * Route prefix this controller targets. Defaults to the legacy `/harness`
+     * surface; {@link AgentController} overrides it to `/agent-controller`.
+     */
+    protected readonly pathPrefix: string = '/harness',
   ) {
     super(options);
   }
 
   private basePath() {
-    return `/harness/${encodeURIComponent(this.harnessId)}`;
+    return `${this.pathPrefix}/${encodeURIComponent(this.harnessId)}`;
   }
 
   /** List the modes configured on this harness (e.g. build, plan). */
@@ -656,7 +668,28 @@ export class Harness extends BaseResource {
 
   /** Scope to a session bound to `resourceId` (e.g. a user or conversation id). */
   session(resourceId: string): HarnessSession {
-    return new HarnessSession(this.options, this.harnessId, resourceId);
+    return new HarnessSession(this.options, this.harnessId, resourceId, this.pathPrefix);
+  }
+}
+
+/**
+ * A session bound to a `resourceId` within one agent controller. Identical to
+ * {@link HarnessSession} but targets the canonical `/agent-controller` routes.
+ */
+export class AgentControllerSession extends HarnessSession {
+  constructor(options: ClientOptions, agentControllerId: string, resourceId: string) {
+    super(options, agentControllerId, resourceId, '/agent-controller');
+  }
+}
+
+/**
+ * An agent controller hosted on the connected Mastra instance. This is the
+ * canonical replacement for {@link Harness} and targets the `/agent-controller`
+ * routes.
+ */
+export class AgentController extends Harness {
+  constructor(options: ClientOptions, agentControllerId: string) {
+    super(options, agentControllerId, '/agent-controller');
   }
 }
 

@@ -2,6 +2,7 @@ import { Agent } from '@mastra/core/agent';
 import { Harness } from '@mastra/core/harness';
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
+import { Workspace } from '@mastra/core/workspace';
 import { describe, it, expect, beforeEach } from 'vitest';
 
 import { HTTPException } from '../http-exception';
@@ -29,6 +30,7 @@ function makeMastra() {
   const harness = new Harness({
     id: 'code',
     storage: new InMemoryStore(),
+    workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
     modes: [
       { id: 'build', name: 'Build', default: true, agent: makeAgent() },
       { id: 'plan', name: 'Plan', agent: makeAgent() },
@@ -135,12 +137,12 @@ describe('harness routes', () => {
       session.emit({ type: 'agent_start' } as any);
 
       // The route enqueues raw event objects (the server adapter is responsible
-      // for SSE framing). Read past any `:`-prefixed heartbeat comments until we
-      // see our event object.
+      // for SSE framing). Read past any `:`-prefixed heartbeat comments and
+      // workspace lifecycle events until we see our event object.
       let received: any;
-      for (let i = 0; i < 5 && received === undefined; i++) {
+      for (let i = 0; i < 10 && received === undefined; i++) {
         const { value } = await reader.read();
-        if (value && typeof value === 'object') received = value;
+        if (value && typeof value === 'object' && (value as any).type === 'agent_start') received = value;
       }
       await reader.cancel();
 

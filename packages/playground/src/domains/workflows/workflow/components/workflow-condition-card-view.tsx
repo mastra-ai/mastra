@@ -1,6 +1,6 @@
-import { Icon } from '@mastra/playground-ui';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronDown } from 'lucide-react';
 import { Fragment } from 'react';

@@ -1,5 +1,14 @@
 # @mastra/slack
 
+## 1.5.0-alpha.1
+
+### Patch Changes
+
+- Normalize trailing slashes in the Slack provider `baseUrl`. A `baseUrl` with a trailing slash (e.g. `MASTRA_BASE_URL=https://example.com/`) previously produced double-slash callback URLs like `https://example.com//slack/oauth/callback`, which broke the OAuth flow and webhook delivery. The trailing slash is now stripped, so callback URLs are always well-formed. ([#18483](https://github.com/mastra-ai/mastra/pull/18483))
+
+- Updated dependencies [[`023766f`](https://github.com/mastra-ai/mastra/commit/023766f44d59b30a50f3a381e33eddde8ab56c00), [`a0509c7`](https://github.com/mastra-ai/mastra/commit/a0509c731a08aa3ed626557c5338126362856f57), [`01caf93`](https://github.com/mastra-ai/mastra/commit/01caf93d71ae2c1e65f49735cafb531975187426), [`c2c1d7b`](https://github.com/mastra-ai/mastra/commit/c2c1d7bb61d2602955f14ed3952f807c2d6eb576), [`3eb852e`](https://github.com/mastra-ai/mastra/commit/3eb852e5435bc908b800193498103dc724f455b0)]:
+  - @mastra/core@1.47.0-alpha.5
+
 ## 1.5.0-alpha.0
 
 ### Minor Changes

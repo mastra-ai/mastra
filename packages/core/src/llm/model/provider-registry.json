@@ -555,6 +555,7 @@
         "xai/grok-build-0.1",
         "xai/grok-imagine-image",
         "xai/grok-imagine-video",
+        "xai/grok-imagine-video-1.5",
         "xai/grok-imagine-video-1.5-preview",
         "xai/grok-stt",
         "xai/grok-tts",
@@ -576,6 +577,7 @@
         "zai/glm-5-turbo",
         "zai/glm-5.1",
         "zai/glm-5.2",
+        "zai/glm-5.2-fast",
         "zai/glm-5v-turbo"
       ],
       "docUrl": "https://github.com/vercel/ai/tree/5eb85cc45a259553501f535b8ac79a77d0e79223/packages/gateway",
@@ -1658,7 +1660,8 @@
         "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
         "moonshotai/Kimi-K2.6",
         "openai/gpt-oss-120b",
-        "zai-org/GLM-4.7"
+        "zai-org/GLM-4.7",
+        "zai-org/GLM-5.2"
       ],
       "docUrl": "https://api.berget.ai",
       "gateway": "models.dev"
@@ -1767,6 +1770,7 @@
         "glm-5-fast",
         "glm-5.1-fast",
         "glm-5.2",
+        "glm-5.2-short",
         "kimi-k2.5-fast",
         "kimi-k2.6-fast",
         "moonshotai/Kimi-K2.5",
@@ -2748,18 +2752,20 @@
       "name": "evroc",
       "models": [
         "KBLab/kb-whisper-large",
-        "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
         "Qwen/Qwen3-Embedding-8B",
+        "Qwen/Qwen3-Reranker-4B",
         "Qwen/Qwen3-VL-30B-A3B-Instruct",
+        "Qwen/Qwen3.6-35B-A3B-FP8",
+        "evroc/roc",
+        "google/gemma-4-26B-A4B-it",
         "intfloat/multilingual-e5-large-instruct",
-        "microsoft/Phi-4-multimodal-instruct",
-        "mistralai/Magistral-Small-2509",
+        "mistralai/Mistral-Medium-3.5-128B",
         "mistralai/Voxtral-Small-24B-2507",
-        "mistralai/devstral-small-2-24b-instruct-2512",
-        "moonshotai/Kimi-K2.5",
+        "moonshotai/Kimi-K2.6",
         "nvidia/Llama-3.3-70B-Instruct-FP8",
         "openai/gpt-oss-120b",
-        "openai/whisper-large-v3"
+        "openai/whisper-large-v3",
+        "openai/whisper-large-v3-turbo"
       ],
       "docUrl": "https://docs.evroc.com/products/think/overview.html",
       "gateway": "models.dev"
@@ -2984,7 +2990,7 @@
       "apiKeyEnvVar": "STEPFUN_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "StepFun",
-      "models": ["step-1-32k", "step-2-16k", "step-3.5-flash", "step-3.5-flash-2603"],
+      "models": ["step-1-32k", "step-2-16k", "step-3.5-flash", "step-3.5-flash-2603", "step-3.7-flash"],
       "docUrl": "https://platform.stepfun.com/docs/zh/overview/concept",
       "gateway": "models.dev"
     },
@@ -3422,7 +3428,6 @@
       "models": [
         "gpt-oss-120b",
         "gpt-oss-20b",
-        "llama-3.1-8b-instruct",
         "meta-llama-3_3-70b-instruct",
         "mistral-7b-instruct-v0.3",
         "mistral-nemo-instruct-2407",
@@ -4284,6 +4289,7 @@
         "rekaai/reka-flash-3",
         "relace/relace-apply-3",
         "relace/relace-search",
+        "sakana/fugu-ultra",
         "sao10k/l3-lunaris-8b",
         "sao10k/l3.1-70b-hanami-x1",
         "sao10k/l3.1-euryale-70b",
@@ -6231,6 +6237,7 @@
       "xai/grok-build-0.1",
       "xai/grok-imagine-image",
       "xai/grok-imagine-video",
+      "xai/grok-imagine-video-1.5",
       "xai/grok-imagine-video-1.5-preview",
       "xai/grok-stt",
       "xai/grok-tts",
@@ -6252,6 +6259,7 @@
       "zai/glm-5-turbo",
       "zai/glm-5.1",
       "zai/glm-5.2",
+      "zai/glm-5.2-fast",
       "zai/glm-5v-turbo"
     ],
     "submodel": [
@@ -7094,7 +7102,8 @@
       "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
       "moonshotai/Kimi-K2.6",
       "openai/gpt-oss-120b",
-      "zai-org/GLM-4.7"
+      "zai-org/GLM-4.7",
+      "zai-org/GLM-5.2"
     ],
     "snowflake-cortex": [
       "claude-fable-5",
@@ -7179,6 +7188,7 @@
       "glm-5-fast",
       "glm-5.1-fast",
       "glm-5.2",
+      "glm-5.2-short",
       "kimi-k2.5-fast",
       "kimi-k2.6-fast",
       "moonshotai/Kimi-K2.5",
@@ -7985,18 +7995,20 @@
     ],
     "evroc": [
       "KBLab/kb-whisper-large",
-      "Qwen/Qwen3-30B-A3B-Instruct-2507-FP8",
       "Qwen/Qwen3-Embedding-8B",
+      "Qwen/Qwen3-Reranker-4B",
       "Qwen/Qwen3-VL-30B-A3B-Instruct",
+      "Qwen/Qwen3.6-35B-A3B-FP8",
+      "evroc/roc",
+      "google/gemma-4-26B-A4B-it",
       "intfloat/multilingual-e5-large-instruct",
-      "microsoft/Phi-4-multimodal-instruct",
-      "mistralai/Magistral-Small-2509",
+      "mistralai/Mistral-Medium-3.5-128B",
       "mistralai/Voxtral-Small-24B-2507",
-      "mistralai/devstral-small-2-24b-instruct-2512",
-      "moonshotai/Kimi-K2.5",
+      "moonshotai/Kimi-K2.6",
       "nvidia/Llama-3.3-70B-Instruct-FP8",
       "openai/gpt-oss-120b",
-      "openai/whisper-large-v3"
+      "openai/whisper-large-v3",
+      "openai/whisper-large-v3-turbo"
     ],
     "xiaomi": [
       "mimo-v2-flash",
@@ -8125,7 +8137,7 @@
     ],
     "llmtr": ["gemma-4", "magibu-11b-v8", "medgemma-4b", "qwen3-6-35b", "sincap", "trendyol-7b"],
     "sarvam": ["sarvam-105b", "sarvam-30b"],
-    "stepfun": ["step-1-32k", "step-2-16k", "step-3.5-flash", "step-3.5-flash-2603"],
+    "stepfun": ["step-1-32k", "step-2-16k", "step-3.5-flash", "step-3.5-flash-2603", "step-3.7-flash"],
     "hpc-ai": ["minimax/minimax-m2.5", "moonshotai/kimi-k2.5", "zai-org/glm-5.1"],
     "minimax-cn": [
       "MiniMax-M2",
@@ -8440,7 +8452,6 @@
     "ovhcloud": [
       "gpt-oss-120b",
       "gpt-oss-20b",
-      "llama-3.1-8b-instruct",
       "meta-llama-3_3-70b-instruct",
       "mistral-7b-instruct-v0.3",
       "mistral-nemo-instruct-2407",
@@ -9209,6 +9220,7 @@
       "rekaai/reka-flash-3",
       "relace/relace-apply-3",
       "relace/relace-search",
+      "sakana/fugu-ultra",
       "sao10k/l3-lunaris-8b",
       "sao10k/l3.1-70b-hanami-x1",
       "sao10k/l3.1-euryale-70b",

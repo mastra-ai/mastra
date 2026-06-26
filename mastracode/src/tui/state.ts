@@ -248,6 +248,16 @@ export interface TUIState {
   githubPrGradientAnimator?: GradientAnimator;
   githubPrPollingActive: boolean;
 
+  // ── Tokens/sec tracking ────────────────────────────────────────────────
+  /**
+   * Timestamp (ms) of the first streamed content delta of the current step —
+   * i.e. when decoding began. tokens/sec is measured over decode time only
+   * (excludes TTFT and inter-step tool gaps). 0 means decode not yet started.
+   */
+  decodeStartedAt: number;
+  /** Current computed tokens/sec rate (0 when idle) */
+  tokensPerSec: number;
+
   // ── Observational Memory ──────────────────────────────────────────────
   omProgressComponent?: OMProgressComponent;
   activeOMMarker?: OMMarkerComponent;
@@ -373,6 +383,10 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     projectInfo: detectProject(process.cwd()),
     modelAuthStatus: { hasAuth: true },
     githubPrPollingActive: false,
+
+    // Tokens/sec tracking
+    decodeStartedAt: 0,
+    tokensPerSec: 0,
 
     // Goal loop
     goalManager: new GoalManager(),

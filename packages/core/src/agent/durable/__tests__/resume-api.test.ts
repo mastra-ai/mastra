@@ -332,14 +332,16 @@ describe('Resume with CachingPubSub Event Replay', () => {
     // Wait a bit for events to be cached
     await new Promise(resolve => setTimeout(resolve, 50));
 
-    // Disconnect (cleanup)
-    initialCleanup();
-
-    // Verify events were cached - use the correct topic format
+    // Verify events were cached - use the correct topic format.
+    // Read history before cleanup: the agent now reuses this CachingPubSub
+    // instance, so cleanup clears this topic's cached history.
     const topic = `agent.stream.${runId}`;
     const cachedEvents = await cachingPubsub.getHistory(topic);
     // Events should be cached (at least the start event)
     expect(cachedEvents.length).toBeGreaterThan(0);
+
+    // Disconnect (cleanup)
+    initialCleanup();
   });
 
   it('should deduplicate events during resume replay', async () => {
@@ -363,13 +365,16 @@ describe('Resume with CachingPubSub Event Replay', () => {
 
     // Wait for events
     await new Promise(resolve => setTimeout(resolve, 100));
-    cleanup();
 
-    // Subscribe with replay - should get events without duplicates
+    // Subscribe with replay - should get events without duplicates.
+    // Replay before cleanup: the agent now reuses this CachingPubSub instance,
+    // so cleanup clears this topic's cached history.
     const topic = `agent.stream.${runId}`;
     await cachingPubsub.subscribeWithReplay(topic, event => {
       receivedEvents.push(event);
     });
+
+    cleanup();
 
     // Each event ID should be unique
     const eventIds = receivedEvents.map(e => e.id);

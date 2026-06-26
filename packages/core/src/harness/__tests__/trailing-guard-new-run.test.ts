@@ -17,7 +17,8 @@ import { Agent } from '../../agent';
 import { InMemoryStore } from '../../storage/mock';
 import { Harness } from '../harness';
 import type { Session } from '../session';
-import type { HarnessEvent } from '../types';
+import { createMockWorkspace } from '../test-utils';
+import type { AgentControllerEvent } from '../types';
 
 function createHarness() {
   const agent = new Agent({
@@ -28,6 +29,7 @@ function createHarness() {
   });
 
   return new Harness({
+    workspace: createMockWorkspace(),
     id: 'trailing-guard-harness',
     storage: new InMemoryStore(),
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
@@ -53,7 +55,7 @@ describe('Trailing guard does not swallow new-run null-runId chunks', () => {
     const harness = createHarness();
     await harness.init();
     const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });

@@ -1,9 +1,10 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import { Icon, toast } from '@mastra/playground-ui';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { AlertTriangle, ChevronDown, ChevronRight, CopyIcon, Globe, LockIcon, Pencil, Settings2 } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';

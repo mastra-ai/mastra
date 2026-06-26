@@ -1,8 +1,14 @@
 import type { Agent } from '@mastra/core/agent';
-import type { Harness, Session } from '@mastra/core/harness';
+import type { AgentController, Session } from '@mastra/core/agent-controller';
+import type { MastraFGAPermissionInput } from '@mastra/core/auth/ee';
+// Type-only import: erased at runtime, so this cannot crash against an older
+// @mastra/core that lacks the `./agent-controller` subpath export. Controller
+// resolution at runtime goes through mastra.getAgentController?.() with a
+// getHarness() fallback (see resolveControllerOrThrow), never a value import.
 import { z } from 'zod/v4';
 
 import { HTTPException } from '../http-exception';
+import type { ServerRoute } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 
@@ -39,19 +45,29 @@ function isReservedThreadMetadataKey(key: string): boolean {
   );
 }
 
+/**
+ * Resolves a controller by id. `AgentController` is the canonical surface, so
+ * this prefers `mastra.getAgentController` and falls back to the legacy
+ * `mastra.getHarness` accessor on a miss. Trying both keeps the server working
+ * against an older installed `@mastra/core` that predates the rename, and also
+ * covers cases where a controller is only registered under one accessor.
+ */
 function getHarnessOrThrow(
-  mastra: { getHarness: (id: string) => Harness<any> | undefined },
+  mastra: {
+    getAgentController?: (id: string) => AgentController<any> | undefined;
+    getHarness?: (id: string) => AgentController<any> | undefined;
+  },
   harnessId: string,
-): Harness<any> {
-  const harness = mastra.getHarness(harnessId);
-  if (!harness) {
-    throw new HTTPException(404, { message: `harness "${harnessId}" not found` });
+): AgentController<any> {
+  const controller = mastra.getAgentController?.(harnessId) ?? mastra.getHarness?.(harnessId);
+  if (!controller) {
+    throw new HTTPException(404, { message: `agent controller "${harnessId}" not found` });
   }
-  return harness;
+  return controller;
 }
 
 async function getSession(
-  harness: Harness<any>,
+  harness: AgentController<any>,
   resourceId: string,
   tags?: Record<string, string>,
 ): Promise<Session<any>> {
@@ -251,27 +267,33 @@ const setToolPermissionBodySchema = z.object({
 
 export const LIST_HARNESSES_ROUTE = createRoute({
   method: 'GET',
-  path: '/harness',
+  path: '/agent-controller',
   responseType: 'json' as const,
   responseSchema: listHarnessesResponseSchema,
   summary: 'List harnesses',
   description: 'Lists the harnesses hosted on this Mastra instance.',
-  tags: ['Harness'],
+  tags: ['AgentController'],
   requiresAuth: true,
-  requiresPermission: 'harness:read',
+  requiresPermission: 'agent-controller:read',
   handler: async ({ mastra }) => {
     try {
-      const harnesses = mastra.listHarnesses();
-      return { harnesses: Object.keys(harnesses).map(id => ({ id })) };
+      const ids = new Set<string>();
+      if (mastra.listAgentControllers) {
+        for (const id of Object.keys(mastra.listAgentControllers())) ids.add(id);
+      }
+      if (mastra.listHarnesses) {
+        for (const id of Object.keys(mastra.listHarnesses())) ids.add(id);
+      }
+      return { harnesses: Array.from(ids).map(id => ({ id })) };
     } catch (error) {
-      return handleError(error, 'error listing harnesses');
+      return handleError(error, 'error listing agent controllers');
     }
   },
 });
 
 export const CREATE_HARNESS_SESSION_ROUTE = createRoute({
   method: 'POST',
-  path: '/harness/:harnessId/sessions',
+  path: '/agent-controller/:harnessId/sessions',
   responseType: 'json' as const,
   pathParamSchema: harnessIdPathParams,
   bodySchema: createSessionBodySchema,
@@ -279,9 +301,9 @@ export const CREATE_HARNESS_SESSION_ROUTE = createRoute({
   summary: 'Create or resume a harness session',
   description:
     'Creates a session for the given resourceId, or returns the existing one (get-or-create), so reconnects resume the conversation.',
-  tags: ['Harness'],
+  tags: ['AgentController'],
   requiresAuth: true,
-  requiresPermission: 'harness:execute',
+  requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, harnessId, resourceId, tags }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -299,16 +321,16 @@ export const CREATE_HARNESS_SESSION_ROUTE = createRoute({
 
 export const STREAM_HARNESS_SESSION_ROUTE = createRoute({
   method: 'GET',
-  path: '/harness/:harnessId/sessions/:resourceId/stream',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/stream',
   responseType: 'stream' as const,
   streamFormat: 'sse' as const,
   sseFlushOnConnect: true,
   pathParamSchema: sessionPathParams,
   summary: 'Stream harness session events',
   description: 'Subscribes to a session\u2019s event bus and streams events to the client over SSE.',
-  tags: ['Harness', 'Streaming'],
+  tags: ['AgentController', 'Streaming'],
   requiresAuth: true,
-  requiresPermission: 'harness:read',
+  requiresPermission: 'agent-controller:read',
   handler: async ({ mastra, harnessId, resourceId, abortSignal }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -385,16 +407,16 @@ export const STREAM_HARNESS_SESSION_ROUTE = createRoute({
 
 export const SEND_HARNESS_MESSAGE_ROUTE = createRoute({
   method: 'POST',
-  path: '/harness/:harnessId/sessions/:resourceId/messages',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/messages',
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: sendMessageBodySchema,
   responseSchema: ackResponseSchema,
   summary: 'Send a message to a harness session',
   description: 'Sends a user message to the session. The reply streams as events on the session\u2019s SSE stream.',
-  tags: ['Harness', 'Streaming'],
+  tags: ['AgentController', 'Streaming'],
   requiresAuth: true,
-  requiresPermission: 'harness:execute',
+  requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, harnessId, resourceId, message }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -409,15 +431,15 @@ export const SEND_HARNESS_MESSAGE_ROUTE = createRoute({
 
 export const ABORT_HARNESS_SESSION_ROUTE = createRoute({
   method: 'POST',
-  path: '/harness/:harnessId/sessions/:resourceId/abort',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/abort',
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   responseSchema: ackResponseSchema,
   summary: 'Abort a harness session run',
   description: 'Aborts the in-flight run for the session, if any.',
-  tags: ['Harness'],
+  tags: ['AgentController'],
   requiresAuth: true,
-  requiresPermission: 'harness:execute',
+  requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, harnessId, resourceId }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -432,16 +454,16 @@ export const ABORT_HARNESS_SESSION_ROUTE = createRoute({
 
 export const HARNESS_TOOL_APPROVAL_ROUTE = createRoute({
   method: 'POST',
-  path: '/harness/:harnessId/sessions/:resourceId/tool-approval',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/tool-approval',
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: toolApprovalBodySchema,
   responseSchema: ackResponseSchema,
   summary: 'Respond to a harness tool approval',
   description: 'Approves or declines a pending tool call surfaced by the session.',
-  tags: ['Harness'],
+  tags: ['AgentController'],
   requiresAuth: true,
-  requiresPermission: 'harness:execute',
+  requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, harnessId, resourceId, toolCallId, approved }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -461,7 +483,7 @@ export const HARNESS_TOOL_APPROVAL_ROUTE = createRoute({
 
 export const HARNESS_TOOL_SUSPENSION_ROUTE = createRoute({
   method: 'POST',
-  path: '/harness/:harnessId/sessions/:resourceId/tool-suspension',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/tool-suspension',
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: toolSuspensionBodySchema,
@@ -469,9 +491,9 @@ export const HARNESS_TOOL_SUSPENSION_ROUTE = createRoute({
   summary: 'Respond to a suspended harness tool',
   description:
     'Resumes a suspended interactive tool (ask_user, request_access, submit_plan) with the provided resume data.',
-  tags: ['Harness'],
+  tags: ['AgentController'],
   requiresAuth: true,
-  requiresPermission: 'harness:execute',
+  requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, harnessId, resourceId, toolCallId, resumeData }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -486,16 +508,16 @@ export const HARNESS_TOOL_SUSPENSION_ROUTE = createRoute({
 
 export const STEER_HARNESS_SESSION_ROUTE = createRoute({
   method: 'POST',
-  path: '/harness/:harnessId/sessions/:resourceId/steer',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/steer',
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: steerBodySchema,
   responseSchema: ackResponseSchema,
   summary: 'Steer the in-flight run',
   description: 'Injects a message into the running turn (interjection) without starting a new run.',
-  tags: ['Harness'],
+  tags: ['AgentController'],
   requiresAuth: true,
-  requiresPermission: 'harness:execute',
+  requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, harnessId, resourceId, message }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -510,16 +532,16 @@ export const STEER_HARNESS_SESSION_ROUTE = createRoute({
 
 export const SWITCH_HARNESS_MODE_ROUTE = createRoute({
   method: 'POST',
-  path: '/harness/:harnessId/sessions/:resourceId/mode',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/mode',
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: switchModeBodySchema,
   responseSchema: ackResponseSchema,
   summary: 'Switch the session mode',
   description: 'Switches the active mode (e.g. build, plan) for the session.',
-  tags: ['Harness'],
+  tags: ['AgentController'],
   requiresAuth: true,
-  requiresPermission: 'harness:execute',
+  requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, harnessId, resourceId, modeId }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -534,16 +556,16 @@ export const SWITCH_HARNESS_MODE_ROUTE = createRoute({
 
 export const SWITCH_HARNESS_MODEL_ROUTE = createRoute({
   method: 'POST',
-  path: '/harness/:harnessId/sessions/:resourceId/model',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/model',
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: switchModelBodySchema,
   responseSchema: ackResponseSchema,
   summary: 'Switch the session model',
   description: 'Switches the model for the session, scoped to the thread by default.',
-  tags: ['Harness'],
+  tags: ['AgentController'],
   requiresAuth: true,
-  requiresPermission: 'harness:execute',
+  requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, harnessId, resourceId, modelId, scope, modeId }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -558,16 +580,16 @@ export const SWITCH_HARNESS_MODEL_ROUTE = createRoute({
 
 export const SWITCH_HARNESS_THREAD_ROUTE = createRoute({
   method: 'POST',
-  path: '/harness/:harnessId/sessions/:resourceId/thread',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/thread',
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: switchThreadBodySchema,
   responseSchema: ackResponseSchema,
   summary: 'Switch the session thread',
   description: 'Switches the session to an existing thread (rebinding its stream and state).',
-  tags: ['Harness'],
+  tags: ['AgentController'],
   requiresAuth: true,
-  requiresPermission: 'harness:execute',
+  requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, harnessId, resourceId, threadId }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -582,15 +604,15 @@ export const SWITCH_HARNESS_THREAD_ROUTE = createRoute({
 
 export const GET_HARNESS_SESSION_STATE_ROUTE = createRoute({
   method: 'GET',
-  path: '/harness/:harnessId/sessions/:resourceId',
+  path: '/agent-controller/:harnessId/sessions/:resourceId',
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   responseSchema: sessionStateResponseSchema,
   summary: 'Get session state',
   description: 'Returns the current mode, model, and thread for the session (for initial UI hydration).',
-  tags: ['Harness'],
+  tags: ['AgentController'],
   requiresAuth: true,
-  requiresPermission: 'harness:read',
+  requiresPermission: 'agent-controller:read',
   handler: async ({ mastra, harnessId, resourceId }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -635,15 +657,15 @@ export const GET_HARNESS_SESSION_STATE_ROUTE = createRoute({
 
 export const LIST_HARNESS_MODES_ROUTE = createRoute({
   method: 'GET',
-  path: '/harness/:harnessId/modes',
+  path: '/agent-controller/:harnessId/modes',
   responseType: 'json' as const,
   pathParamSchema: harnessIdPathParams,
   responseSchema: listModesResponseSchema,
   summary: 'List harness modes',
   description: 'Lists the modes configured on the harness (e.g. build, plan).',
-  tags: ['Harness'],
+  tags: ['AgentController'],
   requiresAuth: true,
-  requiresPermission: 'harness:read',
+  requiresPermission: 'agent-controller:read',
   handler: async ({ mastra, harnessId }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -658,7 +680,7 @@ export const LIST_HARNESS_MODES_ROUTE = createRoute({
 
 export const LIST_HARNESS_THREADS_ROUTE = createRoute({
   method: 'GET',
-  path: '/harness/:harnessId/sessions/:resourceId/threads',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/threads',
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   queryParamSchema: listThreadsQuerySchema,
@@ -666,9 +688,9 @@ export const LIST_HARNESS_THREADS_ROUTE = createRoute({
   summary: 'List session threads',
   description:
     'Lists the threads for the session\u2019s resource, most-recently-updated first. Pass `limit` to return only the newest N (e.g. for a sidebar). Pass `tags` (a JSON-encoded object) to scope the list to threads matching every tag \u2014 e.g. `{ projectPath }` so git worktrees sharing a resourceId each see only their own threads.',
-  tags: ['Harness'],
+  tags: ['AgentController'],
   requiresAuth: true,
-  requiresPermission: 'harness:read',
+  requiresPermission: 'agent-controller:read',
   handler: async ({ mastra, harnessId, resourceId, limit, tags }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -725,7 +747,7 @@ export const LIST_HARNESS_THREADS_ROUTE = createRoute({
 
 export const SEND_HARNESS_NOTIFICATION_ROUTE = createRoute({
   method: 'POST',
-  path: '/harness/:harnessId/sessions/:resourceId/notifications',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/notifications',
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: sendNotificationBodySchema,
@@ -738,9 +760,9 @@ export const SEND_HARNESS_NOTIFICATION_ROUTE = createRoute({
   summary: 'Send a notification signal to a session',
   description:
     'Delivers a notification to the session\u2019s current agent/thread. The agent\u2019s delivery policy determines whether the notification wakes an idle thread, is summarised, or is persisted for later.',
-  tags: ['Harness'],
+  tags: ['AgentController'],
   requiresAuth: true,
-  requiresPermission: 'harness:execute',
+  requiresPermission: 'agent-controller:execute',
   handler: async ({
     mastra,
     harnessId,
@@ -789,16 +811,16 @@ export const SEND_HARNESS_NOTIFICATION_ROUTE = createRoute({
 
 export const CREATE_HARNESS_THREAD_ROUTE = createRoute({
   method: 'POST',
-  path: '/harness/:harnessId/sessions/:resourceId/threads',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/threads',
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: createThreadBodySchema,
   responseSchema: threadResponseSchema,
   summary: 'Create a new thread',
   description: 'Creates a new thread in the session (unbinds the previous thread, binds the new one).',
-  tags: ['Harness', 'Threads'],
+  tags: ['AgentController', 'Threads'],
   requiresAuth: true,
-  requiresPermission: 'harness:execute',
+  requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, harnessId, resourceId, title }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -819,15 +841,15 @@ export const CREATE_HARNESS_THREAD_ROUTE = createRoute({
 
 export const DELETE_HARNESS_THREAD_ROUTE = createRoute({
   method: 'DELETE',
-  path: '/harness/:harnessId/sessions/:resourceId/threads/:threadId',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/threads/:threadId',
   responseType: 'json' as const,
   pathParamSchema: threadPathParams,
   responseSchema: ackResponseSchema,
   summary: 'Delete a thread',
   description: 'Deletes a thread. If the deleted thread is the active one, the session is unbound.',
-  tags: ['Harness', 'Threads'],
+  tags: ['AgentController', 'Threads'],
   requiresAuth: true,
-  requiresPermission: 'harness:execute',
+  requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, harnessId, resourceId, threadId }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -842,16 +864,16 @@ export const DELETE_HARNESS_THREAD_ROUTE = createRoute({
 
 export const RENAME_HARNESS_THREAD_ROUTE = createRoute({
   method: 'PUT',
-  path: '/harness/:harnessId/sessions/:resourceId/threads/:threadId',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/threads/:threadId',
   responseType: 'json' as const,
   pathParamSchema: threadPathParams,
   bodySchema: renameThreadBodySchema,
   responseSchema: ackResponseSchema,
   summary: 'Rename a thread',
   description: 'Renames the specified thread.',
-  tags: ['Harness', 'Threads'],
+  tags: ['AgentController', 'Threads'],
   requiresAuth: true,
-  requiresPermission: 'harness:execute',
+  requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, harnessId, resourceId, threadId, title }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -870,16 +892,16 @@ export const RENAME_HARNESS_THREAD_ROUTE = createRoute({
 
 export const CLONE_HARNESS_THREAD_ROUTE = createRoute({
   method: 'POST',
-  path: '/harness/:harnessId/sessions/:resourceId/threads/clone',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/threads/clone',
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: cloneThreadBodySchema,
   responseSchema: threadResponseSchema,
   summary: 'Clone a thread',
   description: 'Clones a thread (and its messages). The session binds to the new clone.',
-  tags: ['Harness', 'Threads'],
+  tags: ['AgentController', 'Threads'],
   requiresAuth: true,
-  requiresPermission: 'harness:execute',
+  requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, harnessId, resourceId, sourceThreadId, title }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -900,16 +922,16 @@ export const CLONE_HARNESS_THREAD_ROUTE = createRoute({
 
 export const LIST_HARNESS_THREAD_MESSAGES_ROUTE = createRoute({
   method: 'GET',
-  path: '/harness/:harnessId/sessions/:resourceId/threads/:threadId/messages',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/threads/:threadId/messages',
   responseType: 'json' as const,
   pathParamSchema: threadPathParams,
   queryParamSchema: listMessagesQuerySchema,
   responseSchema: listMessagesResponseSchema,
   summary: 'List thread messages',
   description: 'Lists messages for a specific thread. Returns most recent messages first.',
-  tags: ['Harness', 'Threads'],
+  tags: ['AgentController', 'Threads'],
   requiresAuth: true,
-  requiresPermission: 'harness:read',
+  requiresPermission: 'agent-controller:read',
   handler: async ({ mastra, harnessId, resourceId, threadId, limit }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -935,7 +957,7 @@ export const LIST_HARNESS_THREAD_MESSAGES_ROUTE = createRoute({
 
 export const FOLLOW_UP_HARNESS_SESSION_ROUTE = createRoute({
   method: 'POST',
-  path: '/harness/:harnessId/sessions/:resourceId/follow-up',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/follow-up',
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: followUpBodySchema,
@@ -943,9 +965,9 @@ export const FOLLOW_UP_HARNESS_SESSION_ROUTE = createRoute({
   summary: 'Queue a follow-up message',
   description:
     'Queues a follow-up message. If the session is idle it sends immediately; if a run is active it queues for after completion.',
-  tags: ['Harness'],
+  tags: ['AgentController'],
   requiresAuth: true,
-  requiresPermission: 'harness:execute',
+  requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, harnessId, resourceId, message }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -964,15 +986,15 @@ export const FOLLOW_UP_HARNESS_SESSION_ROUTE = createRoute({
 
 export const LIST_HARNESS_MODELS_ROUTE = createRoute({
   method: 'GET',
-  path: '/harness/:harnessId/models',
+  path: '/agent-controller/:harnessId/models',
   responseType: 'json' as const,
   pathParamSchema: harnessIdPathParams,
   responseSchema: listModelsResponseSchema,
   summary: 'List available models',
   description: 'Lists all models available on this harness (with auth status and use counts).',
-  tags: ['Harness'],
+  tags: ['AgentController'],
   requiresAuth: true,
-  requiresPermission: 'harness:read',
+  requiresPermission: 'agent-controller:read',
   handler: async ({ mastra, harnessId }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -999,15 +1021,15 @@ export const LIST_HARNESS_MODELS_ROUTE = createRoute({
 
 export const GET_HARNESS_WORKSPACE_STATUS_ROUTE = createRoute({
   method: 'GET',
-  path: '/harness/:harnessId/workspace',
+  path: '/agent-controller/:harnessId/workspace',
   responseType: 'json' as const,
   pathParamSchema: harnessIdPathParams,
   responseSchema: workspaceStatusResponseSchema,
   summary: 'Get workspace status',
   description: 'Returns whether the harness has a workspace configured and whether it is ready.',
-  tags: ['Harness'],
+  tags: ['AgentController'],
   requiresAuth: true,
-  requiresPermission: 'harness:read',
+  requiresPermission: 'agent-controller:read',
   handler: async ({ mastra, harnessId }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -1028,15 +1050,15 @@ export const GET_HARNESS_WORKSPACE_STATUS_ROUTE = createRoute({
 
 export const GET_HARNESS_OM_RECORD_ROUTE = createRoute({
   method: 'GET',
-  path: '/harness/:harnessId/sessions/:resourceId/om',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/om',
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   responseSchema: omRecordResponseSchema,
   summary: 'Get observational memory record',
   description: 'Returns the current observational memory record for the session\u2019s thread/resource.',
-  tags: ['Harness'],
+  tags: ['AgentController'],
   requiresAuth: true,
-  requiresPermission: 'harness:read',
+  requiresPermission: 'agent-controller:read',
   handler: async ({ mastra, harnessId, resourceId }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -1055,16 +1077,16 @@ export const GET_HARNESS_OM_RECORD_ROUTE = createRoute({
 
 export const SET_HARNESS_RESOURCE_ID_ROUTE = createRoute({
   method: 'POST',
-  path: '/harness/:harnessId/sessions/:resourceId/resource',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/resource',
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: z.object({ newResourceId: z.string() }),
   responseSchema: ackResponseSchema,
   summary: 'Change the session resource ID',
   description: 'Updates the session\u2019s resource identity (e.g. when a user logs in).',
-  tags: ['Harness'],
+  tags: ['AgentController'],
   requiresAuth: true,
-  requiresPermission: 'harness:execute',
+  requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, harnessId, resourceId, newResourceId }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -1079,15 +1101,15 @@ export const SET_HARNESS_RESOURCE_ID_ROUTE = createRoute({
 
 export const GET_HARNESS_RESOURCE_IDS_ROUTE = createRoute({
   method: 'GET',
-  path: '/harness/:harnessId/sessions/:resourceId/resources',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/resources',
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   responseSchema: z.object({ resourceIds: z.array(z.string()) }),
   summary: 'Get known resource IDs',
   description: 'Lists the resource IDs known to this session (from threads).',
-  tags: ['Harness'],
+  tags: ['AgentController'],
   requiresAuth: true,
-  requiresPermission: 'harness:read',
+  requiresPermission: 'agent-controller:read',
   handler: async ({ mastra, harnessId, resourceId }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -1127,21 +1149,21 @@ const goalRecordSchema = z.object({
 });
 const goalResponseSchema = z.object({ goal: goalRecordSchema.optional() });
 
-function getAgentForSession(harness: Harness<any>, session: Session<any>): Agent {
+function getAgentForSession(harness: AgentController<any>, session: Session<any>): Agent {
   return harness.getCurrentAgent(session);
 }
 
 export const GET_HARNESS_GOAL_ROUTE = createRoute({
   method: 'GET',
-  path: '/harness/:harnessId/sessions/:resourceId/goal',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/goal',
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   responseSchema: goalResponseSchema,
   summary: 'Get the current goal',
   description: 'Returns the active/paused/done goal objective for the session\u2019s thread, if any.',
-  tags: ['Harness', 'Goals'],
+  tags: ['AgentController', 'Goals'],
   requiresAuth: true,
-  requiresPermission: 'harness:read',
+  requiresPermission: 'agent-controller:read',
   handler: async ({ mastra, harnessId, resourceId }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -1159,7 +1181,7 @@ export const GET_HARNESS_GOAL_ROUTE = createRoute({
 
 export const SET_HARNESS_GOAL_ROUTE = createRoute({
   method: 'POST',
-  path: '/harness/:harnessId/sessions/:resourceId/goal',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/goal',
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: setGoalBodySchema,
@@ -1167,9 +1189,9 @@ export const SET_HARNESS_GOAL_ROUTE = createRoute({
   summary: 'Set a goal',
   description:
     'Sets a new objective for the session\u2019s thread. The agent\u2019s in-loop goal judge evaluates progress after each turn.',
-  tags: ['Harness', 'Goals'],
+  tags: ['AgentController', 'Goals'],
   requiresAuth: true,
-  requiresPermission: 'harness:execute',
+  requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, harnessId, resourceId, objective, judgeModelId, maxRuns }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -1192,16 +1214,16 @@ export const SET_HARNESS_GOAL_ROUTE = createRoute({
 
 export const UPDATE_HARNESS_GOAL_ROUTE = createRoute({
   method: 'PUT',
-  path: '/harness/:harnessId/sessions/:resourceId/goal',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/goal',
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: updateGoalBodySchema,
   responseSchema: goalResponseSchema,
   summary: 'Update goal options',
   description: 'Updates the judge model, max runs, or status of the active goal. No-op when no goal is set.',
-  tags: ['Harness', 'Goals'],
+  tags: ['AgentController', 'Goals'],
   requiresAuth: true,
-  requiresPermission: 'harness:execute',
+  requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, harnessId, resourceId, judgeModelId, maxRuns, status }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -1224,15 +1246,15 @@ export const UPDATE_HARNESS_GOAL_ROUTE = createRoute({
 
 export const CLEAR_HARNESS_GOAL_ROUTE = createRoute({
   method: 'DELETE',
-  path: '/harness/:harnessId/sessions/:resourceId/goal',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/goal',
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   responseSchema: ackResponseSchema,
   summary: 'Clear the goal',
   description: 'Removes the active goal from the session\u2019s thread.',
-  tags: ['Harness', 'Goals'],
+  tags: ['AgentController', 'Goals'],
   requiresAuth: true,
-  requiresPermission: 'harness:execute',
+  requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, harnessId, resourceId }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -1254,15 +1276,15 @@ export const CLEAR_HARNESS_GOAL_ROUTE = createRoute({
 
 export const GET_HARNESS_PERMISSIONS_ROUTE = createRoute({
   method: 'GET',
-  path: '/harness/:harnessId/sessions/:resourceId/permissions',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/permissions',
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   responseSchema: permissionRulesResponseSchema,
   summary: 'Get permission rules',
   description: 'Returns the current permission rules (per-category and per-tool policies) for the session.',
-  tags: ['Harness', 'Permissions'],
+  tags: ['AgentController', 'Permissions'],
   requiresAuth: true,
-  requiresPermission: 'harness:read',
+  requiresPermission: 'agent-controller:read',
   handler: async ({ mastra, harnessId, resourceId }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -1280,16 +1302,16 @@ export const GET_HARNESS_PERMISSIONS_ROUTE = createRoute({
 
 export const SET_HARNESS_CATEGORY_PERMISSION_ROUTE = createRoute({
   method: 'PUT',
-  path: '/harness/:harnessId/sessions/:resourceId/permissions/category',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/permissions/category',
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: setCategoryPermissionBodySchema,
   responseSchema: ackResponseSchema,
   summary: 'Set permission for a tool category',
   description: 'Sets the approval policy (allow/ask/deny) for all tools in a category.',
-  tags: ['Harness', 'Permissions'],
+  tags: ['AgentController', 'Permissions'],
   requiresAuth: true,
-  requiresPermission: 'harness:execute',
+  requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, harnessId, resourceId, category, policy }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -1304,7 +1326,7 @@ export const SET_HARNESS_CATEGORY_PERMISSION_ROUTE = createRoute({
 
 export const SET_HARNESS_TOOL_PERMISSION_ROUTE = createRoute({
   method: 'PUT',
-  path: '/harness/:harnessId/sessions/:resourceId/permissions/tool',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/permissions/tool',
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: setToolPermissionBodySchema,
@@ -1312,9 +1334,9 @@ export const SET_HARNESS_TOOL_PERMISSION_ROUTE = createRoute({
   summary: 'Set permission for a specific tool',
   description:
     'Sets the approval policy (allow/ask/deny) for a specific tool by name. Per-tool overrides take precedence over category policies.',
-  tags: ['Harness', 'Permissions'],
+  tags: ['AgentController', 'Permissions'],
   requiresAuth: true,
-  requiresPermission: 'harness:execute',
+  requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, harnessId, resourceId, toolName, policy }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -1335,7 +1357,7 @@ const setSessionStateBodySchema = z.object({ state: z.record(z.string(), z.unkno
 
 export const SET_HARNESS_SESSION_STATE_ROUTE = createRoute({
   method: 'PUT',
-  path: '/harness/:harnessId/sessions/:resourceId/state',
+  path: '/agent-controller/:harnessId/sessions/:resourceId/state',
   responseType: 'json' as const,
   pathParamSchema: sessionPathParams,
   bodySchema: setSessionStateBodySchema,
@@ -1343,9 +1365,9 @@ export const SET_HARNESS_SESSION_STATE_ROUTE = createRoute({
   summary: 'Set session state',
   description:
     'Merges the provided key-value pairs into the session state. Existing keys not in the payload are preserved.',
-  tags: ['Harness'],
+  tags: ['AgentController'],
   requiresAuth: true,
-  requiresPermission: 'harness:execute',
+  requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, harnessId, resourceId, state }) => {
     try {
       const harness = getHarnessOrThrow(mastra, harnessId);
@@ -1357,3 +1379,36 @@ export const SET_HARNESS_SESSION_STATE_ROUTE = createRoute({
     }
   },
 });
+
+// ---------------------------------------------------------------------------
+// Agent Controller surface (alias of the Harness surface)
+// ---------------------------------------------------------------------------
+
+/**
+ * `Harness` was renamed to `AgentController`. The route handlers in this module
+ * are the canonical `AgentController` surface — they resolve controllers via the
+ * version-safe `getAgentController`-first accessor in `getHarnessOrThrow`.
+ *
+ * To keep the legacy `/harness/...` API working for backwards compatibility,
+ * each canonical route is mirrored: only its metadata is rewritten (path prefix,
+ * OpenAPI tag, permission resource). The handler is shared verbatim, so both
+ * surfaces resolve through the same canonical accessor.
+ */
+export function mirrorAgentControllerRouteAsHarness(route: ServerRoute): ServerRoute {
+  const rewriteTag = (tag: string): string => (tag === 'AgentController' ? 'Harness' : tag);
+  const rewritePermission = (perm: MastraFGAPermissionInput): MastraFGAPermissionInput =>
+    typeof perm === 'string' && perm.startsWith('agent-controller:')
+      ? (`harness:${perm.slice('agent-controller:'.length)}` as MastraFGAPermissionInput)
+      : perm;
+
+  return {
+    ...route,
+    path: route.path.replace(/^\/agent-controller/, '/harness'),
+    openapi: route.openapi ? { ...route.openapi, tags: route.openapi.tags?.map(rewriteTag) } : route.openapi,
+    requiresPermission: Array.isArray(route.requiresPermission)
+      ? route.requiresPermission.map(rewritePermission)
+      : route.requiresPermission !== undefined
+        ? rewritePermission(route.requiresPermission)
+        : undefined,
+  } as ServerRoute;
+}

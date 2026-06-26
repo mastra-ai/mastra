@@ -23,6 +23,13 @@ vi.mock('@mastra/playground-ui', async () => {
   };
 });
 
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: {
+    success: (...args: unknown[]) => toastSuccessMock(...args),
+    error: (...args: unknown[]) => toastErrorMock(...args),
+  },
+}));
+
 const BASE_URL = 'http://localhost:4111';
 
 const Wrapper = ({ children }: { children: ReactNode }) => {

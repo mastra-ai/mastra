@@ -1,12 +1,13 @@
-import { Icon, ToolsIcon } from '@mastra/playground-ui';
-import type { RuleGroup } from '@mastra/playground-ui';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EntityName, EntityDescription, EntityContent, Entity } from '@mastra/playground-ui/components/Entity';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
 import { PlusIcon, XIcon } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';

@@ -33,6 +33,10 @@ vi.mock('@mastra/playground-ui', () => {
   };
 });
 
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();

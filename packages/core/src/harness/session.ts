@@ -3,6 +3,7 @@ import { createSignal } from '../agent/signals';
 import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import type {
   AgentThreadSubscription,
+  MastraBrowser,
   SendAgentNotificationSignalOptions,
   SendAgentNotificationSignalResult,
   SendAgentSignalAccepted,
@@ -18,20 +19,21 @@ import type { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import { safeStringify } from '../utils';
+import { Workspace } from '../workspace';
 
 import { SessionRunEngine } from './session-run-engine';
 import type { TaskItemSnapshot } from './tools';
 import { createEmptyTokenUsage, defaultDisplayState, defaultOMProgressState } from './types';
 import type {
-  HarnessDisplayState,
-  HarnessEvent,
-  HarnessEventListener,
-  HarnessMessage,
-  HarnessMode,
-  HarnessOMConfig,
-  HarnessRequestState,
-  HarnessRequestStateUpdater,
-  HarnessThread,
+  AgentControllerDisplayState,
+  AgentControllerEvent,
+  AgentControllerEventListener,
+  AgentControllerMessage,
+  AgentControllerMode,
+  AgentControllerOMConfig,
+  AgentControllerRequestState,
+  AgentControllerRequestStateUpdater,
+  AgentControllerThread,
   ModelUseCountTracker,
   PermissionPolicy,
   PermissionRules,
@@ -162,7 +164,7 @@ export class SessionIdentity {
 /**
  * The shared-host storage surface the Session's thread domain leverages to read
  * and write threads. The Harness backs this with its memory storage (mapping raw
- * storage rows to {@link HarnessThread}/{@link HarnessMessage}); when no storage
+ * storage rows to {@link AgentControllerThread}/{@link AgentControllerMessage}); when no storage
  * is configured the handle is absent and the data methods degrade gracefully
  * (empty lists, undefined settings, no-op writes).
  *
@@ -175,13 +177,13 @@ export interface ThreadDataStore {
     resourceId?: string;
     includeForkedSubagents?: boolean;
     metadata?: Record<string, unknown>;
-  }): Promise<HarnessThread[]>;
+  }): Promise<AgentControllerThread[]>;
   /** Fetch a single thread by id, or null when it doesn't exist. */
-  getById(input: { threadId: string }): Promise<HarnessThread | null>;
+  getById(input: { threadId: string }): Promise<AgentControllerThread | null>;
   /** List messages for a thread, newest-`limit` (returned oldest-first) or all. */
-  listMessages(input: { threadId: string; limit?: number }): Promise<HarnessMessage[]>;
+  listMessages(input: { threadId: string; limit?: number }): Promise<AgentControllerMessage[]>;
   /** The first user message for each given thread id. */
-  firstUserMessages(input: { threadIds: string[] }): Promise<Map<string, HarnessMessage>>;
+  firstUserMessages(input: { threadIds: string[] }): Promise<Map<string, AgentControllerMessage>>;
   /** Read a value from a thread's metadata. */
   getMetadata(input: { threadId: string; key: string }): Promise<unknown>;
   /** Write a value into a thread's metadata. */
@@ -191,7 +193,7 @@ export interface ThreadDataStore {
   /** Whether the host has thread storage configured. When false, lifecycle persistence is a no-op. */
   hasStorage(): boolean;
   /** Persist a new or updated thread row. No-op when storage is unavailable. */
-  saveThread(input: { thread: HarnessThread }): Promise<void>;
+  saveThread(input: { thread: AgentControllerThread }): Promise<void>;
   /** Delete a thread row by id. No-op when storage is unavailable. */
   deleteThread(input: { threadId: string }): Promise<void>;
   /** Clone a thread (and its messages) via the host's memory, returning the new thread. */
@@ -200,7 +202,7 @@ export interface ThreadDataStore {
     resourceId: string;
     title?: string;
     metadata?: Record<string, unknown>;
-  }): Promise<HarnessThread>;
+  }): Promise<AgentControllerThread>;
   /** Acquire the host thread lock for a thread id. No-op when no lock is configured. */
   acquireLock(threadId: string): Promise<void>;
   /** Release the host thread lock for a thread id. No-op when no lock is configured. */
@@ -263,7 +265,7 @@ export interface SessionMachinery {
     reminderType: string;
     role: 'user' | 'assistant' | 'system';
     metadata?: Record<string, unknown>;
-  }): Promise<HarnessMessage | null>;
+  }): Promise<AgentControllerMessage | null>;
 }
 
 /**
@@ -365,7 +367,7 @@ export class SessionThread {
     allResources?: boolean;
     includeForkedSubagents?: boolean;
     metadata?: Record<string, unknown>;
-  }): Promise<HarnessThread[]> {
+  }): Promise<AgentControllerThread[]> {
     if (!this.#store) {
       return [];
     }
@@ -379,7 +381,7 @@ export class SessionThread {
   }
 
   /** Fetch a single thread by id, or null when it doesn't exist / no storage. */
-  async getById({ threadId }: { threadId: string }): Promise<HarnessThread | null> {
+  async getById({ threadId }: { threadId: string }): Promise<AgentControllerThread | null> {
     if (!this.#store) return null;
     return this.#store.getById({ threadId });
   }
@@ -393,7 +395,7 @@ export class SessionThread {
     threadId: string;
     expectedResourceId: string;
     expectedProjectPath: string;
-  }): Promise<HarnessThread> {
+  }): Promise<AgentControllerThread> {
     if (!this.#store?.hasStorage()) {
       throw new Error('Memory is not configured on this Harness');
     }
@@ -421,7 +423,7 @@ export class SessionThread {
    * not own (the thread id is otherwise an unguessable but unscoped key). Throws
    * `Thread not found: <id>` when the thread is absent or owned by someone else.
    */
-  async #requireOwnedThread({ threadId }: { threadId: string }): Promise<HarnessThread> {
+  async #requireOwnedThread({ threadId }: { threadId: string }): Promise<AgentControllerThread> {
     const thread = await this.#store?.getById({ threadId });
     if (!thread || thread.resourceId !== this.#getResourceId()) {
       throw new Error(`Thread not found: ${threadId}`);
@@ -430,7 +432,7 @@ export class SessionThread {
   }
 
   /** List messages for a thread (newest-`limit`, returned oldest-first), or all. */
-  async listMessages({ threadId, limit }: { threadId: string; limit?: number }): Promise<HarnessMessage[]> {
+  async listMessages({ threadId, limit }: { threadId: string; limit?: number }): Promise<AgentControllerMessage[]> {
     if (!this.#store) return [];
     // Only expose messages for threads this session owns.
     await this.#requireOwnedThread({ threadId });
@@ -438,19 +440,19 @@ export class SessionThread {
   }
 
   /** List messages for the session's active thread (empty when not bound). */
-  async listActiveMessages({ limit }: { limit?: number } = {}): Promise<HarnessMessage[]> {
+  async listActiveMessages({ limit }: { limit?: number } = {}): Promise<AgentControllerMessage[]> {
     if (this.#threadId === null) return [];
     return this.listMessages({ threadId: this.#threadId, limit });
   }
 
   /** The first user message for a single thread, or null. */
-  async firstUserMessage({ threadId }: { threadId: string }): Promise<HarnessMessage | null> {
+  async firstUserMessage({ threadId }: { threadId: string }): Promise<AgentControllerMessage | null> {
     const messages = await this.firstUserMessages({ threadIds: [threadId] });
     return messages.get(threadId) ?? null;
   }
 
   /** The first user message for each given thread id. */
-  async firstUserMessages({ threadIds }: { threadIds: string[] }): Promise<Map<string, HarnessMessage>> {
+  async firstUserMessages({ threadIds }: { threadIds: string[] }): Promise<Map<string, AgentControllerMessage>> {
     if (!this.#store || threadIds.length === 0) return new Map();
     return this.#store.firstUserMessages({ threadIds });
   }
@@ -516,12 +518,12 @@ export class SessionThread {
   }
 
   /** Create a new thread, bind the session to it, and rebind the agent stream. */
-  async create({ title }: { title?: string } = {}): Promise<HarnessThread> {
+  async create({ title }: { title?: string } = {}): Promise<AgentControllerThread> {
     const session = this.#owner;
     const store = this.#store;
     this.cleanupSubscription();
     const now = new Date();
-    const thread: HarnessThread = {
+    const thread: AgentControllerThread = {
       id: session.machinery.generateId(),
       resourceId: session.identity.getResourceId(),
       title: title || '',
@@ -653,7 +655,7 @@ export class SessionThread {
     sourceThreadId?: string;
     title?: string;
     resourceId?: string;
-  } = {}): Promise<HarnessThread> {
+  } = {}): Promise<AgentControllerThread> {
     const sourceId = sourceThreadId ?? this.#threadId;
     if (!sourceId) {
       throw new Error('No source thread to clone');
@@ -679,7 +681,7 @@ export class SessionThread {
     resourceId: string;
     title?: string;
     metadata?: Record<string, unknown>;
-  }): Promise<HarnessThread> {
+  }): Promise<AgentControllerThread> {
     const session = this.#owner;
     const store = this.#store;
     if (!store) {
@@ -1523,7 +1525,7 @@ export class SessionMode {
    * Resolves a mode id to its full definition. Injected by the Harness via
    * {@link setResolver}, since the mode *catalog* (`config.modes`) is host config.
    */
-  #resolveMode: ((modeId: string) => HarnessMode | null) | undefined;
+  #resolveMode: ((modeId: string) => AgentControllerMode | null) | undefined;
   constructor(store: () => ThreadSettingsStore | undefined, model: SessionModel, bus: SessionBus) {
     this.#store = store;
     this.#model = model;
@@ -1534,7 +1536,7 @@ export class SessionMode {
    * Attach the resolver that maps a mode id to its definition. The Harness owns
    * the mode catalog (`config.modes`) and injects this once.
    */
-  setResolver(resolve: (modeId: string) => HarnessMode | null): void {
+  setResolver(resolve: (modeId: string) => AgentControllerMode | null): void {
     this.#resolveMode = resolve;
   }
 
@@ -1547,7 +1549,7 @@ export class SessionMode {
    * Resolve the currently-selected mode id to its full definition against the
    * host's mode catalog. Throws if the selected mode id isn't in the catalog.
    */
-  resolve(): HarnessMode {
+  resolve(): AgentControllerMode {
     const mode = this.#resolveMode?.(this.#id) ?? null;
     if (!mode) {
       throw new Error(`Mode not found: ${this.#id}`);
@@ -1597,7 +1599,7 @@ export class SessionMode {
     if (this.#switchVersion !== version) return;
     if (modelId) {
       this.#model.set({ modelId });
-      this.#bus.emit({ type: 'model_changed', modelId } as HarnessEvent);
+      this.#bus.emit({ type: 'model_changed', modelId } as AgentControllerEvent);
     }
   }
 }
@@ -1611,9 +1613,9 @@ interface SessionOMRoleConfig {
   /** Session-state key holding this role's threshold. */
   thresholdKey: 'observationThreshold' | 'reflectionThreshold';
   /** Resolve this role's default model id from `omConfig`. */
-  defaultModelId: (omConfig: HarnessOMConfig | undefined) => string | undefined;
+  defaultModelId: (omConfig: AgentControllerOMConfig | undefined) => string | undefined;
   /** Resolve this role's default threshold from `omConfig`. */
-  defaultThreshold: (omConfig: HarnessOMConfig | undefined) => number | undefined;
+  defaultThreshold: (omConfig: AgentControllerOMConfig | undefined) => number | undefined;
 }
 
 /**
@@ -1628,7 +1630,7 @@ class SessionOMRole {
   #getState: (() => Record<string, unknown>) | undefined;
   #setState: ((updates: Record<string, unknown>) => void) | undefined;
   #setSetting: ((args: { key: string; value: unknown }) => Promise<void>) | undefined;
-  #omConfig: HarnessOMConfig | undefined;
+  #omConfig: AgentControllerOMConfig | undefined;
   #gateways: MastraModelGatewayInterface[] | undefined;
 
   constructor(config: SessionOMRoleConfig, bus: SessionBus) {
@@ -1641,7 +1643,7 @@ class SessionOMRole {
     getState: () => Record<string, unknown>;
     setState: (updates: Record<string, unknown>) => void;
     setSetting: (args: { key: string; value: unknown }) => Promise<void>;
-    omConfig?: HarnessOMConfig;
+    omConfig?: AgentControllerOMConfig;
     gateways?: MastraModelGatewayInterface[];
   }): void {
     this.#getState = wiring.getState;
@@ -1726,7 +1728,7 @@ class SessionOM {
     getState: () => Record<string, unknown>;
     setState: (updates: Record<string, unknown>) => void;
     setSetting: (args: { key: string; value: unknown }) => Promise<void>;
-    omConfig?: HarnessOMConfig;
+    omConfig?: AgentControllerOMConfig;
     gateways?: MastraModelGatewayInterface[];
   }): void {
     this.observer.setWiring(options);
@@ -1862,7 +1864,7 @@ class SessionSubagents {
   }
 }
 
-type SessionStateUpdater<TState, TResult> = HarnessRequestStateUpdater<TState, TResult>;
+type SessionStateUpdater<TState, TResult> = AgentControllerRequestStateUpdater<TState, TResult>;
 
 interface SessionStateOptions<TState> {
   initialState?: Partial<TState>;
@@ -2026,7 +2028,7 @@ class SessionState<TState = unknown> {
  * are injected at construction so the reducer stays self-contained.
  */
 export class SessionDisplayState {
-  #state: HarnessDisplayState = defaultDisplayState();
+  #state: AgentControllerDisplayState = defaultDisplayState();
 
   constructor(
     private readonly deps: {
@@ -2045,7 +2047,7 @@ export class SessionDisplayState {
    * A read-only snapshot of the canonical display state. UIs should render from
    * this instead of building state up from raw events.
    */
-  get(): Readonly<HarnessDisplayState> {
+  get(): Readonly<AgentControllerDisplayState> {
     return this.#state;
   }
 
@@ -2110,10 +2112,10 @@ export class SessionDisplayState {
 
   /**
    * Apply a display-state update based on an incoming event. The centralized
-   * state machine that keeps {@link HarnessDisplayState} in sync with every
+   * state machine that keeps {@link AgentControllerDisplayState} in sync with every
    * event the Harness emits.
    */
-  apply(event: HarnessEvent): void {
+  apply(event: AgentControllerEvent): void {
     const ds = this.#state;
 
     switch (event.type) {
@@ -2497,15 +2499,35 @@ export class SessionDisplayState {
  * reference to their session's bus and call {@link emit} directly.
  */
 export class SessionBus {
-  readonly #listeners: HarnessEventListener[] = [];
+  readonly #listeners: AgentControllerEventListener[] = [];
   #displayState: SessionDisplayState | undefined;
+  /**
+   * The last workspace lifecycle event group emitted on this bus, replayed to
+   * subscribers that attach after the workspace finished initializing. Without
+   * this, late listeners (the normal pattern: create a session, then subscribe)
+   * would never see the workspace ready/error status.
+   */
+  #lastWorkspaceEvents: AgentControllerEvent[] = [];
 
   /** Attach the display-state reducer the bus folds events into. Set once by the Session. */
   setDisplayState(displayState: SessionDisplayState): void {
     this.#displayState = displayState;
   }
 
-  subscribe(listener: HarnessEventListener): () => void {
+  subscribe(listener: AgentControllerEventListener): () => void {
+    // Replay buffered workspace lifecycle events so late subscribers learn the
+    // current workspace status. The workspace is initialized during session
+    // creation, before any external caller can subscribe.
+    for (const event of this.#lastWorkspaceEvents) {
+      try {
+        const result = listener(event);
+        if (result && typeof result === 'object' && 'catch' in result) {
+          (result as Promise<void>).catch(err => console.error('Error in session event listener:', err));
+        }
+      } catch (err) {
+        console.error('Error in session event listener:', err);
+      }
+    }
     this.#listeners.push(listener);
     return () => {
       const index = this.#listeners.indexOf(listener);
@@ -2515,7 +2537,18 @@ export class SessionBus {
     };
   }
 
-  emit(event: HarnessEvent): void {
+  emit(event: AgentControllerEvent): void {
+    if (
+      event.type === 'workspace_status_changed' ||
+      event.type === 'workspace_ready' ||
+      event.type === 'workspace_error'
+    ) {
+      if (event.type === 'workspace_status_changed') {
+        this.#lastWorkspaceEvents = [event];
+      } else {
+        this.#lastWorkspaceEvents.push(event);
+      }
+    }
     this.#displayState?.apply(event);
     this.#dispatch(event);
     if (event.type !== 'display_state_changed' && this.#displayState) {
@@ -2523,7 +2556,7 @@ export class SessionBus {
     }
   }
 
-  #dispatch(event: HarnessEvent): void {
+  #dispatch(event: AgentControllerEvent): void {
     for (const listener of [...this.#listeners]) {
       try {
         const result = listener(event);
@@ -2583,13 +2616,15 @@ export class Session<TState = unknown> {
   /** The canonical display state a UI renders, plus the reducer that maintains it. */
   readonly displayState: SessionDisplayState;
   /** The session-owned Harness state domain. */
-  readonly state: HarnessRequestState<TState>;
+  readonly state: AgentControllerRequestState<TState>;
   /**
    * Scoping tags for this session (e.g. `{ projectPath }`). Seeded at creation
    * and stamped onto every thread this session creates so thread listings can be
    * filtered back to the session's scope. Empty when the session is unscoped.
    */
   readonly #tags: Record<string, string>;
+  readonly #workspace: Workspace;
+  browser?: MastraBrowser;
 
   constructor({
     resourceId,
@@ -2597,12 +2632,16 @@ export class Session<TState = unknown> {
     id,
     ownerId,
     tags,
+    workspace,
+    browser,
   }: {
     resourceId: string;
     state?: SessionStateOptions<TState>;
     id: string;
     ownerId: string;
     tags?: Record<string, string>;
+    workspace: Workspace;
+    browser?: MastraBrowser;
   }) {
     this.#tags = tags && Object.keys(tags).length > 0 ? { ...tags } : {};
     this.identity = new SessionIdentity({ resourceId, id, ownerId });
@@ -2615,6 +2654,13 @@ export class Session<TState = unknown> {
     });
     this.#bus.setDisplayState(this.displayState);
     this.state = new SessionState(state ?? { initialState: {} as TState }, this.#bus);
+
+    if (!workspace || !(workspace instanceof Workspace)) {
+      throw new Error(`A session requires a valid workspace instance.`);
+    }
+
+    this.#workspace = workspace;
+    this.browser = browser;
   }
 
   /**
@@ -2634,7 +2680,7 @@ export class Session<TState = unknown> {
    * Listeners are scoped to this session: a session never delivers its events
    * to another session's subscribers.
    */
-  subscribe(listener: HarnessEventListener): () => void {
+  subscribe(listener: AgentControllerEventListener): () => void {
     return this.#bus.subscribe(listener);
   }
 
@@ -2643,7 +2689,7 @@ export class Session<TState = unknown> {
    * the event into the canonical display state, dispatches to this session's
    * listeners, then fans out a synthetic `display_state_changed`.
    */
-  emit(event: HarnessEvent): void {
+  emit(event: AgentControllerEvent): void {
     this.#bus.emit(event);
   }
 
@@ -2714,7 +2760,7 @@ export class Session<TState = unknown> {
   processStream(
     response: { fullStream: AsyncIterable<any> },
     requestContext?: RequestContext,
-  ): Promise<{ message: HarnessMessage; suspended?: boolean } | undefined> {
+  ): Promise<{ message: AgentControllerMessage; suspended?: boolean } | undefined> {
     return this.runEngine.processStream(response, requestContext);
   }
 
@@ -3208,7 +3254,7 @@ export class Session<TState = unknown> {
     reminderType: string;
     role?: 'user' | 'assistant' | 'system';
     metadata?: Record<string, unknown>;
-  }): Promise<HarnessMessage | null> {
+  }): Promise<AgentControllerMessage | null> {
     const threadId = this.thread.getId();
     if (!threadId) return null;
     return this.machinery.saveSystemReminder({

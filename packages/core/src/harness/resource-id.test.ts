@@ -3,6 +3,7 @@ import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
 import type { Session } from './session';
+import { createMockWorkspace } from './test-utils';
 
 function createAgent() {
   return new Agent({
@@ -20,6 +21,7 @@ async function createSession(opts?: {
 }) {
   const agent = createAgent();
   const harness = new Harness({
+    workspace: createMockWorkspace(),
     id: 'test-harness',
     storage: opts?.storage ?? new InMemoryStore(),
     modes: [{ id: 'default', name: 'Default', default: true, agent }],

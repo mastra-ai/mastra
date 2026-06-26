@@ -3,6 +3,7 @@ import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
 import type { Session } from './session';
+import { createMockWorkspace } from './test-utils';
 
 function createHarness(threadLock?: { acquire: (id: string) => void; release: (id: string) => void }) {
   const agent = new Agent({
@@ -12,6 +13,7 @@ function createHarness(threadLock?: { acquire: (id: string) => void; release: (i
   });
 
   return new Harness({
+    workspace: createMockWorkspace(),
     id: 'test-harness',
     storage: new InMemoryStore(),
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
@@ -188,6 +190,7 @@ describe('Harness thread locking', () => {
         model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
       });
       return new Harness({
+        workspace: createMockWorkspace(),
         id: 'test-harness',
         storage: store,
         modes: [{ id: 'default', name: 'Default', default: true, agent }],

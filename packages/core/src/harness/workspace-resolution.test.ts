@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Agent } from '../agent';
+import type { MastraBrowser } from '../browser';
 import { InMemoryStore } from '../storage/mock';
 import { Workspace } from '../workspace/workspace';
 import { Harness } from './harness';
-import type { Session } from './session';
 
 /**
  * Create a minimal Workspace instance for testing.
@@ -11,6 +11,15 @@ import type { Session } from './session';
  */
 function createMockWorkspace(name = 'test-workspace'): Workspace {
   return new Workspace({ name, skills: ['/tmp/test-skills'] });
+}
+
+/**
+ * Create a minimal mock MastraBrowser for testing.
+ * Cast through `unknown` because MastraBrowser is abstract with many members
+ * we don't need to exercise in workspace/browser resolution tests.
+ */
+function createMockBrowser(id = 'mock-browser'): MastraBrowser {
+  return { id, provider: 'mock', providerType: 'sdk' } as unknown as MastraBrowser;
 }
 
 function createAgent() {
@@ -26,32 +35,9 @@ function createAgent() {
 // ===========================================================================
 
 describe('Harness workspace — static instance', () => {
-  it('getWorkspace() returns the workspace immediately', () => {
+  it('createSession succeeds with a static workspace and initializes it', async () => {
     const ws = createMockWorkspace();
-    const harness = new Harness({
-      id: 'test',
-      storage: new InMemoryStore(),
-      modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
-      workspace: ws,
-    });
-
-    expect(harness.getWorkspace()).toBe(ws);
-  });
-
-  it('hasWorkspace() returns true', () => {
-    const ws = createMockWorkspace();
-    const harness = new Harness({
-      id: 'test',
-      storage: new InMemoryStore(),
-      modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
-      workspace: ws,
-    });
-
-    expect(harness.hasWorkspace()).toBe(true);
-  });
-
-  it('resolveWorkspace() returns the existing workspace without calling workspaceFn', async () => {
-    const ws = createMockWorkspace();
+    const initSpy = vi.spyOn(ws, 'init');
     const harness = new Harness({
       id: 'test',
       storage: new InMemoryStore(),
@@ -59,10 +45,27 @@ describe('Harness workspace — static instance', () => {
       workspace: ws,
     });
     await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
-    const resolved = await harness.resolveWorkspace({ session });
-    expect(resolved).toBe(ws);
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    expect(session).toBeDefined();
+    expect(initSpy).toHaveBeenCalled();
+  });
+
+  it('createSession succeeds when workspace is provided as a session override', async () => {
+    const ws = createMockWorkspace('override-ws');
+    const harness = new Harness({
+      id: 'test',
+      storage: new InMemoryStore(),
+      modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
+    });
+    await harness.init();
+
+    const session = await harness.createSession({
+      id: 'test-session',
+      ownerId: 'test-owner',
+      workspace: ws,
+    });
+    expect(session).toBeDefined();
   });
 });
 
@@ -71,70 +74,89 @@ describe('Harness workspace — static instance', () => {
 // ===========================================================================
 
 describe('Harness workspace — dynamic factory', () => {
-  let ws: Workspace;
-  let workspaceFn: ReturnType<typeof vi.fn>;
-  let harness: Harness;
-
-  beforeEach(async () => {
-    ws = createMockWorkspace('dynamic-ws');
-    workspaceFn = vi.fn().mockResolvedValue(ws);
-    harness = new Harness({
+  it('factory is called during createSession with requestContext and mastra', async () => {
+    const ws = createMockWorkspace('dynamic-ws');
+    const factory = vi.fn().mockResolvedValue(ws);
+    const harness = new Harness({
       id: 'test',
       storage: new InMemoryStore(),
       modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
-      workspace: workspaceFn,
+      workspace: factory,
     });
     await harness.init();
-  });
 
-  it('getWorkspace() returns undefined before resolution', () => {
-    // No session created yet, so the dynamic workspace has not been resolved.
-    expect(harness.getWorkspace()).toBeUndefined();
-  });
-
-  it('hasWorkspace() returns true (factory is configured)', () => {
-    expect(harness.hasWorkspace()).toBe(true);
-  });
-
-  it('resolveWorkspace() invokes the factory and caches the result', async () => {
     const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
-    // createSession resolves the workspace once; the explicit resolve below
-    // should hit the cache rather than re-invoking the factory.
-    workspaceFn.mockClear();
-
-    const resolved = await harness.resolveWorkspace({ session });
-
-    expect(resolved).toBe(ws);
-    expect(workspaceFn).not.toHaveBeenCalled();
-    // getWorkspace() returns the cached value
-    expect(harness.getWorkspace()).toBe(ws);
+    expect(session).toBeDefined();
+    expect(factory).toHaveBeenCalledTimes(1);
+    expect(factory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestContext: expect.anything(),
+        mastra: expect.anything(),
+      }),
+    );
   });
 
-  it('resolveWorkspace() returns cached workspace without re-invoking factory', async () => {
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
-    workspaceFn.mockClear();
+  it('factory is invoked per-session, not cached across sessions', async () => {
+    const ws = createMockWorkspace('dynamic-ws');
+    const factory = vi.fn().mockResolvedValue(ws);
+    const harness = new Harness({
+      id: 'test',
+      storage: new InMemoryStore(),
+      modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
+      workspace: factory,
+    });
+    await harness.init();
 
-    await harness.resolveWorkspace({ session });
-    const resolved2 = await harness.resolveWorkspace({ session });
+    await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'resource-a' });
+    await harness.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'resource-b' });
 
-    expect(resolved2).toBe(ws);
-    // Factory not called again — the workspace was cached at createSession time.
-    expect(workspaceFn).not.toHaveBeenCalled();
+    // Each session creation invokes the factory independently.
+    expect(factory).toHaveBeenCalledTimes(2);
   });
 
-  it('resolveWorkspace() returns undefined when factory returns undefined', async () => {
+  it('createSession throws when factory returns undefined', async () => {
     const nullFactory = vi.fn().mockResolvedValue(undefined);
-    const h = new Harness({
+    const harness = new Harness({
       id: 'test',
       storage: new InMemoryStore(),
       modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
       workspace: nullFactory,
     });
-    await h.init();
-    const session = await h.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await harness.init();
 
-    const resolved = await h.resolveWorkspace({ session });
-    expect(resolved).toBeUndefined();
+    await expect(harness.createSession({ id: 'test-session', ownerId: 'test-owner' })).rejects.toThrow(
+      'A session requires a valid workspace instance.',
+    );
+  });
+
+  it('resolveWorkspace provides session state to the factory', async () => {
+    const ws = createMockWorkspace('dynamic-ws');
+    // Simulates a dynamic workspace factory that reads session state via
+    // getState() — the recommended accessor on AgentControllerRequestContext.
+    // Before the fix, resolveWorkspace built a minimal context missing
+    // state accessors, causing "Cannot read properties of undefined".
+    const factory = vi.fn(async ({ requestContext }) => {
+      const ctx = requestContext.get('harness');
+      const state = ctx.getState();
+      expect(state).toEqual({ projectPath: '/tmp/test' });
+      return ws;
+    });
+    const harness = new Harness({
+      id: 'test',
+      storage: new InMemoryStore(),
+      modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
+      workspace: factory,
+      initialState: { projectPath: '/tmp/test' },
+    });
+    await harness.init();
+
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+
+    // resolveWorkspace is called outside the request flow (e.g. from slash
+    // commands). createSession does not cache the resolved workspace on
+    // this.workspace, so this re-invokes the factory with a fresh context.
+    const resolved = await harness.resolveWorkspace({ session });
+    expect(resolved).toBe(ws);
   });
 });
 
@@ -143,57 +165,263 @@ describe('Harness workspace — dynamic factory', () => {
 // ===========================================================================
 
 describe('Harness workspace — none configured', () => {
-  let harness: Harness;
-  let session: Session;
-
-  beforeEach(async () => {
-    harness = new Harness({
-      id: 'test',
-      storage: new InMemoryStore(),
-      modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
-    });
-    await harness.init();
-    session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
-  });
-
-  it('getWorkspace() returns undefined', () => {
-    expect(harness.getWorkspace()).toBeUndefined();
-  });
-
-  it('hasWorkspace() returns false', () => {
-    expect(harness.hasWorkspace()).toBe(false);
-  });
-
-  it('resolveWorkspace() returns undefined', async () => {
-    const resolved = await harness.resolveWorkspace({ session });
-    expect(resolved).toBeUndefined();
-  });
-});
-
-// ===========================================================================
-// buildRequestContext caches workspace
-// ===========================================================================
-
-describe('buildRequestContext caches dynamic workspace', () => {
-  it('getWorkspace() returns the resolved workspace after buildRequestContext runs', async () => {
-    const ws = createMockWorkspace('ctx-ws');
-    const factory = vi.fn().mockResolvedValue(ws);
+  it('createSession throws when no workspace is configured', async () => {
     const harness = new Harness({
       id: 'test',
       storage: new InMemoryStore(),
       modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
-      workspace: factory,
+    });
+    await harness.init();
+
+    await expect(harness.createSession({ id: 'test-session', ownerId: 'test-owner' })).rejects.toThrow(
+      'A session requires a valid workspace instance.',
+    );
+  });
+});
+
+// ===========================================================================
+// Per-session workspace overrides via createSession({ workspace })
+// ===========================================================================
+
+describe('Harness createSession — workspace overrides', () => {
+  it('per-session workspace override is resolved at session creation', async () => {
+    const sessionWs = createMockWorkspace('session-ws');
+    const initSpy = vi.spyOn(sessionWs, 'init');
+    const harness = new Harness({
+      id: 'test',
+      storage: new InMemoryStore(),
+      modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
+    });
+    await harness.init();
+
+    const session = await harness.createSession({
+      id: 'test-session',
+      ownerId: 'test-owner',
+      workspace: sessionWs,
     });
 
-    // Before — workspace is not resolved
-    expect(harness.getWorkspace()).toBeUndefined();
+    expect(initSpy).toHaveBeenCalledTimes(1);
+    expect(session).toBeDefined();
+  });
 
+  it('falls back to Harness-level workspace when no override is provided', async () => {
+    const harnessWs = createMockWorkspace('harness-ws');
+    const initSpy = vi.spyOn(harnessWs, 'init');
+    const harness = new Harness({
+      id: 'test',
+      storage: new InMemoryStore(),
+      modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
+      workspace: harnessWs,
+    });
     await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
-    // Trigger buildRequestContext indirectly via resolveWorkspace
-    await harness.resolveWorkspace({ session });
+    initSpy.mockClear();
 
-    // After — workspace is cached
-    expect(harness.getWorkspace()).toBe(ws);
+    const session = await harness.createSession({
+      id: 'test-session',
+      ownerId: 'test-owner',
+    });
+
+    expect(session).toBeDefined();
+    // The harness-level workspace is initialized for the session.
+    expect(initSpy).toHaveBeenCalled();
+  });
+
+  it('per-session workspace override takes precedence over harness-level', async () => {
+    const harnessWs = createMockWorkspace('harness-ws');
+    const sessionWs = createMockWorkspace('session-ws');
+    const harnessInitSpy = vi.spyOn(harnessWs, 'init');
+    const sessionInitSpy = vi.spyOn(sessionWs, 'init');
+    const harness = new Harness({
+      id: 'test',
+      storage: new InMemoryStore(),
+      modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
+      workspace: harnessWs,
+    });
+    await harness.init();
+    harnessInitSpy.mockClear();
+    sessionInitSpy.mockClear();
+
+    const session = await harness.createSession({
+      id: 'test-session',
+      ownerId: 'test-owner',
+      workspace: sessionWs,
+    });
+
+    expect(session).toBeDefined();
+    // The session-level workspace is initialized, not the harness-level one.
+    expect(sessionInitSpy).toHaveBeenCalled();
+    expect(harnessInitSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ===========================================================================
+// Per-session workspace isolation between sessions
+// ===========================================================================
+
+describe('Harness createSession — workspace isolation', () => {
+  it('two sessions with different resource IDs use different workspace overrides', async () => {
+    const wsA = createMockWorkspace('ws-a');
+    const wsB = createMockWorkspace('ws-b');
+    const initSpyA = vi.spyOn(wsA, 'init');
+    const initSpyB = vi.spyOn(wsB, 'init');
+    const harness = new Harness({
+      id: 'test',
+      storage: new InMemoryStore(),
+      modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
+    });
+    await harness.init();
+
+    const sessionA = await harness.createSession({
+      id: 'session-a',
+      ownerId: 'test-owner',
+      resourceId: 'resource-a',
+      workspace: wsA,
+    });
+    const sessionB = await harness.createSession({
+      id: 'session-b',
+      ownerId: 'test-owner',
+      resourceId: 'resource-b',
+      workspace: wsB,
+    });
+
+    expect(sessionA).toBeDefined();
+    expect(sessionB).toBeDefined();
+    expect(initSpyA).toHaveBeenCalled();
+    expect(initSpyB).toHaveBeenCalled();
+    expect(wsA).not.toBe(wsB);
+  });
+
+  it('one session workspace override does not leak into another session', async () => {
+    const wsA = createMockWorkspace('ws-a');
+    const initSpyA = vi.spyOn(wsA, 'init');
+    const harness = new Harness({
+      id: 'test',
+      storage: new InMemoryStore(),
+      modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
+    });
+    await harness.init();
+
+    // Session A has a workspace override
+    const sessionA = await harness.createSession({
+      id: 'session-a',
+      ownerId: 'test-owner',
+      resourceId: 'resource-a',
+      workspace: wsA,
+    });
+
+    // Session B has no workspace override — should throw because no workspace is available
+    await expect(
+      harness.createSession({
+        id: 'session-b',
+        ownerId: 'test-owner',
+        resourceId: 'resource-b',
+      }),
+    ).rejects.toThrow('A session requires a valid workspace instance.');
+
+    // Session A still has its own workspace (init was called)
+    expect(sessionA).toBeDefined();
+    expect(initSpyA).toHaveBeenCalled();
+  });
+});
+
+// ===========================================================================
+// Per-session browser overrides via createSession({ browser })
+// ===========================================================================
+
+describe('Harness createSession — browser overrides', () => {
+  it('uses the per-session browser instance instead of the Harness-level one', async () => {
+    const ws = createMockWorkspace();
+    const harnessBrowser = createMockBrowser('harness-browser');
+    const sessionBrowser = createMockBrowser('session-browser');
+    const harness = new Harness({
+      id: 'test',
+      storage: new InMemoryStore(),
+      modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
+      workspace: ws,
+      browser: harnessBrowser,
+    });
+    await harness.init();
+
+    const session = await harness.createSession({
+      id: 'test-session',
+      ownerId: 'test-owner',
+      browser: sessionBrowser,
+    });
+
+    expect(session.browser).toBe(sessionBrowser);
+    expect(session.browser).not.toBe(harnessBrowser);
+  });
+
+  it('per-session browser override is used at session creation', async () => {
+    const ws = createMockWorkspace();
+    const sessionBrowser = createMockBrowser('session-browser');
+    const harness = new Harness({
+      id: 'test',
+      storage: new InMemoryStore(),
+      modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
+      workspace: ws,
+    });
+    await harness.init();
+
+    const session = await harness.createSession({
+      id: 'test-session',
+      ownerId: 'test-owner',
+      browser: sessionBrowser,
+    });
+
+    expect(session.browser).toBe(sessionBrowser);
+  });
+
+  it('falls back to Harness-level browser when no override is provided', async () => {
+    const ws = createMockWorkspace();
+    const harnessBrowser = createMockBrowser('harness-browser');
+    const harness = new Harness({
+      id: 'test',
+      storage: new InMemoryStore(),
+      modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
+      workspace: ws,
+      browser: harnessBrowser,
+    });
+    await harness.init();
+
+    const session = await harness.createSession({
+      id: 'test-session',
+      ownerId: 'test-owner',
+    });
+
+    expect(session.browser).toBe(harnessBrowser);
+  });
+
+  it('per-session browser override does not leak into another session', async () => {
+    const ws = createMockWorkspace();
+    const browserA = createMockBrowser('browser-a');
+    const harness = new Harness({
+      id: 'test',
+      storage: new InMemoryStore(),
+      modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
+      workspace: ws,
+    });
+    await harness.init();
+
+    // Session A has a browser override
+    const sessionA = await harness.createSession({
+      id: 'session-a',
+      ownerId: 'test-owner',
+      resourceId: 'resource-a',
+      browser: browserA,
+    });
+
+    // Session B has no browser override — should NOT see session A's browser
+    const sessionB = await harness.createSession({
+      id: 'session-b',
+      ownerId: 'test-owner',
+      resourceId: 'resource-b',
+    });
+
+    expect(sessionB.browser).toBeUndefined();
+    expect(sessionB.browser).not.toBe(browserA);
+
+    // Session A still has its own browser
+    expect(sessionA.browser).toBe(browserA);
   });
 });
