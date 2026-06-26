@@ -3,17 +3,17 @@ import { hostname } from 'node:os';
 import path from 'node:path';
 
 import { Agent } from '@mastra/core/agent';
-import type { PubSub } from '@mastra/core/events';
-import { Harness } from '@mastra/core/harness';
+import { AgentController } from '@mastra/core/agent-controller';
 import type {
   HeartbeatHandler,
-  HarnessConfig,
-  HarnessEvent,
-  HarnessMode,
-  HarnessSubagent,
-  HarnessRequestContext,
+  AgentControllerConfig,
+  AgentControllerEvent,
+  AgentControllerMode,
+  AgentControllerSubagent,
+  AgentControllerRequestContext,
   Session,
-} from '@mastra/core/harness';
+} from '@mastra/core/agent-controller';
+import type { PubSub } from '@mastra/core/events';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { ProviderConfig } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
@@ -126,7 +126,10 @@ function shortHash(input: string): string {
   return createHash('sha256').update(input).digest('hex').slice(0, 12);
 }
 
-function applyEffectiveDefaultsToModes(modes: HarnessMode[], effectiveDefaults: Record<string, string>): HarnessMode[] {
+function applyEffectiveDefaultsToModes(
+  modes: AgentControllerMode[],
+  effectiveDefaults: Record<string, string>,
+): AgentControllerMode[] {
   return modes.map(mode => {
     const savedModel = effectiveDefaults[mode.id];
     if (!savedModel) {
@@ -145,9 +148,9 @@ export interface MastraCodeConfig {
   /** Home directory for global config discovery. Default: os.homedir() */
   homeDir?: string;
   /** Override modes (model IDs, colors, which modes exist). Default: build/plan/fast */
-  modes?: HarnessMode[];
+  modes?: AgentControllerMode[];
   /** Override or extend subagent definitions. Default: explore/plan/execute */
-  subagents?: HarnessSubagent[];
+  subagents?: AgentControllerSubagent[];
   /** Extra tools merged into the dynamic tool set. Can be a static record or a function that receives requestContext. */
   extraTools?:
     | Record<
@@ -173,7 +176,7 @@ export interface MastraCodeConfig {
   /** Override heartbeat handlers. Default: gateway-sync */
   heartbeatHandlers?: HeartbeatHandler[];
   /** Override the workspace. Default: local filesystem + local sandbox based on detected project */
-  workspace?: HarnessConfig<MastraCodeState>['workspace'];
+  workspace?: AgentControllerConfig<MastraCodeState>['workspace'];
   /** Override the config directory name. Default: '.mastracode'. Replaces '.mastracode' in all project-level and global config paths (MCP, hooks, commands, database, skills, agent instructions). */
   configDir?: string;
   /** Programmatic MCP server configurations, merged with (and overriding) file-based configs. */
@@ -190,9 +193,9 @@ export interface MastraCodeConfig {
    *
    * Use this when you need to override memory model behavior completely.
    */
-  memory?: HarnessConfig<MastraCodeState>['memory'] | false;
+  memory?: AgentControllerConfig<MastraCodeState>['memory'] | false;
   /** Browser provider for browser automation tools. When set, the agent gains access to browser tools. */
-  browser?: HarnessConfig<MastraCodeState>['browser'];
+  browser?: AgentControllerConfig<MastraCodeState>['browser'];
   /** PubSub for signal routing. When crossProcessPubSub is true, thread locks are disabled. */
   pubsub?: PubSub;
   /** Use Mastra Code's built-in Unix socket PubSub for local cross-process signal routing. */
@@ -477,7 +480,7 @@ export async function createMastraCodeHarness(config?: MastraCodeConfig) {
           const defaultModeModelId = harness.listModes().find(mode => mode.id === modeId)?.defaultModelId;
           const modelId = session.model.get() || activeSession?.model.get() || defaultModeModelId || '';
           const requestContext = new RequestContext();
-          const harnessContext: HarnessRequestContext = {
+          const harnessContext: AgentControllerRequestContext = {
             harnessId: harness.id,
             state: session.state.get(),
             getState: () => session.state.get(),
@@ -559,7 +562,7 @@ export async function createMastraCodeHarness(config?: MastraCodeConfig) {
       new AgentsMDInjector({
         getIgnoredInstructionPaths: ({ requestContext }) => {
           const harnessContext = requestContext?.get('harness') as
-            | HarnessRequestContext<{ projectPath?: string }>
+            | AgentControllerRequestContext<{ projectPath?: string }>
             | undefined;
           const state = harnessContext?.getState();
           return getStaticallyLoadedInstructionPaths(state?.projectPath ?? project.rootPath);
@@ -587,10 +590,10 @@ export async function createMastraCodeHarness(config?: MastraCodeConfig) {
     ],
   });
 
-  // const defaultSubAgents: Array<HarnessSubagent> = [];
+  // const defaultSubAgents: Array<AgentControllerSubagent> = [];
   // const defaultSubagents = [exploreSubagent, planSubagent, executeSubagent];
 
-  const defaultModes: HarnessMode[] = [
+  const defaultModes: AgentControllerMode[] = [
     {
       ...buildMode,
       metadata: {
@@ -730,7 +733,7 @@ export async function createMastraCodeHarness(config?: MastraCodeConfig) {
   }
 
   const typedStateSchema = stateSchema as PublicSchema<MastraCodeState>;
-  const harness: Harness<MastraCodeState> = new Harness<MastraCodeState>({
+  const harness: AgentController<MastraCodeState> = new AgentController<MastraCodeState>({
     id: 'mastra-code',
     resourceId: project.resourceId,
     storage,
@@ -841,7 +844,7 @@ export async function wireSessionConcerns(
 
   // Sync hookManager session ID on thread changes
   if (hookManager) {
-    session.subscribe((event: HarnessEvent) => {
+    session.subscribe((event: AgentControllerEvent) => {
       if (event.type === 'thread_changed') {
         hookManager.setSessionId(event.threadId);
       } else if (event.type === 'thread_created') {
@@ -869,7 +872,7 @@ export async function wireSessionConcerns(
       }
     };
 
-    session.subscribe((event: HarnessEvent) => {
+    session.subscribe((event: AgentControllerEvent) => {
       if (event.type === 'thread_changed') void startGithubPollingForCurrentThread(event.threadId);
       else if (event.type === 'thread_created') void startGithubPollingForCurrentThread(event.thread.id);
     });

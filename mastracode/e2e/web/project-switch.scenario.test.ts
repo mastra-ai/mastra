@@ -20,7 +20,7 @@ describe('web scenario: project-switch', () => {
       run: async ({ driver, workspaceRoot }) => {
         // Set the project path to the scenario's temp workspace dir.
         const client = driver.getClient();
-        const session = client.getHarness('code').session('web-scenario-project-switch');
+        const session = client.getAgentController('code').session('web-scenario-project-switch');
         await session.setState({ projectPath: workspaceRoot });
 
         // Send a message — the workspace factory reads projectPath from state.

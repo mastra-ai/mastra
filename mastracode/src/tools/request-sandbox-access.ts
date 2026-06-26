@@ -5,7 +5,7 @@
 
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { HarnessRequestContext } from '@mastra/core/harness';
+import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { createTool } from '@mastra/core/tools';
 import { LocalFilesystem } from '@mastra/core/workspace';
 import { z } from 'zod';
@@ -40,7 +40,9 @@ export const requestSandboxAccessTool = createTool({
   resumeSchema: z.union([z.string(), z.array(z.string())]),
   execute: async ({ path: requestedPath, reason }: RequestSandboxAccessInput, context: any) => {
     try {
-      const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
+      const harnessCtx = context?.requestContext?.get('harness') as
+        | AgentControllerRequestContext<MastraCodeState>
+        | undefined;
 
       // Resolve to absolute path (expand ~ first since Node path APIs don't handle it)
       const expanded = expandTilde(requestedPath);

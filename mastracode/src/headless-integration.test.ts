@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { Agent } from '@mastra/core/agent';
-import { Harness } from '@mastra/core/harness';
-import type { HarnessEvent } from '@mastra/core/harness';
+import { AgentController } from '@mastra/core/agent-controller';
+import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import type {
   GatewayAuthRequest,
   GatewayAuthResult,
@@ -185,7 +185,7 @@ function createHarnessWithAgent(opts: {
   const mastra = new Mastra({ agents: { 'test-agent': agent }, logger: false, storage });
   const registeredAgent = mastra.getAgent('test-agent');
 
-  const harness = new Harness({
+  const harness = new AgentController({
     id: 'test-harness',
     storage,
     workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
@@ -215,7 +215,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     await harness.init();
     const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -226,7 +226,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     expect(types).toContain('agent_start');
     expect(types).toContain('agent_end');
     // agent_end should have reason 'complete'
-    const agentEnd = events.find(e => e.type === 'agent_end') as Extract<HarnessEvent, { type: 'agent_end' }>;
+    const agentEnd = events.find(e => e.type === 'agent_end') as Extract<AgentControllerEvent, { type: 'agent_end' }>;
     expect(agentEnd.reason).toBe('complete');
   });
 
@@ -256,7 +256,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     await harness.init();
     const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -304,7 +304,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     await harness.init();
     const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -348,7 +348,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     await harness.init();
     const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -390,7 +390,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     await harness.init();
     const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -460,7 +460,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     await harness.init();
     const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -470,7 +470,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     expect(mockExecute).toHaveBeenCalledTimes(1);
 
     const reminderUpdates = events.filter(
-      (event): event is Extract<HarnessEvent, { type: 'message_update' }> => event.type === 'message_update',
+      (event): event is Extract<AgentControllerEvent, { type: 'message_update' }> => event.type === 'message_update',
     );
     const persistedReminderMessages = reminderUpdates.filter(event =>
       event.message.content.some(
@@ -486,7 +486,7 @@ describe('headless mode — event-driven auto-resolution', () => {
 
     const finalMessageEnd = [...events]
       .reverse()
-      .find((event): event is Extract<HarnessEvent, { type: 'message_end' }> => event.type === 'message_end');
+      .find((event): event is Extract<AgentControllerEvent, { type: 'message_end' }> => event.type === 'message_end');
 
     expect(finalMessageEnd).toBeDefined();
     expect(
@@ -567,7 +567,7 @@ function createHarnessWithModels(opts: {
   const mastra = new Mastra({ agents: { 'test-agent': agent }, logger: false, storage });
   const registeredAgent = mastra.getAgent('test-agent');
 
-  const harness = new Harness({
+  const harness = new AgentController({
     id: 'test-harness',
     storage,
     workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
@@ -697,7 +697,7 @@ describe('headless mode — --output-format contracts', () => {
   });
 
   it('keeps state-signal parts visible in stream-json message events', async () => {
-    let listener: ((event: HarnessEvent) => void) | undefined;
+    let listener: ((event: AgentControllerEvent) => void) | undefined;
     const stateSignalPart = {
       type: 'state_signal',
       id: 'state-signal-browser-1',
@@ -710,7 +710,7 @@ describe('headless mode — --output-format contracts', () => {
     const harness = {
       session: {
         sendMessage: vi.fn(async () => {
-          listener?.({ type: 'agent_start', runId: 'run-state' } as HarnessEvent);
+          listener?.({ type: 'agent_start', runId: 'run-state' } as AgentControllerEvent);
           listener?.({
             type: 'message_end',
             message: {
@@ -719,23 +719,23 @@ describe('headless mode — --output-format contracts', () => {
               content: [stateSignalPart, { type: 'text', text: 'Observed browser state.' }],
               createdAt: new Date(0),
             },
-          } as HarnessEvent);
-          listener?.({ type: 'agent_end', reason: 'complete' } as HarnessEvent);
+          } as AgentControllerEvent);
+          listener?.({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
         }),
-        subscribe: vi.fn((next: (event: HarnessEvent) => void) => {
+        subscribe: vi.fn((next: (event: AgentControllerEvent) => void) => {
           listener = next;
           return () => {};
         }),
         thread: { getId: vi.fn(() => 'thread-state') },
       },
-    } as unknown as Harness<Record<string, unknown>>;
+    } as unknown as AgentController<Record<string, unknown>>;
 
     const {
       result: exitCode,
       stdout,
       stderr,
     } = await captureProcessOutput(() =>
-      runHeadless(harness as unknown as Harness<Record<string, unknown>>, (harness as any).session as any, {
+      runHeadless(harness as unknown as AgentController<Record<string, unknown>>, (harness as any).session as any, {
         prompt: 'Describe the browser state',
         format: 'default',
         outputFormat: 'stream-json',
@@ -782,7 +782,7 @@ describe('headless mode — --model flag', () => {
     await harness.init();
     const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => events.push(event));
 
     const exitCode = await runHeadless(harness, session, {
@@ -820,7 +820,7 @@ describe('headless mode — --model flag', () => {
       return origWrite(...(args as Parameters<typeof origWrite>));
     });
 
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => events.push(event));
 
     const exitCode = await runHeadless(harness, session, {
@@ -862,7 +862,7 @@ describe('headless mode — --model flag', () => {
       return origWrite(...(args as Parameters<typeof origWrite>));
     });
 
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => events.push(event));
 
     const exitCode = await runHeadless(harness, session, {
@@ -1022,7 +1022,7 @@ describe('headless mode — --model flag', () => {
     await harness.init();
     const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => events.push(event));
 
     const exitCode = await runHeadless(harness, session, {
@@ -1048,7 +1048,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     await harness.init();
     const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => events.push(event));
 
     const exitCode = await runHeadless(
@@ -1192,7 +1192,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
       return origWrite(...(args as Parameters<typeof origWrite>));
     });
 
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => events.push(event));
 
     // No effectiveDefaults passed — should warn, not error
@@ -1385,7 +1385,7 @@ describe('headless mode — thread control', () => {
     const mastra = new Mastra({ agents: { 'test-agent': agent }, logger: false, storage });
     const registeredAgent = mastra.getAgent('test-agent');
 
-    const harness = new Harness({
+    const harness = new AgentController({
       id: 'test-harness',
       storage,
       memory,

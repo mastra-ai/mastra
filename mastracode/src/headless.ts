@@ -4,7 +4,12 @@
 import { existsSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 
-import type { Harness, HarnessEvent, HarnessMessage, Session } from '@mastra/core/harness';
+import type {
+  AgentController,
+  AgentControllerEvent,
+  AgentControllerMessage,
+  Session,
+} from '@mastra/core/agent-controller';
 
 import { setupDebugLogging } from './utils/debug-log.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
@@ -202,7 +207,7 @@ function resolveExitCode(reason?: string): number {
 
 function autoResolve<TState extends Record<string, unknown>>(
   session: Session<TState>,
-  event: HarnessEvent,
+  event: AgentControllerEvent,
 ): { resolved: true; label: string; json: Record<string, unknown> } | { resolved: false } {
   switch (event.type) {
     case 'tool_approval_required': {
@@ -242,7 +247,7 @@ function autoResolve<TState extends Record<string, unknown>>(
   }
 }
 
-function formatDefault(event: HarnessEvent, ctx: { lastTextLength: number }): void {
+function formatDefault(event: AgentControllerEvent, ctx: { lastTextLength: number }): void {
   switch (event.type) {
     case 'agent_start':
       ctx.lastTextLength = 0;
@@ -299,14 +304,14 @@ function createEmptySummary(): HeadlessSummary {
   return { text: '', toolCalls: [], toolResults: [] };
 }
 
-function extractAssistantText(message: HarnessMessage): string {
+function extractAssistantText(message: AgentControllerMessage): string {
   return message.content
     .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
     .map(c => c.text)
     .join('');
 }
 
-function aggregateIntoSummary(event: HarnessEvent, summary: HeadlessSummary): void {
+function aggregateIntoSummary(event: AgentControllerEvent, summary: HeadlessSummary): void {
   switch (event.type) {
     case 'message_end':
       if (event.message.role === 'assistant') {
@@ -345,7 +350,7 @@ function aggregateIntoSummary(event: HarnessEvent, summary: HeadlessSummary): vo
 
 function finalizeSummary<TState extends Record<string, unknown>>(
   summary: HeadlessSummary,
-  endEvent: Extract<HarnessEvent, { type: 'agent_end' }>,
+  endEvent: Extract<AgentControllerEvent, { type: 'agent_end' }>,
   session: Session<TState>,
 ): void {
   summary.finishReason = endEvent.reason;
@@ -377,7 +382,7 @@ async function resolveThread<TState extends Record<string, unknown>>(
  * Returns the exit code (0 = success, 1 = error/aborted, 2 = timeout).
  */
 export async function runHeadless<TState extends Record<string, unknown>>(
-  harness: Harness<TState>,
+  harness: AgentController<TState>,
   session: Session<TState>,
   args: HeadlessArgs & { prompt: string },
   effectiveDefaults?: Record<string, string>,

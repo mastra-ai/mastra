@@ -1,4 +1,4 @@
-import type { HarnessMode } from '@mastra/core/harness';
+import type { AgentControllerMode } from '@mastra/core/agent-controller';
 
 import { createMastraCode } from '../index.js';
 import { releaseAllThreadLocks } from '../utils/thread-lock.js';
@@ -33,7 +33,7 @@ export async function acpMain(options?: { dangerousAutoApprove?: boolean }): Pro
     const { harness, mcpManager, signalsPubSub } = result;
 
     // Default modes (same as createMastraCode defaults)
-    const modes: HarnessMode[] = [
+    const modes: AgentControllerMode[] = [
       { id: 'build', name: 'Build' },
       { id: 'plan', name: 'Plan' },
       { id: 'fast', name: 'Fast' },

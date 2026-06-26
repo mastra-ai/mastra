@@ -1,4 +1,4 @@
-import type { HarnessRequestContext } from '@mastra/core/harness';
+import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { GatewayLanguageModel, MastraModelGatewayInterface } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import { loadSettings } from '../onboarding/settings.js';
@@ -26,7 +26,7 @@ type ResolvedModel = GatewayLanguageModel;
 type ModelRequestHeaders = Record<string, string>;
 
 function getHarnessHeaders(requestContext?: RequestContext): ModelRequestHeaders | undefined {
-  const harnessContext = requestContext?.get('harness') as HarnessRequestContext<any> | undefined;
+  const harnessContext = requestContext?.get('harness') as AgentControllerRequestContext<any> | undefined;
   const headers = {
     ...(harnessContext?.threadId ? { 'x-thread-id': harnessContext.threadId } : {}),
     ...(harnessContext?.resourceId ? { 'x-resource-id': harnessContext.resourceId } : {}),
@@ -101,7 +101,7 @@ export function resolveModel(
  * This allows runtime model switching via the /models picker.
  */
 export function getDynamicModel({ requestContext }: { requestContext: RequestContext }): ResolvedModel {
-  const harnessContext = requestContext.get('harness') as HarnessRequestContext<any> | undefined;
+  const harnessContext = requestContext.get('harness') as AgentControllerRequestContext<any> | undefined;
 
   const modelId = harnessContext?.session?.modelId;
   if (!modelId) {

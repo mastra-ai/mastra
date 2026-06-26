@@ -1,12 +1,12 @@
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 
 import { MastraClient } from '../client';
-import { harnessMessageText } from './harness';
-import type { HarnessEvent } from './harness';
+import { agentControllerMessageText } from './agent-controller';
+import type { AgentControllerEvent } from './agent-controller';
 
 global.fetch = vi.fn();
 
-describe('Harness Resource', () => {
+describe('AgentController Resource', () => {
   let client: MastraClient;
   const clientOptions = { baseUrl: 'http://localhost:4111' };
 
@@ -39,109 +39,100 @@ describe('Harness Resource', () => {
     client = new MastraClient(clientOptions);
   });
 
-  it('lists harnesses', async () => {
-    mockJson({ harnesses: [{ id: 'code' }, { id: 'docs' }] });
-    const harnesses = await client.listHarnesses();
-    expect(harnesses).toEqual([{ id: 'code' }, { id: 'docs' }]);
-    const [url] = lastCall();
-    expect(url).toBe('http://localhost:4111/api/harness');
-  });
-
   it('lists agent controllers via the canonical route', async () => {
-    mockJson({ harnesses: [{ id: 'code' }, { id: 'docs' }] });
+    mockJson({ agentControllers: [{ id: 'code' }, { id: 'docs' }] });
     const controllers = await client.listAgentControllers();
     expect(controllers).toEqual([{ id: 'code' }, { id: 'docs' }]);
     const [url] = lastCall();
     expect(url).toBe('http://localhost:4111/api/agent-controller');
   });
 
-  it('creates a session via the canonical agent-controller route', async () => {
-    mockJson({ harnessId: 'code', resourceId: 'user-1', threadId: 't-123' });
+  it('creates (or resumes) a session via the canonical agent-controller route', async () => {
+    mockJson({ controllerId: 'code', resourceId: 'user-1', threadId: 't-123' });
     const res = await client.getAgentController('code').session('user-1').create();
-    expect(res).toEqual({ harnessId: 'code', resourceId: 'user-1', threadId: 't-123' });
+    expect(res).toEqual({ controllerId: 'code', resourceId: 'user-1', threadId: 't-123' });
     const [url, init] = lastCall();
     expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions');
     expect(init.method).toBe('POST');
     expect(JSON.parse(init.body as string)).toEqual({ resourceId: 'user-1' });
   });
 
-  it('creates (or resumes) a session', async () => {
-    mockJson({ harnessId: 'code', resourceId: 'user-1', threadId: 't-123' });
-    const res = await client.getHarness('code').session('user-1').create();
-    expect(res).toEqual({ harnessId: 'code', resourceId: 'user-1', threadId: 't-123' });
-    const [url, init] = lastCall();
-    expect(url).toBe('http://localhost:4111/api/harness/code/sessions');
-    expect(init.method).toBe('POST');
-    expect(JSON.parse(init.body as string)).toEqual({ resourceId: 'user-1' });
-  });
-
   it('sends a message to the resource-scoped session', async () => {
     mockJson({ ok: true });
-    await client.getHarness('code').session('user-1').sendMessage('hello');
+    await client.getAgentController('code').session('user-1').sendMessage('hello');
     const [url, init] = lastCall();
-    expect(url).toBe('http://localhost:4111/api/harness/code/sessions/user-1/messages');
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/messages');
     expect(init.method).toBe('POST');
     expect(JSON.parse(init.body as string)).toEqual({ message: 'hello' });
   });
 
   it('aborts the in-flight run', async () => {
     mockJson({ ok: true });
-    await client.getHarness('code').session('user-1').abort();
+    await client.getAgentController('code').session('user-1').abort();
     const [url, init] = lastCall();
-    expect(url).toBe('http://localhost:4111/api/harness/code/sessions/user-1/abort');
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/abort');
     expect(init.method).toBe('POST');
   });
 
   it('approves a pending tool call', async () => {
     mockJson({ ok: true });
-    await client.getHarness('code').session('user-1').approveTool('call-7', true);
+    await client.getAgentController('code').session('user-1').approveTool('call-7', true);
     const [url, init] = lastCall();
-    expect(url).toBe('http://localhost:4111/api/harness/code/sessions/user-1/tool-approval');
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/tool-approval');
     expect(JSON.parse(init.body as string)).toEqual({ toolCallId: 'call-7', approved: true });
   });
 
   it('responds to a suspended tool (ask_user)', async () => {
     mockJson({ ok: true });
-    await client.getHarness('code').session('user-1').respondToToolSuspension('call-9', 'my answer');
+    await client.getAgentController('code').session('user-1').respondToToolSuspension('call-9', 'my answer');
     const [url, init] = lastCall();
-    expect(url).toBe('http://localhost:4111/api/harness/code/sessions/user-1/tool-suspension');
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/tool-suspension');
     expect(JSON.parse(init.body as string)).toEqual({ toolCallId: 'call-9', resumeData: 'my answer' });
   });
 
   it('responds to a submit_plan suspension', async () => {
     mockJson({ ok: true });
-    await client.getHarness('code').session('user-1').respondToToolSuspension('call-plan', { action: 'approved' });
+    await client
+      .getAgentController('code')
+      .session('user-1')
+      .respondToToolSuspension('call-plan', { action: 'approved' });
     const [, init] = lastCall();
     expect(JSON.parse(init.body as string)).toEqual({ toolCallId: 'call-plan', resumeData: { action: 'approved' } });
   });
 
   it('steers the in-flight run', async () => {
     mockJson({ ok: true });
-    await client.getHarness('code').session('user-1').steer('focus on tests');
+    await client.getAgentController('code').session('user-1').steer('focus on tests');
     const [url, init] = lastCall();
-    expect(url).toBe('http://localhost:4111/api/harness/code/sessions/user-1/steer');
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/steer');
     expect(JSON.parse(init.body as string)).toEqual({ message: 'focus on tests' });
   });
 
   it('reads session state', async () => {
-    mockJson({ harnessId: 'code', resourceId: 'user-1', threadId: 't-1', modeId: 'build', modelId: 'm' });
-    const state = await client.getHarness('code').session('user-1').state();
-    expect(state).toEqual({ harnessId: 'code', resourceId: 'user-1', threadId: 't-1', modeId: 'build', modelId: 'm' });
+    mockJson({ controllerId: 'code', resourceId: 'user-1', threadId: 't-1', modeId: 'build', modelId: 'm' });
+    const state = await client.getAgentController('code').session('user-1').state();
+    expect(state).toEqual({
+      controllerId: 'code',
+      resourceId: 'user-1',
+      threadId: 't-1',
+      modeId: 'build',
+      modelId: 'm',
+    });
     const [url] = lastCall();
-    expect(url).toBe('http://localhost:4111/api/harness/code/sessions/user-1');
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1');
   });
 
   it('switches mode and model', async () => {
     mockJson({ ok: true });
-    await client.getHarness('code').session('user-1').switchMode('plan');
+    await client.getAgentController('code').session('user-1').switchMode('plan');
     let [url, init] = lastCall();
-    expect(url).toBe('http://localhost:4111/api/harness/code/sessions/user-1/mode');
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/mode');
     expect(JSON.parse(init.body as string)).toEqual({ modeId: 'plan' });
 
     mockJson({ ok: true });
-    await client.getHarness('code').session('user-1').switchModel('openai/gpt-4o', { scope: 'thread' });
+    await client.getAgentController('code').session('user-1').switchModel('openai/gpt-4o', { scope: 'thread' });
     [url, init] = lastCall();
-    expect(url).toBe('http://localhost:4111/api/harness/code/sessions/user-1/model');
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/model');
     expect(JSON.parse(init.body as string)).toMatchObject({ modelId: 'openai/gpt-4o', scope: 'thread' });
   });
 
@@ -152,23 +143,23 @@ describe('Harness Resource', () => {
         { id: 'plan', name: 'Plan' },
       ],
     });
-    const modes = await client.getHarness('code').listModes();
+    const modes = await client.getAgentController('code').listModes();
     expect(modes).toEqual([
       { id: 'build', name: 'Build' },
       { id: 'plan', name: 'Plan' },
     ]);
-    expect(lastCall()[0]).toBe('http://localhost:4111/api/harness/code/modes');
+    expect(lastCall()[0]).toBe('http://localhost:4111/api/agent-controller/code/modes');
 
     mockJson({ threads: [{ id: 't-1', title: 'One' }] });
-    const threads = await client.getHarness('code').session('user-1').listThreads();
+    const threads = await client.getAgentController('code').session('user-1').listThreads();
     expect(threads).toEqual([{ id: 't-1', title: 'One' }]);
-    expect(lastCall()[0]).toBe('http://localhost:4111/api/harness/code/sessions/user-1/threads');
+    expect(lastCall()[0]).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/threads');
 
     // `tags` is JSON-encoded into the query string so worktrees sharing a
     // resourceId can scope the listing to their own threads.
     mockJson({ threads: [{ id: 't-1', title: 'One', tags: { projectPath: '/repo/wt-a' } }] });
     const scoped = await client
-      .getHarness('code')
+      .getAgentController('code')
       .session('user-1')
       .listThreads({ tags: { projectPath: '/repo/wt-a' } });
     expect(scoped).toEqual([{ id: 't-1', title: 'One', tags: { projectPath: '/repo/wt-a' } }]);
@@ -176,9 +167,9 @@ describe('Harness Resource', () => {
     expect(scopedUrl.searchParams.get('tags')).toBe(JSON.stringify({ projectPath: '/repo/wt-a' }));
 
     mockJson({ ok: true });
-    await client.getHarness('code').session('user-1').switchThread('t-1');
+    await client.getAgentController('code').session('user-1').switchThread('t-1');
     const [url, init] = lastCall();
-    expect(url).toBe('http://localhost:4111/api/harness/code/sessions/user-1/thread');
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/thread');
     expect(JSON.parse(init.body as string)).toEqual({ threadId: 't-1' });
   });
 
@@ -189,9 +180,9 @@ describe('Harness Resource', () => {
     ];
     mockSse([`data: ${JSON.stringify(events[0])}\n\n`, `: heartbeat\n\n`, `data: ${JSON.stringify(events[1])}\n\n`]);
 
-    const received: HarnessEvent[] = [];
+    const received: AgentControllerEvent[] = [];
     const sub = await client
-      .getHarness('code')
+      .getAgentController('code')
       .session('user-1')
       .subscribe({
         onEvent: e => received.push(e),
@@ -202,11 +193,11 @@ describe('Harness Resource', () => {
     sub.unsubscribe();
 
     const [url] = lastCall();
-    expect(url).toBe('http://localhost:4111/api/harness/code/sessions/user-1/stream');
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/stream');
     expect(received.map(e => e.type)).toEqual(['agent_start', 'message_update']);
     expect(received[1].type).toBe('message_update');
     if (received[1].type === 'message_update') {
-      expect(harnessMessageText(received[1].message)).toBe('hi');
+      expect(agentControllerMessageText(received[1].message)).toBe('hi');
     }
   });
 
@@ -216,9 +207,9 @@ describe('Harness Resource', () => {
     const mid = Math.floor(serialized.length / 2);
     mockSse([serialized.slice(0, mid), serialized.slice(mid)]);
 
-    const received: HarnessEvent[] = [];
+    const received: AgentControllerEvent[] = [];
     const sub = await client
-      .getHarness('code')
+      .getAgentController('code')
       .session('user-1')
       .subscribe({
         onEvent: e => received.push(e),
@@ -232,7 +223,7 @@ describe('Harness Resource', () => {
   it('sends a notification signal', async () => {
     mockJson({ accepted: true, notificationId: 'n-1', decision: 'deliver', runId: 'run-1' });
     const result = await client
-      .getHarness('code')
+      .getAgentController('code')
       .session('user-1')
       .sendNotification({
         source: 'github',
@@ -243,7 +234,7 @@ describe('Harness Resource', () => {
       });
 
     const [url, init] = lastCall();
-    expect(url).toBe('http://localhost:4111/api/harness/code/sessions/user-1/notifications');
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/notifications');
     expect(init.method).toBe('POST');
     const body = JSON.parse(init.body as string);
     expect(body.source).toBe('github');

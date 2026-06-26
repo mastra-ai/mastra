@@ -1,5 +1,5 @@
 import { MastraClient } from '@mastra/client-js';
-import type { HarnessEvent } from '@mastra/client-js';
+import type { AgentControllerEvent } from '@mastra/client-js';
 import { describe, it, expect } from 'vitest';
 
 import { initialTranscript, transcriptReducer } from '../../src/web/ui/transcript';
@@ -28,7 +28,7 @@ describe('web scenario: sse-reconnect', () => {
         baseUrl: server.baseUrl,
         fetch: server.fetch as typeof fetch,
       });
-      const harness = client.getHarness('code');
+      const harness = client.getAgentController('code');
       const session = harness.session(RESOURCE_ID);
 
       // --- Phase 1: initial subscribe + first message ---
@@ -37,7 +37,7 @@ describe('web scenario: sse-reconnect', () => {
       expect(initialState.modeId).toBeTruthy();
 
       let transcript = initialTranscript;
-      const apply = (event: HarnessEvent) => {
+      const apply = (event: AgentControllerEvent) => {
         transcript = transcriptReducer(transcript, { type: 'event', event });
       };
 
@@ -77,7 +77,7 @@ describe('web scenario: sse-reconnect', () => {
       sub1.unsubscribe();
 
       // --- Phase 3: re-subscribe (what the hook does on reconnect) ---
-      // Re-sync state (the authoritative snapshot — exactly what useHarnessSession does).
+      // Re-sync state (the authoritative snapshot — exactly what useAgentControllerSession does).
       const reconnectState = await session.state();
       expect(reconnectState.modeId).toBeTruthy();
       expect(reconnectState.threadId).toBeTruthy();

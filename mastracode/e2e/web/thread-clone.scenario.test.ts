@@ -28,7 +28,7 @@ describe('web scenario: thread-lifecycle', () => {
 
         // Rename the second thread.
         const client = driver.getClient();
-        const session = client.getHarness('code').session('web-scenario-thread-lifecycle');
+        const session = client.getAgentController('code').session('web-scenario-thread-lifecycle');
         await session.renameThread(created.id, 'Renamed thread');
 
         // List threads — should include both.

@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 
 import { CombinedAutocompleteProvider, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SlashCommand } from '@earendil-works/pi-tui';
-import type { HarnessEventListener } from '@mastra/core/harness';
+import type { AgentControllerEventListener } from '@mastra/core/agent-controller';
 import { getUserId } from '../utils/project.js';
 import { loadCustomCommands } from '../utils/slash-command-loader.js';
 import { ThreadLockError } from '../utils/thread-lock.js';
@@ -546,7 +546,7 @@ export function setupKeyHandlers(
 
 export function subscribeToHarness(state: TUIState, handleEvent: (event: any) => Promise<void>): void {
   let eventQueue = Promise.resolve();
-  const listener: HarnessEventListener = event => {
+  const listener: AgentControllerEventListener = event => {
     eventQueue = eventQueue.then(async () => {
       try {
         await handleEvent(event);

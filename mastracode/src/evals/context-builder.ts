@@ -7,9 +7,9 @@
  */
 
 import type { MastraDBMessage } from '@mastra/core/agent';
+import type { AgentController, Session } from '@mastra/core/agent-controller';
 import { extractTrajectoryFromTrace } from '@mastra/core/evals';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, Trajectory } from '@mastra/core/evals';
-import type { Harness, Session } from '@mastra/core/harness';
 import type { CoreMessage, CoreSystemMessage } from '@mastra/core/llm';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 
@@ -30,7 +30,7 @@ export type MastraCodeEvalContext = {
 
 export type BuildContextOptions = {
   /** Harness instance to extract data from */
-  harness: Harness<any>;
+  harness: AgentController<any>;
   /** Session whose state/model/thread is being evaluated */
   session: Session<any>;
   /** Thread ID to build context for (defaults to current thread) */
@@ -71,7 +71,7 @@ export async function buildEvalContext(options: BuildContextOptions): Promise<Ma
   return {
     agentInput: {
       inputMessages,
-      rememberedMessages: [], // Harness doesn't separate these; memory recall is transparent
+      rememberedMessages: [], // AgentController doesn't separate these; memory recall is transparent
       systemMessages,
       taggedSystemMessages: {},
     },

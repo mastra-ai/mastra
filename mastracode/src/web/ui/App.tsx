@@ -32,7 +32,7 @@ import { Sidebar } from './Sidebar';
 import { applyDensity, applyTheme, loadDensity, loadTheme, saveDensity, saveTheme } from './theme';
 import type { Density, Theme } from './theme';
 import { useToast } from './toast';
-import { useHarnessSession } from './useHarnessSession';
+import { useAgentControllerSession } from './useAgentControllerSession';
 
 export default function App() {
   const { toast } = useToast();
@@ -57,7 +57,7 @@ export default function App() {
   const resourceId = activeProject?.resourceId ?? DEFAULT_RESOURCE_ID;
   const sessionEnabled = !!activeProject?.resourceId;
 
-  const session = useHarnessSession({
+  const session = useAgentControllerSession({
     harnessId: 'code',
     resourceId,
     projectPath: activeProject?.path,

@@ -5,8 +5,13 @@
  */
 import { Container, Text } from '@earendil-works/pi-tui';
 import type { Component } from '@earendil-works/pi-tui';
-import type { HarnessMessage, HarnessMessageContent, TaskItemInput, TaskItemSnapshot } from '@mastra/core/harness';
-import { assignTaskIds, parseSubagentMeta } from '@mastra/core/harness';
+import type {
+  AgentControllerMessage,
+  AgentControllerMessageContent,
+  TaskItemInput,
+  TaskItemSnapshot,
+} from '@mastra/core/agent-controller';
+import { assignTaskIds, parseSubagentMeta } from '@mastra/core/agent-controller';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { TASKS_STATE_ID } from '@mastra/core/tools';
 import { getPlanFilename } from '../utils/plans.js';
@@ -49,7 +54,7 @@ function shouldRenderReactiveSignal(tagName: string): boolean {
   return !HIDDEN_REACTIVE_SIGNAL_TAGS.has(tagName);
 }
 
-type MessageWithAttributes = HarnessMessage & {
+type MessageWithAttributes = AgentControllerMessage & {
   attributes?: Record<string, string | number | boolean | null | undefined>;
 };
 
@@ -352,13 +357,13 @@ function unescapeSkillBoundary(text: string): string {
   return text.replaceAll('&lt;/skill&gt;', '</skill>');
 }
 
-export function addUserMessage(state: TUIState, message: HarnessMessage, options?: { label?: string }): void {
+export function addUserMessage(state: TUIState, message: AgentControllerMessage, options?: { label?: string }): void {
   if (state.messageComponentsById.has(message.id)) {
     return;
   }
 
   const reminderPart = message.content.find(
-    (content): content is Extract<HarnessMessageContent, { type: 'system_reminder' }> =>
+    (content): content is Extract<AgentControllerMessageContent, { type: 'system_reminder' }> =>
       content.type === 'system_reminder',
   );
 
@@ -711,7 +716,7 @@ function applyTaskToolResult(
 
 const STARTUP_MESSAGE_WINDOW_SIZE = 200;
 
-function getLatestMessageTimestamp(messages: HarnessMessage[]): number | undefined {
+function getLatestMessageTimestamp(messages: AgentControllerMessage[]): number | undefined {
   let latest: number | undefined;
   for (const message of messages) {
     const time = new Date(message.createdAt).getTime();
@@ -751,7 +756,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
     } else if (message.role === 'assistant') {
       // Render content in order - interleaving text and tool calls
       // Accumulate text/thinking until we hit a tool call, then render both
-      let accumulatedContent: HarnessMessageContent[] = [];
+      let accumulatedContent: AgentControllerMessageContent[] = [];
 
       for (const content of message.content) {
         if (content.type === 'text' || content.type === 'thinking') {
@@ -759,7 +764,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
         } else if (content.type === 'tool_call') {
           // Render accumulated text first if any
           if (accumulatedContent.length > 0) {
-            const textMessage: HarnessMessage = {
+            const textMessage: AgentControllerMessage = {
               ...message,
               content: accumulatedContent,
             };
@@ -951,7 +956,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
 
           // Render accumulated text first if any
           if (accumulatedContent.length > 0) {
-            const textMessage: HarnessMessage = {
+            const textMessage: AgentControllerMessage = {
               ...message,
               content: accumulatedContent,
             };
@@ -998,7 +1003,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
 
       // Render any remaining text after the last tool call
       if (accumulatedContent.length > 0) {
-        const textMessage: HarnessMessage = {
+        const textMessage: AgentControllerMessage = {
           ...message,
           content: accumulatedContent,
         };

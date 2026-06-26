@@ -4,8 +4,8 @@ import { join } from 'node:path';
 
 import { createOpenAI } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
+import { AgentController } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
-import { Harness } from '@mastra/core/harness';
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryNotificationsStorage } from '@mastra/core/notifications';
 import { MastraCompositeStore } from '@mastra/core/storage';
@@ -105,19 +105,18 @@ export async function startHarnessServer(
   } = options;
   const openai = createOpenAI({ apiKey: 'scenario-key', baseURL: aimockBaseUrl });
 
-  let workspace: Workspace | undefined;
-  let workspaceRoot: string | undefined;
-  let tools: Record<string, unknown> | undefined;
-  if (withWorkspace) {
-    workspaceRoot = mkdtempSync(join(tmpdir(), 'mc-web-scenario-'));
-    workspace = new Workspace({
-      id: 'scenario-workspace',
-      name: 'Scenario Workspace',
-      filesystem: new LocalFilesystem({ basePath: workspaceRoot, allowedPaths: [workspaceRoot] }),
-      sandbox: new LocalSandbox({ workingDirectory: workspaceRoot }),
-    });
-    tools = await createWorkspaceTools(workspace);
-  }
+  // A session always requires a Workspace instance (sessions own workspace +
+  // browser since #18467), so every scenario gets a real sandboxed workspace
+  // rooted at a temp dir. The `workspace` option only controls whether the
+  // workspace file/shell *tools* are attached to the agent.
+  const workspaceRoot = mkdtempSync(join(tmpdir(), 'mc-web-scenario-'));
+  const workspace = new Workspace({
+    id: 'scenario-workspace',
+    name: 'Scenario Workspace',
+    filesystem: new LocalFilesystem({ basePath: workspaceRoot, allowedPaths: [workspaceRoot] }),
+    sandbox: new LocalSandbox({ workingDirectory: workspaceRoot }),
+  });
+  const tools: Record<string, unknown> | undefined = withWorkspace ? await createWorkspaceTools(workspace) : undefined;
 
   // Minimal request_access tool — mirrors mastracode's version but without the
   // filesystem logic. Suspends with a sandbox_access_request payload and resumes
@@ -170,10 +169,10 @@ export async function startHarnessServer(
   const harnessStore = inheritStorageFromMastra
     ? undefined
     : new LibSQLStore({ id: 'scenario-harness-storage', url: 'file::memory:?cache=shared' });
-  const harness = new Harness({
+  const harness = new AgentController({
     id: HARNESS_ID,
     ...(harnessStore ? { storage: harnessStore } : {}),
-    ...(workspace ? { workspace } : {}),
+    workspace,
     // Auto-approve tool calls (yolo) so scenarios exercise the full
     // execute-and-suspend path for built-in interactive tools (ask_user,
     // submit_plan) without a separate approval round-trip. Disable to test the

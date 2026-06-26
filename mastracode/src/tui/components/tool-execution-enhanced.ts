@@ -6,7 +6,7 @@
 import * as os from 'node:os';
 import { Box, Container, Spacer, Text, visibleWidth } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
-import type { TaskItemInput } from '@mastra/core/harness';
+import type { TaskItemInput } from '@mastra/core/agent-controller';
 import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
 import type { Theme as HighlightTheme } from 'cli-highlight';

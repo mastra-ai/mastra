@@ -6,7 +6,7 @@
  */
 import { Container, TUI, ProcessTerminal } from '@earendil-works/pi-tui';
 import type { CombinedAutocompleteProvider, Component, Terminal, Text } from '@earendil-works/pi-tui';
-import type { Harness, HarnessMessage, Session } from '@mastra/core/harness';
+import type { AgentController, AgentControllerMessage, Session } from '@mastra/core/agent-controller';
 import type { SkillMetadata, Workspace } from '@mastra/core/workspace';
 import type { GithubSignals } from '@mastra/github-signals';
 import type { MastraCodeAnalytics } from '../analytics.js';
@@ -90,7 +90,7 @@ export function getGithubPrSubscriptionsFromMetadata(
 
 export interface MastraTUIOptions {
   /** The harness instance to control */
-  harness: Harness<any>;
+  harness: AgentController<any>;
 
   /** The session created from the harness that all work runs through */
   session: Session<any>;
@@ -142,7 +142,7 @@ export interface MastraTUIOptions {
 
 export interface TUIState {
   // ── Core dependencies (set once) ──────────────────────────────────────
-  harness: Harness<any>;
+  harness: AgentController<any>;
   session: Session<any>;
   options: MastraTUIOptions;
   hookManager?: HookManager;
@@ -166,7 +166,7 @@ export interface TUIState {
   isInitialized: boolean;
   gradientAnimator?: GradientAnimator;
   streamingComponent?: AssistantMessageComponent;
-  streamingMessage?: HarnessMessage;
+  streamingMessage?: AgentControllerMessage;
   pendingTools: Map<string, IToolExecutionComponent>;
   /** Task tools are hidden on success but promoted to normal tool boxes on errors */
   pendingTaskToolIds: Set<string>;

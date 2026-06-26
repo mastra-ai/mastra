@@ -19,7 +19,7 @@ export type ConnectionStatus = 'connecting' | 'ready' | 'reconnecting' | 'error'
 /** How many recent threads to load for the sidebar (it shows the newest few). */
 const THREAD_PAGE_SIZE = 20;
 
-type Session = ReturnType<ReturnType<MastraClient['getHarness']>['session']>;
+type Session = ReturnType<ReturnType<MastraClient['getAgentController']>['session']>;
 
 function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -89,7 +89,7 @@ export interface HarnessSessionApi {
  * stream, folds events through the transcript reducer, and exposes the full
  * run-control + mode/model/thread surface the UI needs.
  */
-export function useHarnessSession({
+export function useAgentControllerSession({
   harnessId,
   resourceId,
   projectPath,
@@ -102,7 +102,7 @@ export function useHarnessSession({
   const [threads, setThreads] = useState<HarnessThreadInfo[]>([]);
 
   const sessionRef = useRef<Session | null>(null);
-  const harnessRef = useRef<ReturnType<MastraClient['getHarness']> | null>(null);
+  const harnessRef = useRef<ReturnType<MastraClient['getAgentController']> | null>(null);
   const [models, setModels] = useState<HarnessAvailableModel[]>([]);
   const [settings, setSettings] = useState<HarnessSessionSettings | null>(null);
 
@@ -221,7 +221,7 @@ export function useHarnessSession({
 
     (async () => {
       const client = new MastraClient({ baseUrl });
-      const harness = client.getHarness(harnessId);
+      const harness = client.getAgentController(harnessId);
       const session = harness.session(resourceId);
       sessionRef.current = session;
       harnessRef.current = harness;

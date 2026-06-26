@@ -1,7 +1,7 @@
 import { harnessMessageText } from '@mastra/client-js';
 import type {
-  HarnessEvent,
-  KnownHarnessEvent,
+  AgentControllerEvent,
+  KnownAgentControllerEvent,
   HarnessMessage,
   HarnessTaskSnapshot,
   HarnessOMProgress,
@@ -207,7 +207,7 @@ export const initialTranscript: TranscriptState = {
 let noticeSeq = 0;
 
 type Action =
-  | { type: 'event'; event: HarnessEvent }
+  | { type: 'event'; event: AgentControllerEvent }
   | { type: 'localUser'; text: string; steer?: boolean }
   | { type: 'localNotice'; text: string; level: 'info' | 'error' }
   | { type: 'resolvePrompt'; id: string }
@@ -262,8 +262,8 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
   }
 }
 
-function applyEvent(state: TranscriptState, raw: HarnessEvent): TranscriptState {
-  const event = raw as KnownHarnessEvent;
+function applyEvent(state: TranscriptState, raw: AgentControllerEvent): TranscriptState {
+  const event = raw as KnownAgentControllerEvent;
   switch (event.type) {
     case 'agent_start':
       // Reset the rate at the start of a new turn (not at the end) so the last

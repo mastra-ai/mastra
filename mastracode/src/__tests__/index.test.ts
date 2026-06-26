@@ -104,8 +104,8 @@ function createMockSettings() {
   };
 }
 
-vi.mock('@mastra/core/harness', () => ({
-  Harness: class {
+vi.mock('@mastra/core/agent-controller', () => ({
+  AgentController: class {
     constructor(config: unknown) {
       harnessConstructorMock(config);
     }
@@ -371,7 +371,7 @@ describe('createMastraCode', () => {
     delete process.env.MASTRA_GATEWAY_API_KEY;
   });
 
-  it('registers the MastraCode gateway and app-provided model hooks on Harness', async () => {
+  it('registers the MastraCode gateway and app-provided model hooks on AgentController', async () => {
     const { createMastraCode } = await import('../index.js');
     const subagent = { id: 'review', name: 'Review', instructions: 'Review changes' };
 
@@ -464,7 +464,7 @@ describe('createMastraCode', () => {
     expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code', undefined);
   });
 
-  it('passes custom workspace config through to Harness without using the default factory', async () => {
+  it('passes custom workspace config through to AgentController without using the default factory', async () => {
     const customWorkspace = { id: 'custom-workspace' };
     const { createMastraCode } = await import('../index.js');
 
@@ -500,7 +500,7 @@ describe('createMastraCode', () => {
     expect(codeAgentConfig?.signals?.some(provider => provider instanceof TaskSignalProvider)).toBe(true);
   });
 
-  it('uses the configured default mode when constructing Harness', async () => {
+  it('uses the configured default mode when constructing AgentController', async () => {
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode({
@@ -532,7 +532,7 @@ describe('createMastraCode', () => {
     );
   });
 
-  it('configures Harness project path from detected project metadata', async () => {
+  it('configures AgentController project path from detected project metadata', async () => {
     const projectPath = '/tmp/mastracode-project';
     detectProjectMock.mockReturnValue({
       mode: 'none',

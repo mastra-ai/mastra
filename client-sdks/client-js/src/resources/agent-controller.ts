@@ -7,8 +7,7 @@ import { BaseResource } from './base';
  *
  * Mirrors the controller HTTP routes served when an AgentController is
  * registered on a Mastra instance (`new Mastra({ agentControllers })`). The
- * canonical routes are served under `/agent-controller`; the legacy `/harness`
- * routes remain available for backwards compatibility:
+ * routes are served under `/agent-controller`:
  *
  *   GET  /agent-controller                                          listAgentControllers
  *   POST /agent-controller/:id/sessions                             session().create()
@@ -18,11 +17,11 @@ import { BaseResource } from './base';
  *   POST /agent-controller/:id/sessions/:resourceId/tool-approval   session().approveTool()
  */
 
-export interface HarnessInfo {
+export interface AgentControllerInfo {
   id: string;
 }
 
-export interface HarnessMessageContent {
+export interface AgentControllerMessageContent {
   type: 'text' | 'thinking' | 'tool_call' | 'tool_result' | string;
   /** Correlates a `tool_call` part with its `tool_result` part. */
   id?: string;
@@ -34,10 +33,10 @@ export interface HarnessMessageContent {
   isError?: boolean;
 }
 
-export interface HarnessMessage {
+export interface AgentControllerMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
-  content: HarnessMessageContent[];
+  content: AgentControllerMessageContent[];
   stopReason?: string;
   errorMessage?: string;
 }
@@ -49,7 +48,7 @@ export interface HarnessMessage {
  * `observationTokens/reflectionThreshold ↓projectedReflectionSavings`
  * (accumulated observations before a reflection fires).
  */
-export interface HarnessOMProgress {
+export interface AgentControllerOMProgress {
   status: string;
   pendingTokens: number;
   threshold: number;
@@ -62,17 +61,17 @@ export interface HarnessOMProgress {
 }
 
 /**
- * Harness events the SDK types explicitly. This is a discriminated union, so
+ * AgentController events the SDK types explicitly. This is a discriminated union, so
  * narrowing on `event.type` gives you the right payload fields. This mirrors the
- * subset of the harness event stream a web client typically renders.
+ * subset of the agent controller event stream a web client typically renders.
  */
-export type KnownHarnessEvent =
+export type KnownAgentControllerEvent =
   | { type: 'agent_start' }
   | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' | 'suspended' }
   // Assistant message streaming.
-  | { type: 'message_start'; message: HarnessMessage }
-  | { type: 'message_update'; message: HarnessMessage }
-  | { type: 'message_end'; message: HarnessMessage }
+  | { type: 'message_start'; message: AgentControllerMessage }
+  | { type: 'message_update'; message: AgentControllerMessage }
+  | { type: 'message_end'; message: AgentControllerMessage }
   // Tool lifecycle.
   | { type: 'tool_input_start'; toolCallId: string; toolName: string }
   | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: string; toolName?: string }
@@ -94,7 +93,7 @@ export type KnownHarnessEvent =
   | { type: 'subagent_start'; toolCallId: string; agentType: string; task: string; modelId: string }
   | { type: 'subagent_end'; toolCallId: string }
   // Task tools.
-  | { type: 'task_updated'; tasks: HarnessTaskSnapshot[] }
+  | { type: 'task_updated'; tasks: AgentControllerTaskSnapshot[] }
   // Notifications.
   | {
       type: 'notification';
@@ -124,7 +123,7 @@ export type KnownHarnessEvent =
       type: 'display_state_changed';
       displayState: {
         isRunning?: boolean;
-        omProgress?: HarnessOMProgress;
+        omProgress?: AgentControllerOMProgress;
         tokenUsage?: Record<string, unknown>;
         [key: string]: unknown;
       };
@@ -165,26 +164,27 @@ export type KnownHarnessEvent =
   | { type: 'info'; message: string }
   | { type: 'error'; error: { message?: string } | string; errorType?: string };
 
-/** Any other harness event the SDK doesn't model explicitly. */
-export interface OtherHarnessEvent {
+/** Any other agent controller event the SDK doesn't model explicitly. */
+export interface OtherAgentControllerEvent {
   type: string;
   [key: string]: unknown;
 }
 
 /**
- * A harness event. Narrow on `type` to access known payloads; unknown event
- * types fall through to {@link OtherHarnessEvent}.
+ * An agent controller event. Narrow on `type` to access known payloads; unknown
+ * event types fall through to {@link OtherAgentControllerEvent}.
  */
-export type HarnessEvent = KnownHarnessEvent | OtherHarnessEvent;
+export type AgentControllerEvent = KnownAgentControllerEvent | OtherAgentControllerEvent;
 
-export interface CreateHarnessSessionResponse {
-  harnessId: string;
+/** Response from creating or resuming an agent controller session. */
+export interface CreateAgentControllerSessionResponse {
+  controllerId: string;
   resourceId: string;
   threadId?: string;
 }
 
 /** Agent behavior settings, mirroring the TUI's `/settings` toggles. */
-export interface HarnessSessionSettings {
+export interface AgentControllerSessionSettings {
   /** Auto-approve all tool calls (no per-tool prompt). */
   yolo: boolean;
   /** Extended-thinking budget. */
@@ -195,26 +195,27 @@ export interface HarnessSessionSettings {
   smartEditing: boolean;
 }
 
-export interface HarnessSessionState {
-  harnessId: string;
+/** State snapshot for an agent controller session. */
+export interface AgentControllerSessionState {
+  controllerId: string;
   resourceId: string;
   threadId?: string;
   modeId: string;
   modelId: string;
   /** OM progress snapshot for the status line (initial hydration). */
-  omProgress?: HarnessOMProgress;
+  omProgress?: AgentControllerOMProgress;
   /** Cumulative token usage for the current thread. */
   tokenUsage?: Record<string, unknown>;
   /** Agent behavior settings (yolo, thinking, notifications, smart editing). */
-  settings?: HarnessSessionSettings;
+  settings?: AgentControllerSessionSettings;
 }
 
-export interface HarnessModeInfo {
+export interface AgentControllerModeInfo {
   id: string;
   name?: string;
 }
 
-export interface HarnessThreadInfo {
+export interface AgentControllerThreadInfo {
   id: string;
   title?: string;
   resourceId?: string;
@@ -228,7 +229,7 @@ export interface HarnessThreadInfo {
   tags?: Record<string, string>;
 }
 
-export interface HarnessAvailableModel {
+export interface AgentControllerAvailableModel {
   id: string;
   provider: string;
   modelName: string;
@@ -237,12 +238,12 @@ export interface HarnessAvailableModel {
   useCount: number;
 }
 
-export interface HarnessWorkspaceStatus {
+export interface AgentControllerWorkspaceStatus {
   hasWorkspace: boolean;
   isReady: boolean;
 }
 
-export interface HarnessGoalRecord {
+export interface AgentControllerGoalRecord {
   id?: string;
   objective: string;
   status: 'active' | 'paused' | 'done';
@@ -267,7 +268,7 @@ export interface PermissionRules {
 }
 
 /** Snapshot of a single task item from the task tools. */
-export interface HarnessTaskSnapshot {
+export interface AgentControllerTaskSnapshot {
   id: string;
   content: string;
   status: 'pending' | 'in_progress' | 'completed';
@@ -303,39 +304,35 @@ export interface PlanResume {
   feedback?: string;
 }
 
-export interface SubscribeHarnessSessionOptions {
-  /** Called for each harness event received over the stream. */
-  onEvent: (event: HarnessEvent) => void;
+/** Options for subscribing to an agent controller session's event stream. */
+export interface SubscribeAgentControllerSessionOptions {
+  /** Called for each event received over the stream. */
+  onEvent: (event: AgentControllerEvent) => void;
   /** Called when the stream errors or ends unexpectedly. */
   onError?: (error: unknown) => void;
 }
 
-export interface HarnessSubscription {
+export interface AgentControllerSubscription {
   /** Stop reading and release the underlying stream. */
   unsubscribe: () => void;
 }
 
 /**
- * A session bound to a `resourceId` within one harness. Sessions are
+ * A session bound to a `resourceId` within one agent controller. Sessions are
  * get-or-create on the server, so re-creating the same resourceId resumes the
  * existing conversation rather than forking it.
  */
-export class HarnessSession extends BaseResource {
+export class AgentControllerSession extends BaseResource {
   constructor(
     options: ClientOptions,
-    private readonly harnessId: string,
+    private readonly controllerId: string,
     private readonly resourceId: string,
-    /**
-     * Route prefix this session targets. Defaults to the legacy `/harness`
-     * surface; {@link AgentControllerSession} overrides it to `/agent-controller`.
-     */
-    protected readonly pathPrefix: string = '/harness',
   ) {
     super(options);
   }
 
   private base() {
-    return `${this.pathPrefix}/${encodeURIComponent(this.harnessId)}/sessions/${encodeURIComponent(this.resourceId)}`;
+    return `/agent-controller/${encodeURIComponent(this.controllerId)}/sessions/${encodeURIComponent(this.resourceId)}`;
   }
 
   /**
@@ -345,8 +342,8 @@ export class HarnessSession extends BaseResource {
    * using a `{ projectPath }` tag) so each resumes its own thread instead of the
    * most recent thread across the whole resource.
    */
-  create(options?: { tags?: Record<string, string> }): Promise<CreateHarnessSessionResponse> {
-    return this.request(`${this.pathPrefix}/${encodeURIComponent(this.harnessId)}/sessions`, {
+  create(options?: { tags?: Record<string, string> }): Promise<CreateAgentControllerSessionResponse> {
+    return this.request(`/agent-controller/${encodeURIComponent(this.controllerId)}/sessions`, {
       method: 'POST',
       body: { resourceId: this.resourceId, tags: options?.tags },
     });
@@ -356,10 +353,10 @@ export class HarnessSession extends BaseResource {
    * Subscribe to this session's event stream (SSE). The assistant's reply to a
    * message arrives here as `message_*` events, not on the sendMessage call.
    */
-  async subscribe(options: SubscribeHarnessSessionOptions): Promise<HarnessSubscription> {
+  async subscribe(options: SubscribeAgentControllerSessionOptions): Promise<AgentControllerSubscription> {
     const response = (await this.request(`${this.base()}/stream`, { stream: true })) as Response;
     if (!response.body) {
-      throw new Error('No response body for harness session stream');
+      throw new Error('No response body for agent controller session stream');
     }
 
     const reader = response.body.getReader();
@@ -384,7 +381,7 @@ export class HarnessSession extends BaseResource {
               const data = line.slice(5).trim();
               if (!data) continue;
               try {
-                options.onEvent(JSON.parse(data) as HarnessEvent);
+                options.onEvent(JSON.parse(data) as AgentControllerEvent);
               } catch {
                 // ignore malformed frame
               }
@@ -442,7 +439,7 @@ export class HarnessSession extends BaseResource {
   }
 
   /** Get the current mode, model, and thread (for initial UI hydration). */
-  state(): Promise<HarnessSessionState> {
+  state(): Promise<AgentControllerSessionState> {
     return this.request(this.base());
   }
 
@@ -474,13 +471,13 @@ export class HarnessSession extends BaseResource {
    */
   async listThreads(
     options?: number | { limit?: number; tags?: Record<string, string> },
-  ): Promise<HarnessThreadInfo[]> {
+  ): Promise<AgentControllerThreadInfo[]> {
     const opts = typeof options === 'number' ? { limit: options } : (options ?? {});
     const params = new URLSearchParams();
     if (opts.limit != null) params.set('limit', String(opts.limit));
     if (opts.tags && Object.keys(opts.tags).length > 0) params.set('tags', JSON.stringify(opts.tags));
     const query = params.toString() ? `?${params.toString()}` : '';
-    const body = await this.request<{ threads: HarnessThreadInfo[] }>(`${this.base()}/threads${query}`);
+    const body = await this.request<{ threads: AgentControllerThreadInfo[] }>(`${this.base()}/threads${query}`);
     return body.threads;
   }
 
@@ -490,7 +487,7 @@ export class HarnessSession extends BaseResource {
   }
 
   /** Create a new thread (unbinds previous, binds the new one). */
-  async createThread(title?: string): Promise<HarnessThreadInfo> {
+  async createThread(title?: string): Promise<AgentControllerThreadInfo> {
     return this.request(`${this.base()}/threads`, {
       method: 'POST',
       body: { title },
@@ -513,7 +510,7 @@ export class HarnessSession extends BaseResource {
   }
 
   /** Clone a thread (and its messages). The session binds to the clone. */
-  async cloneThread(options?: { sourceThreadId?: string; title?: string }): Promise<HarnessThreadInfo> {
+  async cloneThread(options?: { sourceThreadId?: string; title?: string }): Promise<AgentControllerThreadInfo> {
     return this.request(`${this.base()}/threads/clone`, {
       method: 'POST',
       body: options ?? {},
@@ -521,9 +518,9 @@ export class HarnessSession extends BaseResource {
   }
 
   /** List messages for a specific thread. */
-  async listMessages(threadId: string, limit?: number): Promise<HarnessMessage[]> {
+  async listMessages(threadId: string, limit?: number): Promise<AgentControllerMessage[]> {
     const params = limit != null ? `?limit=${limit}` : '';
-    const body = await this.request<{ messages: HarnessMessage[] }>(
+    const body = await this.request<{ messages: AgentControllerMessage[] }>(
       `${this.base()}/threads/${encodeURIComponent(threadId)}/messages${params}`,
     );
     return body.messages;
@@ -558,8 +555,8 @@ export class HarnessSession extends BaseResource {
   }
 
   /** Get the current goal for this session's thread. */
-  async getGoal(): Promise<HarnessGoalRecord | undefined> {
-    const body = await this.request<{ goal?: HarnessGoalRecord }>(`${this.base()}/goal`);
+  async getGoal(): Promise<AgentControllerGoalRecord | undefined> {
+    const body = await this.request<{ goal?: AgentControllerGoalRecord }>(`${this.base()}/goal`);
     return body.goal;
   }
 
@@ -567,8 +564,8 @@ export class HarnessSession extends BaseResource {
   async setGoal(
     objective: string,
     options?: { judgeModelId?: string; maxRuns?: number },
-  ): Promise<HarnessGoalRecord | undefined> {
-    const body = await this.request<{ goal?: HarnessGoalRecord }>(`${this.base()}/goal`, {
+  ): Promise<AgentControllerGoalRecord | undefined> {
+    const body = await this.request<{ goal?: AgentControllerGoalRecord }>(`${this.base()}/goal`, {
       method: 'POST',
       body: { objective, ...options },
     });
@@ -580,8 +577,8 @@ export class HarnessSession extends BaseResource {
     judgeModelId?: string;
     maxRuns?: number;
     status?: 'active' | 'paused' | 'done';
-  }): Promise<HarnessGoalRecord | undefined> {
-    const body = await this.request<{ goal?: HarnessGoalRecord }>(`${this.base()}/goal`, {
+  }): Promise<AgentControllerGoalRecord | undefined> {
+    const body = await this.request<{ goal?: AgentControllerGoalRecord }>(`${this.base()}/goal`, {
       method: 'PUT',
       body: options,
     });
@@ -631,70 +628,44 @@ export class HarnessSession extends BaseResource {
   }
 }
 
-/** A harness hosted on the connected Mastra instance. */
-export class Harness extends BaseResource {
+/** An agent controller hosted on the connected Mastra instance. */
+export class AgentController extends BaseResource {
   constructor(
     options: ClientOptions,
-    private readonly harnessId: string,
-    /**
-     * Route prefix this controller targets. Defaults to the legacy `/harness`
-     * surface; {@link AgentController} overrides it to `/agent-controller`.
-     */
-    protected readonly pathPrefix: string = '/harness',
+    private readonly controllerId: string,
   ) {
     super(options);
   }
 
   private basePath() {
-    return `${this.pathPrefix}/${encodeURIComponent(this.harnessId)}`;
+    return `/agent-controller/${encodeURIComponent(this.controllerId)}`;
   }
 
-  /** List the modes configured on this harness (e.g. build, plan). */
-  async listModes(): Promise<HarnessModeInfo[]> {
-    const body = await this.request<{ modes: HarnessModeInfo[] }>(`${this.basePath()}/modes`);
+  /** List the modes configured on this agent controller (e.g. build, plan). */
+  async listModes(): Promise<AgentControllerModeInfo[]> {
+    const body = await this.request<{ modes: AgentControllerModeInfo[] }>(`${this.basePath()}/modes`);
     return body.modes;
   }
 
-  /** List available models on this harness (with auth status and use counts). */
-  async listModels(): Promise<HarnessAvailableModel[]> {
-    const body = await this.request<{ models: HarnessAvailableModel[] }>(`${this.basePath()}/models`);
+  /** List available models on this agent controller (with auth status and use counts). */
+  async listModels(): Promise<AgentControllerAvailableModel[]> {
+    const body = await this.request<{ models: AgentControllerAvailableModel[] }>(`${this.basePath()}/models`);
     return body.models;
   }
 
-  /** Get workspace status for this harness. */
-  async workspaceStatus(): Promise<HarnessWorkspaceStatus> {
+  /** Get workspace status for this agent controller. */
+  async workspaceStatus(): Promise<AgentControllerWorkspaceStatus> {
     return this.request(`${this.basePath()}/workspace`);
   }
 
   /** Scope to a session bound to `resourceId` (e.g. a user or conversation id). */
-  session(resourceId: string): HarnessSession {
-    return new HarnessSession(this.options, this.harnessId, resourceId, this.pathPrefix);
-  }
-}
-
-/**
- * A session bound to a `resourceId` within one agent controller. Identical to
- * {@link HarnessSession} but targets the canonical `/agent-controller` routes.
- */
-export class AgentControllerSession extends HarnessSession {
-  constructor(options: ClientOptions, agentControllerId: string, resourceId: string) {
-    super(options, agentControllerId, resourceId, '/agent-controller');
-  }
-}
-
-/**
- * An agent controller hosted on the connected Mastra instance. This is the
- * canonical replacement for {@link Harness} and targets the `/agent-controller`
- * routes.
- */
-export class AgentController extends Harness {
-  constructor(options: ClientOptions, agentControllerId: string) {
-    super(options, agentControllerId, '/agent-controller');
+  session(resourceId: string): AgentControllerSession {
+    return new AgentControllerSession(this.options, this.controllerId, resourceId);
   }
 }
 
 /** Pull the plain text out of an assistant message's content parts. */
-export function harnessMessageText(message: HarnessMessage): string {
+export function agentControllerMessageText(message: AgentControllerMessage): string {
   return message.content
     .filter(c => c.type === 'text' && typeof c.text === 'string')
     .map(c => c.text)

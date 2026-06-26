@@ -5,7 +5,7 @@
  * Renders between status and editor.
  */
 import { Container, Text, Spacer, visibleWidth } from '@earendil-works/pi-tui';
-import type { TaskItemInput } from '@mastra/core/harness';
+import type { TaskItemInput } from '@mastra/core/agent-controller';
 import chalk from 'chalk';
 import { getTermWidth, theme } from '../theme.js';
 import { truncateAnsi } from './ansi.js';

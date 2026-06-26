@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import type { Component } from '@earendil-works/pi-tui';
 import type { AgentSignalAttributes } from '@mastra/core/agent';
-import type { HarnessEvent, HarnessMessage } from '@mastra/core/harness';
+import type { AgentControllerEvent, AgentControllerMessage } from '@mastra/core/agent-controller';
 import type { Workspace } from '@mastra/core/workspace';
 import { getOAuthProviders } from '../auth/storage.js';
 import {
@@ -370,7 +370,7 @@ export class MastraTUI {
     content: string,
     images?: Array<{ data: string; mimeType: string }>,
     id = '',
-  ): HarnessMessage {
+  ): AgentControllerMessage {
     return {
       id,
       role: 'user',
@@ -711,7 +711,7 @@ export class MastraTUI {
     return this._ectx;
   }
 
-  private async handleEvent(event: HarnessEvent): Promise<void> {
+  private async handleEvent(event: AgentControllerEvent): Promise<void> {
     if (event.type === 'agent_start') {
       this.clearIdleCounter();
       this.startCaffeinate();
@@ -754,7 +754,7 @@ export class MastraTUI {
     }
   }
 
-  private captureHarnessAnalytics(event: HarnessEvent): void {
+  private captureHarnessAnalytics(event: AgentControllerEvent): void {
     const analytics = this.state.analytics;
     if (!analytics) {
       return;

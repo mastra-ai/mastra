@@ -6,7 +6,7 @@
  * Also includes formatToolResult helper.
  */
 
-import type { TaskItemInput } from '@mastra/core/harness';
+import type { TaskItemInput } from '@mastra/core/agent-controller';
 import { safeStringify } from '@mastra/core/utils';
 import { parse as parsePartialJson } from 'partial-json';
 

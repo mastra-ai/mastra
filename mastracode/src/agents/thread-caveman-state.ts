@@ -1,4 +1,4 @@
-import type { HarnessThread, Session } from '@mastra/core/harness';
+import type { AgentControllerThread, Session } from '@mastra/core/agent-controller';
 
 interface ThreadStateSetting {
   key: string;
@@ -24,7 +24,7 @@ function getStateValue(session: Session<Record<string, unknown>>, setting: Threa
 async function findThread(
   session: Session<Record<string, unknown>>,
   threadId: string,
-): Promise<HarnessThread | undefined> {
+): Promise<AgentControllerThread | undefined> {
   const threads = await session.thread.list({ allResources: true });
   return threads.find(t => t.id === threadId);
 }

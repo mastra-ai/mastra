@@ -21,7 +21,7 @@ describe('web scenario: notification-crud', () => {
 
         // Send a notification via the SDK.
         const client = driver.getClient();
-        const session = client.getHarness('code').session('web-scenario-notification-crud');
+        const session = client.getAgentController('code').session('web-scenario-notification-crud');
         const result = await session.sendNotification({
           source: 'ci',
           kind: 'build',

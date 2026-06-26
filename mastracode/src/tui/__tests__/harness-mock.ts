@@ -1,4 +1,4 @@
-import type { Harness } from '@mastra/core/harness';
+import type { AgentController } from '@mastra/core/agent-controller';
 import { vi } from 'vitest';
 
 /**
@@ -166,7 +166,7 @@ export function createMockHarness(opts: MockHarnessOptions = {}) {
     getObservationalMemoryRecord: vi.fn(async () => null),
   };
 
-  return deepMerge(base, opts.harness) as unknown as Harness<Record<string, unknown>> & {
+  return deepMerge(base, opts.harness) as unknown as AgentController<Record<string, unknown>> & {
     session: ReturnType<typeof createMockSession>;
   };
 }

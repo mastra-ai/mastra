@@ -1,4 +1,4 @@
-import type { HarnessRequestContext } from '@mastra/core/harness';
+import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
@@ -17,7 +17,7 @@ let cachedMemoryKey: string | null = null;
  * Used by both the memory factory and the OM model functions.
  */
 function getHarnessState(requestContext: RequestContext): MastraCodeState | undefined {
-  const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
+  const ctx = requestContext.get('harness') as AgentControllerRequestContext<MastraCodeState> | undefined;
   return ctx?.getState() as MastraCodeState | undefined;
 }
 

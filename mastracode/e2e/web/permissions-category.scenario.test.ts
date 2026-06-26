@@ -15,7 +15,7 @@ const scenario: WebScenario = {
   aimockFixture: 'automated-chat.json',
   server: { yolo: false },
   run: async ({ driver }) => {
-    const session = driver.getClient().getHarness('code').session(`web-scenario-${scenario.name}`);
+    const session = driver.getClient().getAgentController('code').session(`web-scenario-${scenario.name}`);
 
     await session.setPermissionForCategory('execute', 'deny');
     await session.setPermissionForCategory('edit', 'ask');

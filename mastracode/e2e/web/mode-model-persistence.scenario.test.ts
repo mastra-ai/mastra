@@ -37,7 +37,7 @@ describe('web scenario: mode-model-persistence', () => {
 
         // Re-read state via the API to confirm BOTH switches persisted.
         const client = driver.getClient();
-        const session = client.getHarness('code').session('web-scenario-mode-model-persistence');
+        const session = client.getAgentController('code').session('web-scenario-mode-model-persistence');
         const state = await session.state();
         expect(state.modeId).toBe('plan');
         expect(state.modelId).toBe('anthropic/claude-sonnet-4');

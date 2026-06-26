@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Readable, Writable } from 'node:stream';
 import { AgentSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
-import type { Harness, HarnessMode, Session } from '@mastra/core/harness';
+import type { AgentController, AgentControllerMode, Session } from '@mastra/core/agent-controller';
 import { MastraCodeAcpAgent } from './agent.js';
 
 /**
@@ -9,8 +9,8 @@ import { MastraCodeAcpAgent } from './agent.js';
  * This sets up the JSON-RPC stream and keeps the process alive until the client disconnects.
  */
 export async function runAcpServer(
-  harness: Harness,
-  modes: HarnessMode[],
+  harness: AgentController,
+  modes: AgentControllerMode[],
   cleanup?: () => Promise<void>,
 ): Promise<void> {
   // Create the ndJSON stream from stdin/stdout

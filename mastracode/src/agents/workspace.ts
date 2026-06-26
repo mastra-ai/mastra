@@ -3,7 +3,7 @@ import os from 'node:os';
 import path, { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ToolsInput } from '@mastra/core/agent';
-import type { HarnessRequestContext } from '@mastra/core/harness';
+import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { Workspace, LocalFilesystem, LocalSandbox, createWorkspaceTools } from '@mastra/core/workspace';
@@ -129,7 +129,7 @@ function detectPackageRunner(projectPath: string): string | undefined {
 }
 
 export function getDynamicWorkspace({ requestContext, mastra }: { requestContext: RequestContext; mastra?: Mastra }) {
-  const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
+  const ctx = requestContext.get('harness') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = ctx?.getState();
   const rawProjectPath = state?.projectPath;
 

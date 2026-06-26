@@ -1,7 +1,7 @@
 /**
  * Event dispatcher: maps HarnessEvent types to extracted handler functions.
  */
-import type { HarnessEvent, HarnessThread, TaskItemSnapshot } from '@mastra/core/harness';
+import type { AgentControllerEvent, AgentControllerThread, TaskItemSnapshot } from '@mastra/core/agent-controller';
 import type { AskUserSelectionMode } from '@mastra/core/tools';
 
 import { getCurrentGitBranchAsync } from '../utils/project.js';
@@ -55,7 +55,11 @@ function trackInteractivePrompt(
   ectx.analytics?.trackInteractivePrompt(promptType, properties);
 }
 
-export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerContext, state: TUIState): Promise<void> {
+export async function dispatchEvent(
+  event: AgentControllerEvent,
+  ectx: EventHandlerContext,
+  state: TUIState,
+): Promise<void> {
   switch (event.type) {
     case 'agent_start':
       // Reset tokens/sec at the start of a new turn (not at the end) so the
@@ -179,7 +183,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       });
       // Update current thread title for status line display
       const threads = await state.session.thread.list();
-      const currentThread = threads.find((t: HarnessThread) => t.id === event.threadId);
+      const currentThread = threads.find((t: AgentControllerThread) => t.id === event.threadId);
       if (currentThread) {
         state.currentThreadTitle = currentThread.title;
         const metadata = currentThread.metadata as Record<string, unknown> | undefined;
@@ -305,7 +309,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       break;
 
     case 'om_activation': {
-      const activationEvent = event as Extract<HarnessEvent, { type: 'om_activation' }> & {
+      const activationEvent = event as Extract<AgentControllerEvent, { type: 'om_activation' }> & {
         triggeredBy?: 'threshold' | 'ttl' | 'provider_change';
         lastActivityAt?: number;
         ttlExpiredMs?: number;

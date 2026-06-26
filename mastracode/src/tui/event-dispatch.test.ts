@@ -1,4 +1,4 @@
-import type { TaskItemSnapshot } from '@mastra/core/harness';
+import type { TaskItemSnapshot } from '@mastra/core/agent-controller';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { dispatchEvent } from './event-dispatch.js';

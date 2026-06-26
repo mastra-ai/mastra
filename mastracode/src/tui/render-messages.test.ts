@@ -1,5 +1,5 @@
 import { Container } from '@earendil-works/pi-tui';
-import type { HarnessMessage } from '@mastra/core/harness';
+import type { AgentControllerMessage } from '@mastra/core/agent-controller';
 import { describe, expect, it, vi } from 'vitest';
 
 import { isChatBoundarySpacer } from './components/chat-boundary-spacer.js';
@@ -56,23 +56,23 @@ function createState(): TUIState {
   } as unknown as TUIState;
 }
 
-function createUserMessage(text: string, id = 'user-1'): HarnessMessage {
+function createUserMessage(text: string, id = 'user-1'): AgentControllerMessage {
   return {
     id,
     role: 'user',
     content: [{ type: 'text', text }],
-  } as HarnessMessage;
+  } as AgentControllerMessage;
 }
 
 function createReminderMessage(
-  reminder: Extract<HarnessMessage['content'][number], { type: 'system_reminder' }>,
+  reminder: Extract<AgentControllerMessage['content'][number], { type: 'system_reminder' }>,
   id = '__temporal_1',
-): HarnessMessage {
+): AgentControllerMessage {
   return {
     id,
     role: 'user',
     content: [reminder],
-  } as HarnessMessage;
+  } as AgentControllerMessage;
 }
 
 describe('addUserMessage', () => {
@@ -186,7 +186,7 @@ describe('renderExistingMessages startup history loading', () => {
     const messages = [
       { ...createUserMessage('first', 'user-1'), createdAt: new Date('2026-05-15T13:00:00.000Z') },
       { ...createUserMessage('second', 'user-2'), createdAt: latest },
-    ] as HarnessMessage[];
+    ] as AgentControllerMessage[];
     const state = createState();
     state.session = {
       ...(state.session as any),
@@ -243,7 +243,7 @@ describe('renderExistingMessages startup history loading', () => {
 
 describe('renderExistingMessages subagents', () => {
   it('uses the current model id for persisted forked subagents when no metadata tag is present', async () => {
-    const message: HarnessMessage = {
+    const message: AgentControllerMessage = {
       id: 'assistant-1',
       role: 'assistant',
       createdAt: new Date(),
@@ -293,7 +293,7 @@ describe('renderExistingMessages subagents', () => {
 
 describe('renderExistingMessages task tools', () => {
   it('replays task patch results into the pinned task list', async () => {
-    const messages: HarnessMessage[] = [
+    const messages: AgentControllerMessage[] = [
       {
         id: 'assistant-1',
         role: 'assistant',
@@ -365,7 +365,7 @@ describe('renderExistingMessages task tools', () => {
 
   it('replays task_check result snapshots into the pinned task list', async () => {
     const checkedTasks = [{ id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' }];
-    const messages: HarnessMessage[] = [
+    const messages: AgentControllerMessage[] = [
       {
         id: 'assistant-1',
         role: 'assistant',
@@ -422,7 +422,7 @@ describe('renderExistingMessages task tools', () => {
   });
 
   it('replays early task patch history without structured task snapshots', async () => {
-    const messages: HarnessMessage[] = [
+    const messages: AgentControllerMessage[] = [
       {
         id: 'assistant-1',
         role: 'assistant',
@@ -489,7 +489,7 @@ describe('renderExistingMessages task tools', () => {
   });
 
   it('keeps replayed task state local when harness state schema rejects tasks', async () => {
-    const messages: HarnessMessage[] = [
+    const messages: AgentControllerMessage[] = [
       {
         id: 'assistant-1',
         role: 'assistant',
@@ -535,7 +535,7 @@ describe('renderExistingMessages task tools', () => {
   });
 
   it('does not reuse previous IDs by order when replaying duplicate task content', async () => {
-    const messages: HarnessMessage[] = [
+    const messages: AgentControllerMessage[] = [
       {
         id: 'assistant-1',
         role: 'assistant',
@@ -614,7 +614,7 @@ describe('renderExistingMessages task tools', () => {
   });
 
   it('restores task state from snapshots in the bounded rendered window', async () => {
-    const fillerMessages = Array.from({ length: 39 }, (_, index): HarnessMessage => {
+    const fillerMessages = Array.from({ length: 39 }, (_, index): AgentControllerMessage => {
       return {
         id: `user-${index}`,
         role: 'user',
@@ -622,7 +622,7 @@ describe('renderExistingMessages task tools', () => {
         content: [{ type: 'text', text: `Message ${index}` }],
       };
     });
-    const visibleTaskUpdate: HarnessMessage = {
+    const visibleTaskUpdate: AgentControllerMessage = {
       id: 'assistant-visible',
       role: 'assistant',
       createdAt: new Date(),
@@ -673,7 +673,7 @@ describe('renderExistingMessages task tools', () => {
   });
 
   it('renders inline receipts when replaying repeated complete patches that finish the list', async () => {
-    const messages: HarnessMessage[] = [
+    const messages: AgentControllerMessage[] = [
       {
         id: 'assistant-1',
         role: 'assistant',
@@ -757,7 +757,7 @@ describe('renderExistingMessages task tools', () => {
 
   it('renders completed task receipts when replaying repeated completed task writes', async () => {
     const completedTasks = [{ id: 'tests', content: 'Write tests', status: 'completed', activeForm: 'Writing tests' }];
-    const messages: HarnessMessage[] = [
+    const messages: AgentControllerMessage[] = [
       {
         id: 'assistant-1',
         role: 'assistant',
@@ -791,7 +791,7 @@ describe('renderExistingMessages task tools', () => {
           },
         ],
       },
-    ] as HarnessMessage[];
+    ] as AgentControllerMessage[];
     const state = createState();
     state.session = {
       ...(state.session as any),
