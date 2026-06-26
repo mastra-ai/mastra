@@ -162,6 +162,18 @@ await slack.configure({
     description: 'Whether to include channel tools (`add_reaction`, `remove_reaction`).',
   },
   {
+    name: 'state',
+    type: "ChannelConfig['state']",
+    isOptional: true,
+    description: 'State adapter for message deduplication, locking, and subscriptions.',
+  },
+  {
+    name: 'chatOptions',
+    type: "ChannelConfig['chatOptions']",
+    isOptional: true,
+    description: 'Additional options passed directly to the Chat SDK.',
+  },
+  {
     name: 'logger',
     type: "SlackAdapterConfig['logger']",
     isOptional: true,
@@ -225,6 +237,13 @@ interface ChannelConnectResult {
     isOptional: true,
     description:
       'Customize the Slack app manifest before it is sent to the Manifest API. Receives the default manifest and returns the final one — use it for custom scopes, additional events, or interactivity settings.',
+  },
+  {
+    name: 'redirectUrl',
+    type: 'string',
+    isOptional: true,
+    description:
+      "URL to redirect to after successful OAuth completion. Defaults to the provider's `redirectPath` or `/`.",
   },
 ]}
 />
