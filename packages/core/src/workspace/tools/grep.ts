@@ -129,6 +129,9 @@ Usage:
             }
 
             for (const entry of entries) {
+              // Always skip .git directory — its internals are never useful and waste tokens
+              if (entry.type === 'directory' && entry.name === '.git') continue;
+
               // Skip hidden files/dirs unless includeHidden is set
               if (!includeHidden && entry.name.startsWith('.')) continue;
 

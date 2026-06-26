@@ -136,6 +136,10 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
     // Filter entries
     let filtered = entries;
 
+    // Always skip .git directory — its internals are never useful and waste tokens.
+    // This is applied before any other filtering so we never traverse into .git.
+    filtered = filtered.filter(e => !(e.type === 'directory' && e.name === '.git'));
+
     // Filter hidden files unless showHidden
     if (!showHidden) {
       filtered = filtered.filter(e => !e.name.startsWith('.'));
@@ -153,12 +157,6 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
         return !patterns.some(pattern => e.name.includes(pattern));
       });
     }
-
-    // Always exclude .git internals — they are never useful and waste tokens
-    filtered = filtered.filter(e => {
-      if (e.type === 'directory' && e.name === '.git') return false;
-      return true;
-    });
 
     // Filter by gitignore rules (paths must be relative to workspace root, not listing root)
     if (ignoreFilter) {
