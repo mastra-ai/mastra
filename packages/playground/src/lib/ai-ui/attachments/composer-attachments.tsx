@@ -1,5 +1,5 @@
 import type { CoreUserMessage } from '@mastra/core/llm';
-import { fileToBase64, getFileContentType, isRemoteUrl } from '@mastra/playground-ui';
+import { fileToBase64, getFileContentType, isRemoteUrl } from '@mastra/playground-ui/utils/file';
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 

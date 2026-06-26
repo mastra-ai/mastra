@@ -1,7 +1,7 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useParams } from 'react-router';
 import { WorkflowStepDetailContent } from '@/domains/workflows/components/workflow-step-detail';
 import { useWorkflowStepDetail } from '@/domains/workflows/context/workflow-step-detail-context';
