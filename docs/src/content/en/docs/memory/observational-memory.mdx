@@ -219,7 +219,7 @@ export const agent = new Agent({
 })
 ```
 
-Extractor behavior is derived from whether you provide a schema. Schema-backed extractors run as a follow-up structured output call after the Observer or Reflector finishes. The follow-up call adds model latency and usage, but it uses the same temporary in-memory Observer or Reflector thread so providers that support prompt caching can reuse the shared prompt prefix. Schema-less extractors are inline string extractors emitted directly in the Observer or Reflector response.
+Adding a `schema` makes the extractor run as a follow-up structured output request. Schema-less extractors are inline string extractors emitted directly in the Observer or Reflector response.
 
 ```typescript title="src/mastra/agents/agent.ts"
 new Extractor({
@@ -228,12 +228,12 @@ new Extractor({
 })
 ```
 
-By default, OM includes the previous extraction in later extraction prompts. Set `includePreviousExtraction: false` for values that should only come from the current OM run.
+By default, OM shows the last extracted value to the extractor on later runs. Set `includePreviousExtraction: false` when the Observer should not see the previous value.
 
 ```typescript title="src/mastra/agents/agent.ts"
 new Extractor({
   name: 'Latest blocker',
-  instructions: 'Extract only the latest blocker mentioned in this conversation window.',
+  instructions: 'Extract any blockers the agent is running into.',
   includePreviousExtraction: false,
 })
 ```
@@ -247,28 +247,6 @@ new Extractor({
     memory ? 'Extract workspace facts for this memory instance.' : 'Extract workspace facts.',
 })
 ```
-
-Use `WorkingMemoryExtractor` when the Observer or Reflector should update working memory instead of relying on the main agent to call the working memory tool:
-
-```typescript title="src/mastra/agents/agent.ts"
-import { Memory, WorkingMemoryExtractor } from '@mastra/memory'
-
-const memory = new Memory({
-  options: {
-    workingMemory: {
-      enabled: true,
-      injectTools: false,
-    },
-    observationalMemory: {
-      observation: {
-        extract: [new WorkingMemoryExtractor()],
-      },
-    },
-  },
-})
-```
-
-`WorkingMemoryExtractor` uses the normal extractor pipeline. It reads the active working memory template or schema, uses structured extraction when working memory has a JSON schema, writes updates through the memory instance, and doesn't duplicate the value under OM extracted metadata.
 
 Use `onExtracted` to normalize or react to custom extracted values before they are persisted:
 
