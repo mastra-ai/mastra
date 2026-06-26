@@ -346,7 +346,7 @@ Visit [`createNotificationInboxTool()` reference](/reference/signals/create-noti
 
 ## Distributed and serverless deployments
 
-Signals coordinate runs through a pub/sub backend. When a signal arrives, Mastra acquires a lease on the target thread so a single process owns the conversation at a time, then either wakes the agent or routes the input into the running loop.
+Signals coordinate runs through a pub/sub backend. When a signal arrives on a backend that implements `LeaseProvider`, Mastra acquires a lease on the target thread so a single process owns the conversation at a time, then either wakes the agent or routes the input into the running loop. Backends without leasing fall back to a no-op that always grants ownership, which is fine in a single process but not across instances.
 
 The default in-memory pub/sub can't cross instance boundaries. On serverless platforms like Vercel, or any multi-instance deployment, a follow-up signal can land on a different instance than the one running the agent. Without a shared pub/sub, that instance can't reach the active run and starts its own, leaving the original run untouched and the thread processed twice.
 
