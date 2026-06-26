@@ -80,8 +80,8 @@ export async function createDriver(opts: {
   fetch: (url: string, init?: RequestInit) => Promise<Response>;
 }): Promise<ScenarioDriver> {
   const client = new MastraClient({ baseUrl: opts.baseUrl, fetch: opts.fetch as typeof fetch });
-  const harness = client.getAgentController('code');
-  const session = harness.session(opts.resourceId);
+  const controller = client.getAgentController('code');
+  const session = controller.session(opts.resourceId);
 
   let state: TranscriptState = initialTranscript;
   const apply = (next: TranscriptState) => {

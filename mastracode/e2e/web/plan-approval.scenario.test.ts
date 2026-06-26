@@ -5,7 +5,7 @@ import { runScenario } from './scenario-runner';
 /**
  * Web equivalent of MastraCode's plan-approval handoff: in plan mode the agent
  * calls `submit_plan`, the UI shows a plan suspension, approving it resumes the
- * run and (per harness semantics) transitions to the default build mode.
+ * run and (per controller semantics) transitions to the default build mode.
  */
 describe('web scenario: plan-approval', () => {
   it('surfaces a submit_plan prompt and resumes on approval', async () => {

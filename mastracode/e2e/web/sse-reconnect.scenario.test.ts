@@ -28,8 +28,8 @@ describe('web scenario: sse-reconnect', () => {
         baseUrl: server.baseUrl,
         fetch: server.fetch as typeof fetch,
       });
-      const harness = client.getAgentController('code');
-      const session = harness.session(RESOURCE_ID);
+      const controller = client.getAgentController('code');
+      const session = controller.session(RESOURCE_ID);
 
       // --- Phase 1: initial subscribe + first message ---
       await session.create();

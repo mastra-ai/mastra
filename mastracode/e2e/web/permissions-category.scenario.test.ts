@@ -11,7 +11,7 @@ import { runScenario } from './scenario-runner';
  */
 const scenario: WebScenario = {
   name: 'permissions-category',
-  description: 'Sets per-category permission policies and reads them back through the harness routes.',
+  description: 'Sets per-category permission policies and reads them back through the controller routes.',
   aimockFixture: 'automated-chat.json',
   server: { yolo: false },
   run: async ({ driver }) => {
@@ -30,7 +30,7 @@ const scenario: WebScenario = {
       }
     }
 
-    // The scenario harness requires at least one model turn; this also proves
+    // The scenario controller requires at least one model turn; this also proves
     // the category writes above don't disrupt a normal run.
     await driver.submit('Say the smoke phrase');
     await driver.waitForText('WEB scenario smoke response');

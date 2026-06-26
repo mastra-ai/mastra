@@ -21,18 +21,18 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 
 /**
- * In-process Mastra harness server for scenario tests.
+ * In-process Mastra controller server for scenario tests.
  *
- * Builds a real {@link Harness} (model pointed at AIMock), registers it on a
- * real {@link Mastra}, then mounts the real `@mastra/server` harness routes on a
+ * Builds a real {@link AgentController} (model pointed at AIMock), registers it on a
+ * real {@link Mastra}, then mounts the real `@mastra/server` controller routes on a
  * real Hono app. `app.fetch` is handed to the `@mastra/client-js` MastraClient,
  * so a scenario drives the full production stack:
  *
- *   MastraClient → Hono → @mastra/server route handlers → Harness session →
+ *   MastraClient → Hono → @mastra/server route handlers → AgentController session →
  *   AIMock model → SSE events back to the client.
  */
 
-const HARNESS_ID = 'code';
+const CONTROLLER_ID = 'code';
 
 export interface ScenarioServerOptions {
   /** Auto-approve all tool calls (default true). Set false to test approvals. */
@@ -42,9 +42,9 @@ export interface ScenarioServerOptions {
   /** Attach lightweight browser tools to the agent, matching provider tool names. */
   browser?: 'stagehand' | 'agent-browser' | false;
   /**
-   * Build the Harness with no storage of its own and configure storage on the
-   * parent Mastra instead, exercising Harness#resolveStorage inheritance (the
-   * production web-server wiring). Default false (harness owns its storage).
+   * Build the AgentController with no storage of its own and configure storage on the
+   * parent Mastra instead, exercising AgentController#resolveStorage inheritance (the
+   * production web-server wiring). Default false (controller owns its storage).
    */
   inheritStorageFromMastra?: boolean;
 }
@@ -160,17 +160,17 @@ export async function startAgentControllerServer(
     ...(browser ? { browser } : {}),
   });
 
-  // A registered Harness always reads storage through its parent Mastra
+  // A registered AgentController always reads storage through its parent Mastra
   // (`#resolveStorage()` prefers the external Mastra's store), so the parent
   // composite below owns the durable `memory` domain. When NOT exercising the
-  // inheritance path explicitly, the Harness also gets its own ephemeral libsql
+  // inheritance path explicitly, the AgentController also gets its own ephemeral libsql
   // store. We use libsql (not a bare InMemoryStore) because it is a real
   // composite store with a `memory` domain — matching production web wiring.
   const harnessStore = inheritStorageFromMastra
     ? undefined
-    : new LibSQLStore({ id: 'scenario-harness-storage', url: 'file::memory:?cache=shared' });
-  const harness = new AgentController({
-    id: HARNESS_ID,
+    : new LibSQLStore({ id: 'scenario-controller-storage', url: 'file::memory:?cache=shared' });
+  const controller = new AgentController({
+    id: CONTROLLER_ID,
     ...(harnessStore ? { storage: harnessStore } : {}),
     workspace,
     // Auto-approve tool calls (yolo) so scenarios exercise the full
@@ -188,14 +188,14 @@ export async function startAgentControllerServer(
   const notifications = new InMemoryNotificationsStorage();
   const compositeStorage = new MastraCompositeStore({
     id: 'scenario-storage',
-    // A registered Harness resolves storage through this parent Mastra, so it
+    // A registered AgentController resolves storage through this parent Mastra, so it
     // must own a real `memory` domain (the libsql default store) for thread/OM
     // persistence to land. We add it unconditionally so both the inheritance
     // path and the standalone path have a durable memory domain to read through.
     default: new LibSQLStore({ id: 'scenario-mastra-storage', url: 'file::memory:?cache=shared' }),
     domains: { notifications },
   });
-  const mastra = new Mastra({ harnesses: { [HARNESS_ID]: harness }, storage: compositeStorage });
+  const mastra = new Mastra({ agentControllers: { [CONTROLLER_ID]: controller }, storage: compositeStorage });
 
   const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
   const adapter = new MastraServer({ app, mastra });
