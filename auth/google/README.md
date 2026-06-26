@@ -25,6 +25,7 @@ import { MastraAuthGoogle } from '@mastra/auth-google';
 export const mastra = new Mastra({
   server: {
     auth: new MastraAuthGoogle({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
       allowedDomains: ['example.com'],
     }),
   },
@@ -60,17 +61,17 @@ export const mastra = new Mastra({
 
 ## Environment variables
 
-| Variable                             | Description                                                      |
-| ------------------------------------ | ---------------------------------------------------------------- |
-| `GOOGLE_CLIENT_ID`                   | Google OAuth client ID                                           |
-| `GOOGLE_CLIENT_SECRET`               | Google OAuth client secret for SSO                               |
-| `GOOGLE_REDIRECT_URI`                | OAuth redirect URI for the SSO callback                          |
-| `GOOGLE_COOKIE_PASSWORD`             | Session encryption key, at least 32 characters                   |
-| `GOOGLE_ALLOWED_DOMAINS`             | Comma-separated Google Workspace domains to allow                |
-| `GOOGLE_HOSTED_DOMAIN`               | Hosted-domain login hint passed to Google                        |
-| `GOOGLE_SERVICE_ACCOUNT_EMAIL`       | Service account email for Directory API access                   |
-| `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` | PEM private key for the service account                          |
-| `GOOGLE_WORKSPACE_ADMIN_EMAIL`       | Workspace admin email to impersonate with domain-wide delegation |
+| Variable                             | Description                                                                         |
+| ------------------------------------ | ----------------------------------------------------------------------------------- |
+| `GOOGLE_CLIENT_ID`                   | Google OAuth client ID                                                              |
+| `GOOGLE_CLIENT_SECRET`               | Google OAuth client secret for SSO                                                  |
+| `GOOGLE_REDIRECT_URI`                | OAuth redirect URI for the SSO callback                                             |
+| `GOOGLE_COOKIE_PASSWORD`             | Session encryption key, at least 32 characters                                      |
+| `GOOGLE_ALLOWED_DOMAINS`             | Comma-separated Google Workspace domains to allow                                   |
+| `GOOGLE_HOSTED_DOMAIN`               | Hosted-domain login hint passed to Google                                           |
+| `GOOGLE_SERVICE_ACCOUNT_EMAIL`       | Service account email for Directory API access                                      |
+| `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` | PEM private key for the service account. Use escaped `\n` newlines in `.env` values |
+| `GOOGLE_WORKSPACE_ADMIN_EMAIL`       | Workspace admin email to impersonate with domain-wide delegation                    |
 
 `MastraAuthGoogle` reads the Google auth variables directly. The service-account variables above are examples for wiring `MastraRBACGoogle`; pass them through the `serviceAccount` option as shown.
 

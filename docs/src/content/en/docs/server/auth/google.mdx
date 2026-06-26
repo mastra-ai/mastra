@@ -143,7 +143,12 @@ export const mastra = new Mastra({
   server: {
     auth: new MastraAuthAuth0(),
     rbac: new MastraRBACGoogle({
-      getUserKey: user => user.email,
+      getUserKey: user => {
+        if (!user || typeof user !== 'object') return undefined
+
+        const { email } = user as { email?: unknown }
+        return typeof email === 'string' ? email : undefined
+      },
       serviceAccount: {
         clientEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL!,
         privateKey: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY!,
