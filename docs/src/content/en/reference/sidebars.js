@@ -303,18 +303,18 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Harness',
+      label: 'AgentController',
       collapsed: true,
       items: [
         {
           type: 'doc',
-          id: 'harness/harness-class',
-          label: 'Harness Class',
+          id: 'agent-controller/agent-controller-class',
+          label: 'AgentController Class',
           customProps: { tags: ['beta'] },
         },
         {
           type: 'doc',
-          id: 'harness/session',
+          id: 'agent-controller/session',
           label: 'Session Class',
           customProps: { tags: ['beta'] },
         },

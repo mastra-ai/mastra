@@ -1,5 +1,5 @@
 ---
-title: "Tool approvals and permissions | Harness"
+title: "Tool approvals and permissions | AgentController"
 description: "Gate tool execution with user approval flows and configure permission policies per-category or per-tool."
 packages:
   - "@mastra/core"
@@ -7,7 +7,7 @@ packages:
 
 # Tool approvals and permissions
 
-The Harness provides a permission system that controls which tools require user approval before execution. You can configure policies at the category level or per-tool, and grant session-wide exceptions for trusted tools. This gives agents with access to destructive or sensitive tools — file writes, command execution, API calls — a human-in-the-loop checkpoint before those tools run.
+The AgentController provides a permission system that controls which tools require user approval before execution. You can configure policies at the category level or per-tool, and grant session-wide exceptions for trusted tools. This gives agents with access to destructive or sensitive tools — file writes, command execution, API calls — a human-in-the-loop checkpoint before those tools run.
 
 ## Permission policies
 
@@ -23,18 +23,18 @@ Set policies per-category or per-tool. Per-tool policies take precedence over ca
 
 ```typescript
 // Category-level: all execute tools require approval
-await harness.session.permissions.setForCategory({ category: 'execute', policy: 'ask' })
+await agentController.session.permissions.setForCategory({ category: 'execute', policy: 'ask' })
 
 // Tool-level: this specific tool is always blocked
-await harness.session.permissions.setForTool({ toolName: 'dangerous_tool', policy: 'deny' })
+await agentController.session.permissions.setForTool({ toolName: 'dangerous_tool', policy: 'deny' })
 ```
 
 ### Tool categories
 
-The `toolCategoryResolver` maps tool names to categories. Pass it to the Harness constructor:
+The `toolCategoryResolver` maps tool names to categories. Pass it to the AgentController constructor:
 
-```typescript title="src/mastra/harness.ts"
-const harness = new Harness({
+```typescript title="src/mastra/agent-controller.ts"
+const agentController = new AgentController({
   id: 'my-agent',
   toolCategoryResolver: toolName => {
     if (toolName.includes('write') || toolName.includes('delete')) return 'edit'
@@ -48,13 +48,13 @@ Built-in categories are `read`, `edit`, `execute`, `mcp`, and `other`.
 
 ## Responding to approval requests
 
-When a tool's policy is `ask`, the Harness emits a `tool_approval_required` event. Your UI should display a prompt and call `session.respondToToolApproval()`:
+When a tool's policy is `ask`, the AgentController emits a `tool_approval_required` event. Your UI should display a prompt and call `session.respondToToolApproval()`:
 
 ```typescript
-harness.subscribe(event => {
+agentController.subscribe(event => {
   if (event.type === 'tool_approval_required') {
     // Show approval UI...
-    harness.session.respondToToolApproval({ decision: 'approve' })
+    agentController.session.respondToToolApproval({ decision: 'approve' })
   }
 })
 ```
@@ -62,22 +62,22 @@ harness.subscribe(event => {
 The `decision` field accepts `'approve'`, `'decline'`, or `'always_allow_category'`. When `always_allow_category` is used, the tool's category is granted for the rest of the session. Future tools in the same category are auto-approved.
 
 ```typescript
-harness.session.respondToToolApproval({ decision: 'always_allow_category' })
+agentController.session.respondToToolApproval({ decision: 'always_allow_category' })
 ```
 
 ## Session grants
 
-The Harness owns permission _policy_ (which categories require approval); the [`Session`](/docs/harness/session) owns the _grants_ a user makes during a conversation. Grant a category or tool for the rest of the session so it runs without further prompting:
+The AgentController owns permission _policy_ (which categories require approval); the [`Session`](/docs/agent-controller/session) owns the _grants_ a user makes during a conversation. Grant a category or tool for the rest of the session so it runs without further prompting:
 
 ```typescript
 // Grant all edit tools for this session
-harness.session.grantCategory('edit')
+agentController.session.grantCategory('edit')
 
 // Grant a specific tool
-harness.session.grantTool('mastra_workspace_execute_command')
+agentController.session.grantTool('mastra_workspace_execute_command')
 
 // Check current grants
-const grants = harness.session.getGrants()
+const grants = agentController.session.getGrants()
 // { categories: ['edit'], tools: ['mastra_workspace_execute_command'] }
 ```
 
@@ -86,11 +86,11 @@ const grants = harness.session.getGrants()
 Interactive built-in tools (`ask_user`, `submit_plan`) use the native tool-suspension primitive instead of the approval flow. They emit a `tool_suspended` event with `toolCallId`, `toolName`, and `suspendPayload`. Resume with `respondToToolSuspension()`:
 
 ```typescript
-harness.subscribe(event => {
+agentController.subscribe(event => {
   if (event.type === 'tool_suspended' && event.toolName === 'ask_user') {
     const { question } = event.suspendPayload as { question: string }
     // Show question to user, then resume:
-    harness.respondToToolSuspension({
+    agentController.respondToToolSuspension({
       toolCallId: event.toolCallId,
       resumeData: 'User response here',
     })
@@ -104,13 +104,13 @@ The `submit_plan` tool suspends via the same mechanism. Resume with an `action` 
 
 ```typescript
 // Approve the plan
-harness.respondToToolSuspension({
+agentController.respondToToolSuspension({
   toolCallId: event.toolCallId,
   resumeData: { action: 'approved' },
 })
 
 // Reject with feedback
-harness.respondToToolSuspension({
+agentController.respondToToolSuspension({
   toolCallId: event.toolCallId,
   resumeData: { action: 'rejected', feedback: 'Needs more detail' },
 })
@@ -118,7 +118,7 @@ harness.respondToToolSuspension({
 
 ## Built-in tools
 
-The Harness provides these built-in tools to agents in every mode:
+The AgentController provides these built-in tools to agents in every mode:
 
 | Tool | Description |
 | - | - |
@@ -133,7 +133,7 @@ The Harness provides these built-in tools to agents in every mode:
 Disable specific built-in tools with `disableBuiltinTools`:
 
 ```typescript
-const harness = new Harness({
+const agentController = new AgentController({
   id: 'no-plans',
   disableBuiltinTools: ['submit_plan'],
 })
@@ -141,8 +141,8 @@ const harness = new Harness({
 
 ## Related
 
-- [Harness overview](/docs/harness/overview)
-- [Session](/docs/harness/session)
-- [Subagents](/docs/harness/subagents)
+- [AgentController overview](/docs/agent-controller/overview)
+- [Session](/docs/agent-controller/session)
+- [Subagents](/docs/agent-controller/subagents)
 - [Agent approval](/docs/agents/agent-approval)
-- [API reference](/reference/harness/harness-class)
+- [API reference](/reference/agent-controller/agent-controller-class)

@@ -362,39 +362,39 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Harness',
+      label: 'AgentController',
       customProps: {
         tags: ['beta'],
       },
       items: [
         {
           type: 'doc',
-          id: 'harness/overview',
+          id: 'agent-controller/overview',
           label: 'Overview',
         },
         {
           type: 'doc',
-          id: 'harness/session',
+          id: 'agent-controller/session',
           label: 'Session',
         },
         {
           type: 'doc',
-          id: 'harness/modes',
+          id: 'agent-controller/modes',
           label: 'Modes',
         },
         {
           type: 'doc',
-          id: 'harness/threads-and-state',
+          id: 'agent-controller/threads-and-state',
           label: 'Threads and State',
         },
         {
           type: 'doc',
-          id: 'harness/subagents',
+          id: 'agent-controller/subagents',
           label: 'Subagents',
         },
         {
           type: 'doc',
-          id: 'harness/tool-approvals',
+          id: 'agent-controller/tool-approvals',
           label: 'Tool Approvals',
         },
       ],
