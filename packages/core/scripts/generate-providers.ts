@@ -13,9 +13,10 @@ async function generateProviderRegistry(gateways: MastraModelGateway[]) {
   const { providers, models, attachmentCapabilities, failedGateways } = await fetchProvidersFromGateways(gateways);
 
   if (failedGateways.length > 0) {
-    console.error(`\nFailed to fetch from gateways: ${failedGateways.join(', ')}`);
-    console.error('Aborting generation to avoid writing partial provider data.');
-    process.exit(1);
+    console.warn(
+      `\nFailed to fetch from gateways: ${failedGateways.join(', ')}. Skipping generation to avoid writing partial provider data.`,
+    );
+    return;
   }
 
   // Write registry files to src/ (for version control)
