@@ -320,6 +320,13 @@ export function updateStatusLine(state: TUIState): void {
     if (ref) {
       parts.push({ plain: ref, styled: ref });
     }
+    if (state.tokensPerSec > 0) {
+      const tpsLabel = `${state.tokensPerSec} tok/s`;
+      parts.push({
+        plain: tpsLabel,
+        styled: theme.fg('dim', tpsLabel),
+      });
+    }
     if (opts.showQueue && queuedLabel) {
       parts.push({
         plain: queuedLabel,

@@ -136,6 +136,7 @@ export interface UsageSnapshot {
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
+  reasoningTokens?: number;
   [key: string]: unknown;
 }
 
@@ -181,6 +182,15 @@ export interface TranscriptState {
   workspaceReady?: boolean;
   /** Latest goal evaluation. */
   goal?: GoalSnapshot;
+  /** Current tokens/sec throughput (0 when idle). */
+  tokensPerSec: number;
+  /**
+   * @internal Timestamp (ms) of the first streamed content delta of the current
+   * step — i.e. when decoding actually began. Used to measure tokens/sec over
+   * decode time only, excluding TTFT and tool-execution gaps between steps.
+   * 0 means decoding has not started for the current step.
+   */
+  _decodeStartedAt: number;
 }
 
 export const initialTranscript: TranscriptState = {
@@ -190,6 +200,8 @@ export const initialTranscript: TranscriptState = {
   tasks: [],
   followUpCount: 0,
   omPhase: 'idle',
+  tokensPerSec: 0,
+  _decodeStartedAt: 0,
 };
 
 let noticeSeq = 0;
@@ -254,15 +266,30 @@ function applyEvent(state: TranscriptState, raw: HarnessEvent): TranscriptState 
   const event = raw as KnownHarnessEvent;
   switch (event.type) {
     case 'agent_start':
-      return { ...state, running: true };
+      // Reset the rate at the start of a new turn (not at the end) so the last
+      // turn's tokens/sec stays visible while idle — short single-step turns
+      // would otherwise zero it before it could be read.
+      return { ...state, running: true, tokensPerSec: 0, _decodeStartedAt: 0 };
     case 'agent_end':
-      return { ...state, running: false, pending: false };
+      // Keep tokensPerSec as the last turn's reading; only clear the in-flight
+      // decode window so a stale start can't bleed into the next turn.
+      return { ...state, running: false, pending: false, _decodeStartedAt: 0 };
 
     case 'message_start':
     case 'message_update': {
       const next = upsertAssistant(state, event.message, true);
+      // Only streamed assistant content opens the decode window — empty or
+      // tool-only updates must not count toward tokens/sec.
+      if (!hasAssistantText(next)) {
+        return next;
+      }
+      // Mark the start of decoding for the current step on the first streamed
+      // content delta, so tokens/sec is measured over decode time only (it
+      // excludes TTFT before this point and tool gaps between steps). usage_update
+      // at step-finish closes this window and re-arms it for the next step.
+      const decoded = next._decodeStartedAt > 0 ? next : { ...next, _decodeStartedAt: Date.now() };
       // First streamed assistant content clears the "thinking" pending state.
-      return hasAssistantText(next) ? { ...next, pending: false } : next;
+      return { ...decoded, pending: false };
     }
     case 'message_end':
       return { ...upsertAssistant(state, event.message, false), pending: false };
@@ -400,8 +427,35 @@ function applyEvent(state: TranscriptState, raw: HarnessEvent): TranscriptState 
       return pushNotice(state, 'info', `Deleted thread ${event.threadId}`);
 
     // Usage tracking.
-    case 'usage_update':
-      return { ...state, usage: event.usage as UsageSnapshot };
+    case 'usage_update': {
+      const usageSnap = event.usage as UsageSnapshot;
+      const now = Date.now();
+      // usage_update fires at step-finish and carries the completion (and any
+      // reasoning) tokens generated during this step. Measure tokens/sec over the
+      // decode window only — from the step's first content delta (_decodeStartedAt)
+      // to now — which excludes TTFT and inter-step tool/scheduling time. Smooth
+      // with an exponential moving average (α=0.3) for a stable readout.
+      const stepTokens = (usageSnap.completionTokens ?? 0) + (usageSnap.reasoningTokens ?? 0);
+      let tps = state.tokensPerSec;
+      if (state._decodeStartedAt > 0 && stepTokens > 0) {
+        const decodeSec = (now - state._decodeStartedAt) / 1000;
+        if (decodeSec > 0) {
+          const instantaneous = stepTokens / decodeSec;
+          const alpha = 0.3;
+          tps =
+            state.tokensPerSec > 0
+              ? Math.round(alpha * instantaneous + (1 - alpha) * state.tokensPerSec)
+              : Math.round(instantaneous);
+        }
+      }
+      return {
+        ...state,
+        usage: usageSnap,
+        tokensPerSec: tps,
+        // Re-arm: the next step's decode window opens on its first content delta.
+        _decodeStartedAt: 0,
+      };
+    }
 
     // Canonical display-state snapshot — carries the status-line figures
     // (OM msg/mem budgets and cumulative token usage).
