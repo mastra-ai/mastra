@@ -278,13 +278,18 @@ function applyEvent(state: TranscriptState, raw: HarnessEvent): TranscriptState 
     case 'message_start':
     case 'message_update': {
       const next = upsertAssistant(state, event.message, true);
+      // Only streamed assistant content opens the decode window — empty or
+      // tool-only updates must not count toward tokens/sec.
+      if (!hasAssistantText(next)) {
+        return next;
+      }
       // Mark the start of decoding for the current step on the first streamed
       // content delta, so tokens/sec is measured over decode time only (it
       // excludes TTFT before this point and tool gaps between steps). usage_update
       // at step-finish closes this window and re-arms it for the next step.
       const decoded = next._decodeStartedAt > 0 ? next : { ...next, _decodeStartedAt: Date.now() };
       // First streamed assistant content clears the "thinking" pending state.
-      return hasAssistantText(decoded) ? { ...decoded, pending: false } : decoded;
+      return { ...decoded, pending: false };
     }
     case 'message_end':
       return { ...upsertAssistant(state, event.message, false), pending: false };
