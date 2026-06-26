@@ -6,8 +6,7 @@
   "main": "index.js",
   "version": "0.0.1",
   "scripts": {
-    "start": "npx bun src/example.ts",
-    "processor-demo": "npx bun src/processor-demo.ts",
+    "start": "npx bun src/structured-output-example.ts",
     "mastra:build": "mastra build",
     "mastra:dev": "mastra dev"
   },
