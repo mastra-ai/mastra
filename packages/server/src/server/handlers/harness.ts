@@ -1,6 +1,10 @@
 import type { Agent } from '@mastra/core/agent';
+import type { AgentController, Session } from '@mastra/core/agent-controller';
 import type { MastraFGAPermissionInput } from '@mastra/core/auth/ee';
-import type { AgentController, Session } from '@mastra/core/harness';
+// Type-only import: erased at runtime, so this cannot crash against an older
+// @mastra/core that lacks the `./agent-controller` subpath export. Controller
+// resolution at runtime goes through mastra.getAgentController?.() with a
+// getHarness() fallback (see resolveControllerOrThrow), never a value import.
 import { z } from 'zod/v4';
 
 import { HTTPException } from '../http-exception';

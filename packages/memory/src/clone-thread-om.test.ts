@@ -1,6 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { AgentController } from '@mastra/core/harness';
+import { AgentController } from '@mastra/core/agent-controller';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MemoryStorage, ObservationalMemoryRecord, BufferedObservationChunk } from '@mastra/core/storage';
 import { Workspace } from '@mastra/core/workspace';
