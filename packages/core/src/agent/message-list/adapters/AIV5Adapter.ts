@@ -152,6 +152,27 @@ function getMastraCreatedAt(providerMetadata?: AIV5Type.ProviderMetadata): numbe
   return typeof createdAt === 'number' ? createdAt : undefined;
 }
 
+function hasAnthropicSignature(providerMetadata?: AIV5Type.ProviderMetadata): boolean {
+  const anthropic = providerMetadata?.anthropic;
+  return Boolean(
+    anthropic &&
+    typeof anthropic === 'object' &&
+    typeof (anthropic as Record<string, unknown>).signature === 'string' &&
+    (anthropic as Record<string, unknown>).signature,
+  );
+}
+
+function getReasoningText(part: Extract<MastraMessagePart, { type: 'reasoning' }>): string {
+  return (
+    part.reasoning ||
+    (part.details?.reduce((text: string, detail) => {
+      if (detail.type === 'text' && detail.text) return text + detail.text;
+      return text;
+    }, '') ??
+      '')
+  );
+}
+
 function getDisplayTransform(
   providerMetadata: unknown,
   phase: 'input-available' | 'output-available' | 'error' | 'approval' | 'suspend',
@@ -345,13 +366,7 @@ export class AIV5Adapter {
 
         // Handle reasoning parts
         if (part.type === 'reasoning') {
-          const text =
-            part.reasoning ||
-            (part.details?.reduce((p: string, c) => {
-              if (c.type === `text` && c.text) return p + c.text;
-              return p;
-            }, '') ??
-              '');
+          const text = getReasoningText(part);
           if (text || part.details?.length) {
             const v5UIPart: AIV5Type.ReasoningUIPart = {
               type: 'reasoning' as const,
@@ -658,7 +673,7 @@ export class AIV5Adapter {
         if (p.type === 'reasoning') {
           return {
             type: 'reasoning' as const,
-            reasoning: '',
+            reasoning: hasAnthropicSignature(p.providerMetadata) ? p.text : '',
             details: [
               {
                 type: 'text' as const,
@@ -897,7 +912,7 @@ export class AIV5Adapter {
       } else if (part.type === 'reasoning') {
         const v2ReasoningPart: MastraDBMessage['content']['parts'][number] = {
           type: 'reasoning',
-          reasoning: '',
+          reasoning: hasAnthropicSignature(part.providerOptions) ? part.text : '',
           details: [{ type: 'text', text: part.text }],
         };
         if (part.providerOptions) {
