@@ -5,6 +5,7 @@ import { createSignal } from '../agent/signals';
 import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
+import { createMockWorkspace } from './test-utils';
 import type { HarnessEvent } from './types';
 
 function createTextStreamModel(responseText: string) {
@@ -46,6 +47,7 @@ async function createHarness(
   }),
 ) {
   const harness = new Harness({
+    workspace: createMockWorkspace(),
     id: 'test-harness',
     storage,
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
@@ -836,6 +838,7 @@ describe('Harness signal messages', () => {
       model: createTextStreamModel('unused'),
     });
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'subscription-tool-harness',
       storage,
       modes: [{ id: 'default', name: 'Default', default: true, agent }],

@@ -541,6 +541,7 @@ export type ProviderModelsMap = {
     'zai/glm-5-turbo',
     'zai/glm-5.1',
     'zai/glm-5.2',
+    'zai/glm-5.2-fast',
     'zai/glm-5v-turbo',
   ];
   readonly submodel: readonly [
@@ -1390,6 +1391,7 @@ export type ProviderModelsMap = {
     'moonshotai/Kimi-K2.6',
     'openai/gpt-oss-120b',
     'zai-org/GLM-4.7',
+    'zai-org/GLM-5.2',
   ];
   readonly 'snowflake-cortex': readonly [
     'claude-fable-5',
@@ -1474,6 +1476,7 @@ export type ProviderModelsMap = {
     'glm-5-fast',
     'glm-5.1-fast',
     'glm-5.2',
+    'glm-5.2-short',
     'kimi-k2.5-fast',
     'kimi-k2.6-fast',
     'moonshotai/Kimi-K2.5',
@@ -1970,6 +1973,7 @@ export type ProviderModelsMap = {
     'ministral-8b-2512',
     'mistral-large-2512',
     'mistral-large-latest',
+    'mistral-ocr-latest',
     'mistral-small-2506',
     'nemotron-3-ultra-550b',
     'o1',
@@ -2280,18 +2284,20 @@ export type ProviderModelsMap = {
   ];
   readonly evroc: readonly [
     'KBLab/kb-whisper-large',
-    'Qwen/Qwen3-30B-A3B-Instruct-2507-FP8',
     'Qwen/Qwen3-Embedding-8B',
+    'Qwen/Qwen3-Reranker-4B',
     'Qwen/Qwen3-VL-30B-A3B-Instruct',
+    'Qwen/Qwen3.6-35B-A3B-FP8',
+    'evroc/roc',
+    'google/gemma-4-26B-A4B-it',
     'intfloat/multilingual-e5-large-instruct',
-    'microsoft/Phi-4-multimodal-instruct',
-    'mistralai/Magistral-Small-2509',
+    'mistralai/Mistral-Medium-3.5-128B',
     'mistralai/Voxtral-Small-24B-2507',
-    'mistralai/devstral-small-2-24b-instruct-2512',
-    'moonshotai/Kimi-K2.5',
+    'moonshotai/Kimi-K2.6',
     'nvidia/Llama-3.3-70B-Instruct-FP8',
     'openai/gpt-oss-120b',
     'openai/whisper-large-v3',
+    'openai/whisper-large-v3-turbo',
   ];
   readonly xiaomi: readonly [
     'mimo-v2-flash',
@@ -2420,7 +2426,7 @@ export type ProviderModelsMap = {
   ];
   readonly llmtr: readonly ['gemma-4', 'magibu-11b-v8', 'medgemma-4b', 'qwen3-6-35b', 'sincap', 'trendyol-7b'];
   readonly sarvam: readonly ['sarvam-105b', 'sarvam-30b'];
-  readonly stepfun: readonly ['step-1-32k', 'step-2-16k', 'step-3.5-flash', 'step-3.5-flash-2603'];
+  readonly stepfun: readonly ['step-1-32k', 'step-2-16k', 'step-3.5-flash', 'step-3.5-flash-2603', 'step-3.7-flash'];
   readonly 'hpc-ai': readonly ['minimax/minimax-m2.5', 'moonshotai/kimi-k2.5', 'zai-org/glm-5.1'];
   readonly 'minimax-cn': readonly [
     'MiniMax-M2',
@@ -3504,6 +3510,7 @@ export type ProviderModelsMap = {
     'rekaai/reka-flash-3',
     'relace/relace-apply-3',
     'relace/relace-search',
+    'sakana/fugu-ultra',
     'sao10k/l3-lunaris-8b',
     'sao10k/l3.1-70b-hanami-x1',
     'sao10k/l3.1-euryale-70b',

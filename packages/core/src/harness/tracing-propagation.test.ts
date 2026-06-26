@@ -5,6 +5,7 @@ import type { TracingContext, TracingOptions } from '../observability';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
 import type { Session } from './session';
+import { createMockWorkspace } from './test-utils';
 
 function createTextStreamModel(responseText: string) {
   return new MockLanguageModelV2({
@@ -55,6 +56,7 @@ describe('Harness tracing propagation', () => {
   beforeEach(async () => {
     agent = createAgent();
     harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test-harness',
       storage: new InMemoryStore(),
       modes: [{ id: 'default', name: 'Default', default: true, agent }],
