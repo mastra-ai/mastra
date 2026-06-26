@@ -3674,6 +3674,54 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('completes a signal-started run that no caller subscribes to or consumes', async () => {
+    // Regression: a fire-and-forget wake (e.g. a heartbeat) starts a thread run
+    // but never subscribes to or consumes the returned stream. The runtime must
+    // still drive the stream to completion on its own so the run reaches a
+    // terminal state and its active-run record releases. If it does not, the
+    // thread stays wedged and every later signal coalesces into the stuck run.
+    const agent = new Agent({
+      id: 'unconsumed-wake-agent',
+      name: 'Unconsumed Wake Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('unconsumed response'),
+    });
+
+    const resourceId = 'unconsumed-wake-user';
+    const threadId = 'unconsumed-wake-thread';
+
+    // Wake the thread without subscribing or consuming the resulting stream.
+    const accepted = await agent.sendSignal(
+      { type: 'user-message', contents: 'wake without a consumer' },
+      {
+        resourceId,
+        threadId,
+        ifIdle: { streamOptions: { memory: { resource: resourceId, thread: threadId } } },
+      },
+    ).accepted;
+    expect(accepted.action).toBe('wake');
+    const runId = 'runId' in accepted ? accepted.runId : undefined;
+    expect(runId).toBeTruthy();
+    expect(agent.getActiveThreadRunId({ resourceId, threadId })).toBe(runId);
+
+    // With no consumer, the run must still finish and release the active-run record.
+    await waitForCondition(() => agent.getActiveThreadRunId({ resourceId, threadId }) === undefined, 2000);
+    expect(agent.getActiveThreadRunId({ resourceId, threadId })).toBeUndefined();
+
+    // A follow-up wake now starts a fresh run rather than coalescing into a stuck one.
+    const followUp = await agent.sendSignal(
+      { type: 'user-message', contents: 'second wake after first completed' },
+      {
+        resourceId,
+        threadId,
+        ifIdle: { streamOptions: { memory: { resource: resourceId, thread: threadId } } },
+      },
+    ).accepted;
+    expect(followUp.action).toBe('wake');
+    const followUpRunId = 'runId' in followUp ? followUp.runId : undefined;
+    expect(followUpRunId).not.toBe(runId);
+  });
+
   it('preserves active interjections sent immediately after repeated idle signal-started runs', async () => {
     const releaseInitialCalls: Array<() => void> = [];
     const prompts: any[][] = [];

@@ -3,6 +3,7 @@ import { createSignal } from '../agent/signals';
 import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import type {
   AgentThreadSubscription,
+  MastraBrowser,
   SendAgentNotificationSignalOptions,
   SendAgentNotificationSignalResult,
   SendAgentSignalAccepted,
@@ -18,6 +19,7 @@ import type { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import { safeStringify } from '../utils';
+import { Workspace } from '../workspace';
 
 import { SessionRunEngine } from './session-run-engine';
 import type { TaskItemSnapshot } from './tools';
@@ -74,6 +76,27 @@ function addOptionalUsageField(usage: TokenUsage, key: OptionalUsageField, value
 const MODE_ID_KEY = 'currentModeId';
 /** Persisted thread-setting key prefix for a mode's last-used model. */
 const modeModelKey = (modeId: string) => `modeModelId_${modeId}`;
+
+/**
+ * Internal thread-metadata keys used by `Session.loadMetadata()` to persist
+ * runtime bookkeeping (selected model/mode, observer/reflector config, token
+ * usage). These share the flat thread `metadata` bag with user-provided
+ * session scoping tags, so they must never be treated as tags: they are
+ * skipped when stamping tags onto a thread and excluded when reading tags
+ * back out of thread metadata.
+ */
+function isReservedThreadMetadataKey(key: string): boolean {
+  return (
+    key === 'currentModelId' ||
+    key === MODE_ID_KEY ||
+    key === 'observerModelId' ||
+    key === 'reflectorModelId' ||
+    key === 'observationThreshold' ||
+    key === 'reflectionThreshold' ||
+    key === 'tokenUsage' ||
+    key.startsWith('modeModelId_')
+  );
+}
 
 /**
  * Owns the session's identity: the memory `resourceId` and the active
@@ -518,10 +541,20 @@ export class SessionThread {
       metadata[`modeModelId_${session.mode.get()}`] = modelId;
     }
 
-    // Auto-tag with projectPath from state so threads are scoped to the working directory
-    const projectPath = (session.state.get() as any).projectPath;
-    if (projectPath) {
-      metadata.projectPath = projectPath;
+    // Stamp the session's scoping tags onto the thread so listings can be
+    // filtered back to this session's scope (e.g. a `projectPath` per git
+    // worktree). Fall back to a `projectPath` read from state for unscoped
+    // sessions that still carry one in their initial state.
+    const tags = session.getTags();
+    if (Object.keys(tags).length > 0) {
+      for (const [key, value] of Object.entries(tags)) {
+        if (!isReservedThreadMetadataKey(key)) metadata[key] = value;
+      }
+    } else {
+      const projectPath = (session.state.get() as any).projectPath;
+      if (projectPath) {
+        metadata.projectPath = projectPath;
+      }
     }
 
     // Acquire lock on new thread before releasing old one.
@@ -2468,6 +2501,13 @@ export class SessionDisplayState {
 export class SessionBus {
   readonly #listeners: HarnessEventListener[] = [];
   #displayState: SessionDisplayState | undefined;
+  /**
+   * The last workspace lifecycle event group emitted on this bus, replayed to
+   * subscribers that attach after the workspace finished initializing. Without
+   * this, late listeners (the normal pattern: create a session, then subscribe)
+   * would never see the workspace ready/error status.
+   */
+  #lastWorkspaceEvents: HarnessEvent[] = [];
 
   /** Attach the display-state reducer the bus folds events into. Set once by the Session. */
   setDisplayState(displayState: SessionDisplayState): void {
@@ -2475,6 +2515,19 @@ export class SessionBus {
   }
 
   subscribe(listener: HarnessEventListener): () => void {
+    // Replay buffered workspace lifecycle events so late subscribers learn the
+    // current workspace status. The workspace is initialized during session
+    // creation, before any external caller can subscribe.
+    for (const event of this.#lastWorkspaceEvents) {
+      try {
+        const result = listener(event);
+        if (result && typeof result === 'object' && 'catch' in result) {
+          (result as Promise<void>).catch(err => console.error('Error in session event listener:', err));
+        }
+      } catch (err) {
+        console.error('Error in session event listener:', err);
+      }
+    }
     this.#listeners.push(listener);
     return () => {
       const index = this.#listeners.indexOf(listener);
@@ -2485,6 +2538,17 @@ export class SessionBus {
   }
 
   emit(event: HarnessEvent): void {
+    if (
+      event.type === 'workspace_status_changed' ||
+      event.type === 'workspace_ready' ||
+      event.type === 'workspace_error'
+    ) {
+      if (event.type === 'workspace_status_changed') {
+        this.#lastWorkspaceEvents = [event];
+      } else {
+        this.#lastWorkspaceEvents.push(event);
+      }
+    }
     this.#displayState?.apply(event);
     this.#dispatch(event);
     if (event.type !== 'display_state_changed' && this.#displayState) {
@@ -2553,18 +2617,33 @@ export class Session<TState = unknown> {
   readonly displayState: SessionDisplayState;
   /** The session-owned Harness state domain. */
   readonly state: HarnessRequestState<TState>;
+  /**
+   * Scoping tags for this session (e.g. `{ projectPath }`). Seeded at creation
+   * and stamped onto every thread this session creates so thread listings can be
+   * filtered back to the session's scope. Empty when the session is unscoped.
+   */
+  readonly #tags: Record<string, string>;
+  readonly #workspace: Workspace;
+  browser?: MastraBrowser;
 
   constructor({
     resourceId,
     state,
     id,
     ownerId,
+    tags,
+    workspace,
+    browser,
   }: {
     resourceId: string;
     state?: SessionStateOptions<TState>;
     id: string;
     ownerId: string;
+    tags?: Record<string, string>;
+    workspace: Workspace;
+    browser?: MastraBrowser;
   }) {
+    this.#tags = tags && Object.keys(tags).length > 0 ? { ...tags } : {};
     this.identity = new SessionIdentity({ resourceId, id, ownerId });
     this.thread = new SessionThread(() => this.identity.getResourceId());
     this.displayState = new SessionDisplayState({
@@ -2575,6 +2654,21 @@ export class Session<TState = unknown> {
     });
     this.#bus.setDisplayState(this.displayState);
     this.state = new SessionState(state ?? { initialState: {} as TState }, this.#bus);
+
+    if (!workspace || !(workspace instanceof Workspace)) {
+      throw new Error(`A session requires a valid workspace instance.`);
+    }
+
+    this.#workspace = workspace;
+    this.browser = browser;
+  }
+
+  /**
+   * This session's scoping tags (e.g. `{ projectPath }`), stamped onto every
+   * thread it creates. Returns a copy; empty when the session is unscoped.
+   */
+  getTags(): Record<string, string> {
+    return { ...this.#tags };
   }
 
   // ===========================================================================

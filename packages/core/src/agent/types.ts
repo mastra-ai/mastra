@@ -30,6 +30,7 @@ import type {
 } from '../llm/model/base.types';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { IMastraLogger } from '../logger';
+import type { ReasoningLevel } from '../loop/types';
 import type { Mastra } from '../mastra';
 import type { VersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
@@ -71,6 +72,7 @@ export type {
   UIMessageWithMetadata,
   MessageList,
 } from './message-list/index';
+export type { ReasoningLevel } from '../loop/types';
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
 export type {
   NotificationDeliveryPolicyConfig,
@@ -419,7 +421,18 @@ export interface AgentCreateOptions {
   tracingPolicy?: TracingPolicy;
 }
 
-export type ModelFallbackSettings = Omit<CallSettings, 'abortSignal' | 'maxRetries' | 'headers'>;
+export type ModelFallbackSettings = Omit<CallSettings, 'abortSignal' | 'maxRetries' | 'headers'> & {
+  /**
+   * Reasoning effort level for the model. Controls how much reasoning
+   * the model performs before generating a response.
+   *
+   * Only effective with LanguageModelV4 (AI SDK v7) model providers that support reasoning.
+   * When used with older model providers (V2/V3), this option is a no-op.
+   *
+   * @default undefined (provider default behavior)
+   */
+  reasoning?: ReasoningLevel;
+};
 
 export type ModelWithRetries = {
   id?: string;

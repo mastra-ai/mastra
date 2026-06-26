@@ -1,5 +1,46 @@
 # @mastra/playground-ui
 
+## 37.0.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`023766f`](https://github.com/mastra-ai/mastra/commit/023766f44d59b30a50f3a381e33eddde8ab56c00), [`a0509c7`](https://github.com/mastra-ai/mastra/commit/a0509c731a08aa3ed626557c5338126362856f57), [`01caf93`](https://github.com/mastra-ai/mastra/commit/01caf93d71ae2c1e65f49735cafb531975187426), [`c2c1d7b`](https://github.com/mastra-ai/mastra/commit/c2c1d7bb61d2602955f14ed3952f807c2d6eb576), [`3eb852e`](https://github.com/mastra-ai/mastra/commit/3eb852e5435bc908b800193498103dc724f455b0)]:
+  - @mastra/core@1.47.0-alpha.5
+  - @mastra/client-js@1.28.0-alpha.5
+  - @mastra/react@1.1.2-alpha.5
+
+## 37.0.0-alpha.4
+
+### Patch Changes
+
+- Added direct import paths for toast and Playground UI icons so apps can avoid the root Playground UI barrel when using high-traffic utilities and icon components. ([#18470](https://github.com/mastra-ai/mastra/pull/18470))
+
+  ```ts
+  import { Toaster } from '@mastra/playground-ui/components/Toaster';
+  import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+  import { toast } from '@mastra/playground-ui/utils/toast';
+  ```
+
+- Updated dependencies [[`462a769`](https://github.com/mastra-ai/mastra/commit/462a769da61850862ca1be3d74134d33078ee6a7), [`f328049`](https://github.com/mastra-ai/mastra/commit/f3280498c324afd2a8d36cd828f5b9f94a2dddc1), [`e545228`](https://github.com/mastra-ai/mastra/commit/e54522856934a5dc030b7b6385771e3548020d59)]:
+  - @mastra/core@1.47.0-alpha.4
+  - @mastra/client-js@1.28.0-alpha.4
+  - @mastra/react@1.1.2-alpha.4
+
+## 37.0.0-alpha.3
+
+### Patch Changes
+
+- Added a direct utility import for the class name helper so applications can avoid the root Playground UI barrel. ([#18458](https://github.com/mastra-ai/mastra/pull/18458))
+
+  ```ts
+  import { cn } from '@mastra/playground-ui/utils/cn';
+  ```
+
+- Updated dependencies [[`bf3fe49`](https://github.com/mastra-ai/mastra/commit/bf3fe49f9467dbbdb8f9eaf74e0f7971ffb19559), [`24ceaea`](https://github.com/mastra-ai/mastra/commit/24ceaea0bdd8609cabbab764380608ca6621a194), [`9e45902`](https://github.com/mastra-ai/mastra/commit/9e4590208e745055cecca202e2db0e5c65e17d3c), [`6ccf67b`](https://github.com/mastra-ai/mastra/commit/6ccf67bf075753754927a57bc2e1734ba2c820c5), [`825d8de`](https://github.com/mastra-ai/mastra/commit/825d8def9fa64c2bcc3d8dd6b49e09342c3ac5c7), [`ffa09e7`](https://github.com/mastra-ai/mastra/commit/ffa09e772a5c92270eabe2090fc42d45bd8ec4b7), [`461a7c5`](https://github.com/mastra-ai/mastra/commit/461a7c501449295287f4f0ee4b0b42344f39fcf8), [`4211472`](https://github.com/mastra-ai/mastra/commit/4211472a5a2bd319c60cd2e42d9109c3eef7ac1c), [`9e45902`](https://github.com/mastra-ai/mastra/commit/9e4590208e745055cecca202e2db0e5c65e17d3c), [`5c0df77`](https://github.com/mastra-ai/mastra/commit/5c0df776c40efa420f8c07a2f3ee66010296618e)]:
+  - @mastra/core@1.47.0-alpha.3
+  - @mastra/client-js@1.28.0-alpha.3
+  - @mastra/react@1.1.2-alpha.3
+
 ## 36.1.0-alpha.2
 
 ### Minor Changes

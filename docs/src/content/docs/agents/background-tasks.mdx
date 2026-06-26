@@ -61,26 +61,26 @@ Once a tool has opted in, the LLM can optionally include a `_background` field i
 
 ### Tool-level
 
-Set `backgroundTasks.enabled: true` on the tool definition. Tools opted in at this layer run in the background whenever called by an agent that has the manager enabled.
+Set `background.enabled: true` on the tool definition. Tools opted in at this layer run in the background whenever called by an agent that has the manager enabled.
 
 ```typescript title="src/mastra/tools/research.ts"
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 export const researchTool = createTool({
-	id: 'research',
-	description: 'Run a long research job',
-	inputSchema: z.object({ topic: z.string() }),
-	// highlight-start
-	backgroundTasks: {
-		enabled: true,
-		timeoutMs: 600_000,
-		maxRetries: 1,
-	},
-	// highlight-end
-	execute: async ({ context }) => {
-		// ...
-	},
+  id: 'research',
+  description: 'Run a long research job',
+  inputSchema: z.object({ topic: z.string() }),
+  // highlight-start
+  background: {
+    enabled: true,
+    timeoutMs: 600_000,
+    maxRetries: 1,
+  },
+  // highlight-end
+  execute: async ({ context }) => {
+    // ...
+  },
 })
 ```
 
@@ -127,7 +127,7 @@ The `_background` override is a _modifier_ on tools the developer has already op
 When a tool call is dispatched, the resolved background config is computed in this priority order:
 
 1. Agent-level `backgroundTasks.tools` entry for the tool.
-1. Tool-level `backgroundTasks` config.
+1. Tool-level `background` config.
 1. LLM `_background.enabled` override (only used to enable background dispatch when the tool was opted in at one of the layers above).
 1. Manager defaults (`defaultTimeoutMs`, `defaultRetries`).
 
@@ -222,7 +222,7 @@ const stream = await supervisor.stream('Research AI in education and write an ar
 
 ### Inheriting from the subagent
 
-If a subagent isn't listed under the supervisor's `backgroundTasks.tools` but has background-eligible tools of its own (either via tool-level `backgroundTasks.enabled: true` or its own `backgroundTasks.tools` entry) the framework still dispatches the entire subagent invocation as a background task. The supervisor inherits the subagent's intent: the subagent itself becomes the background task, and its inner tools run in the foreground inside the subagent's loop.
+If a subagent isn't listed under the supervisor's `backgroundTasks.tools` but has background-eligible tools of its own (either via tool-level `background.enabled: true` or its own `backgroundTasks.tools` entry) the framework still dispatches the entire subagent invocation as a background task. The supervisor inherits the subagent's intent: the subagent itself becomes the background task, and its inner tools run in the foreground inside the subagent's loop.
 
 The background config used for the inherited dispatch (for example `waitTimeoutMs`) is derived from the subagent's own `backgroundTasks` config.
 
@@ -309,7 +309,7 @@ The manager keeps tool executors in process memory. If the process restarts whil
 
 Each layer can register terminal-state callbacks. They don't replace one another, and success/failure hooks fire for their respective outcomes:
 
-- Tool-level `backgroundTasks.onComplete` / `onFailed`: scoped to one tool.
+- Tool-level `background.onComplete` / `onFailed`: scoped to one tool.
 - Agent-level `backgroundTasks.onTaskComplete` / `onTaskFailed`: scoped to all tasks dispatched by this agent.
 - Manager-level `onTaskComplete` / `onTaskFailed`: scoped globally.
 

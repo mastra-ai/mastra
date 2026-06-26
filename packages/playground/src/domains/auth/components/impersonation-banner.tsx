@@ -1,4 +1,4 @@
-import { Txt } from '@mastra/playground-ui';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Eye, X } from 'lucide-react';
 
 import { useRoleImpersonation } from '../hooks/use-role-impersonation';

@@ -1,6 +1,6 @@
 'use client';
 
-import { Button } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Column } from '@mastra/playground-ui/components/Columns';
 import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { getShortId } from '@mastra/playground-ui/components/Text';

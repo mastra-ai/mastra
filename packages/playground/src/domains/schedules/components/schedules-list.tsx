@@ -1,5 +1,5 @@
 import type { ScheduleResponse } from '@mastra/client-js';
-import { DataList, DataListSkeleton } from '@mastra/playground-ui';
+import { DataList, DataListSkeleton } from '@mastra/playground-ui/components/DataList';
 import { useMemo } from 'react';
 import { formatScheduleTimestamp, formatRelativeTime } from '../utils/format';
 import { ScheduleStatusText } from './schedule-status-badge';

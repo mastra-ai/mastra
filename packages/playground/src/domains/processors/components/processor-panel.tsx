@@ -1,11 +1,13 @@
 import { jsonLanguage } from '@codemirror/lang-json';
-import { Button, Txt, toast } from '@mastra/playground-ui';
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { MainContentContent } from '@mastra/playground-ui/components/MainContent';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import CodeMirror from '@uiw/react-codemirror';
 import { useState, useId, useEffect } from 'react';
 import type {

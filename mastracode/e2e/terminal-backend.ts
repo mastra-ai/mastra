@@ -4,7 +4,7 @@ import type { Terminal as XtermTerminalType } from '@xterm/headless';
 import xterm from '@xterm/headless';
 
 import type { MastraCodeConfig } from '../../src/index.js';
-import { getScenario } from './scenarios/index.js';
+import { getScenario } from './tui/index.js';
 import type {
   McE2eInProcessApp,
   McE2ePrepareContext,
@@ -12,7 +12,7 @@ import type {
   McE2eStartMastraCodeAppOptions,
   McE2eTerminal,
   ScenarioName,
-} from './scenarios/types.js';
+} from './tui/types.js';
 
 export type TerminalRunConfig = {
   scenarioName: ScenarioName;

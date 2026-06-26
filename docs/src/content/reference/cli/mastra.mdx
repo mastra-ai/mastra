@@ -678,6 +678,14 @@ Target a specific Mastra server URL.
 mastra api --url https://example.com agent list
 ```
 
+#### `--server-api-prefix <prefix>`
+
+Set the API route prefix of the target server. Defaults to `/api`. Use this when the server is mounted under a custom prefix (for example a `@mastra/fastify` `MastraServer` with `prefix: "/api/mastra-studio"`), the same way `mastra studio` accepts `--server-api-prefix`. You can also set the `MASTRA_API_PREFIX` environment variable instead of passing the flag.
+
+```bash
+mastra api --url https://example.com --server-api-prefix /api/mastra-studio agent list
+```
+
 #### `--header <"Key: Value">`
 
 Send a custom HTTP header. Repeat the flag to send multiple headers.

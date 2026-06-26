@@ -82,9 +82,9 @@ export const requestSandboxAccessTool = createTool({
         // filesystem allowlist from `sandboxAllowedPaths` on every call
         // (getDynamicWorkspace), so an unawaited setState would let that
         // rebuild clobber the in-turn widen below before the grant lands.
-        const currentAllowed = (harnessCtx?.session.state.get()?.sandboxAllowedPaths as string[] | undefined) ?? [];
+        const currentAllowed = (harnessCtx?.getState()?.sandboxAllowedPaths as string[] | undefined) ?? [];
         if (!currentAllowed.includes(absolutePath)) {
-          await harnessCtx?.session.state.set({
+          await harnessCtx?.setState({
             sandboxAllowedPaths: [...currentAllowed, absolutePath],
           });
         }

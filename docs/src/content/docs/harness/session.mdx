@@ -37,7 +37,7 @@ const threadId = harness.session.thread.getId()
 
 The session `id` and `ownerId` are stable for the life of the session — they don't change when the resource ID is switched. They mirror the `id` and `ownerId` fields on `SessionRecord` in storage, so storage layers can key sessions by a stable identifier rather than the mutable resource ID.
 
-The resource ID is set when creating a session via [`harness.createSession()`](/reference/harness/harness-class#createsession-id-ownerid-resourceid-) and defaults to the harness `id`. See [Resource IDs](/docs/harness/threads-and-state#resource-ids) for how it scopes threads.
+The resource ID is set when creating a session via [`harness.createSession()`](/reference/harness/harness-class#createsession-id-ownerid-resourceid-tags-workspace-browser-requestcontext-) and defaults to the harness `id`. See [Resource IDs](/docs/harness/threads-and-state#resource-ids) for how it scopes threads.
 
 ## Thread
 

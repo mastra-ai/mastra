@@ -17,6 +17,7 @@ import { Agent } from '../../agent';
 import { InMemoryStore } from '../../storage/mock';
 import { Harness } from '../harness';
 import type { Session } from '../session';
+import { createMockWorkspace } from '../test-utils';
 import type { HarnessEvent } from '../types';
 
 function createHarness() {
@@ -28,6 +29,7 @@ function createHarness() {
   });
 
   return new Harness({
+    workspace: createMockWorkspace(),
     id: 'trailing-guard-harness',
     storage: new InMemoryStore(),
     modes: [{ id: 'default', name: 'Default', default: true, agent }],

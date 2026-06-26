@@ -1,17 +1,12 @@
 import { jsonLanguage } from '@codemirror/lang-json';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-  Txt,
-  Icon,
-  formatJSON,
-  isValidJson,
-  cn,
-} from '@mastra/playground-ui';
+import { formatJSON, isValidJson } from '@mastra/playground-ui';
 import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import CodeMirror from '@uiw/react-codemirror';
 import { Braces, ChevronDown, CopyIcon, EyeIcon, EyeOffIcon } from 'lucide-react';
