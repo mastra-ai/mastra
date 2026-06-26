@@ -166,12 +166,12 @@ export async function startAgentControllerServer(
   // inheritance path explicitly, the AgentController also gets its own ephemeral libsql
   // store. We use libsql (not a bare InMemoryStore) because it is a real
   // composite store with a `memory` domain — matching production web wiring.
-  const harnessStore = inheritStorageFromMastra
+  const controllerStore = inheritStorageFromMastra
     ? undefined
     : new LibSQLStore({ id: 'scenario-controller-storage', url: 'file::memory:?cache=shared' });
   const controller = new AgentController({
     id: CONTROLLER_ID,
-    ...(harnessStore ? { storage: harnessStore } : {}),
+    ...(controllerStore ? { storage: controllerStore } : {}),
     workspace,
     // Auto-approve tool calls (yolo) so scenarios exercise the full
     // execute-and-suspend path for built-in interactive tools (ask_user,

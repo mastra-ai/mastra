@@ -5,7 +5,7 @@ import { runScenario } from './scenario-runner';
 /**
  * Verify the workspace status route reports correctly when a workspace is
  * configured vs. when it isn't (default). Also verify the workspace-enabled
- * harness can serve a chat.
+ * controller can serve a chat.
  */
 describe('web scenario: workspace-status', () => {
   it('reports workspace as ready when configured', async () => {
@@ -18,7 +18,7 @@ describe('web scenario: workspace-status', () => {
         expect(workspaceRoot).toBeTruthy();
 
         // Check workspace status via the API.
-        const res = await rawFetch(`${baseUrl}/api/harness/code/workspace`);
+        const res = await rawFetch(`${baseUrl}/api/agent-controller/code/workspace`);
         const body = (await res.json()) as { hasWorkspace: boolean; isReady: boolean };
         expect(body.hasWorkspace).toBe(true);
         expect(body.isReady).toBe(true);

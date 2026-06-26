@@ -91,7 +91,7 @@ function validateModes(modes: AgentControllerMode[]): void {
  * through the AI SDK as a `content-filter` finish reason, with details on
  * `providerMetadata.anthropic.stopDetails`. Without explicit handling these
  * runs end on an empty assistant message with no error, so the run appears to
- * silently stop. Returning a message here lets the harness finalize the run
+ * silently stop. Returning a message here lets the controller finalize the run
  * into an explicit terminal error state.
  */
 /**
@@ -102,7 +102,7 @@ function validateModes(modes: AgentControllerMode[]): void {
 const FABLE_FALLBACK_MODEL = 'claude-opus-4-8';
 
 /**
- * Step budget applied to every harness-driven agent run.
+ * Step budget applied to every controller-driven agent run.
  *
  * This MUST be passed to both the initial stream and `resumeStream`: when a run
  * suspends on an interactive tool (e.g. `ask_user`) and then resumes, the
@@ -111,7 +111,7 @@ const FABLE_FALLBACK_MODEL = 'claude-opus-4-8';
  * capped and ends with `reason:"complete"` after a few steps — the agent stops
  * mid-task even though it promised to continue. See {@link buildSharedRunOptions}.
  */
-const HARNESS_MAX_STEPS = 1000;
+const CONTROLLER_MAX_STEPS = 1000;
 
 /**
  * Returns Anthropic `providerOptions` that enable a server-side fallback to
@@ -229,7 +229,7 @@ export class AgentController<TState = {}> {
       throw new Error(
         config.defaultModeId
           ? `Default mode not found: ${config.defaultModeId}`
-          : 'Harness requires at least one agent mode',
+          : 'AgentController requires at least one agent mode',
       );
     }
 
@@ -325,9 +325,9 @@ export class AgentController<TState = {}> {
    * Call {@link init} once before creating sessions so shared storage and
    * workspace are ready.
    *
-   * @param id - Stable session identifier (mirrors `SessionRecord.id`). Defaults to the harness `id`.
-   * @param ownerId - Stable session owner (mirrors `SessionRecord.ownerId`). Defaults to the harness `id`.
-   * @param resourceId - Memory resource to bind this session to. Defaults to the harness `resourceId` or `id`.
+   * @param id - Stable session identifier (mirrors `SessionRecord.id`). Defaults to the controller `id`.
+   * @param ownerId - Stable session owner (mirrors `SessionRecord.ownerId`). Defaults to the controller `id`.
+   * @param resourceId - Memory resource to bind this session to. Defaults to the controller `resourceId` or `id`.
    */
   async createSession({
     resourceId,
@@ -398,7 +398,7 @@ export class AgentController<TState = {}> {
   ): Promise<Session<TState>> {
     // Seed the session's tags into its state so thread tagging + the workspace
     // factory resolve against this session's scope (e.g. its `projectPath`), not
-    // the harness-global default (which, on a multi-session server, may point at
+    // the controller-global default (which, on a multi-session server, may point at
     // a different repo).
     const requestContext = overrides?.requestContext ?? new RequestContext();
     let initialState = structuredClone(this.config.initialState);
@@ -497,7 +497,7 @@ export class AgentController<TState = {}> {
     // worktrees sharing a resourceId each resume their own thread without
     // claiming threads owned by another scope. A thread is a candidate only when
     // its metadata matches every provided tag; with no tags every thread
-    // qualifies. Tags default to the harness-global state when omitted.
+    // qualifies. Tags default to the controller-global state when omitted.
     const selectionTags: Record<string, string> = {};
     if (tags && Object.keys(tags).length > 0) {
       Object.assign(selectionTags, tags);
@@ -1509,7 +1509,7 @@ export class AgentController<TState = {}> {
   private buildSharedRunOptions(session: Session<TState>): Record<string, unknown> {
     const isYolo = (session.state.get() as Record<string, unknown>).yolo === true;
     const shared: Record<string, unknown> = {
-      maxSteps: HARNESS_MAX_STEPS,
+      maxSteps: CONTROLLER_MAX_STEPS,
       savePerStep: false,
       requireToolApproval: !isYolo,
     };

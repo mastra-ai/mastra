@@ -3,17 +3,17 @@ import { describe, it, expect } from 'vitest';
 import { runScenario } from './scenario-runner';
 
 /**
- * Storage inheritance: the Harness is built with NO storage of its own, and
+ * Storage inheritance: the AgentController is built with NO storage of its own, and
  * storage is configured on the parent Mastra instead. This is the production
- * web-server wiring (`new Mastra({ harnesses, storage })`). Thread persistence
- * must still work, proving the Harness reads through the parent Mastra's store
- * (Harness#resolveStorage).
+ * web-server wiring (`new Mastra({ agentControllrs, storage })`). Thread persistence
+ * must still work, proving the AgentController reads through the parent Mastra's store
+ * (AgentController#resolveStorage).
  */
 describe('web scenario: storage-inheritance', () => {
-  it('persists threads through the parent Mastra storage when the harness has none', async () => {
+  it('persists threads through the parent Mastra storage when the controller has none', async () => {
     await runScenario({
       name: 'storage-inheritance',
-      description: 'Harness with no storage inherits the parent Mastra store; created threads still persist.',
+      description: 'AgentController with no storage inherits the parent Mastra store; created threads still persist.',
       aimockFixture: 'automated-chat.json',
       server: { inheritStorageFromMastra: true },
       run: async ({ driver }) => {
@@ -29,7 +29,7 @@ describe('web scenario: storage-inheritance', () => {
         expect(secondThreadId).not.toBe(firstThreadId);
 
         // Listing reads back through the inherited Mastra storage. If the
-        // harness were silently storage-less, this would be empty.
+        // controller were silently storage-less, this would be empty.
         const threads = await driver.listThreads();
         const ids = threads.map(t => t.id);
         expect(ids).toContain(secondThreadId);

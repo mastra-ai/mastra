@@ -5,7 +5,7 @@ import { createDriver } from './driver';
 import type { ScenarioDriver } from './driver';
 
 /**
- * Scenario harness — mirrors how MastraCode's TUI scenarios run: start AIMock
+ * Scenario runner — mirrors how MastraCode's TUI scenarios run: start AIMock
  * with a fixture, stand up the real backend pointed at it, drive the real SDK,
  * then assert. Returns the driver + the AIMock request log for `verifyAimock`.
  */

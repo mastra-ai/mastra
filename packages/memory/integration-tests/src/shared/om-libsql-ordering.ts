@@ -420,7 +420,7 @@ export async function runOm14745RotationScenario(opts: {
   });
 
   if (!bufResult.buffered) {
-    throw new Error('OM 14745 harness: expected om.buffer() to run (buffered=false)');
+    throw new Error('OM 14745 controller: expected om.buffer() to run (buffered=false)');
   }
 
   messageList.updateToolInvocation({
