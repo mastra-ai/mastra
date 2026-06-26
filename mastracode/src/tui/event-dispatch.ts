@@ -220,14 +220,17 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
 
     case 'usage_update': {
       // Token accumulation handled by Harness display state.
-      // Compute tokens/sec from completion token deltas.
+      // Compute tokens/sec using exponential moving average (α=0.3) for smooth display.
       const now = Date.now();
       const currentTokens = event.usage.completionTokens;
       if (state.prevTokenTimestamp > 0 && currentTokens > state.prevCompletionTokens) {
         const elapsedSec = (now - state.prevTokenTimestamp) / 1000;
         if (elapsedSec > 0) {
           const delta = currentTokens - state.prevCompletionTokens;
-          state.tokensPerSec = Math.round(delta / elapsedSec);
+          const instantaneous = delta / elapsedSec;
+          const alpha = 0.3;
+          const ema = state.tokensPerSec > 0 ? alpha * instantaneous + (1 - alpha) * state.tokensPerSec : instantaneous;
+          state.tokensPerSec = Math.round(ema);
         }
       }
       state.prevCompletionTokens = currentTokens;

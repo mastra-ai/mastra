@@ -417,7 +417,12 @@ function applyEvent(state: TranscriptState, raw: HarnessEvent): TranscriptState 
       if (state._prevTokenTimestamp > 0 && currentTokens > state._prevCompletionTokens) {
         const elapsedSec = (now - state._prevTokenTimestamp) / 1000;
         if (elapsedSec > 0) {
-          tps = Math.round((currentTokens - state._prevCompletionTokens) / elapsedSec);
+          const instantaneous = (currentTokens - state._prevCompletionTokens) / elapsedSec;
+          const alpha = 0.3;
+          tps =
+            state.tokensPerSec > 0
+              ? Math.round(alpha * instantaneous + (1 - alpha) * state.tokensPerSec)
+              : Math.round(instantaneous);
         }
       }
       return {
