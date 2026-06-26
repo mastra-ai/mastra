@@ -196,6 +196,14 @@ type BaseWorkingMemory = {
    * @see docs/src/content/en/docs/agents/signals.mdx
    */
   useStateSignals?: boolean;
+  /**
+   * Whether to inject the working memory update tool into the main agent.
+   * Set to false when another path, such as Observational Memory extractors,
+   * owns working memory updates.
+   *
+   * @default true
+   */
+  injectTools?: boolean;
   /** @deprecated The `use` option has been removed. Working memory always uses tool-call mode. */
   use?: never;
 };

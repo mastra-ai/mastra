@@ -55,6 +55,7 @@ export {
 } from './processors/observational-memory/model-by-input-tokens';
 export {
   Extractor,
+  WorkingMemoryExtractor,
   type ExtractorConfig,
   type ExtractorOnExtractedContext,
   type ExtractorRuntimeContext,
@@ -2149,7 +2150,11 @@ Notes:
     this.assertWorkingMemoryStateSignalsCompatibility(mergedConfig);
     const tools: Record<string, ToolAction<any, any, any>> = {};
 
-    if (mergedConfig.workingMemory?.enabled && !mergedConfig.readOnly) {
+    if (
+      mergedConfig.workingMemory?.enabled &&
+      mergedConfig.workingMemory.injectTools !== false &&
+      !mergedConfig.readOnly
+    ) {
       const { name, tool } = createWorkingMemoryTool(mergedConfig, {
         vNext: this.isVNextWorkingMemoryConfig(mergedConfig),
       });
