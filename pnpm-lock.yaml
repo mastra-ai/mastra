@@ -1522,8 +1522,8 @@ importers:
         specifier: ^3.10.1
         version: 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@mastra/lint-docs':
-        specifier: ^1.0.1
-        version: 1.0.1(prettier@3.8.4)
+        specifier: ^1.0.2
+        version: 1.0.2(prettier@3.8.4)
       '@playwright/test':
         specifier: ^1.58.2
         version: 1.60.0
@@ -13715,6 +13715,13 @@ packages:
     peerDependencies:
       prettier: ^3.8.3
 
+  '@mastra/lint-docs@1.0.2':
+    resolution: {integrity: sha512-aa5pQBKrUBK9VeZhRALGrrIEnta5Ovv82Cg8lBZz/45pfG6E1Deo8p4EFTBaBgcL99Wa2LZLSCeMb4SvXU3U/Q==}
+    engines: {node: '>=22.13.0'}
+    hasBin: true
+    peerDependencies:
+      prettier: ^3.8.3
+
   '@mastra/schema-compat@1.1.0':
     resolution: {integrity: sha512-2v8nTaAC/279jHs0ux2Emp+lNgBFq3QeNbZCGSHFeeBhbqqM5aWJCPY2Xgw8Z/dY3mTpFxBbmXQz3oRyYStnqg==}
     engines: {node: '>=22.13.0'}
@@ -19567,6 +19574,11 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
+  acorn@8.17.0:
+    resolution: {integrity: sha512-xRQbDb9BnwDafYNn6Vwl839DYVjqXYb1XVGtWAZ1kcDc6iwAL4hg3B1dZlRiuENFeO2H53gFG3in621AdERVAg==}
+    engines: {node: '>=0.4.0'}
+    hasBin: true
+
   address@1.2.2:
     resolution: {integrity: sha512-4B/qKCfeE/ODUaAUpSwfzazo5x29WD4r3vXiWsB7I2mSDAihwEqKO+g8GELZUQSSAo5e1XTYh3ZVfLyxBc12nA==}
     engines: {node: '>= 10.0.0'}
@@ -21383,6 +21395,9 @@ packages:
 
   decode-named-character-reference@1.2.0:
     resolution: {integrity: sha512-c6fcElNV6ShtZXmsgNgFFV5tVX2PaV4g+MOAkb8eXHvn6sryJBrZa9r0zV6+dtTyoCKxtDy5tyQ5ZwQuidtd+Q==}
+
+  decode-named-character-reference@1.3.0:
+    resolution: {integrity: sha512-GtpQYB283KrPp6nRw50q3U9/VfOutZOe103qlN7BPP6Ad27xYnOIWv4lPzo8HCAL+mMZofJ9KEy30fq6MfaK6Q==}
 
   decompress-response@6.0.0:
     resolution: {integrity: sha512-aW35yZM6Bb/4oJlZncMH2LCoZtJXTRxES17vE3hoRiowU2kWHaJKFkSBDnDR+cm9J+9QhXmREyIfv0pji9ejCQ==}
@@ -24307,6 +24322,9 @@ packages:
 
   mdast-util-from-markdown@2.0.2:
     resolution: {integrity: sha512-uZhTV/8NBuw0WHkPTrCqDOl0zVe1BIng5ZtHoDk49ME1qqcjYmmLmOf0gELgcRMxN4w2iuIeVso5/6QymSrgmA==}
+
+  mdast-util-from-markdown@2.0.3:
+    resolution: {integrity: sha512-W4mAWTvSlKvf8L6J+VN9yLSqQ9AOAAvHuoDAmPkz4dHf553m5gVj2ejadHJhoJmcmxEnOv6Pa8XJhpxE93kb8Q==}
 
   mdast-util-frontmatter@2.0.1:
     resolution: {integrity: sha512-LRqI9+wdgC25P0URIJY9vwocIzCcksduHQ9OF2joxQoyTNVduwLAFUzjoopuRJbJAReaKrNQKAZKL3uCMugWJA==}
@@ -36133,7 +36151,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@mastra/lint-docs@1.0.1(prettier@3.8.4)':
+  '@mastra/lint-docs@1.0.2(prettier@3.8.4)':
     dependencies:
       prettier: 3.8.4
       remark: 15.0.1
@@ -42739,6 +42757,10 @@ snapshots:
     dependencies:
       acorn: 8.16.0
 
+  acorn-import-attributes@1.9.5(acorn@8.17.0):
+    dependencies:
+      acorn: 8.17.0
+
   acorn-import-phases@1.0.4(acorn@8.16.0):
     dependencies:
       acorn: 8.16.0
@@ -42747,9 +42769,15 @@ snapshots:
     dependencies:
       acorn: 8.16.0
 
+  acorn-jsx@5.3.2(acorn@8.17.0):
+    dependencies:
+      acorn: 8.17.0
+
   acorn-walk@8.3.2: {}
 
   acorn@8.16.0: {}
+
+  acorn@8.17.0: {}
 
   address@1.2.2: {}
 
@@ -44816,6 +44844,10 @@ snapshots:
   decimal.js@10.6.0: {}
 
   decode-named-character-reference@1.2.0:
+    dependencies:
+      character-entities: 2.0.2
+
+  decode-named-character-reference@1.3.0:
     dependencies:
       character-entities: 2.0.2
 
@@ -47195,15 +47227,15 @@ snapshots:
 
   import-in-the-middle@1.15.0:
     dependencies:
-      acorn: 8.16.0
-      acorn-import-attributes: 1.9.5(acorn@8.16.0)
+      acorn: 8.17.0
+      acorn-import-attributes: 1.9.5(acorn@8.17.0)
       cjs-module-lexer: 1.4.3
       module-details-from-path: 1.0.4
 
   import-in-the-middle@2.0.6:
     dependencies:
-      acorn: 8.16.0
-      acorn-import-attributes: 1.9.5(acorn@8.16.0)
+      acorn: 8.17.0
+      acorn-import-attributes: 1.9.5(acorn@8.17.0)
       cjs-module-lexer: 2.2.0
       module-details-from-path: 1.0.4
 
@@ -48341,12 +48373,29 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  mdast-util-from-markdown@2.0.3:
+    dependencies:
+      '@types/mdast': 4.0.4
+      '@types/unist': 3.0.3
+      decode-named-character-reference: 1.3.0
+      devlop: 1.1.0
+      mdast-util-to-string: 4.0.0
+      micromark: 4.0.2
+      micromark-util-decode-numeric-character-reference: 2.0.2
+      micromark-util-decode-string: 2.0.1
+      micromark-util-normalize-identifier: 2.0.1
+      micromark-util-symbol: 2.0.1
+      micromark-util-types: 2.0.2
+      unist-util-stringify-position: 4.0.0
+    transitivePeerDependencies:
+      - supports-color
+
   mdast-util-frontmatter@2.0.1:
     dependencies:
       '@types/mdast': 4.0.4
       devlop: 1.1.0
       escape-string-regexp: 5.0.0
-      mdast-util-from-markdown: 2.0.2
+      mdast-util-from-markdown: 2.0.3
       mdast-util-to-markdown: 2.1.2
       micromark-extension-frontmatter: 2.0.0
     transitivePeerDependencies:
@@ -48712,8 +48761,8 @@ snapshots:
 
   micromark-extension-mdxjs@3.0.0:
     dependencies:
-      acorn: 8.16.0
-      acorn-jsx: 5.3.2(acorn@8.16.0)
+      acorn: 8.17.0
+      acorn-jsx: 5.3.2(acorn@8.17.0)
       micromark-extension-mdx-expression: 3.0.1
       micromark-extension-mdx-jsx: 3.0.2
       micromark-extension-mdx-md: 2.0.0
@@ -53715,7 +53764,7 @@ snapshots:
 
   unplugin@1.16.1:
     dependencies:
-      acorn: 8.16.0
+      acorn: 8.17.0
       webpack-virtual-modules: 0.6.2
 
   unplugin@2.3.11:

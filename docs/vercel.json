@@ -794,6 +794,21 @@
 			"source": "/docs/streaming/background-task-streaming",
 			"destination": "/docs/agents/background-tasks#subscribe-to-all-task-events",
 			"permanent": true
+		},
+		{
+			"source": "/docs/community/licensing",
+			"destination": "/docs/license",
+			"permanent": true
+		},
+		{
+			"source": "/docs/community/contributing-templates",
+			"destination": "/docs",
+			"permanent": true
+		},
+		{
+			"source": "/docs/community/discord",
+			"destination": "/docs",
+			"permanent": true
 		}
 	]
 }

@@ -895,27 +895,6 @@ const sidebars = {
 				},
 			],
 		},
-		{
-			type: 'category',
-			label: 'Community',
-			items: [
-				{
-					type: 'doc',
-					id: 'community/contributing-templates',
-					label: 'Contributing Templates',
-				},
-				{
-					type: 'doc',
-					id: 'community/licensing',
-					label: 'License',
-				},
-				{
-					type: 'doc',
-					id: 'community/discord',
-					label: 'Discord',
-				},
-			],
-		},
 	],
 	platformSidebar: [
 		{

@@ -212,7 +212,11 @@ jobs:
       - name: Validate frontmatter
         if: steps.mdx-changes.outputs.has_changes == 'true'
         working-directory: ./docs
-        run: pnpm dlx tsx scripts/validate-frontmatter.ts
+        run: pnpm validate:frontmatter
+
+      - name: Validate redirects
+        working-directory: ./docs
+        run: pnpm validate:redirects
 
       - name: Validate reference sidebar sort order
         working-directory: ./docs
