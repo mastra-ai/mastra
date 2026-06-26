@@ -18,6 +18,7 @@ import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
 
 import { Harness } from '../harness';
 import { describeNonSuccessFinishReason } from '../stream-content';
+import { createMockWorkspace } from '../test-utils';
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -55,6 +56,7 @@ async function buildHarness(id: string, stream: () => ReadableStream) {
   const registeredAgent = mastra.getAgent(`agent-${id}`);
 
   const harness = new Harness({
+    workspace: createMockWorkspace(),
     id: `harness-${id}`,
     storage,
     modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
@@ -62,7 +64,7 @@ async function buildHarness(id: string, stream: () => ReadableStream) {
   });
 
   await harness.init();
-  const session = await harness.createSession();
+  const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
   await session.thread.create();
   return { harness, session };
 }

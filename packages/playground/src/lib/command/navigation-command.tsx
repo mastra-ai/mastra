@@ -1,6 +1,4 @@
 import {
-  useMaybeSidebar,
-  AgentIcon,
   CommandDialog,
   CommandEmpty,
   CommandGroup,
@@ -8,13 +6,15 @@ import {
   CommandItem,
   CommandList,
   CommandShortcut,
-  Kbd,
-  McpServerIcon,
-  ScrollArea,
-  ToolsIcon,
-  WorkflowIcon,
-  useKeyboardShortcutLabel,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Command';
+import { Kbd } from '@mastra/playground-ui/components/Kbd';
+import { useMaybeSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
+import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import {
   Cpu,
   EyeIcon,

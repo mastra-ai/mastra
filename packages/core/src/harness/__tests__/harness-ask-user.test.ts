@@ -15,6 +15,8 @@ import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
 import { askUserTool } from '../../tools/builtin/ask-user';
 
 import { Harness } from '../harness';
+import { SessionApproval } from '../session';
+import { createMockWorkspace } from '../test-utils';
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -80,6 +82,7 @@ async function buildHarness(id: string, input: string) {
   const registeredAgent = mastra.getAgent(`agent-${id}`);
 
   const harness = new Harness({
+    workspace: createMockWorkspace(),
     id: `harness-${id}`,
     storage,
     modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
@@ -87,7 +90,7 @@ async function buildHarness(id: string, input: string) {
   });
 
   await harness.init();
-  const session = await harness.createSession();
+  const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
   await session.thread.create();
   return { harness, session, registeredAgent };
 }
@@ -260,6 +263,27 @@ describe('Harness: ask_user native suspension', () => {
     expect(approval.isArmed()).toBe(false);
   });
 
+  it('ignores a tool-approval response whose toolCallId does not match the armed gate', async () => {
+    // A stale/delayed approval request must not resolve a different pending gate.
+    // When a toolCallId is supplied it has to match the armed call; a mismatch is
+    // a no-op so the gate stays parked for the correct responder.
+    const approval = new SessionApproval();
+    const parked = approval.arm({ toolName: 'edit_file', toolCallId: 'call-current' });
+    expect(approval.isArmed()).toBe(true);
+    expect(approval.getToolCallId()).toBe('call-current');
+
+    // Wrong id: ignored, gate remains armed.
+    approval.respond({ decision: 'approve', toolCallId: 'call-stale' });
+    expect(approval.isArmed()).toBe(true);
+
+    // Correct id resolves it. Omitting toolCallId is also accepted (backwards compatible).
+    approval.respond({ decision: 'approve', toolCallId: 'call-current' });
+    const decision = await parked;
+    expect(decision.decision).toBe('approve');
+    expect(approval.isArmed()).toBe(false);
+    expect(approval.getToolCallId()).toBeNull();
+  });
+
   it('surfaces three ask_user questions one at a time across resumes (#13642 serialized flow)', async () => {
     // When the model emits three ask_user calls in one step, suspend-capable tools
     // run sequentially: only the first suspends per run, and answering it resumes
@@ -315,13 +339,14 @@ describe('Harness: ask_user native suspension', () => {
     const mastra = new Mastra({ agents: { 'agent-serial': agent }, logger: false, storage });
     const registeredAgent = mastra.getAgent('agent-serial');
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'harness-serial',
       storage,
       modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
       initialState: { yolo: true } as any,
     });
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     await session.thread.create();
 
     const events: any[] = [];
@@ -346,9 +371,13 @@ describe('Harness: ask_user native suspension', () => {
         expect(suspensions.map(e => e.toolCallId)).toEqual([next.toolCallId]);
         expect(events.some(e => e.type === 'tool_start')).toBe(false);
       } else {
-        // Last answer completes the run with no further suspensions.
+        // Last answer completes the run with no further suspensions. The resume
+        // call returns once the matching tool result boundary is observed, so the
+        // final agent_end may arrive on the subscription shortly after.
         expect(suspensions).toHaveLength(0);
-        expect(events.some(e => e.type === 'agent_end' && e.reason === 'complete')).toBe(true);
+        await vi.waitFor(() => {
+          expect(events.some(e => e.type === 'agent_end' && e.reason === 'complete')).toBe(true);
+        });
       }
     }
 

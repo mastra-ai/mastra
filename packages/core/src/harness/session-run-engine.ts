@@ -16,7 +16,7 @@ import {
   toSystemReminderContent,
   toUserSignalMessage,
 } from './stream-content';
-import type { HarnessMessage, TokenUsage } from './types';
+import type { AgentControllerMessage, TokenUsage } from './types';
 
 /**
  * The transient state of a single in-flight agent stream: the assistant message
@@ -24,8 +24,8 @@ import type { HarnessMessage, TokenUsage } from './types';
  * flags. One per run; recreated per run within a subscribed thread stream.
  */
 type StreamState = {
-  currentMessage: HarnessMessage;
-  lastFinishedMessage?: HarnessMessage;
+  currentMessage: AgentControllerMessage;
+  lastFinishedMessage?: AgentControllerMessage;
   isSuspended: boolean;
   textContentById: Map<string, { index: number; text: string }>;
   thinkingContentById: Map<string, { index: number; text: string }>;
@@ -59,7 +59,7 @@ export class SessionRunEngine {
     this.#machinery = machinery;
   }
 
-  private createEmptyAssistantMessage(): HarnessMessage {
+  private createEmptyAssistantMessage(): AgentControllerMessage {
     return {
       id: this.#machinery.generateId(),
       role: 'assistant',
@@ -105,13 +105,13 @@ export class SessionRunEngine {
   async processStream(
     response: { fullStream: AsyncIterable<any> },
     requestContextInput?: RequestContext,
-  ): Promise<{ message: HarnessMessage; suspended?: boolean } | undefined> {
+  ): Promise<{ message: AgentControllerMessage; suspended?: boolean } | undefined> {
     const state = this.createStreamState();
     const requestContext = await this.#machinery.buildRequestContext(requestContextInput);
     this.#session.run.nextOperation();
     this.#session.emit({ type: 'agent_start' });
 
-    let result: { message: HarnessMessage; suspended?: boolean } | undefined;
+    let result: { message: AgentControllerMessage; suspended?: boolean } | undefined;
     let error = false;
     let aborted = false;
 
@@ -167,7 +167,7 @@ export class SessionRunEngine {
     state: StreamState,
     chunk: any,
     requestContext: RequestContext,
-  ): Promise<{ message: HarnessMessage; suspended?: boolean } | undefined> {
+  ): Promise<{ message: AgentControllerMessage; suspended?: boolean } | undefined> {
     if ('runId' in chunk && chunk.runId) {
       this.#session.run.setRunId({ runId: chunk.runId });
     }
@@ -314,7 +314,7 @@ export class SessionRunEngine {
           break;
         }
 
-        const approvalPromise = this.#session.approval.arm({ toolName });
+        const approvalPromise = this.#session.approval.arm({ toolName, toolCallId });
         this.#session.emit({ type: 'tool_approval_required', toolCallId, toolName, args: toolArgs });
 
         const approval = await approvalPromise;
@@ -329,6 +329,7 @@ export class SessionRunEngine {
           await this.#session.declineToolCall({
             toolCallId,
             requestContext: approval.requestContext ?? requestContext,
+            declineContext: approval.declineContext,
           });
         }
         break;
@@ -731,7 +732,7 @@ export class SessionRunEngine {
     }
   }
 
-  private finishStreamState(state: StreamState): { message: HarnessMessage; suspended?: boolean } {
+  private finishStreamState(state: StreamState): { message: AgentControllerMessage; suspended?: boolean } {
     if (this.hasCurrentMessageContent(state) || !state.lastFinishedMessage) {
       this.#session.emit({ type: 'message_end', message: state.currentMessage });
       return { message: state.currentMessage, suspended: state.isSuspended || undefined };
@@ -776,18 +777,12 @@ export class SessionRunEngine {
   async processSubscribedThreadStream(subscription: AgentThreadSubscription<any>): Promise<void> {
     const requestContext = await this.#machinery.buildRequestContext();
     let currentRun: StreamState | undefined;
-    let lastFinishedRunId: string | null = null;
 
     try {
       for await (const chunk of subscription.stream) {
         if (!this.#session.stream.isCurrent({ subscription })) {
           subscription.unsubscribe();
           break;
-        }
-
-        const chunkRunId = 'runId' in chunk ? chunk.runId : null;
-        if (lastFinishedRunId && chunkRunId === lastFinishedRunId) {
-          continue;
         }
 
         if (!currentRun) {
@@ -812,7 +807,6 @@ export class SessionRunEngine {
             chunk.type === 'abort' ||
             chunk.type === 'tool-call-suspended'
           ) {
-            const finishedRunId: string | null = chunkRunId ?? this.#session.run.getRunId();
             const suspended =
               chunk.type === 'tool-call-suspended' ||
               (streamResult ?? this.finishStreamState(currentRun)).suspended ||
@@ -837,8 +831,17 @@ export class SessionRunEngine {
               error: isError,
               aborted,
             });
-            lastFinishedRunId = finishedRunId;
             currentRun = undefined;
+            if (aborted) {
+              // The abort chunk terminates this consumer loop, so the live
+              // subscription is no longer being drained. Detach it so the next
+              // signal (e.g. a follow-up message sent right after Ctrl+C)
+              // re-subscribes and starts a fresh consumer — otherwise the new
+              // run's chunks would never be processed and the follow-up would
+              // get no response.
+              this.#session.stream.detach();
+              break;
+            }
           }
         } catch (error) {
           await this.handleSubscribedStreamError(error);

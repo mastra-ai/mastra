@@ -13,6 +13,7 @@ import { MessageList } from '../../message-list';
 import { mastraDBMessageToSignal } from '../../signals';
 import type { AgentMethodType } from '../../types';
 import type { PrepareStreamRunScope } from './run-scope';
+import { INITIAL_SIGNAL_ECHOES_KEY, MESSAGE_LIST_KEY, PROCESSOR_STATES_KEY } from './run-scope-keys';
 import type { AgentCapabilities } from './schema';
 import { prepareMemoryStepOutputSchema } from './schema';
 
@@ -130,9 +131,9 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
         // factory closure's runScope instead of step outputs, because the evented
         // engine serializes step outputs via JSON and would strip them. CreatedAgentSignal
         // carries `toDataPart`/`toLLMMessage`/`toDBMessage` methods that would not survive.
-        runScope.messageList = messageList;
-        runScope.processorStates = processorStates;
-        runScope.initialSignalEchoes = initialSignalEchoes;
+        runScope.set(MESSAGE_LIST_KEY, messageList);
+        runScope.set(PROCESSOR_STATES_KEY, processorStates);
+        runScope.set(INITIAL_SIGNAL_ECHOES_KEY, initialSignalEchoes);
         return {
           threadExists: false,
           thread: thread as StorageThreadType | undefined,
@@ -212,9 +213,9 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
         }));
       }
 
-      runScope.messageList = messageList;
-      runScope.processorStates = processorStates;
-      runScope.initialSignalEchoes = initialSignalEchoes;
+      runScope.set(MESSAGE_LIST_KEY, messageList);
+      runScope.set(PROCESSOR_STATES_KEY, processorStates);
+      runScope.set(INITIAL_SIGNAL_ECHOES_KEY, initialSignalEchoes);
       return {
         thread: threadObject,
         tripwire,

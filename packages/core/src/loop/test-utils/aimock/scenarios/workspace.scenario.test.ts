@@ -2,12 +2,12 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
 import { LocalFilesystem } from '../../../../workspace/filesystem';
 import { Workspace } from '../../../../workspace/workspace';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
 /**
  * Regression class: workspace is threaded into tool execution context.
@@ -18,7 +18,7 @@ import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
  * appears in the final output. A regression where the workspace is not passed to
  * tool execution is caught (the tool would throw / get no workspace).
  */
-describe('AIMock loop scenario: workspace in tool execution', () => {
+describeForAllEngines('AIMock loop scenario: workspace in tool execution', engine => {
   const getMock = useLoopScenarioAimock();
   let tempDir: string;
 
@@ -49,6 +49,7 @@ describe('AIMock loop scenario: workspace in tool execution', () => {
     });
 
     const { requests, output } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Read the note and tell me what it says.',
       tools: { read_note: readNote },

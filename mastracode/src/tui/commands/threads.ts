@@ -111,12 +111,13 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
         state.ui.hideOverlay();
 
         if (thread.id === currentId) {
+          ctx.showInfo(`Switched to: ${thread.title || thread.id}`);
           resolve();
           return;
         }
 
         if (thread.resourceId !== currentResourceId) {
-          state.harness.setResourceId(state.session, { resourceId: thread.resourceId });
+          await state.harness.setResourceId(state.session, { resourceId: thread.resourceId });
         }
         try {
           await state.session.thread.switch({ threadId: thread.id });

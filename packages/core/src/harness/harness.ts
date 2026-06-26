@@ -6,13 +6,17 @@ import { mastraDBMessageToSignal } from '../agent/signals';
 import type { AgentInstructions, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import { getErrorFromUnknown } from '../error';
+import { GatewayManager } from '../llm/model/gateways';
+import { defaultGateways } from '../llm/model/gateways/defaults';
 import { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
 import type { TracingContext, TracingOptions } from '../observability';
 import { RequestContext } from '../request-context';
+import type { MastraCompositeStore } from '../storage/base';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import type { ObservationalMemoryRecord } from '../storage/types';
+import type { DynamicArgument } from '../types';
 import { Workspace } from '../workspace/workspace';
 import type { WorkspaceConfig } from '../workspace/workspace';
 
@@ -41,17 +45,18 @@ import {
 import type {
   AvailableModel,
   HeartbeatHandler,
-  HarnessConfig,
-  HarnessMessage,
-  HarnessMessageContent,
-  HarnessMode,
-  HarnessRequestContext,
-  HarnessThread,
+  AgentControllerConfig,
+  AgentControllerMessage,
+  AgentControllerMessageContent,
+  AgentControllerMode,
+  AgentControllerRequestContext,
+  AgentControllerRequestStateUpdater,
+  AgentControllerThread,
   ModelAuthStatus,
   ToolCategory,
 } from './types';
 
-function validateModes(modes: HarnessMode[]): void {
+function validateModes(modes: AgentControllerMode[]): void {
   const modeIds = new Set<string>();
 
   for (const mode of modes) {
@@ -148,7 +153,7 @@ export function buildFableFallbackProviderOptions(
  *
  * @example
  * ```ts
- * const harness = new Harness({
+ * const controller = new AgentController({
  *   id: "my-coding-agent",
  *   storage: new LibSQLStore({ url: "file:./data.db" }),
  *   stateSchema: z.object({
@@ -160,39 +165,29 @@ export function buildFableFallbackProviderOptions(
  *   ],
  * })
  *
- * harness.subscribe((event) => {
+ * controller.subscribe((event) => {
  *   if (event.type === "message_update") renderMessage(event.message)
  * })
  *
- * await harness.init()
- * await harness.sendMessage({ content: "Hello!" })
+ * await controller.init()
+ * await controller.sendMessage({ content: "Hello!" })
  * ```
  */
-export class Harness<TState = {}> {
+export class AgentController<TState = {}> {
   readonly id: string;
 
-  private config: HarnessConfig<TState>;
-  private workspace: Workspace | undefined = undefined;
-  private workspaceFn:
-    | ((ctx: {
-        requestContext: RequestContext;
-        mastra?: Mastra;
-      }) => Promise<Workspace | undefined> | Workspace | undefined)
-    | undefined = undefined;
+  private config: AgentControllerConfig<TState>;
   private workspaceInitialized = false;
   private initPromise: Promise<void> | undefined = undefined;
-  private workspaceError: Error | undefined = undefined;
-  private browser: MastraBrowser | undefined = undefined;
-  private browserFn:
-    | ((ctx: { requestContext: RequestContext }) => Promise<MastraBrowser | undefined> | MastraBrowser | undefined)
-    | undefined = undefined;
+  private browser: DynamicArgument<MastraBrowser | undefined> = undefined;
+  private workspace: DynamicArgument<Workspace | undefined> = undefined;
   private heartbeatTimers = new Map<string, { timer: NodeJS.Timeout; shutdown?: () => void | Promise<void> }>();
   /**
    * The mode every new session starts in. Resolved once at construction from
    * `config.defaultModeId` (or the configured default/first mode) and reused by
    * every {@link createSession} call. The Harness itself holds no session.
    */
-  readonly #defaultMode: HarnessMode;
+  readonly #defaultMode: AgentControllerMode;
   /**
    * Live sessions created by {@link createSession}, keyed by resourceId. A
    * resourceId maps to exactly one session per Harness (get-or-create). Stores
@@ -206,14 +201,26 @@ export class Harness<TState = {}> {
   private availableModelsCacheTime: number = 0;
   readonly #instructions?: string;
   #internalMastra: Mastra | undefined = undefined;
+  /**
+   * Set when this Harness is registered on a parent Mastra (via
+   * {@link __registerMastra}). When present it is used in place of the
+   * lazily-created internal Mastra, so a server-hosted Harness shares the
+   * server's storage/agents/gateways instead of spinning up its own.
+   */
+  #externalMastra: Mastra | undefined = undefined;
+  #gatewayManager: GatewayManager | undefined = undefined;
   #legacyAgentMode: Record<string, Agent<any, any, any, any>> = {};
 
-  constructor(config: HarnessConfig<TState>) {
+  constructor(config: AgentControllerConfig<TState>) {
     validateModes(config.modes);
 
     this.id = config.id;
     this.config = config;
     this.#instructions = config.instructions;
+    // Gateway manager merges configured gateways with the router defaults
+    // (custom takes precedence). Shared by listAvailableModels,
+    // getCurrentModelAuthStatus, and the OM model resolver.
+    this.#gatewayManager = new GatewayManager([...(config.gateways ?? []), ...defaultGateways]);
 
     const defaultMode = config.defaultModeId
       ? config.modes.find(mode => mode.id === config.defaultModeId)
@@ -228,19 +235,8 @@ export class Harness<TState = {}> {
 
     this.#defaultMode = defaultMode;
 
-    // Store workspace: pre-built instance, dynamic factory, or config (constructed in init())
-    if (config.workspace instanceof Workspace) {
-      this.workspace = config.workspace;
-    } else if (typeof config.workspace === 'function') {
-      this.workspaceFn = config.workspace;
-    }
-
-    // Store browser: pre-built instance or dynamic factory
-    if (config.browser && typeof config.browser !== 'function') {
-      this.browser = config.browser;
-    } else if (typeof config.browser === 'function') {
-      this.browserFn = config.browser;
-    }
+    this.workspace = config.workspace;
+    this.browser = config.browser;
   }
 
   /**
@@ -263,9 +259,7 @@ export class Harness<TState = {}> {
     });
     session.setCategoryResolver(toolName => this.getToolCategory({ toolName }));
     session.setSubagentNameResolver(agentType => this.getSubagentDisplayName(agentType));
-    session.mode.setResolver(modeId => this.config.modes.find(m => m.id === modeId) ?? null, {
-      abort: () => session.abort(),
-    });
+    session.mode.setResolver(modeId => this.config.modes.find(m => m.id === modeId) ?? null);
     session.model.setResolver({
       getCurrentModeId: () => session.mode.get(),
       trackModelUse: this.config.modelUseCountTracker,
@@ -275,7 +269,7 @@ export class Harness<TState = {}> {
       setState: updates => void session.state.set(updates as Partial<TState>),
       setSetting: ({ key, value }) => session.thread.setSetting({ key, value }),
       omConfig: this.config.omConfig,
-      resolveModel: this.config.resolveModel,
+      gateways: this.config.gateways ?? [],
     });
     session.permissions.setResolver({
       getState: () => session.state.get() as Record<string, unknown>,
@@ -286,7 +280,7 @@ export class Harness<TState = {}> {
       setState: updates => void session.state.set(updates as Partial<TState>),
       setSetting: ({ key, value }) => session.thread.setSetting({ key, value }),
     });
-    session.thread.connect(this.createThreadDataStore(session), session as Session);
+    session.thread.connect(this.createThreadDataStore(), session as Session);
     session.setMachinery({
       getAgent: () => this.getCurrentAgent(session),
       subscribeToThread: ({ resourceId, threadId }) =>
@@ -330,9 +324,39 @@ export class Harness<TState = {}> {
    *
    * Call {@link init} once before creating sessions so shared storage and
    * workspace are ready.
+   *
+   * @param id - Stable session identifier (mirrors `SessionRecord.id`). Defaults to the harness `id`.
+   * @param ownerId - Stable session owner (mirrors `SessionRecord.ownerId`). Defaults to the harness `id`.
+   * @param resourceId - Memory resource to bind this session to. Defaults to the harness `resourceId` or `id`.
    */
-  async createSession({ resourceId }: { resourceId?: string } = {}): Promise<Session<TState>> {
+  async createSession({
+    resourceId,
+    ownerId,
+    id,
+    tags,
+    workspace,
+    browser,
+    requestContext,
+  }: {
+    resourceId?: string;
+    id?: string;
+    ownerId?: string;
+    /**
+     * Arbitrary string tags that scope this session. Each tag is seeded into the
+     * session's state and used to filter initial thread selection: a thread is a
+     * resume candidate only when its metadata matches every provided tag. This
+     * lets worktrees sharing a resourceId each resume their own thread (via a
+     * `projectPath` tag) and leaves room for future scoping dimensions without
+     * changing the API. Falls back to `initialState` when omitted.
+     */
+    tags?: Record<string, string>;
+    workspace?: Workspace;
+    browser?: MastraBrowser;
+    requestContext?: RequestContext;
+  } = {}): Promise<Session<TState>> {
     const effectiveResourceId = resourceId ?? this.config.resourceId ?? this.config.id;
+    const effectiveSessionId = id ?? this.config.id;
+    const effectiveOwnerId = ownerId ?? this.config.id;
 
     // Get-or-create: a resourceId maps to exactly one durable session per
     // Harness. Asking for the same resource twice returns the same session, so
@@ -344,7 +368,11 @@ export class Harness<TState = {}> {
       return existing;
     }
 
-    const creation = this.#createSessionForResource(effectiveResourceId);
+    const creation = this.#createSessionForResource(effectiveOwnerId, effectiveSessionId, effectiveResourceId, tags, {
+      workspace,
+      browser,
+      requestContext,
+    });
     this.#sessionsByResource.set(effectiveResourceId, creation);
     try {
       return await creation;
@@ -357,38 +385,141 @@ export class Harness<TState = {}> {
     }
   }
 
-  async #createSessionForResource(effectiveResourceId: string): Promise<Session<TState>> {
+  async #createSessionForResource(
+    ownerId: string,
+    id: string,
+    effectiveResourceId: string,
+    tags?: Record<string, string>,
+    overrides?: {
+      workspace?: Workspace;
+      browser?: MastraBrowser;
+      requestContext?: RequestContext;
+    },
+  ): Promise<Session<TState>> {
+    // Seed the session's tags into its state so thread tagging + the workspace
+    // factory resolve against this session's scope (e.g. its `projectPath`), not
+    // the harness-global default (which, on a multi-session server, may point at
+    // a different repo).
+    const requestContext = overrides?.requestContext ?? new RequestContext();
+    let initialState = structuredClone(this.config.initialState);
+    if (tags && Object.keys(tags).length > 0) {
+      initialState = { ...initialState, ...tags } as TState;
+    }
+    const defaultMode = this.#defaultMode;
+    requestContext.set('harness', {
+      harnessId: this.id,
+      state: initialState,
+      getState: () => initialState,
+      setState: (updates: Partial<TState>) => {
+        initialState = { ...initialState, ...updates };
+      },
+      updateState: (updater: AgentControllerRequestStateUpdater<TState, unknown>) => {
+        return Promise.resolve(updater(initialState as Readonly<TState>)).then(result => {
+          if (result.updates) {
+            initialState = { ...initialState, ...result.updates };
+          }
+          return result.result;
+        });
+      },
+      threadId: null,
+      resourceId: effectiveResourceId,
+      session: {
+        id,
+        ownerId,
+        resourceId: effectiveResourceId,
+        modeId: defaultMode.id,
+        modelId: defaultMode.defaultModelId ?? '',
+        state: {
+          get: () => initialState as Readonly<TState>,
+          set: (updates: Partial<TState>) => {
+            initialState = { ...initialState, ...updates };
+            return Promise.resolve();
+          },
+          update: <TResult>(updater: AgentControllerRequestStateUpdater<TState, TResult>) => {
+            return Promise.resolve(updater(initialState as Readonly<TState>)).then(result => {
+              if (result.updates) {
+                initialState = { ...initialState, ...result.updates };
+              }
+              return result.result;
+            });
+          },
+        },
+      },
+      getSubagentModelId: (params?: { agentType?: string }) => {
+        const sub = this.config.subagents?.find(s => s.id === params?.agentType);
+        return sub?.defaultModelId ?? null;
+      },
+    });
+
+    let workspaceToConnect = overrides?.workspace ?? this.workspace;
+    if (typeof workspaceToConnect === 'function') {
+      workspaceToConnect = await workspaceToConnect({ requestContext, mastra: this.getMastra() });
+    }
+
+    let browserToConnect = overrides?.browser ?? this.browser;
+    if (typeof browserToConnect === 'function') {
+      browserToConnect = await browserToConnect({ requestContext, mastra: this.getMastra() });
+    }
+
     const session = this.#wireSession(
       new Session({
         resourceId: effectiveResourceId,
+        id,
+        ownerId,
+        tags,
         state: {
-          initialState: this.config.initialState,
+          initialState,
           stateSchema: this.config.stateSchema,
         },
+        workspace: workspaceToConnect as Workspace,
+        browser: browserToConnect,
       }),
     );
 
-    // Replay current workspace status onto the new session so a session created
-    // after init() still observes the shared workspace being ready (or failed).
-    if (this.workspace && this.workspaceInitialized) {
-      session.emit({ type: 'workspace_status_changed', status: 'ready' });
-      session.emit({
-        type: 'workspace_ready',
-        workspaceId: this.workspace.id,
-        workspaceName: this.workspace.name,
-      });
-    } else if (this.workspaceError) {
-      session.emit({ type: 'workspace_status_changed', status: 'error', error: this.workspaceError });
-      session.emit({ type: 'workspace_error', error: this.workspaceError });
+    if (workspaceToConnect && workspaceToConnect instanceof Workspace) {
+      try {
+        await workspaceToConnect.init();
+        session.emit({ type: 'workspace_status_changed', status: 'ready' });
+        session.emit({
+          type: 'workspace_ready',
+          workspaceId: workspaceToConnect.id,
+          workspaceName: workspaceToConnect.name,
+        });
+      } catch (error) {
+        const initError = getErrorFromUnknown(error);
+        session.emit({ type: 'workspace_status_changed', status: 'error', error: initError });
+        session.emit({ type: 'workspace_error', error: initError });
+      }
     }
 
-    // Bring the session online with a current thread: resume the most recent
-    // thread for this resource, or create a fresh one when none exist.
+    // Bring the session online with a current thread. Selection is tag-aware so
+    // worktrees sharing a resourceId each resume their own thread without
+    // claiming threads owned by another scope. A thread is a candidate only when
+    // its metadata matches every provided tag; with no tags every thread
+    // qualifies. Tags default to the harness-global state when omitted.
+    const selectionTags: Record<string, string> = {};
+    if (tags && Object.keys(tags).length > 0) {
+      Object.assign(selectionTags, tags);
+    } else {
+      const projectPath = (this.config.initialState as any)?.projectPath as string | undefined;
+      if (projectPath) selectionTags.projectPath = projectPath;
+    }
+    const tagEntries = Object.entries(selectionTags);
+
     const threads = await session.thread.list();
-    if (threads.length === 0) {
+    const candidates =
+      tagEntries.length > 0
+        ? threads.filter(t => {
+            const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
+            return tagEntries.every(([key, value]) => metadata[key] === value);
+          })
+        : threads;
+
+    // Resume the most recent same-resource candidate, or create a new thread.
+    if (candidates.length === 0) {
       await session.thread.create();
     } else {
-      const mostRecent = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
+      const mostRecent = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
       await this.config.threadLock?.acquire(mostRecent.id);
       session.thread.set({ threadId: mostRecent.id });
       await session.thread.loadMetadata();
@@ -413,12 +544,104 @@ export class Harness<TState = {}> {
   // ===========================================================================
 
   /**
-   * Access the internal Mastra instance.
-   * Available after `init()` when storage is configured.
+   * Access the Mastra instance backing this Harness.
+   *
+   * Returns the parent Mastra when this Harness is registered on one (see
+   * {@link __registerMastra}); otherwise the internal Mastra created during
+   * `init()` when storage is configured.
+   *
    * Useful for scorer registration, observability access, and eval tooling.
    */
   getMastra(): Mastra | undefined {
-    return this.#internalMastra;
+    return this.#externalMastra ?? this.#internalMastra;
+  }
+
+  /**
+   * Whether a workspace is configured on this Harness (static instance, dynamic
+   * factory, or config object). Sessions without an explicit workspace override
+   * fall back to this.
+   */
+  hasWorkspace(): boolean {
+    return this.workspace !== undefined;
+  }
+
+  /**
+   * Whether the Harness-level static workspace has been initialized. Dynamic
+   * factory workspaces are resolved and initialized per-session during
+   * `createSession`, so this returns `false` for factory configs until a
+   * session is created.
+   */
+  isWorkspaceReady(): boolean {
+    if (typeof this.workspace === 'function') return true;
+    return this.workspaceInitialized && this.workspace !== undefined;
+  }
+
+  /**
+   * The Harness-level workspace, if it is a static instance. Dynamic factory
+   * workspaces are not resolved here — use {@link resolveWorkspace} to resolve
+   * a factory against a session's request context.
+   */
+  getWorkspace(): Workspace | undefined {
+    return typeof this.workspace === 'function' ? undefined : (this.workspace ?? undefined);
+  }
+
+  /**
+   * Eagerly resolve the workspace. For dynamic workspaces (factory function),
+   * this triggers resolution against the given session's request context and
+   * caches the result so {@link getWorkspace} returns it. Useful for code paths
+   * outside the request flow (e.g. slash commands).
+   */
+  async resolveWorkspace({
+    session,
+    requestContext,
+  }: {
+    session: Session<TState>;
+    requestContext?: RequestContext;
+  }): Promise<Workspace | undefined> {
+    if (typeof this.workspace !== 'function') return this.workspace ?? undefined;
+    const ctx = await this.buildRequestContext(session, requestContext);
+    const resolved = await this.workspace({ requestContext: ctx, mastra: this.getMastra() });
+    this.workspace = resolved;
+    return resolved ?? undefined;
+  }
+
+  /**
+   * Register this Harness on a parent Mastra. Called by Mastra during
+   * construction when a harness is passed in its config. Once registered, the
+   * Harness uses the parent Mastra (its storage, agents, gateways, and
+   * observability) instead of building its own internal one during `init()`.
+   *
+   * @internal
+   */
+  __registerMastra(mastra: Mastra): void {
+    this.#externalMastra = mastra;
+  }
+
+  /**
+   * Resolve the storage this Harness reads and writes through.
+   *
+   * When registered on a parent Mastra, the Harness inherits that Mastra's
+   * configured storage so the host and its Harnesses persist to a single store.
+   * A standalone Harness falls back to its own `config.storage`.
+   */
+  #resolveStorage(): MastraCompositeStore | undefined {
+    return this.#externalMastra?.getStorage() ?? this.config.storage;
+  }
+
+  private async resolveConfiguredMemory(): Promise<MastraMemory | undefined> {
+    const configuredMemory = this.config.memory;
+    if (!configuredMemory) return undefined;
+
+    const memory =
+      typeof configuredMemory === 'function'
+        ? await configuredMemory({ requestContext: new RequestContext(), mastra: this.getMastra() })
+        : configuredMemory;
+
+    if (!memory) {
+      throw new Error('Dynamic memory factory returned empty value');
+    }
+
+    return memory;
   }
 
   /**
@@ -426,7 +649,6 @@ export class Harness<TState = {}> {
    */
   setBrowser(browser: MastraBrowser | undefined): void {
     this.browser = browser;
-    this.browserFn = undefined;
 
     // Collect unique agents: shared backing agent + any deprecated mode.agent
     // instances so all receive the browser (signal providers may be attached to
@@ -465,7 +687,10 @@ export class Harness<TState = {}> {
     // (required for tool approval snapshot persistence/resume).
     // We init storage through Mastra's proxied storage so augmentWithInit
     // tracks it and won't double-init.
-    if (this.config.storage) {
+    //
+    // Skip this when registered on a parent Mastra: that Mastra already owns
+    // storage/agents/gateways, and getMastra() resolves to it.
+    if (this.config.storage && !this.#externalMastra) {
       const enabledGateways = this.config.gateways?.filter(gateway => gateway.shouldEnable?.() ?? true);
       const gateways = enabledGateways?.length
         ? Object.fromEntries(enabledGateways.map(gateway => [gateway.id, gateway]))
@@ -479,25 +704,28 @@ export class Harness<TState = {}> {
         ...(gateways ? { gateways } : {}),
       });
       await this.#internalMastra.getStorage()!.init();
+    } else if (this.#externalMastra) {
+      // Registered on a parent Mastra: don't build an internal Mastra, but make
+      // sure the inherited storage is initialized before any session reads or
+      // writes through it. Init is idempotent on MastraCompositeStore, so this
+      // is safe even when the parent already initialized it.
+      await this.#externalMastra.getStorage()?.init();
     }
 
     // Initialize workspace if configured (skip for dynamic factory — resolved per-request)
-    if (this.config.workspace && !this.workspaceInitialized && !this.workspaceFn) {
+    if (this.config.workspace && !this.workspaceInitialized && typeof this.workspace !== 'function') {
       try {
         if (!this.workspace) {
           this.workspace = new Workspace(this.config.workspace as WorkspaceConfig);
         }
 
-        await this.workspace.init();
+        await (this.workspace as Workspace).init();
         this.workspaceInitialized = true;
-        this.workspaceError = undefined;
-      } catch (error) {
-        const err = getErrorFromUnknown(error);
+      } catch {
         this.workspace = undefined;
         this.workspaceInitialized = false;
-        // Remember the failure so sessions created later can surface it; the
-        // Harness holds no session of its own to emit onto during init().
-        this.workspaceError = err;
+        // Sessions created later will call workspace.init() themselves and
+        // surface the error through workspace_error events on the session.
       }
     }
 
@@ -522,10 +750,11 @@ export class Harness<TState = {}> {
   }
 
   private async getMemoryStorage(): Promise<MemoryStorage> {
-    if (!this.config.storage) {
+    const storage = this.#resolveStorage();
+    if (!storage) {
       throw new Error('Storage is not configured on this Harness');
     }
-    const memoryStorage = await this.config.storage.getStore('memory');
+    const memoryStorage = await storage.getStore('memory');
     if (!memoryStorage) {
       throw new Error('Storage does not have a memory domain configured');
     }
@@ -537,21 +766,21 @@ export class Harness<TState = {}> {
    * through. The Session owns the thread-domain logic; this adapter just maps
    * raw storage rows to Harness types — it does not call back into Session.
    */
-  private createThreadDataStore(session: Session<TState>): ThreadDataStore {
+  private createThreadDataStore(): ThreadDataStore {
     return {
-      listThreads: ({ resourceId, includeForkedSubagents }) =>
-        this.queryThreads({ resourceId, includeForkedSubagents }),
+      listThreads: ({ resourceId, includeForkedSubagents, metadata }) =>
+        this.queryThreads({ resourceId, includeForkedSubagents, metadata }),
       getById: ({ threadId }) => this.queryThreadById({ threadId }),
       listMessages: ({ threadId, limit }) => this.queryThreadMessages({ threadId, limit }),
       firstUserMessages: ({ threadIds }) => this.queryFirstUserMessages({ threadIds }),
       getMetadata: ({ threadId, key }) => this.readThreadMetadataValue({ threadId, key }),
       setMetadata: ({ threadId, key, value }) => this.writeThreadMetadataValue({ threadId, key, value }),
       deleteMetadata: ({ threadId, key }) => this.removeThreadMetadataValue({ threadId, key }),
-      hasStorage: () => !!this.config.storage,
+      hasStorage: () => !!this.#resolveStorage(),
       saveThread: ({ thread }) => this.persistThreadRow(thread),
       deleteThread: ({ threadId }) => this.deleteThreadRow(threadId),
-      cloneThread: ({ sourceThreadId, resourceId, title }) =>
-        this.cloneThreadRow(session, { sourceThreadId, resourceId, title }),
+      cloneThread: ({ sourceThreadId, resourceId, title, metadata }) =>
+        this.cloneThreadRow({ sourceThreadId, resourceId, title, metadata }),
       acquireLock: threadId => this.config.threadLock?.acquire(threadId) ?? Promise.resolve(),
       releaseLock: threadId => this.config.threadLock?.release(threadId) ?? Promise.resolve(),
       getModeIds: () => this.config.modes.map(m => m.id),
@@ -559,8 +788,8 @@ export class Harness<TState = {}> {
   }
 
   /** Persist a thread row to memory storage (gateway primitive for the Session thread domain). */
-  private async persistThreadRow(thread: HarnessThread): Promise<void> {
-    if (!this.config.storage) return;
+  private async persistThreadRow(thread: AgentControllerThread): Promise<void> {
+    if (!this.#resolveStorage()) return;
     const memoryStorage = await this.getMemoryStorage();
     await memoryStorage.saveThread({
       thread: {
@@ -576,29 +805,32 @@ export class Harness<TState = {}> {
 
   /** Delete a thread row from memory storage (gateway primitive for the Session thread domain). */
   private async deleteThreadRow(threadId: string): Promise<void> {
-    if (!this.config.storage) return;
+    if (!this.#resolveStorage()) return;
     const memoryStorage = await this.getMemoryStorage();
     await memoryStorage.deleteThread({ threadId });
   }
 
   /** Clone a thread (and messages) via the host's memory (gateway primitive for the Session thread domain). */
-  private async cloneThreadRow(
-    session: Session<TState>,
-    {
-      sourceThreadId,
-      resourceId,
-      title,
-    }: {
-      sourceThreadId: string;
-      resourceId: string;
-      title?: string;
-    },
-  ): Promise<HarnessThread> {
-    if (!this.config.memory) {
-      throw new Error('Memory is not configured on this Harness');
+  private async cloneThreadRow({
+    sourceThreadId,
+    resourceId,
+    title,
+    metadata,
+  }: {
+    sourceThreadId: string;
+    resourceId: string;
+    title?: string;
+    metadata?: Record<string, unknown>;
+  }): Promise<AgentControllerThread> {
+    const storage = this.#resolveStorage();
+    const memory = storage ? await storage.getStore('memory') : await this.resolveConfiguredMemory();
+    if (!memory) {
+      throw new Error(
+        storage ? 'Storage does not have a memory domain configured' : 'Memory is not configured on this Harness',
+      );
     }
-    const memory = await this.resolveMemory(session);
-    const result = await memory.cloneThread({ sourceThreadId, resourceId, title });
+
+    const result = await memory.cloneThread({ sourceThreadId, resourceId, title, metadata });
     return {
       id: result.thread.id,
       resourceId: result.thread.resourceId,
@@ -610,7 +842,7 @@ export class Harness<TState = {}> {
   }
 
   private async readThreadMetadataValue({ threadId, key }: { threadId: string; key: string }): Promise<unknown> {
-    if (!this.config.storage) return undefined;
+    if (!this.#resolveStorage()) return undefined;
     try {
       const memoryStorage = await this.getMemoryStorage();
       const thread = await memoryStorage.getThreadById({ threadId });
@@ -631,7 +863,7 @@ export class Harness<TState = {}> {
     key: string;
     value: unknown;
   }): Promise<void> {
-    if (!this.config.storage) return;
+    if (!this.#resolveStorage()) return;
     try {
       const memoryStorage = await this.getMemoryStorage();
       const thread = await memoryStorage.getThreadById({ threadId });
@@ -646,7 +878,7 @@ export class Harness<TState = {}> {
   }
 
   private async removeThreadMetadataValue({ threadId, key }: { threadId: string; key: string }): Promise<void> {
-    if (!this.config.storage) return;
+    if (!this.#resolveStorage()) return;
     try {
       const memoryStorage = await this.getMemoryStorage();
       const thread = await memoryStorage.getThreadById({ threadId });
@@ -666,8 +898,8 @@ export class Harness<TState = {}> {
     }
   }
 
-  private async queryThreadById({ threadId }: { threadId: string }): Promise<HarnessThread | null> {
-    if (!this.config.storage) return null;
+  private async queryThreadById({ threadId }: { threadId: string }): Promise<AgentControllerThread | null> {
+    if (!this.#resolveStorage()) return null;
     const memoryStorage = await this.getMemoryStorage();
     const thread = await memoryStorage.getThreadById({ threadId });
     if (!thread) return null;
@@ -684,14 +916,24 @@ export class Harness<TState = {}> {
   private async queryThreads({
     resourceId,
     includeForkedSubagents,
+    metadata,
   }: {
     resourceId?: string;
     includeForkedSubagents?: boolean;
-  }): Promise<HarnessThread[]> {
-    if (!this.config.storage) return [];
+    metadata?: Record<string, unknown>;
+  }): Promise<AgentControllerThread[]> {
+    if (!this.#resolveStorage()) {
+      return [];
+    }
 
     const memoryStorage = await this.getMemoryStorage();
-    const filter: { resourceId?: string } | undefined = resourceId === undefined ? undefined : { resourceId };
+    const filter =
+      resourceId === undefined && metadata === undefined
+        ? undefined
+        : {
+            ...(resourceId === undefined ? {} : { resourceId }),
+            ...(metadata === undefined ? {} : { metadata }),
+          };
 
     const result = await memoryStorage.listThreads({ filter, perPage: false });
 
@@ -718,8 +960,8 @@ export class Harness<TState = {}> {
   }: {
     threadId: string;
     limit?: number;
-  }): Promise<HarnessMessage[]> {
-    if (!this.config.storage) return [];
+  }): Promise<AgentControllerMessage[]> {
+    if (!this.#resolveStorage()) return [];
 
     const memoryStorage = await this.getMemoryStorage();
 
@@ -737,8 +979,12 @@ export class Harness<TState = {}> {
     return result.messages.map(msg => this.convertToHarnessMessage(msg));
   }
 
-  private async queryFirstUserMessages({ threadIds }: { threadIds: string[] }): Promise<Map<string, HarnessMessage>> {
-    if (!this.config.storage || threadIds.length === 0) return new Map();
+  private async queryFirstUserMessages({
+    threadIds,
+  }: {
+    threadIds: string[];
+  }): Promise<Map<string, AgentControllerMessage>> {
+    if (!this.#resolveStorage() || threadIds.length === 0) return new Map();
 
     const memoryStorage = await this.getMemoryStorage();
     const result = await memoryStorage.listMessages({
@@ -747,7 +993,7 @@ export class Harness<TState = {}> {
       orderBy: { field: 'createdAt', direction: 'ASC' },
     });
 
-    const firstUserMessages = new Map<string, HarnessMessage>();
+    const firstUserMessages = new Map<string, AgentControllerMessage>();
     for (const message of result.messages) {
       if (message.role !== 'user' || !message.threadId || firstUserMessages.has(message.threadId)) continue;
       firstUserMessages.set(message.threadId, this.convertToHarnessMessage(message));
@@ -764,36 +1010,46 @@ export class Harness<TState = {}> {
   // Mode Management
   // ===========================================================================
 
-  listModes(): HarnessMode[] {
+  listModes(): AgentControllerMode[] {
     return this.config.modes;
   }
 
-  private propagateRuntimeServicesToAgent(agent: Agent): Agent {
-    const alreadyHasMastra = !!agent.getMastraInstance();
-    const workspaceForAgents = this.workspaceFn ?? this.workspace;
-    const browserForAgents = this.browserFn ?? this.browser;
-
+  private propagateRuntimeServicesToAgent(agent: Agent, _session?: Session<TState>): Agent {
     if (this.config.memory && !agent.hasOwnMemory()) {
       agent.__setMemory(this.config.memory);
-    }
-    if (workspaceForAgents && !agent.hasOwnWorkspace()) {
-      agent.__setWorkspace(workspaceForAgents);
-    }
-    if (browserForAgents && !agent.hasOwnBrowser()) {
-      agent.setBrowser(browserForAgents as MastraBrowser);
     }
     if (this.config.pubsub && !agent.hasOwnPubSub()) {
       agent.__setPubSub(this.config.pubsub);
     }
 
-    if (this.#internalMastra && !alreadyHasMastra) {
-      this.#internalMastra.addAgent(agent);
+    // Register the agent on the resolved Mastra (the parent when registered,
+    // otherwise the internal one). Re-bind when the agent currently has no
+    // Mastra OR is bound to a different instance — e.g. an agent that built its
+    // own internal Mastra before this Harness was registered on a parent.
+    // Done before workspace/browser propagation so that addAgent — which may
+    // resolve agent.getWorkspace() — does not prematurely invoke a workspace
+    // factory before the per-session request context is available.
+    const mastra = this.getMastra();
+    if (mastra && agent.getMastraInstance() !== mastra) {
+      mastra.addAgent(agent);
+    }
+
+    if (this.workspace && typeof agent.hasOwnWorkspace === 'function' && !agent.hasOwnWorkspace()) {
+      agent.__setWorkspace(this.workspace);
+    }
+    if (
+      this.browser &&
+      typeof agent.hasOwnBrowser === 'function' &&
+      !agent.hasOwnBrowser() &&
+      typeof this.browser !== 'function'
+    ) {
+      agent.setBrowser(this.browser);
     }
 
     return agent;
   }
 
-  private getAgentForMode(mode: HarnessMode): Agent<any, any, any, any> {
+  private getAgentForMode(mode: AgentControllerMode): Agent<any, any, any, any> {
     // Deprecated per-mode agent — use directly, no forking.
     if (mode.agent) {
       if (!this.#legacyAgentMode[mode.id]) {
@@ -822,7 +1078,11 @@ export class Harness<TState = {}> {
         ...mode.additionalTools,
       };
 
-      const model = this.config.resolveModel ? this.config.resolveModel(mode.defaultModelId) : mode.defaultModelId;
+      // Model resolution flows through the gateways registered on the internal
+      // Mastra instance: the bare model id string is handed to the Agent, and
+      // `propagateRuntimeServicesToAgent` attaches the internal Mastra so the
+      // model router resolves it via the configured gateways (auth included).
+      const model = mode.defaultModelId;
       this.#legacyAgentMode[mode.id] = new Agent({
         id: `${this.id}-agent`,
         name: `Harness ${this.id} agent`,
@@ -874,37 +1134,34 @@ export class Harness<TState = {}> {
   getCurrentAgent(session: Session<TState>): Agent {
     const mode = session.mode.resolve();
 
-    return this.propagateRuntimeServicesToAgent(this.getAgentForMode(mode));
+    return this.propagateRuntimeServicesToAgent(this.getAgentForMode(mode), session);
   }
 
   /**
    * Check if the current model's provider has authentication configured.
-   * Uses app-provided catalog/auth hooks; Harness does not resolve gateway auth itself.
+   * Delegates to the {@link GatewayManager} auth chain (the same resolution
+   * the model router uses at run time). Falls back to `hasAuth: true` when
+   * no model is selected or the chain cannot resolve auth.
    */
   async getCurrentModelAuthStatus(session: Session<TState>): Promise<ModelAuthStatus> {
     const modelId = session.model.get();
     if (!modelId) return { hasAuth: true };
 
+    const hasAuth = this.#gatewayManager ? await this.#gatewayManager.hasAuth(modelId) : true;
+    if (hasAuth) return { hasAuth: true };
+
+    // Surface the env-var hint from the catalog when available.
     try {
       const availableModels = await this.listAvailableModels();
       const currentModel = availableModels.find(model => model.id === modelId);
       if (currentModel) {
-        return {
-          hasAuth: currentModel.hasApiKey,
-          apiKeyEnvVar: currentModel.hasApiKey ? undefined : currentModel.apiKeyEnvVar,
-        };
+        return { hasAuth: false, apiKeyEnvVar: currentModel.apiKeyEnvVar };
       }
     } catch {
-      // Ignore catalog lookup errors and fall through to provider-based checks.
+      // Ignore catalog lookup errors.
     }
 
-    const provider = modelId.split('/', 1)[0];
-    if (this.config.modelAuthChecker && provider) {
-      const result = this.config.modelAuthChecker(provider);
-      if (result !== undefined) return { hasAuth: result };
-    }
-
-    return { hasAuth: true };
+    return { hasAuth: false };
   }
 
   /**
@@ -927,21 +1184,9 @@ export class Harness<TState = {}> {
       });
     };
 
-    if (this.config.customModelCatalogProvider) {
-      try {
-        const customModels = await Promise.resolve(this.config.customModelCatalogProvider());
-        for (const model of customModels) {
-          upsertModel({
-            id: model.id,
-            provider: model.provider,
-            modelName: model.modelName,
-            hasApiKey: model.hasApiKey,
-            apiKeyEnvVar: model.apiKeyEnvVar,
-          });
-        }
-      } catch (error) {
-        console.warn('Failed to load available models:', error);
-      }
+    const catalog = await this.#gatewayManager!.listAvailableModels();
+    for (const model of catalog) {
+      upsertModel(model);
     }
 
     const result = [...modelsById.values()];
@@ -965,18 +1210,20 @@ export class Harness<TState = {}> {
    * surrounding teardown — dropping the current thread subscription and clearing
    * the active thread — since those are Harness-owned.
    */
-  setResourceId(session: Session<TState>, { resourceId }: { resourceId: string }): void {
+  async setResourceId(session: Session<TState>, { resourceId }: { resourceId: string }): Promise<void> {
     const previousResourceId = session.identity.getResourceId();
     session.thread.cleanupSubscription();
     session.identity.setResourceId({ resourceId });
-    session.thread.clear();
+    const releasePreviousThreadLock = session.thread.clearAndReleaseLock();
 
     // Re-key the resource registry so this session is the one resolved for its
     // new resourceId (and is no longer resolved for the old one). This session
     // becomes the authoritative owner of the target resource, replacing any
     // prior session registered there.
-    void this.#dropSessionFromRegistry(previousResourceId, session);
+    const dropPreviousResource = this.#dropSessionFromRegistry(previousResourceId, session);
     this.#sessionsByResource.set(resourceId, Promise.resolve(session));
+    await releasePreviousThreadLock;
+    await dropPreviousResource;
   }
 
   /** Remove `resourceId` from the registry only if it still resolves to `session`. */
@@ -1139,6 +1386,60 @@ export class Harness<TState = {}> {
   // Message Handling
   // ===========================================================================
 
+  /**
+   * Resolve the `activeTools` allowlist for the current mode's run.
+   *
+   * Returns `undefined` when the mode has no `availableTools` configured
+   * (no restriction — all tools visible). When the mode declares
+   * `availableTools`, returns that list filtered to remove tools whose
+   * permission category is denied.
+   *
+   * Per-tool `deny` is already handled by `buildToolsets` (denied tools are
+   * deleted from the toolsets), so those tools won't exist at execution time
+   * regardless of whether they appear in the allowlist.
+   *
+   * The returned list uses the same exposed tool names the execution pipeline
+   * checks against (e.g. `view`, `write_file`, `ask_user`), which matches the
+   * names workspace tools are renamed to via `TOOL_NAME_OVERRIDES`.
+   */
+  private resolveModeActiveTools(session: Session<TState>): string[] | undefined {
+    const currentMode = session.mode.resolve();
+    const availableTools = currentMode?.availableTools;
+    if (!availableTools) {
+      return undefined;
+    }
+    if (availableTools.length === 0) {
+      return [];
+    }
+
+    const permissionRules = session.permissions.getRules();
+    const deniedTools = new Set(
+      Object.entries(permissionRules.tools)
+        .filter(([, policy]) => policy === 'deny')
+        .map(([tool]) => tool),
+    );
+    const deniedCategories = new Set(
+      Object.entries(permissionRules.categories)
+        .filter(([, policy]) => policy === 'deny')
+        .map(([cat]) => cat),
+    );
+
+    if (deniedTools.size === 0 && deniedCategories.size === 0) {
+      return availableTools;
+    }
+
+    return availableTools.filter(toolName => {
+      // Per-tool deny always wins — even over the mode allowlist.
+      if (deniedTools.has(toolName)) {
+        return false;
+      }
+      // Category deny: tools with no category (null — always-allowed tools
+      // like ask_user) are not subject to category deny.
+      const category = this.getToolCategory({ toolName });
+      return !category || !deniedCategories.has(category);
+    });
+  }
+
   private async buildAgentMessageStreamOptions({
     session,
     requestContext: requestContextInput,
@@ -1186,6 +1487,15 @@ export class Harness<TState = {}> {
     };
     streamOptions.toolsets = await this.buildToolsets(session, requestContext);
 
+    // Apply mode-level tool visibility via `activeTools` — the same mechanism
+    // the execution pipeline already enforces at tool-call time.  Only set
+    // when the helper returns a concrete list so modes without
+    // `availableTools` keep unrestricted behaviour.
+    const activeTools = this.resolveModeActiveTools(session);
+    if (activeTools !== undefined) {
+      streamOptions.activeTools = activeTools;
+    }
+
     return streamOptions;
   }
 
@@ -1216,7 +1526,7 @@ export class Harness<TState = {}> {
   /**
    * Persist a system-reminder message for a thread (host-owned storage). Throws
    * when no storage is configured — the Session guards the no-thread case before
-   * calling. Returns the saved message converted to {@link HarnessMessage}.
+   * calling. Returns the saved message converted to {@link AgentControllerMessage}.
    */
   private async saveSystemReminder({
     threadId,
@@ -1232,8 +1542,8 @@ export class Harness<TState = {}> {
     reminderType: string;
     role: 'user' | 'assistant' | 'system';
     metadata?: Record<string, unknown>;
-  }): Promise<HarnessMessage | null> {
-    if (!this.config.storage) return null;
+  }): Promise<AgentControllerMessage | null> {
+    if (!this.#resolveStorage()) return null;
     const memoryStorage = await this.getMemoryStorage();
     const dbMessage = {
       id: randomUUID(),
@@ -1303,8 +1613,8 @@ export class Harness<TState = {}> {
       }>;
       metadata?: Record<string, unknown>;
     };
-  }): HarnessMessage {
-    const content: HarnessMessageContent[] = [];
+  }): AgentControllerMessage {
+    const content: AgentControllerMessageContent[] = [];
     const systemReminder = getRecordValue(msg.content.metadata?.systemReminder);
 
     if (systemReminder && typeof systemReminder.type === 'string') {
@@ -1653,13 +1963,18 @@ export class Harness<TState = {}> {
       }
     }
 
-    // Auto-create subagent tool if subagent definitions are configured
-    if (this.config.subagents?.length && this.config.resolveModel) {
+    // Auto-create subagent tool if subagent definitions are configured.
+    // Model resolution flows through the gateways registered on the internal
+    // Mastra instance: `resolveModel` returns the bare model id string and the
+    // created subagent Agent receives the internal Mastra via its constructor
+    // so the model router resolves through the same gateways as the parent.
+    if (this.config.subagents?.length) {
       const currentMode = session.mode.resolve();
       const hasMemory = Boolean(this.config.memory);
       builtInTools.subagent = createSubagentTool({
         subagents: this.config.subagents,
-        resolveModel: this.config.resolveModel,
+        resolveModel: (modelId: string) => modelId,
+        mastra: this.getMastra(),
         harnessTools: resolvedHarnessTools,
         fallbackModelId: currentMode?.defaultModelId,
         getParentModelId: () => session.model.get(),
@@ -1754,7 +2069,7 @@ export class Harness<TState = {}> {
     requestContext?: RequestContext,
   ): Promise<RequestContext> {
     requestContext ??= new RequestContext();
-    const harnessContext: HarnessRequestContext<TState> = {
+    const harnessContext: AgentControllerRequestContext<TState> = {
       harnessId: this.id,
       state: session.state.get(),
       getState: () => session.state.get(),
@@ -1763,6 +2078,8 @@ export class Harness<TState = {}> {
       threadId: session.thread.getId(),
       resourceId: session.identity.getResourceId(),
       session: {
+        id: session.identity.getId(),
+        ownerId: session.identity.getOwnerId(),
         modeId: session.mode.get(),
         modelId: session.model.get(),
         state: {
@@ -1772,25 +2089,11 @@ export class Harness<TState = {}> {
         },
       },
       abortSignal: session.run.getAbortSignal(),
-      workspace: this.workspace,
       emitEvent: event => session.emit(event),
       getSubagentModelId: params => session.subagents.model.get(params ?? {}),
     };
 
     requestContext.set('harness', harnessContext);
-
-    if (this.workspaceFn) {
-      // Pass the internal Mastra instance so the workspace factory can dedupe
-      // against the registered workspace (getWorkspaceById). Without it, a
-      // dynamic factory would build a *separate* Workspace/filesystem instance
-      // from the one the agent resolves and registers — leaving harness-side
-      // tools (e.g. request_access) mutating a different filesystem than the
-      // agent's workspace tools (e.g. view) read from.
-      const resolved = await Promise.resolve(this.workspaceFn({ requestContext, mastra: this.#internalMastra }));
-      harnessContext.workspace = resolved;
-      // Cache for getWorkspace() so callers outside request flow (e.g. /skills) can access it
-      this.workspace = resolved;
-    }
 
     return requestContext;
   }
@@ -1820,7 +2123,7 @@ export class Harness<TState = {}> {
 
   private async persistTokenUsage(session: Session<TState>): Promise<void> {
     const threadId = session.thread.getId();
-    if (!threadId || !this.config.storage) return;
+    if (!threadId || !this.#resolveStorage()) return;
 
     try {
       const memoryStorage = await this.getMemoryStorage();
@@ -1836,59 +2139,6 @@ export class Harness<TState = {}> {
       }
     } catch {
       // Token persistence is not critical
-    }
-  }
-
-  // ===========================================================================
-  // Workspace
-  // ===========================================================================
-
-  getWorkspace(): Workspace | undefined {
-    return this.workspace;
-  }
-
-  /**
-   * Eagerly resolve the workspace. For dynamic workspaces (factory function),
-   * this triggers resolution and caches the result so getWorkspace() returns it.
-   * Useful for code paths outside the request flow (e.g. slash commands).
-   */
-  async resolveWorkspace({
-    session,
-    requestContext,
-  }: {
-    session: Session<TState>;
-    requestContext?: RequestContext;
-  }): Promise<Workspace | undefined> {
-    if (this.workspace) return this.workspace;
-    if (this.workspaceFn) {
-      // buildRequestContext resolves the workspace and caches it on this.workspace
-      await this.buildRequestContext(session, requestContext);
-      return this.workspace;
-    }
-    return undefined;
-  }
-
-  hasWorkspace(): boolean {
-    return this.config.workspace !== undefined;
-  }
-
-  isWorkspaceReady(): boolean {
-    if (this.workspaceFn) return true;
-    return this.workspaceInitialized && this.workspace !== undefined;
-  }
-
-  async destroyWorkspace(): Promise<void> {
-    if (this.workspaceFn) return;
-    if (this.workspace && this.workspaceInitialized) {
-      // The workspace is a Harness-shared resource torn down at Harness
-      // shutdown; there is no single session to emit lifecycle events onto.
-      try {
-        await this.workspace.destroy();
-      } catch (error) {
-        console.warn('Workspace destroy failed:', error);
-      } finally {
-        this.workspaceInitialized = false;
-      }
     }
   }
 
@@ -1977,7 +2227,6 @@ export class Harness<TState = {}> {
     // cleanup) is the caller's responsibility via `session.thread.*`. Here we
     // only tear down Harness-shared resources.
     await this.stopHeartbeats();
-    await this.destroyWorkspace();
   }
 
   // ===========================================================================
@@ -1988,6 +2237,17 @@ export class Harness<TState = {}> {
     if (this.config.idGenerator) {
       return this.config.idGenerator();
     }
-    return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+    return randomUUID();
   }
 }
+
+/**
+ * @deprecated Use {@link AgentController} instead. `Harness` is retained as a
+ * backwards-compatible alias and will be removed in a future major release.
+ */
+export const Harness = AgentController;
+/**
+ * @deprecated Use {@link AgentController} instead. `Harness` is retained as a
+ * backwards-compatible alias and will be removed in a future major release.
+ */
+export type Harness<TState = {}> = AgentController<TState>;

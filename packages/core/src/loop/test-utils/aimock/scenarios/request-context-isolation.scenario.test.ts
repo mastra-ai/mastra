@@ -1,9 +1,9 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
 import { RequestContext } from '../../../../request-context';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
 /**
  * Regression class: requestContext isolation between steps.
@@ -12,7 +12,7 @@ import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
  * isolated across multiple tool execution steps within a single run. This pins
  * the regression where requestContext could be mutated or lost between steps.
  */
-describe('AIMock loop scenario: requestContext isolation between steps', () => {
+describeForAllEngines('AIMock loop scenario: requestContext isolation between steps', engine => {
   const getMock = useLoopScenarioAimock();
 
   it('preserves requestContext across multiple tool execution steps', async () => {
@@ -69,6 +69,7 @@ describe('AIMock loop scenario: requestContext isolation between steps', () => {
     requestContext.set('sessionId', 'session-888');
 
     await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Execute all three tools in sequence',
       tools: { tool_1: tool1, tool_2: tool2, tool_3: tool3 },
@@ -158,6 +159,7 @@ describe('AIMock loop scenario: requestContext isolation between steps', () => {
     requestContext.set('sessionId', originalSessionId);
 
     const { output } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Run mutating tool then check tool',
       tools: { mutating_tool: mutatingTool, check_tool: checkTool },
@@ -211,6 +213,7 @@ describe('AIMock loop scenario: requestContext isolation between steps', () => {
     requestContext.set('userId', 'parallel-user-777');
 
     await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Execute tools in parallel',
       tools: {

@@ -5,8 +5,9 @@ import { RequestContext } from '../request-context';
 import { SignalProvider } from '../signals/signal-provider';
 
 import { Harness } from './harness';
+import { createMockWorkspace } from './test-utils';
 import type * as Tools from './tools';
-import type { HarnessSubagent } from './types';
+import type { AgentControllerSubagent } from './types';
 
 // Capture the options passed to createSubagentTool so we can poke at the
 // cloneThreadForFork callback the harness wired up — without having to
@@ -44,7 +45,7 @@ describe('Harness fork clone metadata wiring', () => {
 
     const memoryFactory = vi.fn().mockResolvedValue({ cloneThread });
 
-    const subagents: HarnessSubagent[] = [
+    const subagents: AgentControllerSubagent[] = [
       {
         id: 'explore',
         name: 'Explore',
@@ -55,11 +56,11 @@ describe('Harness fork clone metadata wiring', () => {
     ];
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test',
       resourceId: 'parent-resource',
       memory: memoryFactory as unknown as never,
       subagents,
-      resolveModel: () => ({}) as never,
       modes: [
         {
           id: 'default',
@@ -76,7 +77,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     // Invoke the private buildToolsets to trigger createSubagentTool with the
     // wired-in cloneThreadForFork callback.
@@ -101,8 +102,8 @@ describe('Harness fork clone metadata wiring', () => {
     });
   });
 
-  it('does not create the subagent tool from gateways without an app-provided resolver', async () => {
-    const subagents: HarnessSubagent[] = [
+  it('creates the gateway-backed subagent tool when subagents are configured', async () => {
+    const subagents: AgentControllerSubagent[] = [
       {
         id: 'explore',
         name: 'Explore',
@@ -120,6 +121,7 @@ describe('Harness fork clone metadata wiring', () => {
     };
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test',
       resourceId: 'parent-resource',
       subagents,
@@ -139,20 +141,30 @@ describe('Harness fork clone metadata wiring', () => {
       ],
     });
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const toolsets = (await (harness as any).buildToolsets(session, new RequestContext())) as {
       harnessBuiltIn?: Record<string, unknown>;
     };
 
-    expect(capturedOpts).toHaveLength(0);
-    expect(toolsets.harnessBuiltIn?.subagent).toBeUndefined();
+    expect(capturedOpts).toHaveLength(1);
+    expect(toolsets.harnessBuiltIn?.subagent).toBeDefined();
+    // Model resolution flows through the gateways: resolveModel is the identity
+    // passthrough of the bare model id, resolved by the internal Mastra router.
+    const opts = capturedOpts[0] as {
+      resolveModel: (modelId: string) => unknown;
+      mastra?: unknown;
+    };
+    expect(opts.resolveModel('openai/gpt-4o')).toBe('openai/gpt-4o');
+    // mastra is undefined when no storage is configured (no internal Mastra
+    // is created), but the property must be present on the options.
+    expect('mastra' in opts).toBe(true);
   });
 
   it('wires getParentToolsets so forks can inherit parent toolsets', async () => {
     const memoryFactory = vi.fn().mockResolvedValue({ cloneThread: vi.fn() });
 
-    const subagents: HarnessSubagent[] = [
+    const subagents: AgentControllerSubagent[] = [
       {
         id: 'explore',
         name: 'Explore',
@@ -162,11 +174,11 @@ describe('Harness fork clone metadata wiring', () => {
     ];
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test',
       resourceId: 'parent-resource',
       memory: memoryFactory as unknown as never,
       subagents,
-      resolveModel: () => ({}) as never,
       modes: [
         {
           id: 'default',
@@ -183,7 +195,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     await (harness as any).buildToolsets(session, new RequestContext());
 
@@ -211,6 +223,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test',
       resourceId: 'test-resource',
       memory: memoryFactory as unknown as never,
@@ -233,7 +246,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     // All modes should return the same agent instance — no forking
     const buildAgent = harness.getCurrentAgent(session);
@@ -258,6 +271,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test',
       resourceId: 'test-resource',
       memory: memoryFactory as unknown as never,
@@ -281,7 +295,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     // Switch modes multiple times
     harness.getCurrentAgent(session);
@@ -305,6 +319,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test',
       resourceId: 'test-resource',
       memory: memoryFactory as unknown as never,
@@ -328,7 +343,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const resolve = (harness as any).resolveCurrentModeInstructions;
 
@@ -353,6 +368,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test',
       resourceId: 'test-resource',
       memory: memoryFactory as unknown as never,
@@ -374,7 +390,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const buildToolsets = (harness as any).buildToolsets;
 
@@ -412,6 +428,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test',
       resourceId: 'test-resource',
       memory: memoryFactory as unknown as never,
@@ -434,7 +451,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     // Signal provider should always point at baseAgent, regardless of mode
     expect(signalProvider.getConnectedAgent()).toBe(baseAgent);
@@ -465,6 +482,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test',
       resourceId: 'test-resource',
       memory: memoryFactory as unknown as never,
@@ -486,7 +504,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     // Deprecated mode.agent path — each mode gets its own agent
     const currentBuild = harness.getCurrentAgent(session);
@@ -524,6 +542,7 @@ describe('Harness fork clone metadata wiring', () => {
     expect(baseAgent.hasOwnMemory()).toBe(false);
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test',
       resourceId: 'test-resource',
       memory: memoryFactory as unknown as never,
@@ -546,7 +565,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     await harness.init();
-    await harness.createSession();
+    await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     // After init, signal provider's connected agent (the base agent) should have memory
     const connectedAgent = signalProvider.getConnectedAgent()!;

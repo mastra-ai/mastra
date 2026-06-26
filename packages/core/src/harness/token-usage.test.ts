@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
-import type { HarnessEvent } from './types';
+import { createMockWorkspace } from './test-utils';
+import type { AgentControllerEvent } from './types';
 
 function createHarness(storage = new InMemoryStore()) {
   const agent = new Agent({
@@ -12,6 +13,7 @@ function createHarness(storage = new InMemoryStore()) {
   });
 
   return new Harness({
+    workspace: createMockWorkspace(),
     id: 'test-harness',
     storage,
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
@@ -52,7 +54,7 @@ describe('step-finish token usage extraction', () => {
   beforeEach(async () => {
     harness = createHarness();
     await harness.init();
-    session = await harness.createSession();
+    session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
   });
 
   it('extracts token usage from AI SDK v5/v6 format (inputTokens/outputTokens)', async () => {
@@ -87,7 +89,7 @@ describe('step-finish token usage extraction', () => {
       cacheCreationInputTokens: 5,
       raw: { provider: 'test-provider' },
     };
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => events.push(event));
 
     await (session as any).processStream({ fullStream: mockStream(usage) });
@@ -113,7 +115,7 @@ describe('step-finish token usage extraction', () => {
     const storage = new InMemoryStore();
     harness = createHarness(storage);
     await harness.init();
-    session = await harness.createSession();
+    session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const thread = await session.thread.create();
     const usage = {
       inputTokens: 100,

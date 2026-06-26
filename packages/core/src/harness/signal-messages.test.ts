@@ -5,7 +5,8 @@ import { createSignal } from '../agent/signals';
 import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
-import type { HarnessEvent } from './types';
+import { createMockWorkspace } from './test-utils';
+import type { AgentControllerEvent } from './types';
 
 function createTextStreamModel(responseText: string) {
   return new MockLanguageModelV2({
@@ -46,12 +47,13 @@ async function createHarness(
   }),
 ) {
   const harness = new Harness({
+    workspace: createMockWorkspace(),
     id: 'test-harness',
     storage,
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
   });
   await harness.init();
-  const session = await harness.createSession();
+  const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
   return { harness, session };
 }
 
@@ -392,7 +394,7 @@ describe('Harness signal messages', () => {
   it('processes sendMessage streams once through the active thread subscription', async () => {
     const storage = new InMemoryStore();
     const { session } = await createHarness(storage);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -402,11 +404,11 @@ describe('Harness signal messages', () => {
     await waitFor(() => events.some(event => event.type === 'message_end' && event.message.role === 'assistant'));
 
     const assistantStarts = events.filter(
-      (event): event is Extract<HarnessEvent, { type: 'message_start' }> =>
+      (event): event is Extract<AgentControllerEvent, { type: 'message_start' }> =>
         event.type === 'message_start' && event.message.role === 'assistant',
     );
     const assistantEnds = events.filter(
-      (event): event is Extract<HarnessEvent, { type: 'message_end' }> =>
+      (event): event is Extract<AgentControllerEvent, { type: 'message_end' }> =>
         event.type === 'message_end' && event.message.role === 'assistant',
     );
     expect(assistantStarts).toHaveLength(1);
@@ -433,6 +435,7 @@ describe('Harness signal messages', () => {
     const thread = await session.thread.create();
 
     // Simulate an active run from the harness consumer's perspective
+    session.run.ensureAbortController();
     session.run.setRunId({ runId: 'active-run-id' });
 
     const buildToolsets = vi.spyOn(harness as any, 'buildToolsets');
@@ -454,10 +457,115 @@ describe('Harness signal messages', () => {
     );
   });
 
+  it('starts a new run instead of dispatching onto an aborted run when a follow-up arrives mid-abort', async () => {
+    // Regression: after Ctrl+C (abort), the AbortController is cleared
+    // immediately but the run id and active-run id linger until `run.reset()`
+    // fires (after agent_end). Without the isRunning() guard in sendSignal,
+    // the follow-up signal is dispatched onto the dying run and lost.
+    const storage = new InMemoryStore();
+    const agent = new Agent({
+      id: 'abort-followup-agent',
+      name: 'abort-followup-agent',
+      instructions: 'You are a test agent.',
+      model: createTextStreamModel('World'),
+    });
+    const { harness, session } = await createHarness(storage, agent);
+    vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
+      stream: (async function* () {})(),
+      unsubscribe: vi.fn(),
+      abort: vi.fn(),
+      activeRunId: () => 'run-1',
+    });
+    const thread = await session.thread.create();
+
+    // Simulate an active run, then abort it — exactly what Ctrl+C does.
+    session.run.ensureAbortController();
+    session.run.setRunId({ runId: 'run-1' });
+    session.abort();
+
+    // After abort: isRunning() is false, but getRunId() and activeRunId()
+    // still return 'run-1' (not yet reset by agent_end).
+    expect(session.run.isRunning()).toBe(false);
+    expect(session.run.getRunId()).toBe('run-1');
+    expect(session.stream.activeRunId()).toBe('run-1');
+
+    const buildToolsets = vi.spyOn(harness as any, 'buildToolsets');
+    const sendSignal = vi.spyOn(agent, 'sendSignal').mockReturnValue({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'new-run-id' }),
+      signal: createSignal({ type: 'user-message', contents: 'follow-up after abort' }),
+    });
+
+    const signal = session.sendSignal({ content: 'follow-up after abort' });
+    await expect(signal.accepted).resolves.toEqual({ accepted: true, runId: undefined });
+
+    // buildToolsets is only called in the new-run (idle) branch, proving
+    // the signal did NOT dispatch onto the dying run.
+    expect(buildToolsets).toHaveBeenCalledTimes(1);
+    // sendSignal must include streamOptions in ifIdle (new-run branch),
+    // not bare ifActive/ifIdle (active-run branch).
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ contents: 'follow-up after abort' }),
+      expect.objectContaining({
+        resourceId: thread.resourceId,
+        threadId: thread.id,
+        ifIdle: expect.objectContaining({ streamOptions: expect.any(Object) }),
+      }),
+    );
+  });
+
+  it('waits for post-abort stream teardown before starting the follow-up run', async () => {
+    const storage = new InMemoryStore();
+    const agent = new Agent({
+      id: 'abort-idle-wait-agent',
+      name: 'abort-idle-wait-agent',
+      instructions: 'You are a test agent.',
+      model: createTextStreamModel('World'),
+    });
+    const { harness, session } = await createHarness(storage, agent);
+    let activeRunId: string | null = 'run-1';
+    vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
+      stream: (async function* () {})(),
+      unsubscribe: vi.fn(),
+      abort: vi.fn(),
+      activeRunId: () => activeRunId,
+    });
+    const thread = await session.thread.create();
+
+    session.run.ensureAbortController();
+    session.run.setRunId({ runId: 'run-1' });
+    session.abort();
+
+    const buildToolsets = vi.spyOn(harness as any, 'buildToolsets');
+    const sendSignal = vi.spyOn(agent, 'sendSignal').mockReturnValue({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'new-run-id' }),
+      signal: createSignal({ type: 'user-message', contents: 'follow-up after abort' }),
+    });
+
+    const signal = session.sendSignal({ content: 'follow-up after abort' });
+    await new Promise(resolve => setTimeout(resolve, 10));
+
+    expect(buildToolsets).not.toHaveBeenCalled();
+    expect(sendSignal).not.toHaveBeenCalled();
+
+    activeRunId = null;
+    session.run.reset();
+
+    await expect(signal.accepted).resolves.toEqual({ accepted: true, runId: undefined });
+    expect(buildToolsets).toHaveBeenCalledTimes(1);
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ contents: 'follow-up after abort' }),
+      expect.objectContaining({
+        resourceId: thread.resourceId,
+        threadId: thread.id,
+        ifIdle: expect.objectContaining({ streamOptions: expect.any(Object) }),
+      }),
+    );
+  });
+
   it('tracks queued follow-ups in display state while running', async () => {
     const storage = new InMemoryStore();
     const { session } = await createHarness(storage);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -480,7 +588,7 @@ describe('Harness signal messages', () => {
       model: createTextStreamModel('Hello'),
     });
     const { session } = await createHarness(storage, agent);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -526,7 +634,7 @@ describe('Harness signal messages', () => {
   it('sends idle follow-ups immediately without marking them queued', async () => {
     const storage = new InMemoryStore();
     const { session } = await createHarness(storage);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -620,7 +728,7 @@ describe('Harness signal messages', () => {
       model: createTextStreamModel('Hello'),
     });
     const { session } = await createHarness(storage, agent);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -652,7 +760,7 @@ describe('Harness signal messages', () => {
       model: createTextStreamModel('Hello'),
     });
     const { session } = await createHarness(storage, agent);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -699,7 +807,7 @@ describe('Harness signal messages', () => {
   it('starts a new idle signal after a subscription-owned run completes', async () => {
     const storage = new InMemoryStore();
     const { session } = await createHarness(storage);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -730,14 +838,15 @@ describe('Harness signal messages', () => {
       model: createTextStreamModel('unused'),
     });
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'subscription-tool-harness',
       storage,
       modes: [{ id: 'default', name: 'Default', default: true, agent }],
       initialState: { yolo: true } as any,
     });
     await harness.init();
-    const session = await harness.createSession();
-    const events: HarnessEvent[] = [];
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -759,14 +868,11 @@ describe('Harness signal messages', () => {
       abort: vi.fn(),
       activeRunId: () => 'run-1',
     });
-    const directResumeStream = (async function* () {
-      yield { type: 'text-start', payload: { id: 'direct-text' } };
-      yield { type: 'text-delta', payload: { id: 'direct-text', text: 'direct resume should not render' } };
-      yield { type: 'finish', payload: { stepResult: { reason: 'stop' } } };
-    })();
-    const approveToolCall = vi
-      .spyOn(agent, 'approveToolCall')
-      .mockResolvedValue({ fullStream: directResumeStream } as any);
+    const sendToolApproval = vi.spyOn(agent, 'sendToolApproval').mockResolvedValue({
+      accepted: true,
+      runId: 'run-1',
+      toolCallId: 'tool-1',
+    });
     vi.spyOn(agent, 'sendSignal').mockReturnValue({
       accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }),
       signal: createSignal({ type: 'user-message', contents: 'run tool' }),
@@ -784,20 +890,13 @@ describe('Harness signal messages', () => {
       ),
     );
 
-    expect(approveToolCall).toHaveBeenCalledWith(expect.objectContaining({ runId: 'run-1', toolCallId: 'tool-1' }));
-    expect(
-      events.some(
-        event =>
-          event.type === 'message_end' &&
-          event.message.content.some(part => part.type === 'text' && part.text === 'direct resume should not render'),
-      ),
-    ).toBe(false);
+    expect(sendToolApproval).toHaveBeenCalledWith(expect.objectContaining({ approved: true, toolCallId: 'tool-1' }));
   });
 
   it('starts idle text signals through ifIdle stream options', async () => {
     const storage = new InMemoryStore();
     const { session } = await createHarness(storage);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -808,11 +907,11 @@ describe('Harness signal messages', () => {
     await waitFor(() => events.some(event => event.type === 'message_end' && event.message.role === 'assistant'));
 
     const signalEnd = events.find(
-      (event): event is Extract<HarnessEvent, { type: 'message_end' }> =>
+      (event): event is Extract<AgentControllerEvent, { type: 'message_end' }> =>
         event.type === 'message_end' && event.message.id === signal.id,
     );
     const assistantEnd = events.find(
-      (event): event is Extract<HarnessEvent, { type: 'message_end' }> =>
+      (event): event is Extract<AgentControllerEvent, { type: 'message_end' }> =>
         event.type === 'message_end' && event.message.role === 'assistant',
     );
 
@@ -823,7 +922,7 @@ describe('Harness signal messages', () => {
   it('does not carry a stale abort reason into a later idle signal run', async () => {
     const storage = new InMemoryStore();
     const { session } = await createHarness(storage);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -835,7 +934,7 @@ describe('Harness signal messages', () => {
     await waitFor(() => events.some(event => event.type === 'agent_end'));
 
     const agentEnd = events.find(
-      (event): event is Extract<HarnessEvent, { type: 'agent_end' }> => event.type === 'agent_end',
+      (event): event is Extract<AgentControllerEvent, { type: 'agent_end' }> => event.type === 'agent_end',
     );
     expect(agentEnd?.reason).toBe('complete');
   });
@@ -910,7 +1009,7 @@ describe('Harness signal messages', () => {
   it('emits echoed file user-message signals as user message events', async () => {
     const storage = new InMemoryStore();
     const { session } = await createHarness(storage);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -949,7 +1048,7 @@ describe('Harness signal messages', () => {
   it('emits echoed user-message signals as user message events', async () => {
     const storage = new InMemoryStore();
     const { session } = await createHarness(storage);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -996,7 +1095,7 @@ describe('Harness signal messages', () => {
   it('closes the current assistant message when a goal chunk arrives before continuation text', async () => {
     const storage = new InMemoryStore();
     const { session } = await createHarness(storage);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -1045,10 +1144,10 @@ describe('Harness signal messages', () => {
     );
 
     const messageEndEvents = events.filter(
-      (event): event is Extract<HarnessEvent, { type: 'message_end' }> => event.type === 'message_end',
+      (event): event is Extract<AgentControllerEvent, { type: 'message_end' }> => event.type === 'message_end',
     );
     const messageUpdateEvents = events.filter(
-      (event): event is Extract<HarnessEvent, { type: 'message_update' }> => event.type === 'message_update',
+      (event): event is Extract<AgentControllerEvent, { type: 'message_update' }> => event.type === 'message_update',
     );
 
     expect(messageEndEvents).toHaveLength(1);
@@ -1060,7 +1159,7 @@ describe('Harness signal messages', () => {
   it('emits generic reactive signal data parts as renderable message updates', async () => {
     const storage = new InMemoryStore();
     const { session } = await createHarness(storage);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -1104,7 +1203,7 @@ describe('Harness signal messages', () => {
   it('emits notification summary data parts as renderable message updates', async () => {
     const storage = new InMemoryStore();
     const { session } = await createHarness(storage);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -1158,7 +1257,7 @@ describe('Harness signal messages', () => {
   it('emits full notification data parts as renderable message updates', async () => {
     const storage = new InMemoryStore();
     const { session } = await createHarness(storage);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -1236,7 +1335,7 @@ describe('Harness signal messages', () => {
   it('emits state signal data parts as renderable message updates', async () => {
     const storage = new InMemoryStore();
     const { session } = await createHarness(storage);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });

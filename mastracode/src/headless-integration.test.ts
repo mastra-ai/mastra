@@ -5,13 +5,21 @@ import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import { Harness } from '@mastra/core/harness';
 import type { HarnessEvent } from '@mastra/core/harness';
+import type {
+  GatewayAuthRequest,
+  GatewayAuthResult,
+  GatewayLanguageModel,
+  MastraModelGatewayInterface,
+  ProviderConfig,
+} from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { AgentsMDInjector } from '@mastra/core/processors';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
+import { Workspace } from '@mastra/core/workspace';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import z from 'zod';
 
 import { runHeadless } from './headless.js';
@@ -101,6 +109,22 @@ afterEach(() => {
   }
 });
 
+// Prevent default gateways (models.dev, netlify) from hitting the network
+// during model-catalog tests. Errors are caught by GatewayManager.listProviders.
+beforeEach(() => {
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network disabled in tests')));
+});
+
+async function waitFor(condition: () => boolean, timeoutMs = 5_000): Promise<void> {
+  const start = Date.now();
+  while (!condition()) {
+    if (Date.now() - start > timeoutMs) {
+      throw new Error('Timed out waiting for condition');
+    }
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+}
+
 async function captureProcessOutput<T>(fn: () => Promise<T>) {
   const stdoutChunks: string[] = [];
   const stderrChunks: string[] = [];
@@ -164,6 +188,7 @@ function createHarnessWithAgent(opts: {
   const harness = new Harness({
     id: 'test-harness',
     storage,
+    workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
     modes: [
       {
         id: 'default',
@@ -188,7 +213,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: HarnessEvent[] = [];
     session.subscribe(event => {
@@ -229,7 +254,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: HarnessEvent[] = [];
     session.subscribe(event => {
@@ -244,13 +269,84 @@ describe('headless mode — event-driven auto-resolution', () => {
     expect(mockExecute).toHaveBeenCalledTimes(1);
   });
 
+  it('resumes same-run-id suspended tools through the subscribed thread stream exactly once', async () => {
+    const confirmTool = createTool({
+      id: 'confirmAction',
+      description: 'Confirm an action',
+      inputSchema: z.object({ action: z.string() }),
+      execute: async (input: { action: string }, context?: any) => {
+        const resumeData = context?.agent?.resumeData ?? context?.workflow?.resumeData ?? context?.resumeData;
+        if (resumeData) {
+          return { result: `${input.action} confirmed`, resumeData };
+        }
+
+        const suspend = context?.suspend ?? context?.agent?.suspend;
+        if (!suspend) throw new Error('suspend not available in context');
+        await suspend({ action: input.action });
+        return { result: `${input.action} pending` };
+      },
+    });
+
+    let callCount = 0;
+    const harness = createHarnessWithAgent({
+      doStream: async () => {
+        callCount++;
+        return {
+          stream:
+            callCount === 1
+              ? createToolCallStream('confirmAction', '{"action":"deploy"}')
+              : createTextStream('Deployment confirmed.'),
+        };
+      },
+      tools: { confirmAction: confirmTool },
+    });
+
+    await harness.init();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+
+    const events: HarnessEvent[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+
+    await session.sendMessage({ content: 'Deploy to production' });
+
+    expect(events.some(e => e.type === 'tool_suspended')).toBe(true);
+    const suspendedEndCount = events.filter(e => e.type === 'agent_end' && (e as any).reason === 'suspended').length;
+    expect(suspendedEndCount).toBe(1);
+
+    const resumeStartIndex = events.length;
+    // Generic tool resume reuses the suspended runId and resumes from tool-result
+    // chunks, not a fresh start chunk. The subscribed thread stream must own that
+    // output; otherwise this waits forever or produces duplicate resume events.
+    await session.respondToToolSuspension({ resumeData: { confirmed: true } });
+    await waitFor(() =>
+      events.slice(resumeStartIndex).some(e => e.type === 'agent_end' && (e as any).reason === 'complete'),
+    );
+
+    const resumeEvents = events.slice(resumeStartIndex);
+    expect(callCount).toBe(2);
+    expect(resumeEvents.filter(e => e.type === 'agent_start')).toHaveLength(1);
+    expect(resumeEvents.filter(e => e.type === 'agent_end' && (e as any).reason === 'complete')).toHaveLength(1);
+    expect(
+      resumeEvents.some(e =>
+        e.type === 'message_update'
+          ? (e as any).message?.content?.some(
+              (part: any) => part.type === 'text' && part.text?.includes('Deployment confirmed'),
+            )
+          : false,
+      ),
+    ).toBe(true);
+    expect(resumeEvents.some(e => e.type === 'error')).toBe(false);
+  });
+
   it('streams message_update events with text content', async () => {
     const harness = createHarnessWithAgent({
       doStream: async () => ({ stream: createTextStream('Here is the result.') }),
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: HarnessEvent[] = [];
     session.subscribe(event => {
@@ -292,7 +388,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: HarnessEvent[] = [];
     session.subscribe(event => {
@@ -362,7 +458,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: HarnessEvent[] = [];
     session.subscribe(event => {
@@ -405,6 +501,44 @@ describe('headless mode — event-driven auto-resolution', () => {
   });
 });
 
+function createFakeGatewayFromModels(
+  customModels: { id: string; provider: string; modelName: string; hasApiKey: boolean; apiKeyEnvVar?: string }[],
+): MastraModelGatewayInterface {
+  // Group models by provider for fetchProviders
+  const providers: Record<string, ProviderConfig> = {};
+  for (const m of customModels) {
+    if (!providers[m.provider]) {
+      providers[m.provider] = {
+        name: m.provider,
+        models: [],
+        apiKeyEnvVar: m.apiKeyEnvVar ?? `${m.provider.toUpperCase().replace(/-/g, '_')}_API_KEY`,
+        gateway: 'models.dev',
+      };
+    }
+    providers[m.provider]!.models!.push(m.modelName);
+  }
+
+  // Build a lookup from routerId → hasApiKey for resolveAuth
+  const authMap = new Map(customModels.map(m => [m.id, m.hasApiKey]));
+
+  return {
+    id: 'models.dev',
+    name: 'Test models.dev Gateway',
+    fetchProviders: async () => providers,
+    buildUrl: () => 'https://example.com/v1',
+    getApiKey: async () => {
+      throw new Error('no api key');
+    },
+    resolveAuth: (request: GatewayAuthRequest): GatewayAuthResult | undefined => {
+      if (authMap.get(request.routerId)) {
+        return { apiKey: 'test-key', source: 'gateway' };
+      }
+      return undefined;
+    },
+    resolveLanguageModel: () => ({}) as GatewayLanguageModel,
+  };
+}
+
 function createHarnessWithModels(opts: {
   doStream: () => Promise<{ stream: ReadableStream }>;
   customModels?: { id: string; provider: string; modelName: string; hasApiKey: boolean; apiKeyEnvVar?: string }[];
@@ -436,6 +570,7 @@ function createHarnessWithModels(opts: {
   const harness = new Harness({
     id: 'test-harness',
     storage,
+    workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
     modes: [
       {
         id: 'default',
@@ -447,11 +582,7 @@ function createHarnessWithModels(opts: {
       },
     ],
     initialState: { yolo: true } as any,
-    customModelCatalogProvider: () =>
-      (opts.customModels ?? []).map(m => ({
-        ...m,
-        useCount: 0,
-      })),
+    gateways: [createFakeGatewayFromModels(opts.customModels ?? [])],
   });
   (harness as any).getAgentForMode = () => registeredAgent;
 
@@ -465,7 +596,7 @@ describe('headless mode — --output-format contracts', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const {
       result: exitCode,
@@ -492,7 +623,7 @@ describe('headless mode — --output-format contracts', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const {
       result: exitCode,
@@ -530,7 +661,7 @@ describe('headless mode — --output-format contracts', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const {
       result: exitCode,
@@ -649,7 +780,7 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: HarnessEvent[] = [];
     session.subscribe(event => events.push(event));
@@ -680,7 +811,7 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -722,7 +853,7 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -756,7 +887,7 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const writeSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
 
@@ -795,7 +926,7 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const writeSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
 
@@ -828,7 +959,7 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -861,7 +992,7 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const writeSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
 
@@ -889,7 +1020,7 @@ describe('headless mode — --model flag', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: HarnessEvent[] = [];
     session.subscribe(event => events.push(event));
@@ -915,7 +1046,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: HarnessEvent[] = [];
     session.subscribe(event => events.push(event));
@@ -946,7 +1077,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const exitCode = await runHeadless(
       harness,
@@ -973,7 +1104,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -1017,7 +1148,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -1052,7 +1183,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -1088,7 +1219,7 @@ describe('headless mode — thread control', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const thread = await session.thread.create({ title: 'target-thread' });
     const updatedAtBefore = thread.updatedAt.getTime();
 
@@ -1120,7 +1251,7 @@ describe('headless mode — thread control', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const thread = await session.thread.create({ title: 'my-feature' });
     const updatedAtBefore = thread.updatedAt.getTime();
 
@@ -1152,7 +1283,7 @@ describe('headless mode — thread control', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const exitCode = await runHeadless(harness, session, {
       prompt: 'Hello',
@@ -1171,7 +1302,7 @@ describe('headless mode — thread control', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     await session.thread.create({ title: 'original-title' });
 
     const exitCode = await runHeadless(harness, session, {
@@ -1195,7 +1326,7 @@ describe('headless mode — thread control', () => {
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     harness.setResourceId(session, { resourceId: 'resource-a' });
     const alphaOlderThread = await session.thread.create({ title: 'older-alpha' });
     harness.setResourceId(session, { resourceId: 'resource-b' });
@@ -1258,6 +1389,7 @@ describe('headless mode — thread control', () => {
       id: 'test-harness',
       storage,
       memory,
+      workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
       modes: [
         {
           id: 'default',
@@ -1273,7 +1405,7 @@ describe('headless mode — thread control', () => {
     (harness as any).getAgentForMode = () => registeredAgent;
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const sourceThread = await session.thread.create({ title: 'source-thread' });
 
     const events: any[] = [];

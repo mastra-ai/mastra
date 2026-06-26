@@ -1,4 +1,6 @@
-import { Button, Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle, Txt } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Database } from 'lucide-react';
 import { useState } from 'react';
 

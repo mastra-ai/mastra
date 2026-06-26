@@ -3,6 +3,7 @@ import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import type { ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraModelConfig } from '../llm/model/shared.types';
+import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
 import { askUserTool } from '../tools/builtin/ask-user';
 import { submitPlanTool } from '../tools/builtin/submit-plan';
@@ -10,7 +11,7 @@ import { summarizeTaskCheck } from '../tools/builtin/task-tools';
 import { createTool } from '../tools/tool';
 import { createWorkspaceTools } from '../workspace/tools/tools';
 
-import type { HarnessRequestContext, HarnessSubagent } from './types';
+import type { AgentControllerRequestContext, AgentControllerSubagent } from './types';
 
 // `ask_user` is an agent-agnostic built-in tool. It is defined in
 // `../tools/builtin/ask-user` and re-exported here so the Harness toolset and
@@ -66,7 +67,7 @@ export { TaskStateProcessor } from '../tools/builtin/task-state-processor';
 // =============================================================================
 
 export interface CreateSubagentToolOptions {
-  subagents: HarnessSubagent[];
+  subagents: AgentControllerSubagent[];
   resolveModel: (modelId: string) => MastraModelConfig;
   /** Resolved harness tools (already evaluated from DynamicArgument) */
   harnessTools?: ToolsInput;
@@ -98,6 +99,12 @@ export interface CreateSubagentToolOptions {
    * stability, but its runtime execute function is patched to block recursion.
    */
   getParentToolsets?: (requestContext?: RequestContext) => Promise<ToolsetsInput | undefined>;
+  /**
+   * Internal Mastra instance passed to each subagent Agent constructor so the
+   * bare model id resolves through the same gateways as the parent and the
+   * agent inherits pubsub/observability.
+   */
+  mastra?: Mastra;
 }
 
 /**
@@ -106,7 +113,7 @@ export interface CreateSubagentToolOptions {
  * streams the response, and forwards events to the harness.
  */
 export function createSubagentTool(opts: CreateSubagentToolOptions) {
-  const { subagents, resolveModel, harnessTools, fallbackModelId } = opts;
+  const { subagents, resolveModel, harnessTools, fallbackModelId, mastra } = opts;
 
   const subagentIds = subagents.map(s => s.id);
 
@@ -158,7 +165,7 @@ Use this tool when:
         };
       }
 
-      const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext | undefined;
+      const harnessCtx = context?.requestContext?.get('harness') as AgentControllerRequestContext | undefined;
       const emitEvent = harnessCtx?.emitEvent;
       const abortSignal = harnessCtx?.abortSignal;
       const toolCallId = context?.agent?.toolCallId ?? 'unknown';
@@ -172,7 +179,7 @@ Use this tool when:
       let subagentRequestContext: RequestContext | undefined;
       let streamMemory: { thread: string; resource?: string } | undefined;
       let streamMaxSteps: number | undefined;
-      let streamStopWhen: HarnessSubagent['stopWhen'];
+      let streamStopWhen: AgentControllerSubagent['stopWhen'];
       let streamPrepareStep: ((args: { tools?: Record<string, unknown> }) => { activeTools: string[] }) | undefined;
       let forkedToolsets: ToolsetsInput | undefined;
 
@@ -311,6 +318,7 @@ Use this tool when:
           model,
           tools: mergedTools,
           workspace,
+          mastra,
         });
 
         // Only resolve workspace tool names when an allowlist is configured,

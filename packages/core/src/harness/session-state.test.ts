@@ -2,18 +2,20 @@ import { describe, expect, it } from 'vitest';
 
 import { Harness } from './harness';
 import type { Session } from './session';
-import type { HarnessConfig, HarnessEvent } from './types';
+import { createMockWorkspace } from './test-utils';
+import type { AgentControllerConfig, AgentControllerEvent } from './types';
 
 async function createSession<TState extends Record<string, unknown>>(
-  config: Partial<HarnessConfig<TState>> = {},
+  config: Partial<AgentControllerConfig<TState>> = {},
 ): Promise<{ harness: Harness<TState>; session: Session<TState> }> {
   const harness = new Harness<TState>({
+    workspace: createMockWorkspace(),
     id: 'test-harness',
     modes: [{ id: 'build', defaultModelId: 'test-model' }],
     ...config,
-  } as HarnessConfig<TState>);
+  } as AgentControllerConfig<TState>);
   await harness.init();
-  const session = await harness.createSession();
+  const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
   return { harness, session };
 }
 
@@ -52,8 +54,8 @@ describe('Harness session state', () => {
         required: ['count'],
       },
     });
-    const events: HarnessEvent[] = [];
-    session.subscribe((event: HarnessEvent) => {
+    const events: AgentControllerEvent[] = [];
+    session.subscribe((event: AgentControllerEvent) => {
       events.push(event);
     });
 

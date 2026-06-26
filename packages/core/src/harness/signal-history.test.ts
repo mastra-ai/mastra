@@ -4,6 +4,7 @@ import { getDummyResponseModel } from '../agent/__tests__/mock-model';
 import { signalToMastraDBMessage } from '../agent/signals';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
+import { createMockWorkspace } from './test-utils';
 
 describe('Harness signal history rendering', () => {
   async function createHarnessWithThread() {
@@ -15,13 +16,14 @@ describe('Harness signal history rendering', () => {
       model: getDummyResponseModel('v2'),
     });
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test-harness',
       storage,
       modes: [{ id: 'default', name: 'Default', default: true, agent }],
     });
 
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const thread = await session.thread.create({ title: 'Signal thread' });
     const memoryStorage = await storage.getStore('memory');
     if (!memoryStorage) throw new Error('Expected memory storage');

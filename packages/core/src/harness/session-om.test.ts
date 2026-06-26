@@ -1,15 +1,15 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
-import type { HarnessEvent, HarnessOMConfig } from './types';
+import { createMockWorkspace } from './test-utils';
+import type { AgentControllerEvent, AgentControllerOMConfig } from './types';
 
 async function createSession(options: {
   storage: InMemoryStore;
-  omConfig?: HarnessOMConfig;
-  resolveModel?: (modelId: string) => any;
-  onEvent?: (event: HarnessEvent) => void;
+  omConfig?: AgentControllerOMConfig;
+  onEvent?: (event: AgentControllerEvent) => void;
 }) {
   const agent = new Agent({
     name: 'test-agent',
@@ -18,15 +18,15 @@ async function createSession(options: {
   });
 
   const harness = new Harness({
+    workspace: createMockWorkspace(),
     id: 'test-harness',
     storage: options.storage,
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
     omConfig: options.omConfig,
-    resolveModel: options.resolveModel,
   });
 
   await harness.init();
-  const session = await harness.createSession();
+  const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
   if (options.onEvent) session.subscribe(options.onEvent);
   return { harness, session };
 }
@@ -75,7 +75,7 @@ describe('session.om', () => {
   });
 
   it('observer.switchModel persists to thread settings and emits om_model_changed', async () => {
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     const { session } = await createSession({ storage, onEvent: event => events.push(event) });
     await session.thread.create();
 
@@ -91,7 +91,7 @@ describe('session.om', () => {
   });
 
   it('reflector.switchModel persists to thread settings and emits om_model_changed', async () => {
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     const { session } = await createSession({ storage, onEvent: event => events.push(event) });
     await session.thread.create();
 
@@ -106,23 +106,20 @@ describe('session.om', () => {
     });
   });
 
-  it('resolves the observer model via the configured resolver', async () => {
-    const resolveModel = vi.fn((modelId: string) => ({ modelId }));
+  it('resolves the observer model through the model router gateways', async () => {
     const { session } = await createSession({
       storage,
       omConfig: { defaultObserverModelId: 'openai/gpt-4o' },
-      resolveModel,
     });
 
-    expect(session.om.observer.resolvedModel()).toMatchObject({ modelId: 'openai/gpt-4o' });
-    expect(resolveModel).toHaveBeenCalledWith('openai/gpt-4o');
+    const resolved = session.om.observer.resolvedModel() as { modelId?: string; provider?: string };
+    expect(resolved?.provider).toBe('openai');
+    expect(resolved?.modelId).toBe('gpt-4o');
   });
 
   it('returns undefined resolved model when no model id is set', async () => {
-    const resolveModel = vi.fn((modelId: string) => ({ modelId }));
-    const { session } = await createSession({ storage, resolveModel });
+    const { session } = await createSession({ storage });
 
     expect(session.om.observer.resolvedModel()).toBeUndefined();
-    expect(resolveModel).not.toHaveBeenCalled();
   });
 });

@@ -6,10 +6,10 @@ import { LLMock } from '@copilotkit/aimock';
 import { LibSQLStore } from '@mastra/libsql';
 import { afterAll, describe, it } from 'vitest';
 
-import type { McE2eScenario, ScenarioName } from './scenarios/index.js';
-import { getScenario, listScenarios } from './scenarios/index.js';
 import type { TerminalRunConfig } from './terminal-backend.js';
 import { runTerminalBackend } from './terminal-backend.js';
+import type { McE2eScenario, ScenarioName } from './tui/index.js';
+import { getScenario, listScenarios } from './tui/index.js';
 
 const rows = Number(process.env.MC_E2E_ROWS ?? 36);
 const columns = Number(process.env.MC_E2E_COLUMNS ?? 120);
@@ -257,7 +257,7 @@ async function runScenarioInProcess(scenario: McE2eScenario): Promise<void> {
     }
   } finally {
     await aimock?.stop();
-    if (status === 0) rmSync(runRoot, { recursive: true, force: true });
+    if (status === 0) rmSync(runRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 }
 

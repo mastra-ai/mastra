@@ -536,7 +536,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         // from route path/method unless explicitly set or route is public
         const requestContext = c.get('requestContext');
         // Check if any auth is configured (studio or server) for RBAC
-        const hasAuth = this.mastra.getStudio()?.auth || this.mastra.getServer()?.auth;
+        const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
         if (hasAuth) {
           const hasPermission = await loadHasPermission();
           if (hasPermission) {
@@ -569,11 +569,19 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           const result = await route.handler(handlerParams);
           return this.sendResponse(route, c, result, prefix);
         } catch (error) {
-          this.mastra.getLogger()?.error('Error calling handler', {
-            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
-            path: route.path,
-            method: route.method,
-          });
+          // 4xx errors are client conditions (e.g. no session, expired token) and are
+          // already returned as structured HTTP responses below. Logging them as errors
+          // produces noise for callers — skip the logger call for those cases.
+          const httpStatus =
+            error && typeof error === 'object' && 'status' in error ? (error as any).status : undefined;
+          const isClientError = typeof httpStatus === 'number' && httpStatus >= 400 && httpStatus < 500;
+          if (!isClientError) {
+            this.mastra.getLogger()?.error('Error calling handler', {
+              error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+              path: route.path,
+              method: route.method,
+            });
+          }
           // Check if it's an HTTPException or MastraError with a status code
           if (error && typeof error === 'object') {
             // Check for direct status property (HTTPException)
@@ -655,7 +663,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
 
         const requestContext = c.get('requestContext');
         // Check if any auth is configured (studio or server) for RBAC
-        const hasAuth = this.mastra.getStudio()?.auth || this.mastra.getServer()?.auth;
+        const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
         if (hasAuth) {
           const hasPermission = await loadHasPermission();
           if (hasPermission) {

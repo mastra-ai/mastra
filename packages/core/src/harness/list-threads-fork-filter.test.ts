@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
+import { createMockWorkspace } from './test-utils';
 
 function createHarness(resourceId: string) {
   const agent = new Agent({
@@ -11,6 +12,7 @@ function createHarness(resourceId: string) {
   });
 
   return new Harness({
+    workspace: createMockWorkspace(),
     id: 'test-harness',
     storage: new InMemoryStore(),
     resourceId,
@@ -47,7 +49,7 @@ describe('Harness listThreads — forked subagent filter', () => {
   it('hides forkedSubagent threads by default', async () => {
     const harness = createHarness('rid-1');
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     // Drop the auto-created starter thread so assertions see only seeded threads.
     await session.thread.delete({ threadId: session.thread.getId()! });
 
@@ -67,7 +69,7 @@ describe('Harness listThreads — forked subagent filter', () => {
   it('includes forks when includeForkedSubagents=true', async () => {
     const harness = createHarness('rid-2');
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     // Drop the auto-created starter thread so assertions see only seeded threads.
     await session.thread.delete({ threadId: session.thread.getId()! });
 
@@ -88,7 +90,7 @@ describe('Harness listThreads — forked subagent filter', () => {
     // explicitly requested.
     const harness = createHarness('rid-3');
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     // Drop the auto-created starter thread so assertions see only seeded threads.
     await session.thread.delete({ threadId: session.thread.getId()! });
 
@@ -108,7 +110,7 @@ describe('Harness listThreads — forked subagent filter', () => {
     // Defensive: only `forkedSubagent === true` should hide a thread.
     const harness = createHarness('rid-4');
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     // Drop the auto-created starter thread so assertions see only seeded threads.
     await session.thread.delete({ threadId: session.thread.getId()! });
 

@@ -41,6 +41,7 @@ import { getEditorTheme, mastra, TERM_WIDTH_BUFFER } from './theme.js';
 export interface PendingSignalMessage {
   component: Component;
   text: string;
+  images?: Array<{ data: string; mimeType: string }>;
   isInterjection?: boolean;
 }
 
@@ -222,6 +223,8 @@ export interface TUIState {
   activeOnboarding?: OnboardingInlineComponent;
   lastSubmitPlanComponent?: Component;
   pendingSubmitPlanComponents: Map<string, PlanApprovalInlineComponent>;
+  /** Previous plan snapshot for diff display on resubmission */
+  previousPlanSnapshot?: { title: string; plan: string };
   /** User-message follow-ups queued while the agent is running */
   pendingFollowUpMessages: Array<{ content: string; images?: Array<{ data: string; mimeType: string }> }>;
   /** FIFO ordering across queued follow-up messages and slash commands */
@@ -234,8 +237,8 @@ export interface TUIState {
   pendingSlashCommands: string[];
   /** Pending user-message component ids for queued slash commands */
   pendingSlashCommandMessageIds: string[];
-  /** Active approval dialog dismiss callback — called on Ctrl+C to unblock the dialog */
-  pendingApprovalDismiss: (() => void) | null;
+  /** Active approval dialog dismiss callback — called on Ctrl+C or user interruption to unblock the dialog */
+  pendingApprovalDismiss: ((context?: { reason?: string; message?: string }) => void) | null;
 
   // ── Status line ───────────────────────────────────────────────────────
   projectInfo: ProjectInfo;
@@ -244,6 +247,16 @@ export interface TUIState {
   modelAuthStatus: { hasAuth: boolean; apiKeyEnvVar?: string };
   githubPrGradientAnimator?: GradientAnimator;
   githubPrPollingActive: boolean;
+
+  // ── Tokens/sec tracking ────────────────────────────────────────────────
+  /**
+   * Timestamp (ms) of the first streamed content delta of the current step —
+   * i.e. when decoding began. tokens/sec is measured over decode time only
+   * (excludes TTFT and inter-step tool gaps). 0 means decode not yet started.
+   */
+  decodeStartedAt: number;
+  /** Current computed tokens/sec rate (0 when idle) */
+  tokensPerSec: number;
 
   // ── Observational Memory ──────────────────────────────────────────────
   omProgressComponent?: OMProgressComponent;
@@ -370,6 +383,10 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     projectInfo: detectProject(process.cwd()),
     modelAuthStatus: { hasAuth: true },
     githubPrPollingActive: false,
+
+    // Tokens/sec tracking
+    decodeStartedAt: 0,
+    tokensPerSec: 0,
 
     // Goal loop
     goalManager: new GoalManager(),

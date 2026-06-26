@@ -18,11 +18,12 @@ import type { MastraScorer } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event, EventCallback } from '../events/types';
+import type { AgentController, Harness } from '../harness';
 import { AvailableHooks, registerHook } from '../hooks';
 import { LicenseClient } from '../license';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import { getGatewayId } from '../llm/model/gateways';
-import { defaultGateways } from '../llm/model/router';
+import { defaultGateways } from '../llm/model/gateways/defaults';
 import { LogLevel, noopLogger, ConsoleLogger, DualLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
@@ -66,6 +67,8 @@ import { computeNextFireAt } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, WorkflowSchedulerConfig, WorkflowScheduler } from '../workflows/scheduler';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
+import type { RunScope } from './run-scope';
+import { createRunScope } from './run-scope';
 import type { VersionOverrides, VersionSelector } from './types';
 
 /**
@@ -268,6 +271,26 @@ export interface Config<
    * Workflows provide type-safe, composable task execution with built-in error handling.
    */
   workflows?: TWorkflows;
+
+  /**
+   * AgentControllers to host on this Mastra instance, keyed by id. Each
+   * registered AgentController uses this Mastra (its storage, agents, gateways,
+   * and observability) instead of building its own internal one, and is
+   * reachable via {@link Mastra.getAgentController} /
+   * {@link Mastra.listAgentControllers}. This is how a server exposes multiple
+   * AgentControllers' sessions over HTTP.
+   */
+  agentControllers?: Record<string, AgentController<any>>;
+
+  /**
+   * Harnesses to host on this Mastra instance, keyed by id.
+   *
+   * @deprecated Use {@link MastraConfig.agentControllers} instead. `harnesses`
+   * is retained as a backwards-compatible alias and will be removed in a future
+   * major. Entries from both keys are merged, with `agentControllers` taking
+   * precedence on key collisions.
+   */
+  harnesses?: Record<string, Harness<any>>;
 
   /**
    * Text-to-speech providers for voice synthesis capabilities.
@@ -580,6 +603,7 @@ export class Mastra<
   #agents: TAgents;
   #logger: TLogger;
   #workflows: TWorkflows;
+  #harnesses: Record<string, Harness<any>> = {};
   #hiddenWorkflowKeys = new Set<string>();
   #observability: ObservabilityEntrypoint;
   #tts?: TTTS;
@@ -644,7 +668,16 @@ export class Mastra<
   // Tracks registration timestamps for run-scoped internal workflows so a lazy
   // TTL sweep can evict entries from abandoned suspended runs that were never
   // resumed. Unscoped (singleton) entries are not tracked — they live forever.
-  #runScopedWorkflowTimestamps: Map<string, number> = new Map();
+  #runScopedWorkflowTimestamps: Map<string, { registeredAt: number; runId: string }> = new Map();
+  // Per-run bag of non-serializable runtime state (SaveQueueManager,
+  // BackgroundTaskManager, MessageList, abort controllers, dynamic tool sets…)
+  // shared across step factories within a single run. Never persisted, never
+  // published. Lifecycle is refcounted against `__registerInternalWorkflow`
+  // calls for the same runId so multiple workflows sharing a run (e.g. an
+  // agentic-loop wrapping an agentic-execution) keep the scope alive until the
+  // last unregisters. See `./run-scope.ts`.
+  #runScopes: Map<string, RunScope> = new Map();
+  #runScopeRefcounts: Map<string, number> = new Map();
   // Run-scoped internal workflows older than this TTL (ms) are evicted during
   // the lazy sweep that runs on each new registration.
   static readonly INTERNAL_WORKFLOW_TTL_MS = 30 * 60 * 1000; // 30 minutes
@@ -1431,6 +1464,17 @@ export class Mastra<
       });
     }
 
+    // `harnesses` is the deprecated alias of `agentControllers`; merge both,
+    // letting `agentControllers` win on key collisions.
+    const agentControllerEntries = {
+      ...(config?.harnesses ?? {}),
+      ...(config?.agentControllers ?? {}),
+    };
+    for (const [key, agentController] of Object.entries(agentControllerEntries)) {
+      this.#harnesses[key] = agentController;
+      agentController.__registerMastra(this);
+    }
+
     registerHook(AvailableHooks.ON_SCORER_RUN, createOnScorerHook(this));
 
     /*
@@ -1882,6 +1926,78 @@ export class Mastra<
   }
 
   /**
+   * Get an AgentController hosted on this Mastra instance by its registration
+   * key (the key it was registered under in `new Mastra({ agentControllers })`).
+   * Returns `undefined` when none is registered under that key. Server route
+   * handlers use this to create and drive sessions over HTTP.
+   *
+   * @example
+   * ```typescript
+   * const code = new AgentController({ id: 'code-controller', modes });
+   * const mastra = new Mastra({ agentControllers: { code } });
+   *
+   * mastra.getAgentController('code'); // → the AgentController (by key)
+   * ```
+   */
+  public getAgentController(key: string): AgentController<any> | undefined {
+    return this.#harnesses[key];
+  }
+
+  /**
+   * Get an AgentController hosted on this Mastra instance by its unique `id`
+   * (the `id` passed to the `AgentController` constructor). Falls back to a
+   * registration-key lookup when none matches by id, mirroring
+   * {@link getAgentById}. Returns `undefined` when none is found.
+   *
+   * @example
+   * ```typescript
+   * const code = new AgentController({ id: 'code-controller', modes });
+   * const mastra = new Mastra({ agentControllers: { code } });
+   *
+   * mastra.getAgentControllerById('code-controller'); // → by id
+   * ```
+   */
+  public getAgentControllerById(id: string): AgentController<any> | undefined {
+    return Object.values(this.#harnesses).find(controller => controller.id === id) ?? this.#harnesses[id];
+  }
+
+  /**
+   * List all AgentControllers hosted on this Mastra instance, keyed by their
+   * registration key.
+   */
+  public listAgentControllers(): Record<string, AgentController<any>> {
+    return this.#harnesses;
+  }
+
+  /**
+   * Get a Harness hosted on this Mastra instance by its registration key.
+   *
+   * @deprecated Use {@link Mastra.getAgentController} instead.
+   */
+  public getHarness(key: string): Harness<any> | undefined {
+    return this.getAgentController(key);
+  }
+
+  /**
+   * Get a Harness hosted on this Mastra instance by its unique `id`.
+   *
+   * @deprecated Use {@link Mastra.getAgentControllerById} instead.
+   */
+  public getHarnessById(id: string): Harness<any> | undefined {
+    return this.getAgentControllerById(id);
+  }
+
+  /**
+   * List all Harnesses hosted on this Mastra instance, keyed by their
+   * registration key.
+   *
+   * @deprecated Use {@link Mastra.listAgentControllers} instead.
+   */
+  public listHarnesses(): Record<string, Harness<any>> {
+    return this.listAgentControllers();
+  }
+
+  /**
    * Adds a new agent to the Mastra instance.
    *
    * This method allows dynamic registration of agents after the Mastra instance
@@ -2047,7 +2163,9 @@ export class Mastra<
           apiRoutes: [...(this.#server?.apiRoutes ?? []), ...channelRoutes],
         };
       }
-      void agentChannelsInstance.initialize(this);
+      agentChannelsInstance.initialize(this).catch(err => {
+        this.#logger?.error(`Failed to initialize channels for agent ${agentKey}:`, err);
+      });
     }
   }
 
@@ -2511,8 +2629,18 @@ export class Mastra<
     });
     if (runId) {
       const key = `${workflow.id}:${runId}`;
+      const isNewRegistration = !this.#internalMastraWorkflows[key];
       this.#internalMastraWorkflows[key] = workflow;
-      this.#runScopedWorkflowTimestamps.set(key, Date.now());
+      this.#runScopedWorkflowTimestamps.set(key, { registeredAt: Date.now(), runId });
+      // Pair the registration with a runScope. Multiple workflows can share a
+      // runId (parent + nested); we refcount so the scope outlives the first
+      // unregister and dies with the last.
+      if (isNewRegistration) {
+        this.#runScopeRefcounts.set(runId, (this.#runScopeRefcounts.get(runId) ?? 0) + 1);
+        if (!this.#runScopes.has(runId)) {
+          this.#runScopes.set(runId, createRunScope());
+        }
+      }
       this.#sweepStaleRunScopedWorkflows();
     } else {
       this.#internalMastraWorkflows[workflow.id] = workflow;
@@ -2522,11 +2650,66 @@ export class Mastra<
   /**
    * Remove a runId-scoped registration. The unscoped `${id}` entry is left intact
    * so single-instance callers (background tasks, score-traces) continue to resolve.
+   *
+   * Decrements the refcount for the runScope tied to this runId; when the
+   * count hits zero the scope is dropped along with every reference it held.
    */
   __unregisterInternalWorkflow(id: string, runId: string) {
     const key = `${id}:${runId}`;
+    const wasRegistered = !!this.#internalMastraWorkflows[key];
     delete this.#internalMastraWorkflows[key];
     this.#runScopedWorkflowTimestamps.delete(key);
+    if (wasRegistered) {
+      this.#releaseRunScope(runId);
+    }
+  }
+
+  /**
+   * Get the existing runScope for a runId without creating one.
+   * Returns undefined when no internal workflow has been registered against
+   * the runId — callers should treat this as the run not yet being bootstrapped.
+   */
+  __getRunScope(runId: string): RunScope | undefined {
+    return this.#runScopes.get(runId);
+  }
+
+  /**
+   * Idempotently allocate a runScope for a runId. Used by call sites (like
+   * `loop()`) that need to populate the scope *before* the internal workflow
+   * registration lands. The scope is held until the matching internal-workflow
+   * registration is released or the TTL sweep evicts it.
+   *
+   * Bumps the refcount so the scope cannot be freed before the caller is done
+   * with it; callers MUST pair this with `__releaseRunScope(runId)`.
+   */
+  __createRunScope(runId: string): RunScope {
+    let scope = this.#runScopes.get(runId);
+    if (!scope) {
+      scope = createRunScope();
+      this.#runScopes.set(runId, scope);
+    }
+    this.#runScopeRefcounts.set(runId, (this.#runScopeRefcounts.get(runId) ?? 0) + 1);
+    return scope;
+  }
+
+  /**
+   * Decrement the runScope refcount; drops the scope when the count reaches
+   * zero. Public so callers that called `__createRunScope` directly (e.g.,
+   * `loop()` hydration) can release their hold without unregistering a
+   * workflow.
+   */
+  __releaseRunScope(runId: string): void {
+    this.#releaseRunScope(runId);
+  }
+
+  #releaseRunScope(runId: string): void {
+    const next = (this.#runScopeRefcounts.get(runId) ?? 0) - 1;
+    if (next <= 0) {
+      this.#runScopeRefcounts.delete(runId);
+      this.#runScopes.delete(runId);
+    } else {
+      this.#runScopeRefcounts.set(runId, next);
+    }
   }
 
   __hasInternalWorkflow(id: string, runId?: string): boolean {
@@ -2623,10 +2806,23 @@ export class Mastra<
    */
   #sweepStaleRunScopedWorkflows() {
     const now = Date.now();
-    for (const [key, registeredAt] of this.#runScopedWorkflowTimestamps) {
-      if (now - registeredAt > Mastra.INTERNAL_WORKFLOW_TTL_MS) {
+    for (const [key, entry] of this.#runScopedWorkflowTimestamps) {
+      if (now - entry.registeredAt > Mastra.INTERNAL_WORKFLOW_TTL_MS) {
         delete this.#internalMastraWorkflows[key];
         this.#runScopedWorkflowTimestamps.delete(key);
+        // Release the matching scope using the runId we stored at registration
+        // time — never parse it back out of the composite key, since callers
+        // can pass runIds that contain ':'.
+        this.#releaseRunScope(entry.runId);
+        // Surface the eviction so operators can investigate long-suspended
+        // runs that never resumed. The refcounted lifecycle in
+        // `__createRunScope`/`__releaseRunScope` covers the happy path; this
+        // branch only fires when a registration was abandoned past the TTL.
+        this.#logger.warn('Evicted stale run-scoped workflow after TTL expired', {
+          runId: entry.runId,
+          ageMs: now - entry.registeredAt,
+          ttlMs: Mastra.INTERNAL_WORKFLOW_TTL_MS,
+        });
       }
     }
   }
@@ -4761,6 +4957,19 @@ export class Mastra<
       if (result.status === 'rejected') {
         this.#logger?.error('Failed to destroy workspace during shutdown', {
           workspaceId: workspaceIds[index],
+          error: result.reason,
+        });
+      }
+    });
+
+    // Tear down hosted Harnesses (heartbeats, workspaces) before closing storage,
+    // since teardown may still flush to the shared store.
+    const harnessKeys = Object.keys(this.#harnesses);
+    const harnessTeardown = await Promise.allSettled(harnessKeys.map(key => this.#harnesses[key]!.destroy()));
+    harnessTeardown.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        this.#logger?.error('Failed to destroy harness during shutdown', {
+          harnessKey: harnessKeys[index],
           error: result.reason,
         });
       }

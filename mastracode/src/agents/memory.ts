@@ -18,7 +18,7 @@ let cachedMemoryKey: string | null = null;
  */
 function getHarnessState(requestContext: RequestContext): MastraCodeState | undefined {
   const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
-  return ctx?.session.state.get() as MastraCodeState | undefined;
+  return ctx?.getState() as MastraCodeState | undefined;
 }
 
 /**

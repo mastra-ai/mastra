@@ -3,6 +3,7 @@ import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
 import type { Session } from './session';
+import { createMockWorkspace } from './test-utils';
 
 function createHarness(threadLock?: { acquire: (id: string) => void; release: (id: string) => void }) {
   const agent = new Agent({
@@ -12,6 +13,7 @@ function createHarness(threadLock?: { acquire: (id: string) => void; release: (i
   });
 
   return new Harness({
+    workspace: createMockWorkspace(),
     id: 'test-harness',
     storage: new InMemoryStore(),
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
@@ -30,7 +32,7 @@ describe('Harness thread locking', () => {
     release = vi.fn();
     harness = createHarness({ acquire, release });
     await harness.init();
-    session = await harness.createSession();
+    session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     // createSession() acquires a lock for its auto-created starter thread.
     // Reset the spies so each test observes only its own lock activity.
     acquire.mockClear();
@@ -188,6 +190,7 @@ describe('Harness thread locking', () => {
         model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
       });
       return new Harness({
+        workspace: createMockWorkspace(),
         id: 'test-harness',
         storage: store,
         modes: [{ id: 'default', name: 'Default', default: true, agent }],
@@ -201,7 +204,7 @@ describe('Harness thread locking', () => {
       // First session creates a thread for resource "user-1".
       const harnessA = freshHarness(store);
       await harnessA.init();
-      const sessionA = await harnessA.createSession({ resourceId: 'user-1' });
+      const sessionA = await harnessA.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-1' });
       const existing = sessionA.thread.getId();
       expect(existing).toBeDefined();
 
@@ -211,7 +214,7 @@ describe('Harness thread locking', () => {
       // A second session for the same resourceId should resume that thread.
       const harnessB = freshHarness(store);
       await harnessB.init();
-      const sessionB = await harnessB.createSession({ resourceId: 'user-1' });
+      const sessionB = await harnessB.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-1' });
 
       expect(sessionB.thread.getId()).toBe(existing);
       expect(acquire).toHaveBeenCalledWith(existing);
@@ -222,7 +225,7 @@ describe('Harness thread locking', () => {
 
       const harnessA = freshHarness(store);
       await harnessA.init();
-      const sessionA = await harnessA.createSession({ resourceId: 'user-1' });
+      const sessionA = await harnessA.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-1' });
       const existing = sessionA.thread.getId();
 
       acquire.mockClear();
@@ -230,7 +233,7 @@ describe('Harness thread locking', () => {
       // A session for a different resourceId must not resume user-1's thread.
       const harnessB = freshHarness(store);
       await harnessB.init();
-      const sessionB = await harnessB.createSession({ resourceId: 'user-2' });
+      const sessionB = await harnessB.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-2' });
 
       expect(sessionB.thread.getId()).not.toBe(existing);
       expect(acquire).toHaveBeenCalledWith(sessionB.thread.getId());
@@ -242,8 +245,74 @@ describe('Harness thread locking', () => {
       await harness.init();
 
       acquire.mockClear();
-      const newSession = await harness.createSession();
+      const newSession = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
       expect(acquire).toHaveBeenCalledWith(newSession.thread.getId());
+    });
+
+    it('scopes initial thread selection to tags so worktrees stay isolated', async () => {
+      const store = new InMemoryStore();
+
+      // Two worktrees of the same repo share one resourceId but live at
+      // different paths. Each session is created with its own projectPath tag.
+      const harnessA = freshHarness(store);
+      await harnessA.init();
+      const sessionA = await harnessA.createSession({
+        id: 'session-a',
+        ownerId: 'test-owner',
+        resourceId: 'repo',
+        tags: { projectPath: '/repo/worktree-a' },
+      });
+      const threadA = sessionA.thread.getId();
+      expect(threadA).toBeDefined();
+
+      const harnessB = freshHarness(store);
+      await harnessB.init();
+      const sessionB = await harnessB.createSession({
+        id: 'session-b',
+        ownerId: 'test-owner',
+        resourceId: 'repo',
+        tags: { projectPath: '/repo/worktree-b' },
+      });
+      const threadB = sessionB.thread.getId();
+
+      // worktree-b must NOT claim worktree-a's most-recent thread.
+      expect(threadB).not.toBe(threadA);
+
+      // Reconnecting to worktree-a resumes its own thread, not worktree-b's.
+      const harnessA2 = freshHarness(store);
+      await harnessA2.init();
+      const sessionA2 = await harnessA2.createSession({
+        id: 'session-a2',
+        ownerId: 'test-owner',
+        resourceId: 'repo',
+        tags: { projectPath: '/repo/worktree-a' },
+      });
+      expect(sessionA2.thread.getId()).toBe(threadA);
+
+      // The tags are stamped onto the thread metadata (not just used for
+      // selection), so listings can filter threads back to their scope.
+      const threadsA = await sessionA2.thread.list();
+      const resumed = threadsA.find(t => t.id === threadA);
+      expect((resumed?.metadata as Record<string, unknown> | undefined)?.projectPath).toBe('/repo/worktree-a');
+    });
+
+    it('stamps every tag onto created threads (multi-dimensional scope)', async () => {
+      const store = new InMemoryStore();
+      const harness = freshHarness(store);
+      await harness.init();
+      const session = await harness.createSession({
+        id: 'multi',
+        ownerId: 'test-owner',
+        resourceId: 'repo',
+        tags: { projectPath: '/repo/wt', branch: 'feat/x' },
+      });
+
+      const threadId = session.thread.getId();
+      const threads = await session.thread.list();
+      const created = threads.find(t => t.id === threadId);
+      const metadata = (created?.metadata as Record<string, unknown> | undefined) ?? {};
+      expect(metadata.projectPath).toBe('/repo/wt');
+      expect(metadata.branch).toBe('feat/x');
     });
   });
 
@@ -304,7 +373,7 @@ describe('Harness thread locking', () => {
     it('works normally without locking', async () => {
       const unlocked = createHarness(); // no threadLock
       await unlocked.init();
-      const unlockedSession = await unlocked.createSession();
+      const unlockedSession = await unlocked.createSession({ id: 'unlocked-session', ownerId: 'test-owner' });
 
       const threadA = await unlockedSession.thread.create({ title: 'test' });
       await unlockedSession.thread.create({ title: 'test2' });

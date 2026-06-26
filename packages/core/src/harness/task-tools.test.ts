@@ -6,8 +6,9 @@ import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 
 import { Harness } from './harness';
+import { createMockWorkspace } from './test-utils';
 import { assignTaskIds, taskWriteTool } from './tools';
-import type { HarnessEvent } from './types';
+import type { AgentControllerEvent } from './types';
 
 async function createSession() {
   const agent = new Agent({
@@ -17,12 +18,13 @@ async function createSession() {
   });
 
   const harness = new Harness<Record<string, unknown>>({
+    workspace: createMockWorkspace(),
     id: 'test-harness',
     storage: new InMemoryStore(),
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
   });
   await harness.init();
-  const session = await harness.createSession();
+  const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
   return { harness, session };
 }
 
@@ -195,6 +197,7 @@ describe('harness state transactions', () => {
     let validationCount = 0;
 
     const harness = new Harness<Record<string, unknown>>({
+      workspace: createMockWorkspace(),
       id: 'test-harness',
       storage: new InMemoryStore(),
       stateSchema: z
@@ -222,7 +225,7 @@ describe('harness state transactions', () => {
       ],
     });
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const setStatePromise = session.state.set({ seed: 'initial' });
     const transactionPromise = session.state.update((state: Record<string, unknown>) => {
@@ -243,6 +246,7 @@ describe('harness state transactions', () => {
 describe('task tool permissions', () => {
   it('removes denied built-in and configured harness tools even when yolo is enabled', async () => {
     const harness = new Harness<Record<string, unknown>>({
+      workspace: createMockWorkspace(),
       id: 'test-harness',
       storage: new InMemoryStore(),
       initialState: {
@@ -276,7 +280,7 @@ describe('task tool permissions', () => {
       ],
     });
     await harness.init();
-    const session = await harness.createSession();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const toolsets = await (harness as any).buildToolsets(session, new RequestContext());
 
@@ -293,7 +297,7 @@ describe('task tool display bridge', () => {
   it('emits task_updated and updates the display snapshot when a task tool runs with a harness context', async () => {
     const { harness, session } = await createSession();
 
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => events.push(event));
 
     // Real harness request context — wires emitEvent -> harness.emit, the
@@ -317,7 +321,7 @@ describe('task tool display bridge', () => {
 
     const taskUpdated = events.filter(event => event.type === 'task_updated');
     expect(taskUpdated).toHaveLength(1);
-    expect((taskUpdated[0] as Extract<HarnessEvent, { type: 'task_updated' }>).tasks).toEqual([
+    expect((taskUpdated[0] as Extract<AgentControllerEvent, { type: 'task_updated' }>).tasks).toEqual([
       { id: 'task_write_tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
     ]);
 

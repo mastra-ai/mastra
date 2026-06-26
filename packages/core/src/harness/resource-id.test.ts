@@ -3,6 +3,7 @@ import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
 import type { Session } from './session';
+import { createMockWorkspace } from './test-utils';
 
 function createAgent() {
   return new Agent({
@@ -12,16 +13,25 @@ function createAgent() {
   });
 }
 
-async function createSession(opts?: { resourceId?: string; storage?: InMemoryStore }) {
+async function createSession(opts?: {
+  resourceId?: string;
+  sessionId?: string;
+  ownerId?: string;
+  storage?: InMemoryStore;
+}) {
   const agent = createAgent();
   const harness = new Harness({
+    workspace: createMockWorkspace(),
     id: 'test-harness',
     storage: opts?.storage ?? new InMemoryStore(),
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
-    ...(opts?.resourceId ? { resourceId: opts.resourceId } : {}),
   });
   await harness.init();
-  const session = await harness.createSession();
+  const session = await harness.createSession({
+    id: opts?.sessionId ?? 'test-session-id',
+    ownerId: opts?.ownerId ?? 'test-owner',
+    ...(opts?.resourceId ? { resourceId: opts.resourceId } : {}),
+  });
   return { harness, session };
 }
 
@@ -39,9 +49,46 @@ describe('Harness resource ID', () => {
 
     it('still returns the original default after setResourceId is called', async () => {
       const { harness, session } = await createSession({ resourceId: 'original' });
-      harness.setResourceId(session, { resourceId: 'changed' });
+      await harness.setResourceId(session, { resourceId: 'changed' });
       expect(session.identity.getResourceId()).toBe('changed');
       expect(session.identity.getDefaultResourceId()).toBe('original');
+    });
+  });
+
+  describe('stable session identity (id / ownerId)', () => {
+    it('uses the explicitly provided id and ownerId', async () => {
+      const { session } = await createSession({
+        resourceId: 'custom-resource',
+        sessionId: 'explicit-id',
+        ownerId: 'explicit-owner',
+      });
+      expect(session.identity.getId()).toBe('explicit-id');
+      expect(session.identity.getOwnerId()).toBe('explicit-owner');
+    });
+
+    it('flows configured sessionId and ownerId into the session identity', async () => {
+      const { session } = await createSession({
+        resourceId: 'custom-resource',
+        sessionId: 'stable-session-id',
+        ownerId: 'machine-owner',
+      });
+      expect(session.identity.getId()).toBe('stable-session-id');
+      expect(session.identity.getOwnerId()).toBe('machine-owner');
+      // resourceId is independent of id/ownerId
+      expect(session.identity.getResourceId()).toBe('custom-resource');
+    });
+
+    it('keeps id and ownerId stable when resourceId is switched', async () => {
+      const { harness, session } = await createSession({
+        resourceId: 'original',
+        sessionId: 'stable-session-id',
+        ownerId: 'machine-owner',
+      });
+      await harness.setResourceId(session, { resourceId: 'changed' });
+      expect(session.identity.getResourceId()).toBe('changed');
+      expect(session.identity.getDefaultResourceId()).toBe('original');
+      expect(session.identity.getId()).toBe('stable-session-id');
+      expect(session.identity.getOwnerId()).toBe('machine-owner');
     });
   });
 
@@ -69,10 +116,10 @@ describe('Harness resource ID', () => {
       // Create threads under different resource IDs
       await session.thread.create({ title: 'thread-1' });
 
-      harness.setResourceId(session, { resourceId: 'user-2' });
+      await harness.setResourceId(session, { resourceId: 'user-2' });
       await session.thread.create({ title: 'thread-2' });
 
-      harness.setResourceId(session, { resourceId: 'user-3' });
+      await harness.setResourceId(session, { resourceId: 'user-3' });
       await session.thread.create({ title: 'thread-3' });
 
       const ids = await harness.getKnownResourceIds(session);

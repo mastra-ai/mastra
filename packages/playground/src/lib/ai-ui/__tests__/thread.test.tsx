@@ -1,15 +1,16 @@
-// @vitest-environment jsdom
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import type { TaskItem } from '@mastra/core/harness';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatProvider } from '../chat/chat-provider';
 import { Thread } from '../thread';
+import { memoryDisabled, memoryEnabled, v2Agent } from './fixtures/agent';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { ThreadInputProvider } from '@/domains/conversation';
@@ -51,8 +52,15 @@ const baseHandlers = () => [
   http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
   http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })),
   http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
+  http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json(memoryDisabled)),
   http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () => workingMemoryResponse()),
+  http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json({ providers: [] })),
   http.get(`${BASE_URL}/api/agents/:agentId/voice/speakers`, () => HttpResponse.json([])),
+  http.get(`${BASE_URL}/api/agents/:agentId`, () => HttpResponse.json(v2Agent)),
+  http.get(`${BASE_URL}/api/editor/builder/settings`, () =>
+    HttpResponse.json({ enabled: false, modelPolicy: { active: false } }),
+  ),
+  http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json({ providers: [] })),
   http.post(
     `${BASE_URL}/api/agents/:agentId/threads/subscribe`,
     () =>
@@ -93,7 +101,14 @@ const renderThreadTree = (
   return (
     <Wrapper threadId={threadId}>
       <ThreadInputProvider>
-        <ChatProvider key={threadId} agentId="agent-1" threadId={threadId} initialMessages={initialMessages}>
+        <ChatProvider
+          key={threadId}
+          agentId="agent-1"
+          threadId={threadId}
+          initialMessages={initialMessages}
+          supportsMemory={true}
+          settings={{ modelSettings: { chatWithLegacyStream: false } }}
+        >
           <Thread agentId="agent-1" agentName="Helper" threadId={threadId} hasModelList={hasModelList} />
         </ChatProvider>
       </ThreadInputProvider>
@@ -366,6 +381,182 @@ describe('Thread', () => {
 
 const sseChunk = (chunk: unknown) => `data: ${JSON.stringify(chunk)}\n\n`;
 
+const taskSignalChunk = (tasks: TaskItem[], tagName = 'current-task-list') =>
+  sseChunk({
+    type: 'data-signal',
+    data: {
+      id: 'tasks',
+      type: 'state',
+      tagName,
+      metadata: { value: { tasks } },
+    },
+  });
+
+const taskPlanMenu: TaskItem = {
+  id: 'task-plan-menu',
+  content: 'Plan menu',
+  status: 'in_progress',
+  activeForm: 'Planning menu',
+};
+
+const taskShop: TaskItem = {
+  id: 'task-shop',
+  content: 'Create shopping list',
+  status: 'pending',
+  activeForm: 'Creating shopping list',
+};
+
+const taskCook: TaskItem = {
+  id: 'task-cook',
+  content: 'Cook meal',
+  status: 'pending',
+  activeForm: 'Cooking meal',
+};
+
+describe('TaskPanel', () => {
+  beforeEach(() => {
+    (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'true';
+    server.resetHandlers();
+  });
+
+  const renderWithControlledSubscription = async () => {
+    let subscribeController: ReadableStreamDefaultController<Uint8Array> | null = null;
+    const encoder = new TextEncoder();
+    const subscribeStream = () =>
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          subscribeController = controller;
+        },
+      });
+
+    server.use(...baseHandlers());
+    server.use(
+      http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json(memoryEnabled)),
+      http.post(
+        `${BASE_URL}/api/agents/:agentId/threads/subscribe`,
+        () =>
+          new HttpResponse(subscribeStream(), {
+            status: 200,
+            headers: { 'content-type': 'text/event-stream' },
+          }),
+      ),
+      http.post(`${BASE_URL}/api/agents/agent-1/send-message`, () =>
+        HttpResponse.json({ accepted: true, runId: 'run-1', signal: { id: 'task-signal-id' } }),
+      ),
+    );
+
+    await act(async () => {
+      renderThread([]);
+    });
+
+    const textarea = screen.getByPlaceholderText('Enter your message...');
+    await act(async () => {
+      fireEvent.change(textarea, { target: { value: 'track these tasks' } });
+      fireEvent.keyDown(textarea, { key: 'Enter' });
+    });
+
+    await waitFor(() => {
+      expect(subscribeController).toBeTruthy();
+    });
+
+    const pushTasks = async (tasks: TaskItem[], tagName = 'current-task-list') => {
+      await act(async () => {
+        subscribeController?.enqueue(encoder.encode(taskSignalChunk(tasks, tagName)));
+      });
+    };
+
+    const close = async () => {
+      await act(async () => {
+        subscribeController?.close();
+        await new Promise(resolve => setTimeout(resolve, 10));
+      });
+    };
+
+    return { pushTasks, close };
+  };
+
+  it('renders task items when a data-signal task snapshot streams in', async () => {
+    const { pushTasks, close } = await renderWithControlledSubscription();
+
+    await pushTasks([taskPlanMenu, taskShop, taskCook]);
+
+    expect(await screen.findByTestId('task-panel')).toBeTruthy();
+    expect(screen.getByText('0/3 completed')).toBeTruthy();
+    expect(screen.getByText('Planning menu')).toBeTruthy();
+    expect(screen.getByText('Create shopping list')).toBeTruthy();
+    expect(screen.getByText('Cook meal')).toBeTruthy();
+
+    await close();
+  });
+
+  it('updates the task list when a task-list-update delta streams in', async () => {
+    const { pushTasks, close } = await renderWithControlledSubscription();
+    const completedPlan: TaskItem = { ...taskPlanMenu, status: 'completed' };
+    const activeShop: TaskItem = { ...taskShop, status: 'in_progress', activeForm: 'Shopping for ingredients' };
+
+    await pushTasks([taskPlanMenu, taskShop]);
+    await pushTasks([completedPlan, activeShop], 'task-list-update');
+
+    expect(await screen.findByText('1/2 completed')).toBeTruthy();
+    expect(screen.getByText('Plan menu')).toBeTruthy();
+    expect(screen.getByText('Shopping for ingredients')).toBeTruthy();
+    expect(screen.queryByText('Planning menu')).toBeFalsy();
+
+    await close();
+  });
+
+  it('scrolls the active task into view when task state updates', async () => {
+    const scrollIntoView = vi.fn();
+    const originalScrollIntoView = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrollIntoView;
+
+    const { pushTasks, close } = await renderWithControlledSubscription();
+
+    try {
+      const activeShop: TaskItem = { ...taskShop, status: 'in_progress', activeForm: 'Shopping for ingredients' };
+
+      await pushTasks([taskPlanMenu, activeShop, taskCook], 'task-list-update');
+
+      await waitFor(() => {
+        expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+      });
+    } finally {
+      Element.prototype.scrollIntoView = originalScrollIntoView;
+      await close();
+    }
+  });
+
+  it('hides when all tasks are complete', async () => {
+    const { pushTasks, close } = await renderWithControlledSubscription();
+
+    await pushTasks([
+      { ...taskPlanMenu, status: 'completed' },
+      { ...taskShop, status: 'completed' },
+    ]);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('task-panel')).toBeFalsy();
+    });
+
+    await close();
+  });
+
+  it('hides when task_write clears tasks', async () => {
+    const { pushTasks, close } = await renderWithControlledSubscription();
+
+    await pushTasks([taskPlanMenu]);
+    expect(await screen.findByTestId('task-panel')).toBeTruthy();
+
+    await pushTasks([]);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('task-panel')).toBeFalsy();
+    });
+
+    await close();
+  });
+});
+
 describe('Thread signal-path user-message reconciliation', () => {
   beforeEach(() => {
     (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'true';
@@ -388,6 +579,7 @@ describe('Thread signal-path user-message reconciliation', () => {
 
     server.use(
       http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
+      http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })),
       http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
       http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () =>
         HttpResponse.json({

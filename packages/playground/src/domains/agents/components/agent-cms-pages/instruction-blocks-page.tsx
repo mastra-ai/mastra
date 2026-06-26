@@ -1,4 +1,4 @@
-import { ScrollArea } from '@mastra/playground-ui';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Controller } from 'react-hook-form';
 
 import { isInstructionsLocked, useAgentEditFormContext } from '../../context/agent-edit-form-context';

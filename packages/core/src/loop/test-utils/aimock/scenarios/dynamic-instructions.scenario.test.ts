@@ -1,7 +1,7 @@
 import type { JournalEntry } from '@copilotkit/aimock';
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { RequestContext } from '../../../../request-context';
-import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
 /**
  * Concept: dynamic configuration (instructions resolved from request context).
@@ -11,7 +11,7 @@ import { runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
  * same agent can be re-targeted per request. This pins that resolution path
  * end-to-end through the loop.
  */
-describe('AIMock loop scenario: dynamic instructions', () => {
+describeForAllEngines('AIMock loop scenario: dynamic instructions', engine => {
   const getMock = useLoopScenarioAimock();
 
   function systemPromptOf(request: JournalEntry): string {
@@ -25,6 +25,7 @@ describe('AIMock loop scenario: dynamic instructions', () => {
     requestContext.set('userTier', 'enterprise');
 
     const { requests } = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Hello.',
       requestContext,
@@ -51,6 +52,7 @@ describe('AIMock loop scenario: dynamic instructions', () => {
     free.set('userTier', 'free');
 
     const enterpriseRun = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Hello.',
       requestContext: enterprise,
@@ -65,6 +67,7 @@ describe('AIMock loop scenario: dynamic instructions', () => {
     expect(enterprisePrompt).toContain('enterprise customer');
 
     const freeRun = await runLoopScenario({
+      engine,
       llm: getMock(),
       prompt: 'Hello.',
       requestContext: free,

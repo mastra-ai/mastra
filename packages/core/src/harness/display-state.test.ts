@@ -4,15 +4,15 @@ import { InMemoryStore } from '../storage/mock';
 import { ChunkFrom } from '../stream/types';
 import type { Session } from './session';
 import { createTestSession } from './test-utils';
-import type { HarnessEvent, HarnessSubagent, HarnessSubagentHistoryEntry } from './types';
+import type { AgentControllerEvent, AgentControllerSubagent, AgentControllerSubagentHistoryEntry } from './types';
 import { createEmptyTokenUsage, defaultDisplayState } from './types';
 
-function createSession(storage?: InMemoryStore, opts?: { subagents?: HarnessSubagent[] }) {
+function createSession(storage?: InMemoryStore, opts?: { subagents?: AgentControllerSubagent[] }) {
   return createTestSession({ storage: storage ?? new InMemoryStore(), subagents: opts?.subagents });
 }
 
 // Helper to emit an event on a session bus.
-function emit(session: Session, event: HarnessEvent) {
+function emit(session: Session, event: AgentControllerEvent) {
   session.emit(event);
 }
 
@@ -320,7 +320,7 @@ describe('tool lifecycle', () => {
   });
 
   it('uses display transforms while processing tool stream chunks', async () => {
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -393,7 +393,7 @@ describe('tool lifecycle', () => {
   });
 
   it('preserves explicit null display transforms', async () => {
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -874,7 +874,7 @@ describe('subagent lifecycle', () => {
     });
 
     const terminalSubagent = session.displayState.get().activeSubagents.get('s1')!;
-    const historyEntry: HarnessSubagentHistoryEntry = terminalSubagent;
+    const historyEntry: AgentControllerSubagentHistoryEntry = terminalSubagent;
 
     expect(terminalSubagent.status).toBe('completed');
     expect(historyEntry.agentType).toBe('execute');
@@ -1443,15 +1443,20 @@ describe('resetThreadDisplayState', () => {
 
 describe('display_state_changed emission', () => {
   let session: Session;
-  let events: HarnessEvent[];
+  let events: AgentControllerEvent[];
 
   beforeEach(async () => {
     const ctx = await createSession();
     session = ctx.session;
     events = [];
-    session.subscribe((event: HarnessEvent) => {
+    session.subscribe((event: AgentControllerEvent) => {
       events.push(event);
     });
+    // createSession emits workspace lifecycle events (workspace_status_changed,
+    // workspace_ready) during session creation, before this subscriber attaches.
+    // The bus replays them to late subscribers — clear them so the tests below
+    // only observe events they emit themselves.
+    events.length = 0;
   });
 
   it('emits display_state_changed after every non-display_state_changed event', () => {
@@ -1535,7 +1540,7 @@ describe('display_state_changed emission', () => {
 
   it('display_state_changed reflects state at time of each event', () => {
     const snapshots: boolean[] = [];
-    session.subscribe((event: HarnessEvent) => {
+    session.subscribe((event: AgentControllerEvent) => {
       if (event.type === 'display_state_changed') {
         snapshots.push(event.displayState.isRunning);
       }
