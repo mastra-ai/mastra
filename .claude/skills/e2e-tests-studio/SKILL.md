@@ -44,19 +44,23 @@ The structure has exactly three levels:
 import { test, expect } from '@playwright/test';
 import { resetStorage } from '../__utils__/reset-storage';
 
-test.describe('Tools list page', () => {                          // the unit
+test.describe('Tools list page', () => {
+  // the unit
   test.afterEach(async () => {
     await resetStorage();
   });
 
-  test.describe('when a registered tool is clicked', () => {      // ONE precondition (starts with "when")
-    test('navigates to that tool detail page', async ({ page }) => {  // ONE outcome
+  test.describe('when a registered tool is clicked', () => {
+    // ONE precondition (starts with "when")
+    test('navigates to that tool detail page', async ({ page }) => {
+      // ONE outcome
       await page.goto('/tools');
       await page.locator('text=Get current weather for a location').click();
       await expect(page).toHaveURL(/\/tools\/weatherInfo$/);
     });
 
-    test('shows the tool name as the page heading', async ({ page }) => {  // ONE outcome
+    test('shows the tool name as the page heading', async ({ page }) => {
+      // ONE outcome
       await page.goto('/tools');
       await page.locator('text=Get current weather for a location').click();
       await expect(page.locator('h2')).toHaveText('weatherInfo');
@@ -441,14 +445,14 @@ Before considering tests complete, verify:
 
 ## Anti-Patterns to Avoid
 
-| ❌ Don't                           | ✅ Do Instead                                                |
-| ---------------------------------- | ------------------------------------------------------------ |
-| Test that modal opens              | Test that modal action completes and persists                |
-| Test that button is clickable      | Test that clicking button produces expected result           |
-| Test loading spinner appears       | Test that loaded data is correct                             |
-| Test form validation message shows | Test that invalid form cannot submit AND valid form succeeds |
-| Test dropdown has options          | Test that selecting option changes system behavior           |
-| Test sidebar navigation works      | Test that navigated page has correct data/functionality      |
-| Assert element is visible          | Assert element contains expected data/state                  |
-| Top-level flat `test()` with no precondition describe | Nest every `test` in a `test.describe('when …')` block |
-| One `test()` asserting several unrelated outcomes | One `test()` per observable outcome                |
+| ❌ Don't                                              | ✅ Do Instead                                                |
+| ----------------------------------------------------- | ------------------------------------------------------------ |
+| Test that modal opens                                 | Test that modal action completes and persists                |
+| Test that button is clickable                         | Test that clicking button produces expected result           |
+| Test loading spinner appears                          | Test that loaded data is correct                             |
+| Test form validation message shows                    | Test that invalid form cannot submit AND valid form succeeds |
+| Test dropdown has options                             | Test that selecting option changes system behavior           |
+| Test sidebar navigation works                         | Test that navigated page has correct data/functionality      |
+| Assert element is visible                             | Assert element contains expected data/state                  |
+| Top-level flat `test()` with no precondition describe | Nest every `test` in a `test.describe('when …')` block       |
+| One `test()` asserting several unrelated outcomes     | One `test()` per observable outcome                          |
