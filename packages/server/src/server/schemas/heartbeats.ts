@@ -59,6 +59,8 @@ export const heartbeatPathParams = z.object({
 
 /** Body for POST /heartbeats — creates a heartbeat. */
 export const createHeartbeatBodySchema = z.object({
+  /** Optional stable id; normalized to `hb_<slug>`. A random id is generated when omitted. */
+  id: z.string().optional(),
   agentId: z.string(),
   cron: z.string(),
   timezone: z.string().optional(),

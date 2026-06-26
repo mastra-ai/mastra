@@ -40,6 +40,43 @@ describe('mastra.heartbeats canonical service', () => {
     expect((await mastra.heartbeats.get(bHb.id))?.agentId).toBe('b');
   });
 
+  it('accepts a custom id, normalizing it to hb_<slug>', async () => {
+    const { mastra } = makeMastra(['a']);
+
+    const withRaw = await mastra.heartbeats.create({
+      agentId: 'a',
+      cron: '*/5 * * * *',
+      prompt: 'A',
+      id: 'Nightly Summary!',
+    });
+    expect(withRaw.id).toBe(`${HEARTBEAT_SCHEDULE_PREFIX}nightly-summary`);
+    expect((await mastra.heartbeats.get(withRaw.id))?.agentId).toBe('a');
+
+    const withPrefix = await mastra.heartbeats.create({
+      agentId: 'a',
+      cron: '*/5 * * * *',
+      prompt: 'B',
+      id: 'hb_morning-report',
+    });
+    expect(withPrefix.id).toBe(`${HEARTBEAT_SCHEDULE_PREFIX}morning-report`);
+  });
+
+  it('throws when creating a heartbeat with an id that already exists', async () => {
+    const { mastra } = makeMastra(['a']);
+    await mastra.heartbeats.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'A', id: 'dupe' });
+
+    await expect(
+      mastra.heartbeats.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'B', id: 'dupe' }),
+    ).rejects.toThrow(/already exists/);
+  });
+
+  it('throws when a custom id is empty after normalization', async () => {
+    const { mastra } = makeMastra(['a']);
+    await expect(
+      mastra.heartbeats.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'A', id: '!!!' }),
+    ).rejects.toThrow(/empty after normalization/);
+  });
+
   it('list with no filter returns heartbeats across agents', async () => {
     const { mastra } = makeMastra(['a', 'b']);
     await mastra.heartbeats.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'A' });

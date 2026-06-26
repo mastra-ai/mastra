@@ -3113,6 +3113,8 @@ export interface Heartbeat {
  * names the agent the heartbeat fires as.
  */
 export interface CreateHeartbeatInput {
+  /** Optional stable id; normalized to `hb_<slug>`. A random id is generated when omitted. */
+  id?: string;
   agentId: string;
   cron: string;
   prompt: string;

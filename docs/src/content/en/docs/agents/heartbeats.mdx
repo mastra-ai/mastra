@@ -156,6 +156,22 @@ A few rules worth knowing:
 - `run` fires the heartbeat once immediately without affecting its schedule.
 - `list` filters by `agentId`, `threadId`, `resourceId`, and `name`.
 
+### Custom IDs
+
+By default `create` generates a random `hb_<uuid>` id. Pass `id` to choose a stable one, for example when you want a predictable handle to look up, update, or delete later:
+
+```typescript
+await mastra.heartbeats.create({
+  id: 'nightly-summary',
+  agentId: 'pinger',
+  cron: '0 9 * * *',
+  prompt: 'Summarize anything new since yesterday.',
+})
+// stored as `hb_nightly-summary`
+```
+
+The id is normalized to `hb_<slug>`: the `hb_` prefix is added if missing and the rest is slugified. Creating a heartbeat with an id that already exists throws, so use `update` to change an existing one.
+
 ### From the client
 
 The same operations are available from `@mastra/client-js` over the server routes, so you can manage heartbeats from a separate process or a UI.

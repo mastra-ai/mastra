@@ -2290,9 +2290,11 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Creates a heartbeat for the agent named by `agentId`. Each call creates a
-   * new heartbeat with a random `hb_<uuid>` id — multiple heartbeats per
-   * agent/thread are supported. Use `name` to label distinct heartbeats.
+   * Creates a heartbeat for the agent named by `agentId`. By default each call
+   * creates a new heartbeat with a random `hb_<uuid>` id — multiple heartbeats
+   * per agent/thread are supported. Use `name` to label distinct heartbeats.
+   * Pass `id` to choose a stable id (normalized to `hb_<slug>`); creating one
+   * with an id that already exists throws.
    *
    * Trigger (fire) history is read through the generic schedules surface:
    * `listScheduleTriggers(heartbeat.id)`.

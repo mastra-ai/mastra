@@ -100,6 +100,7 @@ export const CREATE_HEARTBEAT_ROUTE = createRoute({
       agentId,
       cron: body.cron,
       prompt: body.prompt,
+      ...(body.id ? { id: body.id } : {}),
       ...(body.name ? { name: body.name } : {}),
       ...(body.timezone ? { timezone: body.timezone } : {}),
       ...(body.threadId ? { threadId: body.threadId } : {}),

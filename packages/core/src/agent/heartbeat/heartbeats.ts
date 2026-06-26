@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import slugify from '@sindresorhus/slugify';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { Mastra } from '../../mastra';
 import type { Schedule } from '../../storage/domains/schedules/base';
@@ -8,6 +9,29 @@ import type { HeartbeatBroadcastMode, HeartbeatIfActive, HeartbeatIfIdle } from 
 import { HEARTBEAT_SCHEDULE_PREFIX } from './types';
 
 type HeartbeatTarget = Extract<Schedule['target'], { type: 'heartbeat' }>;
+
+/**
+ * Normalize a caller-supplied heartbeat id into the canonical `hb_<slug>`
+ * shape. The slug part is lowercased and stripped of characters that are
+ * unsafe in storage keys / URLs; the `hb_` prefix is added only if missing so
+ * a caller can pass either `nightly-summary` or `hb_nightly-summary`.
+ */
+function normalizeHeartbeatId(rawId: string): string {
+  const trimmed = rawId.trim();
+  const withoutPrefix = trimmed.startsWith(HEARTBEAT_SCHEDULE_PREFIX)
+    ? trimmed.slice(HEARTBEAT_SCHEDULE_PREFIX.length)
+    : trimmed;
+  const slug = slugify(withoutPrefix);
+  if (!slug) {
+    throw new MastraError({
+      id: 'HEARTBEATS_INVALID_ID',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.USER,
+      text: `createHeartbeat: id "${rawId}" is empty after normalization. Provide an id with at least one alphanumeric character.`,
+    });
+  }
+  return `${HEARTBEAT_SCHEDULE_PREFIX}${slug}`;
+}
 
 /**
  * Flat heartbeat view returned by the {@link Heartbeats} service. Projects
@@ -39,6 +63,13 @@ export interface Heartbeat {
 
 /** Input to {@link Heartbeats.create}. */
 export interface CreateHeartbeatInput {
+  /**
+   * Optional stable id. Normalized to `hb_<slug>` (the `hb_` prefix is added
+   * if missing and the rest is slugified). When omitted, a random
+   * `hb_<uuid>` id is generated. Creating a heartbeat with an id that already
+   * exists throws.
+   */
+  id?: string;
   agentId: string;
   cron: string;
   prompt: string;
@@ -151,7 +182,18 @@ export class Heartbeats {
     // startWorkers() need to flip the request flag and lazily inject.
     await this.#mastra.__ensureHeartbeatRuntimeReady();
 
-    const id = `${HEARTBEAT_SCHEDULE_PREFIX}${randomUUID()}`;
+    const id = input.id !== undefined ? normalizeHeartbeatId(input.id) : `${HEARTBEAT_SCHEDULE_PREFIX}${randomUUID()}`;
+    if (input.id !== undefined) {
+      const existing = await store.getSchedule(id);
+      if (existing) {
+        throw new MastraError({
+          id: 'HEARTBEATS_ID_EXISTS',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: `createHeartbeat: a heartbeat with id "${id}" already exists. Use update() to modify it or choose a different id.`,
+        });
+      }
+    }
     const now = Date.now();
     const nextFireAt = computeNextFireAt(input.cron, { timezone: input.timezone, after: now });
 
