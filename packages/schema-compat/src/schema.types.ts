@@ -29,3 +29,6 @@ export type PublicSchema<Output = unknown, Input = Output> =
   | AISdkSchemaLike<Output>;
 
 export type InferPublicSchema<T extends PublicSchema> = T extends PublicSchema<infer Output> ? Output : never;
+
+export type InferPublicSchemaInput<T extends PublicSchema> =
+  T extends PublicSchema<any, infer Input> ? Input : never;
