@@ -199,11 +199,11 @@ export const agent = new Agent({
 })
 ```
 
-Cloudflare Workers and Netlify Functions are detected automatically from the request context, so they don't need `waitUntil`. AWS Lambda doesn't need it either, because it waits for the event loop to drain. For runtimes where `waitUntil` lives on the request context but isn't detected automatically, use `resolveWaitUntil`. See the [Channels reference](/reference/agents/channels#parameters) for details.
+Vercel and AWS Lambda require `waitUntil`, since they freeze the function as soon as the response is sent. Cloudflare Workers and Netlify Functions are detected automatically from the request context, so they don't need it. For runtimes where `waitUntil` lives on the request context but isn't detected automatically, use `resolveWaitUntil`. See the [Channels reference](/reference/agents/channels#parameters) for details.
 
 ### Coordinate instances with a shared pub/sub
 
-Channels route messages through the agent's signal pipeline, and each run acquires a lease on its thread. The default in-memory pub/sub can't cross instance boundaries, so on serverless a "stop" reply can land on a different instance than the one running the agent, and instances can re-process the same thread.
+Channels route messages through the agent's signal pipeline, and each run acquires a lease on its thread so a single run owns the conversation at a time. The default in-memory pub/sub can't cross instance boundaries, so on serverless a follow-up message can land on a different instance than the one running the agent. Without a shared pub/sub, that instance can't reach the active run and starts its own, leaving the original run untouched and the thread processed twice.
 
 Configure a shared pub/sub backed by Redis Streams on the `Mastra` instance so leases and signals coordinate across instances:
 
