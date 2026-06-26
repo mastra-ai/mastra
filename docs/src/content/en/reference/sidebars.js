@@ -106,6 +106,15 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Channel Providers',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'channels/channel-provider', label: 'ChannelProvider' },
+        { type: 'doc', id: 'channels/slack-provider', label: 'SlackProvider' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'CLI',
       collapsed: true,
       items: [
@@ -529,15 +538,6 @@ const sidebars = {
         { type: 'doc', id: 'server/nestjs-adapter', label: 'NestJS Adapter' },
         { type: 'doc', id: 'server/register-api-route', label: 'registerApiRoute()' },
         { type: 'doc', id: 'server/routes', label: 'Server Routes' },
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Channel Providers',
-      collapsed: true,
-      items: [
-        { type: 'doc', id: 'channels/channel-provider', label: 'ChannelProvider' },
-        { type: 'doc', id: 'channels/slack-provider', label: 'SlackProvider' },
       ],
     },
     {
