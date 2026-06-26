@@ -599,15 +599,7 @@ export class Harness<TState = {}> {
     requestContext?: RequestContext;
   }): Promise<Workspace | undefined> {
     if (typeof this.workspace !== 'function') return this.workspace ?? undefined;
-    const ctx = requestContext ?? new RequestContext();
-    ctx.set('harness', {
-      harnessId: this.id,
-      session: {
-        id: session.identity.getId(),
-        ownerId: session.identity.getOwnerId(),
-        resourceId: session.identity.getResourceId(),
-      },
-    });
+    const ctx = await this.buildRequestContext(session, requestContext);
     const resolved = await this.workspace({ requestContext: ctx, mastra: this.getMastra() });
     this.workspace = resolved;
     return resolved ?? undefined;
