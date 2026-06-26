@@ -1,0 +1,24 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Propose a plan to add a README",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_submit_plan",
+            "name": "submit_plan",
+            "arguments": {
+              "title": "Add a README",
+              "plan": "1. Create README.md\n2. Describe the project"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

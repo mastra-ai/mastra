@@ -5,8 +5,9 @@ import { RequestContext } from '../request-context';
 import { SignalProvider } from '../signals/signal-provider';
 
 import { Harness } from './harness';
+import { createMockWorkspace } from './test-utils';
 import type * as Tools from './tools';
-import type { HarnessSubagent } from './types';
+import type { AgentControllerSubagent } from './types';
 
 // Capture the options passed to createSubagentTool so we can poke at the
 // cloneThreadForFork callback the harness wired up — without having to
@@ -44,7 +45,7 @@ describe('Harness fork clone metadata wiring', () => {
 
     const memoryFactory = vi.fn().mockResolvedValue({ cloneThread });
 
-    const subagents: HarnessSubagent[] = [
+    const subagents: AgentControllerSubagent[] = [
       {
         id: 'explore',
         name: 'Explore',
@@ -55,6 +56,7 @@ describe('Harness fork clone metadata wiring', () => {
     ];
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test',
       resourceId: 'parent-resource',
       memory: memoryFactory as unknown as never,
@@ -101,7 +103,7 @@ describe('Harness fork clone metadata wiring', () => {
   });
 
   it('creates the gateway-backed subagent tool when subagents are configured', async () => {
-    const subagents: HarnessSubagent[] = [
+    const subagents: AgentControllerSubagent[] = [
       {
         id: 'explore',
         name: 'Explore',
@@ -119,6 +121,7 @@ describe('Harness fork clone metadata wiring', () => {
     };
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test',
       resourceId: 'parent-resource',
       subagents,
@@ -161,7 +164,7 @@ describe('Harness fork clone metadata wiring', () => {
   it('wires getParentToolsets so forks can inherit parent toolsets', async () => {
     const memoryFactory = vi.fn().mockResolvedValue({ cloneThread: vi.fn() });
 
-    const subagents: HarnessSubagent[] = [
+    const subagents: AgentControllerSubagent[] = [
       {
         id: 'explore',
         name: 'Explore',
@@ -171,6 +174,7 @@ describe('Harness fork clone metadata wiring', () => {
     ];
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test',
       resourceId: 'parent-resource',
       memory: memoryFactory as unknown as never,
@@ -219,6 +223,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test',
       resourceId: 'test-resource',
       memory: memoryFactory as unknown as never,
@@ -266,6 +271,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test',
       resourceId: 'test-resource',
       memory: memoryFactory as unknown as never,
@@ -313,6 +319,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test',
       resourceId: 'test-resource',
       memory: memoryFactory as unknown as never,
@@ -361,6 +368,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test',
       resourceId: 'test-resource',
       memory: memoryFactory as unknown as never,
@@ -420,6 +428,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test',
       resourceId: 'test-resource',
       memory: memoryFactory as unknown as never,
@@ -473,6 +482,7 @@ describe('Harness fork clone metadata wiring', () => {
     });
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test',
       resourceId: 'test-resource',
       memory: memoryFactory as unknown as never,
@@ -532,6 +542,7 @@ describe('Harness fork clone metadata wiring', () => {
     expect(baseAgent.hasOwnMemory()).toBe(false);
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test',
       resourceId: 'test-resource',
       memory: memoryFactory as unknown as never,

@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
-import type { HarnessEvent } from './types';
+import { createMockWorkspace } from './test-utils';
+import type { AgentControllerEvent } from './types';
 
 function createHarness(
   storage: InMemoryStore,
@@ -15,6 +16,7 @@ function createHarness(
   });
 
   return new Harness({
+    workspace: createMockWorkspace(),
     id: 'test-harness',
     resourceId: options.resourceId,
     storage,
@@ -78,6 +80,7 @@ describe('Harness.createSession — cross-session isolation', () => {
       model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
     });
     const harness = new Harness<{ counter: number }>({
+      workspace: createMockWorkspace(),
       id: 'test-harness',
       storage,
       initialState: { counter: 0 },
@@ -101,8 +104,8 @@ describe('Harness.createSession — cross-session isolation', () => {
     const a = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
     const b = await harness.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
 
-    const aEvents: HarnessEvent[] = [];
-    const bEvents: HarnessEvent[] = [];
+    const aEvents: AgentControllerEvent[] = [];
+    const bEvents: AgentControllerEvent[] = [];
     a.subscribe(event => {
       aEvents.push(event);
     });

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
+import { createMockWorkspace } from './test-utils';
 
 async function createSession(onModelUse?: (modelId: string) => void) {
   const agent = new Agent({
@@ -12,6 +13,7 @@ async function createSession(onModelUse?: (modelId: string) => void) {
   });
 
   const harness = new Harness({
+    workspace: createMockWorkspace(),
     id: 'test-harness',
     storage: new InMemoryStore(),
     modes: [{ id: 'default', name: 'Default', default: true, agent }],

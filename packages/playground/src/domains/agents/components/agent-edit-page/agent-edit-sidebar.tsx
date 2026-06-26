@@ -1,4 +1,3 @@
-import type { JsonSchema } from '@mastra/playground-ui';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { JSONSchemaForm, jsonSchemaToFields } from '@mastra/playground-ui/components/JSONSchemaForm';
@@ -12,6 +11,7 @@ import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { VariablesIcon } from '@mastra/playground-ui/icons/VariablesIcon';
+import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import { Check, PlusIcon } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import type { RefObject } from 'react';

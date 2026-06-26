@@ -1,4 +1,3 @@
-import type { RuleGroup } from '@mastra/playground-ui';
 import { EntityName, EntityDescription, EntityContent, Entity } from '@mastra/playground-ui/components/Entity';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Label } from '@mastra/playground-ui/components/Label';
@@ -9,6 +8,7 @@ import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Sectio
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { JudgeIcon } from '@mastra/playground-ui/icons/JudgeIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 

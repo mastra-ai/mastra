@@ -10,6 +10,7 @@ import type {
 } from '../llm/model/gateways';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
+import { createMockWorkspace } from './test-utils';
 
 /**
  * Minimal in-memory gateway used to drive the Harness model catalog without
@@ -54,6 +55,7 @@ function createHarness(gateway: MastraModelGatewayInterface, defaultModelId?: st
   });
 
   return new Harness({
+    workspace: createMockWorkspace(),
     id: 'test-harness',
     storage: new InMemoryStore(),
     modes: [{ id: 'default', name: 'Default', default: true, agent, defaultModelId }],

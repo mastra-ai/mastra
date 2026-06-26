@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Harness } from '../harness';
+import { createMockWorkspace } from '../test-utils';
 
 function createSubscription(activeRunId: () => string | null) {
   return {
@@ -27,6 +28,7 @@ describe('Harness signal messages', () => {
     let activeRunId: string | null = 'run-1';
     const agent = createAgentMock(() => activeRunId);
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'harness-1',
       resourceId: 'resource-1',
       modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
@@ -66,6 +68,7 @@ describe('Harness signal messages', () => {
     let activeRunId: string | null = 'run-1';
     const agent = createAgentMock(() => activeRunId);
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'harness-approval-interrupt',
       resourceId: 'resource-1',
       modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
@@ -101,6 +104,7 @@ describe('Harness signal messages', () => {
       signal: { id: 'signal-1', type: 'user-message' },
     } as any);
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'harness-idle-signal-failure',
       resourceId: 'resource-1',
       modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],

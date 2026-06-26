@@ -326,4 +326,71 @@ describe('MessageRow', () => {
     expect(screen.getByText('boom went wrong')).toBeTruthy();
     expect(screen.getByText('Error')).toBeTruthy();
   });
+
+  describe('when an assistant message contains a step-start part', () => {
+    it('does not render the debug "Fallback:" text and still renders the text part', () => {
+      const { container } = renderRow(
+        baseMessage({
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [{ type: 'step-start' } as never, { type: 'text', text: 'real content' }],
+          },
+        }),
+      );
+
+      expect(screen.getByText('real content')).toBeTruthy();
+      expect(container.textContent).not.toContain('Fallback:');
+      expect(container.textContent).not.toContain('step-start');
+    });
+  });
+
+  describe('when a task signal carries an empty task snapshot', () => {
+    it('hides the signal badge (tasks render in the docked TaskPanel)', () => {
+      const { container } = renderRow(
+        baseMessage({
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'data-signal',
+                data: { type: 'state', tagName: 'current-task-list', metadata: { value: { tasks: [] } } },
+              } as never,
+            ],
+          },
+        }),
+      );
+      expect(container.textContent).toBe('');
+    });
+  });
+
+  describe('when a task signal carries an item with an invalid status', () => {
+    it('rejects the task shape and falls back to the generic state badge', () => {
+      renderRow(
+        baseMessage({
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'data-signal',
+                data: {
+                  type: 'state',
+                  tagName: 'current-task-list',
+                  metadata: {
+                    state: { id: 'current-task-list' },
+                    value: {
+                      tasks: [{ id: 't1', content: 'Do thing', status: 'bogus', activeForm: 'Doing thing' }],
+                    },
+                  },
+                },
+              } as never,
+            ],
+          },
+        }),
+      );
+      expect(screen.getByText('current-task-list')).toBeTruthy();
+    });
+  });
 });

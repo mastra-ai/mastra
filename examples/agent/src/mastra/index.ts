@@ -100,6 +100,7 @@ import {
   stepLoggerProcessor,
 } from './processors/index';
 import { gatewayAgent } from './agents/gateway';
+import { askUserAgent } from './agents/ask-user-agent';
 import { codeModeAgent } from './agents/code-mode-agent';
 import { clinicDirectAgent, clinicSpecialistAgent, clinicSupervisorAgent } from './agents/clinic-context-agents';
 
@@ -120,6 +121,7 @@ const storage = new MastraCompositeStore({
 export const mastra = new Mastra({
   agents: {
     gatewayAgent,
+    askUserAgent,
     chefAgent,
     chefAgentResponses,
     codeOverrideEditableAgent,

@@ -13,11 +13,15 @@ function createMockLocalFilesystem() {
 }
 
 function createHarnessCtx() {
+  const getState = () => ({ sandboxAllowedPaths: [] });
+  const setState = vi.fn();
   return {
+    getState,
+    setState,
     session: {
       state: {
-        get: () => ({ sandboxAllowedPaths: [] }),
-        set: vi.fn(),
+        get: getState,
+        set: setState,
       },
     },
   };
@@ -83,8 +87,8 @@ describe('request_access', () => {
     // The grant must be persisted to harness state so the workspace factory
     // re-derives the same allowlist on the next tool call (otherwise the
     // factory's setAllowedPaths rebuild clobbers the in-turn widen below).
-    expect(harnessCtx.session.state.set).toHaveBeenCalledTimes(1);
-    expect(harnessCtx.session.state.set).toHaveBeenCalledWith({
+    expect(harnessCtx.setState).toHaveBeenCalledTimes(1);
+    expect(harnessCtx.setState).toHaveBeenCalledWith({
       sandboxAllowedPaths: ['/outside/project/dir'],
     });
 
@@ -104,11 +108,15 @@ describe('request_access', () => {
     // only reachable through the harness request context. Granting access must
     // widen that filesystem so same-turn `view` calls can read the path.
     const { fs, setAllowedPaths } = createMockLocalFilesystem();
+    const getState = () => ({ sandboxAllowedPaths: [] });
+    const setState = vi.fn();
     const harnessCtx: any = {
+      getState,
+      setState,
       session: {
         state: {
-          get: () => ({ sandboxAllowedPaths: [] }),
-          set: vi.fn(),
+          get: getState,
+          set: setState,
         },
       },
       workspace: { filesystem: fs },

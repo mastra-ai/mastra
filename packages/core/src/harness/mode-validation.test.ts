@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import { Harness } from './harness';
-import type { HarnessMode } from './types';
+import type { AgentControllerMode } from './types';
 
 describe('Harness mode validation', () => {
   it('types each mode as either replacing or augmenting tools', () => {
-    const replaceToolsMode: HarnessMode = { id: 'replace-tools', tools: {} };
-    const augmentToolsMode: HarnessMode = { id: 'augment-tools', additionalTools: {} };
+    const replaceToolsMode: AgentControllerMode = { id: 'replace-tools', tools: {} };
+    const augmentToolsMode: AgentControllerMode = { id: 'augment-tools', additionalTools: {} };
     // @ts-expect-error modes cannot replace and augment tools at the same time
-    const invalidToolsMode: HarnessMode = { id: 'invalid-tools', tools: {}, additionalTools: {} };
+    const invalidToolsMode: AgentControllerMode = { id: 'invalid-tools', tools: {}, additionalTools: {} };
 
     expect([replaceToolsMode.id, augmentToolsMode.id, invalidToolsMode.id]).toEqual([
       'replace-tools',
