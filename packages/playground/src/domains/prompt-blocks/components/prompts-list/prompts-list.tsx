@@ -1,5 +1,9 @@
 import type { StoredPromptBlockResponse } from '@mastra/client-js';
-import { EntityList, EntityListSkeleton, truncateString } from '@mastra/playground-ui';
+import { truncateString } from '@mastra/playground-ui';
+import {
+  DataList as EntityList,
+  DataListSkeleton as EntityListSkeleton,
+} from '@mastra/playground-ui/components/DataList';
 import { CheckIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLinkComponent } from '@/lib/framework';
@@ -25,7 +29,7 @@ export function PromptsList({ promptBlocks, isLoading, search = '' }: PromptsLis
   }
 
   return (
-    <EntityList columns="auto 1fr auto auto">
+    <EntityList columns="auto 1fr auto auto" variant="striped">
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Description</EntityList.TopCell>

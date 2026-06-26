@@ -189,6 +189,7 @@ async function getPackageVersion(pkgName: string): Promise<string | undefined> {
 export function getSpanKind(type: SpanType): SpanKind {
   switch (type) {
     case SpanType.MODEL_GENERATION:
+    case SpanType.RAG_EMBEDDING:
     case SpanType.MCP_TOOL_CALL:
       return SpanKind.CLIENT;
     default:

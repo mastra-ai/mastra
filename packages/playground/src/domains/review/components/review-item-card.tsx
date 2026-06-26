@@ -1,4 +1,10 @@
-import { Badge, ButtonWithTooltip, Textarea, TooltipProvider, Txt, Icon, cn } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ThumbsUp, ThumbsDown, Trash2, CheckCircle, GaugeIcon } from 'lucide-react';
 import { useState } from 'react';
 import { TagPicker } from './tag-picker';
@@ -108,8 +114,8 @@ export function ReviewItemCard({
         <div className="flex items-center gap-2 mt-2">
           {/* Rating: thumbs up / down */}
           <div className="flex items-center gap-0.5 mr-1">
-            <ButtonWithTooltip
-              tooltipContent="Good — this result is acceptable"
+            <Button
+              tooltip="Good — this result is acceptable"
               variant={item.rating === 'positive' ? 'default' : 'ghost'}
               size="sm"
               onClick={() => onRate(item.rating === 'positive' ? undefined : 'positive')}
@@ -118,10 +124,10 @@ export function ReviewItemCard({
               <Icon size="sm" className={item.rating === 'positive' ? 'text-positive1' : ''}>
                 <ThumbsUp />
               </Icon>
-            </ButtonWithTooltip>
+            </Button>
 
-            <ButtonWithTooltip
-              tooltipContent="Bad — this result needs fixing"
+            <Button
+              tooltip="Bad — this result needs fixing"
               variant={item.rating === 'negative' ? 'default' : 'ghost'}
               size="sm"
               onClick={() => onRate(item.rating === 'negative' ? undefined : 'negative')}
@@ -130,7 +136,7 @@ export function ReviewItemCard({
               <Icon size="sm" className={item.rating === 'negative' ? 'text-negative1' : ''}>
                 <ThumbsDown />
               </Icon>
-            </ButtonWithTooltip>
+            </Button>
           </div>
 
           {/* Tags */}
@@ -173,17 +179,17 @@ export function ReviewItemCard({
           {!isCompleted && (
             <div className="flex items-center gap-0.5">
               {onComplete && (
-                <ButtonWithTooltip tooltipContent="Mark as complete" variant="ghost" size="sm" onClick={onComplete}>
+                <Button tooltip="Mark as complete" variant="ghost" size="sm" onClick={onComplete}>
                   <Icon size="sm" className="text-positive1">
                     <CheckCircle />
                   </Icon>
-                </ButtonWithTooltip>
+                </Button>
               )}
-              <ButtonWithTooltip tooltipContent="Remove from review" variant="ghost" size="sm" onClick={onRemove}>
+              <Button tooltip="Remove from review" variant="ghost" size="sm" onClick={onRemove}>
                 <Icon size="sm" className="text-neutral2 hover:text-negative1">
                   <Trash2 />
                 </Icon>
-              </ButtonWithTooltip>
+              </Button>
             </div>
           )}
         </div>

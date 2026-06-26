@@ -1,19 +1,12 @@
-import {
-  ButtonWithTooltip,
-  ErrorState,
-  NoDataPageLayout,
-  PageLayout,
-  PermissionDenied,
-  SessionExpired,
-  Spinner,
-  Tab,
-  TabContent,
-  TabList,
-  Tabs,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-  toast,
-} from '@mastra/playground-ui';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { FileText, Wand2, Search, ChevronDown, Bot, Server } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { useSearchParams, useParams, useNavigate } from 'react-router';
@@ -164,12 +157,11 @@ export default function Workspace() {
   // None of these operations require sandbox - all are done via GitHub API + filesystem
   const canManageSkills = hasFilesystem && !isReadOnly;
 
-  // Derive writable mounts and mount paths for CompositeFilesystem
+  // Derive writable mounts for CompositeFilesystem
   const mounts = workspaceInfo?.mounts;
   const writableMounts = mounts
     ?.filter(m => !m.readOnly)
     .map(m => ({ path: m.path, displayName: m.displayName, icon: m.icon, provider: m.provider, name: m.name }));
-  const mountPaths = mounts && mounts.length > 1 ? mounts.map(m => m.path) : undefined;
 
   // Skills.sh handlers
   const handleInstallSkill = useCallback(
@@ -367,13 +359,9 @@ export default function Workspace() {
       {hasSearchCapability && (
         <PageLayout.TopArea>
           <PageLayout.Row className="justify-end">
-            <ButtonWithTooltip
-              onClick={() => setShowSearch(!showSearch)}
-              tooltipContent="Search workspace"
-              aria-label="Search workspace"
-            >
+            <Button onClick={() => setShowSearch(!showSearch)} tooltip="Search workspace" aria-label="Search workspace">
               <Search />
-            </ButtonWithTooltip>
+            </Button>
           </PageLayout.Row>
         </PageLayout.TopArea>
       )}
@@ -517,7 +505,7 @@ export default function Workspace() {
                     entries={files}
                     currentPath={currentPath}
                     isLoading={isLoadingFiles}
-                    error={filesError}
+                    error={filesError instanceof Error ? filesError : null}
                     onNavigate={setCurrentPath}
                     onFileSelect={setSelectedFile}
                     onRefresh={() => refetchFiles()}
@@ -559,7 +547,6 @@ export default function Workspace() {
                   onRemoveSkill={canManageSkills ? handleRemoveSkill : undefined}
                   updatingSkillName={updatingSkillName ?? undefined}
                   removingSkillName={removingSkillName ?? undefined}
-                  mountPaths={mountPaths}
                 />
               </TabContent>
             )}

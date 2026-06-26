@@ -1,11 +1,21 @@
 import type { LightSpanRecord } from '@mastra/core/storage';
-import { CircleGaugeIcon, ChevronsDownUpIcon, ChevronsUpDownIcon, Link2Icon, SaveIcon } from 'lucide-react';
+import {
+  CircleGaugeIcon,
+  ChevronsDownUpIcon,
+  ChevronsUpDownIcon,
+  DownloadIcon,
+  Link2Icon,
+  Loader2Icon,
+  SaveIcon,
+  WrenchIcon,
+} from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
+import { useDownloadTraceJson } from '../hooks/use-download-trace-json';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
 import { TraceKeysAndValues } from './trace-keys-and-values';
 import { TraceTimeline } from './trace-timeline';
-import { Button, ButtonWithTooltip } from '@/ds/components/Button';
+import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { Notice } from '@/ds/components/Notice';
@@ -25,6 +35,8 @@ export interface TraceDataPanelViewProps {
   onEvaluateTrace?: () => void;
   /** When set, a "Save as Dataset Item" button appears; the consumer owns the dialog. */
   onSaveAsDatasetItem?: (args: { traceId: string; rootSpanId: string | undefined }) => void;
+  /** When set, an "Add tool mocks to item" button appears; the consumer owns the dialog. */
+  onAddTraceMocksToItem?: (args: { traceId: string }) => void;
   initialSpanId?: string | null;
   onPrevious?: () => void;
   onNext?: () => void;
@@ -41,6 +53,14 @@ export interface TraceDataPanelViewProps {
    * `spans`. When omitted, the span with no parent is used (trace case).
    */
   anchorSpanId?: string;
+  /**
+   * Whether to render the "Evaluating traces and saving them as dataset items is
+   * available in Mastra Studio" info notice when neither `onEvaluateTrace` nor
+   * `onSaveAsDatasetItem` is provided. Defaults to `true`. Pass `false` when this
+   * panel is rendered inside Studio in a context that intentionally omits those
+   * handlers (e.g. inline below an experiment result).
+   */
+  showUnavailableFeaturesMsg?: boolean;
 }
 
 export function TraceDataPanelView({
@@ -51,6 +71,7 @@ export function TraceDataPanelView({
   onSpanSelect,
   onEvaluateTrace,
   onSaveAsDatasetItem,
+  onAddTraceMocksToItem,
   initialSpanId,
   onPrevious,
   onNext,
@@ -61,11 +82,14 @@ export function TraceDataPanelView({
   LinkComponent,
   traceHref,
   anchorSpanId,
+  showUnavailableFeaturesMsg = true,
 }: TraceDataPanelViewProps) {
   const isOnTracePage = placement === 'trace-page';
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const collapsed = controlledCollapsed ?? internalCollapsed;
   const setCollapsed = onCollapsedChange ?? setInternalCollapsed;
+
+  const { download: downloadTraceJson, isPending: isDownloadingTrace } = useDownloadTraceJson();
 
   const contentRef = useRef<HTMLDivElement>(null);
   const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(initialSpanId ?? undefined);
@@ -123,11 +147,28 @@ export function TraceDataPanelView({
 
   const showOpenTracePageLink = !isOnTracePage && LinkComponent && traceHref;
 
+  // Shared across both header layouts (list side panel and full trace page) so a trace can be
+  // downloaded from wherever it's being inspected.
+  const downloadTraceButton = (
+    <Button
+      size="md"
+      tooltip="Download trace JSON"
+      aria-label="Download trace JSON"
+      disabled={isDownloadingTrace}
+      onClick={() => downloadTraceJson(traceId)}
+    >
+      {isDownloadingTrace ? <Loader2Icon className="animate-spin" /> : <DownloadIcon />}
+    </Button>
+  );
+
   return (
     <DataPanel collapsed={collapsed}>
       <DataPanel.Header>
         {isOnTracePage ? (
-          <DataPanel.Heading>Trace Timeline</DataPanel.Heading>
+          <>
+            <DataPanel.Heading>Trace Timeline</DataPanel.Heading>
+            <ButtonsGroup className="ml-auto shrink-0">{downloadTraceButton}</ButtonsGroup>
+          </>
         ) : (
           <>
             <DataPanel.Heading>
@@ -135,31 +176,34 @@ export function TraceDataPanelView({
             </DataPanel.Heading>
             <ButtonsGroup className="ml-auto shrink-0">
               {onCollapsedChange && (
-                <ButtonWithTooltip
+                <Button
                   size="md"
-                  tooltipContent={collapsed ? 'Expand panel' : 'Collapse panel'}
+                  tooltip={collapsed ? 'Expand panel' : 'Collapse panel'}
                   onClick={() => setCollapsed(!collapsed)}
                 >
                   {collapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
-                </ButtonWithTooltip>
+                </Button>
               )}
-              <DataPanel.NextPrevNav
-                onPrevious={onPrevious}
-                onNext={onNext}
-                previousLabel="Previous trace"
-                nextLabel="Next trace"
-              />
+              {(onPrevious || onNext) && (
+                <DataPanel.NextPrevNav
+                  onPrevious={onPrevious}
+                  onNext={onNext}
+                  previousLabel="Previous trace"
+                  nextLabel="Next trace"
+                />
+              )}
               {showOpenTracePageLink && (
-                <ButtonWithTooltip
+                <Button
                   as={LinkComponent}
                   href={traceHref}
                   size="md"
-                  tooltipContent="Open trace page"
+                  tooltip="Open trace page"
                   aria-label="Open trace page"
                 >
                   <Link2Icon />
-                </ButtonWithTooltip>
+                </Button>
               )}
+              {downloadTraceButton}
               <DataPanel.CloseButton onClick={onClose} />
             </ButtonsGroup>
           </>
@@ -175,8 +219,8 @@ export function TraceDataPanelView({
           <DataPanel.Content ref={contentRef}>
             {!isOnTracePage && rootSpan && <TraceKeysAndValues rootSpan={rootSpan} className="mb-6" />}
 
-            {!isOnTracePage && (onEvaluateTrace || onSaveAsDatasetItem) && (
-              <div className="mb-6 flex justify-between items-center gap-4">
+            {!isOnTracePage && (onEvaluateTrace || onSaveAsDatasetItem || onAddTraceMocksToItem) && (
+              <div className="mb-6 flex flex-wrap justify-between items-center gap-4">
                 {onEvaluateTrace && (
                   <Button size="sm" onClick={onEvaluateTrace}>
                     <Icon>
@@ -193,16 +237,29 @@ export function TraceDataPanelView({
                     Save as Dataset Item
                   </Button>
                 )}
+                {onAddTraceMocksToItem && (
+                  <Button size="sm" onClick={() => onAddTraceMocksToItem({ traceId })}>
+                    <Icon>
+                      <WrenchIcon />
+                    </Icon>
+                    Add tool mocks to item
+                  </Button>
+                )}
               </div>
             )}
 
-            {!isOnTracePage && !onEvaluateTrace && !onSaveAsDatasetItem && (
-              <Notice variant="info" className="mb-6">
-                <Notice.Message>
-                  Evaluating traces and saving them as dataset items is available in Mastra Studio (local or deployed).
-                </Notice.Message>
-              </Notice>
-            )}
+            {!isOnTracePage &&
+              !onEvaluateTrace &&
+              !onSaveAsDatasetItem &&
+              !onAddTraceMocksToItem &&
+              showUnavailableFeaturesMsg && (
+                <Notice variant="info" className="mb-6">
+                  <Notice.Message>
+                    Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
+                    deployed).
+                  </Notice.Message>
+                </Notice>
+              )}
 
             <TraceTimeline
               hierarchicalSpans={hierarchicalSpans}

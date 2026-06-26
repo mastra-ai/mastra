@@ -3253,6 +3253,61 @@ describe('Workflow as Processor', () => {
       expect(isProcessorWorkflow(configuredProcessors[1])).toBe(false);
     });
 
+    it('should preserve state signal processors on resolved combined input workflows', async () => {
+      const stateProcessor = {
+        id: 'state-proc',
+        name: 'State Processor',
+        processInput: async ({ messages }: any) => messages,
+        computeStateSignal: () => ({ cacheKey: 'state-proc-cache', contents: 'state' }),
+      };
+      const inputProcessor = {
+        id: 'input-proc',
+        name: 'Input Processor',
+        processInput: async ({ messages }: any) => messages,
+      };
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'test',
+        model: testModel,
+        inputProcessors: [stateProcessor, inputProcessor],
+      });
+
+      const resolvedProcessors = await agent.listInputProcessors();
+
+      expect(resolvedProcessors).toHaveLength(1);
+      expect(isProcessorWorkflow(resolvedProcessors[0])).toBe(true);
+      expect(resolvedProcessors[0]?.__stateSignalProcessors).toEqual([stateProcessor]);
+    });
+
+    it('should preserve state signal only processors on resolved combined input workflows', async () => {
+      const stateProcessor = {
+        id: 'state-only-proc',
+        name: 'State Only Processor',
+        computeStateSignal: () => ({ cacheKey: 'state-only-cache', contents: 'state' }),
+      };
+      const inputProcessor = {
+        id: 'input-proc',
+        name: 'Input Processor',
+        processInput: async ({ messages }: any) => messages,
+      };
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'test',
+        model: testModel,
+        inputProcessors: [stateProcessor, inputProcessor],
+      });
+
+      const resolvedProcessors = await agent.listInputProcessors();
+
+      expect(resolvedProcessors).toHaveLength(1);
+      expect(isProcessorWorkflow(resolvedProcessors[0])).toBe(true);
+      expect(resolvedProcessors[0]?.__stateSignalProcessors).toEqual([stateProcessor]);
+    });
+
     it('should return individual output processors, not a combined workflow', async () => {
       const outputProcessor1 = {
         id: 'output-proc-1',

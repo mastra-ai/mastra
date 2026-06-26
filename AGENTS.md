@@ -5,6 +5,7 @@ For work in packages read package local packages/<name>/AGENTS.md first
 turborepo pnpm workspace
 packages use strict TypeScript
 vitest tests are colocated with source
+When adding a model name or ID to docs, changesets, or comments, use a placeholder token from docs/src/plugins/remark-model-tokens/models.ts (remark replaces them at docs build time); in executable tests use a real provider/model value, not a bare token
 
 Prefer narrowest build test lint typecheck for packages
 when package splits unit integration or E2E coverage run narrowest suite first
@@ -37,7 +38,8 @@ gh-pr-comments
 make-moves
 
 Read relevant @.claude/skills/
-e2e-tests-studio REQUIRED for packages/playground-ui packages/playground E2E behavior tests
+playground-msw-tests PRIMARY test approach for packages/playground packages/playground-ui
+e2e-tests-studio SECONDARY test approach for packages/playground-ui packages/playground
 mastra-docs
 react-best-practices
 tailwind-best-practices

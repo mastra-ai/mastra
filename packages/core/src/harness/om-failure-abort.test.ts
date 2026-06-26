@@ -2,31 +2,36 @@ import { describe, it, expect } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
+import { createMockWorkspace } from './test-utils';
 import type { HarnessEvent } from './types';
 
-function createHarness() {
+async function createSession() {
   const agent = new Agent({
     name: 'test-agent',
     instructions: 'You are a test agent.',
     model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
   });
 
-  return new Harness({
+  const harness = new Harness({
+    workspace: createMockWorkspace(),
     id: 'test-harness',
     storage: new InMemoryStore(),
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
   });
+  await harness.init();
+  const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+  return { session };
 }
 
 describe('Harness OM failure abort behavior', () => {
   it('aborts stream and emits an error when OM buffering fails', async () => {
-    const harness = createHarness();
+    const { session } = await createSession();
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    session.subscribe(event => events.push(event));
 
-    (harness as any).abortController = new AbortController();
+    session.run.ensureAbortController();
 
-    await (harness as any).processStream({
+    await (session as any).processStream({
       fullStream: (async function* () {
         yield {
           type: 'data-om-buffering-failed',
@@ -47,19 +52,19 @@ describe('Harness OM failure abort behavior', () => {
       'Observational memory observation buffering failed: Bad Request',
     );
     expect(events.some(e => e.type === 'agent_end' && e.reason === 'aborted')).toBe(true);
-    expect((harness as any).abortRequested).toBe(false);
-    expect((harness as any).abortController).toBeNull();
+    expect(session.run.isAbortRequested()).toBe(false);
+    expect(session.run.hasAbortController()).toBe(false);
     expect(events.some(e => e.type === 'message_start')).toBe(false);
   });
 
   it('aborts stream and emits an error when OM observation run fails', async () => {
-    const harness = createHarness();
+    const { session } = await createSession();
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    session.subscribe(event => events.push(event));
 
-    (harness as any).abortController = new AbortController();
+    session.run.ensureAbortController();
 
-    await (harness as any).processStream({
+    await (session as any).processStream({
       fullStream: (async function* () {
         yield {
           type: 'data-om-observation-failed',
@@ -81,7 +86,7 @@ describe('Harness OM failure abort behavior', () => {
       'Observational memory reflection run failed: Model unavailable',
     );
     expect(events.some(e => e.type === 'agent_end' && e.reason === 'aborted')).toBe(true);
-    expect((harness as any).abortRequested).toBe(false);
+    expect(session.run.isAbortRequested()).toBe(false);
     expect(events.some(e => e.type === 'message_start')).toBe(false);
   });
 });

@@ -1,10 +1,7 @@
-import {
-  MainContentLayout,
-  PermissionDenied,
-  SessionExpired,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 
@@ -120,7 +117,7 @@ export default function WorkspaceSkillDetailPage() {
         <div className="grid place-items-center h-full">
           <div className="text-center">
             <p className="text-red-400 mb-2">Failed to load skill</p>
-            <p className="text-sm text-neutral3">{error?.message ?? 'Skill not found'}</p>
+            <p className="text-sm text-neutral3">{error instanceof Error ? error.message : 'Skill not found'}</p>
           </div>
         </div>
       </MainContentLayout>

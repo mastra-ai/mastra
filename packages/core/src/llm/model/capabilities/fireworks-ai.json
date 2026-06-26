@@ -1,0 +1,11 @@
+{
+  "attachment": [
+    "accounts/fireworks/models/kimi-k2p6",
+    "accounts/fireworks/models/kimi-k2p7-code",
+    "accounts/fireworks/models/minimax-m3",
+    "accounts/fireworks/models/qwen3p7-plus",
+    "accounts/fireworks/routers/kimi-k2p6-fast",
+    "accounts/fireworks/routers/kimi-k2p6-turbo",
+    "accounts/fireworks/routers/kimi-k2p7-code-fast"
+  ]
+}

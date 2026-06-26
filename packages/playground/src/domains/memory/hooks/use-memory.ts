@@ -1,5 +1,5 @@
 import type { GetObservationalMemoryResponse, GetMemoryStatusResponse } from '@mastra/client-js';
-import { toast } from '@mastra/playground-ui';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
@@ -208,10 +208,9 @@ export const useMemoryWithOMStatus = ({
     queryKey: ['memory-status', agentId, resourceId, threadId, requestContext],
     queryFn: () =>
       agentId
-        ? client.getMemoryStatus(agentId, {
+        ? client.getMemoryStatus(agentId, requestContext, {
             resourceId,
             threadId,
-            requestContext,
           })
         : null,
     enabled: Boolean(agentId),

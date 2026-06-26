@@ -1,6 +1,7 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
-import { EmptyState, ItemList } from '@mastra/playground-ui';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { ItemList } from '@mastra/playground-ui/components/ItemList';
 import { GaugeIcon } from 'lucide-react';
 import { useMemo } from 'react';
 

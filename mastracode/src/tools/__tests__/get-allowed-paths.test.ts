@@ -1,8 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 
-// Mock the workspace module to control skillPaths
+const { buildSkillPathsMock } = vi.hoisted(() => ({
+  buildSkillPathsMock: vi.fn((_projectPath: string, _configDir: string) => [
+    '/mock/skills/dir-a',
+    '/mock/skills/dir-b',
+  ]),
+}));
+
+// Mock the workspace module to control buildSkillPaths
 vi.mock('../../agents/workspace.js', () => ({
-  skillPaths: ['/mock/skills/dir-a', '/mock/skills/dir-b'],
+  buildSkillPaths: buildSkillPathsMock,
 }));
 
 import { getAllowedPathsFromContext } from '../utils.js';
@@ -22,15 +29,22 @@ describe('getAllowedPathsFromContext', () => {
     expect(a).not.toBe(b);
   });
 
-  it('merges skill paths with sandbox paths from harness state (getState)', () => {
+  it('merges skill paths with sandbox paths from session state', () => {
+    buildSkillPathsMock.mockClear();
     const toolContext = {
       requestContext: {
         get: (key: string) => {
           if (key === 'harness') {
             return {
-              getState: () => ({
-                sandboxAllowedPaths: ['/user/sandbox/path-1', '/user/sandbox/path-2'],
-              }),
+              session: {
+                state: {
+                  get: () => ({
+                    projectPath: '/test/project',
+                    configDir: '.mastracode',
+                    sandboxAllowedPaths: ['/user/sandbox/path-1', '/user/sandbox/path-2'],
+                  }),
+                },
+              },
             };
           }
           return undefined;
@@ -38,6 +52,7 @@ describe('getAllowedPathsFromContext', () => {
       },
     };
     const result = getAllowedPathsFromContext(toolContext);
+    expect(buildSkillPathsMock).toHaveBeenCalledWith('/test/project', '.mastracode');
     expect(result).toEqual([
       '/mock/skills/dir-a',
       '/mock/skills/dir-b',
@@ -52,8 +67,13 @@ describe('getAllowedPathsFromContext', () => {
         get: (key: string) => {
           if (key === 'harness') {
             return {
-              state: {
-                sandboxAllowedPaths: ['/user/sandbox/static-path'],
+              session: {
+                state: {
+                  get: () => ({
+                    projectPath: '/test/project',
+                    sandboxAllowedPaths: ['/user/sandbox/static-path'],
+                  }),
+                },
               },
             };
           }
@@ -65,12 +85,20 @@ describe('getAllowedPathsFromContext', () => {
     expect(result).toEqual(['/mock/skills/dir-a', '/mock/skills/dir-b', '/user/sandbox/static-path']);
   });
 
-  it('returns only skill paths when harness context has no sandbox paths', () => {
+  it('returns only skill paths when session state has no sandbox paths', () => {
     const toolContext = {
       requestContext: {
         get: (key: string) => {
           if (key === 'harness') {
-            return { getState: () => ({}) };
+            return {
+              session: {
+                state: {
+                  get: () => ({
+                    projectPath: '/test/project',
+                  }),
+                },
+              },
+            };
           }
           return undefined;
         },
@@ -90,17 +118,19 @@ describe('getAllowedPathsFromContext', () => {
     expect(result).toEqual(['/mock/skills/dir-a', '/mock/skills/dir-b']);
   });
 
-  it('prefers getState() over static state property', () => {
+  it('reads sandbox paths from session state', () => {
     const toolContext = {
       requestContext: {
         get: (key: string) => {
           if (key === 'harness') {
             return {
-              getState: () => ({
-                sandboxAllowedPaths: ['/from-getState'],
-              }),
-              state: {
-                sandboxAllowedPaths: ['/from-static-state'],
+              session: {
+                state: {
+                  get: () => ({
+                    projectPath: '/test/project',
+                    sandboxAllowedPaths: ['/from-session-state'],
+                  }),
+                },
               },
             };
           }
@@ -109,6 +139,6 @@ describe('getAllowedPathsFromContext', () => {
       },
     };
     const result = getAllowedPathsFromContext(toolContext);
-    expect(result).toEqual(['/mock/skills/dir-a', '/mock/skills/dir-b', '/from-getState']);
+    expect(result).toEqual(['/mock/skills/dir-a', '/mock/skills/dir-b', '/from-session-state']);
   });
 });

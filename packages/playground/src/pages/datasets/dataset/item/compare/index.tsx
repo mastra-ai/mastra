@@ -1,26 +1,21 @@
 import type { DatasetItem } from '@mastra/client-js';
-import {
-  Button,
-  ButtonsGroup,
-  CodeDiff,
-  Column,
-  Columns,
-  MainContentContent,
-  MainContentLayout,
-  MainHeader,
-  PermissionDenied,
-  SessionExpired,
-  TextAndIcon,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { CodeDiff } from '@mastra/playground-ui/components/CodeDiff';
+import { Column, Columns } from '@mastra/playground-ui/components/Columns';
+import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { ArrowLeft, GitCompareIcon, History, DiffIcon, ColumnsIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router';
 import { DatasetItemHeader, DatasetItemContent } from '@/domains/datasets';
 import { useDatasetItem, useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
-import { SelectField } from '@/lib/form/components/select-field';
 import { useLinkComponent } from '@/lib/framework';
 import { RouteHeaderActions } from '@/lib/route-header';
 import { cn } from '@/lib/utils';
@@ -184,15 +179,18 @@ function CompareItemColumn({
   return (
     <Column>
       <Column.Toolbar className="flex gap-4">
-        <SelectField
-          label="Item"
-          name={`compare-item-${idx}`}
-          value={itemId}
-          onValueChange={onItemChange}
-          options={options}
-          placeholder="Select item"
-          labelIsHidden={true}
-        />
+        <Select name={`compare-item-${idx}`} value={itemId} onValueChange={onItemChange}>
+          <SelectTrigger aria-label="Item">
+            <SelectValue placeholder="Select item" />
+          </SelectTrigger>
+          <SelectContent>
+            {options.map(option => (
+              <SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Button as={Link} to={`/datasets/${datasetId}/items/${itemId}`}>
           <History />
           Versions

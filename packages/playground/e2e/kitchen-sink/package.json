@@ -15,25 +15,13 @@
     "@mastra/loggers": "latest",
     "@mastra/mcp": "latest",
     "@mastra/memory": "latest",
-    "ai": "^5.0.179",
+    "ai": "^5.0.196",
     "mastra": "latest",
-    "msw": "^2.13.6",
-    "zod": "^4.3.6"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.20",
     "typescript": "^5.9.3"
   },
-  "pnpm": {
-    "overrides": {
-      "mastra": "link:../../../../packages/cli",
-      "@mastra/core": "link:../../../../packages/core",
-      "@mastra/loggers": "link:../../../../packages/loggers",
-      "@mastra/memory": "link:../../../../packages/memory",
-      "@mastra/libsql": "link:../../../../stores/libsql",
-      "@mastra/editor": "link:../../../../packages/editor",
-      "@mastra/mcp": "link:../../../../packages/mcp"
-    }
-  },
-  "packageManager": "pnpm@10.29.3"
+  "packageManager": "pnpm@11.5.1"
 }

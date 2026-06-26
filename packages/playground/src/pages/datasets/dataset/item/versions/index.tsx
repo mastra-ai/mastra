@@ -1,19 +1,15 @@
-import {
-  Button,
-  ButtonsGroup,
-  Chip,
-  CodeDiff,
-  Column,
-  Columns,
-  MainContentContent,
-  MainContentLayout,
-  MainHeader,
-  PermissionDenied,
-  SessionExpired,
-  TextAndIcon,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { Chip } from '@mastra/playground-ui/components/Chip';
+import { CodeDiff } from '@mastra/playground-ui/components/CodeDiff';
+import { Column, Columns } from '@mastra/playground-ui/components/Columns';
+import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { TextAndIcon } from '@mastra/playground-ui/components/Text';
 import { format } from 'date-fns';
 import { ArrowLeft, HistoryIcon, GitCompareIcon, ColumnsIcon, GitCompareArrowsIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
@@ -22,7 +18,6 @@ import { DatasetItemContent } from '@/domains/datasets';
 import { useDatasetItemVersion, useDatasetItemVersions } from '@/domains/datasets/hooks/use-dataset-item-versions';
 import type { DatasetItemVersion } from '@/domains/datasets/hooks/use-dataset-item-versions';
 import { useDataset } from '@/domains/datasets/hooks/use-datasets';
-import { SelectField } from '@/lib/form/components/select-field';
 import { useLinkComponent } from '@/lib/framework';
 import { RouteHeaderActions } from '@/lib/route-header';
 import { cn } from '@/lib/utils';
@@ -241,16 +236,22 @@ function CompareVersionColumn({
     <Column>
       <Column.Toolbar className="grid gap-4 grid-cols-[auto_1fr]">
         <HistoryIcon className="w-6 h-6 opacity-50" />
-        <SelectField
-          label="Version"
+        <Select
           name={`compare-version-${idx}`}
           value={String(datasetVersion)}
           onValueChange={(val: string) => onVersionChange(Number(val))}
-          options={options}
-          placeholder="Select version"
-          labelIsHidden={true}
-          className="w-full"
-        />
+        >
+          <SelectTrigger aria-label="Version" className="w-full">
+            <SelectValue placeholder="Select version" />
+          </SelectTrigger>
+          <SelectContent>
+            {options.map(option => (
+              <SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </Column.Toolbar>
 
       {showContent && (

@@ -9,6 +9,8 @@ packages:
 
 The Inworld voice implementation in Mastra provides streaming text-to-speech (TTS) and batch speech-to-text (STT) capabilities using Inworld AI's API. It supports multiple TTS and STT models, configurable audio encodings, and progressive audio streaming.
 
+For real-time, full-duplex speech-to-speech, the same package exports [`InworldRealtimeVoice`](/reference/voice/inworld-realtime).
+
 ## Usage example
 
 ```typescript
@@ -291,6 +293,6 @@ const speakers = await voice.getSpeakers()
 ## Notes
 
 - The TTS endpoint uses progressive NDJSON streaming, so audio playback can begin before the full response is received.
-- An API key can be provided via the `speechModel` or `listeningModel` config, or the `INWORLD_API_KEY` environment variable. TTS and STT keys are resolved independently: passing distinct `speechModel.apiKey` and `listeningModel.apiKey` values lets each service use its own credential. If only one is provided, it is reused for both services as a fallback before the env var.
+- An API key can be provided via the `speechModel` or `listeningModel` config, or the `INWORLD_API_KEY` environment variable. TTS and STT keys are resolved independently: passing distinct `speechModel.apiKey` and `listeningModel.apiKey` values lets each service use its own credential. If only one is provided, it's reused for both services as a fallback before the env var.
 - `inworld-tts-2` is the default flagship model. Use `deliveryMode` (`STABLE` | `BALANCED` | `CREATIVE`) to steer delivery style on this model. The `temperature` option is ignored on `inworld-tts-2`.
 - The `inworld-tts-1.5-mini` model offers lower latency at the cost of reduced voice quality compared to `inworld-tts-1.5-max`.

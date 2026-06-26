@@ -1,0 +1,11 @@
+{
+  "attachment": [
+    "qwen3.5-122b-a10b",
+    "qwen3.5-27b",
+    "qwen3.5-35b-a3b",
+    "qwen3.5-397b-a17b",
+    "qwen3.6-27b",
+    "qwen3.6-35b-a3b",
+    "qwen3.6-flash"
+  ]
+}

@@ -89,7 +89,13 @@ export class InMemoryWorkspacesStorage extends WorkspacesStorage {
     }
 
     // Separate metadata fields from config fields
-    const { authorId, activeVersionId, metadata, status, ...configFields } = updates;
+    const { authorId, activeVersionId, metadata, status, ...rawConfigFields } = updates;
+
+    // Strip undefined keys so omitted PATCH fields don't overwrite persisted values
+    const configFields: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(rawConfigFields)) {
+      if (value !== undefined) configFields[key] = value;
+    }
 
     // Config field names from StorageWorkspaceSnapshotType
     const configFieldNames = [

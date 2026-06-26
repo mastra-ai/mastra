@@ -12,6 +12,7 @@ export const workflowRunStatusSchema = z.enum([
   'bailed',
   'tripwire',
   'paused',
+  'skipped',
 ]);
 
 // Path parameter schemas
@@ -57,6 +58,7 @@ export const workflowInfoSchema = z.object({
   allSteps: z.record(z.string(), serializedStepSchema),
   name: z.string().optional(),
   description: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
   stepGraph: z.array(serializedStepFlowEntrySchema),
   inputSchema: z.string().optional(),
   outputSchema: z.string().optional(),

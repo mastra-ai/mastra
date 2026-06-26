@@ -161,7 +161,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     const memoryContext = parseMemoryRequestContext(requestContext);
     const readOnly = memoryContext?.memoryConfig?.readOnly;
 
-    const actorModelContext = model?.modelId ? { provider: model.provider, modelId: model.modelId } : undefined;
+    const actorModelContext = model?.modelId
+      ? { provider: model.provider, modelId: model.modelId, providerOptions: args.providerOptions }
+      : undefined;
     state.__omActorModelContext = actorModelContext;
 
     return this.engine.getTokenCounter().runWithModelContext(actorModelContext, async () => {
@@ -239,10 +241,11 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           },
         });
         this.turn.writer = writer;
+        this.turn.sendSignal = args.sendSignal;
         this.turn.requestContext = requestContext;
         await this.turn.start(this.memory);
         if (stepNumber === 0 && this.temporalMarkers) {
-          await insertTemporalGapMarkers({ messageList, writer });
+          await insertTemporalGapMarkers({ messageList, sendSignal: args.sendSignal });
         }
         state.__omTurn = this.turn;
       }
@@ -367,6 +370,17 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           await turn.end();
           this.turn = undefined;
           state.__omTurn = undefined;
+        } else {
+          // No turn exists — this happens during a resumed stream where input processors
+          // were skipped (isResume=true), so processInputStep never created a turn.
+          // Directly persist any new response messages so the final assistant text
+          // from the resumed turn is not lost.
+          const newOutput = messageList.get.response.db();
+          const newInput = messageList.get.input.db();
+          const messagesToSave = [...newInput, ...newOutput];
+          if (messagesToSave.length > 0 && context.threadId) {
+            await this.engine.persistMessages(messagesToSave, context.threadId, context.resourceId);
+          }
         }
 
         return messageList;

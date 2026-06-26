@@ -5,6 +5,8 @@ import type { DatasetRecord } from '../../storage/types';
 import { executeTarget } from './executor';
 import type { Target, ExecutionResult } from './executor';
 import { resolveScorers, resolveStepScorers, runScorersForItem, runStepScorersForItem } from './scorer';
+import { TOOL_MOCK_MISMATCH, TOOL_MOCK_EXHAUSTED } from './tool-mocks';
+import type { ItemToolMock } from './tool-mocks';
 import type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult } from './types';
 
 /** Unified item shape used within experiment execution (bridges inline + versioned data) */
@@ -15,6 +17,12 @@ type ExperimentItem = {
   groundTruth?: unknown;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
+  /** Resume data for suspended workflow steps, keyed by step ID */
+  resumeSteps?: Record<string, unknown>;
+  /** Flat resume data for single-step suspend workflows */
+  resumeData?: unknown;
+  /** Item-level static tool mocks (agent targets only) */
+  toolMocks?: ItemToolMock[];
 };
 
 // Re-export types and helpers
@@ -29,6 +37,16 @@ export type {
 } from './types';
 export { executeTarget, type Target, type ExecutionResult } from './executor';
 export { resolveScorers, runScorersForItem } from './scorer';
+export {
+  ToolMockMatcher,
+  TOOL_MOCK_MISMATCH,
+  TOOL_MOCK_EXHAUSTED,
+  type ItemToolMock,
+  type ToolMockMatchArgs,
+  type ToolMockReport,
+  type ToolMockResolution,
+  type ToolMockFailureCode,
+} from './tool-mocks';
 
 // Re-export analytics
 export * from './analytics';
@@ -118,7 +136,11 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           datasetVersion: null,
           input: dataItem.input,
           groundTruth: dataItem.groundTruth,
+          requestContext: dataItem.requestContext,
           metadata: dataItem.metadata,
+          resumeSteps: dataItem.resumeSteps,
+          resumeData: dataItem.resumeData,
+          toolMocks: dataItem.toolMocks,
         };
       });
       datasetVersion = null;
@@ -160,6 +182,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         groundTruth: v.groundTruth,
         requestContext: v.requestContext,
         metadata: v.metadata,
+        toolMocks: v.toolMocks,
       }));
     } else {
       throw new Error('No data source: provide datasetId or data');
@@ -213,6 +236,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           requestContext: mergedRequestContext,
           experimentId,
           versions,
+          toolMocks: targetType === 'agent' ? item.toolMocks : undefined,
         });
       };
     } else {
@@ -221,6 +245,19 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   } catch (err) {
     await markFailedOnSetupError(err);
     throw err; // unreachable, but satisfies TS control flow
+  }
+
+  // Tool mocks only apply to agent targets. If a dataset carrying toolMocks is reused
+  // against a task/workflow/scorer target, the mocks are silently ignored — warn once
+  // (not per item) so the misconfiguration is visible without log spam.
+  const itemsWithToolMocks = items.filter(item => item.toolMocks?.length).length;
+  if (targetType !== 'agent' && itemsWithToolMocks > 0) {
+    mastra
+      .getLogger()
+      ?.warn(
+        `Experiment target is "${config.task ? 'task' : targetType}" but ${itemsWithToolMocks} of ${items.length} dataset items declare toolMocks. ` +
+          `Tool mocks only apply to agent targets and will be ignored.`,
+      );
   }
 
   // Normalize categorized scorer config (AgentScorerConfig | WorkflowScorerConfig) to a flat
@@ -282,6 +319,8 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         targetId: targetId ?? 'inline',
         totalItems: items.length,
         agentVersion,
+        organizationId: datasetRecord?.organizationId ?? null,
+        projectId: datasetRecord?.projectId ?? null,
       });
     }
     // Update status to running (both sync and async paths)
@@ -332,6 +371,12 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           // Don't retry abort errors
           if (execResult.error.message.toLowerCase().includes('abort')) break;
 
+          // Don't retry deterministic tool-mock failures — the matcher state cannot
+          // change between attempts, so retrying would always fail identically.
+          if (execResult.error.code === TOOL_MOCK_MISMATCH || execResult.error.code === TOOL_MOCK_EXHAUSTED) {
+            break;
+          }
+
           retryCount++;
           const delay = Math.min(1000 * Math.pow(2, retryCount - 1), 30000);
           const jitter = delay * 0.2 * Math.random();
@@ -365,6 +410,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           startedAt: itemStartedAt,
           completedAt: itemCompletedAt,
           retryCount,
+          ...(execResult.toolMockReport ? { toolMockReport: execResult.toolMockReport } : {}),
         };
 
         // Run scorers (inline, after target completes)
@@ -423,6 +469,9 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
               completedAt: itemCompletedAt,
               retryCount,
               traceId: execResult.traceId,
+              organizationId: datasetRecord?.organizationId ?? null,
+              projectId: datasetRecord?.projectId ?? null,
+              ...(execResult.toolMockReport ? { toolMockReport: execResult.toolMockReport } : {}),
             });
           } catch (persistError) {
             console.warn(`Failed to persist result for item ${item.id}:`, persistError);

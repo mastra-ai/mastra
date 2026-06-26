@@ -1,7 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAI as createOpenAIV5 } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import type { ToolInvocationUIPart } from '@ai-sdk/ui-utils-v5';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
@@ -11,6 +10,7 @@ import { noopLogger } from '../../logger';
 import { MockMemory } from '../../memory/mock';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
+import type { MastraToolInvocationPart } from '../message-list/state/types';
 import { assertNoDuplicateParts } from '../test-utils';
 
 setupDummyApiKeys(getLLMTestMode(), ['openai']);
@@ -208,7 +208,7 @@ function saveAndErrorE2ETests(version: 'v1' | 'v2') {
         const toolResultIds = new Set(
           assistantMsg!.content.parts
             .filter(p => p.type === 'tool-invocation' && p.toolInvocation.state === 'result')
-            .map(p => (p as ToolInvocationUIPart).toolInvocation.toolCallId),
+            .map(p => (p as MastraToolInvocationPart).toolInvocation.toolCallId),
         );
         expect(assistantMsg!.content.toolInvocations?.length).toBe(toolResultIds.size);
       }, 500000);
@@ -287,7 +287,7 @@ function saveAndErrorE2ETests(version: 'v1' | 'v2') {
         const toolResultIds = new Set(
           assistantMsg!.content.parts
             .filter(p => p.type === 'tool-invocation' && p.toolInvocation.state === 'result')
-            .map(p => (p as ToolInvocationUIPart).toolInvocation.toolCallId),
+            .map(p => (p as MastraToolInvocationPart).toolInvocation.toolCallId),
         );
         expect(assistantMsg!.content.toolInvocations?.length).toBe(toolResultIds.size);
       }, 500000);

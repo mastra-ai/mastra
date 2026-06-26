@@ -5,7 +5,6 @@ import { APICallError, generateId } from '@internal/ai-sdk-v5';
 import type { CallSettings, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import type { StructuredOutputOptions } from '../../../agent';
 import type { MessageList } from '../../../agent/message-list';
-import type { CreatedAgentSignal } from '../../../agent/signals';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
 import { generateBackgroundTaskSystemPrompt } from '../../../background-tasks';
@@ -15,8 +14,9 @@ import { ModelRouterLanguageModel } from '../../../llm/model/router';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
-import { createObservabilityContext, SpanType } from '../../../observability';
-import type { ModelInferenceContext } from '../../../observability';
+import type { Mastra } from '../../../mastra';
+import { createObservabilityContext, EntityType, SpanType } from '../../../observability';
+import type { AnySpan, ModelInferenceContext, TracingContext } from '../../../observability';
 import { executeWithContextSync, getStepAvailableToolNames } from '../../../observability/utils';
 import type { CachedLLMStepResponse, InputProcessorOrWorkflow, ProcessorStreamWriter } from '../../../processors/index';
 import { isProcessorWorkflow } from '../../../processors/index';
@@ -43,10 +43,27 @@ import {
 } from '../../../tools/payload-transform';
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
 import type { ToolToConvert } from '../../../tools/tool-builder/builder';
-import { isMastraTool } from '../../../tools/toolchecks';
+import { getProviderToolName, isMastraTool, isProviderTool } from '../../../tools/toolchecks';
 import { makeCoreTool } from '../../../utils';
 import { createStep } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
+import type { RunScopeContext } from '../../run-scope-access';
+import { readScoped, writeScoped } from '../../run-scope-access';
+import {
+  AGENT_BACKGROUND_CONFIG_KEY,
+  BACKGROUND_TASK_MANAGER_KEY,
+  DRAIN_PENDING_SIGNALS_KEY,
+  GENERATE_ID_KEY,
+  INITIAL_SIGNAL_ECHOES_KEY,
+  MEMORY_KEY,
+  RESOURCE_ID_KEY,
+  STEP_ACTIVE_TOOLS_KEY,
+  STEP_TOOLS_KEY,
+  STEP_WORKSPACE_KEY,
+  THREAD_ID_KEY,
+  TOOL_PAYLOAD_TRANSFORM_KEY,
+  TRANSPORT_REF_KEY,
+} from '../../run-scope-keys';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
@@ -54,6 +71,21 @@ import { buildMessagesFromChunks } from './build-messages-from-chunks';
 import type { CollectedChunk } from './build-messages-from-chunks';
 import { resolveConfiguredToolCallConcurrency, updateToolCallForeachConcurrency } from './tool-call-concurrency';
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
+
+/**
+ * Finish reasons that terminate the agentic loop. The loop must NOT continue on
+ * any of these, otherwise it re-sends the same request and spins until maxSteps
+ * (or forever when maxSteps is unset).
+ *
+ * - `stop`: the model finished normally.
+ * - `error`: the model stream failed.
+ * - `length`: the model hit max_tokens; retrying reproduces the truncation
+ *   (issue #15717).
+ * - `content-filter`: a classifier block / model refusal (e.g. `claude-fable-5`
+ *   surfaced by the AI SDK as `content-filter`). Retrying re-triggers the same
+ *   refusal, so the run would hang indefinitely.
+ */
+const TERMINAL_FINISH_REASONS = ['stop', 'error', 'length', 'content-filter'];
 
 function getRequestInputProcessors({
   inputProcessors,
@@ -84,7 +116,6 @@ function getRequestInputProcessors({
 
 type ProcessOutputStreamResult = {
   collectedChunks: CollectedChunk[];
-  interjectedSignals: CreatedAgentSignal[];
 };
 
 type ProcessOutputStreamOptions<OUTPUT = undefined> = {
@@ -103,20 +134,104 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
     rawResponse: any;
   };
   logger?: IMastraLogger;
-  drainPendingSignals?: (runId: string) => CreatedAgentSignal[];
   transportRef?: StreamTransportRef;
   transportResolver?: () => StreamTransport | undefined;
   toolPayloadTransform?: NonNullable<OuterLLMRun['_internal']>['toolPayloadTransform'];
+  /**
+   * Mastra instance reference. Used to look up the client tool
+   * observability ingest implementation when emitting tool-call chunks
+   * for client-side tools, so we can attach a W3C trace context carrier
+   * the client SDK can extract.
+   */
+  mastra?: Mastra;
+  /** Active tracing context. Parent of any CLIENT_TOOL_CALL spans we create. */
+  tracingContext?: TracingContext;
 };
+
+type ToolResolvers = {
+  resolveTool: (toolName: string) => ToolSet[string] | undefined;
+  resolveDirectOrProviderTool: (toolName: string) => ToolSet[string] | undefined;
+  resolveDirectOrIdTool: (toolName: string) => ToolSet[string] | undefined;
+};
+
+function createToolResolvers(tools?: ToolSet): ToolResolvers {
+  let providerToolsByName: Map<string, ToolSet[string]> | undefined;
+  let toolsById: Map<string, ToolSet[string]> | undefined;
+
+  const ensureToolIndexes = () => {
+    if (providerToolsByName && toolsById) {
+      return;
+    }
+
+    const nextProviderToolsByName = new Map<string, ToolSet[string]>();
+    const nextToolsById = new Map<string, ToolSet[string]>();
+
+    for (const tool of Object.values(tools || {})) {
+      if (!tool || typeof tool !== 'object') {
+        continue;
+      }
+
+      if (isProviderTool(tool)) {
+        const providerToolName = getProviderToolName(tool.id);
+        if (!nextProviderToolsByName.has(providerToolName)) {
+          nextProviderToolsByName.set(providerToolName, tool);
+        }
+
+        const explicitProviderName = (tool as { name?: unknown }).name;
+        if (typeof explicitProviderName === 'string' && !nextProviderToolsByName.has(explicitProviderName)) {
+          nextProviderToolsByName.set(explicitProviderName, tool);
+        }
+      }
+
+      const toolId = (tool as { id?: unknown }).id;
+      if (typeof toolId === 'string' && !nextToolsById.has(toolId)) {
+        nextToolsById.set(toolId, tool);
+      }
+    }
+
+    providerToolsByName = nextProviderToolsByName;
+    toolsById = nextToolsById;
+  };
+
+  const resolveDirectOrProviderTool = (toolName: string) => {
+    const directTool = tools?.[toolName];
+    if (directTool) {
+      return directTool;
+    }
+    ensureToolIndexes();
+    return providerToolsByName?.get(toolName);
+  };
+  const resolveDirectOrIdTool = (toolName: string) => {
+    const directTool = tools?.[toolName];
+    if (directTool) {
+      return directTool;
+    }
+    ensureToolIndexes();
+    return toolsById?.get(toolName);
+  };
+
+  return {
+    resolveTool: toolName => {
+      const tool = resolveDirectOrProviderTool(toolName);
+      if (tool) {
+        return tool;
+      }
+      ensureToolIndexes();
+      return toolsById?.get(toolName);
+    },
+    resolveDirectOrProviderTool,
+    resolveDirectOrIdTool,
+  };
+}
 
 async function addToolPayloadTransformToChunk<OUTPUT>(
   chunk: ChunkType<OUTPUT>,
   {
-    tools,
+    resolveTool,
     policy,
     logger,
   }: {
-    tools?: ToolSet;
+    resolveTool: ToolResolvers['resolveTool'];
     policy?: NonNullable<OuterLLMRun['_internal']>['toolPayloadTransform'];
     logger?: IMastraLogger;
   },
@@ -132,10 +247,7 @@ async function addToolPayloadTransformToChunk<OUTPUT>(
     return chunk;
   }
 
-  const tool =
-    tools?.[toolName] ||
-    findProviderToolByName(tools, toolName) ||
-    Object.values(tools || {}).find((candidate: any) => `id` in candidate && candidate.id === toolName);
+  const tool = resolveTool(toolName);
   const source = {
     policy,
     toolTransform: (tool as { transform?: unknown } | undefined)?.transform as any,
@@ -315,14 +427,125 @@ async function processOutputStream<OUTPUT = undefined>({
   responseFromModel,
   includeRawChunks,
   logger,
-  runId,
-  drainPendingSignals,
   transportRef,
   transportResolver,
   toolPayloadTransform,
+  mastra,
+  tracingContext,
 }: ProcessOutputStreamOptions<OUTPUT>): Promise<ProcessOutputStreamResult> {
   let transportSet = false;
   const collectedChunks: CollectedChunk[] = [];
+  const { resolveTool, resolveDirectOrProviderTool, resolveDirectOrIdTool } = createToolResolvers(tools);
+  const clientToolArgsTextByToolCallId = new Map<string, string[]>();
+  const clientToolObservabilityByToolCallId = new Map<
+    string,
+    {
+      carrier: unknown;
+      span: AnySpan;
+      ended: boolean;
+    }
+  >();
+
+  const endClientToolObservabilitySpan = (toolCallId: string, args?: unknown): void => {
+    const entry = clientToolObservabilityByToolCallId.get(toolCallId);
+    if (!entry || entry.ended) {
+      clientToolArgsTextByToolCallId.delete(toolCallId);
+      return;
+    }
+
+    entry.span.end(args !== undefined ? { metadata: { args } } : undefined);
+    entry.ended = true;
+    clientToolArgsTextByToolCallId.delete(toolCallId);
+  };
+
+  const parseClientToolArgsFromDeltas = (toolCallId: string): unknown | undefined => {
+    const deltas = clientToolArgsTextByToolCallId.get(toolCallId);
+    if (!deltas?.length) {
+      return undefined;
+    }
+
+    const input = deltas.join('');
+    if (!input) {
+      return undefined;
+    }
+
+    try {
+      return JSON.parse(input);
+    } catch {
+      return undefined;
+    }
+  };
+
+  const injectClientToolObservability = ({
+    toolCallId,
+    toolName,
+    args,
+    providerExecuted,
+    payload,
+  }: {
+    toolCallId: string;
+    toolName: string;
+    args?: unknown;
+    providerExecuted?: boolean;
+    payload: Record<string, unknown> & { observability?: unknown };
+  }) => {
+    const toolDef = resolveDirectOrProviderTool(toolName);
+    const inferredProviderExecuted = inferProviderExecuted(providerExecuted, toolDef);
+    const isClientTool = !inferredProviderExecuted && !(toolDef as { execute?: unknown } | undefined)?.execute;
+
+    if (!isClientTool || !mastra || !tracingContext?.currentSpan) {
+      return { toolDef, inferredProviderExecuted };
+    }
+
+    const existingCarrier = clientToolObservabilityByToolCallId.get(toolCallId);
+    if (existingCarrier) {
+      payload.observability = existingCarrier.carrier;
+      if (args !== undefined) {
+        endClientToolObservabilitySpan(toolCallId, args);
+      }
+      return { toolDef, inferredProviderExecuted };
+    }
+
+    const proxy = mastra.observability?.getClientObservabilityProxy?.();
+    if (!proxy) {
+      return { toolDef, inferredProviderExecuted };
+    }
+
+    try {
+      const parentSpan =
+        tracingContext.currentSpan.type === SpanType.AGENT_RUN
+          ? tracingContext.currentSpan
+          : (tracingContext.currentSpan.findParent(SpanType.AGENT_RUN) ?? tracingContext.currentSpan);
+      const clientToolSpan = parentSpan.createChildSpan({
+        type: SpanType.CLIENT_TOOL_CALL,
+        name: `client_tool: '${toolName}'`,
+        entityType: EntityType.TOOL,
+        entityId: toolName,
+        entityName: toolName,
+        attributes: {
+          toolDescription: (toolDef as { description?: string } | undefined)?.description,
+          toolType: 'client-tool',
+        },
+        ...(args !== undefined ? { input: args } : {}),
+      });
+      if (clientToolSpan) {
+        const carrier = proxy.inject(clientToolSpan);
+        const entry = { carrier, span: clientToolSpan, ended: false };
+        clientToolObservabilityByToolCallId.set(toolCallId, entry);
+        payload.observability = carrier;
+        if (args !== undefined) {
+          endClientToolObservabilitySpan(toolCallId, args);
+        }
+      }
+    } catch (err) {
+      logger?.warn?.('[ClientObservabilityProxy] failed to create CLIENT_TOOL_CALL span', {
+        error: err instanceof Error ? err.message : String(err),
+        toolName,
+      });
+    }
+
+    return { toolDef, inferredProviderExecuted };
+  };
 
   for await (let chunk of outputStream._getBaseStream()) {
     // Stop processing chunks if the abort signal has fired.
@@ -350,18 +573,41 @@ async function processOutputStream<OUTPUT = undefined>({
       continue;
     }
 
-    if (['tool-call', 'tool-call-input-streaming-start'].includes(chunk.type)) {
-      const interjectedSignals = drainPendingSignals?.(runId) ?? [];
-      if (interjectedSignals.length > 0) {
-        return { collectedChunks, interjectedSignals };
-      }
-    }
-
     chunk = await addToolPayloadTransformToChunk(chunk, {
-      tools,
+      resolveTool,
       policy: toolPayloadTransform,
       logger,
     });
+
+    let toolInputStartToolDef: ToolSet[string] | undefined;
+    if (chunk.type === 'tool-call-input-streaming-start') {
+      ({ toolDef: toolInputStartToolDef } = injectClientToolObservability({
+        toolCallId: chunk.payload.toolCallId,
+        toolName: chunk.payload.toolName,
+        providerExecuted: chunk.payload.providerExecuted,
+        payload: chunk.payload as unknown as Record<string, unknown> & { observability?: unknown },
+      }));
+    } else if (chunk.type === 'tool-call-delta') {
+      const toolCallId = chunk.payload.toolCallId;
+      if (toolCallId && chunk.payload.argsTextDelta) {
+        const deltas = clientToolArgsTextByToolCallId.get(toolCallId) ?? [];
+        deltas.push(chunk.payload.argsTextDelta);
+        clientToolArgsTextByToolCallId.set(toolCallId, deltas);
+      }
+    } else if (chunk.type === 'tool-call-input-streaming-end') {
+      const parsedArgs = parseClientToolArgsFromDeltas(chunk.payload.toolCallId);
+      if (parsedArgs !== undefined) {
+        endClientToolObservabilitySpan(chunk.payload.toolCallId, parsedArgs);
+      }
+    } else if (chunk.type === 'tool-call') {
+      injectClientToolObservability({
+        toolCallId: chunk.payload.toolCallId,
+        toolName: chunk.payload.toolName,
+        args: chunk.payload.args,
+        providerExecuted: chunk.payload.providerExecuted,
+        payload: chunk.payload as unknown as Record<string, unknown> & { observability?: unknown },
+      });
+    }
 
     // Collect every chunk for post-stream message building
     collectedChunks.push({
@@ -383,9 +629,7 @@ async function processOutputStream<OUTPUT = undefined>({
         break;
 
       case 'tool-call-input-streaming-start': {
-        const tool =
-          tools?.[chunk.payload.toolName] ||
-          Object.values(tools || {})?.find(tool => `id` in tool && tool.id === chunk.payload.toolName);
+        const tool = toolInputStartToolDef || resolveDirectOrIdTool(chunk.payload.toolName);
 
         if (tool && 'onInputStart' in tool) {
           try {
@@ -404,9 +648,7 @@ async function processOutputStream<OUTPUT = undefined>({
       }
 
       case 'tool-call-delta': {
-        const tool =
-          tools?.[chunk.payload.toolName || ''] ||
-          Object.values(tools || {})?.find(tool => `id` in tool && tool.id === chunk.payload.toolName);
+        const tool = chunk.payload.toolName ? resolveDirectOrIdTool(chunk.payload.toolName) : undefined;
 
         if (tool && 'onInputDelta' in tool) {
           try {
@@ -434,7 +676,7 @@ async function processOutputStream<OUTPUT = undefined>({
             totalUsage: chunk.payload.totalUsage,
             headers: responseFromModel.rawResponse?.headers,
             messageId,
-            isContinued: !['stop', 'error', 'length'].includes(chunk.payload.stepResult.reason),
+            isContinued: !TERMINAL_FINISH_REASONS.includes(chunk.payload.stepResult.reason),
             request: responseFromModel.request,
           },
         });
@@ -475,8 +717,7 @@ async function processOutputStream<OUTPUT = undefined>({
         // For same-stream results (call + result in one step), no matching part exists yet
         // so updateToolInvocation returns false — buildMessagesFromChunks handles the merge.
         if (chunk.payload.result != null) {
-          const resultToolDef =
-            tools?.[chunk.payload.toolName] || findProviderToolByName(tools, chunk.payload.toolName);
+          const resultToolDef = resolveDirectOrProviderTool(chunk.payload.toolName);
           messageList.updateToolInvocation({
             type: 'tool-invocation',
             toolInvocation: {
@@ -494,6 +735,10 @@ async function processOutputStream<OUTPUT = undefined>({
         break;
       }
 
+      case 'tool-call': {
+        safeEnqueue(controller, chunk);
+        break;
+      }
       default:
         safeEnqueue(controller, chunk);
     }
@@ -520,19 +765,18 @@ async function processOutputStream<OUTPUT = undefined>({
     if (runState.state.hasErrored) {
       break;
     }
-
-    // Drain signals only at stream boundaries so follow-ups do not split visible assistant text
-    // or separate a tool call from its result. Tool calls are handled before enqueueing so
-    // an interjection can cancel a not-yet-visible tool call from the current step.
-    if (['text-end', 'reasoning-end', 'tool-result', 'finish'].includes(chunk.type)) {
-      const interjectedSignals = drainPendingSignals?.(runId) ?? [];
-      if (interjectedSignals.length > 0) {
-        return { collectedChunks, interjectedSignals };
-      }
-    }
   }
 
-  return { collectedChunks, interjectedSignals: [] };
+  for (const [toolCallId, entry] of clientToolObservabilityByToolCallId.entries()) {
+    if (!entry.ended) {
+      const parsedArgs = parseClientToolArgsFromDeltas(toolCallId);
+      entry.span.end(parsedArgs !== undefined ? { metadata: { args: parsedArgs } } : undefined);
+      entry.ended = true;
+    }
+  }
+  clientToolArgsTextByToolCallId.clear();
+
+  return { collectedChunks };
 }
 
 function executeStreamWithFallbackModels<T>(
@@ -615,8 +859,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   maxProcessorRetries,
   workspace,
   outputWriter,
+  mastra,
+  rotateResponseMessageId: rotateLoopResponseMessageId,
 }: OuterLLMRun<TOOLS, OUTPUT> & { toolCallForeachOptions?: ToolCallForeachOptions }) {
-  const initialSystemMessages = messageList.getAllSystemMessages();
+  const initialUntaggedSystemMessages = messageList.getSystemMessages();
   const configuredToolCallConcurrency = resolveConfiguredToolCallConcurrency(toolCallConcurrency);
 
   let currentIteration = 0;
@@ -627,6 +873,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
     outputSchema: llmIterationOutputSchema,
     execute: async ({ inputData, bail, tracingContext }) => {
       currentIteration++;
+      // Resolve run-scoped state from either the Mastra-managed RunScope or
+      // the legacy `_internal` bag (back-compat for tests).
+      const scopeCtx: RunScopeContext = { mastra, runId, _internal };
 
       // Insert a step-start boundary between loop iterations so that
       // consecutive tool-only turns are not collapsed into a single block
@@ -678,29 +927,37 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               },
             });
           }
-          // Reset system messages to original before each step execution
-          // This ensures that system message modifications in prepareStep/processInputStep/processors
-          // don't persist across steps - each step starts fresh with original system messages
-          if (initialSystemMessages) {
-            messageList.replaceAllSystemMessages(initialSystemMessages);
+          // Reset the mutable untagged bucket before each step execution. Tagged
+          // processor-owned buckets remain on messageList and are assembled later.
+          if (initialUntaggedSystemMessages) {
+            messageList.replaceAllSystemMessages(initialUntaggedSystemMessages);
           }
 
           if (inputData.processorRetryFeedback) {
             messageList.addSystem(inputData.processorRetryFeedback, 'processor-retry-feedback');
           }
 
-          const initialSignalEchoes = _internal?.initialSignalEchoes?.splice(0) ?? [];
+          const initialSignalEchoes =
+            readScoped(scopeCtx, INITIAL_SIGNAL_ECHOES_KEY, 'initialSignalEchoes')?.splice(0) ?? [];
           for (const initialSignal of initialSignalEchoes) {
             safeEnqueue(controller, initialSignal.toDataPart());
           }
 
-          const pendingSignals = _internal?.drainPendingSignals?.(runId) ?? [];
-          if (pendingSignals.length > 0) {
-            currentMessageId = _internal?.generateId?.() ?? generateId();
-          }
-          for (const pendingSignal of pendingSignals) {
-            messageList.add(pendingSignal, 'input');
-            safeEnqueue(controller, pendingSignal.toDataPart());
+          const shouldDrainBeforeFirstModelRequest = (inputData.output?.steps?.length ?? 0) === 0;
+          if (shouldDrainBeforeFirstModelRequest) {
+            // Pre-run signals were queued before this run made its first model
+            // request — fold them into it. Signals sent to an already-active run
+            // use the default scope and are drained later by `signalDrainStep`
+            // so each becomes its own turn.
+            const preRunSignals =
+              readScoped(scopeCtx, DRAIN_PENDING_SIGNALS_KEY, 'drainPendingSignals')?.(runId, 'pre-run') ?? [];
+            if (preRunSignals.length > 0) {
+              currentMessageId = rotateLoopResponseMessageId();
+            }
+            for (const preRunSignal of preRunSignals) {
+              const signalForTranscript = messageList.addSignal(preRunSignal);
+              safeEnqueue(controller, signalForTranscript.toDataPart());
+            }
           }
 
           const currentStep: {
@@ -719,13 +976,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             tools,
             toolChoice,
             activeTools,
-            providerOptions,
+            providerOptions: mergeProviderOptions(providerOptions, modelConfig.providerOptions),
             modelSettings,
             structuredOutput,
             workspace,
           };
           const rotateResponseMessageId = () => {
-            currentMessageId = _internal?.generateId?.() ?? generateId();
+            currentMessageId = readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? generateId();
             currentStep.messageId = currentMessageId;
             return currentMessageId;
           };
@@ -763,6 +1020,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 stepNumber: inputData.output?.steps?.length || 0,
                 ...createObservabilityContext(stepTracingContext),
                 requestContext,
+                memory: readScoped(scopeCtx, MEMORY_KEY, 'memory'),
+                resourceId: readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId'),
+                threadId: readScoped(scopeCtx, THREAD_ID_KEY, 'threadId'),
                 model,
                 steps: inputData.output?.steps || [],
                 messageId: currentStep.messageId,
@@ -770,9 +1030,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 tools,
                 toolChoice,
                 activeTools: activeTools as string[] | undefined,
-                providerOptions,
-                modelSettings,
-                structuredOutput,
+                providerOptions: currentStep.providerOptions,
+                modelSettings: currentStep.modelSettings,
+                structuredOutput: currentStep.structuredOutput,
                 retryCount: inputData.processorRetryCount || 0,
                 writer: inputStepWriter,
                 abortSignal: options?.abortSignal,
@@ -835,8 +1095,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                       {
                         name,
                         runId,
-                        threadId: _internal?.threadId,
-                        resourceId: _internal?.resourceId,
+                        threadId: readScoped(scopeCtx, THREAD_ID_KEY, 'threadId'),
+                        resourceId: readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId'),
                         logger,
                         agentName: agentId,
                         requestContext: requestContext || new RequestContext(),
@@ -878,10 +1138,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             }
           }
 
-          // Store activeTools on _internal so toolCallStep can enforce them
-          if (_internal) {
-            _internal.stepActiveTools = currentStep.activeTools as string[] | undefined;
-          }
+          // Publish activeTools to the run scope so toolCallStep can enforce them.
+          writeScoped(
+            scopeCtx,
+            STEP_ACTIVE_TOOLS_KEY,
+            'stepActiveTools',
+            currentStep.activeTools as string[] | undefined,
+          );
 
           if (toolCallForeachOptions) {
             updateToolCallForeachConcurrency(toolCallForeachOptions, {
@@ -915,7 +1178,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             downloadConcurrency,
             supportedUrls: resolvedSupportedUrls,
           };
-          let inputMessages = await messageList.get.all.aiV5.llmPrompt(messageListPromptArgs);
+          const llmPromptForModel =
+            currentStep.model?.specificationVersion === 'v3' || currentStep.model?.specificationVersion === 'v4'
+              ? messageList.get.all.aiV6.llmPrompt
+              : messageList.get.all.aiV5.llmPrompt;
+          let inputMessages = await llmPromptForModel(messageListPromptArgs);
 
           if (autoResumeSuspendedTools) {
             const messages = messageList.get.all.db();
@@ -981,8 +1248,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             }
           }
 
-          if (_internal?.backgroundTaskManager && currentStep.tools) {
-            const bgPrompt = generateBackgroundTaskSystemPrompt(currentStep.tools, _internal?.agentBackgroundConfig);
+          if (readScoped(scopeCtx, BACKGROUND_TASK_MANAGER_KEY, 'backgroundTaskManager') && currentStep.tools) {
+            const bgPrompt = generateBackgroundTaskSystemPrompt(
+              currentStep.tools,
+              readScoped(scopeCtx, AGENT_BACKGROUND_CONFIG_KEY, 'agentBackgroundConfig'),
+            );
             inputMessages = inputMessages.map((message, index) => {
               if (message.role === 'system' && index === 0) {
                 message.content = message.content + `\n\n${bgPrompt}`;
@@ -1083,9 +1353,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 ...currentStep.modelSettings,
                 ...modelConfig.modelSettings,
               } as Record<string, unknown> | undefined,
-              providerOptions: mergeProviderOptions(currentStep.providerOptions, modelConfig.providerOptions) as
-                | Record<string, unknown>
-                | undefined,
+              providerOptions: currentStep.providerOptions as Record<string, unknown> | undefined,
               availableTools: getStepAvailableToolNames(
                 currentStep.tools as Record<string, unknown> | undefined,
                 currentStep.activeTools as readonly string[] | undefined,
@@ -1101,8 +1369,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 execute({
                   runId,
                   model: currentStep.model,
-                  // Per-model providerOptions deep-merge per provider key on top of call-time providerOptions
-                  providerOptions: mergeProviderOptions(currentStep.providerOptions, modelConfig.providerOptions),
+                  providerOptions: currentStep.providerOptions,
                   inputMessages,
                   tools: currentStep.tools,
                   toolChoice: currentStep.toolChoice,
@@ -1121,8 +1388,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                   // x-thread-id / x-resource-id enable server-side memory enrichment (e.g. Memory Gateway)
                   headers: (() => {
                     const memoryHeaders: Record<string, string> = {};
-                    if (_internal?.threadId) memoryHeaders['x-thread-id'] = _internal.threadId;
-                    if (_internal?.resourceId) memoryHeaders['x-resource-id'] = _internal.resourceId;
+                    const tid = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
+                    const rid = readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId');
+                    if (tid) memoryHeaders['x-thread-id'] = tid;
+                    if (rid) memoryHeaders['x-resource-id'] = rid;
                     const merged = {
                       ...memoryHeaders,
                       ...modelHeaders,
@@ -1131,7 +1400,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                     return Object.keys(merged).length > 0 ? merged : undefined;
                   })(),
                   methodType,
-                  generateId: _internal?.generateId,
+                  generateId: readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId'),
                   onResult: ({
                     warnings: warningsFromStream,
                     request: requestFromStream,
@@ -1148,7 +1417,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                       messageId: currentStep.messageId,
                     });
 
-                    safeEnqueue(controller, {
+                    return {
                       runId,
                       from: ChunkFrom.AGENT,
                       type: 'step-start',
@@ -1157,7 +1426,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                         warnings: warnings || [],
                         messageId: currentStep.messageId,
                       },
-                    });
+                    };
                   },
                   shouldThrowError: !isLastModel,
                 }),
@@ -1199,7 +1468,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
 
           try {
-            const { collectedChunks, interjectedSignals } = await processOutputStream({
+            const { collectedChunks } = await processOutputStream({
               outputStream,
               includeRawChunks,
               tools: currentStep.tools,
@@ -1215,10 +1484,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 rawResponse,
               },
               logger,
-              drainPendingSignals: _internal?.drainPendingSignals,
-              transportRef: _internal?.transportRef,
+              transportRef: readScoped(scopeCtx, TRANSPORT_REF_KEY, 'transportRef'),
               transportResolver,
-              toolPayloadTransform: _internal?.toolPayloadTransform,
+              toolPayloadTransform: readScoped(scopeCtx, TOOL_PAYLOAD_TRANSFORM_KEY, 'toolPayloadTransform'),
+              mastra,
+              tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
             });
 
             // Build messages from the full chunk sequence and add to messageList.
@@ -1232,22 +1502,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             });
             for (const msg of builtMessages) {
               messageList.add(msg, 'response');
-            }
-
-            if (interjectedSignals.length > 0) {
-              messageList.markResponseMessageBoundary(currentStep.messageId);
-              outputStream.messageId = rotateResponseMessageId();
-              for (const signal of interjectedSignals) {
-                messageList.add(signal, 'input');
-                safeEnqueue(controller, signal.toDataPart());
-              }
-              runState.setState({
-                stepResult: {
-                  reason: 'other',
-                  messageId: currentMessageId,
-                  isContinued: true,
-                },
-              });
             }
 
             // Apply structuredOutput metadata to the assistant message.
@@ -1402,7 +1656,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 abortSignal: options?.abortSignal,
                 messageId: currentMessageId,
                 rotateResponseMessageId: () => {
-                  currentMessageId = _internal?.generateId?.() ?? generateId();
+                  currentMessageId = readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? generateId();
                   // Keep the active output stream in sync so bail/retry paths
                   // below report the rotated id instead of the stale one, and so
                   // any subsequent chunks the stream writes itself use the new id.
@@ -1462,11 +1716,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         messageList.enrichLastStepStart(executedStepModel);
       }
 
-      // Store modified tools and workspace in _internal so toolCallStep can access them
-      // without going through workflow serialization (which would lose execute functions)
-      if (_internal) {
-        _internal.stepTools = stepTools;
-        _internal.stepWorkspace = stepWorkspace ?? _internal.stepWorkspace;
+      // Publish modified tools/workspace to the run scope so toolCallStep can read them
+      // without going through workflow serialization (which would lose execute functions).
+      writeScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools', stepTools);
+      const existingWorkspace = stepWorkspace ?? readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace');
+      if (existingWorkspace !== undefined) {
+        writeScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace', existingWorkspace);
       }
 
       if (callBail) {
@@ -1539,7 +1794,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           abortSignal: options?.abortSignal,
           messageId: currentMessageId,
           rotateResponseMessageId: () => {
-            currentMessageId = _internal?.generateId?.() ?? generateId();
+            currentMessageId = readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? generateId();
             // Keep the active output stream in sync so the retry payload and
             // any downstream chunks use the rotated id.
             outputStream.messageId = currentMessageId;
@@ -1676,6 +1931,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             messageList,
             stepNumber,
             finishReason: immediateFinishReason,
+            providerMetadata: outputStream._getImmediateProviderMetadata(),
             toolCalls: toolCallInfos.length > 0 ? toolCallInfos : undefined,
             text: immediateText,
             usage: outputStream._getImmediateUsage(),
@@ -1805,10 +2061,21 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // excluded 'length' from shouldContinue; this guard prevents hasPendingToolCalls from
       // inadvertently re-enabling it.
       // See: https://github.com/mastra-ai/mastra/issues/15717
-      const hasPendingToolCalls = toolCalls && toolCalls.some(tc => !tc.providerExecuted) && finishReason !== 'length';
+      // `error` failures, `length` truncation, and `content-filter` refusals
+      // must never be overridden by a pending tool call: retrying re-sends the
+      // same request (reproducing the failure/truncation, or re-triggering the
+      // same refusal) and the loop spins until maxSteps — or forever when
+      // maxSteps is unset. Note we deliberately do NOT exclude `stop` here:
+      // some models return finishReason='stop' alongside tool calls, which the
+      // loop must process.
+      const hasPendingToolCalls =
+        toolCalls &&
+        toolCalls.some(tc => !tc.providerExecuted) &&
+        finishReason !== 'error' &&
+        finishReason !== 'length' &&
+        finishReason !== 'content-filter';
       const shouldContinue =
-        shouldRetry ||
-        (!tripwireTriggered && (hasPendingToolCalls || !['stop', 'error', 'length'].includes(finishReason)));
+        shouldRetry || (!tripwireTriggered && (hasPendingToolCalls || !TERMINAL_FINISH_REASONS.includes(finishReason)));
 
       // Reset retry count after a successful non-retry step; only consecutive retries carry forward.
       const nextProcessorRetryCount = shouldRetry ? currentProcessorRetryCount + 1 : 0;

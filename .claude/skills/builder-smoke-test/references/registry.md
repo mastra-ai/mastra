@@ -23,7 +23,7 @@ curl -s "$BASE/editor/builder/registries" | jq .
 ```
 
 - [ ] If enabled: `[{ id: 'skills-sh', enabled: true, label: '...' }]`
-- [ ] If disabled: empty array or omitted entry
+- [ ] If disabled: the entry is still present with `enabled: false` (e.g. `[{ id: 'skills-sh', enabled: false }]`) — the registry is listed but not callable. Search/popular/preview/install on a disabled registry return `404` (`Registry not found`).
 
 ### 2. Search
 

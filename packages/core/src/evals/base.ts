@@ -2,16 +2,19 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../agent';
 import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } from '../agent/message-list';
-import { tryGenerateWithJsonFallback } from '../agent/utils';
+import type { AgentMemoryOption, ToolsInput } from '../agent/types';
+import { tryStreamWithJsonFallback } from '../agent/utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { resolveModelConfig } from '../llm/model/resolve-model';
 import type { MastraModelConfig } from '../llm/model/shared.types';
 import { noopLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import type { MastraMemory } from '../memory/memory';
 import {
   createObservabilityContext,
   EntityType,
   getOrCreateSpan,
+  InternalSpans,
   resolveObservabilityContext,
   SpanType,
 } from '../observability';
@@ -28,7 +31,8 @@ import { executeWithContext } from '../observability/utils';
 import { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
-import { createWorkflow, createStep } from '../workflows/workflow';
+import { createWorkflow } from '../workflows/create';
+import { createStep } from '../workflows/workflow';
 import type {
   ScoringSamplingConfig,
   ScorerRunInputForAgent,
@@ -55,6 +59,34 @@ type ScorerTypeShortcuts = {
   };
 };
 
+/**
+ * LLM-as-judge configuration for a scorer (or an individual scorer step).
+ *
+ * When `tools` is provided, the internal judge agent can call them before
+ * producing its score/output — e.g. a goal judge that inspects the workspace
+ * with readonly tools to independently verify the agent's claims, rather than
+ * grading text alone. Tools run in the judge agent's own tool-call loop and the
+ * judge still returns the step's structured output at the end.
+ */
+export interface ScorerJudgeConfig {
+  model: MastraModelConfig;
+  instructions: string;
+  jsonPromptInjection?: boolean;
+  /** Optional tools the judge agent may call while evaluating (e.g. readonly verification tools). */
+  tools?: ToolsInput;
+  /** Optional memory instance for the internal judge agent. */
+  memory?: MastraMemory;
+  /** Default memory options passed to the internal judge agent run. */
+  defaultMemoryOptions?: AgentMemoryOption;
+  /** Optional callback for observing the internal judge agent stream as soon as it starts. */
+  onStream?: (stream: Awaited<ReturnType<Agent['stream']>>) => void | Promise<void>;
+}
+
+export type ScorerStepJudgeConfig = Omit<ScorerJudgeConfig, 'memory' | 'defaultMemoryOptions'> & {
+  /** Per-step memory options merged onto scorer-level `judge.defaultMemoryOptions`. */
+  memory?: AgentMemoryOption;
+};
+
 // Pipeline scorer
 // TInput and TRunOutput establish the type contract for the entire scorer pipeline,
 // ensuring type safety flows through all steps and contexts
@@ -62,10 +94,7 @@ interface ScorerConfig<TID extends string, TInput = any, TRunOutput = any> {
   id: TID;
   name?: string;
   description: string;
-  judge?: {
-    model: MastraModelConfig;
-    instructions: string;
-  };
+  judge?: ScorerJudgeConfig;
   // Optional type specification - can be enum shortcut or explicit schemas
   type?:
     | keyof ScorerTypeShortcuts
@@ -151,10 +180,7 @@ interface PromptObject<
    * The TOutput generic is inferred from this schema's output type.
    */
   outputSchema: PublicSchema<TOutput>;
-  judge?: {
-    model: MastraModelConfig;
-    instructions: string;
-  };
+  judge?: ScorerStepJudgeConfig;
 
   // Support both sync and async createPrompt
   createPrompt: (context: PromptObjectContext<TAccumulated, TStepName, TInput, TRunOutput>) => string | Promise<string>;
@@ -230,10 +256,7 @@ type GenerateScoreFunctionStep<TAccumulated extends Record<string, any>, TInput,
 // Special prompt object type for generateScore that always returns a number
 interface GenerateScorePromptObject<TAccumulated extends Record<string, any>, TInput, TRunOutput> {
   description: string;
-  judge?: {
-    model: MastraModelConfig;
-    instructions: string;
-  };
+  judge?: ScorerStepJudgeConfig;
   // Support both sync and async createPrompt
   createPrompt: (context: StepContext<TAccumulated, TInput, TRunOutput>) => string | Promise<string>;
 }
@@ -241,10 +264,7 @@ interface GenerateScorePromptObject<TAccumulated extends Record<string, any>, TI
 // Special prompt object type for generateReason that always returns a string
 interface GenerateReasonPromptObject<TAccumulated extends Record<string, any>, TInput, TRunOutput> {
   description: string;
-  judge?: {
-    model: MastraModelConfig;
-    instructions: string;
-  };
+  judge?: ScorerStepJudgeConfig;
   // Support both sync and async createPrompt
   createPrompt: (context: GenerateReasonContext<TAccumulated, TInput, TRunOutput>) => string | Promise<string>;
 }
@@ -796,6 +816,14 @@ class MastraScorer<
       }),
       options: {
         validateInputs: false,
+        // The scorer pipeline is mastra-owned plumbing — only the SCORER_RUN
+        // span (created in run()) is user-facing. Mark all workflow spans as
+        // internal so they're hidden from exported traces by default. Any
+        // user-defined agents/tools/models invoked from a scorer step keep
+        // their own tracing policy and stay visible.
+        tracingPolicy: {
+          internal: InternalSpans.WORKFLOW,
+        },
       },
     });
 
@@ -840,6 +868,24 @@ class MastraScorer<
     const prompt = await originalStep.createPrompt(context);
     const modelConfig = originalStep.judge?.model ?? this.config.judge?.model;
     const instructions = originalStep.judge?.instructions ?? this.config.judge?.instructions;
+    const jsonPromptInjection = originalStep.judge?.jsonPromptInjection ?? this.config.judge?.jsonPromptInjection;
+    // Step-level tools override scorer-level tools. When present, the judge agent
+    // can call them (in its own tool-call loop) before producing the step output.
+    const tools = originalStep.judge?.tools ?? this.config.judge?.tools;
+    const memory = this.config.judge?.memory;
+    const defaultMemoryOptions = this.config.judge?.defaultMemoryOptions;
+    const stepMemoryOptions = originalStep.judge?.memory;
+    const onStream = originalStep.judge?.onStream ?? this.config.judge?.onStream;
+    const memoryOptions = stepMemoryOptions
+      ? {
+          ...defaultMemoryOptions,
+          ...stepMemoryOptions,
+          options:
+            defaultMemoryOptions?.options || stepMemoryOptions.options
+              ? { ...defaultMemoryOptions?.options, ...stepMemoryOptions.options }
+              : undefined,
+        }
+      : defaultMemoryOptions;
 
     if (!modelConfig || !instructions) {
       throw new MastraError({
@@ -864,18 +910,28 @@ class MastraScorer<
       name: 'judge',
       model: resolvedModel,
       instructions,
+      ...(tools ? { tools } : {}),
+      ...(memory ? { memory } : {}),
     });
+    const judgeRunOptions = {
+      ...observabilityContext,
+      ...(memoryOptions ? { memory: memoryOptions } : {}),
+    };
 
     // GenerateScore output must be a number
     if (scorerStep.name === 'generateScore') {
       let result;
       if (isSupportedLanguageModel(resolvedModel)) {
-        result = await tryGenerateWithJsonFallback(judge, prompt, {
+        result = await tryStreamWithJsonFallback(judge, prompt, {
           structuredOutput: {
             schema: z.object({ score: z.number() }),
+            jsonPromptInjection,
           },
-          ...observabilityContext,
+          ...judgeRunOptions,
+          ...(onStream ? { onStream } : {}),
         });
+        const object = await result.object;
+        return { result: (object as { score: number }).score, prompt, judgeModel };
       } else {
         const schema = z.object({
           score: z.number(),
@@ -883,20 +939,21 @@ class MastraScorer<
         const standardSchema = toStandardSchema(schema as PublicSchema);
         result = await judge.generateLegacy(prompt, {
           output: standardSchemaToJSONSchema(standardSchema),
-          ...observabilityContext,
+          ...judgeRunOptions,
         });
+        return { result: (result.object as { score: number }).score, prompt, judgeModel };
       }
-      return { result: (result.object as { score: number }).score, prompt, judgeModel };
 
       // GenerateReason output must be a string
     } else if (scorerStep.name === 'generateReason') {
       let result;
       if (isSupportedLanguageModel(resolvedModel)) {
-        result = await judge.generate(prompt, { ...observabilityContext });
+        result = await judge.stream(prompt, judgeRunOptions);
+        void onStream?.(result as unknown as Awaited<ReturnType<Agent['stream']>>);
       } else {
-        result = await judge.generateLegacy(prompt, { ...observabilityContext });
+        result = await judge.generateLegacy(prompt, judgeRunOptions);
       }
-      return { result: result.text, prompt, judgeModel };
+      return { result: await result.text, prompt, judgeModel };
     } else {
       const promptStep = originalStep as PromptObject<any, any, any, TInput, TRunOutput>;
       // Convert to StandardSchemaWithJSON at runtime to ensure ~standard.jsonSchema is available
@@ -905,19 +962,23 @@ class MastraScorer<
       let result;
       if (isSupportedLanguageModel(resolvedModel)) {
         // Use type assertion to any to bypass complex type checking - runtime schema is validated by toStandardSchema
-        result = await tryGenerateWithJsonFallback(judge, prompt, {
+        result = await tryStreamWithJsonFallback(judge, prompt, {
           structuredOutput: {
             schema: standardSchema as any,
+            jsonPromptInjection,
           },
-          ...observabilityContext,
+          ...judgeRunOptions,
+          ...(onStream ? { onStream } : {}),
         });
+        const object = await result.object;
+        return { result: object, prompt, judgeModel };
       } else {
         result = await judge.generateLegacy(prompt, {
           output: standardSchemaToJSONSchema(standardSchema),
-          ...observabilityContext,
+          ...judgeRunOptions,
         });
+        return { result: result.object, prompt, judgeModel };
       }
-      return { result: result.object, prompt, judgeModel };
     }
   }
 
@@ -1025,6 +1086,8 @@ export type MastraPartType =
   | 'data-tool-call-approval'
   | 'data-tool-call-suspended'
   | 'data-system-reminder'
+  | 'data-signal'
+  | 'data-user-message'
   | 'data-tripwire'
   | 'data-structured-output'
   // Allow arbitrary strings for custom data-* types

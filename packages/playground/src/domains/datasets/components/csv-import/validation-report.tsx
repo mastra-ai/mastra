@@ -1,6 +1,6 @@
 'use client';
 
-import { cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { AlertTriangleIcon, CheckCircleIcon } from 'lucide-react';
 import type { CsvValidationResult, RowValidationResult } from '../../utils/csv-validation';
 

@@ -38,7 +38,7 @@ describe('Fastify auth middleware helper', () => {
     adapter.registerContextMiddleware();
 
     app.get('/custom/protected', { preHandler: createAuthMiddleware({ mastra }) }, async request => {
-      const user = request.requestContext.get('user') as { id: string };
+      const user = request.requestContext.get('mastra__user') as { id: string };
       return { userId: user.id };
     });
 

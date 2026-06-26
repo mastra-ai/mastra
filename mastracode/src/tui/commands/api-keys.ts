@@ -3,8 +3,8 @@
  * Lists known providers with their key status and allows adding, updating, or removing keys.
  */
 
-import { Box, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
-import type { SelectItem } from '@mariozechner/pi-tui';
+import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
+import type { SelectItem } from '@earendil-works/pi-tui';
 
 import { ApiKeyDialogComponent } from '../components/api-key-dialog.js';
 import { showModalOverlay } from '../overlay.js';
@@ -14,14 +14,22 @@ import type { SlashCommandContext } from './types.js';
 interface ProviderInfo {
   provider: string;
   envVar?: string;
-  source: 'env' | 'stored' | 'none';
+  source: 'oauth' | 'env' | 'stored' | 'none';
+}
+
+/**
+ * OAuth credentials are stored under the auth provider id, which differs from
+ * the catalog provider id for OpenAI (stored as `openai-codex`).
+ */
+function getAuthProviderId(provider: string): string {
+  return provider === 'openai' ? 'openai-codex' : provider;
 }
 
 /**
  * Build a deduplicated list of providers from available models,
  * annotated with their current key source.
  */
-function getProviderList(
+export function getProviderList(
   ctx: SlashCommandContext,
   models: { provider: string; hasApiKey: boolean; apiKeyEnvVar?: string }[],
 ): ProviderInfo[] {
@@ -31,7 +39,9 @@ function getProviderList(
     if (seen.has(model.provider)) continue;
 
     let source: ProviderInfo['source'] = 'none';
-    if (ctx.authStorage?.hasStoredApiKey(model.provider)) {
+    if (ctx.authStorage?.isLoggedIn(getAuthProviderId(model.provider))) {
+      source = 'oauth';
+    } else if (ctx.authStorage?.hasStoredApiKey(model.provider)) {
       source = 'stored';
     } else if (model.apiKeyEnvVar && process.env[model.apiKeyEnvVar]) {
       source = 'env';
@@ -51,6 +61,8 @@ function getProviderList(
 
 function statusLabel(info: ProviderInfo): string {
   switch (info.source) {
+    case 'oauth':
+      return theme.fg('success', '✓') + theme.fg('dim', ' (oauth)');
     case 'env':
       return theme.fg('success', '✓') + theme.fg('dim', ' (env)');
     case 'stored':
@@ -68,7 +80,7 @@ function buildItems(providers: ProviderInfo[]): SelectItem[] {
 }
 
 export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<void> {
-  const models = await ctx.state.harness.listAvailableModels();
+  let models = await ctx.state.harness.listAvailableModels();
   let providers = getProviderList(ctx, models);
 
   if (providers.length === 0) {
@@ -89,9 +101,11 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
     const updateDetail = (providerName: string) => {
       const info = providers.find(p => p.provider === providerName);
       if (!info) return;
-      if (info.source === 'env') {
+      if (info.source === 'oauth') {
+        detailText.setText(theme.fg('dim', '  Authenticated via OAuth. Press Enter to add an API key override.'));
+      } else if (info.source === 'env') {
         detailText.setText(
-          theme.fg('dim', '  Key set via environment variable. To change it, update your shell environment.'),
+          theme.fg('dim', '  Key set via environment variable. Press Enter to store a local override.'),
         );
       } else if (info.source === 'stored') {
         detailText.setText(theme.fg('dim', '  Key stored locally. Press Enter to update or Delete to remove.'));
@@ -112,13 +126,6 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
         const info = providers.find(p => p.provider === item.value);
         if (!info) return;
 
-        if (info.source === 'env') {
-          ctx.showInfo(
-            `${info.provider} key is set via environment variable${info.envVar ? ` (${info.envVar})` : ''}. Update it in your shell environment.`,
-          );
-          return;
-        }
-
         showKeyDialog(info);
       };
 
@@ -134,18 +141,25 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
 
       // Handle Delete key to remove stored keys
       const originalHandleInput = list.handleInput.bind(list);
-      list.handleInput = (data: string) => {
+      list.handleInput = async (data: string) => {
         // Delete or Backspace
         if (data === '\x7f' || data === '\x1b[3~') {
           const info = providers.find(p => p.provider === currentSelection);
           if (info?.source === 'stored' && ctx.authStorage) {
+            const storedKey = ctx.authStorage.getStoredApiKey(info.provider);
             ctx.authStorage.remove(`apikey:${info.provider}`);
-            if (info.envVar) {
+            if (info.envVar && process.env[info.envVar] === storedKey) {
               delete process.env[info.envVar];
             }
+            ctx.state.harness.invalidateAvailableModelsCache();
+            models = await ctx.state.harness.listAvailableModels();
             providers = getProviderList(ctx, models);
             ctx.showInfo(`API key removed for ${info.provider}`);
             rebuildList();
+          } else if (info?.source === 'env') {
+            ctx.showInfo(
+              `${info.provider} key is set via environment variable${info.envVar ? ` (${info.envVar})` : ''}. Remove it from your shell environment to unset.`,
+            );
           }
           return;
         }

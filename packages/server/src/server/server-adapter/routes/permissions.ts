@@ -47,6 +47,20 @@ const EXECUTE_PATTERNS = [
   '/clone',
 ];
 
+const PUBLISH_PATTERNS = ['/publish', '/activate', '/restore'];
+
+/**
+ * Maps `/stored/<family>` URL segments to canonical permission resource slugs.
+ */
+const STORED_RESOURCE_SEGMENTS: Record<string, string> = {
+  agents: 'stored-agents',
+  'mcp-clients': 'stored-mcp-clients',
+  'prompt-blocks': 'stored-prompt-blocks',
+  scorers: 'stored-scorers',
+  skills: 'stored-skills',
+  workspaces: 'stored-workspaces',
+};
+
 /**
  * Extracts the primary resource name from a route path.
  *
@@ -63,6 +77,7 @@ const EXECUTE_PATTERNS = [
  * extractResource('/agents/:agentId') // → 'agents'
  * extractResource('/memory/threads/:threadId') // → 'memory'
  * extractResource('/stored/agents/:agentId') // → 'stored-agents'
+ * extractResource('/stored/skills/:skillId') // → 'stored-skills'
  */
 export function extractResource(path: string): string | null {
   // Remove leading slash and split by segments
@@ -74,9 +89,11 @@ export function extractResource(path: string): string | null {
 
   const firstSegment = segments[0];
 
-  // Handle special case: /stored/agents → 'stored-agents'
-  if (firstSegment === 'stored' && segments[1] === 'agents') {
-    return 'stored-agents';
+  // Handle special case: /stored/<family> → 'stored-<family>' (or mapped slug).
+  // Uses exact segment match (not startsWith) so paths like /stored/skills-archive
+  // don't incorrectly collapse into a stored family.
+  if (firstSegment === 'stored' && segments[1]) {
+    return STORED_RESOURCE_SEGMENTS[segments[1]] ?? null;
   }
 
   // Handle .well-known paths (A2A protocol)
@@ -97,8 +114,21 @@ export function extractResource(path: string): string | null {
 export function deriveAction(method: string, path: string): string {
   const upperMethod = method.toUpperCase();
 
-  // For POST requests, check if it's an execute operation
+  // For POST requests, check if it's a publish, execute, or write operation.
+  // Publish takes precedence over execute since these suffixes are distinct
+  // version-lifecycle operations on stored resources. Restrict publish-suffix
+  // matching to /stored/* paths so unrelated routes that happen to end with
+  // /activate or /restore aren't accidentally classified as publish.
   if (upperMethod === 'POST') {
+    // Restrict publish-suffix matching to /stored/* paths so unrelated routes
+    // that happen to end with /activate or /restore aren't accidentally
+    // classified as publish.
+    if (path.startsWith('/stored/')) {
+      const isPublishOperation = PUBLISH_PATTERNS.some(pattern => path.endsWith(pattern));
+      if (isPublishOperation) {
+        return 'publish';
+      }
+    }
     const isExecuteOperation = EXECUTE_PATTERNS.some(pattern => path.includes(pattern));
     return isExecuteOperation ? 'execute' : 'write';
   }
@@ -139,14 +169,18 @@ export function derivePermission(route: Pick<ServerRoute, 'path' | 'method'>): s
  * Gets the effective permission for a route.
  *
  * Priority:
- * 1. Explicit requiresPermission on the route
+ * 1. Explicit requiresPermission on the route (string or string[])
  * 2. Derived permission from path/method convention
  * 3. null (no permission required - should only happen for public routes)
  *
+ * When the route specifies an array of permissions, the user needs ANY ONE
+ * of them (logical OR). This is useful for routes that serve multiple
+ * resource types.
+ *
  * @param route - The server route
- * @returns The permission string or null
+ * @returns The permission string, array of alternative permissions, or null
  */
-export function getEffectivePermission(route: ServerRoute): string | null {
+export function getEffectivePermission(route: ServerRoute): string | string[] | null {
   // If route is explicitly public, no permission needed
   if (route.requiresAuth === false) {
     return null;

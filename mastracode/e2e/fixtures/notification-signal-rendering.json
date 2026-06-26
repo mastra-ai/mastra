@@ -1,0 +1,29 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "Start notification host run.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "chunkSize": 4,
+      "streamingProfile": {
+        "ttft": 500,
+        "tps": 4
+      },
+      "response": {
+        "content": "Notification host run completed."
+      }
+    },
+    {
+      "match": {
+        "userMessage": "Notification e2e alert: CI failed on main",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "Notification signal follow-up completed."
+      }
+    }
+  ]
+}

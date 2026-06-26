@@ -1,5 +1,10 @@
 import type { UpdateStoredPromptBlockParams } from '@mastra/client-js';
-import { Notice, Badge, Button, MainContentLayout, Spinner, toast } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -122,7 +127,7 @@ function CmsPromptBlocksEditForm({
       // Fetch latest version after save and activate it
       const versionsResponse = await client
         .getStoredPromptBlock(blockId)
-        .listVersions({ sortDirection: 'DESC', perPage: 1 });
+        .listVersions({ orderBy: { direction: 'DESC' }, perPage: 1 });
       const latestVersion = versionsResponse.versions[0];
       if (!latestVersion) {
         throw new Error('No version found to publish');
@@ -212,7 +217,7 @@ function CmsPromptBlocksEditPage() {
   const { data: block, isLoading } = useStoredPromptBlock(blockId, { status: 'draft' });
   const { data: versionsData } = usePromptBlockVersions({
     blockId: blockId ?? '',
-    params: { sortDirection: 'DESC' },
+    params: { orderBy: { direction: 'DESC' } },
   });
 
   const activeVersionId = block?.activeVersionId;

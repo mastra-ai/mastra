@@ -6,8 +6,6 @@ interface ServerResourceActionsDependencies {
   getSubscriptions: () => Set<string>;
   getLogger: () => IMastraLogger;
   getSdkServer: () => Server;
-  clearDefinedResources: () => void;
-  clearDefinedResourceTemplates: () => void;
 }
 
 /**
@@ -20,8 +18,6 @@ export class ServerResourceActions {
   private readonly getSubscriptions: () => Set<string>;
   private readonly getLogger: () => IMastraLogger;
   private readonly getSdkServer: () => Server;
-  private readonly clearDefinedResources: () => void;
-  private readonly clearDefinedResourceTemplates: () => void;
 
   /**
    * @internal
@@ -30,8 +26,6 @@ export class ServerResourceActions {
     this.getSubscriptions = dependencies.getSubscriptions;
     this.getLogger = dependencies.getLogger;
     this.getSdkServer = dependencies.getSdkServer;
-    this.clearDefinedResources = dependencies.clearDefinedResources;
-    this.clearDefinedResourceTemplates = dependencies.clearDefinedResourceTemplates;
   }
 
   /**
@@ -82,8 +76,9 @@ export class ServerResourceActions {
   /**
    * Notifies clients that the overall list of available resources has changed.
    *
-   * This clears the internal resource cache and sends a `notifications/resources/list_changed`
-   * message to all clients, prompting them to re-fetch the resource list.
+   * This sends a `notifications/resources/list_changed` message to all clients, prompting
+   * them to re-fetch the resource list. Resource lists and templates are always evaluated
+   * per request, so there is no server-side cache to clear.
    *
    * @throws {MastraError} If sending the notification fails
    *
@@ -94,11 +89,7 @@ export class ServerResourceActions {
    * ```
    */
   public async notifyListChanged(): Promise<void> {
-    this.getLogger().info(
-      'Resource list change externally notified. Clearing definedResources and sending notification.',
-    );
-    this.clearDefinedResources(); // Clear cached resources
-    this.clearDefinedResourceTemplates(); // Clear cached resource templates
+    this.getLogger().info('Resource list change externally notified. Sending notification.');
     try {
       await this.getSdkServer().sendResourceListChanged();
     } catch (error) {

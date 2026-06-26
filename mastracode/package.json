@@ -1,10 +1,11 @@
 {
   "name": "mastracode",
-  "version": "0.19.1-alpha.1",
+  "version": "0.26.0-alpha.5",
   "description": "",
   "type": "module",
   "files": [
     "dist",
+    "!dist/web",
     "CHANGELOG.md"
   ],
   "homepage": "https://mastra.ai",
@@ -42,36 +43,58 @@
         "default": "./dist/tui.cjs"
       }
     },
+    "./acp": {
+      "import": {
+        "types": "./dist/acp.d.ts",
+        "default": "./dist/acp.js"
+      },
+      "require": {
+        "types": "./dist/acp.d.ts",
+        "default": "./dist/acp.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
     "cli": "tsx src/main.ts",
     "check": "tsc --noEmit",
+    "web:dev": "concurrently --kill-others-on-fail --names server,ui \"tsx src/web/server.ts\" \"vite --config src/web/vite.config.ts\"",
+    "web:ui:build": "vite --config src/web/vite.config.ts build",
+    "web:test": "vitest run --config e2e/web/vitest.config.ts",
     "build:lib": "tsup --silent --config tsup.config.ts",
-    "prepack": "pnpx tsx ../scripts/generate-package-docs.ts",
+    "prepack": "tsx ../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build --watch",
     "test": "vitest",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "e2e:list": "tsx e2e-list.ts",
+    "e2e:smoke": "vitest run --config e2e/vitest.shards.config.ts",
+    "e2e:test": "MC_E2E_VITEST_SCENARIOS=all vitest run --config e2e/vitest.shards.config.ts",
+    "web:start": "pnpm web:ui:build && tsx src/web/server.ts"
   },
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.76",
+    "@agentclientprotocol/sdk": "^0.21.0",
+    "@ai-sdk/anthropic": "^3.0.82",
     "@ai-sdk/openai": "^3.0.63",
     "@ai-sdk/openai-compatible": "^2.0.47",
     "@ast-grep/napi": "^0.42.0",
-    "@mariozechner/pi-tui": "^0.60.0",
+    "@earendil-works/pi-tui": "^0.79.4",
+    "@hono/node-server": "^1.19.11",
     "@mastra/agent-browser": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/duckdb": "workspace:*",
     "@mastra/fastembed": "workspace:*",
+    "@mastra/github-signals": "workspace:*",
+    "@mastra/hono": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/mcp": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/observability": "workspace:*",
     "@mastra/pg": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
+    "@mastra/server": "workspace:*",
     "@mastra/stagehand": "workspace:*",
     "@mastra/tavily": "workspace:*",
     "ai": "^6.0.176",
@@ -79,7 +102,9 @@
     "cli-highlight": "^2.1.11",
     "execa": "^9.6.1",
     "fastest-levenshtein": "^1.0.16",
+    "hono": "^4.12.8",
     "partial-json": "^0.1.7",
+    "posthog-node": "^5.37.0",
     "strip-ansi": "^7.2.0",
     "tokenx": "^1.3.0",
     "vscode-jsonrpc": "^8.2.1",
@@ -88,19 +113,31 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@copilotkit/aimock": "^1.29.0",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@types/node": "22.19.15",
+    "@mastra/client-js": "workspace:*",
+    "@types/node": "22.19.21",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.2.1",
+    "@xterm/headless": "6.0.0",
+    "concurrently": "^9.1.2",
+    "eslint": "^10.4.1",
+    "highlight.js": "^11.11.0",
+    "marked": "^15.0.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "tsup": "^8.5.1",
-    "tsx": "^4.21.0",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "typescript-eslint": "^8.57.0",
+    "vite": "^6.0.0",
     "vitest": "catalog:"
   },
   "engines": {
-    "node": ">=22.13.0"
+    "node": ">=22.19.0"
   }
 }

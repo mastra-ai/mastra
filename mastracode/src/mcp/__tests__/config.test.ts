@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
-import { classifyServerEntry, validateConfig } from '../config.js';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import { classifyServerEntry, expandEnvVars, loadMcpConfig, validateConfig } from '../config.js';
 
 describe('classifyServerEntry', () => {
   it('classifies stdio entry', () => {
@@ -84,6 +88,25 @@ describe('validateConfig', () => {
       url: 'https://mcp.example.com/sse',
       headers: { Authorization: 'Bearer tok' },
     });
+  });
+
+  it('expands ${VAR} references in http header values from the environment', () => {
+    const previous = process.env.MC_TEST_MCP_KEY;
+    process.env.MC_TEST_MCP_KEY = 'secret-123';
+    try {
+      const result = validateConfig({
+        mcpServers: {
+          remote: { url: 'https://api.example.com/mcp', headers: { 'x-api-key': '${MC_TEST_MCP_KEY}' } },
+        },
+      });
+      expect(result.mcpServers!['remote']).toEqual({
+        url: 'https://api.example.com/mcp',
+        headers: { 'x-api-key': 'secret-123' },
+      });
+    } finally {
+      if (previous === undefined) delete process.env.MC_TEST_MCP_KEY;
+      else process.env.MC_TEST_MCP_KEY = previous;
+    }
   });
 
   it('accepts http server entry with OAuth config', () => {
@@ -258,5 +281,133 @@ describe('validateConfig', () => {
       args: undefined,
       env: undefined,
     });
+  });
+});
+
+describe('expandEnvVars', () => {
+  const env = { TOKEN: 'abc', API_KEY: 'secret-123', EMPTY: '' };
+
+  it('expands a ${VAR} reference', () => {
+    expect(expandEnvVars('${API_KEY}', env)).toBe('secret-123');
+  });
+
+  it('expands references embedded in a larger string', () => {
+    expect(expandEnvVars('Bearer ${TOKEN}', env)).toBe('Bearer abc');
+  });
+
+  it('uses the ${VAR:-default} fallback when the variable is unset or empty', () => {
+    expect(expandEnvVars('${MISSING:-fallback}', env)).toBe('fallback');
+    expect(expandEnvVars('${EMPTY:-fallback}', env)).toBe('fallback');
+  });
+
+  it('expands an unset reference with no default to an empty string', () => {
+    expect(expandEnvVars('${MISSING}', env)).toBe('');
+  });
+
+  it('leaves strings without references untouched', () => {
+    expect(expandEnvVars('plain value with a $ sign', env)).toBe('plain value with a $ sign');
+  });
+
+  it('expands a bare $VAR reference', () => {
+    expect(expandEnvVars('$API_KEY', env)).toBe('secret-123');
+    expect(expandEnvVars('Bearer $TOKEN', env)).toBe('Bearer abc');
+  });
+
+  it('expands an unset bare $VAR reference to an empty string', () => {
+    expect(expandEnvVars('$MISSING', env)).toBe('');
+  });
+
+  it('does not treat $ followed by a non-identifier as a reference', () => {
+    expect(expandEnvVars('it costs $5 today', env)).toBe('it costs $5 today');
+  });
+});
+
+describe('loadMcpConfig', () => {
+  let projectDir: string;
+
+  beforeEach(() => {
+    projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-config-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(projectDir, { recursive: true, force: true });
+  });
+
+  function writeJson(filePath: string, data: unknown): void {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(data));
+  }
+
+  it('reads MCP servers from a root .mcp.json (Claude Code compatible)', () => {
+    writeJson(path.join(projectDir, '.mcp.json'), {
+      mcpServers: { root: { url: 'https://root.example.com/mcp' } },
+    });
+
+    const config = loadMcpConfig(projectDir);
+
+    expect(config.mcpServers).toEqual({
+      root: { url: 'https://root.example.com/mcp', headers: undefined },
+    });
+  });
+
+  it('lets .mastracode/mcp.json override root .mcp.json by server name', () => {
+    writeJson(path.join(projectDir, '.mcp.json'), {
+      mcpServers: { shared: { command: 'root-cmd' } },
+    });
+    writeJson(path.join(projectDir, '.mastracode', 'mcp.json'), {
+      mcpServers: { shared: { command: 'project-cmd' } },
+    });
+
+    const config = loadMcpConfig(projectDir);
+
+    expect(config.mcpServers!['shared']).toEqual({ command: 'project-cmd', args: undefined, env: undefined });
+  });
+
+  it('merges distinct servers from root .mcp.json and .mastracode/mcp.json', () => {
+    writeJson(path.join(projectDir, '.mcp.json'), {
+      mcpServers: { fromRoot: { command: 'a' } },
+    });
+    writeJson(path.join(projectDir, '.mastracode', 'mcp.json'), {
+      mcpServers: { fromProject: { command: 'b' } },
+    });
+
+    const config = loadMcpConfig(projectDir);
+
+    expect(Object.keys(config.mcpServers!).sort()).toEqual(['fromProject', 'fromRoot']);
+  });
+
+  it('lets a root .mcp.json override the global ~/.mastracode/mcp.json by server name', () => {
+    const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-home-'));
+    const previousHome = process.env.HOME;
+    process.env.HOME = homeDir;
+    try {
+      writeJson(path.join(homeDir, '.mastracode', 'mcp.json'), {
+        mcpServers: { shared: { command: 'global-cmd' } },
+      });
+      writeJson(path.join(projectDir, '.mcp.json'), {
+        mcpServers: { shared: { command: 'root-cmd' } },
+      });
+
+      const config = loadMcpConfig(projectDir);
+
+      expect(config.mcpServers!['shared']).toEqual({ command: 'root-cmd', args: undefined, env: undefined });
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+      fs.rmSync(homeDir, { recursive: true, force: true });
+    }
+  });
+
+  it('lets a root .mcp.json override .claude/settings.local.json by server name', () => {
+    writeJson(path.join(projectDir, '.claude', 'settings.local.json'), {
+      mcpServers: { shared: { command: 'claude-cmd' } },
+    });
+    writeJson(path.join(projectDir, '.mcp.json'), {
+      mcpServers: { shared: { command: 'root-cmd' } },
+    });
+
+    const config = loadMcpConfig(projectDir);
+
+    expect(config.mcpServers!['shared']).toEqual({ command: 'root-cmd', args: undefined, env: undefined });
   });
 });

@@ -92,3 +92,22 @@ function getWeatherCondition(code: number): string {
   };
   return conditions[code] || 'Unknown';
 }
+
+export const mockWeatherTool = createTool({
+  id: 'get-weather',
+  description: 'Get current weather for a location',
+  inputSchema: z.object({
+    location: z.string().describe('City name'),
+  }),
+  execute: async input => {
+    return {
+      temperature: 72,
+      feelsLike: 75,
+      humidity: 45,
+      windSpeed: 8,
+      windGust: 12,
+      conditions: 'Clear sky',
+      location: input.location,
+    };
+  },
+});

@@ -1,11 +1,7 @@
-import {
-  NoDataPageLayout,
-  PageLayout,
-  PermissionDenied,
-  SessionExpired,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { useSearchParams } from 'react-router';
 import { SchedulesPage as SchedulesPageContent } from '@/domains/schedules/components/schedules-page';
 import { useSchedules } from '@/domains/schedules/hooks/use-schedules';
@@ -33,7 +29,7 @@ export default function SchedulesPage() {
 
   return (
     <PageLayout>
-      <div className="h-full pt-6">
+      <div className="h-full">
         <SchedulesPageContent workflowId={workflowId} />
       </div>
     </PageLayout>

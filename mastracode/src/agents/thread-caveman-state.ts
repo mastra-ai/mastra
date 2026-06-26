@@ -1,57 +1,87 @@
-import type { Harness, HarnessThread } from '@mastra/core/harness';
+import type { HarnessThread, Session } from '@mastra/core/harness';
 
-const META_KEY = 'cavemanObservations';
+interface ThreadStateSetting {
+  key: string;
+  isValid(value: unknown): boolean;
+}
 
-function getStateCaveman(harness: Harness<Record<string, unknown>>): boolean | undefined {
-  const value = (harness.getState() as Record<string, unknown>)[META_KEY];
-  return typeof value === 'boolean' ? value : undefined;
+const THREAD_STATE_SETTINGS: ThreadStateSetting[] = [
+  {
+    key: 'cavemanObservations',
+    isValid: (value: unknown): value is boolean => typeof value === 'boolean',
+  },
+  {
+    key: 'observeAttachments',
+    isValid: (value: unknown): value is 'auto' | boolean => value === 'auto' || typeof value === 'boolean',
+  },
+];
+
+function getStateValue(session: Session<Record<string, unknown>>, setting: ThreadStateSetting): unknown {
+  const value = session.state.get()[setting.key];
+  return setting.isValid(value) ? value : undefined;
 }
 
 async function findThread(
-  harness: Harness<Record<string, unknown>>,
+  session: Session<Record<string, unknown>>,
   threadId: string,
 ): Promise<HarnessThread | undefined> {
-  const threads = await harness.listThreads({ allResources: true });
+  const threads = await session.thread.list({ allResources: true });
   return threads.find(t => t.id === threadId);
 }
 
 /**
- * Restores `cavemanObservations` for the given thread:
- * - If the thread already has a value in metadata, mirror it into harness state.
- * - Otherwise, persist the current harness-state value to the thread so future
+ * Restores MastraCode-owned per-thread OM settings for the given thread:
+ * - If the thread already has a valid value in metadata, mirror it into harness state.
+ * - Otherwise, persist the current session.state value to the thread so future
  *   sessions see the user's last-selected setting.
  */
-async function restoreCavemanForThread(harness: Harness<Record<string, unknown>>, threadId: string): Promise<void> {
-  const thread = await findThread(harness, threadId);
-  if (harness.getCurrentThreadId() !== threadId) return;
+async function restoreSettingsForThread(session: Session<Record<string, unknown>>, threadId: string): Promise<void> {
+  const thread = await findThread(session, threadId);
+  if (session.thread.getId() !== threadId) return;
 
-  const persisted = thread?.metadata?.[META_KEY];
+  const updates: Record<string, unknown> = {};
+  const settingsToSeed: Array<{ key: string; value: unknown }> = [];
 
-  if (typeof persisted === 'boolean') {
-    if (getStateCaveman(harness) !== persisted) {
-      await harness.setState({ [META_KEY]: persisted });
+  for (const setting of THREAD_STATE_SETTINGS) {
+    const persisted = thread?.metadata?.[setting.key];
+
+    if (setting.isValid(persisted)) {
+      if (getStateValue(session, setting) !== persisted) {
+        updates[setting.key] = persisted;
+      }
+      continue;
     }
-    return;
+
+    const current = getStateValue(session, setting);
+    if (current !== undefined) {
+      settingsToSeed.push({ key: setting.key, value: current });
+    }
   }
 
-  const current = getStateCaveman(harness);
-  if (typeof current === 'boolean') {
-    await harness.setThreadSetting({ key: META_KEY, value: current });
+  if (Object.keys(updates).length > 0) {
+    if (session.thread.getId() !== threadId) return;
+    await session.state.set(updates);
+  }
+
+  for (const setting of settingsToSeed) {
+    if (session.thread.getId() !== threadId) return;
+    await session.thread.setSetting(setting);
   }
 }
 
 /**
- * Wires the `cavemanObservations` toggle into harness thread events so it
- * persists per-thread and new threads inherit the most recent value.
+ * Wires MastraCode-owned OM settings into harness thread events so they persist
+ * per-thread and new threads inherit the most recent value.
  *
- * This is intentionally implemented in mastracode rather than core: the toggle
- * is a mastracode-specific OM concept, so persistence stays scoped to the host.
+ * This is intentionally implemented in mastracode rather than core: these
+ * settings are mastracode-specific OM concepts, so persistence stays scoped to
+ * the host.
  */
-export function attachCavemanThreadStatePersistence(harness: Harness<Record<string, unknown>>): void {
-  harness.subscribe(event => {
+export function attachOMThreadStatePersistence(session: Session<Record<string, unknown>>): void {
+  session.subscribe(event => {
     if (event.type === 'thread_changed' || event.type === 'thread_created') {
       const threadId = event.type === 'thread_changed' ? event.threadId : event.thread.id;
-      void restoreCavemanForThread(harness, threadId).catch(() => {
+      void restoreSettingsForThread(session, threadId).catch(() => {
         // Persistence is best-effort; don't crash the TUI if storage hiccups.
       });
     }
@@ -59,12 +89,12 @@ export function attachCavemanThreadStatePersistence(harness: Harness<Record<stri
 }
 
 /**
- * Eagerly restores `cavemanObservations` for the currently-selected thread.
- * Called once at TUI startup after the initial thread is selected, since the
- * subscription set up later misses the startup `thread_changed` event.
+ * Eagerly restores MastraCode-owned OM settings for the currently-selected
+ * thread. Called once at TUI startup after the initial thread is selected,
+ * since the subscription set up later misses the startup `thread_changed` event.
  */
-export async function restoreCavemanForCurrentThread(harness: Harness<Record<string, unknown>>): Promise<void> {
-  const threadId = harness.getCurrentThreadId();
+export async function restoreOMThreadStateForCurrentThread(session: Session<Record<string, unknown>>): Promise<void> {
+  const threadId = session.thread.getId();
   if (!threadId) return;
-  await restoreCavemanForThread(harness, threadId);
+  await restoreSettingsForThread(session, threadId);
 }

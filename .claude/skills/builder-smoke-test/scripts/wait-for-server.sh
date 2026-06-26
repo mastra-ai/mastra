@@ -99,4 +99,8 @@ echo "  Common causes:" >&2
 echo "    - OPENAI_API_KEY missing → boot crashes in OpenAIVoice ctor before HTTP opens" >&2
 echo "    - AUTH_PROVIDER=workos in .env without valid WORKOS_* creds → boot fails inside auth provider" >&2
 echo "    - Port ${PORT} bound by a stale process (run: lsof -i :${PORT})" >&2
+echo "    - Stale template imports → e.g. \"The requested module '@mastra/editor/ee' does not provide an export named 'builderAgent'\"." >&2
+echo "      Fix: ensure src/mastra/index.ts uses 'createBuilderAgent' (factory) and calls it: 'builderAgent: createBuilderAgent()'." >&2
+echo "  Tip: tail the dev server log (whatever stdout/stderr file you redirected 'mastra dev' into) — the real error" >&2
+echo "       is almost always one of the last ~30 lines before the process exits." >&2
 exit 1

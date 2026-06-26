@@ -94,13 +94,20 @@ test.describe('Admin Role', () => {
 
     test('admin can view agent tools', async ({ page }) => {
       await setupAdminAuth(page);
-      await page.goto('/agents/weather-agent/chat');
+      await page.goto('/agents/weather-agent/settings');
 
-      // The agent has tools - admin should be able to see them
-      // Check if there's a tools tab or section
-      const toolsSection = page.getByText(/weatherInfo|simpleMcpTool/i);
-      // Weather agent has tools configured
-      await expect(toolsSection.first()).toBeVisible();
+      // The agent has tools - admin should be able to see them in the settings overview.
+      await expect(page.getByTestId('agent-settings-view')).toBeVisible({ timeout: 10000 });
+      await expect(page.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-selected', 'true');
+      await expect(page.getByRole('heading', { name: 'Tools' })).toBeVisible({ timeout: 10000 });
+      await expect(page.getByRole('link', { name: 'weatherInfo' })).toHaveAttribute(
+        'href',
+        /\/agents\/weather-agent\/tools\/weatherInfo$/,
+      );
+      await expect(page.getByRole('link', { name: 'simpleMcpTool' })).toHaveAttribute(
+        'href',
+        /\/agents\/weather-agent\/tools\/simpleMcpTool$/,
+      );
     });
   });
 
@@ -113,7 +120,7 @@ test.describe('Admin Role', () => {
       await expectCurrentBreadcrumb(page, 'Workflows');
 
       // Should see workflows in the list
-      const workflowRow = page.locator('.entity-list-row').filter({ hasText: /workflow/i });
+      const workflowRow = page.locator('.data-list-row').filter({ hasText: /workflow/i });
       await expect(workflowRow.first()).toBeVisible();
     });
 
@@ -123,7 +130,7 @@ test.describe('Admin Role', () => {
 
       // Click on a workflow
       await page
-        .locator('.entity-list-row')
+        .locator('.data-list-row')
         .filter({ hasText: /workflow/i })
         .first()
         .click();
@@ -168,7 +175,7 @@ test.describe('Admin Role', () => {
       await expectCurrentBreadcrumb(page, 'Tools');
 
       // Should see tools in the list
-      const toolRow = page.locator('.entity-list-row').filter({ hasText: /weatherInfo|simpleMcpTool/i });
+      const toolRow = page.locator('.data-list-row').filter({ hasText: /weatherInfo|simpleMcpTool/i });
       await expect(toolRow.first()).toBeVisible();
     });
 
@@ -178,7 +185,7 @@ test.describe('Admin Role', () => {
 
       // Click on weatherInfo tool
       await page
-        .locator('.entity-list-row')
+        .locator('.data-list-row')
         .filter({ hasText: /weatherInfo/i })
         .click();
 

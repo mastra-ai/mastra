@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-google-gemini-live",
-  "version": "0.11.4",
+  "version": "0.14.0",
   "description": "Mastra Google Gemini Live API integration",
   "type": "module",
   "files": [
@@ -24,36 +24,34 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
-    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
+    "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
-    "test:integration": "vitest run tool-args-integration.test.ts",
+    "test:integration": "vitest run tool-args-integration.test.ts events-integration.test.ts",
     "lint": "eslint ."
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@google/genai": "^1.45.0",
-    "google-auth-library": "^10.6.1",
+    "@google/genai": "^1.52.0",
+    "@mastra/schema-compat": "workspace:*",
+    "google-auth-library": "^10.6.2",
     "ws": "^8.20.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@internal/test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@mastra/core": "workspace:*",
-    "@types/node": "22.19.15",
+    "@internal/voice": "workspace:*",
+    "@types/node": "22.19.21",
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.2.1",
+    "eslint": "^10.4.1",
     "tsup": "^8.5.1",
-    "tsx": "^4.21.0",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "zod": "catalog:",
-    "zod-to-json-schema": "^3.25.1"
-  },
-  "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
+    "zod": "catalog:"
   },
   "homepage": "https://mastra.ai",
   "repository": {

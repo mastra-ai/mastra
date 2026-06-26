@@ -1,13 +1,13 @@
 import type { GetAgentResponse } from '@mastra/client-js';
+import { truncateString } from '@mastra/playground-ui';
 import {
-  EntityList,
-  EntityListSkeleton,
-  TextAndIcon,
-  WorkflowIcon,
-  AgentIcon,
-  ToolsIcon,
-  truncateString,
-} from '@mastra/playground-ui';
+  DataList as EntityList,
+  DataListSkeleton as EntityListSkeleton,
+} from '@mastra/playground-ui/components/DataList';
+import { TextAndIcon } from '@mastra/playground-ui/components/Text';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { useMemo } from 'react';
 import { extractPrompt } from '../../utils/extractPrompt';
 import { ProviderLogo } from '../agent-metadata/provider-logo';
@@ -37,7 +37,7 @@ export function AgentsList({ agents, isLoading, search = '' }: AgentsListProps) 
   }
 
   return (
-    <EntityList columns={'auto 1fr auto auto auto auto'}>
+    <EntityList columns={'auto 1fr auto auto auto auto'} variant="striped">
       <EntityList.Top>
         <EntityList.TopCell className="">Name</EntityList.TopCell>
         <EntityList.TopCell className="">Instructions</EntityList.TopCell>

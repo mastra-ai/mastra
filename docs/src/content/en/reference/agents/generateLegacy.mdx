@@ -333,6 +333,13 @@ await agent.generateLegacy('message for agent')
               "Tools that are executed on the 'client' side of the request. These tools do not have execute functions in the definition.",
           },
           {
+            name: 'hooks',
+            type: 'ToolHooks',
+            isOptional: true,
+            description:
+              'Per-execution hooks that run before and after tool calls. Overrides matching agent-level hooks for this execution. `beforeToolCall` can return `{ proceed: false, output }` to skip the tool call.',
+          },
+          {
             name: 'savePerStep',
             type: 'boolean',
             isOptional: true,
@@ -580,12 +587,12 @@ await agent.generateLegacy(
         sentiment: z.enum(['positive', 'negative', 'neutral']),
         confidence: z.number(),
       }),
-      model: 'openai/gpt-5.4',
+      model: '__GATEWAY_OPENAI_MODEL__',
       errorStrategy: 'warn',
     },
     // Output processors for response validation
     outputProcessors: [
-      new ModerationProcessor({ model: 'openai/gpt-5-mini' }),
+      new ModerationProcessor({ model: '__GATEWAY_OPENAI_MODEL_MINI__' }),
       new TokenLimiterProcessor({ maxTokens: 1000 }),
     ],
   },

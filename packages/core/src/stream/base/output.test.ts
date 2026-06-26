@@ -1,5 +1,5 @@
 import { ReadableStream } from 'node:stream/web';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../../agent/message-list';
 import type { Processor, ProcessorStreamWriter } from '../../processors';
 import { ChunkFrom } from '../types';
@@ -316,6 +316,107 @@ describe('MastraModelOutput', () => {
       expect(onFinishPayload?.providerMetadata).toEqual(providerMetadata);
     });
 
+    it('exposes the step providerMetadata via _getImmediateProviderMetadata for output-step processors', async () => {
+      const runId = 'test-run';
+      const providerMetadata = {
+        anthropic: { cacheReadInputTokens: 12 },
+      };
+      const messageList = new MessageList({ threadId: 'test-thread' });
+
+      const stream = createChunkStream([createStepFinishChunk(runId), createFinishChunk(runId, providerMetadata)]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      expect(output._getImmediateProviderMetadata()).toEqual(providerMetadata);
+    });
+
+    it('surfaces guardrail providerMetadata on a content-filter block where steps is empty', async () => {
+      // The RFC scenario: a Bedrock guardrail intervenes, the step finishes with
+      // reason "content-filter", the completed-steps array is empty, and the
+      // guardrail trace is only reachable through providerMetadata.
+      const runId = 'test-run';
+      const guardrailTrace = {
+        bedrock: {
+          trace: {
+            guardrail: {
+              actionReason: 'Guardrail blocked.',
+              inputAssessment: {
+                'guardrail-1': {
+                  contentPolicy: { filters: [{ type: 'PROMPT_ATTACK', action: 'BLOCKED', confidence: 'HIGH' }] },
+                },
+              },
+            },
+          },
+        },
+      };
+      const messageList = new MessageList({ threadId: 'test-thread' });
+
+      const contentFilterFinish = {
+        type: 'finish',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: {
+          id: 'finish-1',
+          output: {
+            steps: [],
+            usage: { inputTokens: 10, outputTokens: 0, totalTokens: 10 },
+          },
+          stepResult: {
+            reason: 'content-filter',
+            warnings: [],
+            isContinued: false,
+          },
+          metadata: {},
+          providerMetadata: guardrailTrace,
+          messages: { nonUser: [], all: [] },
+        },
+      } as ChunkType;
+
+      const stream = createChunkStream([contentFilterFinish]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      // No completed step recorded, but the guardrail trace is still surfaced.
+      expect(await output.steps).toHaveLength(0);
+      expect(output._getImmediateFinishReason()).toBe('content-filter');
+      expect(output._getImmediateProviderMetadata()).toEqual(guardrailTrace);
+    });
+
+    it('leaves _getImmediateProviderMetadata undefined when the step has no providerMetadata', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+
+      const stream = createChunkStream([createStepFinishChunk(runId), createFinishChunk(runId)]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      expect(output._getImmediateProviderMetadata()).toBeUndefined();
+    });
+
     it('should merge args from real tool-call into synthetic tool-call when synthetic args are empty', async () => {
       const runId = 'test-run';
       const messageList = new MessageList({ threadId: 'test-thread' });
@@ -462,6 +563,134 @@ describe('MastraModelOutput', () => {
       expect((await output.totalUsage)?.raw).toEqual(rawUsage);
     });
 
+    it('should call onFinish with the suspended payload shape when the stream suspends', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      let finishPayload: any;
+
+      const stream = createChunkStream([
+        {
+          type: 'text-delta',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { text: 'partial answer' },
+        },
+        {
+          type: 'tool-call',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'findUserTool',
+            args: { name: 'Dero Israel' },
+            providerExecuted: false,
+          },
+        },
+        {
+          type: 'tool-call-approval',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'findUserTool',
+            args: { name: 'Dero Israel' },
+            resumeSchema: '{}',
+          },
+        },
+      ] as ChunkType[]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: '__GATEWAY_OPENAI_MODEL__', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: {
+          runId,
+          onFinish: async payload => {
+            finishPayload = payload;
+          },
+        },
+      });
+
+      await output.consumeStream();
+
+      // Core fields the AGENT_RUN span end reads.
+      expect(finishPayload).toMatchObject({
+        finishReason: 'suspended',
+        suspendReason: 'tool-call-approval',
+        toolName: 'findUserTool',
+        toolCallId: 'call-1',
+      });
+      // Empty defaults keep the suspended callback payload contract-complete.
+      expect(finishPayload.text).toBe('');
+      expect(finishPayload.toolCalls).toEqual([]);
+      expect(finishPayload.toolResults).toEqual([]);
+      expect(finishPayload.steps).toEqual([]);
+      expect(finishPayload.usage).toEqual({ inputTokens: undefined, outputTokens: undefined, totalTokens: undefined });
+      expect(finishPayload.totalUsage).toEqual({
+        inputTokens: undefined,
+        outputTokens: undefined,
+        totalTokens: undefined,
+      });
+      expect(finishPayload.response).toEqual({});
+      expect(finishPayload.content).toEqual([]);
+    });
+
+    it('should call onFinish with the aborted payload shape when the stream is aborted', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      let finishPayload: any;
+
+      const stream = createChunkStream([
+        {
+          type: 'text-delta',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { text: 'partial answer' },
+        },
+        {
+          type: 'abort',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {},
+        },
+      ] as ChunkType[]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: '__GATEWAY_OPENAI_MODEL__', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: {
+          runId,
+          onFinish: async payload => {
+            finishPayload = payload;
+          },
+        },
+      });
+
+      await output.consumeStream();
+
+      // Core field the AGENT_RUN span end reads.
+      expect(finishPayload).toMatchObject({
+        finishReason: 'aborted',
+      });
+      // Empty defaults keep the aborted callback payload contract-complete without
+      // reconstructing partial buffered state from a mid-flight canceled stream.
+      expect(finishPayload.text).toBe('');
+      expect(finishPayload.toolCalls).toEqual([]);
+      expect(finishPayload.toolResults).toEqual([]);
+      expect(finishPayload.steps).toEqual([]);
+      expect(finishPayload.usage).toEqual({ inputTokens: undefined, outputTokens: undefined, totalTokens: undefined });
+      expect(finishPayload.totalUsage).toEqual({
+        inputTokens: undefined,
+        outputTokens: undefined,
+        totalTokens: undefined,
+      });
+      expect(finishPayload.response).toEqual({});
+      expect(finishPayload.content).toEqual([]);
+    });
+
     it('should keep the latest step raw usage across multiple steps', async () => {
       const runId = 'test-run';
       const firstRaw = {
@@ -596,6 +825,229 @@ describe('MastraModelOutput', () => {
       expect(finishPayload?.usage).toBeDefined();
       expect('raw' in finishPayload.usage).toBe(false);
       expect('raw' in finishPayload.totalUsage).toBe(false);
+    });
+  });
+
+  describe('client tool observability carriers', () => {
+    it('preserves observability on synthetic tool calls created from streaming input', async () => {
+      const runId = 'test-run';
+      const observability = {
+        traceparent: '00-1234567890abcdef1234567890abcdef-1234567890abcdef-01',
+      };
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      const stream = createChunkStream([
+        {
+          type: 'tool-call-input-streaming-start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'getWeather',
+            providerExecuted: false,
+            observability,
+          },
+        },
+        {
+          type: 'tool-call-delta',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'getWeather',
+            argsTextDelta: '{"location":"Paris"}',
+          },
+        },
+        {
+          type: 'tool-call-input-streaming-end',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+          },
+        },
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ] as ChunkType[]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+      const result = await output.getFullOutput();
+
+      expect(result.toolCalls[0]?.payload).toMatchObject({
+        toolCallId: 'call-1',
+        toolName: 'getWeather',
+        args: { location: 'Paris' },
+        observability,
+      });
+    });
+
+    it('merges observability from the final tool-call onto an existing synthetic tool call', async () => {
+      const runId = 'test-run';
+      const observability = {
+        traceparent: '00-1234567890abcdef1234567890abcdef-1234567890abcdef-01',
+      };
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      const stream = createChunkStream([
+        {
+          type: 'tool-call-input-streaming-start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'getWeather',
+            providerExecuted: false,
+          },
+        },
+        {
+          type: 'tool-call-input-streaming-end',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+          },
+        },
+        {
+          type: 'tool-call',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'call-1',
+            toolName: 'getWeather',
+            args: { location: 'Paris' },
+            providerExecuted: false,
+            observability,
+          },
+        },
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ] as ChunkType[]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+      const result = await output.getFullOutput();
+
+      expect(result.toolCalls).toHaveLength(1);
+      expect(result.toolCalls[0]?.payload.observability).toEqual(observability);
+    });
+  });
+
+  describe('consumeStream onError fan-out', () => {
+    it('invokes every callers onError when the shared drain errors', async () => {
+      const drainError = new Error('drain boom');
+      const stream = new ReadableStream<ChunkType>({
+        pull(controller) {
+          controller.error(drainError);
+        },
+      });
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId: 'test-run' },
+      });
+
+      const firstErrors: unknown[] = [];
+      const secondErrors: unknown[] = [];
+
+      // First caller starts the drain; second caller shares the same drain promise.
+      await Promise.all([
+        output.consumeStream({ onError: e => firstErrors.push(e) }),
+        output.consumeStream({ onError: e => secondErrors.push(e) }),
+      ]);
+
+      expect(firstErrors).toEqual([drainError]);
+      expect(secondErrors).toEqual([drainError]);
+    });
+
+    it('does not call onError when the drain succeeds', async () => {
+      const runId = 'test-run';
+      const stream = createChunkStream([createStepFinishChunk(runId), createFinishChunk(runId)]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      const onError = vi.fn();
+      await output.consumeStream({ onError });
+      await output.consumeStream({ onError });
+
+      expect(onError).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('consumeStream completion sharing', () => {
+    it('resolves every caller only after the stream actually finishes', async () => {
+      const runId = 'test-run';
+
+      // A stream we hold open until release() is called, so we can assert that
+      // no consumeStream() caller resolves before the stream is truly done.
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      const stream = new ReadableStream<ChunkType>({
+        async pull(controller) {
+          controller.enqueue(createStepFinishChunk(runId));
+          await gate;
+          controller.enqueue(createFinishChunk(runId));
+          controller.close();
+        },
+      });
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      let firstResolved = false;
+      let lateResolved = false;
+
+      // First caller starts the drain.
+      const first = output.consumeStream().then(() => {
+        firstResolved = true;
+      });
+
+      // Let the drain begin and buffer the first chunk while the gate is closed.
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // A caller that arrives AFTER consumption already started must still wait
+      // for the stream to finish (this is the early-return bug Fix 2 closed).
+      const late = output.consumeStream().then(() => {
+        lateResolved = true;
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 10));
+      expect(firstResolved).toBe(false);
+      expect(lateResolved).toBe(false);
+
+      release();
+      await Promise.all([first, late]);
+
+      expect(firstResolved).toBe(true);
+      expect(lateResolved).toBe(true);
     });
   });
 });
