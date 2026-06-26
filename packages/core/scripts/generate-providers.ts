@@ -10,7 +10,13 @@ const __dirname = path.dirname(__filename);
 
 async function generateProviderRegistry(gateways: MastraModelGateway[]) {
   // Fetch providers from all gateways
-  const { providers, models, attachmentCapabilities } = await fetchProvidersFromGateways(gateways);
+  const { providers, models, attachmentCapabilities, failedGateways } = await fetchProvidersFromGateways(gateways);
+
+  if (failedGateways.length > 0) {
+    console.error(`\nFailed to fetch from gateways: ${failedGateways.join(', ')}`);
+    console.error('Aborting generation to avoid writing partial provider data.');
+    process.exit(1);
+  }
 
   // Write registry files to src/ (for version control)
   const srcDir = path.join(__dirname, '..', 'src', 'llm', 'model');
