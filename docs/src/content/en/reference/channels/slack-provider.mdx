@@ -56,7 +56,7 @@ await slack.configure({
     type: 'string',
     isOptional: true,
     description:
-      'Slack App Configuration access token for programmatic app creation. Optional — the provider rotates to a fresh token on startup using `refreshToken`.',
+      'Slack App Configuration access token for programmatic app creation. Optional, because the provider rotates to a fresh token on startup using `refreshToken`.',
   },
   {
     name: 'baseUrl',
@@ -121,7 +121,7 @@ await slack.configure({
     type: 'WaitUntilFn',
     isOptional: true,
     description:
-      "Returns a `waitUntil` for the current Slack webhook request. Required on serverless runtimes where Hono can't bridge the platform's `ExecutionContext` (Vercel, AWS Lambda) — without it the invocation freezes after the 200 ack and kills the run mid-flight. Pass the bare `waitUntil(promise)` from your platform SDK (for example, `@vercel/functions`). Cloudflare Workers and Netlify users typically don't need this.",
+      "Returns a `waitUntil` for the current Slack webhook request. Required on serverless runtimes where Hono can't bridge the platform's `ExecutionContext` (Vercel, AWS Lambda). Without it, the invocation freezes after the 200 ack and kills the run mid-flight. Pass the bare `waitUntil(promise)` from your platform SDK (for example, `@vercel/functions`). Cloudflare Workers and Netlify users typically don't need this.",
   },
   {
     name: 'resolveWaitUntil',
@@ -237,7 +237,7 @@ interface ChannelConnectResult {
     type: '(defaults: SlackAppManifest) => SlackAppManifest',
     isOptional: true,
     description:
-      'Customize the Slack app manifest before it is sent to the Manifest API. Receives the default manifest and returns the final one — use it for custom scopes, additional events, or interactivity settings.',
+      'Customize the Slack app manifest before it is sent to the Manifest API. Receives the default manifest and returns the final one. Use it for custom scopes, additional events, or interactivity settings.',
   },
   {
     name: 'redirectUrl',
@@ -305,7 +305,7 @@ slack.setBaseUrl('https://abc123.trycloudflare.com')
 
 #### `initialize()`
 
-Recreates a `SlackAdapter` for each active installation in storage and injects `AgentChannels` into the corresponding agent so it receives Slack events on startup. Does not auto-provision new apps — use `connect()` to create one. Mastra calls this automatically; you rarely call it directly.
+Recreates a `SlackAdapter` for each active installation in storage and injects `AgentChannels` into the corresponding agent so it receives Slack events on startup. Does not auto-provision new apps; use `connect()` to create one. Mastra calls this automatically, so you rarely call it directly.
 
 ```typescript
 await slack.initialize()
@@ -357,6 +357,6 @@ const result = await slack.connect('support-agent')
 
 ## Related
 
-- [ChannelProvider](/reference/channels/channel-provider) — the interface `SlackProvider` implements
-- [Channels](/docs/agents/channels) — concepts, platform setup, and the `createSlackAdapter` path
-- [Channels reference](/reference/agents/channels) — the `channels` config on the `Agent` constructor
+- [ChannelProvider](/reference/channels/channel-provider): the interface `SlackProvider` implements
+- [Channels](/docs/agents/channels): concepts, platform setup, and the `createSlackAdapter` path
+- [Channels reference](/reference/agents/channels): the `channels` config on the `Agent` constructor
