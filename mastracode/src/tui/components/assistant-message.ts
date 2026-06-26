@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Container, Markdown, Spacer, Text } from '@earendil-works/pi-tui';
 import type { MarkdownTheme } from '@earendil-works/pi-tui';
-import type { HarnessMessage } from '@mastra/core/harness';
+import type { AgentControllerMessage } from '@mastra/core/agent-controller';
 import { CHAT_INDENT, getMarkdownTheme, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 
@@ -25,10 +25,14 @@ export class AssistantMessageComponent extends Container {
   private contentContainer: Container;
   private hideThinkingBlock: boolean;
   private markdownTheme: MarkdownTheme;
-  private lastMessage?: HarnessMessage;
+  private lastMessage?: AgentControllerMessage;
   private _id: number;
 
-  constructor(message?: HarnessMessage, hideThinkingBlock = false, markdownTheme: MarkdownTheme = getMarkdownTheme()) {
+  constructor(
+    message?: AgentControllerMessage,
+    hideThinkingBlock = false,
+    markdownTheme: MarkdownTheme = getMarkdownTheme(),
+  ) {
     super();
     this._id = ++_compId;
 
@@ -65,8 +69,8 @@ export class AssistantMessageComponent extends Container {
     return this.contentContainer.children.length > 0 ? 'assistant-message' : undefined;
   }
 
-  updateContent(message: HarnessMessage): void {
-    // Deep copy the message to prevent mutation from the harness's shared content array
+  updateContent(message: AgentControllerMessage): void {
+    // Deep copy the message to prevent mutation from the controller's shared content array
     this.lastMessage = {
       ...message,
       content: message.content.map(c => ({ ...c })),

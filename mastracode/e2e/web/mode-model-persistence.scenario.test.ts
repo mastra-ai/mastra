@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { runScenario } from './harness';
+import { runScenario } from './scenario-runner';
 
 /**
  * Switch mode and model, then re-fetch session state to verify the switches
@@ -17,7 +17,7 @@ describe('web scenario: mode-model-persistence', () => {
         // Default mode should be 'build'.
         expect(driver.state().modeId).toBe('build');
 
-        // Send a message first (required to prove the harness is live).
+        // Send a message first (required to prove the controller is live).
         await driver.submit('hello');
         await driver.waitForText('acknowledged');
         await driver.waitForIdle();
@@ -37,7 +37,7 @@ describe('web scenario: mode-model-persistence', () => {
 
         // Re-read state via the API to confirm BOTH switches persisted.
         const client = driver.getClient();
-        const session = client.getHarness('code').session('web-scenario-mode-model-persistence');
+        const session = client.getAgentController('code').session('web-scenario-mode-model-persistence');
         const state = await session.state();
         expect(state.modeId).toBe('plan');
         expect(state.modelId).toBe('anthropic/claude-sonnet-4');

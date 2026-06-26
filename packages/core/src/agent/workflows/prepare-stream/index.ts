@@ -175,7 +175,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
 
   // Internal toggle: the default is direct (in-process) execution which avoids
   // the requestContext serialisation cycle (toJSON → reconstruct) that drops
-  // non-serialisable values (functions, circular-ref objects like the harness
+  // non-serialisable values (functions, circular-ref objects like the controller
   // context). Set MASTRA_EVENTED_EXECUTION=true to opt in to the evented
   // workflow engine for cross-process coordination via pubsub.
   const useEventedExecution = process.env.MASTRA_EVENTED_EXECUTION === 'true';

@@ -1,7 +1,7 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import type { CustomAvailableModel, CustomModelCatalogProvider } from '@mastra/core/harness';
+import type { CustomAvailableModel, CustomModelCatalogProvider } from '@mastra/core/agent-controller';
 import {
   GATEWAY_AUTH_HEADER,
   MastraGateway,

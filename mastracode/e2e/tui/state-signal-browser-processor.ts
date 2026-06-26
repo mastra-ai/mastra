@@ -96,7 +96,7 @@ export const stateSignalBrowserProcessorScenario = {
         unixSocketPubSub: false,
       },
       onCreated(result) {
-        result.harness.setBrowser(browser);
+        result.controller.setBrowser(browser);
       },
     });
   },

@@ -8,7 +8,7 @@ vi.mock('../send-slash-command-message.js', () => ({
   sendSlashCommandMessage: mocks.sendSlashCommandMessage,
 }));
 
-import { createMockState } from '../../__tests__/harness-mock.js';
+import { createMockState } from '../../__tests__/agent-controller-mock.js';
 import { handleReportIssueCommand } from '../report-issue.js';
 
 function createCtx(options?: { hasModelSelected?: boolean; pendingNewThread?: boolean }) {
@@ -38,7 +38,7 @@ describe('handleReportIssueCommand', () => {
     expect(ctx.showInfo).toHaveBeenCalledWith(
       'No model selected. Use /models to select a model, or /login to authenticate.',
     );
-    expect(state.harness.session.thread.create).not.toHaveBeenCalled();
+    expect(state.controller.session.thread.create).not.toHaveBeenCalled();
     expect(mocks.sendSlashCommandMessage).not.toHaveBeenCalled();
   });
 
@@ -47,10 +47,10 @@ describe('handleReportIssueCommand', () => {
 
     await handleReportIssueCommand(ctx, ['startup', 'hangs']);
 
-    expect(state.harness.session.thread.create).toHaveBeenCalledTimes(1);
+    expect(state.controller.session.thread.create).toHaveBeenCalledTimes(1);
     expect(state.pendingNewThread).toBe(false);
     expect(mocks.sendSlashCommandMessage).toHaveBeenCalledTimes(1);
-    expect(state.harness.session.thread.create.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(state.controller.session.thread.create.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.sendSlashCommandMessage.mock.invocationCallOrder[0],
     );
 

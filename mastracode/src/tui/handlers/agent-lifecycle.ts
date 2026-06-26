@@ -75,7 +75,7 @@ export function handleAgentEnd(ctx: EventHandlerContext): void {
 function drainQueuedAction(ctx: EventHandlerContext): boolean {
   const { state } = ctx;
 
-  // Drain queued follow-up actions once all harness-level follow-ups are done.
+  // Drain queued follow-up actions once all controller-level follow-ups are done.
   // Each queued action that starts a new agent operation will eventually trigger
   // handleAgentEnd again, which drains the next FIFO item.
   if (state.session.followUps.count() > 0) {
@@ -217,7 +217,7 @@ function removeJudgeComponent(state: EventHandlerContext['state'], component: Ju
 
 /**
  * Render an in-loop goal evaluation surfaced by the core goal step as a `goal`
- * stream chunk (bridged to a `goal_evaluation` harness event). The core loop
+ * stream chunk (bridged to a `goal_evaluation` controller event). The core loop
  * owns continuation — this handler only mirrors the judge's decision into the
  * UI, syncs the adapter's progress, and runs the plan-mode auto-switch when a
  * plan-started goal completes.

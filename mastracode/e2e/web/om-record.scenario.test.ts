@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { runScenario } from './harness';
+import { runScenario } from './scenario-runner';
 
 /**
  * Verify the OM record API is accessible. Without OM configured, it should
@@ -24,11 +24,11 @@ describe('web scenario: om-record', () => {
 
         // Read the OM record via the API.
         const res = await rawFetch(
-          `${baseUrl}/api/harness/code/sessions/web-scenario-om-record/om?threadId=${threadId}`,
+          `${baseUrl}/api/agent-controller/code/sessions/web-scenario-om-record/om?threadId=${threadId}`,
         );
         expect(res.status).toBe(200);
         const body = await res.json();
-        // OM is not configured on the scenario harness, so record should be absent/null.
+        // OM is not configured on the scenario controller, so record should be absent/null.
         expect(body.record == null || body.record === undefined).toBe(true);
       },
     });

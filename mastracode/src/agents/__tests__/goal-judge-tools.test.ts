@@ -21,7 +21,7 @@ function createRequestContext(projectPath: string) {
     projectPath,
     sandboxAllowedPaths: [],
   });
-  requestContext.set('harness', {
+  requestContext.set('controller', {
     modeId: 'build',
     getState,
     session: {
@@ -61,10 +61,10 @@ describe('getGoalJudgeTools', () => {
 
   it('returns undefined when no project path can be resolved (keeps judge text-only)', async () => {
     const { getGoalJudgeTools } = await import('../workspace.js');
-    // Empty harness state → getDynamicWorkspace throws → resolver returns undefined.
+    // Empty controller state → getDynamicWorkspace throws → resolver returns undefined.
     const requestContext = new RequestContext();
     const getState = () => ({});
-    requestContext.set('harness', { modeId: 'build', getState, session: { state: { get: getState } } });
+    requestContext.set('controller', { modeId: 'build', getState, session: { state: { get: getState } } });
     const tools = await getGoalJudgeTools({ requestContext: requestContext as any });
     expect(tools).toBeUndefined();
   });

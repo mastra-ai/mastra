@@ -1,6 +1,6 @@
 import { describe, it } from 'vitest';
 
-import { runScenario } from './harness';
+import { runScenario } from './scenario-runner';
 
 /**
  * Web equivalent of MastraCode's `automated-chat` scenario: submit one prompt
@@ -10,7 +10,8 @@ describe('web scenario: automated-chat', () => {
   it('streams a chat response into the transcript', async () => {
     await runScenario({
       name: 'automated-chat',
-      description: 'Submit a prompt to the real harness and assert the AIMock response appears in the UI transcript.',
+      description:
+        'Submit a prompt to the real controller and assert the AIMock response appears in the UI transcript.',
       aimockFixture: 'automated-chat.json',
       run: async ({ driver }) => {
         await driver.submit('Say the smoke phrase');

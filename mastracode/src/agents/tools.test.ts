@@ -13,7 +13,7 @@ function createRequestContext(state: Record<string, unknown>, modeId: string = '
   const getState = () => state;
   return {
     get(key: string) {
-      if (key !== 'harness') return undefined;
+      if (key !== 'controller') return undefined;
       return {
         modeId,
         getState,
