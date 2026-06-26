@@ -620,10 +620,8 @@ describe('AutoExtractedMetrics', () => {
     expect(emittedMetrics[0]!.metric.labels).toEqual({ status: 'ok' });
   });
 
-  it('should use configured model (not responseModel) for OpenRouter pricing lookup', () => {
+  it('should fall back to the configured model when responseModel has no pricing match', () => {
     setup();
-    // OpenRouter returns responseModel with different word ordering than the user-configured alias.
-    // e.g. user configures "anthropic/claude-sonnet-4-6" but OpenRouter returns "anthropic/claude-4.6-sonnet-20260217"
     const span = createMockSpan({
       type: SpanType.MODEL_GENERATION,
       endTime: new Date('2026-01-01T00:00:01Z'),

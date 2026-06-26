@@ -2,4 +2,4 @@
 '@mastra/observability': patch
 ---
 
-Fixed OpenRouter pricing lookup failing when the responseModel has different word ordering than the user-configured model alias (e.g. claude-sonnet-4-6 vs claude-4.6-sonnet). The pricing registry now uses the configured model string for OpenRouter instead of the provider-returned responseModel.
+Fixed pricing lookup when a provider-reported response model does not match a known pricing entry but the configured model does. Cost estimation now falls back to the configured model before reporting `no_matching_model`.
