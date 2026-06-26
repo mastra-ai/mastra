@@ -51,7 +51,7 @@ const writingAgent = new Agent({
 	model: '__GATEWAY_OPENAI_MODEL_MINI__',
 })
 
-// highlight-start
+// [!code highlight:10]
 const supervisor = new Agent({
 	id: 'supervisor',
 	instructions: `You coordinate research and writing using specialized agents.
@@ -62,7 +62,6 @@ const supervisor = new Agent({
 		storage: new LibSQLStore({ id: 'storage', url: 'file:mastra.db' }),
 	}),
 })
-// highlight-end
 
 const stream = await supervisor.stream('Research AI in education and write an article', {
 	maxSteps: 10,
@@ -401,14 +400,13 @@ const supervisor = new Agent({
 	instructions: 'Coordinate research and writing using the available agents.',
 	model: '__GATEWAY_OPENAI_MODEL__',
 	agents: { researchAgent, writingAgent },
-	// highlight-start
+	// [!code highlight:6]
 	backgroundTasks: {
 		tools: {
 			researchAgent: { enabled: true, timeoutMs: 900_000 },
 			writingAgent: { enabled: true, timeoutMs: 900_000 },
 		},
 	},
-	// highlight-end
 })
 
 const stream = await supervisor.streamUntilIdle('Research AI in education and write an article', {

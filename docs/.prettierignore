@@ -4,4 +4,4 @@ build/**
 node_modules/**
 static/**
 src/content/models/**
-src/content/docs/index.mdx # TODO: Fix the formatter
+src/content/docs/index.mdx

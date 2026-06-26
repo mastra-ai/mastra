@@ -104,7 +104,7 @@ const supervisor = new Agent({
 	agents: { researchAgent, writingAgent },
 })
 
-// highlight-start
+// [!code highlight:7]
 const rubricScorer = createRubricScorer({
 	model: '__GATEWAY_OPENAI_MODEL_MINI__',
 	criteria: [
@@ -112,16 +112,14 @@ const rubricScorer = createRubricScorer({
 		{ description: 'The response includes concrete recommendations' },
 	],
 })
-// highlight-end
 
 const stream = await supervisor.stream('Research AI in education', {
 	maxSteps: 10,
-	// highlight-start
+	// [!code highlight:4]
 	isTaskComplete: {
 		scorers: [rubricScorer],
 		strategy: 'all',
 	},
-	// highlight-end
 })
 ```
 

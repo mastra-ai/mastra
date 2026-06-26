@@ -260,7 +260,7 @@ export const supportAgent = new Agent({
 	name: 'support-agent',
 	instructions: 'Help users with their questions.',
 	model: '__GATEWAY_OPENAI_MODEL__',
-	// highlight-start
+	// [!code highlight:8]
 	hooks: {
 		beforeToolCall: ({ toolName, input }) => {
 			console.log(`Running ${toolName}`, input)
@@ -269,7 +269,6 @@ export const supportAgent = new Agent({
 			console.log(`Finished ${toolName}`, { output, error })
 		},
 	},
-	// highlight-end
 })
 ```
 

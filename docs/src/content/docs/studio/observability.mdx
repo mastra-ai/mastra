@@ -39,7 +39,7 @@ import {
 } from '@mastra/observability'
 
 export const mastra = new Mastra({
-	// highlight-start
+	// [!code highlight:10]
 	storage: new MastraCompositeStore({
 		id: 'composite-storage',
 		default: new LibSQLStore({
@@ -50,7 +50,6 @@ export const mastra = new Mastra({
 			observability: await new DuckDBStore().getStore('observability'),
 		},
 	}),
-	// highlight-end
 	observability: new Observability({
 		configs: {
 			default: {

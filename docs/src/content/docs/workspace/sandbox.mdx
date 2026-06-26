@@ -69,14 +69,13 @@ import { Agent } from '@mastra/core/agent'
 import { Workspace, LocalSandbox } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-	// highlight-start
+	// [!code highlight:6]
 	sandbox: ({ requestContext }) => {
 		const userId = requestContext.get('user-id') as string
 		return new LocalSandbox({
 			workingDirectory: `/workspaces/${userId}`,
 		})
 	},
-	// highlight-end
 })
 
 const agent = new Agent({

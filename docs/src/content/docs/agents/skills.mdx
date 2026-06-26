@@ -127,13 +127,12 @@ const supportSkill = createSkill({
 export const agent = new Agent({
 	id: 'dynamic-agent',
 	model: '__GATEWAY_OPENAI_MODEL__',
-	// highlight-start
+	// [!code highlight:5]
 	skills: ({ requestContext }) => {
 		const role = requestContext.get('userRole')
 		if (role === 'developer') return [devSkill]
 		return [supportSkill]
 	},
-	// highlight-end
 })
 ```
 

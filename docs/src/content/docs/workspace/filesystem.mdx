@@ -118,7 +118,7 @@ import { Agent } from '@mastra/core/agent'
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
-	// highlight-start
+	// [!code highlight:7]
 	filesystem: ({ requestContext }) => {
 		const role = requestContext.get('agent-role') || 'guest'
 		return new LocalFilesystem({
@@ -126,7 +126,6 @@ const workspace = new Workspace({
 			readOnly: role !== 'admin',
 		})
 	},
-	// highlight-end
 })
 
 const agent = new Agent({

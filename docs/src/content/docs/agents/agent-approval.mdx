@@ -450,12 +450,11 @@ for await (const chunk of stream.fullStream) {
 		console.log('Arguments:', chunk.payload.args)
 
 		// Approve the tool call
-		// highlight-start
+		// [!code highlight:4]
 		const resumeStream = await supervisorAgent.approveToolCall({
 			runId: stream.runId,
 			toolCallId: chunk.payload.toolCallId,
 		})
-		//highlight-end
 
 		for await (const resumeChunk of resumeStream.textStream) {
 			process.stdout.write(resumeChunk)

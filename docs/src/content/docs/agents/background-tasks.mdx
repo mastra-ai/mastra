@@ -71,13 +71,12 @@ export const researchTool = createTool({
 	id: 'research',
 	description: 'Run a long research job',
 	inputSchema: z.object({ topic: z.string() }),
-	// highlight-start
+	// [!code highlight:5]
 	background: {
 		enabled: true,
 		timeoutMs: 600_000,
 		maxRetries: 1,
 	},
-	// highlight-end
 	execute: async ({ context }) => {
 		// ...
 	},
@@ -96,14 +95,13 @@ export const researcher = new Agent({
 	instructions: 'You research topics and answer questions.',
 	model: '__GATEWAY_OPENAI_MODEL__',
 	tools: { researchTool, summarizeTool },
-	// highlight-start
+	// [!code highlight:6]
 	backgroundTasks: {
 		tools: {
 			researchTool: { enabled: true, timeoutMs: 600_000 },
 			summarizeTool: false,
 		},
 	},
-	// highlight-end
 })
 ```
 
@@ -204,14 +202,13 @@ const supervisor = new Agent({
 	instructions: 'Coordinate research and writing using the available agents.',
 	model: '__GATEWAY_OPENAI_MODEL__',
 	agents: { researchAgent, writingAgent },
-	// highlight-start
+	// [!code highlight:6]
 	backgroundTasks: {
 		tools: {
 			researchAgent: { enabled: true, timeoutMs: 900_000 },
 			writingAgent: { enabled: true, timeoutMs: 900_000 },
 		},
 	},
-	// highlight-end
 })
 
 const stream = await supervisor.stream('Research AI in education and write an article', {
@@ -232,14 +229,13 @@ const researchAgent = new Agent({
 	description: 'Gathers factual information.',
 	model: '__GATEWAY_OPENAI_MODEL_MINI__',
 	tools: { deepResearchTool },
-	// highlight-start
+	// [!code highlight:6]
 	backgroundTasks: {
 		tools: {
 			deepResearchTool: { enabled: true, timeoutMs: 600_000 },
 		},
 		waitTimeoutMs: 900_000,
 	},
-	// highlight-end
 })
 ```
 

@@ -445,14 +445,13 @@ export const agent = new Agent({
 	memory: new Memory({
 		options: {
 			observationalMemory: {
-				// highlight-start
+				// [!code highlight:6]
 				observation: {
 					model: 'google/gemini-2.5-flash',
 				},
 				reflection: {
 					model: '__GATEWAY_OPENAI_MODEL_MINI__',
 				},
-				// highlight-end
 			},
 		},
 	}),

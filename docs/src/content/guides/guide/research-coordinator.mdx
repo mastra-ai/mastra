@@ -328,7 +328,7 @@ Success criteria:
 			},
 		},
 
-		// highlight-start
+		// [!code highlight:10]
 		// Validate task completion
 		isTaskComplete: {
 			scorers: [taskCompleteScorer],
@@ -339,7 +339,6 @@ Success criteria:
 				console.log(`  Score: ${result.scorers[0]?.score}\n`)
 			},
 		},
-		// highlight-end
 	},
 })
 ```

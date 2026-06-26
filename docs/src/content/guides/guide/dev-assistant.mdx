@@ -36,12 +36,11 @@ Additionally, enable BM25 search indexing and load skills from the `skills` dire
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
-// highlight-start
+// [!code highlight:2]
 import { resolve } from 'node:path'
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
-// highlight-end
 
-// highlight-start
+// [!code highlight:7]
 const workspace = new Workspace({
 	filesystem: new LocalFilesystem({ basePath: resolve(import.meta.dirname, '../../workspace') }),
 	sandbox: new LocalSandbox({ workingDirectory: resolve(import.meta.dirname, '../../workspace') }),
@@ -49,7 +48,6 @@ const workspace = new Workspace({
 	bm25: true,
 	autoIndexPaths: ['docs', 'src'],
 })
-// highlight-end
 
 export const mastra = new Mastra({
 	// [!code highlight:1]

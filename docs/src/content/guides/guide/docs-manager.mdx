@@ -19,18 +19,16 @@ The workspace uses a local filesystem to manage documentation files. The agent r
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
-// highlight-start
+// [!code highlight:2]
 import { resolve } from 'node:path'
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
-// highlight-end
 
-// highlight-start
+// [!code highlight:5]
 const workspace = new Workspace({
 	filesystem: new LocalFilesystem({
 		basePath: resolve(import.meta.dirname, '../../workspace'),
 	}),
 })
-// highlight-end
 
 export const mastra = new Mastra({
 	// [!code highlight:1]

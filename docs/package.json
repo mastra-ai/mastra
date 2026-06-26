@@ -19,7 +19,7 @@
 		"validate:sidebar-docs": "tsx scripts/validate-sidebar-docs.ts",
 		"validate:sidebar-new-badges": "tsx scripts/validate-sidebar-new-badges.ts",
 		"validate": "npm-run-all --parallel validate:frontmatter validate:reference-sidebar validate:sidebar-docs validate:sidebar-new-badges",
-		"format": "prettier --write .",
+		"format": "prettier --write ./src/content",
 		"vale:download": "node scripts/vale/download.mjs",
 		"vale": "scripts/vale/bin/vale",
 		"vale:sync": "scripts/vale/bin/vale sync",

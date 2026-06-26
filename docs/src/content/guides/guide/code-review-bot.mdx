@@ -19,19 +19,17 @@ In your `src/mastra/index.ts` file, import the [`Workspace`](/reference/workspac
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
-// highlight-start
+// [!code highlight:2]
 import { resolve } from 'node:path'
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
-// highlight-end
 
-// highlight-start
+// [!code highlight:6]
 const workspace = new Workspace({
 	filesystem: new LocalFilesystem({
 		basePath: resolve(import.meta.dirname, '../../workspace'),
 	}),
 	skills: ['skills'],
 })
-// highlight-end
 
 export const mastra = new Mastra({
 	// [!code highlight:1]

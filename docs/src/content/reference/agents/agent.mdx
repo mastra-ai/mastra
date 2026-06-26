@@ -31,12 +31,11 @@ export const agent = new Agent({
 export const agent2 = new Agent({
 	id: 'test-agent-2',
 	name: 'Test Agent 2',
-	// highlight-start
+	// [!code highlight:4]
 	instructions: {
 		role: 'system',
 		content: 'You are an expert programmer',
 	},
-	// highlight-end
 	model: '__GATEWAY_OPENAI_MODEL__',
 })
 
@@ -44,12 +43,11 @@ export const agent2 = new Agent({
 export const agent3 = new Agent({
 	id: 'test-agent-3',
 	name: 'Test Agent 3',
-	// highlight-start
+	// [!code highlight:4]
 	instructions: [
 		{ role: 'system', content: 'You are a helpful assistant' },
 		{ role: 'system', content: 'You have expertise in TypeScript' },
 	],
-	// highlight-end
 	model: '__GATEWAY_OPENAI_MODEL__',
 })
 ```
@@ -67,13 +65,12 @@ export const agent = new Agent({
 	instructions: {
 		role: 'system',
 		content: 'You are a helpful assistant specialized in technical documentation.',
-		// highlight-start
+		// [!code highlight:5]
 		providerOptions: {
 			openai: {
 				reasoningEffort: 'low',
 			},
 		},
-		// highlight-end
 	},
 	model: '__GATEWAY_OPENAI_MODEL__',
 })
@@ -961,7 +958,7 @@ export const agent = new Agent({
 	name: 'support-agent',
 	instructions: 'Help users with their questions.',
 	model: '__GATEWAY_OPENAI_MODEL__',
-	// highlight-start
+	// [!code highlight:8]
 	hooks: {
 		beforeToolCall: ({ toolName, input }) => {
 			console.log(`Running ${toolName}`, input)
@@ -970,7 +967,6 @@ export const agent = new Agent({
 			console.log(`Finished ${toolName}`, { output, error })
 		},
 	},
-	// highlight-end
 })
 ```
 

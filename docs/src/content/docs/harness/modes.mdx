@@ -30,7 +30,7 @@ import { myAgent } from './agents'
 const harness = new Harness({
 	id: 'multi-mode',
 	agent: myAgent,
-	// highlight-start
+	// [!code highlight:9]
 	modes: [
 		{
 			id: 'plan',
@@ -40,7 +40,6 @@ const harness = new Harness({
 		},
 		{ id: 'build', name: 'Build', instructions: 'Implement the approved plan.' },
 	],
-	// highlight-end
 })
 
 await harness.init()
