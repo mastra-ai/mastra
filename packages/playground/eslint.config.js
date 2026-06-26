@@ -733,6 +733,88 @@ const prohibitedMockModulePatterns = [
   '^@mastra\\/react$',
 ];
 
+// BDD structure enforcement for Playwright E2E specs (e2e/tests/**).
+// Every leaf `test(...)` / `it(...)` MUST be nested inside a
+// `test.describe('when …')` (or `describe('when …')`) precondition block.
+// A purely structural esquery selector cannot assert "nearest ancestor
+// describe title starts with 'when'", so this is implemented as a small custom
+// rule that walks the ancestor chain of each bare `test()` / `it()` call.
+const E2E_BDD_MESSAGE =
+  "E2E BDD: every test()/it() must live inside a test.describe('when …') precondition block. " +
+  "Outer test.describe = the unit, inner test.describe('when …') = ONE precondition, each test = ONE outcome. " +
+  'See the e2e-tests-studio skill.';
+
+/** True when a CallExpression node is a bare `test(...)` / `it(...)` call. */
+function isBareTestCall(node) {
+  return (
+    node.type === 'CallExpression' &&
+    node.callee.type === 'Identifier' &&
+    (node.callee.name === 'test' || node.callee.name === 'it')
+  );
+}
+
+/** True when a CallExpression is a `describe(...)`, `test.describe(...)`, or `it.describe(...)` call. */
+function isDescribeCall(node) {
+  if (node.type !== 'CallExpression') return false;
+  const callee = node.callee;
+  if (callee.type === 'Identifier' && callee.name === 'describe') return true;
+  if (
+    callee.type === 'MemberExpression' &&
+    callee.property.type === 'Identifier' &&
+    callee.property.name === 'describe' &&
+    callee.object.type === 'Identifier' &&
+    (callee.object.name === 'test' || callee.object.name === 'it')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Extract the leading static text of a describe() first argument, or null.
+ * For template literals with interpolation (e.g. `when the ${name} …`) we only
+ * need the leading static quasi to verify the title starts with "when".
+ */
+function describeTitle(node) {
+  const arg = node.arguments[0];
+  if (!arg) return null;
+  if (arg.type === 'Literal' && typeof arg.value === 'string') return arg.value;
+  if (arg.type === 'TemplateLiteral' && arg.quasis.length >= 1) return arg.quasis[0].value.cooked;
+  return null;
+}
+
+const e2eBddPlugin = {
+  rules: {
+    'test-needs-when-describe': {
+      meta: {
+        type: 'problem',
+        docs: { description: 'Require test()/it() to be nested in a describe("when …") block.' },
+        schema: [],
+      },
+      create(context) {
+        return {
+          CallExpression(node) {
+            if (!isBareTestCall(node)) return;
+            // Walk ancestors to find the nearest enclosing describe.
+            const ancestors = context.sourceCode.getAncestors(node);
+            let nearestDescribe = null;
+            for (let i = ancestors.length - 1; i >= 0; i--) {
+              if (isDescribeCall(ancestors[i])) {
+                nearestDescribe = ancestors[i];
+                break;
+              }
+            }
+            const title = nearestDescribe && describeTitle(nearestDescribe);
+            if (!nearestDescribe || title == null || !/^when\b/.test(title)) {
+              context.report({ node, message: E2E_BDD_MESSAGE });
+            }
+          },
+        };
+      },
+    },
+  },
+};
+
 const restrictedTestMockSelectors = [
   {
     selector: prohibitedMockModulePatterns
@@ -755,7 +837,19 @@ const restrictedTestMockSelectors = [
 
 /** @type {import("eslint").Linter.Config[]} */
 export default [
-  { ignores: ['e2e/**'] },
+  // Only the Playwright spec files under e2e/tests are linted (for BDD
+  // structure enforcement below). The kitchen-sink app, test utils, config,
+  // scripts, and build output under e2e remain unlinted as before.
+  {
+    ignores: [
+      'e2e/kitchen-sink/**',
+      'e2e/scripts/**',
+      'e2e/playwright-report/**',
+      'e2e/test-results/**',
+      'e2e/playwright.config.ts',
+      'e2e/tests/__utils__/**',
+    ],
+  },
   ...config,
   {
     plugins: {
@@ -777,6 +871,29 @@ export default [
         ...restrictedPlaygroundUiBarrelImportSpecifiers,
         ...restrictedTestMockSelectors,
       ],
+    },
+  },
+  {
+    // Playwright E2E specs: enforce the BDD structure described in the
+    // e2e-tests-studio skill (every test()/it() nested in a describe('when …')).
+    // These files are not part of the type-aware tsconfig program, so disable
+    // the TypeScript project service here and only run the syntactic BDD rule.
+    files: ['e2e/tests/**/*.spec.ts'],
+    languageOptions: {
+      parserOptions: {
+        projectService: false,
+        project: false,
+      },
+    },
+    plugins: {
+      'e2e-bdd': e2eBddPlugin,
+    },
+    rules: {
+      // These specs are not part of a type-aware tsconfig program, so disable
+      // the @typescript-eslint rules that require type information.
+      '@typescript-eslint/no-misused-promises': 'off',
+      '@typescript-eslint/no-floating-promises': 'off',
+      'e2e-bdd/test-needs-when-describe': 'error',
     },
   },
 ];

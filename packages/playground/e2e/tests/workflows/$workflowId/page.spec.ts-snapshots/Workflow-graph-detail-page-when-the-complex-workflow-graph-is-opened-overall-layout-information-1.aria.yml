@@ -1,0 +1,13 @@
+- navigation "Breadcrumb":
+    - list:
+        - listitem:
+            - link "Workflows":
+                - /url: /workflows
+                - img
+                - text: ''
+        - separator:
+            - img
+        - listitem:
+            - combobox:
+                - text: complex-workflow
+                - img

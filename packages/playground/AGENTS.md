@@ -19,6 +19,11 @@ runs with `onUnhandledRequest: 'error'`:
 - Inner `describe('when …')` = ONE precondition via a real MSW fixture.
 - Each `it` = ONE outcome.
 
+The SAME BDD shape is required for both MSW tests (`src/**`) and Playwright E2E
+specs (`e2e/tests/**`), each lint-enforced via `no-restricted-syntax`. For E2E,
+outer `test.describe` = the unit, inner `test.describe('when …')` = ONE
+precondition, each `test` = ONE outcome — see the `e2e-tests-studio` skill.
+
 Fixtures: nearby `__tests__/fixtures/`, typed with @mastra/client-js response
 types (no inline types, no `as any`). MSW is wired in `vitest.setup.ts`.
 
