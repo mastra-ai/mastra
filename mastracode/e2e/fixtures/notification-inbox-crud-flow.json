@@ -1,0 +1,176 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Seed notification inbox CRUD fixtures.",
+        "hasToolResult": false
+      },
+      "response": {
+        "content": "Notification inbox CRUD seed ready."
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Exercise notification inbox CRUD and search.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_notification_crud_list",
+            "name": "notification_inbox",
+            "arguments": {
+              "action": "list",
+              "status": "pending",
+              "limit": 5
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_notification_crud_list",
+        "hasToolResult": true
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_notification_crud_mark_seen",
+            "name": "notification_inbox",
+            "arguments": {
+              "action": "markSeen",
+              "id": "inbox-crud-seen"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_notification_crud_mark_seen",
+        "hasToolResult": true
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_notification_crud_search_seen",
+            "name": "notification_inbox",
+            "arguments": {
+              "action": "search",
+              "query": "flaky",
+              "status": "seen",
+              "source": "github",
+              "limit": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_notification_crud_search_seen",
+        "hasToolResult": true
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_notification_crud_dismiss",
+            "name": "notification_inbox",
+            "arguments": {
+              "action": "dismiss",
+              "id": "inbox-crud-dismiss"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_notification_crud_dismiss",
+        "hasToolResult": true
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_notification_crud_search_dismissed",
+            "name": "notification_inbox",
+            "arguments": {
+              "action": "search",
+              "query": "reviewer",
+              "status": "dismissed",
+              "source": "github",
+              "limit": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_notification_crud_search_dismissed",
+        "hasToolResult": true
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_notification_crud_archive",
+            "name": "notification_inbox",
+            "arguments": {
+              "action": "archive",
+              "id": "inbox-crud-archive"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_notification_crud_archive",
+        "hasToolResult": true
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_notification_crud_search_archived",
+            "name": "notification_inbox",
+            "arguments": {
+              "action": "search",
+              "query": "canary",
+              "status": "archived",
+              "source": "deploy",
+              "limit": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_notification_crud_search_archived",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Notification inbox CRUD/search e2e complete."
+      }
+    }
+  ]
+}

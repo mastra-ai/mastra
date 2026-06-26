@@ -1,4 +1,4 @@
-import { cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { AgentCmsSidebar } from '../agent-cms-sidebar';
 import { AgentCmsBottomBar } from './agent-cms-bottom-bar';
 

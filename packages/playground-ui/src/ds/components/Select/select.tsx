@@ -1,4 +1,5 @@
 import { Select as SelectPrimitive } from '@base-ui/react/select';
+import type { SelectPopupProps, SelectPositionerProps } from '@base-ui/react/select';
 import { Check, ChevronDown } from 'lucide-react';
 import * as React from 'react';
 
@@ -165,38 +166,67 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
 );
 SelectTrigger.displayName = 'SelectTrigger';
 
-export type SelectContentProps = Omit<SelectPrimitive.Popup.Props, 'className'> & {
-  className?: string;
-  /**
-   * Kept for API compatibility with the previous Radix API. Radix supported
-   * `position="popper" | "item-aligned"`; Base UI always uses popper-style
-   * positioning so this prop is accepted but has no effect.
-   */
-  position?: 'popper' | 'item-aligned';
-  /** Optional portal container, forwarded to `Select.Portal`. */
-  container?: HTMLElement | null;
-  side?: SelectPrimitive.Positioner.Props['side'];
-  align?: SelectPrimitive.Positioner.Props['align'];
-  sideOffset?: SelectPrimitive.Positioner.Props['sideOffset'];
-};
+type SelectContentPositionerProps = Omit<SelectPositionerProps, keyof SelectPopupProps>;
+
+export type SelectContentProps = Omit<SelectPopupProps, 'className'> &
+  SelectContentPositionerProps & {
+    className?: string;
+    /**
+     * Kept for API compatibility with the previous Radix API. Radix supported
+     * `position="popper" | "item-aligned"`; Base UI always uses popper-style
+     * positioning so this prop is accepted but has no effect.
+     */
+    position?: 'popper' | 'item-aligned';
+    /** Optional portal container, forwarded to `Select.Portal`. */
+    container?: HTMLElement | null;
+  };
 
 const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
   (
-    { className, children, position: _position, container, side = 'bottom', align = 'start', sideOffset = 4, ...props },
+    {
+      className,
+      children,
+      position: _position,
+      container,
+      side = 'bottom',
+      align = 'start',
+      sideOffset = 4,
+      alignItemWithTrigger = false,
+      anchor,
+      positionMethod,
+      alignOffset,
+      collisionBoundary,
+      collisionPadding,
+      sticky,
+      arrowPadding,
+      disableAnchorTracking,
+      collisionAvoidance,
+      ...props
+    },
     ref,
   ) => {
     // Default to the nearest SideDialog/Drawer popup so the dropdown stays
     // interactive inside a modal drawer; an explicit `container` still wins.
     const resolvedContainer = usePortalContainer(container);
+    const positionerProps: SelectContentPositionerProps = {
+      side,
+      align,
+      sideOffset,
+      alignItemWithTrigger,
+      anchor,
+      positionMethod,
+      alignOffset,
+      collisionBoundary,
+      collisionPadding,
+      sticky,
+      arrowPadding,
+      disableAnchorTracking,
+      collisionAvoidance,
+    };
+
     return (
       <SelectPrimitive.Portal container={resolvedContainer}>
-        <SelectPrimitive.Positioner
-          className="z-50 outline-none"
-          side={side}
-          align={align}
-          sideOffset={sideOffset}
-          alignItemWithTrigger={false}
-        >
+        <SelectPrimitive.Positioner className="z-50 outline-none" {...positionerProps}>
           <SelectPrimitive.Popup
             ref={ref}
             className={cn(

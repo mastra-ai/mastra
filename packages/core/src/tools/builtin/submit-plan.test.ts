@@ -62,13 +62,15 @@ describe('submitPlanTool (native suspend)', () => {
     expect(result.content).toContain('User feedback: Add tests');
   });
 
-  it('reports rejection without feedback back to the model from resumeData', async () => {
+  it('tells the model to stop and wait when rejected without feedback', async () => {
     const ctx = makeAgentContext({ resumeData: { action: 'rejected' } });
 
     const result = await (submitPlanTool as any).execute({ title: 'Ship it', plan: '# Plan' }, ctx);
 
     expect(result.isError).toBe(false);
-    expect(result.content).toContain('The user wants revisions.');
+    expect(result.content).toContain('not approved');
+    expect(result.content).toContain('Stop now');
+    expect(result.content).toContain('next message');
     expect(result.content).not.toContain('User feedback:');
   });
 

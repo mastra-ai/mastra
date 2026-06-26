@@ -7,6 +7,7 @@ import {
   type ChannelConnectResult,
   type ChannelAdapterConfig,
   AgentChannels,
+  resolveWaitUntil,
 } from '@mastra/core/channels';
 import type { ApiRoute, ContextWithMastra } from '@mastra/core/server';
 import { type ChannelsStorage, type ChannelInstallation } from '@mastra/core/storage';
@@ -27,6 +28,19 @@ import {
 import type { SlackProviderConfig, SlashCommandConfig, SlackConnectOptions, SlackAdapterChannelConfig } from './types';
 
 const PLATFORM = 'slack';
+
+/**
+ * Remove trailing slashes from a base URL so callback paths like
+ * `${baseUrl}/slack/oauth/callback` don't produce double slashes when the
+ * configured value (e.g. MASTRA_BASE_URL) includes a trailing slash.
+ */
+export function stripTrailingSlash(url: string): string {
+  let end = url.length;
+  while (end > 0 && url.charCodeAt(end - 1) === 47 /* '/' */) {
+    end--;
+  }
+  return end === url.length ? url : url.slice(0, end);
+}
 
 /**
  * Create a hash of the agent config for change detection.
@@ -541,7 +555,7 @@ export class SlackProvider implements ChannelProvider {
   #getBaseUrl(): string | undefined {
     // Explicit config takes precedence
     if (this.#baseUrl) {
-      return this.#baseUrl;
+      return stripTrailingSlash(this.#baseUrl);
     }
 
     // Derive from Mastra server config + environment
@@ -563,7 +577,7 @@ export class SlackProvider implements ChannelProvider {
    * Only needed if not using Mastra server config.
    */
   setBaseUrl(baseUrl: string): void {
-    this.#baseUrl = baseUrl;
+    this.#baseUrl = stripTrailingSlash(baseUrl);
   }
 
   /**
@@ -815,7 +829,6 @@ export class SlackProvider implements ChannelProvider {
       | SlackAdapter;
     const existing = agent.getChannels() as AgentChannels | undefined;
     const existingConfig = existing?.channelConfig;
-    existing?.close();
     const agentChannels = new AgentChannels({
       ...existingConfig,
       ...this.#forwardedChannelOptions(),
@@ -1431,8 +1444,19 @@ export class SlackProvider implements ChannelProvider {
       body: rawBody,
     });
 
+    // Resolve waitUntil for this request. Lookup order: bare fn from config (Vercel
+    // users pass `waitUntil` from `@vercel/functions` here), user resolver, then the
+    // core default (Cloudflare Workers + Netlify). Without waitUntil, the serverless
+    // invocation freezes after returning 200 and kills the agent run mid-flight.
+    const waitUntilFn =
+      this.#channelConfig.waitUntil ?? this.#channelConfig.resolveWaitUntil?.(c) ?? resolveWaitUntil(c);
+
     try {
-      return await agentChannels.handleWebhookEvent('slack', delegateRequest);
+      return await agentChannels.handleWebhookEvent(
+        'slack',
+        delegateRequest,
+        waitUntilFn ? { waitUntil: waitUntilFn } : undefined,
+      );
     } catch (error) {
       console.error('[Slack] Error delegating to AgentChannels:', error);
       return c.json({ ok: true });
@@ -1504,8 +1528,8 @@ export class SlackProvider implements ChannelProvider {
       });
     };
 
-    // Process in background
-    (async () => {
+    // Process in background and keep the serverless invocation alive while it runs.
+    const task = (async () => {
       try {
         const result = await agent.generate(prompt);
         const text = typeof result.text === 'string' ? result.text : JSON.stringify(result.text);
@@ -1516,6 +1540,10 @@ export class SlackProvider implements ChannelProvider {
         await sendDelayedResponse(`Error: ${message}`);
       }
     })();
+
+    const slashWaitUntil =
+      this.#channelConfig.waitUntil ?? this.#channelConfig.resolveWaitUntil?.(c) ?? resolveWaitUntil(c);
+    slashWaitUntil?.(task);
 
     // Return immediate acknowledgment
     return c.json({ response_type: 'ephemeral', text: 'Processing...' });

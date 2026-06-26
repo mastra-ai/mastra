@@ -33,7 +33,8 @@ import {
 } from '../observability';
 import { executeWithContext } from '../observability/utils';
 import type { OutputResult, Processor, ProcessorStreamWriter } from '../processors';
-import { ProcessorRunner, ProcessorState, createProcessorSendSignal } from '../processors/runner';
+import { ProcessorRunner, ProcessorState } from '../processors/runner';
+import { createProcessorSendSignal } from '../processors/send-signal';
 import {
   summarizeActiveToolsForSpan,
   summarizeProcessorModelForSpan,
@@ -47,7 +48,7 @@ import { toStandardSchema } from '../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { StorageListWorkflowRunsInput } from '../storage';
 import { WorkflowRunOutput } from '../stream/RunOutput';
-import type { ChunkType, LanguageModelUsage } from '../stream/types';
+import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
 import { Tool } from '../tools/tool';
 import type { ToolExecutionContext } from '../tools/types';
@@ -752,6 +753,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         state,
         result: outputResult,
         finishReason,
+        providerMetadata,
         toolCalls,
         text,
         retryCount,
@@ -1046,6 +1048,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         processorStates,
         result: outputResult,
         finishReason,
+        providerMetadata,
         toolCalls,
         text,
         retryCount,
@@ -1404,6 +1407,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 messageList: checkedMessageList,
                 stepNumber: stepNumber ?? 0,
                 finishReason,
+                providerMetadata: providerMetadata as ProviderMetadata | undefined,
                 toolCalls: toolCalls as any,
                 text,
                 usage: (usage as LanguageModelUsage) ?? defaultUsage,

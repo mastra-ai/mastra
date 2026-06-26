@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import type * as PlaygroundUi from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -18,6 +17,10 @@ vi.mock('@mastra/playground-ui', async importOriginal => {
     toast: { success: vi.fn(), error: vi.fn() },
   };
 });
+
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
 
 const BASE_URL = 'http://localhost:4111';
 

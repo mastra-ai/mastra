@@ -96,9 +96,9 @@ export function createDynamicTools(
 ) {
   return function getDynamicTools({ requestContext }: { requestContext: RequestContext }) {
     const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeComposedState> | undefined;
-    const state = ctx?.getState?.();
+    const state = ctx?.getState();
 
-    const modelId = state?.currentModelId;
+    const modelId = ctx?.session?.modelId;
     const isAnthropicModel = modelId?.startsWith('anthropic/');
     const isOpenAIModel = modelId?.startsWith('openai/');
 

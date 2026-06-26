@@ -27,12 +27,13 @@ export function getAllowedPathsFromContext(
 ): string[] {
   const harnessCtx = toolContext?.requestContext?.get('harness') as
     | {
-        state?: { sandboxAllowedPaths?: string[]; projectPath?: string; configDir?: string };
         getState?: () => { sandboxAllowedPaths?: string[]; projectPath?: string; configDir?: string };
+        session?: {
+          state?: { get?: () => { sandboxAllowedPaths?: string[]; projectPath?: string; configDir?: string } };
+        };
       }
     | undefined;
-
-  const state = harnessCtx?.getState?.() ?? harnessCtx?.state;
+  const state = harnessCtx?.getState?.() ?? harnessCtx?.session?.state?.get?.();
   const projectPath = state?.projectPath ? path.resolve(state.projectPath) : process.cwd();
   const configDir = state?.configDir ?? DEFAULT_CONFIG_DIR;
   const skillPaths = buildSkillPaths(projectPath, configDir);

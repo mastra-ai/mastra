@@ -1,0 +1,582 @@
+---
+title: "Reference: createInngestAgent() | Agents"
+description: "API reference for createInngestAgent(), which wraps an Agent with Inngest-powered durable execution and resumable streams."
+packages:
+  - "@mastra/inngest"
+---
+
+# `createInngestAgent()`
+
+`createInngestAgent()` wraps an existing [`Agent`](/reference/agents/agent) with [Inngest](https://www.inngest.com/docs)-powered durable execution. Like [`createDurableAgent()`](/reference/agents/durable-agent#createdurableagentoptions), it streams events over [PubSub](/docs/server/pubsub) and supports resumable streams, but runs the agentic loop on Inngest's execution engine instead of in-process. Use it when a run must survive process restarts or run in a distributed environment.
+
+For in-process durable execution, use [`createDurableAgent()`](/reference/agents/durable-agent#createdurableagentoptions). For fire-and-forget execution on the built-in workflow engine, use [`createEventedAgent()`](/reference/agents/durable-agent#createeventedagentoptions).
+
+## Usage example
+
+Set up the Inngest client, wrap an agent, register it with Mastra, and expose the Inngest serve endpoint:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Agent } from '@mastra/core/agent'
+import { createInngestAgent, serve as inngestServe } from '@mastra/inngest'
+import { Inngest } from 'inngest'
+
+const inngest = new Inngest({ id: 'my-app' })
+
+const agent = new Agent({
+  id: 'my-agent',
+  name: 'My Agent',
+  instructions: 'You are a helpful assistant',
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+
+const durableAgent = createInngestAgent({ agent, inngest })
+
+export const mastra = new Mastra({
+  agents: { myAgent: durableAgent },
+  server: {
+    apiRoutes: [
+      {
+        path: '/inngest/api',
+        method: 'ALL',
+        createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+      },
+    ],
+  },
+})
+```
+
+Stream a response and read the result:
+
+```typescript
+const { output, runId, cleanup } = await durableAgent.stream('Hello!')
+
+const text = await output.text
+
+cleanup()
+```
+
+## `createInngestAgent(options)`
+
+Wraps an `Agent` with Inngest-powered durable execution and resumable streams.
+
+```typescript
+import { createInngestAgent } from '@mastra/inngest'
+
+const durableAgent = createInngestAgent({ agent, inngest })
+```
+
+Returns: [`InngestAgent`](#inngestagent-interface)
+
+### Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'agent',
+    type: 'Agent',
+    isOptional: false,
+    description:
+      'The Agent to wrap with Inngest durable execution. Agent methods (e.g., `generate()`, `listTools()`, `getMemory()`) delegate to this agent via a Proxy.',
+  },
+  {
+    name: 'inngest',
+    type: 'Inngest',
+    isOptional: false,
+    description:
+      'The Inngest client instance. Used to send workflow events and, in SDK v4, publish realtime stream events.',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    isOptional: true,
+    description: 'ID override.',
+    defaultValue: 'agent.id',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    isOptional: true,
+    description: 'Name override.',
+    defaultValue: 'agent.name',
+  },
+  {
+    name: 'pubsub',
+    type: 'PubSub',
+    isOptional: true,
+    description:
+      'PubSub instance for streaming events. The default `InngestPubSub` uses Inngest Realtime, which works across processes.',
+    defaultValue: 'InngestPubSub',
+  },
+  {
+    name: 'cache',
+    type: 'MastraServerCache',
+    isOptional: true,
+    description:
+      'Cache for stored stream events, which enables resumable streams. When provided, the PubSub is automatically wrapped with `CachingPubSub`. If omitted, the agent inherits the cache from the Mastra instance.',
+  },
+  {
+    name: 'mastra',
+    type: 'Mastra',
+    isOptional: true,
+    description: 'Mastra instance for observability. Set automatically when the agent is registered with Mastra.',
+  },
+]}
+/>
+
+## `InngestAgent` interface
+
+The object returned by `createInngestAgent()`. It implements the full `Agent` interface via a Proxy: any property or method not explicitly defined (e.g., `generate()`, `listTools()`, `getMemory()`) is forwarded to the underlying agent.
+
+### Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'The agent ID.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'The agent name.',
+  },
+  {
+    name: 'agent',
+    type: 'Agent',
+    description: 'The underlying Mastra Agent.',
+  },
+  {
+    name: 'inngest',
+    type: 'Inngest',
+    description: 'The Inngest client.',
+  },
+  {
+    name: 'cache',
+    type: 'MastraServerCache | undefined',
+    description: 'The resolved cache instance, if resumable streams are enabled.',
+  },
+  {
+    name: 'pubsub',
+    type: 'PubSub',
+    description: 'The PubSub instance used for streaming events.',
+  },
+]}
+/>
+
+## Methods
+
+### Execution
+
+#### `stream(messages, options?)`
+
+Streams a response using Inngest's durable execution engine. The workflow is triggered via an Inngest event after the PubSub subscription is established.
+
+```typescript
+const { output, runId, cleanup } = await durableAgent.stream('Hello!', {
+  onChunk: chunk => console.log(chunk),
+  onFinish: result => console.log('done', result),
+})
+
+const text = await output.text
+cleanup()
+```
+
+Returns: [`Promise<InngestAgentStreamResult>`](#inngestagentstreamresult)
+
+#### `resume(runId, resumeData, options?)`
+
+Resumes a suspended Inngest run, for example after a tool approval. Loads the workflow snapshot from storage, finds the suspended step, and sends a resume event to Inngest.
+
+```typescript
+const { output, cleanup } = await durableAgent.resume(
+  runId,
+  {
+    approved: true,
+  },
+  { threadId: 'thread-1', resourceId: 'user-1' },
+)
+
+await output.text
+cleanup()
+```
+
+The third argument accepts `threadId` and `resourceId` in addition to the lifecycle callbacks:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'threadId',
+    type: 'string',
+    isOptional: true,
+    description: 'Thread ID to associate with the resumed run.',
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    isOptional: true,
+    description: 'Resource ID to associate with the resumed run.',
+  },
+  {
+    name: 'onChunk',
+    type: '(chunk: ChunkType) => void | Promise<void>',
+    isOptional: true,
+    description: 'Called for each streamed chunk.',
+  },
+  {
+    name: 'onStepFinish',
+    type: '(result: AgentStepFinishEventData) => void | Promise<void>',
+    isOptional: true,
+    description: 'Called when a step in the agentic loop finishes.',
+  },
+  {
+    name: 'onFinish',
+    type: '(result: AgentFinishEventData) => void | Promise<void>',
+    isOptional: true,
+    description: 'Called when the run finishes.',
+  },
+  {
+    name: 'onError',
+    type: '(error: Error) => void | Promise<void>',
+    isOptional: true,
+    description: 'Called when the run errors.',
+  },
+  {
+    name: 'onSuspended',
+    type: '(data: AgentSuspendedEventData) => void | Promise<void>',
+    isOptional: true,
+    description: 'Called when the run suspends.',
+  },
+]}
+/>
+
+Returns: [`Promise<InngestAgentStreamResult>`](#inngestagentstreamresult)
+
+#### `observe(runId, options?)`
+
+Reconnects to an existing run, replaying cached events before delivering live ones. Use this after a network disconnection. Pass `offset` to start replay from a known position.
+
+```typescript
+const { output, cleanup } = await durableAgent.observe(runId, {
+  offset: 0,
+  onChunk: chunk => console.log(chunk),
+})
+
+await output.text
+```
+
+The result from `observe()` does not include `threadId` or `resourceId`.
+
+Returns: `Promise<Omit<InngestAgentStreamResult, 'threadId' | 'resourceId'>>`
+
+:::warning
+
+The `cleanup()` returned by `observe()` destroys the run's registry entries and cached events. Only call it when you are done with the run. If the run is suspended and you intend to resume later, don't call `cleanup()`.
+
+:::
+
+#### `prepare(messages, options?)`
+
+Prepares a run for durable execution without triggering it. Returns the serialized workflow input that can be used to manually trigger the Inngest workflow event.
+
+```typescript
+const { runId, messageId, workflowInput, threadId, resourceId } = await durableAgent.prepare(
+  'Summarize the document',
+  {
+    memory: { threadId: 'thread-1', resourceId: 'user-1' },
+  },
+)
+```
+
+Returns:
+
+```typescript
+interface PrepareResult {
+  runId: string
+  messageId: string
+  workflowInput: any
+  threadId?: string
+  resourceId?: string
+}
+```
+
+### Introspection
+
+#### `isInngestAgent(obj)`
+
+Type guard that checks whether an object is an `InngestAgent`.
+
+```typescript
+import { isInngestAgent } from '@mastra/inngest'
+
+if (isInngestAgent(agent)) {
+  // agent is InngestAgent
+}
+```
+
+Returns: `boolean`
+
+## Stream options
+
+`stream()` accepts an `InngestAgentStreamOptions` object. It supports the same agent execution options as [`DurableAgent.stream()`](/reference/agents/durable-agent#stream-options), plus lifecycle callbacks.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'runId',
+    type: 'string',
+    isOptional: true,
+    description: 'Unique identifier for this run. Use it later with `resume()` or `observe()`.',
+  },
+  {
+    name: 'instructions',
+    type: "AgentExecutionOptions['instructions']",
+    isOptional: true,
+    description: "Overrides the agent's default instructions for this run.",
+  },
+  {
+    name: 'context',
+    type: 'ModelMessage[]',
+    isOptional: true,
+    description: 'Additional context messages to provide to the agent.',
+  },
+  {
+    name: 'memory',
+    type: 'object',
+    isOptional: true,
+    description: 'Memory configuration for conversation persistence and retrieval.',
+  },
+  {
+    name: 'requestContext',
+    type: 'RequestContext',
+    isOptional: true,
+    description: 'Request context carrying dynamic configuration and state for this run.',
+  },
+  {
+    name: 'maxSteps',
+    type: 'number',
+    isOptional: true,
+    description: 'Maximum number of steps to run.',
+  },
+  {
+    name: 'toolsets',
+    type: 'object',
+    isOptional: true,
+    description: 'Additional tool sets available for this run.',
+  },
+  {
+    name: 'clientTools',
+    type: 'object',
+    isOptional: true,
+    description: 'Client-side tools available during execution.',
+  },
+  {
+    name: 'toolChoice',
+    type: "'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }",
+    isOptional: true,
+    description: 'Tool selection strategy.',
+  },
+  {
+    name: 'modelSettings',
+    type: 'object',
+    isOptional: true,
+    description: 'Model-specific settings such as temperature.',
+  },
+  {
+    name: 'requireToolApproval',
+    type: 'boolean',
+    isOptional: true,
+    description: 'Require approval for all tool calls, which suspends the run until resumed.',
+  },
+  {
+    name: 'autoResumeSuspendedTools',
+    type: 'boolean',
+    isOptional: true,
+    description: 'Automatically resume tools that suspended, instead of waiting for an external `resume()` call.',
+  },
+  {
+    name: 'toolCallConcurrency',
+    type: 'number',
+    isOptional: true,
+    description: 'Maximum number of tool calls to execute concurrently.',
+  },
+  {
+    name: 'includeRawChunks',
+    type: 'boolean',
+    isOptional: true,
+    description: 'Include raw provider chunks in the stream output.',
+  },
+  {
+    name: 'maxProcessorRetries',
+    type: 'number',
+    isOptional: true,
+    description: 'Maximum number of processor retries per generation.',
+  },
+  {
+    name: 'untilIdle',
+    type: 'boolean | { maxIdleMs?: number }',
+    isOptional: true,
+    description:
+      'When set, keeps the stream open across background-task continuations until the agent is idle. Pass `true` for the default 5-minute idle timeout, or `{ maxIdleMs }` to customise.',
+  },
+  {
+    name: 'onChunk',
+    type: '(chunk: ChunkType) => void | Promise<void>',
+    isOptional: true,
+    description: 'Called for each streamed chunk.',
+  },
+  {
+    name: 'onStepFinish',
+    type: '(result: AgentStepFinishEventData) => void | Promise<void>',
+    isOptional: true,
+    description: 'Called when a step in the agentic loop finishes.',
+  },
+  {
+    name: 'onFinish',
+    type: '(result: AgentFinishEventData) => void | Promise<void>',
+    isOptional: true,
+    description: 'Called when the run finishes.',
+  },
+  {
+    name: 'onError',
+    type: '(error: Error) => void | Promise<void>',
+    isOptional: true,
+    description: 'Called when the run errors.',
+  },
+  {
+    name: 'onSuspended',
+    type: '(data: AgentSuspendedEventData) => void | Promise<void>',
+    isOptional: true,
+    description: 'Called when the run suspends, for example for tool approval.',
+  },
+]}
+/>
+
+`observe()` accepts the lifecycle callbacks (`onChunk`, `onStepFinish`, `onFinish`, `onError`, `onSuspended`) plus an `offset` to control where replay starts.
+
+## `InngestAgentStreamResult`
+
+The object returned by `stream()` and `resume()`. The `observe()` method returns the same shape but omits `threadId` and `resourceId`.
+
+```typescript
+interface InngestAgentStreamResult<OUTPUT = undefined> {
+  output: MastraModelOutput<OUTPUT>
+  readonly fullStream: ReadableStream<any>
+  runId: string
+  threadId?: string
+  resourceId?: string
+  cleanup: () => void
+}
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'output',
+    type: 'MastraModelOutput',
+    description: 'The streaming output. Await `output.text` for the full text, or consume `output.fullStream`.',
+  },
+  {
+    name: 'fullStream',
+    type: 'ReadableStream',
+    description: 'The full event stream, delegating to `output.fullStream`.',
+  },
+  {
+    name: 'runId',
+    type: 'string',
+    description: 'The unique run ID. Pass it to `resume()` or `observe()` to reconnect.',
+  },
+  {
+    name: 'threadId',
+    type: 'string',
+    isOptional: true,
+    description: 'Thread ID when using memory.',
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    isOptional: true,
+    description: 'Resource ID when using memory.',
+  },
+  {
+    name: 'cleanup',
+    type: '() => void',
+    description: 'Unsubscribes from PubSub and clears registry entries for the run. Call it when done with the run.',
+  },
+]}
+/>
+
+## Serving Inngest functions
+
+The `@mastra/inngest` package provides `serve()` and `createServe()` to register Inngest workflow functions with your HTTP framework.
+
+### `serve(options)`
+
+Serves Mastra workflows with Hono (the default framework). Collects all Inngest-backed workflows from Mastra and registers them as Inngest functions.
+
+```typescript
+import { serve } from '@mastra/inngest'
+
+app.use('/inngest/api', async c => {
+  return serve({ mastra, inngest })(c)
+})
+```
+
+### `createServe(adapter)`
+
+Factory that accepts any Inngest serve adapter (`inngest/express`, `inngest/fastify`, `inngest/next`, etc.) and returns a serve function for that framework.
+
+```typescript title="Express"
+import { createServe } from '@mastra/inngest'
+import { serve } from 'inngest/express'
+
+const serveExpress = createServe(serve)
+app.use('/inngest/api', serveExpress({ mastra, inngest }))
+```
+
+```typescript title="Next.js"
+import { createServe } from '@mastra/inngest'
+import { serve } from 'inngest/next'
+
+const serveNext = createServe(serve)
+export const { GET, POST, PUT } = serveNext({ mastra, inngest })
+```
+
+### Serve options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'mastra',
+    type: 'Mastra',
+    isOptional: false,
+    description: 'The Mastra instance containing registered agents and workflows.',
+  },
+  {
+    name: 'inngest',
+    type: 'Inngest',
+    isOptional: false,
+    description: 'The Inngest client instance.',
+  },
+  {
+    name: 'functions',
+    type: 'InngestFunction.Like[]',
+    isOptional: true,
+    description: 'Additional Inngest functions to serve alongside Mastra workflows.',
+  },
+  {
+    name: 'registerOptions',
+    type: 'RegisterOptions',
+    isOptional: true,
+    description: 'Options passed to the Inngest registration handler.',
+  },
+]}
+/>
+
+## Related
+
+- [DurableAgent reference](/reference/agents/durable-agent)
+- [Agent class](/reference/agents/agent)
+- [Inngest deployment guide](/guides/deployment/inngest)
+- [PubSub](/docs/server/pubsub)

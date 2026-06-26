@@ -49,12 +49,18 @@ describe('mastracode workspace skill activation', () => {
       const { getDynamicWorkspace } = await import('../workspace.js');
 
       const requestContext = new RequestContext();
+      const getState = () => ({
+        projectPath: tempDir,
+        sandboxAllowedPaths: [],
+      });
       requestContext.set('harness', {
         modeId: 'build',
-        getState: () => ({
-          projectPath: tempDir,
-          sandboxAllowedPaths: [],
-        }),
+        getState,
+        session: {
+          state: {
+            get: getState,
+          },
+        },
       });
 
       const workspace = getDynamicWorkspace({ requestContext });

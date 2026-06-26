@@ -1,67 +1,75 @@
-// @vitest-environment jsdom
-import type { BuilderAvailableModelsResponse } from '@mastra/client-js';
+import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render } from '@testing-library/react';
+import { delay, http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AgentColorProvider } from '../../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../../schemas';
 import { Models } from '../models';
+import { buildBuilderSettings } from './fixtures/builder';
+import { server } from '@/test/msw-server';
 
-vi.mock('@/domains/agent-builder', () => ({
-  useBuilderModelPolicy: () => ({ active: false, pickerVisible: true }),
-}));
-
-vi.mock('@/domains/llm', () => ({
-  cleanProviderId: (provider: string) => provider,
-  ProviderLogo: ({ providerId }: { providerId: string }) => <span data-testid={`provider-logo-${providerId}`} />,
-  useAllModels: () => [],
-}));
-
-// Never resolves, so the available-models query stays pending and the picker
-// renders its loading skeleton.
-vi.mock('@mastra/react', () => ({
-  useMastraClient: () => ({
-    getBuilderAvailableModels: (): Promise<BuilderAvailableModelsResponse> => new Promise(() => {}),
-  }),
-}));
+const BASE_URL = 'http://localhost:4111';
 
 const FormHarness = ({ children }: { children: ReactNode }) => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const methods = useForm<AgentBuilderEditFormValues>({
     defaultValues: {
       name: '',
       model: { provider: '', name: '' },
     } as AgentBuilderEditFormValues,
   });
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
-    <QueryClientProvider client={queryClient}>
-      <FormProvider {...methods}>
-        <AgentColorProvider agentId="agent_test">{children}</AgentColorProvider>
-      </FormProvider>
-    </QueryClientProvider>
+    <MastraReactProvider baseUrl={BASE_URL}>
+      <QueryClientProvider client={queryClient}>
+        <FormProvider {...methods}>
+          <AgentColorProvider agentId="agent_test">{children}</AgentColorProvider>
+        </FormProvider>
+      </QueryClientProvider>
+    </MastraReactProvider>
   );
 };
 
 describe('Models loading state', () => {
+  beforeEach(() => {
+    server.use(
+      http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json(buildBuilderSettings())),
+      // Never resolves, so the available-models query stays pending and the
+      // picker renders its loading skeleton.
+      http.get(`${BASE_URL}/api/editor/builder/models/available`, async () => {
+        await delay('infinite');
+        return HttpResponse.json({ providers: [] });
+      }),
+    );
+  });
+
   afterEach(() => {
     cleanup();
   });
 
-  it('renders a structural skeleton that mirrors the loaded grid template', () => {
-    const { getByTestId, queryByTestId } = render(
-      <FormHarness>
-        <Models />
-      </FormHarness>,
-    );
+  describe('when the available-models query is pending', () => {
+    it('renders the loading skeleton instead of the loaded picker', () => {
+      const { getByTestId, queryByTestId } = render(
+        <FormHarness>
+          <Models />
+        </FormHarness>,
+      );
 
-    const skeleton = getByTestId('model-card-picker-loading');
-    expect(skeleton).toBeTruthy();
-    // The loaded picker testid must NOT be present while data is loading.
-    expect(queryByTestId('model-card-picker')).toBeNull();
-    // Lock in the structural grid contract so a regression to the old
-    // `<Skeleton className="h-40 w-full" />` block can't slip back in.
-    expect(skeleton.className).toContain('grid-cols-[280px_minmax(0,1fr)]');
+      expect(getByTestId('model-card-picker-loading')).toBeTruthy();
+      expect(queryByTestId('model-card-picker')).toBeNull();
+    });
+
+    it('mirrors the loaded grid template so the structural contract cannot regress', () => {
+      const { getByTestId } = render(
+        <FormHarness>
+          <Models />
+        </FormHarness>,
+      );
+
+      const skeleton = getByTestId('model-card-picker-loading');
+      expect(skeleton.className).toContain('grid-cols-[280px_minmax(0,1fr)]');
+    });
   });
 });

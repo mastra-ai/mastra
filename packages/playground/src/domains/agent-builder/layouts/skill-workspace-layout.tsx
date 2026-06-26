@@ -1,4 +1,5 @@
-import { Button, cn } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowLeftIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';

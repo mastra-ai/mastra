@@ -10,12 +10,14 @@ vi.mock('../tools/index.js', () => ({
 import { createDynamicTools, createToolHooks } from './tools.js';
 
 function createRequestContext(state: Record<string, unknown>, modeId: string = 'build') {
+  const getState = () => state;
   return {
     get(key: string) {
       if (key !== 'harness') return undefined;
       return {
         modeId,
-        getState: () => state,
+        getState,
+        session: { state: { get: getState } },
       };
     },
   } as any;

@@ -95,5 +95,8 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     accumulatedUsage: newUsage,
     lastStepResult: executionOutput.stepResult,
     backgroundTaskPending: executionOutput.backgroundTaskPending,
+    // Carry span identity forward unchanged so every iteration shares one trace.
+    agentSpanData: currentState.agentSpanData,
+    modelSpanData: currentState.modelSpanData,
   };
 }

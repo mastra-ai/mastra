@@ -1,6 +1,6 @@
 {
   "name": "@mastra/evals",
-  "version": "1.3.0",
+  "version": "1.5.0-alpha.1",
   "description": "",
   "type": "module",
   "files": [
@@ -49,6 +49,16 @@
         "default": "./dist/scorers/utils.cjs"
       }
     },
+    "./checks": {
+      "import": {
+        "types": "./dist/checks.d.ts",
+        "default": "./dist/checks.js"
+      },
+      "require": {
+        "types": "./dist/checks.d.ts",
+        "default": "./dist/checks.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -73,6 +83,8 @@
   },
   "devDependencies": {
     "@ai-sdk/openai": "^1.3.24",
+    "@ai-sdk/openai-v6": "npm:@ai-sdk/openai@3.0.63",
+    "@copilotkit/aimock": "^1.29.0",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/llm-recorder": "workspace:*",

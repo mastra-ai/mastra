@@ -20,6 +20,8 @@ export {
   GOAL_REQUEST_CONTEXT_KEY,
   DEFAULT_GOAL_JUDGE_PROMPT,
   DEFAULT_GOAL_MAX_RUNS,
+  GOAL_SCORE_WAITING,
+  GOAL_SCORER_ID,
   resolveGoalStore,
   resolveEffectiveGoalSettings,
   readObjective,
