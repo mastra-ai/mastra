@@ -2564,8 +2564,18 @@ export interface UpdateDatasetInput {
   scorerIds?: string[] | null;
 }
 
-export interface AddDatasetItemInput {
-  datasetId: string;
+/**
+ * The mutable, user-supplied payload portion of a dataset item.
+ *
+ * Identity (`id`, `datasetId`) and storage-managed audit fields (`datasetVersion`,
+ * `organizationId`, `projectId`, `createdAt`, `updatedAt`) live on {@link DatasetItem}
+ * and are not part of the payload.
+ *
+ * Used as the base shape for {@link AddDatasetItemInput} and
+ * {@link BatchInsertItemsInput.items}, and (as `Partial<…>`) for
+ * {@link UpdateDatasetItemInput}.
+ */
+export interface DatasetItemPayload {
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
@@ -2575,16 +2585,17 @@ export interface AddDatasetItemInput {
   source?: DatasetItemSource;
 }
 
-export interface UpdateDatasetItemInput {
+export interface AddDatasetItemInput extends DatasetItemPayload {
+  datasetId: string;
+}
+
+/**
+ * Update input for a dataset item. All payload fields are optional; only the
+ * provided fields are patched.
+ */
+export interface UpdateDatasetItemInput extends Partial<DatasetItemPayload> {
   id: string;
   datasetId: string;
-  input?: unknown;
-  groundTruth?: unknown;
-  expectedTrajectory?: unknown;
-  toolMocks?: DatasetItemToolMock[];
-  requestContext?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
-  source?: DatasetItemSource;
 }
 
 export interface DatasetTenancyFilters {
@@ -2632,15 +2643,7 @@ export interface ListDatasetVersionsOutput {
 
 export interface BatchInsertItemsInput {
   datasetId: string;
-  items: Array<{
-    input: unknown;
-    groundTruth?: unknown;
-    expectedTrajectory?: unknown;
-    toolMocks?: DatasetItemToolMock[];
-    requestContext?: Record<string, unknown>;
-    metadata?: Record<string, unknown>;
-    source?: DatasetItemSource;
-  }>;
+  items: DatasetItemPayload[];
 }
 
 export interface BatchDeleteItemsInput {

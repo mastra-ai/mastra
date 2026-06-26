@@ -43,7 +43,7 @@ jobs:
           # Create the workflow run and capture the runId
           http_code=$(curl -w "%{http_code}" -o /tmp/create_response.json -s \
             --max-time 30 \
-            "${BASE_URL}/${WORKFLOW_NAME}/create-run" \
+            "${BASE_URL}/api/workflows/${WORKFLOW_NAME}/create-run" \
             -X 'POST' \
             -H 'Authorization: Bearer ${{ secrets.MASTRA_TRIAGE_JWT_KEY }}' \
             -H 'Referer: https://cloud.mastra.ai/' \
@@ -77,7 +77,7 @@ jobs:
 
           http_code=$(curl -w "%{http_code}" -o /tmp/start_response.json -s \
             --max-time 300 \
-            "${BASE_URL}/${WORKFLOW_NAME}/start?runId=${runId}" \
+            "${BASE_URL}/api/workflows/${WORKFLOW_NAME}/start?runId=${runId}" \
             -X 'POST' \
             -H 'Authorization: Bearer ${{ secrets.MASTRA_TRIAGE_JWT_KEY }}' \
             -H 'Referer: https://cloud.mastra.ai/' \

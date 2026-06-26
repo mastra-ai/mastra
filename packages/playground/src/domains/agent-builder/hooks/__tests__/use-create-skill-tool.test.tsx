@@ -11,7 +11,7 @@ import type { AgentBuilderEditFormValues } from '../../schemas';
 import { useCreateSkillTool } from '../use-create-skill-tool';
 import { authEnabledWritableCapabilities } from './fixtures/auth';
 import { makeStoredSkill } from './fixtures/stored-skills';
-import { extractSkillInstructions } from '@/domains/agents/components/agent-cms-pages/skill-file-tree';
+import { extractSkillInstructions } from '@/domains/agents/components/agent-cms-pages/skill-file-tree-utils';
 import type { InMemoryFileNode } from '@/domains/agents/components/agent-edit-page/utils/form-validation';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
 import { server } from '@/test/msw-server';

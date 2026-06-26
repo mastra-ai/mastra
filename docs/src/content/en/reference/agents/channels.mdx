@@ -1,6 +1,6 @@
 ---
 title: "Reference: Channels | Agents"
-description: "API reference for agent channels, which connect agents to messaging platforms like Slack, Discord, and Telegram."
+description: "API reference for the ChannelConfig agent channels object, which connects agents to messaging platforms like Slack, Discord, and Telegram."
 packages:
   - "@mastra/core"
 ---
@@ -9,7 +9,7 @@ packages:
 
 **Added in:** `@mastra/core@1.22.0`
 
-Channels connect agents to messaging platforms. Configure them via the `channels` property on the `Agent` constructor. See the [Channels guide](/docs/agents/channels) for concepts and platform setup instructions.
+Channels connect agents to messaging platforms. Configure them via the `channels` property on the `Agent` constructor. The object you pass is a `ChannelConfig`. See the [Channels guide](/docs/agents/channels) for concepts and platform setup instructions.
 
 ## Usage example
 
@@ -33,6 +33,8 @@ export const supportAgent = new Agent({
 ```
 
 ## Parameters
+
+The `channels` property accepts a `ChannelConfig` object with the following fields:
 
 <PropertiesTable
   content={[
@@ -109,6 +111,20 @@ export const supportAgent = new Agent({
     isOptional: true,
     description:
       'Decide which `resourceId` owns resource-level memory for a channel thread, separately from who sent the message. Runs only when a new thread is created; reused threads keep their stored owner and never call the hook. Return `ctx.defaultResourceId` (`${platform}:${message.author.userId}`) to keep the built-in behavior.',
+  },
+  {
+    name: 'waitUntil',
+    type: '(promise: Promise<unknown>) => void',
+    isOptional: true,
+    description:
+      'Platform `waitUntil` function. Required on Vercel so background agent runs survive after the webhook returns 200. On Vercel pass `waitUntil` from `@vercel/functions`. Cloudflare Workers and Netlify Functions are detected automatically from the request context. AWS Lambda does not need `waitUntil` because it waits for the event loop to drain naturally.',
+  },
+  {
+    name: 'resolveWaitUntil',
+    type: '(c: Context) => ((promise: Promise<unknown>) => void) | undefined',
+    isOptional: true,
+    description:
+      'Resolver for runtimes where `waitUntil` lives on the Hono request context but is not covered by the built-in helper. Resolution order: bare `waitUntil` → `resolveWaitUntil(c)` → default (Cloudflare Workers, Netlify).',
   },
 ]}
 />

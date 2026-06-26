@@ -1859,6 +1859,99 @@ describe('ProcessorRunner', () => {
       expect(receivedContext.retryCount).toBe(1);
     });
 
+    it('surfaces step providerMetadata to processOutputStep on a content-filter block with empty steps', async () => {
+      // Mirrors the AWS Bedrock guardrail case: the model step is blocked
+      // (finishReason: "content-filter"), the completed-steps array is empty,
+      // and the guardrail assessment is only available via providerMetadata.
+      let receivedProviderMetadata: Record<string, unknown> | undefined;
+
+      const guardrailTrace = {
+        bedrock: {
+          trace: {
+            guardrail: {
+              actionReason: 'Guardrail blocked.',
+              inputAssessment: {
+                'guardrail-1': {
+                  topicPolicy: { topics: [{ name: 'SystemPromptDisclosure', action: 'BLOCKED', type: 'DENY' }] },
+                },
+              },
+            },
+          },
+        },
+      };
+
+      const outputProcessors: Processor[] = [
+        {
+          id: 'guardrail-attribution',
+          name: 'Guardrail Attribution',
+          processOutputStep: async ({ messages, providerMetadata }) => {
+            receivedProviderMetadata = providerMetadata;
+            return messages;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('user message', 'user')], 'user');
+
+      await runner.runProcessOutputStep({
+        steps: [],
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+        finishReason: 'content-filter',
+        providerMetadata: guardrailTrace,
+      });
+
+      // The processor can attribute the block to the responsible policy even
+      // though `steps` is empty.
+      expect(receivedProviderMetadata).toEqual(guardrailTrace);
+      expect((receivedProviderMetadata as typeof guardrailTrace)?.bedrock?.trace?.guardrail?.actionReason).toBe(
+        'Guardrail blocked.',
+      );
+    });
+
+    it('leaves providerMetadata undefined when the step produced none', async () => {
+      let received: { providerMetadata?: unknown; sawKey?: boolean } = {};
+
+      const outputProcessors: Processor[] = [
+        {
+          id: 'no-metadata',
+          name: 'No Metadata',
+          processOutputStep: async args => {
+            received = { providerMetadata: args.providerMetadata, sawKey: 'providerMetadata' in args };
+            return args.messages;
+          },
+        },
+      ];
+
+      runner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors,
+        logger: mockLogger,
+        agentName: 'test-agent',
+      });
+
+      messageList.add([createMessage('user message', 'user')], 'user');
+
+      await runner.runProcessOutputStep({
+        steps: [],
+        messages: messageList.get.all.db(),
+        messageList,
+        stepNumber: 0,
+        finishReason: 'stop',
+        text: 'all good',
+      });
+
+      expect(received.providerMetadata).toBeUndefined();
+    });
+
     it('should abort with retry option in processOutputStep', async () => {
       interface ToneMetadata {
         issue: string;

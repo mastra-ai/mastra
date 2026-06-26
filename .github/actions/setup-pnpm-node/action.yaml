@@ -45,6 +45,7 @@ runs:
         cache_dependency_path: ${{ inputs.cache-dependency-path || 'pnpm-lock.yaml' }}
 
     - name: Reset corrupt pnpm store cache
+      id: reset-store
       if: ${{ inputs.package-manager-cache == 'true' }}
       shell: bash
       run: |
@@ -58,42 +59,59 @@ runs:
           exit 0
         fi
 
-        if ! grep -q "database disk image is malformed" /tmp/pnpm-store-status.log; then
+        # A corrupt restored store cache surfaces in one of two ways from
+        # `pnpm store status`:
+        #   * a SQLite error if the store index is malformed
+        #     ("database disk image is malformed", "file is not a database"), or
+        #   * ERR_PNPM_MODIFIED_DEPENDENCY if cached content files were captured
+        #     mid-write and no longer match their content hashes.
+        # Any other non-zero status is a real failure and should be surfaced.
+        if ! grep -qE "ERR_SQLITE_ERROR|database disk image is malformed|file is not a database|ERR_PNPM_MODIFIED_DEPENDENCY" /tmp/pnpm-store-status.log; then
           cat /tmp/pnpm-store-status.log
           exit "$status"
         fi
 
-        # The restored store cache is corrupt. On these runners pnpm/action-setup
-        # installs pnpm beneath the same directory as the store, and the pnpm
-        # binary is content-addressed into the store, so `rm -rf "$store_path"`
-        # also deletes files the running pnpm depends on. That broke the next
-        # `pnpm install` with a MODULE_NOT_FOUND for pnpm.mjs. Remove the corrupt
-        # store, then reinstall pnpm so its binary is intact before installing.
-        echo "Detected corrupt pnpm store cache at $store_path; removing restored store."
-        rm -rf "$store_path"
+        # Recover by deleting only the store index, keeping the content-addressed
+        # files/ (into which pnpm's own binary is hard-linked). pnpm rebuilds the
+        # index from the content on the next operation, so the binary survives.
+        # Wiping the whole store instead removed pnpm itself (MODULE_NOT_FOUND for
+        # pnpm.mjs) and reinstalling/relinking it left content mismatched against
+        # the lockfile (ERR_PNPM_MODIFIED_DEPENDENCY).
+        echo "Detected corrupt pnpm store at $store_path; deleting only the store index, preserving content."
+        # pnpm >=11 keeps the index in index.db; older versions used
+        # index-v5.json* plus an index/ directory. Remove whichever exist.
+        rm -rf \
+          "$store_path/index.db" \
+          "$store_path/index.db-shm" \
+          "$store_path/index.db-wal" \
+          "$store_path"/index-v*.json* \
+          "$store_path/index"
 
-        if pnpm --version >/dev/null 2>&1; then
-          exit 0
+        pnpm --version
+
+        # Re-check the store. If only the index was corrupt this now passes. If
+        # content files were also mutated, pnpm still reports them; signal the
+        # install step to refetch the modified packages with --force (which is
+        # exactly what pnpm recommends for ERR_PNPM_MODIFIED_DEPENDENCY).
+        set +e
+        pnpm store status >/tmp/pnpm-store-status-after.log 2>&1
+        after=$?
+        set -e
+        if [ "$after" -ne 0 ]; then
+          if ! grep -qE "ERR_PNPM_MODIFIED_DEPENDENCY" /tmp/pnpm-store-status-after.log; then
+            cat /tmp/pnpm-store-status-after.log
+            exit "$after"
+          fi
+          echo "Store content was also modified; the install step will refetch with --force."
+          echo "force-install=true" >> "$GITHUB_OUTPUT"
         fi
-
-        # Resolve the pnpm version the same way pnpm/action-setup does: from the
-        # explicit input if given, otherwise the packageManager field. This keeps
-        # the reinstall in sync with the rest of the workspace automatically.
-        pnpm_version="$PNPM_VERSION"
-        if [ -z "$pnpm_version" ]; then
-          pnpm_version=$(node -p "(require('./$PACKAGE_JSON_FILE').packageManager||'').replace(/^pnpm@/,'').split('+')[0]")
-        fi
-
-        # pnpm/action-setup installs pnpm with `npm install` into the directory
-        # whose node_modules/.bin is PNPM_HOME, so reinstall into that same root.
-        pnpm_install_root=$(cd "$PNPM_HOME/../.." && pwd)
-        echo "pnpm binary was removed with the corrupt store; reinstalling pnpm@$pnpm_version into $pnpm_install_root."
-        npm install --prefix "$pnpm_install_root" "pnpm@$pnpm_version"
-      env:
-        PNPM_VERSION: ${{ inputs.version }}
-        PACKAGE_JSON_FILE: ${{ inputs.package-json-file || 'package.json' }}
 
     - name: Install dependencies
       if: ${{ inputs.install-dependencies == 'true' }}
       shell: bash
-      run: pnpm install --frozen-lockfile
+      run: |
+        if [ "${{ steps.reset-store.outputs.force-install }}" = "true" ]; then
+          pnpm install --frozen-lockfile --force
+        else
+          pnpm install --frozen-lockfile
+        fi

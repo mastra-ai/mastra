@@ -1,5 +1,5 @@
 import { BaseEdge, EdgeLabelRenderer, getBezierPath } from '@xyflow/react';
-import type { EdgeProps } from '@xyflow/react';
+import type { Edge, EdgeProps } from '@xyflow/react';
 import { memo, useContext } from 'react';
 
 import { useCurrentRun } from '../context/use-current-run';
@@ -9,13 +9,17 @@ import { WorkflowEdgeDataButton } from './components/workflow-edge-data-button';
 export const WORKFLOW_DATA_EDGE_TYPE = 'workflow-data-edge';
 
 export interface WorkflowDataEdgeData {
+  [key: string]: unknown;
   previousStepId?: string;
   nextStepId?: string;
   conditionNode?: boolean;
   boundaryPayload?: 'workflow-input' | 'workflow-output';
+  edgeStatus?: 'success' | 'idle';
 }
 
-export interface WorkflowDataEdgeProps extends EdgeProps {
+export type WorkflowDataEdgeModel = Edge<WorkflowDataEdgeData, typeof WORKFLOW_DATA_EDGE_TYPE>;
+
+export interface WorkflowDataEdgeProps extends EdgeProps<WorkflowDataEdgeModel> {
   parentWorkflowName?: string;
 }
 
@@ -25,7 +29,7 @@ const getScopedStepId = (stepId: string | undefined, workflowName?: string) =>
 const WorkflowDataEdgeComponent = (props: WorkflowDataEdgeProps) => {
   const { steps } = useCurrentRun();
   const workflowRun = useContext(WorkflowRunContext);
-  const data = props.data as WorkflowDataEdgeData | undefined;
+  const data = props.data;
   const previousStepKey = getScopedStepId(data?.previousStepId, props.parentWorkflowName);
   const previousStep = previousStepKey ? steps[previousStepKey] : undefined;
   const workflowInput = workflowRun.payload ?? workflowRun.result?.input;
@@ -48,7 +52,15 @@ const WorkflowDataEdgeComponent = (props: WorkflowDataEdgeProps) => {
 
   return (
     <>
-      <BaseEdge id={props.id} path={edgePath} markerEnd={props.markerEnd} style={props.style} />
+      <BaseEdge
+        id={props.id}
+        path={edgePath}
+        markerEnd={props.markerEnd}
+        style={props.style}
+        data-edge-status={data?.edgeStatus ?? 'idle'}
+        data-edge-from={data?.previousStepId}
+        data-edge-to={data?.nextStepId}
+      />
       <EdgeLabelRenderer>
         <div
           className="nodrag nopan"

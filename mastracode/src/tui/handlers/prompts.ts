@@ -3,7 +3,8 @@
  * tool_suspended (ask_user / request_access / submit_plan).
  */
 import type { AskUserSelectionMode } from '@mastra/core/tools';
-import { savePlanToDisk } from '../../utils/plans.js';
+import { shouldShowDiff } from '../../utils/plan-diff.js';
+import { approvePlanFile, readPlanFile, resolvePlanPath } from '../../utils/plans.js';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { PlanApprovalInlineComponent } from '../components/plan-approval-inline.js';
@@ -240,9 +241,22 @@ export async function handleSandboxAccessRequest(
 
 /**
  * Handle a suspended submit_plan tool call.
- * Shows the plan inline with Approve/Reject/Request Changes options.
+ * Shows the plan inline with Approve/Use as Goal/Request Changes options.
+ *
+ * On each submission the plan is saved to a `.md` file and the previous plan
+ * content is snapshotted so that resubmissions can show a diff.
+ *
+ * "Request changes" rejects the tool call and aborts the agent so the user can
+ * provide revision feedback via a normal chat message.
  */
-async function approvePlan(ctx: EventHandlerContext, toolCallId: string, title: string, plan: string): Promise<void> {
+async function approvePlan(
+  ctx: EventHandlerContext,
+  toolCallId: string,
+  title: string,
+  plan: string,
+  planPath: string | undefined,
+  submittedPath: string,
+): Promise<void> {
   const { state } = ctx;
   await state.session.state.set({
     activePlan: {
@@ -251,14 +265,24 @@ async function approvePlan(ctx: EventHandlerContext, toolCallId: string, title: 
       approvedAt: new Date().toISOString(),
     },
   });
-  savePlanToDisk({
-    title,
-    plan,
-    resourceId: state.session.identity.getResourceId(),
-  }).catch(() => {});
+
+  // Archive the approved plan to the global plans dir so it's findable later. The
+  // local plan file is left in place so the user can review every plan made.
+  if (planPath) {
+    await approvePlanFile({
+      planPath,
+      title,
+      resourceId: state.session.identity.getResourceId(),
+    }).catch(() => {});
+  }
+
+  // Reset in-memory diff state so the next plan doesn't diff against this one.
+  state.previousPlanSnapshot = undefined;
+  state.lastSubmitPlanComponent = undefined;
+
   await state.session.respondToToolSuspension({
     toolCallId,
-    resumeData: { action: 'approved' },
+    resumeData: { action: 'approved', path: submittedPath, title, plan },
   });
 }
 
@@ -269,29 +293,66 @@ function formatPlanGoalObjective(title: string, plan: string): string {
 export async function handlePlanApproval(
   ctx: EventHandlerContext,
   toolCallId: string,
-  title: string,
-  plan: string,
+  submittedPath: string,
 ): Promise<void> {
   const { state } = ctx;
+
+  // submit_plan carries the plan file path. The agent can write the plan anywhere it
+  // has access, so read whatever path it submitted (resolved relative to the project)
+  // and parse the `# heading` as the title.
+  const projectPath = (state.session.state.get() as any)?.projectPath as string | undefined;
+  const planPath = submittedPath ? resolvePlanPath(projectPath ?? process.cwd(), submittedPath) : undefined;
+  const current = planPath ? await readPlanFile(planPath) : undefined;
+  if (!current) {
+    state.previousPlanSnapshot = undefined;
+  }
+
+  // Surface a clear error in the approval card when the plan file can't be read,
+  // instead of rendering an empty plan.
+  const plan =
+    current?.plan ??
+    `⚠️ Could not read the plan file at \`${submittedPath}\`. Make sure it exists before submitting it.`;
+  const resolvedTitle = current?.title || 'Implementation Plan';
+  // Snapshot history is keyed by the submitted path so a revision of the same file
+  // diffs against the prior submission, but a brand-new file renders in full.
+  const snapshotKey = submittedPath;
+
+  // A previous snapshot is only a valid diff base for a revision of the SAME
+  // plan file. A different path means a brand-new plan, so render it in full
+  // rather than diffing against an unrelated plan.
+  const snapshot = state.previousPlanSnapshot;
+  const snapshotPlan = snapshot && snapshot.path === snapshotKey ? snapshot.plan : undefined;
+  const previousPlan = snapshotPlan && shouldShowDiff(snapshotPlan, plan) ? snapshotPlan : undefined;
+
+  // Snapshot this submission (keyed by submitted path) so the next resubmission of
+  // the same file can diff against it. Skip seeding history when the file
+  // couldn't be read.
+  if (current) {
+    state.previousPlanSnapshot = { path: snapshotKey, plan };
+  }
+
   return new Promise(resolve => {
+    const planFilename = snapshotKey;
     const approvalOptions = {
       toolCallId,
-      title,
+      title: resolvedTitle,
       plan,
+      planFilename,
+      previousPlan,
       onApprove: async () => {
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
-        await approvePlan(ctx, toolCallId, title, plan);
+        await approvePlan(ctx, toolCallId, resolvedTitle, plan, planPath, snapshotKey);
         resolve();
       },
       onGoal: async () => {
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
-        await approvePlan(ctx, toolCallId, title, plan);
+        await approvePlan(ctx, toolCallId, resolvedTitle, plan, planPath, snapshotKey);
 
         // `approvePlan` waits for plan mode to idle before `startGoal` sends
         // the canonical goal reminder, so this starts a fresh build-mode run.
-        const objective = formatPlanGoalObjective(title, plan);
+        const objective = formatPlanGoalObjective(resolvedTitle, plan);
         await ctx.startGoal(objective, 'Goal cancelled.');
 
         const goal = state.goalManager.getGoal();
@@ -301,13 +362,30 @@ export async function handlePlanApproval(
 
         resolve();
       },
-      onReject: async (feedback?: string) => {
+      onReject: () => {
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
-        await state.session.respondToToolSuspension({
-          toolCallId,
-          resumeData: { action: 'rejected', feedback },
-        });
+        // Resume the tool with a rejection so the rejection result is persisted
+        // in thread history (the next run sees it for context). For submit_plan,
+        // respondToToolSuspension resolves at the resumed tool's `tool_end`
+        // boundary — i.e. once the rejection result has been emitted and the
+        // suspension dropped — but BEFORE the follow-up LLM step runs. We await
+        // that boundary, then abort the run host-side so the model never gets to
+        // generate trailing text. This is deterministic and does not race the
+        // in-loop PlanRejectionAbortProcessor (which remains as a backstop). The
+        // planRejectionAbort flag suppresses the "Interrupted" abort UI so the
+        // transcript stays clean for the user's revision feedback.
+        void (async () => {
+          try {
+            await state.session.respondToToolSuspension({
+              toolCallId,
+              resumeData: { action: 'rejected', path: snapshotKey, title: resolvedTitle, plan },
+            });
+          } finally {
+            state.planRejectionAbort = true;
+            state.session.abort();
+          }
+        })();
         resolve();
       },
     };
@@ -347,6 +425,6 @@ export async function handlePlanApproval(
     state.chatContainer.invalidate();
     state.ui.setFocus(approvalComponent);
 
-    ctx.notify('plan_approval', `Plan "${title}" requires approval`);
+    ctx.notify('plan_approval', `Plan "${resolvedTitle}" requires approval`);
   });
 }

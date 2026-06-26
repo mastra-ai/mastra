@@ -154,6 +154,18 @@ export class StoreOperationsMySQL extends StoreOperations {
       extraConstraints.push(`PRIMARY KEY (${pkColumns})`);
     }
 
+    // Hard-coded constraints for tables that rely on upsert behavior
+    if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
+      extraConstraints.push(
+        `PRIMARY KEY (${quoteIdentifier('workflow_name', 'column name')}, ${quoteIdentifier('run_id', 'column name')})`,
+      );
+    }
+    if (tableName === TABLE_SPANS) {
+      extraConstraints.push(
+        `PRIMARY KEY (${quoteIdentifier('traceId', 'column name')}, ${quoteIdentifier('spanId', 'column name')})`,
+      );
+    }
+
     return `CREATE TABLE IF NOT EXISTS ${tableIdent} (${[...columns, ...extraConstraints].filter(Boolean).join(', ')}) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`;
   }
 

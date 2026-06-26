@@ -176,6 +176,21 @@ describe('MessageFactory', () => {
     expect(calls.StepStart).toHaveBeenCalledTimes(1);
   });
 
+  it('when no StepStart renderer is supplied, step-start renders nothing and never calls fallback', () => {
+    const { calls, renderers } = makeSpyRenderers();
+    const { StepStart: _omitted, ...withoutStepStart } = renderers;
+    const fallback = vi.fn((part: AccumulatorPart) => <div data-testid="fallback">{part.type}</div>);
+
+    const { container } = render(
+      <MessageFactory message={makeMessage([stepStartPart()])} {...withoutStepStart} fallback={fallback} />,
+    );
+
+    expect(screen.queryByTestId('fallback')).toBeNull();
+    expect(fallback).not.toHaveBeenCalled();
+    expect(calls.StepStart).not.toHaveBeenCalled();
+    expect(container.textContent).toBe('');
+  });
+
   it('renders tool-invocation via ToolInvocation, never DynamicTool', () => {
     const { calls, renderers } = makeSpyRenderers();
     render(<MessageFactory message={makeMessage([toolInvocationPart('c-1', 'weather')])} {...renderers} />);

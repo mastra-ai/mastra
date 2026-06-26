@@ -1,6 +1,6 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import type * as PlaygroundUi from '@mastra/playground-ui';
-import { TooltipProvider } from '@mastra/playground-ui';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
@@ -24,6 +24,10 @@ vi.mock('@mastra/playground-ui', async () => {
     usePlaygroundStore: () => ({ requestContext: undefined }),
   };
 });
+
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
 
 const setCurrentUser = (user: CurrentUser) => {
   server.use(http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json(user)));

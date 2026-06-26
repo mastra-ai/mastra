@@ -66,8 +66,9 @@ type RequestContextStub = {
 };
 
 function createRequestContext(state: Record<string, unknown>): RequestContextStub {
+  const getState = () => state;
   return {
-    get: vi.fn(key => (key === 'harness' ? { session: { state: { get: () => state } } } : undefined)),
+    get: vi.fn(key => (key === 'controller' ? { getState, session: { state: { get: getState } } } : undefined)),
   };
 }
 
@@ -137,7 +138,7 @@ describe('getDynamicMemory', () => {
     });
   });
 
-  it('uses harness state overrides and disables async buffering for resource-scoped OM', async () => {
+  it('uses controller state overrides and disables async buffering for resource-scoped OM', async () => {
     const { config, requestContext } = await createMemoryConfig({
       projectPath: '/tmp/project',
       omScope: 'resource',

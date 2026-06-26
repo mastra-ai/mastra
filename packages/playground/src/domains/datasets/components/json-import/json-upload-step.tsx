@@ -1,7 +1,8 @@
 'use client';
 
-import { Icon, cn } from '@mastra/playground-ui';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { FileJson } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
 

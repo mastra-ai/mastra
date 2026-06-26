@@ -16,6 +16,7 @@ vi.mock('node:fs', () => ({
 }));
 
 vi.mock('@earendil-works/pi-tui', () => ({
+  Box: class {},
   CombinedAutocompleteProvider: class {},
   Container: class {
     children: unknown[] = [];
@@ -63,7 +64,7 @@ vi.mock('../../utils/project.js', () => ({
 }));
 
 import { renderBanner } from '../components/banner.js';
-import { buildLayout, subscribeToHarness } from '../setup.js';
+import { buildLayout, subscribeToAgentController } from '../setup.js';
 import { updateStatusLine } from '../status-line.js';
 
 function textOf(child: unknown) {
@@ -95,7 +96,7 @@ function createState(modeCount = 2) {
         mainRepoPath: '/repos/main',
         rootPath: '/repos/demo',
       },
-      harness: {
+      controller: {
         listModes: vi.fn(() => Array.from({ length: modeCount }, (_, i) => ({ id: `mode-${i}` }))),
       },
       ui: {
@@ -158,7 +159,7 @@ describe('buildLayout startup header', () => {
     expect(textOf(uiChildren[4])).toBe('  /help info & shortcuts');
   });
 
-  it('serializes harness event handling so abort cleanup cannot interleave with stream updates', async () => {
+  it('serializes controller event handling so abort cleanup cannot interleave with stream updates', async () => {
     let listener: ((event: { type: string }) => Promise<void>) | undefined;
     const state = {
       session: {
@@ -178,7 +179,7 @@ describe('buildLayout startup header', () => {
       order.push(`end:${event.type}`);
     });
 
-    subscribeToHarness(state, handleEvent);
+    subscribeToAgentController(state, handleEvent);
     const first = listener?.({ type: 'message_update' });
     const second = listener?.({ type: 'agent_end' });
     await Promise.resolve();

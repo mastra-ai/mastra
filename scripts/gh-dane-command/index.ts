@@ -3,7 +3,7 @@
  *
  * Reads a command name and PR number from environment variables,
  * loads the corresponding .claude/commands/ template, processes it,
- * and sends it to a headless MastraCode harness for execution.
+ * and sends it to a headless MastraCode agent controller for execution.
  */
 
 import { readFileSync } from 'node:fs';
@@ -97,8 +97,10 @@ async function main(): Promise<never> {
   // Initialize MastraCode with yolo mode (auto-approve everything)
   // cwd points to the PR workspace so the AI agent operates on the PR branch,
   // while this script and all imports come from the trusted default branch.
+  // createMastraCode (bootLocalAgentController) inits the controller and mints the
+  // single session this process runs through, so no separate init() call is needed here.
   const result = await createMastraCode({ cwd: prWorkspace, initialState: { yolo: true } });
-  const { harness, mcpManager, authStorage } = result;
+  const { controller, session, mcpManager, authStorage } = result;
 
   // Inject the Anthropic API key into auth storage
   authStorage.set('anthropic', { type: 'api_key', key: apiKey });
@@ -108,19 +110,19 @@ async function main(): Promise<never> {
   }
 
   setupDebugLogging();
-  await harness.init();
 
   // Run headless with a 10 minute timeout
-  const exitCode = await runHeadless(harness, {
+  const exitCode = await runHeadless(controller, session, {
     prompt,
     format: 'default',
     continue_: false,
+    cloneThread: false,
     timeout: 600,
   });
 
   // Cleanup
   releaseAllThreadLocks();
-  await Promise.allSettled([mcpManager?.disconnect(), harness?.stopHeartbeats()]);
+  await Promise.allSettled([mcpManager?.disconnect(), controller?.stopHeartbeats()]);
 
   process.exit(exitCode);
 }

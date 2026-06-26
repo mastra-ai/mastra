@@ -121,12 +121,12 @@ test.describe('composer model settings', () => {
     // Reopen Advanced Settings to inspect the reset field values
     await page.click('text=Advanced Settings');
 
-    // Assert - values reset to defaults (maxSteps: 5, maxRetries: 2 are fallback defaults)
+    // Assert - values reset to defaults (maxSteps: 15, maxRetries: 2 are fallback defaults)
     await expect(page.getByLabel('Top K')).toHaveValue('');
     await expect(page.getByLabel('Frequency Penalty')).toHaveValue('');
     await expect(page.getByLabel('Presence Penalty')).toHaveValue('');
     await expect(page.getByLabel('Max Tokens')).toHaveValue('');
-    await expect(page.getByLabel('Max Steps')).toHaveValue('5');
+    await expect(page.getByLabel('Max Steps')).toHaveValue('15');
     await expect(page.getByLabel('Max Retries')).toHaveValue('2');
   });
 });
