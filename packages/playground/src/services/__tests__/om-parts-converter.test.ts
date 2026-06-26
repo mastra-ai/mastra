@@ -1,7 +1,14 @@
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent/message-list';
 import { describe, expect, it } from 'vitest';
 
-import { injectBufferingEnds, markOmMarkersAsDisconnected, scanOmInitialState } from '../om-parts-converter';
+import {
+  buildGlobalOmPartsByCycleId,
+  convertOmPartsInMastraMessage,
+  injectBufferingEnds,
+  markOmMarkersAsDisconnected,
+  normalizeOmCycle,
+  scanOmInitialState,
+} from '../om-parts-converter';
 
 /**
  * Build a `data-om-*` part. `data-${string}` parts are first-class
@@ -22,6 +29,194 @@ const assistantMessage = (parts: MastraMessagePart[], id = 'msg-1'): MastraDBMes
 });
 
 const partsOf = (message: MastraDBMessage) => message.content.parts as Array<{ type: string; data?: any }>;
+
+const convertedOmData = (message: MastraDBMessage) => {
+  const part = message.content.parts[0] as any;
+  return part.output?.omData;
+};
+
+describe('OM part conversion', () => {
+  it('retains terminal extraction fields across a post-stream reset with a poorer snapshot', () => {
+    const cache = new Map();
+    const streamedMessages = [
+      assistantMessage([
+        omPart('om-buffering-start', { cycleId: 'cycle-reset', operationType: 'observation' }),
+        omPart('om-buffering-end', {
+          cycleId: 'cycle-reset',
+          operationType: 'observation',
+          tokensBuffered: 20,
+          observations: ['observed'],
+          extractedValues: { priority: 'high' },
+          extractionFailures: [{ slug: 'status', error: 'missing value' }],
+        }),
+      ]),
+    ];
+
+    const streamedGlobalParts = buildGlobalOmPartsByCycleId(streamedMessages, cache);
+    const streamedMessage = convertOmPartsInMastraMessage(streamedMessages[0], streamedGlobalParts);
+    expect(convertedOmData(streamedMessage)?.extractedValues).toEqual({ priority: 'high' });
+
+    const resetMessages = [
+      assistantMessage([
+        omPart('om-buffering-start', { cycleId: 'cycle-reset', operationType: 'observation' }),
+        omPart('om-buffering-end', {
+          cycleId: 'cycle-reset',
+          operationType: 'observation',
+          tokensBuffered: 20,
+          observations: ['observed'],
+        }),
+      ]),
+    ];
+
+    const resetGlobalParts = buildGlobalOmPartsByCycleId(resetMessages, cache);
+    const resetMessage = convertOmPartsInMastraMessage(resetMessages[0], resetGlobalParts);
+    expect(convertedOmData(resetMessage)?.extractedValues).toEqual({ priority: 'high' });
+    expect(convertedOmData(resetMessage)?.extractionFailures).toEqual([{ slug: 'status', error: 'missing value' }]);
+  });
+
+  it('retains cached extraction fields when a buffering reset snapshot has empty extraction fields', () => {
+    const cache = new Map();
+    const streamedMessages = [
+      assistantMessage([
+        omPart('om-buffering-start', { cycleId: 'cycle-empty-reset', operationType: 'observation' }),
+        omPart('om-buffering-end', {
+          cycleId: 'cycle-empty-reset',
+          operationType: 'observation',
+          extractedValues: { priority: 'high' },
+          extractionFailures: [{ slug: 'status', error: 'missing value' }],
+        }),
+      ]),
+    ];
+
+    buildGlobalOmPartsByCycleId(streamedMessages, cache);
+
+    const resetMessages = [
+      assistantMessage([
+        omPart('om-buffering-start', { cycleId: 'cycle-empty-reset', operationType: 'observation' }),
+        omPart('om-buffering-end', {
+          cycleId: 'cycle-empty-reset',
+          operationType: 'observation',
+          extractedValues: {},
+          extractionFailures: [],
+        }),
+      ]),
+    ];
+
+    const resetGlobalParts = buildGlobalOmPartsByCycleId(resetMessages, cache);
+    const resetMessage = convertOmPartsInMastraMessage(resetMessages[0], resetGlobalParts);
+    expect(convertedOmData(resetMessage)?.extractedValues).toEqual({ priority: 'high' });
+    expect(convertedOmData(resetMessage)?.extractionFailures).toEqual([{ slug: 'status', error: 'missing value' }]);
+  });
+
+  it('retains cached extraction fields when an observation reset snapshot has empty extraction fields', () => {
+    const cache = new Map();
+    const streamedMessages = [
+      assistantMessage([
+        omPart('om-observation-start', { cycleId: 'cycle-observation-reset', operationType: 'observation' }),
+        omPart('om-observation-end', {
+          cycleId: 'cycle-observation-reset',
+          operationType: 'observation',
+          extractedValues: { status: 'complete' },
+          extractionFailures: [{ slug: 'priority', error: 'missing value' }],
+        }),
+      ]),
+    ];
+
+    buildGlobalOmPartsByCycleId(streamedMessages, cache);
+
+    const resetMessages = [
+      assistantMessage([
+        omPart('om-observation-start', { cycleId: 'cycle-observation-reset', operationType: 'observation' }),
+        omPart('om-observation-end', {
+          cycleId: 'cycle-observation-reset',
+          operationType: 'observation',
+          extractedValues: {},
+          extractionFailures: [],
+        }),
+      ]),
+    ];
+
+    const resetGlobalParts = buildGlobalOmPartsByCycleId(resetMessages, cache);
+    const resetMessage = convertOmPartsInMastraMessage(resetMessages[0], resetGlobalParts);
+    expect(convertedOmData(resetMessage)?.extractedValues).toEqual({ status: 'complete' });
+    expect(convertedOmData(resetMessage)?.extractionFailures).toEqual([{ slug: 'priority', error: 'missing value' }]);
+  });
+
+  it('renders extraction failures consistently on failed observation cycles', () => {
+    const messages = [
+      assistantMessage([
+        omPart('om-observation-start', { cycleId: 'cycle-failed-render', operationType: 'observation' }),
+        omPart('om-observation-failed', {
+          cycleId: 'cycle-failed-render',
+          operationType: 'observation',
+          error: 'model failed',
+          extractionFailures: [{ slug: 'priority', error: 'missing value' }],
+        }),
+      ]),
+    ];
+
+    const globalParts = buildGlobalOmPartsByCycleId(messages);
+    const convertedMessage = convertOmPartsInMastraMessage(messages[0], globalParts);
+    expect(convertedOmData(convertedMessage)?._state).toBe('failed');
+    expect(convertedOmData(convertedMessage)?.extractionFailures).toEqual([
+      { slug: 'priority', error: 'missing value' },
+    ]);
+  });
+});
+
+describe('normalizeOmCycle', () => {
+  it('normalizes live, completed, refetched, and reloaded buffering states', () => {
+    const start = omPart('om-buffering-start', { cycleId: 'cycle-buffer', operationType: 'observation' }) as any;
+    expect(normalizeOmCycle('cycle-buffer', { bufferingStart: start }, 'buffering')).toMatchObject({
+      cycleId: 'cycle-buffer',
+      status: 'buffering',
+      isLoading: true,
+    });
+
+    const end = omPart('om-buffering-end', {
+      cycleId: 'cycle-buffer',
+      operationType: 'observation',
+      observations: ['observed'],
+      extractedValues: { priority: 'high' },
+    }) as any;
+    expect(normalizeOmCycle('cycle-buffer', { bufferingStart: start, bufferingEnd: end }, 'buffering')).toMatchObject({
+      status: 'buffering-complete',
+      isLoading: false,
+      observations: ['observed'],
+      extractedValues: { priority: 'high' },
+    });
+
+    const activation = omPart('om-activation', {
+      cycleId: 'cycle-buffer',
+      operationType: 'observation',
+      tokensActivated: 42,
+    }) as any;
+    expect(
+      normalizeOmCycle('cycle-buffer', { bufferingStart: start, bufferingEnd: end, activation }, 'buffering'),
+    ).toMatchObject({
+      status: 'activated',
+      isLoading: false,
+      omData: { tokensObserved: 42 },
+    });
+  });
+
+  it('normalizes observation failure state with extraction failures', () => {
+    const start = omPart('om-observation-start', { cycleId: 'cycle-failed', operationType: 'observation' }) as any;
+    const failed = omPart('om-observation-failed', {
+      cycleId: 'cycle-failed',
+      operationType: 'observation',
+      error: 'model failed',
+      extractionFailures: [{ slug: 'priority', error: 'missing value' }],
+    }) as any;
+
+    expect(normalizeOmCycle('cycle-failed', { start, failed }, 'observation')).toMatchObject({
+      cycleId: 'cycle-failed',
+      status: 'failed',
+      isLoading: false,
+      extractionFailures: [{ slug: 'priority', error: 'missing value' }],
+    });
+  });
+});
 
 describe('markOmMarkersAsDisconnected', () => {
   it('marks an in-progress observation-start marker as disconnected (reads content.parts)', () => {
@@ -71,7 +266,18 @@ describe('injectBufferingEnds', () => {
   it('injects a synthetic buffering-end for an in-progress buffering-start (reads content.parts)', () => {
     const [message] = injectBufferingEnds(
       [assistantMessage([omPart('om-buffering-start', { cycleId: 'cycle-2', operationType: 'observation' })])],
-      { bufferedObservationChunks: [{ cycleId: 'cycle-2', messageTokens: 120, tokenCount: 40, observations: ['x'] }] },
+      {
+        bufferedObservationChunks: [
+          {
+            cycleId: 'cycle-2',
+            messageTokens: 120,
+            tokenCount: 40,
+            observations: ['x'],
+            extractedValues: { priority: 'high' },
+            extractionFailures: [{ slug: 'status', error: 'missing value' }],
+          },
+        ],
+      },
     );
 
     const parts = partsOf(message);
@@ -80,6 +286,8 @@ describe('injectBufferingEnds', () => {
     expect(parts[1].data?.cycleId).toBe('cycle-2');
     expect(parts[1].data?.tokensBuffered).toBe(120);
     expect(parts[1].data?.observations).toEqual(['x']);
+    expect(parts[1].data?.extractedValues).toEqual({ priority: 'high' });
+    expect(parts[1].data?.extractionFailures).toEqual([{ slug: 'status', error: 'missing value' }]);
   });
 
   it('does not inject an end for an already-disconnected buffering-start', () => {

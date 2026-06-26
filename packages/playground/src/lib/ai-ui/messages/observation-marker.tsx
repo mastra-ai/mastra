@@ -92,6 +92,8 @@ const ObservationEndMarker = ({ data }: { data: DataOmObservationEndPart['data']
   const compressionRatio =
     data.tokensObserved > 0 ? ((1 - data.observationTokens / data.tokensObserved) * 100).toFixed(0) : 0;
   const durationSec = (data.durationMs / 1000).toFixed(1);
+  const extractedCount = Object.keys(data.extractedValues ?? {}).length;
+  const extractionFailureCount = data.extractionFailures?.length ?? 0;
 
   return (
     <div
@@ -105,6 +107,8 @@ const ObservationEndMarker = ({ data }: { data: DataOmObservationEndPart['data']
       <CheckCircle2 className="h-3 w-3" />
       <span>
         Observed {tokensK}k tokens → {compressionRatio}% compression ({durationSec}s)
+        {extractedCount > 0 ? ` · ${extractedCount} extracted` : ''}
+        {extractionFailureCount > 0 ? ` · ${extractionFailureCount} failed` : ''}
       </span>
     </div>
   );
@@ -165,6 +169,8 @@ const BufferingEndMarker = ({ data }: { data: DataOmBufferingEndPart['data'] }) 
   const compressionRatio =
     data.tokensBuffered > 0 ? ((1 - data.bufferedTokens / data.tokensBuffered) * 100).toFixed(0) : 0;
   const durationSec = (data.durationMs / 1000).toFixed(1);
+  const extractedCount = Object.keys(data.extractedValues ?? {}).length;
+  const extractionFailureCount = data.extractionFailures?.length ?? 0;
 
   return (
     <div
@@ -178,6 +184,8 @@ const BufferingEndMarker = ({ data }: { data: DataOmBufferingEndPart['data'] }) 
       <CloudCog className="h-3 w-3" />
       <span>
         Buffered {tokensK}k tokens → {compressionRatio}% compression ({durationSec}s)
+        {extractedCount > 0 ? ` · ${extractedCount} extracted` : ''}
+        {extractionFailureCount > 0 ? ` · ${extractionFailureCount} failed` : ''}
       </span>
     </div>
   );
