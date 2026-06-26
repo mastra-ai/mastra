@@ -21,6 +21,7 @@ import type { PubSubDeliveryMode } from '../events/pubsub';
 import type { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
+import { createMockWorkspace } from './test-utils';
 import type { HarnessEvent } from './types';
 
 /** Push-only wrapper around EventEmitterPubSub — mimics mc's SignalsPubSub. */
@@ -77,6 +78,7 @@ describe('mc send-message reproduction', () => {
     });
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test-harness',
       storage,
       resourceId: 'test-resource',
@@ -122,6 +124,7 @@ describe('mc send-message reproduction', () => {
     });
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test-harness',
       storage,
       resourceId: 'test-resource',
@@ -174,6 +177,7 @@ describe('mc send-message reproduction', () => {
     });
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test-harness',
       storage,
       pubsub: pushOnlyPubSub,

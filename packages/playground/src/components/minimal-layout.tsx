@@ -1,5 +1,5 @@
-import { Toaster } from '@mastra/playground-ui';
 import { ThemeProvider } from '@mastra/playground-ui/components/ThemeProvider';
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { AuthRequired } from '@/domains/auth/components/auth-required';
 

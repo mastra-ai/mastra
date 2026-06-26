@@ -1,11 +1,11 @@
 import type { ScoreRowData } from '@mastra/core/evals';
-import { Icon } from '@mastra/playground-ui';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
 import { Sections } from '@mastra/playground-ui/components/Sections';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
 import { TextAndIcon, getShortId } from '@mastra/playground-ui/components/Text';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { format } from 'date-fns/format';
 import {
   HashIcon,

@@ -9,7 +9,8 @@ import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcesso
 import type { ProcessorState } from '../../processors/runner';
 import { RequestContext, MASTRA_VERSIONS_KEY, mergeVersionOverrides } from '../../request-context';
 import type { VersionOverrides } from '../../request-context';
-import type { CoreTool, ToolHooks } from '../../tools/types';
+import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transform';
+import type { CoreTool, ToolHooks, ToolPayloadTransformPolicy } from '../../tools/types';
 import { deepMerge } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
@@ -52,6 +53,7 @@ interface DurablePreparationAgent {
   listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
   listErrorProcessors(requestContext?: RequestContext): Promise<ErrorProcessorOrWorkflow[]>;
   getBackgroundTasksConfig(): AgentBackgroundConfig | undefined;
+  getToolPayloadTransform?(): ToolPayloadTransformPolicy | undefined;
 }
 
 /**
@@ -165,8 +167,9 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     resourceId,
   });
 
-  // Add agent instructions
-  const instructions = await typedAgent.getInstructions({ requestContext });
+  // Add agent instructions. Per-call `options.instructions` overrides the
+  // agent's default instructions to mirror non-durable Agent.stream() behavior.
+  const instructions = execOptions?.instructions || (await typedAgent.getInstructions({ requestContext }));
   if (instructions) {
     if (typeof instructions === 'string') {
       messageList.addSystem(instructions);
@@ -201,6 +204,21 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // Add context messages if provided
   if (execOptions?.context) {
     messageList.add(execOptions.context, 'context');
+  }
+
+  // Per-call `options.system` is appended as an additional system message after
+  // context. Mirrors the non-durable Agent.stream() prepare-memory-step path.
+  if (execOptions?.system) {
+    const sys = execOptions.system;
+    if (typeof sys === 'string') {
+      messageList.addSystem(sys);
+    } else if (Array.isArray(sys)) {
+      for (const s of sys) {
+        messageList.addSystem(s);
+      }
+    } else {
+      messageList.addSystem(sys);
+    }
   }
 
   // Add user messages
@@ -372,9 +390,22 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     }
   }
 
-  // 11. Get background task config
+  // 11. Get background task config. When the caller opts out with
+  // `disableBackgroundTasks: true`, drop the manager so the registry entry
+  // signals "no background tasks for this run" to the check step.
   const backgroundTasksConfig = typedAgent.getBackgroundTasksConfig?.();
-  const backgroundTaskManager = mastra?.backgroundTaskManager;
+  const backgroundTaskManager = execOptions?.disableBackgroundTasks ? undefined : mastra?.backgroundTaskManager;
+
+  // Resolve tool payload transform policy with the same precedence the
+  // non-durable Agent uses: per-call > agent-level > mastra-level. The
+  // resolved policy carries a closure, so it lives on the run registry; the
+  // JSON-safe `targets` shadow is serialized into workflow input below.
+  const toolPayloadTransform =
+    normalizeToolPayloadTransformPolicy(execOptions?.transform) ??
+    typedAgent.getToolPayloadTransform?.() ??
+    normalizeToolPayloadTransformPolicy(
+      mastra?.getToolPayloadTransform?.() ?? (mastra as any)?.getToolPayloadProjection?.(),
+    );
 
   // 12. Resolve memory persistence flags
   const savePerStep = execOptions?.savePerStep;
@@ -413,9 +444,13 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       maxSteps: execOptions?.maxSteps,
       toolChoice: execOptions?.toolChoice as any,
       activeTools: execOptions?.activeTools,
-      temperature: execOptions?.modelSettings?.temperature,
-      // Durable runs serialize their options, so a function-valued global approval policy
-      // can't be persisted. Degrade safely by requiring approval for every tool call.
+      modelSettings: execOptions?.modelSettings as any,
+      // Function-form approval policies are closures that can't ride on the
+      // serialized workflow input — the live closure is parked on the run
+      // registry below. This boolean shadow is the cross-process fallback:
+      // function policies degrade to "require approval for every tool call"
+      // when the registry slot is unavailable (e.g. Inngest after a worker
+      // restart), which is the safe default.
       requireToolApproval:
         typeof execOptions?.requireToolApproval === 'function' ? true : execOptions?.requireToolApproval,
       toolCallConcurrency: execOptions?.toolCallConcurrency,
@@ -427,6 +462,21 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       providerOptions: execOptions?.providerOptions,
       structuredOutput: serializedStructuredOutput,
       skipBgTaskWait: (execOptions as any)?._skipBgTaskWait,
+      disableBackgroundTasks: execOptions?.disableBackgroundTasks,
+      tracingOptions: execOptions?.tracingOptions,
+      actor: execOptions?.actor,
+      instructionsOverride: execOptions?.instructions,
+      systemMessage: execOptions?.system,
+      transform: toolPayloadTransform?.targets ? { targets: toolPayloadTransform.targets } : undefined,
+      isTaskComplete: execOptions?.isTaskComplete
+        ? {
+            scorerNames: execOptions.isTaskComplete.scorers?.map(s => s.name).filter((n): n is string => !!n),
+            strategy: execOptions.isTaskComplete.strategy,
+            timeout: execOptions.isTaskComplete.timeout,
+            parallel: execOptions.isTaskComplete.parallel,
+            suppressFeedback: execOptions.isTaskComplete.suppressFeedback,
+          }
+        : undefined,
     },
     state: {
       memoryConfig,
@@ -465,6 +515,20 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     backgroundTasksConfig,
     agentSpan,
     modelSpan,
+    // Park the stopWhen predicate(s) on the registry so the durable agentic
+    // loop can evaluate them on each iteration. The predicate is a closure and
+    // cannot ride on the serialized workflow input; in-process engines read it
+    // back via globalRunRegistry, cross-process engines degrade to maxSteps.
+    stopWhen: execOptions?.stopWhen,
+    onIterationComplete: execOptions?.onIterationComplete,
+    prepareStep: execOptions?.prepareStep,
+    toolPayloadTransform,
+    isTaskComplete: execOptions?.isTaskComplete,
+    // Park the per-call requireToolApproval policy on the registry so the
+    // durable tool-call step can evaluate function-form policies with the
+    // real (toolName, args) on each call. The boolean shadow on the
+    // serialized workflow input is the cross-process fallback.
+    requireToolApproval: execOptions?.requireToolApproval,
     cleanup: () => {},
   };
 

@@ -6,6 +6,7 @@ import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 
 import { Harness } from './harness';
+import { createMockWorkspace } from './test-utils';
 import { assignTaskIds, taskWriteTool } from './tools';
 import type { HarnessEvent } from './types';
 
@@ -17,6 +18,7 @@ async function createSession() {
   });
 
   const harness = new Harness<Record<string, unknown>>({
+    workspace: createMockWorkspace(),
     id: 'test-harness',
     storage: new InMemoryStore(),
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
@@ -195,6 +197,7 @@ describe('harness state transactions', () => {
     let validationCount = 0;
 
     const harness = new Harness<Record<string, unknown>>({
+      workspace: createMockWorkspace(),
       id: 'test-harness',
       storage: new InMemoryStore(),
       stateSchema: z
@@ -243,6 +246,7 @@ describe('harness state transactions', () => {
 describe('task tool permissions', () => {
   it('removes denied built-in and configured harness tools even when yolo is enabled', async () => {
     const harness = new Harness<Record<string, unknown>>({
+      workspace: createMockWorkspace(),
       id: 'test-harness',
       storage: new InMemoryStore(),
       initialState: {

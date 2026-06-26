@@ -1,5 +1,106 @@
 # @mastra/client-js
 
+## 1.28.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`023766f`](https://github.com/mastra-ai/mastra/commit/023766f44d59b30a50f3a381e33eddde8ab56c00), [`a0509c7`](https://github.com/mastra-ai/mastra/commit/a0509c731a08aa3ed626557c5338126362856f57), [`01caf93`](https://github.com/mastra-ai/mastra/commit/01caf93d71ae2c1e65f49735cafb531975187426), [`c2c1d7b`](https://github.com/mastra-ai/mastra/commit/c2c1d7bb61d2602955f14ed3952f807c2d6eb576), [`3eb852e`](https://github.com/mastra-ai/mastra/commit/3eb852e5435bc908b800193498103dc724f455b0)]:
+  - @mastra/core@1.47.0-alpha.5
+
+## 1.28.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`462a769`](https://github.com/mastra-ai/mastra/commit/462a769da61850862ca1be3d74134d33078ee6a7), [`f328049`](https://github.com/mastra-ai/mastra/commit/f3280498c324afd2a8d36cd828f5b9f94a2dddc1), [`e545228`](https://github.com/mastra-ai/mastra/commit/e54522856934a5dc030b7b6385771e3548020d59)]:
+  - @mastra/core@1.47.0-alpha.4
+
+## 1.28.0-alpha.3
+
+### Minor Changes
+
+- Enrich the harness HTTP session surface so a client can render a status line, ([#18446](https://github.com/mastra-ai/mastra/pull/18446))
+  read behavior settings, and scope threads per working directory.
+
+  `GET /harness/:harnessId/sessions/:resourceId` now also returns:
+  - `omProgress` — the status-line slice of observational-memory progress
+    (pending tokens vs. observation threshold, accumulated observations vs.
+    reflection threshold, plus projected message removal / reflection savings)
+  - `tokenUsage` — cumulative token usage for the current thread
+  - `settings` — agent behavior settings (`yolo`, `thinkingLevel`,
+    `notifications`, `smartEditing`)
+
+  `GET /harness/:harnessId/sessions/:resourceId/threads` accepts an optional
+  `tags` query param (a JSON-encoded object). A single resourceId can be shared
+  across git worktrees of the same repo (the id is derived from the git URL), so
+  passing `tags` scopes the list to threads matching every tag (e.g.
+  `{ projectPath }` for the working directory). Each returned thread now also
+  includes the scoping `tags` it was stamped with at creation.
+
+  The session event stream route (`.../stream`) now enqueues raw event objects
+  and lets the server adapter handle SSE framing, fixing a double-framing bug
+  where events were wrapped twice (`data: "data: {...}\n\n"\n\n`) and could not be
+  parsed by clients.
+
+  `@mastra/client-js` gains the matching types and reads:
+  - `HarnessOMProgress` and `HarnessSessionSettings`, surfaced on
+    `HarnessSessionState` (`omProgress`, `tokenUsage`, `settings`)
+  - a `display_state_changed` event in `KnownHarnessEvent` carrying the
+    status-line figures
+  - `HarnessSession.listThreads()` now accepts either a number (back-compat) or
+    `{ limit?, tags? }`
+
+  Example:
+
+  ```ts
+  const session = client.getHarness('code').session(resourceId);
+
+  // Scope a worktree's thread list (and resumed session) to its own threads.
+  await session.create({ tags: { projectPath: '/repo/worktree-a' } });
+  const threads = await session.listThreads({ tags: { projectPath: '/repo/worktree-a' } });
+
+  // Read the status-line figures and agent settings.
+  const state = await session.state();
+  state.omProgress; // observational-memory progress
+  state.tokenUsage; // cumulative token usage
+  state.settings; // { yolo, thinkingLevel, notifications, smartEditing }
+  ```
+
+- Scope harness session creation with tags so sessions sharing a resourceId can ([#18446](https://github.com/mastra-ai/mastra/pull/18446))
+  each resume their own thread.
+
+  `harness.createSession()` now accepts an optional `tags` record. The tags are
+  (a) seeded into the new session's state, (b) stamped onto every thread the
+  session creates (so thread listings can be filtered back to the session's
+  scope), and (c) used to filter initial thread selection: a thread is a resume
+  candidate only when its metadata matches every provided tag. Previously, initial
+  thread selection only consulted the
+  harness-global `initialState.projectPath`; on a multi-session server (where one
+  Harness serves many scopes) a session could resume the most recently updated
+  thread from a _different_ scope that shared the resourceId. Using a generic tag
+  record (e.g. `{ projectPath }`) keeps room for future scoping dimensions without
+  further API changes.
+
+  The `@mastra/client-js` `HarnessSession.create()` method accepts `{ tags }`, and
+  the `POST /harness/:id/sessions` route accepts a `tags` body field.
+
+  ```ts
+  // before: initial thread chosen by resourceId only
+  const session = await harness.createSession({ resourceId, id, ownerId });
+
+  // after: initial thread scoped to this worktree via a tag
+  const session = await harness.createSession({
+    resourceId,
+    id,
+    ownerId,
+    tags: { projectPath: '/repo/worktree-a' },
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`bf3fe49`](https://github.com/mastra-ai/mastra/commit/bf3fe49f9467dbbdb8f9eaf74e0f7971ffb19559), [`24ceaea`](https://github.com/mastra-ai/mastra/commit/24ceaea0bdd8609cabbab764380608ca6621a194), [`6ccf67b`](https://github.com/mastra-ai/mastra/commit/6ccf67bf075753754927a57bc2e1734ba2c820c5), [`825d8de`](https://github.com/mastra-ai/mastra/commit/825d8def9fa64c2bcc3d8dd6b49e09342c3ac5c7), [`ffa09e7`](https://github.com/mastra-ai/mastra/commit/ffa09e772a5c92270eabe2090fc42d45bd8ec4b7), [`461a7c5`](https://github.com/mastra-ai/mastra/commit/461a7c501449295287f4f0ee4b0b42344f39fcf8), [`4211472`](https://github.com/mastra-ai/mastra/commit/4211472a5a2bd319c60cd2e42d9109c3eef7ac1c), [`9e45902`](https://github.com/mastra-ai/mastra/commit/9e4590208e745055cecca202e2db0e5c65e17d3c), [`5c0df77`](https://github.com/mastra-ai/mastra/commit/5c0df776c40efa420f8c07a2f3ee66010296618e)]:
+  - @mastra/core@1.47.0-alpha.3
+
 ## 1.27.1-alpha.2
 
 ### Patch Changes

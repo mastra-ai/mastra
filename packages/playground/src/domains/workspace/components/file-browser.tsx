@@ -1,4 +1,3 @@
-import { AmazonIcon, AzureIcon, GoogleIcon, SkillIcon } from '@mastra/playground-ui';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
@@ -7,6 +6,10 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { Tree } from '@mastra/playground-ui/components/Tree';
+import { AmazonIcon } from '@mastra/playground-ui/icons/AmazonIcon';
+import { AzureIcon } from '@mastra/playground-ui/icons/AzureIcon';
+import { GoogleIcon } from '@mastra/playground-ui/icons/GoogleIcon';
+import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import {
   File,
   Folder,

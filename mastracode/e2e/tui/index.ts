@@ -13,6 +13,7 @@ import { browserProfileProviderMismatchScenario } from './browser-profile-provid
 import { browserSettingsPersistenceScenario } from './browser-settings-persistence.js';
 import { browserStartupRestoreScenario } from './browser-startup-restore.js';
 import { browserToggleAttachScenario } from './browser-toggle-attach.js';
+import { browserToolUnavailableScenario } from './browser-tool-unavailable.js';
 import { browserWizardBrowserbaseScenario } from './browser-wizard-browserbase.js';
 import { browserWizardExportScenario } from './browser-wizard-export.js';
 import { browserbaseStartupRestoreScenario } from './browserbase-startup-restore.js';
@@ -146,6 +147,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'browser-profile-provider-mismatch': browserProfileProviderMismatchScenario,
   'browser-settings-persistence': browserSettingsPersistenceScenario,
   'browser-startup-restore': browserStartupRestoreScenario,
+  'browser-tool-unavailable': browserToolUnavailableScenario,
   'browserbase-startup-restore': browserbaseStartupRestoreScenario,
   'browser-toggle-attach': browserToggleAttachScenario,
   'browser-wizard-browserbase': browserWizardBrowserbaseScenario,

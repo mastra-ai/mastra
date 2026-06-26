@@ -1,5 +1,70 @@
 # mastracode
 
+## 0.26.0-alpha.5
+
+### Minor Changes
+
+- Add a browser UI for MastraCode. ([#18364](https://github.com/mastra-ai/mastra/pull/18364))
+
+  The web app boots the real MastraCode Harness, registers it on a Mastra
+  instance, mounts the Harness HTTP routes (via `@mastra/server`) on a Hono
+  server, and serves a React UI built with Vite. The UI drives a session over the
+  `@mastra/client-js` harness resource (SSE event stream + JSON commands) and
+  reaches feature parity with the terminal for the core interactive workflows:
+  chat streaming, tool execution, tool approvals, interactive suspensions
+  (`ask_user` / `submit_plan` / `request_access`), mode/model switching, thread
+  lifecycle, task tracking, goals, notifications, steer/abort, follow-ups, a
+  TUI-parity status line (message/reflection budgets and active-goal indicator),
+  and project-scoped workspaces with a server-driven directory picker.
+
+  A full Settings surface mirrors the terminal's configuration commands: model
+  selection, behavior (`yolo`, thinking level, notifications, smart editing,
+  per-category tool permissions), observational-memory models and thresholds,
+  model packs, API keys, and custom providers. These are backed by
+  `/api/web/config/*` routes that read and write the same global `settings.json`
+  the terminal uses, so configuration stays in sync across the terminal and the
+  browser.
+
+  The web server shares its storage with the registered Harness, and projects
+  resolve the same `resourceId` as the terminal, so the two share durable threads
+  and observations for a given project. Thread lists are scoped by project path so
+  worktrees that share a `resourceId` don't bleed each other's threads.
+
+  Internally, harness startup is shared through a single base factory with small
+  per-environment helpers, so the terminal app and the web server build the exact
+  same harness without duplicating wiring. The published `mastracode` package
+  remains terminal-only — the web UI lives in the repository for local
+  development and is excluded from the published package.
+
+  Includes a scenario test suite that drives the production stack
+  (`MastraClient` → Hono → `@mastra/server` routes → Harness → AIMock) end to end.
+
+### Patch Changes
+
+- Updated dependencies [[`023766f`](https://github.com/mastra-ai/mastra/commit/023766f44d59b30a50f3a381e33eddde8ab56c00), [`a0509c7`](https://github.com/mastra-ai/mastra/commit/a0509c731a08aa3ed626557c5338126362856f57), [`01caf93`](https://github.com/mastra-ai/mastra/commit/01caf93d71ae2c1e65f49735cafb531975187426), [`c2c1d7b`](https://github.com/mastra-ai/mastra/commit/c2c1d7bb61d2602955f14ed3952f807c2d6eb576), [`3eb852e`](https://github.com/mastra-ai/mastra/commit/3eb852e5435bc908b800193498103dc724f455b0)]:
+  - @mastra/core@1.47.0-alpha.5
+  - @mastra/server@1.47.0-alpha.5
+  - @mastra/hono@1.5.2-alpha.5
+
+## 0.25.1-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`462a769`](https://github.com/mastra-ai/mastra/commit/462a769da61850862ca1be3d74134d33078ee6a7), [`f328049`](https://github.com/mastra-ai/mastra/commit/f3280498c324afd2a8d36cd828f5b9f94a2dddc1), [`e545228`](https://github.com/mastra-ai/mastra/commit/e54522856934a5dc030b7b6385771e3548020d59)]:
+  - @mastra/core@1.47.0-alpha.4
+
+## 0.25.1-alpha.3
+
+### Patch Changes
+
+- Updated plan and explore modes to declare `availableTools` allowlists so tool visibility is gated at LLM-call time instead of workspace construction. Plan mode includes read-only tools plus plan-file editing and delivery tools; explore mode includes only read-only tools. Build mode remains unrestricted. Workspace creation no longer branches on mode for tool visibility — all modes now share the same workspace instance. ([#18463](https://github.com/mastra-ai/mastra/pull/18463))
+
+- Updated dependencies [[`bf3fe49`](https://github.com/mastra-ai/mastra/commit/bf3fe49f9467dbbdb8f9eaf74e0f7971ffb19559), [`24ceaea`](https://github.com/mastra-ai/mastra/commit/24ceaea0bdd8609cabbab764380608ca6621a194), [`24ceaea`](https://github.com/mastra-ai/mastra/commit/24ceaea0bdd8609cabbab764380608ca6621a194), [`24ceaea`](https://github.com/mastra-ai/mastra/commit/24ceaea0bdd8609cabbab764380608ca6621a194), [`e1f272d`](https://github.com/mastra-ai/mastra/commit/e1f272d2bf1963c0ccb060f34b103b0b780bbff0), [`6ccf67b`](https://github.com/mastra-ai/mastra/commit/6ccf67bf075753754927a57bc2e1734ba2c820c5), [`825d8de`](https://github.com/mastra-ai/mastra/commit/825d8def9fa64c2bcc3d8dd6b49e09342c3ac5c7), [`74f447a`](https://github.com/mastra-ai/mastra/commit/74f447a6fae171ac3a6ec2d9e61be171ca46d23c), [`ffa09e7`](https://github.com/mastra-ai/mastra/commit/ffa09e772a5c92270eabe2090fc42d45bd8ec4b7), [`461a7c5`](https://github.com/mastra-ai/mastra/commit/461a7c501449295287f4f0ee4b0b42344f39fcf8), [`4211472`](https://github.com/mastra-ai/mastra/commit/4211472a5a2bd319c60cd2e42d9109c3eef7ac1c), [`9e45902`](https://github.com/mastra-ai/mastra/commit/9e4590208e745055cecca202e2db0e5c65e17d3c), [`5c0df77`](https://github.com/mastra-ai/mastra/commit/5c0df776c40efa420f8c07a2f3ee66010296618e)]:
+  - @mastra/core@1.47.0-alpha.3
+  - @mastra/pg@1.14.2-alpha.1
+  - @mastra/libsql@1.14.2-alpha.0
+  - @mastra/observability@1.15.2-alpha.0
+
 ## 0.25.1-alpha.2
 
 ### Patch Changes

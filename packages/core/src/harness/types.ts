@@ -10,7 +10,7 @@ import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage/base';
 import type { GoalEvaluationPayload } from '../stream/types';
 import type { DynamicArgument } from '../types';
-import type { Workspace, WorkspaceConfig, WorkspaceStatus } from '../workspace';
+import type { Workspace, WorkspaceStatus } from '../workspace';
 import type { TaskItemSnapshot } from './tools';
 
 // =============================================================================
@@ -77,6 +77,26 @@ interface HarnessModeBase {
   transitionsTo?: string;
 
   /**
+   * Unified per-mode tool visibility allowlist. When set, only tools whose
+   * final exposed names appear in this list are visible to the model and
+   * executable during this mode's runs. Workspace tools use the same list
+   * as all other tools — configure them by exposed tool names such as
+   * `view`, `write_file`, `find_files`, etc. (after workspace tool renaming
+   * via `TOOL_NAME_OVERRIDES`).
+   *
+   * - `undefined` (default): no mode-level restriction; all tools are visible.
+   * - `[]`: no tools are available for this mode.
+   * - Per-tool permission `deny` and category `deny` still win — a denied
+   *   tool is hidden even if it appears in this list.
+   * - `tools` / `additionalTools` remain toolset composition inputs (which
+   *   tools are added to the run), not visibility gates.
+   *
+   * Enforced at LLM-call time via `activeTools`, matching the existing
+   * execution-time enforcement in the durable tool-call step.
+   */
+  availableTools?: string[];
+
+  /**
    * Arbitrary user-defined metadata. `metadata.default === true` is a
    * reserved harness hint for choosing the default mode when `defaultModeId`
    * is unset; all other metadata is pass-through and unvalidated. Use for UI
@@ -91,9 +111,11 @@ interface HarnessModeBase {
 type HarnessModeToolOverrides =
   | {
       /**
-       * The tool set this mode runs with. **Replaces** the backing agent's
-       * tools — the agent's own tools are hidden for the duration of the
-       * mode. Mutually exclusive with `additionalTools`.
+       * Mode-level tools added as a separate toolset alongside the backing
+       * agent's own tools. With a shared backing agent (`HarnessConfig.agent`),
+       * these are layered as an augment — the agent's own tools are **not**
+       * masked. To restrict which tools are visible, use `availableTools`
+       * instead. Mutually exclusive with `additionalTools`.
        */
       tools?: ToolsInput;
       additionalTools?: never;
@@ -239,11 +261,11 @@ export interface HarnessConfig<TState = {}> {
 
   /**
    * Workspace configuration.
-   * Accepts a pre-constructed Workspace instance, a WorkspaceConfig for
-   * Harness to construct internally, or a dynamic factory function that
-   * receives the request context and returns a Workspace per-request.
+   * Accepts a pre-constructed Workspace instance or a dynamic factory
+   * function that receives the request context and returns a Workspace
+   * per-request.
    */
-  workspace?: DynamicArgument<Workspace | undefined> | WorkspaceConfig;
+  workspace?: DynamicArgument<Workspace | undefined>;
 
   /**
    * Browser automation configuration.
@@ -1028,7 +1050,11 @@ export interface HarnessRequestSession<TState = unknown> {
   modeId: string;
   /** Currently-selected model ID ('' when none selected yet) */
   modelId: string;
-  /** Live session-owned harness state accessors. */
+  /**
+   * Live session-owned harness state accessors.
+   * @deprecated Prefer the top-level `getState()` / `setState()` / `updateState()`
+   * on the {@link HarnessRequestContext} instead.
+   */
   state: HarnessRequestState<TState>;
 }
 
@@ -1038,26 +1064,17 @@ export interface HarnessRequestContext<TState = unknown> {
 
   /**
    * Current harness state (read-only snapshot captured when the request context is built).
-   * @deprecated Prefer `session.state.get()` for live state reads.
+   * @deprecated Prefer `getState()` for live state reads.
    */
   state: Readonly<TState>;
 
-  /**
-   * Get the current harness state (live, not snapshot).
-   * @deprecated Prefer `session.state.get()`.
-   */
+  /** Get the current harness state (live, not snapshot). */
   getState: () => Readonly<TState>;
 
-  /**
-   * Update harness state.
-   * @deprecated Prefer `session.state.set(...)`.
-   */
+  /** Update harness state. */
   setState: (updates: Partial<TState>) => Promise<void>;
 
-  /**
-   * Update harness state from the latest state snapshot in a serialized transaction.
-   * @deprecated Prefer `session.state.update(...)`.
-   */
+  /** Update harness state from the latest state snapshot in a serialized transaction. */
   updateState?: <TResult>(updater: HarnessRequestStateUpdater<TState, TResult>) => Promise<TResult>;
 
   /** Current thread ID */

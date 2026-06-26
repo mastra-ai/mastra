@@ -1,11 +1,4 @@
-import {
-  AgentIcon,
-  CollapsiblePanel,
-  PanelSeparator,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-  toast,
-} from '@mastra/playground-ui';
+import { CollapsiblePanel, PanelSeparator, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
@@ -14,6 +7,8 @@ import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDen
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { FileText, Wand2, Search, X } from 'lucide-react';
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Group, Panel, useDefaultLayout } from 'react-resizable-panels';

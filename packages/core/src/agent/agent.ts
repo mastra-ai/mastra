@@ -732,6 +732,15 @@ export class Agent<
   }
 
   /**
+   * Returns the agent-level tool payload transform policy, if any.
+   * Used by durable execution to mirror the non-durable layer's
+   * per-call → agent → mastra merge order.
+   */
+  getToolPayloadTransform(): ToolPayloadTransformPolicy | undefined {
+    return this.#toolPayloadTransform;
+  }
+
+  /**
    * Returns the agent's native goal configuration, if any. Read by the loop's
    * goal step to resolve effective settings (judge model, max runs, prompt).
    * @internal
@@ -8232,12 +8241,22 @@ export class Agent<
       resourceId: string;
       toolCallId?: string;
       approved: boolean;
+      resumeData?: unknown;
       declineContext?: { reason?: string; message?: string };
       messages?: MessageListInput;
       streamOptions?: AgentExecutionOptions<OUTPUT>;
     },
   ): Promise<{ accepted: true; runId: string; toolCallId?: string }> {
-    const { threadId, resourceId, approved, declineContext, messages, streamOptions, ...executionOptions } = options;
+    const {
+      threadId,
+      resourceId,
+      approved,
+      resumeData: customResumeData,
+      declineContext,
+      messages,
+      streamOptions,
+      ...executionOptions
+    } = options;
 
     if (messages && approved) {
       const continuation = agentThreadStreamRuntime.continueWithMessages(
@@ -8282,7 +8301,14 @@ export class Agent<
       resourceId,
       runId,
       toolCallId: options.toolCallId,
-      resumeData: approved ? { approved } : declineContext ? { approved, ...declineContext } : { approved },
+      resumeData:
+        customResumeData !== undefined
+          ? customResumeData
+          : approved
+            ? { approved }
+            : declineContext
+              ? { approved, ...declineContext }
+              : { approved },
       streamOptions: {
         ...resumeOptions,
         memory: {

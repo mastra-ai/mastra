@@ -291,12 +291,16 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   }): Promise<void> {
     const key = this.getWorkflowKey(workflowName, runId);
     const now = new Date();
+    const existing = this.db.workflows.get(key);
     const data: StorageWorkflowRun = {
       workflow_name: workflowName,
       run_id: runId,
       resourceId,
       snapshot,
-      createdAt: createdAt ?? now,
+      // Preserve the original creation time when re-persisting an existing run; only set it
+      // on first insert. Otherwise listWorkflowRuns ordering and date filters drift to the
+      // last activity time. Matches the persistent stores (pg/mysql/mongodb/libsql).
+      createdAt: createdAt ?? existing?.createdAt ?? now,
       updatedAt: updatedAt ?? now,
     };
 
