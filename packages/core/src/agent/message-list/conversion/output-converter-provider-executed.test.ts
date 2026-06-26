@@ -254,6 +254,54 @@ describe('aiV5UIMessagesToAIV5ModelMessages — provider-executed tool metadata'
     expect((toolCall as any)?.providerOptions).toEqual(providerMetadata);
     expect((toolResult as any)?.providerOptions).toEqual(providerMetadata);
   });
+
+  it('keeps previously captured provider metadata when later same-id tool parts are sparse', () => {
+    const providerMetadata = {
+      anthropic: {
+        itemId: 'srvtoolu_sparse_metadata',
+      },
+    };
+
+    const messages: AIV5Type.UIMessage[] = [
+      {
+        id: 'assistant-with-repeated-server-tool',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-webSearch_20250305',
+            toolCallId: 'srvtoolu_sparse_metadata',
+            state: 'output-available',
+            input: { query: 'latest USD/CNY rate' },
+            output: { results: ['7.12'] },
+            providerExecuted: true,
+            providerMetadata,
+          } as AIV5Type.ToolUIPart,
+          {
+            type: 'tool-webSearch_20250305',
+            toolCallId: 'srvtoolu_sparse_metadata',
+            state: 'output-available',
+            input: { query: 'latest USD/CNY rate' },
+            output: { results: ['7.12'] },
+            providerExecuted: true,
+          } as AIV5Type.ToolUIPart,
+        ],
+      },
+    ];
+
+    const result = aiV5UIMessagesToAIV5ModelMessages(messages, [], true);
+    const providerToolParts = result.flatMap(message =>
+      typeof message.content === 'string'
+        ? []
+        : message.content.filter(
+            part =>
+              (part.type === 'tool-call' || part.type === 'tool-result') &&
+              (part as any).toolCallId === 'srvtoolu_sparse_metadata',
+          ),
+    );
+
+    expect(providerToolParts).not.toHaveLength(0);
+    expect(providerToolParts.every(part => (part as any).providerOptions === providerMetadata)).toBe(true);
+  });
 });
 
 /**

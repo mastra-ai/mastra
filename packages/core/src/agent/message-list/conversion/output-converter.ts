@@ -440,9 +440,10 @@ function restoreToolProviderMetadata(
 
       if (!providerMetadata && part.providerExecuted === undefined) continue;
 
+      const existing = toolMetadata.get(part.toolCallId);
       toolMetadata.set(part.toolCallId, {
-        providerMetadata,
-        providerExecuted: part.providerExecuted,
+        providerMetadata: providerMetadata ?? existing?.providerMetadata,
+        providerExecuted: part.providerExecuted ?? existing?.providerExecuted,
       });
     }
   }
