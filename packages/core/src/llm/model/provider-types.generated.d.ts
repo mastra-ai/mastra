@@ -3186,6 +3186,7 @@ export type ProviderModelsMap = {
     'pearl-ai/gemma-4-31b-it',
     'zai-org/GLM-5',
     'zai-org/GLM-5.1',
+    'zai-org/GLM-5.2',
   ];
   readonly frogbot: readonly [
     'claude-haiku-4-5',

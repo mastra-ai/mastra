@@ -2073,6 +2073,19 @@ export class Mastra<
         this.addWorkflow(workflow, workflow.id);
       }
 
+      // Register scorers from the underlying agent so durable runs can resolve
+      // them via mastra.getScorer()/getScorerById() at workflow time.
+      underlyingAgent
+        .listScorers()
+        .then(scorers => {
+          for (const [, entry] of Object.entries(scorers || {})) {
+            this.addScorer(entry.scorer, undefined, { source: 'code' });
+          }
+        })
+        .catch(err => {
+          this.#logger?.debug(`Failed to register scorers from durable agent ${agentKey}:`, err);
+        });
+
       return;
     }
 

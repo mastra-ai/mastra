@@ -122,10 +122,11 @@ describe('DurableAgent callback bridge', () => {
   });
 
   describe('onAbort', () => {
-    // End-to-end abort coverage is gated on the abort_signal_durable task,
-    // which adds a durable abort path / pubsub abort topic. Until then we
-    // exercise the bridge directly: publishing an ABORT event on the run's
-    // stream topic should invoke the user callback.
+    // End-to-end runtime abort coverage (`result.abort()` and external
+    // `abortSignal`) lives in `durable-agent-abort.test.ts`. This unit-level
+    // test pins the pubsub→callback bridge: publishing an ABORT event on the
+    // run's stream topic should invoke the user callback regardless of how
+    // the abort was triggered.
     it('invokes the user callback when an ABORT event is published', async () => {
       const mockModel = new MockLanguageModelV2({
         doStream: async () => ({

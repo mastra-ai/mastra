@@ -356,13 +356,28 @@ interface PrepareResult {
     name: 'modelSettings',
     type: 'object',
     isOptional: true,
-    description: 'Model-specific settings such as temperature.',
+    description:
+      'Model-specific settings such as temperature. Credential-bearing headers (`Authorization`, `X-Api-Key`, and similar) are stripped from the serialized snapshot before it crosses process boundaries.',
+  },
+  {
+    name: 'stopWhen',
+    type: "AgentExecutionOptions['stopWhen']",
+    isOptional: true,
+    description:
+      'Predicate or composition that ends the agentic loop early. The closure rides on the in-process run registry; cross-process resumes degrade to `maxSteps` only.',
+  },
+  {
+    name: 'system',
+    type: 'string | string[]',
+    isOptional: true,
+    description: 'Additional system message appended after the agent instructions and before user messages.',
   },
   {
     name: 'requireToolApproval',
-    type: 'boolean',
+    type: 'boolean | ((args: { toolName: string; args: unknown; requestContext: RequestContext; workspace?: string }) => boolean | Promise<boolean>)',
     isOptional: true,
-    description: 'Require approval for all tool calls, which suspends the run until resumed.',
+    description:
+      'Require approval for tool calls. Pass `true` or `false` to gate all or none, or a function for per-call policy. Function-form policies live on the in-process run registry; cross-process resumes fall back to a `true` shadow.',
   },
   {
     name: 'autoResumeSuspendedTools',
@@ -399,13 +414,67 @@ interface PrepareResult {
     type: 'boolean | { maxIdleMs?: number }',
     isOptional: true,
     description:
-      'When set, keeps the stream open across background-task continuations until the agent is idle. Pass `true` for the default 5-minute idle timeout, or `{ maxIdleMs }` to customise. Equivalent to the deprecated `streamUntilIdle()` method.',
+      'When set, keeps the stream open across background-task continuations until the agent is idle. Pass `true` for the default 5-minute idle timeout, or `{ maxIdleMs }` to customise. Equivalent to the deprecated `streamUntilIdle()` method. Also supported on `resume()`.',
+  },
+  {
+    name: 'disableBackgroundTasks',
+    type: 'boolean',
+    isOptional: true,
+    description: 'Disable background-task dispatch for this run. Background-eligible tools execute inline instead.',
+  },
+  {
+    name: 'tracingOptions',
+    type: "AgentExecutionOptions['tracingOptions']",
+    isOptional: true,
+    description:
+      'Tracing metadata, tags, trace ID, parent span ID, and `requestContextKeys` forwarded to the agent and model spans. Fully JSON-serializable.',
+  },
+  {
+    name: 'actor',
+    type: "AgentExecutionOptions['actor']",
+    isOptional: true,
+    description: 'Per-call actor signal forwarded to FGA checks and tool execution.',
+  },
+  {
+    name: 'transform',
+    type: "AgentExecutionOptions['transform']",
+    isOptional: true,
+    description:
+      'Per-invocation tool payload transform policy. The `transformToolPayload` closure lives on the in-process run registry; only the JSON-safe `targets` shadow is serialized.',
+  },
+  {
+    name: 'prepareStep',
+    type: "AgentExecutionOptions['prepareStep']",
+    isOptional: true,
+    description:
+      'Per-step preparation hook invoked as a `PrepareStepProcessor` at the start of every iteration. Closure-only — stored on the in-process run registry. Cross-process resumes lose the hook.',
+  },
+  {
+    name: 'isTaskComplete',
+    type: "AgentExecutionOptions['isTaskComplete']",
+    isOptional: true,
+    description:
+      'Per-call completion policy. Scorer instances and `onComplete` live on the in-process run registry; the JSON-safe primitives (`strategy`, `timeout`, `parallel`, `suppressFeedback`, `scorerNames`) are serialized for cross-process observability.',
+  },
+  {
+    name: 'delegation',
+    type: "AgentExecutionOptions['delegation']",
+    isOptional: true,
+    description:
+      'Sub-agent delegation hooks (`onDelegationStart`, `onDelegationComplete`, `messageFilter`). Callbacks are baked into the sub-agent tool wrappers at prepare time. Cross-process resumes lose the callbacks.',
   },
   {
     name: 'versions',
     type: 'object',
     isOptional: true,
     description: 'Version overrides for sub-agent delegation.',
+  },
+  {
+    name: 'abortSignal',
+    type: 'AbortSignal',
+    isOptional: true,
+    description:
+      "External abort signal. Forwarded to the durable run's internal `AbortController`, so either source can cancel the run. Cross-process resumes cannot recover the signal — pass a fresh one to `resume()` if you need post-resume abortability.",
   },
   {
     name: 'onChunk',
@@ -437,6 +506,19 @@ interface PrepareResult {
     isOptional: true,
     description: 'Called when the run suspends, for example for tool approval.',
   },
+  {
+    name: 'onAbort',
+    type: "AgentExecutionOptions['onAbort']",
+    isOptional: true,
+    description: 'Called when the run is aborted via `abortSignal` or `result.abort()`.',
+  },
+  {
+    name: 'onIterationComplete',
+    type: "AgentExecutionOptions['onIterationComplete']",
+    isOptional: true,
+    description:
+      'Called after every agentic-loop iteration with the latest `messageList`, `finishReason`, and `isFinal` flag. Observation-only on durable agents: returning `continue: false` or feedback does not influence the loop.',
+  },
 ]}
 />
 
@@ -454,6 +536,7 @@ interface DurableAgentStreamResult<OUTPUT = undefined> {
   threadId?: string
   resourceId?: string
   cleanup: () => void
+  abort: () => void
 }
 ```
 
@@ -490,6 +573,12 @@ interface DurableAgentStreamResult<OUTPUT = undefined> {
     name: 'cleanup',
     type: '() => void',
     description: 'Unsubscribes from PubSub and clears registry entries for the run. Call it when done with the run.',
+  },
+  {
+    name: 'abort',
+    type: '() => void',
+    description:
+      'Aborts the run by flipping the internal `AbortController`. Surfaces as an `AbortError` inside the durable LLM-execution step and fires the `onAbort` callback. Safe to call after the run has finished — a no-op in that case.',
   },
 ]}
 />
