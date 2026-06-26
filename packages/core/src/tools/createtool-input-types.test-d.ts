@@ -1,7 +1,7 @@
+import { jsonSchema } from '@mastra/schema-compat';
 import { describe, it, expectTypeOf } from 'vitest';
 import zDefault from 'zod';
 import { z } from 'zod/v4';
-import { jsonSchema } from '@mastra/schema-compat';
 
 import { createTool } from './tool';
 
