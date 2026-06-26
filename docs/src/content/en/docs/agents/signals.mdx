@@ -344,6 +344,29 @@ Visit [`createNotificationInboxTool()` reference](/reference/signals/create-noti
 
 `sendNotificationSignal()` requires a storage domain with `notifications` support. Use `sendSignal({ type: 'notification' })` only for lower-level notification-shaped context that should bypass inbox storage.
 
+## Distributed and serverless deployments
+
+Signals coordinate runs through a pub/sub backend. When a signal arrives, Mastra acquires a lease on the target thread so a single process owns the conversation at a time, then either wakes the agent or routes the input into the running loop.
+
+The default in-memory pub/sub can't cross instance boundaries. On serverless platforms like Vercel, or any multi-instance deployment, a follow-up signal can land on a different instance than the one running the agent. Without a shared pub/sub, that instance can't reach the active run and starts its own, leaving the original run untouched and the thread processed twice.
+
+Configure a shared pub/sub backed by Redis Streams on the `Mastra` instance so leases and signals coordinate across instances:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { RedisStreamsPubSub } from '@mastra/redis-streams'
+
+export const mastra = new Mastra({
+  agents: { agent },
+  pubsub: new RedisStreamsPubSub({
+    url: process.env.REDIS_URL,
+    keyPrefix: 'mastra:my-app',
+  }),
+})
+```
+
+`RedisStreamsPubSub` implements both the event delivery contract and distributed leasing, so a single backend handles cross-instance signal delivery and lease ownership. Vercel's one-click Redis integration and Upstash Redis both work well. For more on when a distributed pub/sub is needed, see the [PubSub guide](/docs/server/pubsub) and the [`RedisStreamsPubSub` reference](/reference/pubsub/redis-streams).
+
 ## Compatibility and APIs
 
 ### Compatibility
@@ -431,3 +454,4 @@ Use heartbeats together with client-side reconnect logic. Heartbeats reduce idle
 - [Server agent routes](/reference/server/routes#agent-message-routes)
 - [`client.getAgent().subscribeToThread()`](/reference/client-js/agents#subscribetothread)
 - [`client.getAgent().sendToolApproval()`](/reference/client-js/agents#sendtoolapproval)
+- [`RedisStreamsPubSub`](/reference/pubsub/redis-streams)
