@@ -29,7 +29,7 @@ export type InferUITool<TOOL> = {
 /**
  * A set of tools (object with tool instances)
  */
-export type ToolSet = Record<string, Tool>;
+export type ToolSet = Record<string, Tool<any, any, any, any, any, any, any>>;
 
 /**
  * Infer the input and output types of a tool set so it can be used as a UI tool set.
