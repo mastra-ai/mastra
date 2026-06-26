@@ -56,11 +56,10 @@ const resumeSchema = z.object({
  * a AgentController can layer mode-switch behavior on top of the approval in its own response
  * handling without the tool needing to change.
  *
- * The tool takes the plan file `path` — never the plan body. The host validates the path
- * (restricting it to the plans directory) and reads the plan from disk, so more than one
- * plan can exist over time. When executed without an agent `suspend` (e.g. direct
- * invocation outside an agent run), the tool returns the path as readable text so the
- * submission is still surfaced.
+ * The tool takes the plan file `path` — never the plan body. The host reads the plan from
+ * disk at that path, so more than one plan can exist over time. When executed without an
+ * agent `suspend` (e.g. direct invocation outside an agent run), the tool returns the path
+ * as readable text so the submission is still surfaced.
  */
 export const submitPlanTool = createTool({
   id: 'submit_plan',

@@ -11,7 +11,7 @@ import type { TaskItemInput, TaskItemSnapshot } from '@mastra/core/signals';
 import { assignTaskIds } from '@mastra/core/signals';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { TASKS_STATE_ID } from '@mastra/core/tools';
-import { isPlanFilePath, readPlanFile, resolvePlanPath } from '../utils/plans.js';
+import { readPlanFile, resolvePlanPath } from '../utils/plans.js';
 import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
@@ -925,14 +925,12 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             if (submittedPath) {
               // Prefer the submitted plan snapshot persisted in the tool result.
               // Older history entries may not have it, so fall back to reading the
-              // submitted file — but only after validating it is a plan file, so a
-              // recorded arg can't point the host at an arbitrary file.
+              // submitted file from disk.
               const sessionState = state.session.state.get() as any;
               const projectPath = sessionState?.projectPath as string | undefined;
-              const recoverAbsPath =
-                !submittedPlan?.plan && projectPath && isPlanFilePath(projectPath, submittedPath)
-                  ? resolvePlanPath(projectPath, submittedPath)
-                  : undefined;
+              const recoverAbsPath = !submittedPlan?.plan
+                ? resolvePlanPath(projectPath ?? process.cwd(), submittedPath)
+                : undefined;
               const recovered = recoverAbsPath ? await readPlanFile(recoverAbsPath) : undefined;
               const planBody = submittedPlan?.plan ?? recovered?.plan ?? '';
               const planTitle = submittedPlan?.title || recovered?.title || 'Implementation Plan';

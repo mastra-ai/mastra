@@ -4,7 +4,7 @@
  */
 import type { AskUserSelectionMode } from '@mastra/core/tools';
 import { shouldShowDiff } from '../../utils/plan-diff.js';
-import { approvePlanFile, isPlanFilePath, readPlanFile, resolvePlanPath } from '../../utils/plans.js';
+import { approvePlanFile, readPlanFile, resolvePlanPath } from '../../utils/plans.js';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { PlanApprovalInlineComponent } from '../components/plan-approval-inline.js';
@@ -297,19 +297,21 @@ export async function handlePlanApproval(
 ): Promise<void> {
   const { state } = ctx;
 
-  // submit_plan carries the plan file path. Validate it is a `.mastracode/plans/*.md`
-  // file before reading so the model can't point the host at arbitrary files, then
-  // read the plan (and its `# heading` title) from disk.
+  // submit_plan carries the plan file path. The agent can write the plan anywhere it
+  // has access, so read whatever path it submitted (resolved relative to the project)
+  // and parse the `# heading` as the title.
   const projectPath = (state.session.state.get() as any)?.projectPath as string | undefined;
-  const planPath =
-    projectPath && submittedPath && isPlanFilePath(projectPath, submittedPath)
-      ? resolvePlanPath(projectPath, submittedPath)
-      : undefined;
+  const planPath = submittedPath ? resolvePlanPath(projectPath ?? process.cwd(), submittedPath) : undefined;
   const current = planPath ? await readPlanFile(planPath) : undefined;
   if (!current) {
     state.previousPlanSnapshot = undefined;
   }
-  const plan = current?.plan ?? '';
+
+  // Surface a clear error in the approval card when the plan file can't be read,
+  // instead of rendering an empty plan.
+  const plan =
+    current?.plan ??
+    `⚠️ Could not read the plan file at \`${submittedPath}\`. Make sure it exists before submitting it.`;
   const resolvedTitle = current?.title || 'Implementation Plan';
   // Snapshot history is keyed by the submitted path so a revision of the same file
   // diffs against the prior submission, but a brand-new file renders in full.

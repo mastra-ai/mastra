@@ -323,6 +323,33 @@ describe('handlePlanApproval regular approval', () => {
     expect(state.previousPlanSnapshot).toBeUndefined();
   });
 
+  it('reads and renders a plan submitted from a path outside .mastracode/plans/', async () => {
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plan-test-'));
+    tmpProjects.push(projectPath);
+    const outsidePath = path.join(projectPath, 'notes', 'scratch-plan.md');
+    fs.mkdirSync(path.dirname(outsidePath), { recursive: true });
+    fs.writeFileSync(outsidePath, '# Scratch Plan\n\nBuild the scratch feature\n', 'utf-8');
+    const { state, ctx } = createPlanApprovalCtx(projectPath);
+
+    const { component } = await renderPlanApproval(ctx, state, 'notes/scratch-plan.md');
+    const output = component.render(100).join('\n');
+
+    expect(output).toContain('Scratch Plan');
+    expect(output).toContain('Build the scratch feature');
+  });
+
+  it('renders an error in the approval card when the submitted plan file is missing', async () => {
+    const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plan-test-'));
+    tmpProjects.push(projectPath);
+    const { state, ctx } = createPlanApprovalCtx(projectPath);
+
+    const { component } = await renderPlanApproval(ctx, state, '.mastracode/plans/does-not-exist.md');
+    const output = component.render(100).join('\n');
+
+    expect(output).toContain('Could not read the plan file');
+    expect(output).toContain('does-not-exist.md');
+  });
+
   it('renders a diff for a small resubmission of the same plan file', async () => {
     const projectPath = createTmpProjectWithPlan('Same Plan', 'Build the feature\nAdd focused tests\nUpdate docs');
     const { state, ctx } = createPlanApprovalCtx(projectPath);
