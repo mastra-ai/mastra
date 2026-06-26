@@ -156,7 +156,7 @@ When a subscriber calls `nack`, the event is republished with an incremented `de
 
 ## Distributed leasing
 
-`RedisStreamsPubSub` implements the [`LeaseProvider`](/reference/pubsub/lease-provider) contract on top of the same Redis connection. The signals runtime uses it to elect a single owner (usually per thread key) so that across instances only one process wakes and runs the agent, and others route follow-up work to the holder. This is what makes signals work on serverless and multi-instance deployments; without a shared lease, each instance would start its own competing run.
+`RedisStreamsPubSub` implements the [`LeaseProvider`](/reference/pubsub/lease-provider) contract on top of the same Redis connection. The [signals runtime](/docs/agents/signals) uses it to elect a single owner (usually per thread key) so that across instances only one process wakes and runs the agent, and others route follow-up work to the holder. This is what makes signals work on serverless and multi-instance deployments; without a shared lease, each instance would start its own competing run.
 
 Lease keys are namespaced under the same `keyPrefix` as topics, as `<keyPrefix>:lease:<key>`. All operations are atomic: `acquireLease` uses `SET NX PX` and refreshes its own TTL idempotently, while `releaseLease`, `renewLease`, and `transferLease` use Lua scripts that check ownership before mutating, so a concurrent renewal from another owner is never clobbered.
 
