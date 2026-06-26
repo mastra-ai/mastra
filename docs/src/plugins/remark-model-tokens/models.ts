@@ -29,6 +29,9 @@ export const MODEL_TOKENS: Record<string, string> = {
   // Google
   __GATEWAY_GOOGLE_MODEL__: 'google/gemini-2.5-flash',
 
+  // Voyage AI
+  __VOYAGE_RERANK_MODEL__: 'rerank-2.5',
+
   // Alibaba
   __GATEWAY_ALIBABA_MODEL__: 'alibaba/qwen-max',
 }
