@@ -17,7 +17,8 @@ let cachedMemoryKey: string | null = null;
  * Used by both the memory factory and the OM model functions.
  */
 function getHarnessState(requestContext: RequestContext): MastraCodeState | undefined {
-  return (requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined)?.getState?.();
+  const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
+  return ctx?.getState() as MastraCodeState | undefined;
 }
 
 /**

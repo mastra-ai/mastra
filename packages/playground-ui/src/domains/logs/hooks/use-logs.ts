@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 
 import type { LogRecord } from '../types';
 import { useInView } from '@/hooks/use-in-view';
+import { isUnsupportedObservabilityOperationError } from '@/lib/query-utils';
 
 interface UseLogsReturn {
   data: LogRecord[] | undefined;
@@ -18,6 +19,7 @@ interface UseLogsReturn {
 }
 
 const LOGS_PER_PAGE = 20;
+const LOGS_REFETCH_INTERVAL_MS = 10000;
 
 export interface LogsFilters {
   filters?: ListLogsArgs['filters'];
@@ -49,6 +51,13 @@ function selectLogs(data: { pages: ListLogsResponse[] }) {
   return result;
 }
 
+export function getLogsRefetchInterval(query: { state: { error: unknown } }) {
+  if (isUnsupportedObservabilityOperationError(query.state.error, 'logs')) {
+    return false;
+  }
+  return LOGS_REFETCH_INTERVAL_MS;
+}
+
 export const useLogs: (props?: LogsFilters) => UseLogsReturn = ({ filters }: LogsFilters = {}) => {
   const client = useMastraClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
@@ -65,7 +74,7 @@ export const useLogs: (props?: LogsFilters) => UseLogsReturn = ({ filters }: Log
     getNextPageParam,
     select: selectLogs,
     retry: false,
-    refetchInterval: 10000,
+    refetchInterval: getLogsRefetchInterval,
   });
 
   const { hasNextPage, isFetchingNextPage, fetchNextPage, data, isLoading, isError, error } = query;

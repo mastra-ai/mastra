@@ -1,7 +1,7 @@
 'use client';
 
 import type { DatasetItem } from '@mastra/client-js';
-import { Sections } from '@mastra/playground-ui';
+import { Sections } from '@mastra/playground-ui/components/Sections';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { FileInputIcon, FileOutputIcon, TagIcon, RouteIcon } from 'lucide-react';
 import type { useLinkComponent } from '@/lib/framework';

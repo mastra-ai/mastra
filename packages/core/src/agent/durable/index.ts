@@ -119,6 +119,7 @@ export type {
   SerializableModelConfig,
   SerializableDurableState,
   SerializableDurableOptions,
+  SerializableModelSettings,
   DurableAgenticWorkflowInput,
   // Step I/O types
   DurableLLMStepOutput,

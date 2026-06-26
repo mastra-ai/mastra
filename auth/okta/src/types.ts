@@ -2,7 +2,7 @@
  * Shared types for Okta integration.
  */
 
-import type { EEUser, RoleMapping } from '@mastra/core/auth/ee';
+import type { EEUser, RoleMapping } from '@internal/auth/ee';
 import type { JWTPayload } from 'jose';
 
 // ============================================================================

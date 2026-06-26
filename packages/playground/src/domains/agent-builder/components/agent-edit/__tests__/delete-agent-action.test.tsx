@@ -1,6 +1,6 @@
-// @vitest-environment jsdom
 import type * as PlaygroundUi from '@mastra/playground-ui';
-import { DropdownMenu, TooltipProvider } from '@mastra/playground-ui';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -30,7 +30,11 @@ vi.mock('@mastra/playground-ui', async () => {
   };
 });
 
-const { toast } = await import('@mastra/playground-ui');
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
+
+const { toast } = await import('@mastra/playground-ui/utils/toast');
 
 const BASE_URL = 'http://localhost:4111';
 

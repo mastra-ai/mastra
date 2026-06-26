@@ -1,8 +1,9 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { Harness } from '@mastra/core/harness';
+import { AgentController } from '@mastra/core/agent-controller';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MemoryStorage, ObservationalMemoryRecord, BufferedObservationChunk } from '@mastra/core/storage';
+import { Workspace } from '@mastra/core/workspace';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Memory } from './index';
 
@@ -488,10 +489,11 @@ describe('cloneThread – Observational Memory', () => {
       });
 
       const memoryFactory = vi.fn().mockResolvedValue(memory);
-      const harness = new Harness({
+      const harness = new AgentController({
         id: 'clone-thread-dynamic-memory-test',
         resourceId,
         memory: memoryFactory,
+        workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
         modes: [
           {
             id: 'default',
@@ -508,7 +510,8 @@ describe('cloneThread – Observational Memory', () => {
       });
 
       await harness.init();
-      const clonedThread = await harness.cloneThread({ sourceThreadId: 'src-thread-harness-dynamic' });
+      const session = await harness.createSession({ resourceId });
+      const clonedThread = await session.thread.clone({ sourceThreadId: 'src-thread-harness-dynamic' });
 
       expect(memoryFactory).toHaveBeenCalledTimes(1);
 

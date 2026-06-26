@@ -4,6 +4,7 @@ import type { FileHandle } from 'node:fs/promises';
 import net from 'node:net';
 import { dirname } from 'node:path';
 
+import { decode, encode } from './codec';
 import { PubSub } from './pubsub';
 import type { PubSubDeliveryMode } from './pubsub';
 import type { Event, EventCallback, SubscribeOptions } from './types';
@@ -35,8 +36,26 @@ type SubscribeWaiter = {
 
 const DEFAULT_MAX_REMOTE_CLIENT_QUEUED_BYTES = 64 * 1024 * 1024;
 
+/**
+ * Max number of times a local subscriber callback may be redelivered after a
+ * nack. MUST be >= the consumer-side retry budget
+ * (`WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS`) — otherwise the transport
+ * gives up before the consumer can exhaust its budget and surface the terminal
+ * failure, which would leave the run silently hung.
+ *
+ * An invariant test in
+ * `packages/core/src/events/unix-socket-pubsub-redelivery-budget.test.ts`
+ * pins this ordering against the consumer constant so the two constants stay
+ * in sync as the consumer budget changes.
+ */
+export const MAX_LOCAL_REDELIVERIES = 6;
+const REDELIVERY_DELAY_MS = 100;
+
 function serializeFrame(frame: ClientFrame | ServerFrame): string {
-  return `${JSON.stringify(frame)}\n`;
+  // Encode through the codec so non-JSON-safe values (Date, Error, Map, Set,
+  // RegExp, URL, BigInt, undefined, registered classes) survive the wire
+  // round-trip via tagged envelopes.
+  return `${JSON.stringify(encode(frame))}\n`;
 }
 
 function writeSerializedFrame(socket: net.Socket, serializedFrame: string): Promise<void> {
@@ -117,7 +136,7 @@ function readFrames(socket: net.Socket, onFrame: (frame: any) => void) {
       buffer = buffer.slice(newlineIndex + 1);
       if (!line.trim()) continue;
       try {
-        onFrame(JSON.parse(line));
+        onFrame(decode(JSON.parse(line)));
       } catch {
         // Ignore malformed frames. The transport is local IPC and callers can retry.
       }
@@ -583,11 +602,9 @@ export class UnixSocketPubSub extends PubSub {
       return;
     }
     if (frame.type !== 'event') return;
-    const event = {
-      ...frame.event,
-      createdAt: new Date(frame.event.createdAt),
-    };
-    this.#deliverLocal(frame.topic, event);
+    // `createdAt` is already a Date — the codec rehydrates it during JSON.parse
+    // in `readFrames`. No ad-hoc conversion needed.
+    this.#deliverLocal(frame.topic, frame.event);
   }
 
   async #publishFromBroker(
@@ -639,13 +656,6 @@ export class UnixSocketPubSub extends PubSub {
   }
 
   #invokeLocalCallback(topic: string, event: Event, cb: EventCallback, attempt: number) {
-    // Keep this aligned with (or above) the consumer-side retry budget
-    // (e.g. WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS). The transport must
-    // give the consumer enough redeliveries to exhaust its own retry budget
-    // and surface a terminal failure, otherwise the consumer never sees
-    // attempt N and the run silently hangs.
-    const MAX_LOCAL_REDELIVERIES = 6;
-    const REDELIVERY_DELAY_MS = 100;
     let nacked = false;
     const nack = async () => {
       if (nacked || this.#closed) return;

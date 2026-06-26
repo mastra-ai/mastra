@@ -1,10 +1,7 @@
-import {
-  MainContentLayout,
-  PermissionDenied,
-  SessionExpired,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
+import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 

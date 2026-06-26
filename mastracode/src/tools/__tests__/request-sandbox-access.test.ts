@@ -13,9 +13,17 @@ function createMockLocalFilesystem() {
 }
 
 function createHarnessCtx() {
+  const getState = () => ({ sandboxAllowedPaths: [] });
+  const setState = vi.fn();
   return {
-    getState: () => ({ sandboxAllowedPaths: [] }),
-    setState: vi.fn(),
+    getState,
+    setState,
+    session: {
+      state: {
+        get: getState,
+        set: setState,
+      },
+    },
   };
 }
 
@@ -100,9 +108,17 @@ describe('request_access', () => {
     // only reachable through the harness request context. Granting access must
     // widen that filesystem so same-turn `view` calls can read the path.
     const { fs, setAllowedPaths } = createMockLocalFilesystem();
+    const getState = () => ({ sandboxAllowedPaths: [] });
+    const setState = vi.fn();
     const harnessCtx: any = {
-      getState: () => ({ sandboxAllowedPaths: [] }),
-      setState: vi.fn(),
+      getState,
+      setState,
+      session: {
+        state: {
+          get: getState,
+          set: setState,
+        },
+      },
       workspace: { filesystem: fs },
     };
     // Tool context intentionally has NO workspace, matching production.

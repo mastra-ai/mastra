@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { stringToColor } from '@mastra/playground-ui';
+import { stringToColor } from '@mastra/playground-ui/utils/colors';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
 

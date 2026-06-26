@@ -5,6 +5,8 @@ import { ChunkFrom } from '../../../stream/types';
 import { createStep } from '../../../workflows/workflow';
 import { runStreamCompletionScorers, formatStreamCompletionFeedback } from '../../network/validation';
 import type { StreamCompletionContext } from '../../network/validation';
+import { readScoped } from '../../run-scope-access';
+import { RESOURCE_ID_KEY, THREAD_ID_KEY } from '../../run-scope-keys';
 import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema } from '../schema';
 
@@ -23,6 +25,8 @@ export function createIsTaskCompleteStep<Tools extends ToolSet = ToolSet, OUTPUT
     agentId,
     agentName,
   } = params;
+
+  const scopeCtx = { mastra, runId, _internal };
 
   // Track iteration count across executions of this step
   let currentIteration = 0;
@@ -95,8 +99,8 @@ export function createIsTaskCompleteStep<Tools extends ToolSet = ToolSet, OUTPUT
         agentId: agentId || '',
         agentName: agentName || '',
         runId: runId,
-        threadId: _internal?.threadId,
-        resourceId: _internal?.resourceId,
+        threadId: readScoped(scopeCtx, THREAD_ID_KEY, 'threadId'),
+        resourceId: readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId'),
         customContext: requestContext ? Object.fromEntries(requestContext.entries()) : undefined,
       };
 

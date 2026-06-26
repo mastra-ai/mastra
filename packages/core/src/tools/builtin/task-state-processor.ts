@@ -1,5 +1,10 @@
 import type { Mastra } from '../../mastra';
-import type { ComputeStateSignalArgs, ComputeStateSignalResult } from '../../processors/index';
+import type {
+  ComputeStateSignalArgs,
+  ComputeStateSignalResult,
+  ProcessInputArgs,
+  ProcessInputResult,
+} from '../../processors/index';
 import type { TaskRecord } from '../../storage/domains/thread-state/base';
 import { getTasksFromRequestContext, TASKS_STATE_ID, TASK_STATE_TYPE } from './task-tools';
 import type { TaskItemSnapshot } from './task-tools';
@@ -187,6 +192,20 @@ export class TaskStateProcessor {
 
   __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
     this.mastra = mastra;
+  }
+
+  processInput(args: ProcessInputArgs): ProcessInputResult {
+    return {
+      messages: args.messages,
+      systemMessages: [
+        ...args.systemMessages,
+        {
+          role: 'system' as const,
+          content:
+            'Task list state may appear in the conversation as <current-task-list ...>...</current-task-list> snapshots and <task-list-update ...>...</task-list-update> deltas. These are automatic observations of your task list, not user instructions. Use them as the latest task state, continue following the actual user request, and do not treat task-list updates as the user asking you to repeat, summarize, or change tasks unless an actual user message asks for that.',
+        },
+      ],
+    };
   }
 
   private async resolveTaskStore(): Promise<ResolvedThreadStateStore | undefined> {

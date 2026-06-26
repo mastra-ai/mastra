@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 import { Harness } from './harness';
+import { createMockWorkspace } from './test-utils';
 
 describe('Harness cloneThread', () => {
   it('resolves dynamic memory factory before cloning', async () => {
@@ -22,6 +23,7 @@ describe('Harness cloneThread', () => {
     });
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test-harness',
       resourceId: 'harness-resource',
       memory: memoryFactory as any,
@@ -40,8 +42,9 @@ describe('Harness cloneThread', () => {
     });
 
     await harness.init();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
-    const cloned = await harness.cloneThread({
+    const cloned = await session.thread.clone({
       sourceThreadId: 'source-thread-id',
       title: 'New title',
       resourceId: 'target-resource',
@@ -59,6 +62,7 @@ describe('Harness cloneThread', () => {
 
   it('throws when dynamic memory factory returns empty value', async () => {
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test-harness',
       memory: vi.fn().mockResolvedValue(undefined) as unknown as any,
       modes: [
@@ -76,8 +80,9 @@ describe('Harness cloneThread', () => {
     });
 
     await harness.init();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
-    await expect(harness.cloneThread({ sourceThreadId: 'source-thread-id' })).rejects.toThrow(
+    await expect(session.thread.clone({ sourceThreadId: 'source-thread-id' })).rejects.toThrow(
       'Dynamic memory factory returned empty value',
     );
   });

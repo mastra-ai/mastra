@@ -1,4 +1,4 @@
-import { Skeleton } from '@mastra/playground-ui';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { useParams } from 'react-router';
 import { ScorerCombobox } from './components/scorer-combobox';
 import { useStoredScorer } from './hooks/use-stored-scorers';

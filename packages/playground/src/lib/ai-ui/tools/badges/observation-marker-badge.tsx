@@ -1,4 +1,4 @@
-import { MarkdownRenderer } from '@mastra/playground-ui';
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Brain, XCircle, Loader2, ChevronDown, ChevronRight, Unplug, CloudCog } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { ObservationRenderer } from './observation-renderer';

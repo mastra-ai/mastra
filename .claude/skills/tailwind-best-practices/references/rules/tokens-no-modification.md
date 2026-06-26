@@ -44,12 +44,12 @@ export default {
 
 **Correct (requesting token changes):**
 
-If a new token is needed:
+If a new token is needed, escalate to the design team. Use existing tokens that are closest to the requirement until the new token is approved and added.
 
-1. Escalate to the design team
-2. Document the use case and rationale
-3. Use existing tokens that are closest to the requirement until approved
-4. Wait for the new token to be added through proper channels
+When escalating:
+
+1. Document the use case and rationale
+2. Wait for the new token to be added through proper channels
 
 **Protected files:**
 
