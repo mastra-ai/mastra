@@ -94,7 +94,7 @@ Define the rubric once, attach the scorer to `isTaskComplete`, and the agent sel
 
 ```typescript
 import { Agent } from '@mastra/core/agent'
-// highlight-next-line
+// [!code highlight:1]
 import { createRubricScorer } from '@mastra/evals/scorers/prebuilt'
 
 const supervisor = new Agent({

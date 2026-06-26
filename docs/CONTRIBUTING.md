@@ -136,13 +136,12 @@ function add(a: number, b: number) {
 ```
 ````
 
-Alternatively you can use `// highlight-next-line` and `// highlight-start` / `// highlight-end` comments to specify which lines to highlight.
+Alternatively you can use `[!code highlight]` and `[!code highlight:3]` comments to specify which lines to highlight.
 
 ````md
 ```typescript
 function add(a: number, b: number) {
-	// highlight-next-line
-	return a + b
+	return a + b // [!code highlight]
 }
 ```
 ````

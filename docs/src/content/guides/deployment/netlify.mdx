@@ -31,11 +31,11 @@ Import [`NetlifyDeployer`](/reference/deployer/netlify) and set it as the deploy
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
-// highlight-next-line
+// [!code highlight:1]
 import { NetlifyDeployer } from '@mastra/deployer-netlify'
 
 export const mastra = new Mastra({
-	// highlight-next-line
+	// [!code highlight:1]
 	deployer: new NetlifyDeployer(),
 })
 ```

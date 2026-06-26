@@ -35,17 +35,15 @@ Context on what this step does and why. Link to relevant reference docs.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core';
-// highlight-next-line
-import { NewThing } from '@mastra/core/new-thing';
+import { NewThing } from '@mastra/core/new-thing'; // [!code highlight]
 
-// highlight-start
+// [!code highlight:3]
 const thing = new NewThing({
   // configuration
 });
-// highlight-end
 
 export const mastra = new Mastra({
-  // highlight-next-line
+  // [!code highlight:1]
   thing,
 });
 ```
@@ -73,8 +71,7 @@ When updating a file shown earlier, show the full file again and highlight the c
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core';
 import { NewThing } from '@mastra/core/new-thing';
-// highlight-next-line
-import { myAgent } from './agents/my-agent';
+import { myAgent } from './agents/my-agent'; // [!code highlight]
 
 const thing = new NewThing({
   // configuration
@@ -82,8 +79,7 @@ const thing = new NewThing({
 
 export const mastra = new Mastra({
   thing,
-  // highlight-next-line
-  agents: { myAgent },
+  agents: { myAgent }, // [!code highlight]
 });
 ```
 

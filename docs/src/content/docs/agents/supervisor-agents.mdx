@@ -39,14 +39,14 @@ import { LibSQLStore } from '@mastra/libsql'
 
 const researchAgent = new Agent({
 	id: 'research-agent',
-	// highlight-next-line
+	// [!code highlight:1]
 	description: 'Gathers factual information and returns bullet-point summaries.',
 	model: '__GATEWAY_OPENAI_MODEL_MINI__',
 })
 
 const writingAgent = new Agent({
 	id: 'writing-agent',
-	// highlight-next-line
+	// [!code highlight:1]
 	description: 'Transforms research into well-structured articles.',
 	model: '__GATEWAY_OPENAI_MODEL_MINI__',
 })

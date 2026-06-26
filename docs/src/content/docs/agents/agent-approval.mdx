@@ -415,7 +415,7 @@ const findUserTool = createTool({
 			email: z.string(),
 		}),
 	}),
-	// highlight-next-line
+	// [!code highlight:1]
 	requireApproval: true,
 	execute: async input => {
 		const user = await database.findUser(input.userId)
@@ -444,7 +444,7 @@ const supervisorAgent = new Agent({
 const stream = await supervisorAgent.stream('Find user with ID 12345')
 
 for await (const chunk of stream.fullStream) {
-	// highlight-next-line
+	// [!code highlight:1]
 	if (chunk.type === 'tool-call-approval') {
 		console.log('Tool requires approval:', chunk.payload.toolName)
 		console.log('Arguments:', chunk.payload.args)

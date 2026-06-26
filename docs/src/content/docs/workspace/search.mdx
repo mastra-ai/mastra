@@ -48,7 +48,7 @@ import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
 	filesystem: new LocalFilesystem({ basePath: './workspace' }),
-	// highlight-next-line
+	// [!code highlight:1]
 	bm25: true,
 })
 ```
@@ -151,7 +151,7 @@ By default, the search index name is derived from the workspace ID. To set a cus
 const workspace = new Workspace({
 	filesystem: new LocalFilesystem({ basePath: './workspace' }),
 	bm25: true,
-	// highlight-next-line
+	// [!code highlight:1]
 	searchIndexName: 'my_workspace_vectors',
 })
 ```
@@ -205,7 +205,7 @@ Glob patterns let you index specific file types:
 const workspace = new Workspace({
 	filesystem: new LocalFilesystem({ basePath: './workspace' }),
 	bm25: true,
-	// highlight-next-line
+	// [!code highlight:1]
 	autoIndexPaths: ['docs/**/*.md', 'support/**/*.txt'],
 })
 ```

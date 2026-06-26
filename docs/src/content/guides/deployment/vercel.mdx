@@ -31,11 +31,11 @@ Import [`VercelDeployer`](/reference/deployer/vercel) and set it as the deployer
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
-// highlight-next-line
+// [!code highlight:1]
 import { VercelDeployer } from '@mastra/deployer-vercel'
 
 export const mastra = new Mastra({
-	// highlight-next-line
+	// [!code highlight:1]
 	deployer: new VercelDeployer(),
 })
 ```
@@ -84,7 +84,7 @@ import { VercelDeployer } from '@mastra/deployer-vercel'
 
 export const mastra = new Mastra({
 	deployer: new VercelDeployer({
-		// highlight-next-line
+		// [!code highlight:1]
 		studio: true,
 	}),
 })

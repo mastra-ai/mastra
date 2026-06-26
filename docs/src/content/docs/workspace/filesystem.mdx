@@ -80,7 +80,7 @@ If your agent needs to access specific paths outside `basePath`, use `allowedPat
 const workspace = new Workspace({
 	filesystem: new LocalFilesystem({
 		basePath: './workspace',
-		// highlight-next-line
+		// [!code highlight:1]
 		allowedPaths: ['~/.claude/skills', '../shared-data'],
 	}),
 })
@@ -101,7 +101,7 @@ If your agent needs unrestricted access to the entire filesystem, disable contai
 const workspace = new Workspace({
 	filesystem: new LocalFilesystem({
 		basePath: './workspace',
-		// highlight-next-line
+		// [!code highlight:1]
 		contained: false,
 	}),
 })
@@ -177,7 +177,7 @@ To prevent agents from modifying files, enable read-only mode:
 const workspace = new Workspace({
 	filesystem: new LocalFilesystem({
 		basePath: './workspace',
-		// highlight-next-line
+		// [!code highlight:1]
 		readOnly: true,
 	}),
 })

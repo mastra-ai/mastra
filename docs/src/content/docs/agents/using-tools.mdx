@@ -183,7 +183,7 @@ export const supervisor = new Agent({
 	name: 'Supervisor',
 	instructions: 'Coordinate the writer to produce content.',
 	model: '__GATEWAY_OPENAI_MODEL__',
-	// highlight-next-line
+	// [!code highlight:1]
 	agents: { writer },
 })
 ```
@@ -201,7 +201,7 @@ export const researchAgent = new Agent({
 	name: 'Research Agent',
 	instructions: 'You are a research assistant.',
 	model: '__GATEWAY_OPENAI_MODEL__',
-	// highlight-next-line
+	// [!code highlight:1]
 	workflows: { researchWorkflow },
 })
 ```

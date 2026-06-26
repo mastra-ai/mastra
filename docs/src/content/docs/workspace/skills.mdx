@@ -165,7 +165,7 @@ If BM25 or vector search is enabled on the workspace, skills are automatically i
 const workspace = new Workspace({
 	filesystem: new LocalFilesystem({ basePath: './workspace' }),
 	skills: ['skills'],
-	// highlight-next-line
+	// [!code highlight:1]
 	bm25: true,
 })
 ```
@@ -178,13 +178,13 @@ By default, skills are read from the workspace filesystem. For advanced use case
 
 ```typescript
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
-// highlight-next-line
+// [!code highlight:1]
 import { VersionedSkillSource } from '@mastra/core/workspace'
 
 const workspace = new Workspace({
 	filesystem: new LocalFilesystem({ basePath: './workspace' }),
 	skills: ['skills'],
-	// highlight-next-line
+	// [!code highlight:1]
 	skillSource: new VersionedSkillSource(versionTree, blobStore, versionCreatedAt),
 })
 ```

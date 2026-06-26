@@ -45,7 +45,7 @@ export const reviewer = new Agent({
 	id: 'reviewer',
 	model: '__GATEWAY_OPENAI_MODEL__',
 	instructions: 'You are a code review assistant.',
-	// highlight-next-line
+	// [!code highlight:1]
 	skills: [codeReview],
 })
 ```

@@ -34,7 +34,7 @@ const workspace = new Workspace({
 // highlight-end
 
 export const mastra = new Mastra({
-	// highlight-next-line
+	// [!code highlight:1]
 	workspace,
 })
 ```
@@ -142,7 +142,7 @@ Define the agent by importing it inside `src/mastra/index.ts` and registering it
 import { Mastra } from '@mastra/core'
 import { resolve } from 'node:path'
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
-// highlight-next-line
+// [!code highlight:1]
 import { codeReviewer } from './agents/code-reviewer'
 
 const workspace = new Workspace({
@@ -154,7 +154,7 @@ const workspace = new Workspace({
 
 export const mastra = new Mastra({
 	workspace,
-	// highlight-next-line
+	// [!code highlight:1]
 	agents: { codeReviewer },
 })
 ```

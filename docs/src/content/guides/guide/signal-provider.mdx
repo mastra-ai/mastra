@@ -126,7 +126,7 @@ export const devAgent = new Agent({
 	name: 'Dev Agent',
 	instructions: 'Help the user triage CI build failures.',
 	model: '__GATEWAY_OPENAI_MODEL__',
-	// highlight-next-line
+	// [!code highlight:1]
 	signals: [ciSignals],
 })
 ```
@@ -136,11 +136,11 @@ Register the agent with Mastra and add the storage from the first step.
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 import { LibSQLStore } from '@mastra/libsql'
-// highlight-next-line
+// [!code highlight:1]
 import { devAgent } from './agents/dev-agent'
 
 export const mastra = new Mastra({
-	// highlight-next-line
+	// [!code highlight:1]
 	agents: { devAgent },
 	storage: new LibSQLStore({
 		url: 'file:./mastra.db',

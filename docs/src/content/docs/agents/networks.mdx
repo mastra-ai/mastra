@@ -48,11 +48,11 @@ export const routingAgent = new Agent({
 		// highlight-end
 	},
 	workflows: {
-		// highlight-next-line
+		// [!code highlight:1]
 		cityWorkflow,
 	},
 	tools: {
-		// highlight-next-line
+		// [!code highlight:1]
 		weatherTool,
 	},
 	memory: new Memory({

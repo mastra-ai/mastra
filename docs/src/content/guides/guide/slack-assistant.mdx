@@ -48,11 +48,11 @@ Register the agent in your `src/mastra/index.ts` file:
 
 ```ts title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
-// highlight-next-line
+// [!code highlight:1]
 import { slackAgent } from './agents/slack-agent'
 
 export const mastra = new Mastra({
-	// highlight-next-line
+	// [!code highlight:1]
 	agents: { slackAgent },
 })
 ```

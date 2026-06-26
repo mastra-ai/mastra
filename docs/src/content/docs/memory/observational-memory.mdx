@@ -26,7 +26,7 @@ export const agent = new Agent({
 	model: '__GATEWAY_OPENAI_MODEL_MINI__',
 	memory: new Memory({
 		options: {
-			// highlight-next-line
+			// [!code highlight:1]
 			observationalMemory: true,
 		},
 	}),

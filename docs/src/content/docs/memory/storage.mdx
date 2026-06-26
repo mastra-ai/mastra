@@ -101,7 +101,7 @@ export const mastra = new Mastra({
 	storage: new MastraCompositeStore({
 		id: 'composite',
 		domains: {
-			// highlight-next-line
+			// [!code highlight:1]
 			memory: new MemoryLibSQL({ url: 'file:./memory.db' }),
 			workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
 			observability: new ObservabilityStorageClickhouse({

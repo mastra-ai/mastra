@@ -165,11 +165,11 @@ Register the supervisor with Mastra in `src/mastra/index.ts`:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
-// highlight-next-line
+// [!code highlight:1]
 import { supervisorAgent } from './agents/supervisor-agent'
 
 export const mastra = new Mastra({
-	// highlight-next-line
+	// [!code highlight:1]
 	agents: { supervisorAgent },
 })
 ```
@@ -253,7 +253,7 @@ import { Memory } from '@mastra/memory'
 import { LibSQLStore } from '@mastra/libsql'
 import { researchAgent } from './research-agent'
 import { writingAgent } from './writing-agent'
-// highlight-next-line
+// [!code highlight:1]
 import { taskCompleteScorer } from '../scorers/task-complete-scorer'
 
 export const supervisorAgent = new Agent({
