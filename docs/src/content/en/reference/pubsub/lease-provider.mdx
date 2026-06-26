@@ -7,9 +7,9 @@ packages:
 
 # LeaseProvider
 
-`LeaseProvider` is the distributed leasing contract, separate from event delivery ([`PubSub`](/reference/pubsub/base)). Mastra's signals layer uses it to elect a single owner across multiple processes — for example, serverless invocations — for a given resource, most commonly a thread key. The owner is the process that wakes and runs the agent stream, so other processes route follow-up work to it instead of starting a competing run.
+`LeaseProvider` is the distributed leasing contract, separate from event delivery ([`PubSub`](/reference/pubsub/base)). Mastra's signals layer uses it to elect a single owner across multiple processes (for example, serverless invocations) for a given resource, most commonly a thread key. The owner is the process that wakes and runs the agent stream, so other processes route follow-up work to it instead of starting a competing run.
 
-Leasing is a distinct concern from pub/sub. A backend implements `LeaseProvider` only when it can genuinely coordinate a lock — Redis via atomic `SET`/Lua, or an in-memory map for single-process. Backends that cannot lease omit it; the signals runtime feature-detects the capability and falls back to a no-op provider, preserving single-process behavior.
+Leasing is a distinct concern from pub/sub. A backend implements `LeaseProvider` only when it can genuinely coordinate a lock, such as Redis via atomic `SET`/Lua, or an in-memory map for single-process. Backends that cannot lease omit it; the signals runtime feature-detects the capability and falls back to a no-op provider, preserving single-process behavior.
 
 The built-in [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) implements `LeaseProvider`, which is what enables channels and signals to coordinate across instances in distributed and serverless deployments.
 
@@ -57,9 +57,9 @@ Atomically tries to acquire a lease on a key. Returns `{ acquired: true, owner }
 const result = await pubsub.acquireLease('thread:abc', runId, 15000)
 
 if (result.acquired) {
-  // This process owns the thread — wake and run the agent.
+  // This process owns the thread, so wake and run the agent.
 } else {
-  // result.owner holds the lease — route the signal to them.
+  // result.owner holds the lease, so route the signal to them.
 }
 ```
 
@@ -98,7 +98,7 @@ Returns: `Promise<string | undefined>`
 
 #### `releaseLease(key, owner)`
 
-Releases a lease. This is a no-op if the caller is not the current owner — implementations check ownership atomically before releasing, so a concurrent renewal by another owner is never clobbered.
+Releases a lease. This is a no-op if the caller is not the current owner: implementations check ownership atomically before releasing, so a concurrent renewal by another owner is never clobbered.
 
 ```typescript
 await pubsub.releaseLease('thread:abc', runId)
@@ -114,7 +114,7 @@ Renews an existing lease owned by `owner`, extending its TTL. Returns `true` if 
 const stillOwned = await pubsub.renewLease('thread:abc', runId, 15000)
 
 if (!stillOwned) {
-  // Lost the lease — stop renewing and let the new owner take over.
+  // Lost the lease, so stop renewing and let the new owner take over.
 }
 ```
 
@@ -122,7 +122,7 @@ Returns: `Promise<boolean>`
 
 #### `transferLease(key, fromOwner, toOwner, ttlMs)`
 
-Atomically hands a held lease from `fromOwner` to `toOwner`, refreshing its TTL, without releasing the key in between. This is the gap-free primitive used when one owner finishes but a follow-up owner must take over the same key immediately — for example, when a thread run completes and a queued follow-up run drains on the same thread. A naive release-then-acquire would briefly leave the key empty, letting a racing process win the freed lease and start a competing run.
+Atomically hands a held lease from `fromOwner` to `toOwner`, refreshing its TTL, without releasing the key in between. This is the gap-free primitive used when one owner finishes but a follow-up owner must take over the same key immediately, for example when a thread run completes and a queued follow-up run drains on the same thread. A naive release-then-acquire would briefly leave the key empty, letting a racing process win the freed lease and start a competing run.
 
 Returns `true` if `fromOwner` still held the lease and ownership moved to `toOwner`, or `false` if the lease was already lost, in which case the caller should fall back to a fresh `acquireLease`.
 
@@ -130,7 +130,7 @@ Returns `true` if `fromOwner` still held the lease and ownership moved to `toOwn
 const transferred = await pubsub.transferLease('thread:abc', currentRunId, nextRunId, 15000)
 
 if (!transferred) {
-  // Lease was lost — acquire fresh instead.
+  // Lease was lost, so acquire fresh instead.
   await pubsub.acquireLease('thread:abc', nextRunId, 15000)
 }
 ```
@@ -138,14 +138,14 @@ if (!transferred) {
 Returns: `Promise<boolean>`
 
 :::warning
-Backends that cannot perform the transfer atomically must still implement it as a best-effort `releaseLease(fromOwner)` followed by `acquireLease(toOwner)`, and document that the swap is non-atomic — a racing process can win the key in the gap. Keeping the method required means callers have a single code path and atomicity is an explicit per-backend decision.
+Backends that cannot perform the transfer atomically must still implement it as a best-effort `releaseLease(fromOwner)` followed by `acquireLease(toOwner)`, and document that the swap is non-atomic, since a racing process can win the key in the gap. Keeping the method required means callers have a single code path and atomicity is an explicit per-backend decision.
 :::
 
 ## Capability detection
 
 The signals runtime detects `LeaseProvider` structurally rather than with `instanceof`, so detection works even when a separately published backend resolves a different copy of `@mastra/core`. A value is treated as a `LeaseProvider` when it exposes all five methods (`acquireLease`, `getLeaseOwner`, `releaseLease`, `renewLease`, `transferLease`).
 
-When the configured pub/sub backend does not implement `LeaseProvider`, the runtime falls back to an always-win no-op provider. Every caller wins its own lease race and release, renew, and transfer are inert — which preserves the expected single-process behavior.
+When the configured pub/sub backend does not implement `LeaseProvider`, the runtime falls back to an always-win no-op provider. Every caller wins its own lease race, and release, renew, and transfer are inert, which preserves the expected single-process behavior.
 
 ## Related
 
