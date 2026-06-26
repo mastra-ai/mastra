@@ -89,6 +89,7 @@ import {
   Workspace,
   Responses,
   Channels,
+  Harness,
 } from './resources';
 import type {
   ListScoresBySpanParams,
@@ -146,6 +147,8 @@ import type {
   StoredSkillResponse,
   GetSystemPackagesResponse,
   BuilderSettingsResponse,
+  BuilderAvailableModelsResponse,
+  PermissionPatternsResponse,
   InfrastructureStatusResponse,
   ListBuilderRegistriesResponse,
   BuilderRegistrySearchResponse,
@@ -248,6 +251,25 @@ export class MastraClient extends BaseResource {
    */
   public getAgent(agentId: string, version?: AgentVersionIdentifier) {
     return new Agent(this.options, agentId, version);
+  }
+
+  /**
+   * Lists the harnesses hosted on the connected Mastra instance.
+   * @returns Promise containing an array of harness identifiers
+   */
+  public async listHarnesses(): Promise<{ id: string }[]> {
+    const body = await this.request<{ harnesses: { id: string }[] }>('/harness');
+    return body.harnesses;
+  }
+
+  /**
+   * Scopes to a harness hosted on the connected Mastra instance. Use
+   * `getHarness(id).session(resourceId)` to create/resume a session, stream its
+   * events, and send messages.
+   * @param harnessId - The id the harness is registered under on Mastra
+   */
+  public getHarness(harnessId: string) {
+    return new Harness(this.options, harnessId);
   }
 
   /**
@@ -1568,6 +1590,25 @@ export class MastraClient extends BaseResource {
    */
   public getBuilderSettings(): Promise<BuilderSettingsResponse> {
     return this.request('/editor/builder/settings');
+  }
+
+  /**
+   * Retrieves the AI providers/models available under the active builder model
+   * policy. The server applies the EE allowlist, so the result can be rendered
+   * directly in the model picker.
+   * @returns Promise containing the policy-filtered providers/models
+   */
+  public getBuilderAvailableModels(): Promise<BuilderAvailableModelsResponse> {
+    return this.request('/editor/builder/models/available');
+  }
+
+  /**
+   * Retrieves the authoritative list of valid permission-pattern strings.
+   * Used by Studio to validate route→permission literals and gate the sidebar.
+   * @returns Promise containing the permission patterns
+   */
+  public getPermissionPatterns(): Promise<PermissionPatternsResponse> {
+    return this.request('/auth/permission-patterns');
   }
 
   /**

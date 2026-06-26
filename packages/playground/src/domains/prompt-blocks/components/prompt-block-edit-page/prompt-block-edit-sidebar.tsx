@@ -1,15 +1,13 @@
-import {
-  Button,
-  Input,
-  JSONSchemaForm,
-  jsonSchemaToFields,
-  Label,
-  ScrollArea,
-  Spinner,
-  Textarea,
-  Txt,
-} from '@mastra/playground-ui';
-import type { JsonSchema, SchemaField } from '@mastra/playground-ui';
+import type { JsonSchema } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { JSONSchemaForm, jsonSchemaToFields } from '@mastra/playground-ui/components/JSONSchemaForm';
+import type { SchemaField } from '@mastra/playground-ui/components/JSONSchemaForm';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Check, Plus, PlusIcon, Save } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
@@ -138,7 +136,7 @@ export function PromptBlockEditSidebar({
             <Input
               id="prompt-block-name"
               placeholder="My Prompt Block"
-              className="bg-surface3"
+              variant="outline"
               {...register('name')}
               error={!!errors.name}
             />
@@ -153,7 +151,7 @@ export function PromptBlockEditSidebar({
             <Textarea
               id="prompt-block-description"
               placeholder="Describe what this prompt block does"
-              className="bg-surface3"
+              variant="outline"
               {...register('description')}
               error={!!errors.description}
             />

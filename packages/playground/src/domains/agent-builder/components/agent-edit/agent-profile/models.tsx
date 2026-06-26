@@ -1,17 +1,15 @@
-import { isModelAllowed } from '@mastra/core/agent-builder/ee';
-import { Checkbox, Skeleton, Txt, cn } from '@mastra/playground-ui';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { LockIcon, TriangleAlertIcon } from 'lucide-react';
-import type { CSSProperties } from 'react';
 import { useMemo, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
-import { useAgentColor } from '../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
 import { AgentSearchbar } from '../agent-searchbar';
 import { AgentSelectableCard } from '../agent-selectable-card';
-import { useBuilderFilteredModels, useBuilderFilteredProviders, useBuilderModelPolicy } from '@/domains/agent-builder';
-import type { ListProvider } from '@/domains/agent-builder/services/to-providers';
-import { toProviders } from '@/domains/agent-builder/services/to-providers';
-import { ProviderLogo, cleanProviderId, useAllModels, useLLMProviders } from '@/domains/llm';
+import { FilterableList } from './filterable-list';
+import { TwoPanePickerSkeleton } from './two-pane-picker-skeleton';
+import { useBuilderModelPolicy } from '@/domains/agent-builder';
+import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
+import { ProviderLogo, cleanProviderId } from '@/domains/llm';
 import type { ModelInfo } from '@/domains/llm/hooks/use-filtered-models';
 
 export interface Modelprops {
@@ -26,14 +24,15 @@ export const Models = ({ editable = true }: Modelprops) => {
     const policyProvider = policy.default?.provider;
     const policyModelId = policy.default?.modelId;
 
-    return <LockedModelChip provider={policyProvider} modelId={policyModelId} />;
+    return (
+      <div className="px-6 py-6">
+        <LockedModelChip provider={policyProvider} modelId={policyModelId} />
+      </div>
+    );
   }
 
   return (
-    <div
-      className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 overflow-y-auto"
-      data-testid="model-detail-picker"
-    >
+    <div className="h-full min-h-0 overflow-hidden" data-testid="model-detail-picker">
       <ModelPicker disabled={!editable} />
     </div>
   );
@@ -51,14 +50,9 @@ interface ProviderEntry {
 const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
   const { setValue, control } = useFormContext<AgentBuilderEditFormValues>();
   const model = useWatch({ control, name: 'model' });
-  const { data, isLoading } = useLLMProviders();
   const policy = useBuilderModelPolicy();
+  const { models: policyAllowedModels, isLoading } = useAgentBuilderAllowedModels();
 
-  const allProviders = useMemo(() => toProviders((data?.providers as ListProvider[]) || []), [data]);
-  const filteredProviders = useBuilderFilteredProviders(allProviders, policy);
-  const allModels = useAllModels(filteredProviders);
-
-  const policyAllowedModels = useBuilderFilteredModels(allModels, policy);
   const [search, setSearch] = useState('');
   const [selectedProviders, setSelectedProviders] = useState<Set<string> | null>(null);
 
@@ -90,157 +84,91 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
     });
   };
 
+  const handleSelectAllProviders = () => {
+    setSelectedProviders(new Set(providerOptions.map(p => p.providerId)));
+  };
+
+  const handleClearAllProviders = () => {
+    setSelectedProviders(new Set());
+  };
+
+  const providerFilterItems = useMemo(
+    () =>
+      providerOptions.map(({ providerId, providerName }) => ({
+        id: providerId,
+        label: providerName,
+        icon: <ProviderLogo providerId={providerId} size={18} />,
+      })),
+    [providerOptions],
+  );
+
   if (isLoading) {
-    return (
-      <div className="h-full overflow-y-auto">
-        <div
-          className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] gap-4 px-6 overflow-y-auto"
-          data-testid="model-card-picker-loading"
-        >
-          <div className="shrink-0 max-w-[30ch]">
-            <Skeleton className="h-10 w-full rounded-md" />
-          </div>
-
-          <div className="flex flex-wrap gap-2 shrink-0">
-            <Skeleton className="h-badge-default w-20 rounded-full" />
-            <Skeleton className="h-badge-default w-24 rounded-full" />
-            <Skeleton className="h-badge-default w-20 rounded-full" />
-            <Skeleton className="h-badge-default w-28 rounded-full" />
-            <Skeleton className="h-badge-default w-24 rounded-full" />
-          </div>
-
-          <div className="flex min-h-0 flex-col gap-6 overflow-y-auto">
-            <div className="flex flex-col gap-3">
-              <Skeleton className="h-4 w-24" />
-              <div className="grid grid-cols-1 content-start gap-2 lg:gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                <Skeleton className="h-20 rounded-lg" />
-                <Skeleton className="h-20 rounded-lg" />
-                <Skeleton className="h-20 rounded-lg" />
-                <Skeleton className="h-20 rounded-lg" />
-                <Skeleton className="h-20 rounded-lg" />
-                <Skeleton className="h-20 rounded-lg" />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+    return <TwoPanePickerSkeleton testId="model-card-picker-loading" />;
   }
 
   const provider = cleanProviderId(model?.provider ?? '');
   const modelId = model?.name ?? '';
 
   const isSet = Boolean(provider && modelId);
-  const isStale = isSet && policy.active && !isModelAllowed(policy.allowed, { provider, modelId });
+  const isAllowed = policyAllowedModels.some(m => cleanProviderId(m.provider) === provider && m.model === modelId);
+  const isStale = isSet && policy.active && !isAllowed;
 
   const groups = groupModelsByProvider(policyAllowedModels, selectedProviders, search, provider);
   const allProvidersUnchecked = selectedProviders !== null && selectedProviders.size === 0;
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div className="h-full min-h-0 overflow-hidden">
       <div
-        className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] gap-4 px-6 overflow-y-auto"
+        className="grid h-full min-h-0 grid-cols-[280px_minmax(0,1fr)] overflow-hidden"
         data-testid="model-card-picker"
       >
-        <div data-testid="model-card-picker-search" className="shrink-0 max-w-[30ch]">
-          <AgentSearchbar
-            onSearch={setSearch}
-            label="Search models"
-            placeholder="Search models or providers..."
-            size="lg"
-            debounceMs={0}
-          />
-        </div>
-
         {providerOptions.length > 0 && (
-          <ProviderFilterBadges
-            providers={providerOptions}
-            isProviderChecked={isProviderChecked}
+          <FilterableList
+            title="Providers"
+            items={providerFilterItems}
+            isChecked={isProviderChecked}
             onToggle={handleToggleProvider}
+            onSelectAll={handleSelectAllProviders}
+            onClearAll={handleClearAllProviders}
             disabled={disabled}
+            testIdPrefix="models-provider"
           />
         )}
 
-        {groups.length === 0 ? (
-          <div className="flex min-h-0 items-center justify-center">
-            <Txt variant="ui-md" className="text-neutral3">
-              {search.trim()
-                ? `No models match "${search.trim()}"`
-                : allProvidersUnchecked
-                  ? 'Select at least one provider to see models'
-                  : 'No models available'}
-            </Txt>
+        <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-6 px-6 py-6">
+          <div data-testid="model-card-picker-search" className="shrink-0 max-w-[30ch]">
+            <AgentSearchbar
+              onSearch={setSearch}
+              label="Search models"
+              placeholder="Search models or providers..."
+              size="lg"
+              debounceMs={0}
+            />
           </div>
-        ) : (
-          <ModelGroups
-            groups={groups}
-            selectedProvider={provider}
-            selectedModel={modelId}
-            disabled={disabled}
-            onChange={(provider, model) => setValue('model', { provider, name: model }, { shouldDirty: true })}
-          />
-        )}
+
+          {groups.length === 0 ? (
+            <div className="flex min-h-0 items-center justify-center">
+              <Txt variant="ui-md" className="text-neutral3">
+                {search.trim()
+                  ? `No models match "${search.trim()}"`
+                  : allProvidersUnchecked
+                    ? 'Select at least one provider to see models'
+                    : 'No models available'}
+              </Txt>
+            </div>
+          ) : (
+            <ModelGroups
+              groups={groups}
+              selectedProvider={provider}
+              selectedModel={modelId}
+              disabled={disabled}
+              onChange={(provider, model) => setValue('model', { provider, name: model }, { shouldDirty: true })}
+            />
+          )}
+        </div>
       </div>
 
       {isStale && <StaleWarning provider={provider} modelId={modelId} />}
-    </div>
-  );
-};
-
-interface ProviderFilterBadgesProps {
-  providers: ProviderEntry[];
-  isProviderChecked: (providerId: string) => boolean;
-  onToggle: (providerId: string) => void;
-  disabled?: boolean;
-}
-
-const ProviderFilterBadges = ({ providers, isProviderChecked, onToggle, disabled }: ProviderFilterBadgesProps) => {
-  const agentColor = useAgentColor();
-
-  return (
-    <div className="flex flex-wrap gap-2 shrink-0" data-testid="model-provider-filter">
-      {providers.map(({ providerId, providerName }) => {
-        const checked = isProviderChecked(providerId);
-
-        const labelStyle: CSSProperties | undefined = checked
-          ? {
-              borderColor: agentColor.background,
-              color: agentColor.background,
-            }
-          : undefined;
-
-        const checkboxStyle: CSSProperties | undefined = checked
-          ? {
-              backgroundColor: agentColor.background,
-              borderColor: agentColor.background,
-              color: agentColor.foreground,
-            }
-          : undefined;
-
-        return (
-          <label
-            key={providerId}
-            data-testid={`model-provider-filter-badge-${providerId}`}
-            data-checked={checked ? 'true' : 'false'}
-            style={labelStyle}
-            className={cn(
-              'inline-flex items-center gap-2 rounded-full border px-2.5 h-badge-default text-ui-sm font-mono cursor-pointer select-none transition-colors',
-              !checked && 'border-border1 bg-surface3 text-neutral5 hover:bg-surface4',
-              disabled && 'cursor-not-allowed opacity-60',
-            )}
-          >
-            <Checkbox
-              checked={checked}
-              disabled={disabled}
-              onCheckedChange={() => onToggle(providerId)}
-              style={checkboxStyle}
-              data-testid={`model-provider-filter-checkbox-${providerId}`}
-              className="h-3 w-3 shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5"
-            />
-            <span>{providerName}</span>
-          </label>
-        );
-      })}
     </div>
   );
 };
@@ -276,7 +204,7 @@ const ModelGroups = ({ groups, selectedProvider, selectedModel, disabled, onChan
           >
             {group.providerName}
           </Txt>
-          <div className="grid grid-cols-1 content-start gap-2 lg:gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 content-start gap-2 lg:gap-6 sm:grid-cols-2 2xl:grid-cols-3">
             {group.models.map(entry => {
               const cleanedProvider = cleanProviderId(entry.provider);
               const isSelected = cleanedProvider === selectedProvider && entry.model === selectedModel;
@@ -310,7 +238,7 @@ interface StaleWarningProps {
 const StaleWarning = ({ provider, modelId }: StaleWarningProps) => {
   return (
     <div
-      className="flex items-start gap-2 rounded-md border border-accent6 bg-accent6Dark/40 px-3 py-2 text-accent6"
+      className="mx-6 mb-6 flex items-start gap-2 rounded-md border border-accent6 bg-accent6Dark/40 px-3 py-2 text-accent6"
       data-testid="model-detail-stale-warning"
       role="alert"
     >

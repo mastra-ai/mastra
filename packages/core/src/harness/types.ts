@@ -2,14 +2,15 @@ import type { Agent } from '../agent';
 import type { AgentInstructions, ToolsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import type { PubSub } from '../events/pubsub';
-import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
 import type { ObservabilityEntrypoint } from '../observability/types/core';
 import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage/base';
+import type { GoalEvaluationPayload } from '../stream/types';
 import type { DynamicArgument } from '../types';
-import type { Workspace, WorkspaceConfig, WorkspaceStatus } from '../workspace';
+import type { Workspace, WorkspaceStatus } from '../workspace';
 import type { TaskItemSnapshot } from './tools';
 
 // =============================================================================
@@ -41,31 +42,94 @@ export interface HeartbeatHandler {
  * Configuration for a single agent mode within the harness.
  * Each mode represents a different "personality" or capability set.
  */
-export interface HarnessMode<TState> {
-  /** Unique identifier for this mode (e.g., "plan", "build", "review") */
+interface HarnessModeBase {
+  /** Unique within `HarnessConfig.modes`. Validated at construction. */
   id: string;
 
-  /** Human-readable name for display */
   name?: string;
 
-  /** Whether this is the default mode when harness starts */
+  /** bootstrap model default when a session enters this mode. */
+  defaultModelId?: string;
+
+  /** Surfaced in mode pickers / Studio UI. Free text. */
+  description?: string;
+
+  /**
+   * Layered above the backing agent's own instructions for the duration
+   * of this mode. Plain text by design — modes carve operating profile,
+   * not full system-message overrides.
+   */
+  instructions?: string;
+
+  /** @deprecated Use HarnessConfig.agent as the shared backing agent. */
+  agent?: Agent<any, any, any, any>;
+
+  /** @deprecated Prefer metadata.default. */
   default?: boolean;
 
   /**
-   * Default model ID for this mode (e.g., "anthropic/claude-sonnet-4-20250514").
-   * Used when no per-mode model has been explicitly selected.
+   * Optional plan→build target. When `submit_plan` runs in this mode, the
+   * registered `PendingResume` freezes this value as `transitionModeId`.
+   * On approval, the session flips to this mode
+   * idempotently (§5.1, §5.7). If unset, plan approval resumes with no
+   * mode change. Must reference another mode's `id`.
    */
-  defaultModelId?: string;
-
-  /** Hex color for the mode indicator (e.g., "#7c3aed") */
-  color?: string;
+  transitionsTo?: string;
 
   /**
-   * The agent for this mode.
-   * Can be a static Agent or a function that receives harness state.
+   * Unified per-mode tool visibility allowlist. When set, only tools whose
+   * final exposed names appear in this list are visible to the model and
+   * executable during this mode's runs. Workspace tools use the same list
+   * as all other tools — configure them by exposed tool names such as
+   * `view`, `write_file`, `find_files`, etc. (after workspace tool renaming
+   * via `TOOL_NAME_OVERRIDES`).
+   *
+   * - `undefined` (default): no mode-level restriction; all tools are visible.
+   * - `[]`: no tools are available for this mode.
+   * - Per-tool permission `deny` and category `deny` still win — a denied
+   *   tool is hidden even if it appears in this list.
+   * - `tools` / `additionalTools` remain toolset composition inputs (which
+   *   tools are added to the run), not visibility gates.
+   *
+   * Enforced at LLM-call time via `activeTools`, matching the existing
+   * execution-time enforcement in the durable tool-call step.
    */
-  agent: Agent | ((state: TState) => Agent);
+  availableTools?: string[];
+
+  /**
+   * Arbitrary user-defined metadata. `metadata.default === true` is a
+   * reserved harness hint for choosing the default mode when `defaultModeId`
+   * is unset; all other metadata is pass-through and unvalidated. Use for UI
+   * affordances like display color, icon, display name overrides, or any
+   * per-mode configuration that isn't part of the harness's own contract.
+   *
+   * Surfaced verbatim on `getCurrentMode()` and `listModes()`.
+   */
+  metadata?: Record<string, unknown>;
 }
+
+type HarnessModeToolOverrides =
+  | {
+      /**
+       * Mode-level tools added as a separate toolset alongside the backing
+       * agent's own tools. With a shared backing agent (`HarnessConfig.agent`),
+       * these are layered as an augment — the agent's own tools are **not**
+       * masked. To restrict which tools are visible, use `availableTools`
+       * instead. Mutually exclusive with `additionalTools`.
+       */
+      tools?: ToolsInput;
+      additionalTools?: never;
+    }
+  | {
+      tools?: never;
+      /**
+       * Tools layered on top of the backing agent's tools. The agent's tools
+       * stay; these are added. Mutually exclusive with `tools`.
+       */
+      additionalTools?: ToolsInput;
+    };
+
+export type HarnessMode = HarnessModeBase & HarnessModeToolOverrides;
 
 // =============================================================================
 // Subagents
@@ -178,7 +242,15 @@ export interface HarnessConfig<TState = {}> {
   memory?: DynamicArgument<MastraMemory>;
 
   /** Available agent modes */
-  modes: HarnessMode<TState>[];
+  modes: HarnessMode[];
+
+  /** Shared backing agent that each mode forks and decorates. */
+  agent?: Agent<any, any, any, any>;
+
+  /** Default mode to enter when a thread has no persisted mode. */
+  defaultModeId?: string;
+
+  instructions?: string;
 
   /**
    * Tools available to all agents across all modes.
@@ -189,11 +261,11 @@ export interface HarnessConfig<TState = {}> {
 
   /**
    * Workspace configuration.
-   * Accepts a pre-constructed Workspace instance, a WorkspaceConfig for
-   * Harness to construct internally, or a dynamic factory function that
-   * receives the request context and returns a Workspace per-request.
+   * Accepts a pre-constructed Workspace instance or a dynamic factory
+   * function that receives the request context and returns a Workspace
+   * per-request.
    */
-  workspace?: DynamicArgument<Workspace | undefined> | WorkspaceConfig;
+  workspace?: DynamicArgument<Workspace | undefined>;
 
   /**
    * Browser automation configuration.
@@ -216,13 +288,6 @@ export interface HarnessConfig<TState = {}> {
   idGenerator?: () => string;
 
   /**
-   * Custom auth checker for model providers.
-   * Lets the app layer provide additional auth sources (e.g., OAuth tokens)
-   * beyond the default env var check from the provider registry.
-   */
-  modelAuthChecker?: ModelAuthChecker;
-
-  /**
    * Provides per-model use counts for `listAvailableModels()` sorting/display.
    * Lets the app layer track and report how often each model has been used.
    */
@@ -235,22 +300,19 @@ export interface HarnessConfig<TState = {}> {
   modelUseCountTracker?: ModelUseCountTracker;
 
   /**
-   * Optional catalog hook for additional models (e.g., user-defined custom providers).
-   * Returned entries are merged into `listAvailableModels()`.
-   */
-  customModelCatalogProvider?: CustomModelCatalogProvider;
-
-  /**
    * Subagent definitions. The Harness auto-creates a `subagent` built-in tool
    * that parent agents can call to spawn focused subagents.
    */
   subagents?: HarnessSubagent[];
 
   /**
-   * Converts a model ID string (e.g., "anthropic/claude-sonnet-4-20250514") to a
-   * language model instance. Used by subagents and OM model resolution.
+   * Model gateways registered on Harness' internal Mastra instance.
+   * The Harness resolves every model — mode agents, Observational Memory,
+   * subagents — and builds the `listAvailableModels()` catalog through these
+   * gateways. Provider auth (API keys, OAuth, stored credentials) is resolved
+   * via each gateway's `resolveAuth()` / env-var configuration.
    */
-  resolveModel?: (modelId: string) => MastraLanguageModel;
+  gateways?: MastraModelGatewayInterface[];
 
   /**
    * Observational Memory configuration defaults.
@@ -369,25 +431,15 @@ export interface AvailableModel {
 }
 
 /**
- * Additional model entries supplied by the app layer.
+ * Same as {@link AvailableModel} but without the runtime `useCount` field.
+ * Used by providers that supply catalog entries before use-count tracking.
  */
 export type CustomAvailableModel = Omit<AvailableModel, 'useCount'>;
 
 /**
- * Provides additional model catalog entries for `listAvailableModels()`.
+ * Function that returns a list of custom available models (without use counts).
  */
-export type CustomModelCatalogProvider = () => CustomAvailableModel[] | Promise<CustomAvailableModel[]>;
-
-/**
- * Custom auth checker for model providers.
- * Called by `getCurrentModelAuthStatus()` and `listAvailableModels()` to determine
- * whether a provider has valid authentication beyond just env var checks
- * (e.g., OAuth tokens, stored credentials).
- *
- * Return `true` if the provider is authenticated, `false` if not,
- * or `undefined` to fall back to the default env var check.
- */
-export type ModelAuthChecker = (provider: string) => boolean | undefined;
+export type CustomModelCatalogProvider = () => Promise<CustomAvailableModel[]>;
 
 /**
  * Provides per-model use counts for sorting in `listAvailableModels()`.
@@ -416,15 +468,6 @@ export interface HarnessThread {
   updatedAt: Date;
   tokenUsage?: TokenUsage;
   metadata?: Record<string, unknown>;
-}
-
-/**
- * Session info for the current harness instance.
- */
-export interface HarnessSession {
-  currentThreadId: string | null;
-  currentModeId: string;
-  threads: HarnessThread[];
 }
 
 // =============================================================================
@@ -541,34 +584,6 @@ export interface ActiveSubagentState {
 export type HarnessSubagentHistoryEntry = Omit<ActiveSubagentState, 'status'>;
 
 /**
- * Controls whether an `ask_user` prompt accepts one choice or multiple choices.
- *
- * `single_select` is the default for prompts that provide options, preserving the
- * original one-answer behavior. `multi_select` tells the UI that the user may choose
- * more than one option and return those selections as an array.
- */
-export type HarnessQuestionSelectionMode = 'single_select' | 'multi_select';
-
-/**
- * A structured choice rendered by the UI for an `ask_user` prompt.
- *
- * The label is the value returned to the model when the option is selected. The
- * optional description gives the UI more context without changing the answer value.
- */
-export interface HarnessQuestionOption {
-  label: string;
-  description?: string;
-}
-
-/**
- * Answer shape accepted by `respondToQuestion()` for pending `ask_user` prompts.
- *
- * Free-text and single-select prompts resolve with a string. Multi-select prompts
- * resolve with a string array containing each selected option label.
- */
-export type HarnessQuestionAnswer = string | string[];
-
-/**
  * Canonical display state maintained by the Harness.
  *
  * This is the single source of truth for *what to display*.
@@ -586,6 +601,10 @@ export interface HarnessDisplayState {
   // ── Current streaming message ────────────────────────────────────────
   /** The message currently being streamed (null when idle) */
   currentMessage: HarnessMessage | null;
+
+  // ── Follow-up queue ──────────────────────────────────────────────────
+  /** Number of follow-up messages queued locally by the Harness */
+  queuedFollowUps: number;
 
   // ── Token usage ──────────────────────────────────────────────────────
   /** Cumulative token usage for the current thread */
@@ -608,30 +627,21 @@ export interface HarnessDisplayState {
   } | null;
 
   // ── Tool suspension ─────────────────────────────────────────────────
-  /** A tool awaiting resume data after calling suspend() (null when none) */
-  pendingSuspension: {
-    toolCallId: string;
-    toolName: string;
-    args: unknown;
-    suspendPayload: unknown;
-    resumeSchema?: string;
-  } | null;
-
-  // ── Interactive prompts ──────────────────────────────────────────────
-  /** A question from the agent awaiting user answer (null when none) */
-  pendingQuestion: {
-    questionId: string;
-    question: string;
-    options?: HarnessQuestionOption[];
-    selectionMode?: HarnessQuestionSelectionMode;
-  } | null;
-
-  /** A plan awaiting user approval (null when none) */
-  pendingPlanApproval: {
-    planId: string;
-    title?: string;
-    plan: string;
-  } | null;
+  /**
+   * Tools awaiting resume data after calling suspend(), keyed by toolCallId.
+   * Multiple tools can be parked at once (e.g. parallel `ask_user` prompts), so
+   * resuming one leaves the others intact for the UI to keep rendering.
+   */
+  pendingSuspensions: Map<
+    string,
+    {
+      toolCallId: string;
+      toolName: string;
+      args: unknown;
+      suspendPayload: unknown;
+      resumeSchema?: string;
+    }
+  >;
 
   // ── Subagent tracking ────────────────────────────────────────────────
   /** Active subagent executions keyed by parent toolCallId */
@@ -666,13 +676,12 @@ export function defaultDisplayState(): HarnessDisplayState {
   return {
     isRunning: false,
     currentMessage: null,
+    queuedFollowUps: 0,
     tokenUsage: createEmptyTokenUsage(),
     activeTools: new Map(),
     toolInputBuffers: new Map(),
     pendingApproval: null,
-    pendingSuspension: null,
-    pendingQuestion: null,
-    pendingPlanApproval: null,
+    pendingSuspensions: new Map(),
     activeSubagents: new Map(),
     omProgress: defaultOMProgressState(),
     bufferingMessages: false,
@@ -759,7 +768,7 @@ export type HarnessEvent =
   | { type: 'usage_update'; usage: TokenUsage }
   | { type: 'info'; message: string }
   | { type: 'error'; error: Error; errorType?: string; retryable?: boolean; retryDelay?: number }
-  | { type: 'follow_up_queued'; count: number }
+  | { type: 'follow_up_queued'; count: number; runId?: string }
   | { type: 'workspace_status_changed'; status: WorkspaceStatus; error?: Error }
   | { type: 'workspace_ready'; workspaceId: string; workspaceName: string }
   | { type: 'workspace_error'; error: Error }
@@ -854,21 +863,6 @@ export type HarnessEvent =
       currentModel?: string;
     }
   | { type: 'om_thread_title_updated'; cycleId: string; threadId: string; oldTitle?: string; newTitle: string }
-  | { type: 'sandbox_access_request'; questionId: string; path: string; reason: string }
-  | {
-      type: 'ask_question';
-      questionId: string;
-      question: string;
-      options?: HarnessQuestionOption[];
-      selectionMode?: HarnessQuestionSelectionMode;
-    }
-  | {
-      type: 'plan_approval_required';
-      planId: string;
-      title: string;
-      plan: string;
-    }
-  | { type: 'plan_approved' }
   | { type: 'subagent_start'; toolCallId: string; agentType: string; task: string; modelId: string; forked?: boolean }
   | { type: 'subagent_text_delta'; toolCallId: string; agentType: string; textDelta: string }
   | {
@@ -899,33 +893,16 @@ export type HarnessEvent =
       type: 'task_updated';
       tasks: TaskItemSnapshot[];
     }
+  | {
+      type: 'goal_evaluation';
+      payload: GoalEvaluationPayload;
+    }
   | { type: 'display_state_changed'; displayState: HarnessDisplayState };
 
 /**
  * Listener function for harness events.
  */
 export type HarnessEventListener = (event: HarnessEvent) => void | Promise<void>;
-
-/**
- * Listener function for coalesced harness display state snapshots.
- */
-export type HarnessDisplayStateListener = (displayState: HarnessDisplayState) => void | Promise<void>;
-
-export interface HarnessDisplayStateSubscriptionOptions {
-  /**
-   * Minimum quiet window before non-critical display state callbacks.
-   *
-   * @default 250
-   */
-  windowMs?: number;
-
-  /**
-   * Maximum time a pending display state snapshot may wait while updates continue.
-   *
-   * @default 500
-   */
-  maxWaitMs?: number;
-}
 
 // =============================================================================
 // Messages
@@ -968,6 +945,45 @@ export type HarnessMessageContent =
       timestamp?: string;
       goalMaxTurns?: number;
       judgeModelId?: string;
+      goalEvaluation?: GoalEvaluationPayload;
+    }
+  | {
+      type: 'state_signal';
+      id?: string;
+      stateId: string;
+      mode: 'snapshot' | 'delta';
+      cacheKey?: string;
+      version?: number;
+      message: string;
+    }
+  | {
+      type: 'reactive_signal';
+      id?: string;
+      tagName: string;
+      message: string;
+      attributes?: Record<string, unknown>;
+      metadata?: Record<string, unknown>;
+    }
+  | {
+      type: 'notification_summary';
+      id?: string;
+      message: string;
+      pending: number;
+      bySource: Record<string, number>;
+      byPriority: Record<string, number>;
+      notificationIds: string[];
+    }
+  | {
+      type: 'notification';
+      id?: string;
+      notificationId?: string;
+      message: string;
+      source?: string;
+      kind?: string;
+      priority?: string;
+      status?: string;
+      attributes?: Record<string, unknown>;
+      metadata?: Record<string, unknown>;
     }
   | { type: 'image'; data: string; mimeType: string }
   | { type: 'file'; data: string; mediaType: string; filename?: string }
@@ -1002,33 +1018,64 @@ export type HarnessMessageContent =
  * Harness-specific context set on the RequestContext under the 'harness' key.
  * Tools can access harness state and methods through requestContext.get('harness').
  */
+/**
+ * Snapshot of the session-owned values exposed to request-context consumers.
+ * Plain data captured per request; mutating it does not affect the Session.
+ */
+export type HarnessRequestStateUpdateResult<TState, TResult> = {
+  updates?: Partial<TState>;
+  events?: HarnessEvent[];
+  result: TResult;
+};
+
+export type HarnessRequestStateUpdater<TState, TResult> = (
+  state: Readonly<TState>,
+) => HarnessRequestStateUpdateResult<TState, TResult> | Promise<HarnessRequestStateUpdateResult<TState, TResult>>;
+
+export interface HarnessRequestState<TState = unknown> {
+  /** Get the current session-owned harness state (live, not request-context snapshot). */
+  get: () => Readonly<TState>;
+  /** Update session-owned harness state. */
+  set: (updates: Partial<TState>) => Promise<void>;
+  /** Update session-owned harness state from the latest snapshot in a serialized transaction. */
+  update: <TResult>(updater: HarnessRequestStateUpdater<TState, TResult>) => Promise<TResult>;
+}
+
+export interface HarnessRequestSession<TState = unknown> {
+  /** Stable session identifier (mirrors SessionRecord.id in storage). */
+  id: string;
+  /** Stable session owner (mirrors SessionRecord.ownerId in storage). */
+  ownerId: string;
+  /** Currently-selected mode ID */
+  modeId: string;
+  /** Currently-selected model ID ('' when none selected yet) */
+  modelId: string;
+  /**
+   * Live session-owned harness state accessors.
+   * @deprecated Prefer the top-level `getState()` / `setState()` / `updateState()`
+   * on the {@link HarnessRequestContext} instead.
+   */
+  state: HarnessRequestState<TState>;
+}
+
 export interface HarnessRequestContext<TState = unknown> {
   /** The harness instance ID */
   harnessId: string;
 
-  /** Current harness state (read-only snapshot) */
-  state: TState;
+  /**
+   * Current harness state (read-only snapshot captured when the request context is built).
+   * @deprecated Prefer `getState()` for live state reads.
+   */
+  state: Readonly<TState>;
 
-  /** Get the current harness state (live, not snapshot) */
-  getState: () => TState;
+  /** Get the current harness state (live, not snapshot). */
+  getState: () => Readonly<TState>;
 
-  /** Update harness state */
+  /** Update harness state. */
   setState: (updates: Partial<TState>) => Promise<void>;
 
-  /** Update harness state from the latest state snapshot in a serialized transaction */
-  updateState?: <TResult>(
-    updater: (state: Readonly<TState>) =>
-      | {
-          updates?: Partial<TState>;
-          events?: HarnessEvent[];
-          result: TResult;
-        }
-      | Promise<{
-          updates?: Partial<TState>;
-          events?: HarnessEvent[];
-          result: TResult;
-        }>,
-  ) => Promise<TResult>;
+  /** Update harness state from the latest state snapshot in a serialized transaction. */
+  updateState?: <TResult>(updater: HarnessRequestStateUpdater<TState, TResult>) => Promise<TResult>;
 
   /** Current thread ID */
   threadId: string | null;
@@ -1036,8 +1083,11 @@ export interface HarnessRequestContext<TState = unknown> {
   /** Current resource ID */
   resourceId: string;
 
-  /** Current mode ID */
-  modeId: string;
+  /**
+   * Snapshot of the relevant session-owned values for this request.
+   * Plain data (not the live Session); read-only at the point of use.
+   */
+  session: HarnessRequestSession<TState>;
 
   /** Abort signal for the current operation */
   abortSignal?: AbortSignal;
@@ -1047,15 +1097,6 @@ export interface HarnessRequestContext<TState = unknown> {
 
   /** Emit a harness event (used by tools to forward events) */
   emitEvent?: (event: HarnessEvent) => void;
-
-  /** Register a pending question resolver (used by ask_user tools) */
-  registerQuestion?: (params: { questionId: string; resolve: (answer: HarnessQuestionAnswer) => void }) => void;
-
-  /** Register a pending plan approval resolver (used by submit_plan tools) */
-  registerPlanApproval?: (params: {
-    planId: string;
-    resolve: (result: { action: 'approved' | 'rejected'; feedback?: string }) => void;
-  }) => void;
 
   /** Get the configured subagent model ID for a specific agent type */
   getSubagentModelId?: (params?: { agentType?: string }) => string | null;

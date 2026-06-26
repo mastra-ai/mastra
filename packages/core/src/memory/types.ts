@@ -182,15 +182,34 @@ type BaseWorkingMemory = {
    * @default 'resource'
    */
   scope?: 'thread' | 'resource';
+  /**
+   * Experimental: deliver working memory to the model as a state signal instead of folding
+   * it into the system message. Storage is unchanged. When `true`, `Memory` auto-attaches
+   * a state-signal processor that emits snapshots or deltas with dedup via `cacheKey`, and
+   * registers the working-memory tool as `setWorkingMemory` instead of `updateWorkingMemory`.
+   *
+   * Not supported with template working memory `version: 'vnext'`.
+   *
+   * @default false
+   * @see docs/src/content/en/docs/agents/signals.mdx
+   */
+  useStateSignals?: boolean;
   /** @deprecated The `use` option has been removed. Working memory always uses tool-call mode. */
   use?: never;
 };
 
-type TemplateWorkingMemory = BaseWorkingMemory & {
-  template: string;
-  schema?: never;
-  version?: 'stable' | 'vnext';
-};
+type TemplateWorkingMemory =
+  | (BaseWorkingMemory & {
+      template: string;
+      schema?: never;
+      version?: 'stable';
+    })
+  | (Omit<BaseWorkingMemory, 'useStateSignals'> & {
+      template: string;
+      schema?: never;
+      version: 'vnext';
+      useStateSignals?: false;
+    });
 
 type SchemaWorkingMemory = BaseWorkingMemory & {
   schema: PublicSchema;
@@ -833,7 +852,7 @@ export interface ObservationalMemoryOptions {
   temporalMarkers?: boolean;
 
   /**
-   * **Experimental.** Enable retrieval-mode observation groups as durable pointers
+   * Enable retrieval-mode observation groups as durable pointers
    * to raw message history. When enabled, observation groups keep `_range`
    * metadata visible in context and a `recall` tool is registered so the actor
    * can inspect raw messages behind a stored observation summary.
@@ -846,7 +865,6 @@ export interface ObservationalMemoryOptions {
    * `scope` defaults to `'resource'` (cross-thread browsing, thread listing, and search).
    * Set to `'thread'` to restrict to the current thread only.
    *
-   * @experimental
    * @default false
    */
   retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
@@ -1286,8 +1304,7 @@ export type SerializedObservationalMemoryConfig = {
   temporalMarkers?: boolean;
 
   /**
-   * **Experimental.** Enable retrieval-mode observation groups as durable pointers to raw message history.
-   * @experimental
+   * Enable retrieval-mode observation groups as durable pointers to raw message history.
    */
   retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
 

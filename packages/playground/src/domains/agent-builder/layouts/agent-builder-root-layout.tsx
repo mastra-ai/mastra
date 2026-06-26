@@ -1,4 +1,8 @@
-import { Button, EmptyState, Spinner, Toaster, TooltipProvider } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { AlertTriangle, ArrowLeft, Eye, LockIcon, Settings } from 'lucide-react';
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router';
 import { useBuilderAgentAccess } from '../hooks/use-builder-agent-access';

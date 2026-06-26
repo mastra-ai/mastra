@@ -1,5 +1,130 @@
 # create-mastra
 
+## 1.16.0-alpha.5
+
+## 1.16.0-alpha.4
+
+## 1.16.0-alpha.3
+
+## 1.15.2-alpha.2
+
+## 1.15.2-alpha.1
+
+## 1.15.2-alpha.0
+
+## 1.15.1
+
+## 1.15.1-alpha.5
+
+## 1.15.1-alpha.4
+
+## 1.15.1-alpha.3
+
+## 1.15.1-alpha.2
+
+## 1.15.1-alpha.1
+
+## 1.15.1-alpha.0
+
+## 1.15.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+## 1.15.0-alpha.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+## 1.14.1
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+## 1.14.1-alpha.2
+
+## 1.14.1-alpha.1
+
+## 1.14.1-alpha.0
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+## 1.14.0
+
+### Minor Changes
+
+- Added five Gateway-first templates for documentation search, browser automation, meeting notes, company knowledge, and Claw workspace assistance. ([#17425](https://github.com/mastra-ai/mastra/pull/17425))
+
+  Example:
+
+  ```sh
+  npx create-mastra@latest --template template-docs-expert
+  ```
+
+### Patch Changes
+
+- dependencies updates: ([#17846](https://github.com/mastra-ai/mastra/pull/17846))
+  - Updated dependency [`posthog-node@^5.37.0` ↗︎](https://www.npmjs.com/package/posthog-node/v/5.37.0) (from `^5.30.6`, in `dependencies`)
+
+- Republished clean patch versions after compromised npm releases were published outside of the trusted release workflow. ([#18049](https://github.com/mastra-ai/mastra/pull/18049))
+
+  These packages must be released as clean versions higher than the compromised versions currently present on npm so semver ranges resolve to trusted tarballs.
+
+## 1.13.0
+
+## 1.13.0-alpha.4
+
+## 1.12.3-alpha.3
+
+## 1.12.3-alpha.2
+
+## 1.12.3-alpha.1
+
+## 1.12.3-alpha.0
+
+## 1.12.2
+
+## 1.12.2-alpha.1
+
+## 1.12.2-alpha.0
+
+## 1.12.1
+
+## 1.12.1-alpha.0
+
+## 1.12.0
+
+## 1.12.0-alpha.0
+
+## 1.11.0
+
+### Patch Changes
+
+- Fixed observability setup so multi-organization users can choose the target organization without reopening an extra prompt during project provisioning. ([#17214](https://github.com/mastra-ai/mastra/pull/17214))
+
+## 1.11.0-alpha.9
+
+## 1.11.0-alpha.8
+
+## 1.11.0-alpha.7
+
+## 1.11.0-alpha.6
+
+## 1.11.0-alpha.5
+
+## 1.10.3-alpha.4
+
+## 1.10.3-alpha.3
+
+### Patch Changes
+
+- Fixed observability setup so multi-organization users can choose the target organization without reopening an extra prompt during project provisioning. ([#17214](https://github.com/mastra-ai/mastra/pull/17214))
+
 ## 1.10.3-alpha.2
 
 ## 1.10.3-alpha.1

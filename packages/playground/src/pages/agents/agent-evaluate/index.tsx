@@ -1,10 +1,7 @@
-import {
-  PermissionDenied,
-  SessionExpired,
-  Spinner,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 import { AgentPlaygroundEvaluate } from '@/domains/agents/components/agent-playground/agent-playground-evaluate';
@@ -15,6 +12,7 @@ import { useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
 import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
+import { useEditorSource } from '@/domains/configuration/hooks/use-editor-source';
 import { useLinkComponent } from '@/lib/framework';
 
 function AgentEvaluate() {
@@ -36,7 +34,9 @@ function AgentEvaluate() {
     enabled: hasVersions,
   });
 
+  const editorSource = useEditorSource();
   const isCodeAgentOverride = codeAgent?.source === 'code';
+  const isCodeSourceAgent = isCodeAgentOverride && editorSource === 'code';
   const isLoading = isLoadingCodeAgent || (hasVersions && isLoadingStoredAgent);
 
   const dataSource = useMemo<AgentDataSource>(() => {
@@ -51,6 +51,7 @@ function AgentEvaluate() {
     dataSource,
     isCodeAgentOverride,
     hasStoredOverride: isCodeAgentOverride && !!storedAgent,
+    editorConfig: codeAgent?.editor,
     onSuccess: () => {},
   });
 
@@ -108,6 +109,7 @@ function AgentEvaluate() {
       handlePublish={handlePublish}
       handleSaveDraft={handleSaveDraft}
       isCodeAgentOverride={isCodeAgentOverride}
+      isCodeSourceAgent={isCodeSourceAgent}
       readOnly={false}
     >
       <AgentPlaygroundEvaluate

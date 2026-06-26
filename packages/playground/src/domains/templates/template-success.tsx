@@ -1,5 +1,6 @@
-import { KeyValueList, cn } from '@mastra/playground-ui';
-import type { KeyValueListItemData } from '@mastra/playground-ui';
+import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
+import type { KeyValueListItemData } from '@mastra/playground-ui/components/KeyValueList';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { PackageOpenIcon } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { Container } from './shared';

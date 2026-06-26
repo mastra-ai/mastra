@@ -77,6 +77,12 @@ const mockWatcher = {
   close: vi.fn().mockResolvedValue(undefined),
 };
 
+vi.mock('./dev-lock', () => ({
+  acquireDevLock: vi.fn().mockResolvedValue(undefined),
+  updateDevLock: vi.fn().mockResolvedValue(undefined),
+  releaseDevLock: vi.fn(),
+}));
+
 vi.mock('./DevBundler', () => {
   // Use a class for constructor (Vitest v4 requirement)
   class MockDevBundler {

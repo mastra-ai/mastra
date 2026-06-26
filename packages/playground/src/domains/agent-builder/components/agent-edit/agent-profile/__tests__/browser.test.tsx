@@ -1,5 +1,5 @@
-// @vitest-environment jsdom
-import { TooltipProvider, stringToColor } from '@mastra/playground-ui';
+import { stringToColor } from '@mastra/playground-ui';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { afterEach, describe, expect, it } from 'vitest';

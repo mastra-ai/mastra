@@ -12,8 +12,8 @@
   "dependencies": {
     "@ai-sdk/openai": "^1.3.24",
     "@mastra/agent-builder": "*",
-    "dotenv": "^17.2.3",
-    "vite": "^7.3.1",
+    "dotenv": "^17.4.2",
+    "vite": "^8.0.16",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -22,15 +22,6 @@
     "@mastra/mcp": "*",
     "mastra": "*",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.7"
-  },
-  "pnpm": {
-    "overrides": {
-      "@mastra/core": "link:../../core",
-      "@mastra/agent-builder": "link:../../agent-builder",
-      "@mastra/libsql": "link:../../../stores/libsql",
-      "@mastra/mcp": "link:../../mcp",
-      "mastra": "link:../../cli"
-    }
+    "vitest": "^4.1.8"
   }
 }

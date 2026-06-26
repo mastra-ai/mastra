@@ -1,4 +1,3 @@
-import { builderToModelPolicy } from '@mastra/core/agent-builder/ee';
 import type { BuilderModelPolicy } from '@mastra/core/agent-builder/ee';
 import type { IMastraEditor } from '@mastra/core/editor';
 
@@ -14,6 +13,12 @@ import type { IMastraEditor } from '@mastra/core/editor';
  * - the editor doesn't expose builder methods,
  * - the builder config is disabled, or
  * - resolving the builder fails / yields nothing.
+ *
+ * The `@mastra/core/agent-builder/ee` subpath is loaded lazily so this module
+ * remains importable on `@mastra/core` versions that pre-date the subpath
+ * (the subpath was added in core 1.34.0). The dynamic import is only reached
+ * once an editor is actually configured, by which point a compatible core is
+ * guaranteed.
  */
 export async function resolveBuilderModelPolicy(editor: IMastraEditor | undefined): Promise<BuilderModelPolicy> {
   if (!editor) return { active: false };
@@ -27,6 +32,7 @@ export async function resolveBuilderModelPolicy(editor: IMastraEditor | undefine
   // transient failure must not 500 the entire route.
   try {
     const builder = await editor.resolveBuilder();
+    const { builderToModelPolicy } = await import('@mastra/core/agent-builder/ee');
     return builderToModelPolicy(builder);
   } catch {
     return { active: false };

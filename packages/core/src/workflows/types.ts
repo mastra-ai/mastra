@@ -1,6 +1,7 @@
 import type { WritableStream } from 'node:stream/web';
 import type { TextStreamPart } from '@internal/ai-sdk-v4';
 import type { z } from 'zod/v4';
+import type { ActorSignal } from '../auth/ee';
 import type { SerializedError } from '../error';
 import type { MastraScorers } from '../evals';
 import type { PubSub } from '../events/pubsub';
@@ -25,6 +26,7 @@ export type OutputWriter<TChunk = any> = (chunk: TChunk, options?: { messageId?:
  */
 export type WorkflowRunStartOptions = {
   outputWriter?: OutputWriter;
+  actor?: ActorSignal;
   tracingOptions?: TracingOptions;
   outputOptions?: {
     includeState?: boolean;
@@ -147,13 +149,25 @@ export type StepPaused<P, R, S, T> = {
   metadata?: StepMetadata;
 };
 
+export type StepSkipped<P, R, S, T> = {
+  status: 'skipped';
+  payload: P;
+  resumePayload?: R;
+  suspendPayload?: S;
+  suspendOutput?: T;
+  startedAt: number;
+  endedAt: number;
+  metadata?: StepMetadata;
+};
+
 export type StepResult<P, R, S, T> =
   | StepSuccess<P, R, S, T>
   | StepFailure<P, R, S, T>
   | StepSuspended<P, S, T>
   | StepRunning<P, R, S, T>
   | StepWaiting<P, R, S, T>
-  | StepPaused<P, R, S, T>;
+  | StepPaused<P, R, S, T>
+  | StepSkipped<P, R, S, T>;
 
 /**
  * Serialized version of StepFailure where error is a SerializedError
@@ -173,7 +187,8 @@ export type SerializedStepResult<P, R, S, T> =
   | StepSuspended<P, S, T>
   | StepRunning<P, R, S, T>
   | StepWaiting<P, R, S, T>
-  | StepPaused<P, R, S, T>;
+  | StepPaused<P, R, S, T>
+  | StepSkipped<P, R, S, T>;
 
 export type TimeTravelContext<P, R, S, T> = Record<
   string,
@@ -271,7 +286,8 @@ export type WorkflowRunStatus =
   | 'pending'
   | 'canceled'
   | 'bailed'
-  | 'paused';
+  | 'paused'
+  | 'skipped';
 
 export type WorkflowResumeLabel = {
   stepId: string;
@@ -486,6 +502,7 @@ export type WorkflowInfo = {
   allSteps: Record<string, SerializedStep>;
   name: string | undefined;
   description: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
   stepGraph: SerializedStepFlowEntry[];
   inputSchema: string | undefined;
   outputSchema: string | undefined;
@@ -820,6 +837,7 @@ export type WorkflowConfig<
   mastra?: Mastra;
   id: TWorkflowId;
   description?: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
   inputSchema: PublicSchema<TInput>;
   outputSchema: PublicSchema<TOutput>;
   stateSchema?: PublicSchema<TState>;

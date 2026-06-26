@@ -372,6 +372,7 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':toolId')) params.toolId = 'test-tool';
   if (route.path.includes(':threadId')) params.threadId = 'test-thread';
   if (route.path.includes(':conversationId')) params.conversationId = 'test-thread';
+  if (route.path.includes(':harnessId')) params.harnessId = 'test-harness';
   if (route.path.includes(':responseId')) params.responseId = 'test-response';
   if (route.path.includes(':resourceId')) params.resourceId = 'test-resource';
   if (route.path.includes(':modelConfigId')) params.modelConfigId = 'id1';
@@ -430,6 +431,8 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   // Tool provider route params
   if (route.path.includes(':providerId')) params.providerId = 'test-provider';
   if (route.path.includes(':toolSlug')) params.toolSlug = 'test-tool-slug';
+  if (route.path.includes(':authId')) params.authId = 'test-auth-id';
+  if (route.path.includes(':connectionId')) params.connectionId = 'test-connection-id';
 
   // Channel route params
   if (route.path.includes(':platform')) params.platform = 'test-platform';

@@ -89,6 +89,12 @@ export interface BlaxelSandboxOptions extends Omit<MastraSandboxOptions, 'proces
    * This maps to the Blaxel sandbox TTL.
    */
   timeout?: string;
+  /**
+   * Blaxel region where the sandbox should be created.
+   *
+   * Defaults to BL_REGION, then 'auto'.
+   */
+  region?: string;
   /** Environment variables to set in the sandbox */
   env?: Record<string, string>;
   /** Custom labels for the sandbox */
@@ -160,6 +166,7 @@ export class BlaxelSandbox extends MastraSandbox {
   private readonly image: string;
   private readonly memory: number;
   private readonly timeout?: string;
+  private readonly region: string;
   private readonly env: Record<string, string>;
   private readonly labels: Record<string, string>;
   private readonly configuredRuntimes: SandboxRuntime[];
@@ -177,6 +184,7 @@ export class BlaxelSandbox extends MastraSandbox {
     this.image = options.image ?? 'blaxel/ts-app:latest';
     this.memory = options.memory ?? 4096;
     this.timeout = options.timeout;
+    this.region = options.region || process.env.BL_REGION || 'auto';
     this.env = options.env ?? {};
     this.labels = options.labels ?? {};
     this.configuredRuntimes = options.runtimes ?? ['node', 'python', 'bash'];
@@ -637,6 +645,7 @@ export class BlaxelSandbox extends MastraSandbox {
         name: sandboxName,
         image: this.image,
         memory: this.memory,
+        region: this.region,
         ...(this.timeout && { ttl: this.timeout }),
         labels: {
           ...this.labels,

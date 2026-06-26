@@ -2,14 +2,15 @@ import { z } from 'zod/v4';
 import type { BackgroundTaskManager } from '../../../background-tasks';
 import type { AgentBackgroundConfig } from '../../../background-tasks/types';
 import type { SystemMessage } from '../../../llm';
+import { createRunScope } from '../../../mastra/run-scope';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';
 import { InternalSpans } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
-import type { ToolPayloadTransformPolicy } from '../../../tools';
-import { createWorkflow } from '../../../workflows/workflow';
+import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../../../tools';
+import { createEventedWorkflow, createWorkflow as createDirectWorkflow } from '../../../workflows/create';
 import type { Workspace } from '../../../workspace/workspace';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
@@ -31,11 +32,13 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   agentSpan?: Span<SpanType.AGENT_RUN>;
   methodType: AgentMethodType;
   instructions: SystemMessage;
+  /** MCP server guidance to include as a separate system message. */
+  mcpServerGuidance?: string;
   memoryConfig?: MemoryConfigInternal;
   memory?: MastraMemory;
   returnScorerData?: boolean;
   saveQueueManager?: SaveQueueManager;
-  requireToolApproval?: boolean;
+  requireToolApproval?: RequireToolApproval;
   toolCallConcurrency?: number;
   resumeContext?: {
     resumeData: any;
@@ -54,7 +57,7 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
    * drives continuation from outside the loop.
    */
   skipBgTaskWait?: boolean;
-  drainPendingSignals?: (runId: string) => CreatedAgentSignal[];
+  drainPendingSignals?: (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
 }
 
 export function createPrepareStreamWorkflow<OUTPUT = undefined>({
@@ -67,6 +70,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   agentSpan,
   methodType,
   instructions,
+  mcpServerGuidance,
   memoryConfig,
   memory,
   returnScorerData,
@@ -84,6 +88,20 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   skipBgTaskWait,
   drainPendingSignals,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT>) {
+  // Per-run scope shared between prepare-stream steps. Class instances
+  // (MessageList, Tools), Maps, and closures live here instead of step
+  // outputs — see ./run-scope.ts.
+  //
+  // This scope is a closure local to this workflow factory and is NOT
+  // registered with `Mastra.__createRunScope`. The agentic-loop workflow uses
+  // a separate runId-keyed scope on the Mastra instance (created via
+  // `__registerInternalWorkflow`); the bridge between them is
+  // `hydrateRunScopeFromInternal` in `loop/workflows/stream.ts`, which copies
+  // bootstrap state from `_internal` into the Mastra scope after the loop
+  // workflow registers. Prepare-stream and the agentic loop deliberately do
+  // not share runtime state — each owns its own per-run scratch space.
+  const runScope = createRunScope();
+
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
     options,
@@ -95,6 +113,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     methodType,
     memory,
     backgroundTaskEnabled: backgroundTaskManager?.config?.enabled,
+    runScope,
   });
 
   const prepareMemoryStep = createPrepareMemoryStep({
@@ -106,9 +125,11 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     requestContext,
     methodType,
     instructions,
+    mcpServerGuidance,
     memoryConfig,
     memory,
     isResume: !!resumeContext,
+    runScope,
   });
 
   const streamStep = createStreamStep({
@@ -133,6 +154,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     toolPayloadTransform,
     skipBgTaskWait,
     drainPendingSignals,
+    runScope,
   });
 
   const mapResultsStep = createMapResultsStep({
@@ -148,9 +170,18 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     agentId,
     methodType,
     saveQueueManager,
+    runScope,
   });
 
-  return createWorkflow({
+  // Internal toggle: the default is direct (in-process) execution which avoids
+  // the requestContext serialisation cycle (toJSON → reconstruct) that drops
+  // non-serialisable values (functions, circular-ref objects like the harness
+  // context). Set MASTRA_EVENTED_EXECUTION=true to opt in to the evented
+  // workflow engine for cross-process coordination via pubsub.
+  const useEventedExecution = process.env.MASTRA_EVENTED_EXECUTION === 'true';
+  const factory = useEventedExecution ? createEventedWorkflow : createDirectWorkflow;
+
+  return factory({
     id: 'execution-workflow',
     inputSchema: z.object({}),
     outputSchema: z.instanceof(MastraModelOutput<OUTPUT>),
@@ -159,6 +190,10 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
       tracingPolicy: {
         internal: InternalSpans.WORKFLOW,
       },
+      // This is an internal, non-resumable workflow created per agent generate/stream call.
+      // It must never write snapshot rows to the user's storage. Registering Mastra (done by
+      // the agent) lets it read storage to suppress noise, while this keeps writes off.
+      shouldPersistSnapshot: () => false,
       validateInputs: false,
     },
   })

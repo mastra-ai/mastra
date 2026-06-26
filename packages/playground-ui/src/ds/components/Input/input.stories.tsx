@@ -12,11 +12,11 @@ const meta: Meta<typeof Input> = {
   argTypes: {
     variant: {
       control: { type: 'select' },
-      options: ['default', 'filled', 'unstyled'],
+      options: ['default', 'filled', 'outline', 'unstyled'],
     },
     size: {
       control: { type: 'select' },
-      options: ['sm', 'md', 'lg'],
+      options: ['xs', 'sm', 'md', 'default', 'lg'],
     },
     disabled: {
       control: { type: 'boolean' },
@@ -42,7 +42,8 @@ export const Variants: Story = {
   render: () => (
     <div className="flex flex-col gap-3 w-64">
       <Input variant="default" placeholder="Default" />
-      {/* <Input variant="filled" placeholder="Filled" /> */}
+      <Input variant="filled" placeholder="Filled" />
+      <Input variant="outline" placeholder="Outline" />
       <Input variant="unstyled" placeholder="Unstyled" />
     </div>
   ),
@@ -51,6 +52,7 @@ export const Variants: Story = {
 export const Sizes: Story = {
   render: () => (
     <div className="flex flex-col gap-3 w-64">
+      <Input size="xs" placeholder="Extra Small" />
       <Input size="sm" placeholder="Small" />
       <Input size="md" placeholder="Medium" />
       <Input size="default" placeholder="Default" />
@@ -59,12 +61,19 @@ export const Sizes: Story = {
   ),
 };
 
-// export const Filled: Story = {
-//   args: {
-//     placeholder: 'Filled variant',
-//     variant: 'filled',
-//   },
-// };
+export const Filled: Story = {
+  args: {
+    placeholder: 'Filled variant',
+    variant: 'filled',
+  },
+};
+
+export const Outline: Story = {
+  args: {
+    placeholder: 'Outline variant',
+    variant: 'outline',
+  },
+};
 
 // export const Unstyled: Story = {
 //   args: {
@@ -125,14 +134,41 @@ export const Number: Story = {
 export const SizesWithButton: Story = {
   render: () => (
     <div className="grid grid-cols-[200px_auto] gap-3 items-center">
-      {(['sm', 'md', 'default', 'lg'] as const).map(size => (
+      {(['xs', 'sm', 'md', 'default', 'lg'] as const).map(size => (
         <Fragment key={size}>
           <Input size={size} placeholder={size} />
-          <Button size={size} className="justify-self-start">
+          <Button size={size === 'default' ? 'lg' : size} className="justify-self-start">
             Button
           </Button>
         </Fragment>
       ))}
+    </div>
+  ),
+};
+
+export const Error: Story = {
+  args: {
+    placeholder: 'invalid@',
+    defaultValue: 'invalid@',
+    error: true,
+  },
+};
+
+export const OnDifferentSurfaces: Story = {
+  render: () => (
+    <div className="flex flex-col gap-4 w-96">
+      <div className="bg-surface1 p-4 rounded-lg border border-border1">
+        <Input placeholder="On bg-surface1 (darkest in dark mode)" />
+      </div>
+      <div className="bg-surface2 p-4 rounded-lg border border-border1">
+        <Input placeholder="On bg-surface2" />
+      </div>
+      <div className="bg-surface3 p-4 rounded-lg border border-border1">
+        <Input placeholder="On bg-surface3" />
+      </div>
+      <div className="bg-surface4 p-4 rounded-lg border border-border1">
+        <Input placeholder="On bg-surface4 (lightest)" />
+      </div>
     </div>
   ),
 };

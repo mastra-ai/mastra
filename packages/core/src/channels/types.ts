@@ -4,6 +4,7 @@ import type { Mastra } from '../mastra';
 import type { ApiRoute, CorsOptions } from '../server/types';
 import type { InlineLinkEntry } from './inline-media';
 import type { TypingStatusFn } from './typing-status';
+import type { WaitUntilFn, WaitUntilResolver } from './wait-until';
 
 export type { InlineLinkEntry } from './inline-media';
 
@@ -304,6 +305,28 @@ export type ChannelHandler = (
  */
 export type ChannelHandlerConfig = ChannelHandler | false | undefined;
 
+/**
+ * Context passed to {@link ChannelConfig.resolveResourceId}.
+ * Lets an app decide who owns resource-level memory for a channel thread,
+ * separately from who sent the message (`message.author`).
+ */
+export interface ResolveResourceIdContext {
+  /** Platform name (e.g. 'slack', 'discord'). */
+  platform: string;
+  /** The channel thread the message arrived on. Use `thread.isDM` to tell DMs from group/channel threads. */
+  thread: Thread;
+  /** The incoming message. `message.author.userId` is the actor/sender, not necessarily the memory owner. */
+  message: Message;
+  /** The built-in default: `${platform}:${message.author.userId}`. Return this to keep current behavior. */
+  defaultResourceId: string;
+}
+
+/**
+ * Resolve the memory `resourceId` (the owner of resource-level memory) for a channel
+ * thread before it's created.
+ */
+export type ResolveResourceId = (ctx: ResolveResourceIdContext) => string | Promise<string>;
+
 /** Handler overrides for built-in channel event handlers. */
 export interface ChannelHandlers {
   /**
@@ -467,6 +490,62 @@ export interface ChannelConfig {
    * ```
    */
   chatOptions?: Omit<ChatConfig, 'adapters' | 'state' | 'userName'>;
+
+  /**
+   * Resolve the memory `resourceId` (the owner of resource-level memory) before a
+   * channel thread is created. This lets an app decide memory ownership separately
+   * from who sent the message. For example, share an SSO user's memory across Web and a
+   * Feishu/Lark DM (drop the platform prefix), or scope a group chat to its `chat_id`.
+   *
+   * Only affects **newly-created** threads. Once a thread exists it keeps its stored
+   * `resourceId`, so this never relocates memory on an existing conversation.
+   *
+   * Return `defaultResourceId` (`${platform}:${message.author.userId}`) to keep the
+   * built-in behavior. Not set: behavior is unchanged.
+   *
+   * @example
+   * ```ts
+   * resolveResourceId: async ({ thread, message, defaultResourceId }) => {
+   *   if (thread.isDM) return resolveSsoUserId(message);   // shared with Web
+   *   return thread.channelId;                             // group owns the memory
+   * }
+   * ```
+   */
+  resolveResourceId?: ResolveResourceId;
+
+  /**
+   * Keep the serverless invocation alive while background work (agent stream → platform)
+   * runs after the webhook returns 200. Required on Vercel/AWS Lambda — without it the
+   * runtime freezes the function as soon as the response is sent, killing in-flight runs.
+   *
+   * Pass the bare `waitUntil(promise)` function imported from your platform's SDK.
+   * Cloudflare Workers and Netlify users typically don't need this — core resolves
+   * `waitUntil` from `c.executionCtx` and `c.env.context` automatically.
+   *
+   * If `waitUntil` requires the request context to derive, use {@link resolveWaitUntil}
+   * instead.
+   *
+   * @example
+   * ```ts
+   * // Vercel
+   * import { waitUntil } from '@vercel/functions';
+   * channels: { adapters: { ... }, waitUntil }
+   * ```
+   */
+  waitUntil?: WaitUntilFn;
+
+  /**
+   * Resolve `waitUntil` from the request's Hono `Context`. Use this when the runtime
+   * exposes `waitUntil` through the request and core's default resolver doesn't cover
+   * it (custom adapters, exotic runtimes).
+   *
+   * For platforms whose `waitUntil` is a bare import (e.g. `@vercel/functions`), pass
+   * it via {@link waitUntil} instead — no resolver needed.
+   *
+   * Resolution order: {@link waitUntil} (if set) → {@link resolveWaitUntil} (if set)
+   * → core's default.
+   */
+  resolveWaitUntil?: WaitUntilResolver;
 }
 
 // =============================================================================

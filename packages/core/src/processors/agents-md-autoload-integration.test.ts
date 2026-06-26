@@ -127,7 +127,8 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
     // The signal should have proper metadata
     const signalMeta = signalMessages[0]!.content.metadata?.signal as Record<string, unknown> | undefined;
     expect(signalMeta).toBeDefined();
-    expect(signalMeta!.type).toBe('system-reminder');
+    expect(signalMeta!.type).toBe('reactive');
+    expect(signalMeta!.tagName).toBe('system-reminder');
     expect(signalMeta!.attributes).toEqual(
       expect.objectContaining({ type: 'dynamic-agents-md', path: '/repo/src/components/AGENTS.md' }),
     );
@@ -226,12 +227,13 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
       writer,
     });
 
-    // A data-system-reminder chunk should have been emitted
+    // A data-signal chunk should have been emitted
     expect(chunks).toEqual([
       expect.objectContaining({
-        type: 'data-system-reminder',
+        type: 'data-signal',
         data: expect.objectContaining({
-          type: 'system-reminder',
+          type: 'reactive',
+          tagName: 'system-reminder',
           contents: AGENTS_MD_CONTENT,
           metadata: expect.objectContaining({
             path: '/repo/AGENTS.md',
@@ -424,7 +426,7 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
       expect.objectContaining({ attributes: { type: 'dynamic-agents-md', path: '/repo/packages/core/AGENTS.md' } }),
     );
     expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
-    expect(writer.custom).toHaveBeenCalledWith(expect.objectContaining({ type: 'data-system-reminder' }));
+    expect(writer.custom).toHaveBeenCalledWith(expect.objectContaining({ type: 'data-signal' }));
   });
 
   it('no injection when tool call path has no nearby AGENTS.md', async () => {

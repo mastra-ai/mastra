@@ -1,4 +1,5 @@
-import { Breadcrumb, Button, Crumb } from '@mastra/playground-ui';
+import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { RefreshCwIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
@@ -36,7 +37,7 @@ export const ViewTopBar = ({
       data-testid="agent-builder-view-top-bar"
     >
       <Breadcrumb label="Agent navigation" className="min-w-0" listClassName="min-w-0">
-        <Crumb as={Link} to="/agent-builder/agents">
+        <Crumb as={Link} to="/agent-builder/agents" data-testid="agent-builder-back-to-list">
           Agent list
         </Crumb>
         <Crumb as="span" isCurrent>

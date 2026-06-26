@@ -31,6 +31,8 @@ class DockerProcessHandle extends ProcessHandle {
   private _exitCode: number | undefined;
   /** @internal Set by kill() and timeout to distinguish forced termination from natural exit */
   _killed = false;
+  /** @internal Set by the timeout path to distinguish timeout kills from explicit kills */
+  _timedOut = false;
   private _waitPromise: Promise<CommandResult> | null = null;
   private _stdinStream: NodeJS.WritableStream | null = null;
   private _execStream: NodeJS.ReadWriteStream | null = null;
@@ -298,6 +300,8 @@ export class DockerProcessManager extends SandboxProcessManager {
           stdout: handle.stdout,
           stderr: handle.stderr,
           executionTimeMs: Date.now() - startTime,
+          killed: true,
+          timedOut: handle._timedOut,
         });
       });
 
@@ -322,6 +326,7 @@ export class DockerProcessManager extends SandboxProcessManager {
       const timer = setTimeout(() => {
         if (handle.exitCode === undefined) {
           handle._killed = true;
+          handle._timedOut = true;
           handle.kill().catch(() => {});
           // Ensure stream is destroyed even if kill() fails (e.g., PID not found)
           handle._destroyStream();

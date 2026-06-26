@@ -10,6 +10,8 @@ import {
   createRouteAdapterTestSuite,
   createDefaultTestContext,
   createStreamWithSensitiveData,
+  createStreamWithUnserializableChunk,
+  expectSerializedStreamChunks,
   consumeSSEStream,
   createMultipartTestSuite,
 } from '@internal/server-adapter-test-utils';
@@ -105,6 +107,8 @@ describe('Hono Server Adapter', () => {
       const isStream =
         contentType.includes('text/plain') ||
         contentType.includes('text/event-stream') ||
+        contentType.includes('audio/') ||
+        contentType.includes('application/octet-stream') ||
         response.headers?.get('transfer-encoding') === 'chunked';
 
       // Extract headers
@@ -121,11 +125,14 @@ describe('Hono Server Adapter', () => {
           headers,
         };
       } else {
+        // Read the body exactly once; parsing JSON from text avoids consuming
+        // the body twice when the payload is not valid JSON.
+        const rawText = await response.text();
         let data: unknown;
         try {
-          data = await response.json();
+          data = JSON.parse(rawText);
         } catch {
-          data = await response.text();
+          data = rawText;
         }
 
         return {
@@ -460,6 +467,50 @@ describe('Hono Server Adapter', () => {
       const textDelta = chunks.find(c => c.type === 'text-delta');
       expect(textDelta).toBeDefined();
       expect(textDelta.textDelta).toBe('Hello');
+    });
+  });
+
+  // Repro for https://github.com/mastra-ai/mastra/issues/17821 — a chunk that
+  // JSON.stringify can't handle (e.g. a BigInt step output) used to throw inside
+  // the stream loop and silently close the HTTP stream, so Studio never received
+  // the remaining chunks and workflow nodes stayed visually "running" forever.
+  describe('Stream Chunk Serialization', () => {
+    let context: AdapterTestContext;
+
+    beforeEach(async () => {
+      context = await createDefaultTestContext();
+    });
+
+    it('serializes BigInt chunks and skips unserializable chunks without killing the stream', async () => {
+      const app = new Hono();
+
+      const adapter = new MastraServer({
+        app,
+        mastra: context.mastra,
+      });
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/unserializable-stream',
+        responseType: 'stream',
+        streamFormat: 'sse',
+        handler: async () => createStreamWithUnserializableChunk(),
+      };
+
+      app.use('*', adapter.createContextMiddleware());
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const response = await app.request(
+        new Request('http://localhost/test/unserializable-stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      const chunks = await consumeSSEStream(response.body);
+      expectSerializedStreamChunks(chunks);
     });
   });
 

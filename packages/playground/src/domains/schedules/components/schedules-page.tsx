@@ -1,4 +1,5 @@
-import { ErrorState, ListSearch } from '@mastra/playground-ui';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { useState } from 'react';
 import { useSchedules } from '../hooks/use-schedules';
 import { SchedulesList } from './schedules-list';

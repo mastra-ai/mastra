@@ -33,7 +33,8 @@ export function isPendingMarker(val: unknown): val is PendingMarker {
   return (
     val !== null &&
     typeof val === 'object' &&
-    PENDING_MARKER_KEY in val &&
-    (val as Record<string, unknown>)[PENDING_MARKER_KEY] === true
+    Object.prototype.hasOwnProperty.call(val, PENDING_MARKER_KEY) &&
+    (val as Record<string, unknown>)[PENDING_MARKER_KEY] === true &&
+    Object.keys(val).length === 1
   );
 }

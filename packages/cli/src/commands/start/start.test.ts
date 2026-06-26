@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { EventEmitter } from 'node:events';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const spawnMock = vi.fn();
 
@@ -25,6 +26,29 @@ vi.mock('../../utils/logger', () => ({
 vi.mock('../utils', () => ({
   shouldSkipDotenvLoading: vi.fn().mockReturnValue(true),
 }));
+
+// start() registers SIGINT/SIGTERM handlers on every call. Snapshot the
+// listeners present before each test and remove only the ones added during the
+// test, so we never strip handlers owned by the runner or other suites.
+type SignalListener = (...args: unknown[]) => void;
+let signalListenersBefore: Record<'SIGINT' | 'SIGTERM', SignalListener[]>;
+
+beforeEach(() => {
+  signalListenersBefore = {
+    SIGINT: process.listeners('SIGINT') as unknown as SignalListener[],
+    SIGTERM: process.listeners('SIGTERM') as unknown as SignalListener[],
+  };
+});
+
+afterEach(() => {
+  (['SIGINT', 'SIGTERM'] as const).forEach(signal => {
+    (process.listeners(signal) as unknown as SignalListener[]).forEach(listener => {
+      if (!signalListenersBefore[signal].includes(listener)) {
+        process.removeListener(signal, listener);
+      }
+    });
+  });
+});
 
 describe('start command - customArgs handling', () => {
   beforeEach(() => {
@@ -88,5 +112,39 @@ describe('start command - customArgs handling', () => {
     const commands = spawnMock.mock.calls[0][1] as string[];
 
     expect(commands).toEqual(['index.mjs']);
+  });
+});
+
+describe('start command - server stderr handling', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  function createFakeServer() {
+    const server = new EventEmitter() as EventEmitter & {
+      stderr: EventEmitter;
+      kill: ReturnType<typeof vi.fn>;
+    };
+    server.stderr = new EventEmitter();
+    server.kill = vi.fn();
+    return server;
+  }
+
+  it('streams the running server stderr through live so logs stay visible', async () => {
+    const server = createFakeServer();
+    spawnMock.mockReturnValue(server);
+    const writeSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    try {
+      const { start } = await import('./start');
+      await start({ dir: 'output' });
+
+      const line = Buffer.from('[chat-sdk:slack] Could not fetch bot user ID { invalid_auth }\n');
+      server.stderr.emit('data', line);
+
+      expect(writeSpy).toHaveBeenCalledWith(line);
+    } finally {
+      writeSpy.mockRestore();
+    }
   });
 });

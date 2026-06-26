@@ -1,22 +1,20 @@
-import {
-  AgentIcon,
-  DatasetsIcon,
-  ExperimentsIcon,
-  HomeIcon,
-  LogsIcon,
-  McpServerIcon,
-  MetricsIcon,
-  ProcessorIcon,
-  PromptIcon,
-  RequestContextIcon,
-  ScorersIcon,
-  SettingsIcon,
-  ToolsIcon,
-  TraceIcon,
-  WorkflowIcon,
-  WorkspacesIcon,
-} from '@mastra/playground-ui';
-import { BookIcon } from 'lucide-react';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
+import { ExperimentsIcon } from '@mastra/playground-ui/icons/ExperimentsIcon';
+import { HomeIcon } from '@mastra/playground-ui/icons/HomeIcon';
+import { LogsIcon } from '@mastra/playground-ui/icons/LogsIcon';
+import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
+import { MetricsIcon } from '@mastra/playground-ui/icons/MetricsIcon';
+import { ProcessorIcon } from '@mastra/playground-ui/icons/ProcessorIcon';
+import { PromptIcon } from '@mastra/playground-ui/icons/PromptIcon';
+import { RequestContextIcon } from '@mastra/playground-ui/icons/RequestContextIcon';
+import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
+import { SettingsIcon } from '@mastra/playground-ui/icons/SettingsIcon';
+import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
+import { WorkspacesIcon } from '@mastra/playground-ui/icons/WorkspacesIcon';
+import { BookIcon, LayoutGrid } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 
 export type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -36,6 +34,19 @@ export interface NavSection {
   href?: string;
   items: NavItem[];
 }
+
+// Signals is an opt-in experimental UI, gated by the server-injected `MASTRA_SIGNALS_UI` flag.
+const isSignalsEnabled =
+  typeof window !== 'undefined' && (window as unknown as Record<string, unknown>).MASTRA_SIGNALS_UI === 'true';
+
+const signalsNavItem: NavItem = {
+  name: 'Signals',
+  url: '/signals',
+  activePaths: ['/signals'],
+  Icon: LayoutGrid,
+  docs: { href: 'https://mastra.ai/en/docs/observability/tracing/overview', label: 'Signals documentation' },
+  isOnMastraPlatform: true,
+};
 
 export const mainNav: NavSection[] = [
   {
@@ -157,6 +168,7 @@ export const mainNav: NavSection[] = [
         docs: { href: 'https://mastra.ai/en/docs/observability/tracing/overview', label: 'Traces documentation' },
         isOnMastraPlatform: true,
       },
+      ...(isSignalsEnabled ? [signalsNavItem] : []),
       {
         name: 'Logs',
         url: '/logs',

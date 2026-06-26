@@ -152,7 +152,8 @@ function extractReminderPathFromMetadata(message: MastraDBMessage): string | und
 
 function getReminderMarkup(reminderText: string, instructionPath: string): string {
   return signalToXmlMarkup({
-    type: 'system-reminder',
+    type: 'reactive',
+    tagName: 'system-reminder',
     contents: reminderText,
     attributes: { type: REMINDER_TYPE, path: instructionPath },
   });
@@ -281,7 +282,8 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
     }
 
     await args.sendSignal?.({
-      type: 'system-reminder',
+      type: 'reactive',
+      tagName: 'system-reminder',
       contents: reminderText,
       attributes: { type: REMINDER_TYPE, path: instructionPath },
       metadata: getReminderMetadata(instructionPath).systemReminder,

@@ -1,25 +1,44 @@
 import { SearchIcon } from 'lucide-react';
 import { useEffect, useId, useRef } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-import { formElementSizes, formElementFocusWithin, formElementRadius } from '@/ds/primitives/form-element';
-import type { FormElementSize } from '@/ds/primitives/form-element';
+import { controlHeight, controlSizeClasses } from '@/ds/primitives/control-size';
+import type { ControlSize } from '@/ds/primitives/control-size';
+import { inputFocusBorderWithin, inputHoverBorderWithin } from '@/ds/primitives/form-element';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
+
+type SearchbarVariant = 'default' | 'filled' | 'outline';
 
 export type SearchbarProps = {
   onSearch: (search: string) => void;
   label: string;
   placeholder: string;
   debounceMs?: number;
-  size?: FormElementSize;
+  size?: ControlSize;
+  variant?: SearchbarVariant;
   className?: string;
 };
 
-const searchbarSizeClasses = {
-  sm: formElementSizes.sm,
-  md: formElementSizes.md,
-  lg: formElementSizes.lg,
-  default: formElementSizes.default,
+// `default` and `filled` are the same filled surface on purpose: the default Searchbar
+// look IS the filled treatment, and `filled` is an explicit alias for consumers. Share
+// the class string so the two can't drift.
+const searchbarFilledSurface = cn(
+  'bg-surface-overlay-soft rounded-full',
+  'hover:bg-surface-overlay-strong',
+  inputHoverBorderWithin,
+  'outline-hidden focus-within:outline-hidden focus-within:bg-surface-overlay-strong',
+  inputFocusBorderWithin,
+);
+
+const searchbarVariantClasses: Record<SearchbarVariant, string> = {
+  default: searchbarFilledSurface,
+  filled: searchbarFilledSurface,
+  outline: cn(
+    'bg-transparent rounded-full',
+    inputHoverBorderWithin,
+    'outline-hidden focus-within:outline-hidden',
+    inputFocusBorderWithin,
+  ),
 };
 
 export const Searchbar = ({
@@ -28,6 +47,7 @@ export const Searchbar = ({
   placeholder,
   debounceMs = 300,
   size = 'md',
+  variant = 'outline',
   className,
 }: SearchbarProps) => {
   const id = useId();
@@ -69,11 +89,9 @@ export const Searchbar = ({
     <div
       className={cn(
         'border border-border1 flex w-full items-center gap-2 overflow-hidden pl-2 pr-1',
-        formElementRadius,
-        formElementFocusWithin,
         transitions.all,
-        'hover:border-neutral2',
-        searchbarSizeClasses[size],
+        searchbarVariantClasses[variant],
+        controlHeight[size],
         className,
       )}
     >
@@ -89,8 +107,8 @@ export const Searchbar = ({
           type="text"
           placeholder={placeholder}
           className={cn(
-            'bg-transparent text-ui-md placeholder:text-neutral3 block w-full px-2 outline-hidden',
-            searchbarSizeClasses[size],
+            'bg-transparent placeholder:text-neutral2 block w-full px-2 outline-hidden',
+            controlSizeClasses[size],
           )}
           name={id}
           ref={inputRef}

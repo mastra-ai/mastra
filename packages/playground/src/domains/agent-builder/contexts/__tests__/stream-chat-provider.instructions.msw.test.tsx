@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, render } from '@testing-library/react';
@@ -40,10 +39,14 @@ const Providers = ({ children }: { children: ReactNode }) => {
 
 describe('StreamChatProvider — modelSettings.instructions on the wire', () => {
   beforeEach(() => {
+    // These tests model the legacy `stream-until-idle` route. Opt out of thread
+    // signals so the hook drives that endpoint instead of the signal path.
+    (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'false';
     server.resetHandlers();
   });
 
   afterEach(() => {
+    delete (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS;
     cleanup();
   });
 
@@ -52,7 +55,7 @@ describe('StreamChatProvider — modelSettings.instructions on the wire', () => 
 
     server.use(
       http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
-      http.post(`${BASE_URL}/api/agents/builder-agent/stream-until-idle`, async ({ request }) => {
+      http.post(`${BASE_URL}/api/agents/builder-agent/stream`, async ({ request }) => {
         captured.body = await request.json();
         // Minimal "no events" response body — useChat closes out cleanly.
         const stream = new ReadableStream<Uint8Array>({
@@ -96,6 +99,15 @@ describe('StreamChatProvider — modelSettings.instructions on the wire', () => 
     // `instructions` field on the wire (see client-sdks/react/src/agent/hooks.ts:266).
     expect(captured.body.instructions).toBe(snapshot);
 
+    // Supplying extraInstructions must NOT drop the rest of modelSettings.
+    // maxSteps is sent top-level; the remaining settings live under
+    // modelSettings (maxTokens is serialized as maxOutputTokens on the wire).
+    expect(captured.body.maxSteps).toBe(100);
+    expect(captured.body.modelSettings.maxRetries).toBe(3);
+    expect(captured.body.modelSettings.maxOutputTokens).toBe(5000);
+    expect(captured.body.modelSettings.temperature).toBe(1);
+    expect(captured.body.providerOptions).toEqual({ openai: { reasoningEffort: 'low' } });
+
     // Confirm the snapshot is NOT smuggled into the user-facing messages array.
     const messages = captured.body.messages ?? [];
     const serializedMessages = JSON.stringify(messages);
@@ -109,7 +121,7 @@ describe('StreamChatProvider — modelSettings.instructions on the wire', () => 
 
     server.use(
       http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
-      http.post(`${BASE_URL}/api/agents/builder-agent/stream-until-idle`, async ({ request }) => {
+      http.post(`${BASE_URL}/api/agents/builder-agent/stream`, async ({ request }) => {
         captured.body = await request.json();
         const stream = new ReadableStream<Uint8Array>({
           start(controller) {

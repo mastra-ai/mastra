@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { RequestContext } from '../../request-context';
-import { createStep, createWorkflow } from '../workflow';
+import { createWorkflow } from '../create';
+import { createStep } from '../workflow';
 
 describe('Workflow requestContextSchema', () => {
   const requestContextSchema = z.object({

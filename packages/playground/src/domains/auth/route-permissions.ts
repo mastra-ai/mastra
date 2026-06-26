@@ -6,23 +6,17 @@
  * - The order of routes for redirect priority (first accessible route wins)
  * - Sidebar link permission gating
  *
- * IMPORTANT: Permission strings are imported from `@mastra/core/auth/ee` (PERMISSION_PATTERNS).
- * This ensures type safety and prevents typos like 'scorers:read' vs 'scores:read'.
+ * IMPORTANT: The permission strings below are hardcoded literals. They are
+ * validated at runtime against the authoritative permission patterns served by
+ * `GET /auth/permission-patterns` (see `RoutePermissionsGate`), so the browser
+ * never imports the server-only `@mastra/core/auth/ee` code. The gate preserves
+ * the typo protection the old compile-time `P()` validator gave (e.g.
+ * 'scorers:read' vs 'scores:read') by throwing on an unknown literal.
  *
  * @see COR-829 Studio View Permissions
- * @see packages/core/src/auth/ee/interfaces/permissions.generated.ts
  */
 
-import type { PermissionPattern } from '@mastra/core/auth/ee';
-import { PERMISSION_PATTERNS } from '@mastra/core/auth/ee';
-
-// Validated permission helper - ensures we're using valid patterns from the generated file
-const P = <T extends PermissionPattern>(pattern: T): T => {
-  if (!(pattern in PERMISSION_PATTERNS)) {
-    throw new Error(`Invalid permission pattern: ${pattern}`);
-  }
-  return pattern;
-};
+import type { PermissionPattern } from '@mastra/client-js';
 
 export type RoutePermission = {
   /** The route path (used for redirects) */
@@ -44,37 +38,38 @@ export type RoutePermission = {
  * Ordered by redirect priority - when determining where to send a user,
  * we'll redirect to the first route they have permission to access.
  *
- * Permission patterns are validated using P() to ensure they match PERMISSION_PATTERNS.
- * Common gotchas the types will catch:
+ * Permission literals are validated at runtime by `RoutePermissionsGate`
+ * against the server's PERMISSION_PATTERNS. Common gotchas the validation catches:
  * - 'mcp' not 'mcps' (UI route is /mcps but resource is 'mcp')
  * - 'scores' not 'scorers' (UI route is /scorers but resource is 'scores')
  * - 'stored-prompt-blocks' for prompts (uses /stored/prompt-blocks routes)
  */
 export const ROUTE_PERMISSIONS: RoutePermission[] = [
   // Primary routes (highest priority for redirects)
-  { route: '/agents', permission: P('agents:read'), name: 'Agents' },
-  { route: '/workflows', permission: P('workflows:read'), name: 'Workflows' },
+  { route: '/agents', permission: 'agents:read', name: 'Agents' },
+  { route: '/workflows', permission: 'workflows:read', name: 'Workflows' },
 
   // Observability - uses 'observability' resource for traces/metrics, 'logs' for logs
-  { route: '/metrics', permission: P('observability:read'), name: 'Metrics' },
-  { route: '/observability', permission: P('observability:read'), name: 'Traces' },
-  { route: '/traces', permission: P('observability:read'), name: 'Traces' },
-  { route: '/logs', permission: P('logs:read'), name: 'Logs' },
+  { route: '/metrics', permission: 'observability:read', name: 'Metrics' },
+  { route: '/signals', permission: 'observability:read', name: 'Signals' },
+  { route: '/observability', permission: 'observability:read', name: 'Traces' },
+  { route: '/traces', permission: 'observability:read', name: 'Traces' },
+  { route: '/logs', permission: 'logs:read', name: 'Logs' },
 
   // Evaluation - uses 'scores' resource (not 'scorers')
-  { route: '/scorers', permission: P('scores:read'), name: 'Scorers' },
-  { route: '/datasets', permission: [P('datasets:read')], name: 'Datasets' },
-  { route: '/experiments', permission: [P('datasets:read')], name: 'Experiments' },
+  { route: '/scorers', permission: 'scores:read', name: 'Scorers' },
+  { route: '/datasets', permission: ['datasets:read'], name: 'Datasets' },
+  { route: '/experiments', permission: ['datasets:read'], name: 'Experiments' },
 
   // Primitives - note: 'mcp' not 'mcps', 'stored' for prompts (stored/prompt-blocks routes)
-  { route: '/tools', permission: P('tools:read'), name: 'Tools' },
-  { route: '/mcps', permission: P('mcp:read'), name: 'MCP Servers' },
-  { route: '/processors', permission: P('processors:read'), name: 'Processors' },
-  { route: '/prompts', permission: P('stored-prompt-blocks:read'), name: 'Prompts' },
-  { route: '/workspaces', permission: P('workspaces:read'), name: 'Workspaces' },
+  { route: '/tools', permission: 'tools:read', name: 'Tools' },
+  { route: '/mcps', permission: 'mcp:read', name: 'MCP Servers' },
+  { route: '/processors', permission: 'processors:read', name: 'Processors' },
+  { route: '/prompts', permission: 'stored-prompt-blocks:read', name: 'Prompts' },
+  { route: '/workspaces', permission: 'workspaces:read', name: 'Workspaces' },
 
   // Admin-only pages
-  { route: '/request-context', permission: P('*'), name: 'Request Context' },
+  { route: '/request-context', permission: '*', name: 'Request Context' },
 
   // UI-only pages (no corresponding API resource) - marked as public
   // These pages don't fetch protected data, so they're accessible to all authenticated users
@@ -83,17 +78,23 @@ export const ROUTE_PERMISSIONS: RoutePermission[] = [
 ];
 
 /**
+ * Collect the permission literals referenced by the route table (excluding
+ * 'public'), so callers can validate them against the server's patterns.
+ */
+export function collectRouteLiterals(routes: RoutePermission[]): PermissionPattern[] {
+  return [
+    ...new Set(
+      routes.flatMap(r => (Array.isArray(r.permission) ? r.permission : [r.permission])).filter(p => p !== 'public'),
+    ),
+  ];
+}
+
+/**
  * Get all unique permissions used for sidebar gating.
  * Useful for checking if a user has access to ANY sidebar link.
  * Excludes 'public' since those routes are accessible to all authenticated users.
  */
-export const ALL_SIDEBAR_PERMISSIONS = [
-  ...new Set(
-    ROUTE_PERMISSIONS.flatMap(r => (Array.isArray(r.permission) ? r.permission : [r.permission])).filter(
-      p => p !== 'public',
-    ),
-  ),
-];
+export const ALL_SIDEBAR_PERMISSIONS = collectRouteLiterals(ROUTE_PERMISSIONS);
 
 /**
  * Find the permission(s) required for a given route.

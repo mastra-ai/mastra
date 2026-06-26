@@ -1,4 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+
+// Captures the createSession() args so tests can assert on wiring (e.g.
+// id/ownerId). Hoisted so the vi.mock factory can reference it.
+const createSessionCalls = vi.hoisted<Array<{ id?: string; ownerId?: string; resourceId?: string }>>(() => []);
 
 vi.mock('@mastra/core/llm', () => ({
   GatewayRegistry: {
@@ -12,11 +16,33 @@ vi.mock('@mastra/core/llm', () => ({
 
 vi.mock('@mastra/core/agent', () => ({
   Agent: class {},
+  SignalProvider: class {},
 }));
 
 vi.mock('@mastra/core/harness', () => ({
   Harness: class {
-    subscribe() {}
+    constructor(config: {
+      resourceId?: string;
+      heartbeatHandlers?: Array<{ immediate?: boolean; handler: () => unknown }>;
+    }) {
+      for (const heartbeat of config.heartbeatHandlers ?? []) {
+        if (heartbeat.immediate !== false) void heartbeat.handler();
+      }
+    }
+
+    async init() {}
+
+    getMastra() {
+      return undefined;
+    }
+
+    async createSession(args?: { id?: string; ownerId?: string; resourceId?: string }) {
+      createSessionCalls.push({ id: args?.id, ownerId: args?.ownerId, resourceId: args?.resourceId });
+      return {
+        subscribe() {},
+        thread: { getId: () => undefined },
+      };
+    }
   },
   taskWriteTool: {},
   taskCheckTool: {},
@@ -24,6 +50,11 @@ vi.mock('@mastra/core/harness', () => ({
 
 vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {},
+  isBadRequestError: (error: unknown) =>
+    typeof error === 'object' &&
+    error !== null &&
+    'statusCode' in error &&
+    (error as { statusCode?: unknown }).statusCode === 400,
   PrefillErrorHandler: class {},
   ProviderHistoryCompat: class {},
   StreamErrorRetryProcessor: class {},
@@ -38,19 +69,25 @@ vi.mock('./agents/memory.js', () => ({
 }));
 
 vi.mock('./agents/model.js', () => ({
+  createMastraCodeGateway: vi.fn(() => ({})),
+  createMastraCodeModelCatalogProvider: vi.fn(() => vi.fn()),
   getDynamicModel: vi.fn(),
+  getGoalJudgeModel: vi.fn(),
   resolveModel: vi.fn(),
 }));
 
 vi.mock('./agents/subagents/execute.js', () => ({ executeSubagent: {} }));
 vi.mock('./agents/subagents/explore.js', () => ({ exploreSubagent: {} }));
 vi.mock('./agents/subagents/plan.js', () => ({ planSubagent: {} }));
-vi.mock('./agents/tools.js', () => ({ createDynamicTools: vi.fn() }));
-vi.mock('./agents/workspace.js', () => ({ getDynamicWorkspace: vi.fn() }));
+vi.mock('./agents/tools.js', () => ({ createDynamicTools: vi.fn(), createToolHooks: vi.fn() }));
+vi.mock('./agents/workspace.js', () => ({ getDynamicWorkspace: vi.fn(), getGoalJudgeTools: vi.fn() }));
 
 vi.mock('./auth/storage.js', () => ({
   AuthStorage: class {
     get() {
+      return undefined;
+    }
+    getStoredApiKey() {
       return undefined;
     }
     loadStoredApiKeysIntoEnv() {}
@@ -125,9 +162,10 @@ vi.mock('./tui/theme.js', () => ({ mastra: {} }));
 vi.mock('./utils/gateway-sync.js', () => ({ syncGateways: vi.fn() }));
 
 vi.mock('./utils/project.js', () => ({
-  detectProject: vi.fn(() => ({
+  detectProject: vi.fn((cwd?: string) => ({
     mode: 'none',
-    rootPath: process.cwd(),
+    rootPath: cwd ?? process.cwd(),
+    resourceId: `mock-resource-${cwd ?? process.cwd()}`,
     packageManager: 'pnpm',
     hasGit: false,
     contextFiles: [],
@@ -146,6 +184,38 @@ vi.mock('./utils/thread-lock.js', () => ({
   releaseThreadLock: vi.fn(),
 }));
 
+describe('createMastraCode startup performance', () => {
+  it('does not wait for background gateway sync before returning storage warnings', async () => {
+    const [{ syncGateways }, { createStorage }] = await Promise.all([
+      import('./utils/gateway-sync.js'),
+      import('./utils/storage-factory.js'),
+    ]);
+    let resolveSync: (() => void) | undefined;
+    vi.mocked(syncGateways).mockImplementation(
+      () =>
+        new Promise<void>(resolve => {
+          resolveSync = resolve;
+        }),
+    );
+    vi.mocked(createStorage).mockReturnValue({
+      storage: {},
+      backend: 'memory',
+      warning: 'Storage fallback warning',
+    } as never);
+    const { createMastraCode } = await import('./index.js');
+
+    // The contract under test: createMastraCode() resolves with the storage
+    // warning without kicking off gateway sync during startup. The periodic
+    // heartbeat is intentionally not immediate so startup is never coupled to
+    // sync timing or failures.
+    const result = await createMastraCode();
+
+    expect(result.storageWarning).toBe('Storage fallback warning');
+    expect(syncGateways).not.toHaveBeenCalled();
+    resolveSync?.();
+  });
+});
+
 describe('createAuthStorage', () => {
   it('wires the same AuthStorage instance into every OAuth-capable provider', async () => {
     const claudeMax = await import('./providers/claude-max.js');
@@ -158,5 +228,42 @@ describe('createAuthStorage', () => {
     expect(claudeMax.setAuthStorage).toHaveBeenCalledWith(authStorage);
     expect(openaiCodex.setAuthStorage).toHaveBeenCalledWith(authStorage);
     expect(githubCopilot.setAuthStorage).toHaveBeenCalledWith(authStorage);
+  });
+});
+
+describe('Harness session id and ownerId wiring', () => {
+  beforeEach(() => {
+    createSessionCalls.length = 0;
+  });
+
+  it('passes non-empty, deterministic id and ownerId into createSession', async () => {
+    const { createMastraCode } = await import('./index.js');
+    await createMastraCode({ cwd: '/tmp/project-alpha' });
+
+    expect(createSessionCalls).toHaveLength(1);
+    const call = createSessionCalls[0]!;
+    expect(call.id).toBeTruthy();
+    expect(call.id).toMatch(/^mastracode-session-/);
+    expect(call.ownerId).toBeTruthy();
+    expect(call.ownerId).toMatch(/^mastracode-/);
+  });
+
+  it('derives stable id and ownerId for the same cwd across calls', async () => {
+    const { createMastraCode } = await import('./index.js');
+    await createMastraCode({ cwd: '/tmp/project-beta' });
+    await createMastraCode({ cwd: '/tmp/project-beta' });
+
+    expect(createSessionCalls).toHaveLength(2);
+    expect(createSessionCalls[0]!.id).toBe(createSessionCalls[1]!.id);
+    expect(createSessionCalls[0]!.ownerId).toBe(createSessionCalls[1]!.ownerId);
+  });
+
+  it('produces distinct ids for different cwds', async () => {
+    const { createMastraCode } = await import('./index.js');
+    await createMastraCode({ cwd: '/tmp/project-gamma' });
+    await createMastraCode({ cwd: '/tmp/project-delta' });
+
+    expect(createSessionCalls).toHaveLength(2);
+    expect(createSessionCalls[0]!.id).not.toBe(createSessionCalls[1]!.id);
   });
 });

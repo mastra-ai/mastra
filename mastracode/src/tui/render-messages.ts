@@ -3,11 +3,13 @@
  *
  * Pure functions that operate on TUIState — no class dependency.
  */
-import { Container, Spacer, Text } from '@mariozechner/pi-tui';
-import type { Component } from '@mariozechner/pi-tui';
+import { Container, Text } from '@earendil-works/pi-tui';
+import type { Component } from '@earendil-works/pi-tui';
 import type { HarnessMessage, HarnessMessageContent, TaskItemInput, TaskItemSnapshot } from '@mastra/core/harness';
 import { assignTaskIds, parseSubagentMeta } from '@mastra/core/harness';
-import chalk from 'chalk';
+import type { GoalEvaluationPayload } from '@mastra/core/stream';
+import { TASKS_STATE_ID } from '@mastra/core/tools';
+import { getPlanFilename } from '../utils/plans.js';
 import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
@@ -15,23 +17,37 @@ import {
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { AssistantMessageComponent } from './components/assistant-message.js';
 import type { ChatSpacingKind } from './components/chat-spacing.js';
+import { JudgeDisplayComponent } from './components/judge-display.js';
+import { NotificationSummaryComponent } from './components/notification-summary.js';
+import { NotificationComponent } from './components/notification.js';
 import { OMMarkerComponent } from './components/om-marker.js';
 import { OMOutputComponent } from './components/om-output.js';
 import { PlanResultComponent } from './components/plan-approval-inline.js';
+import { ReactiveSignalComponent } from './components/reactive-signal.js';
 import { SlashCommandComponent } from './components/slash-command.js';
+import { StateSignalComponent } from './components/state-signal.js';
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
 import { SystemReminderComponent } from './components/system-reminder.js';
+import { formatTaskProgressLine } from './components/task-progress.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
 import { PendingUserMessageComponent, UserMessageComponent } from './components/user-message.js';
 import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
 import type { TUIState } from './state.js';
-import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
+import { BOX_INDENT, getMarkdownTheme, theme } from './theme.js';
 
 // Re-export so existing consumers can still import from here
 export { formatToolResult };
 
 const WHILE_ACTIVE_USER_MESSAGE_LABEL = 'steer';
+// These are internal control-plane signals handled by GithubSignals. The user-visible
+// result is rendered by github-sync-status, so showing these would duplicate the UI.
+const HIDDEN_REACTIVE_SIGNAL_TAGS = new Set(['github-subscribe-pr', 'github-unsubscribe-pr']);
+const GOAL_STATE_SIGNAL_ID = 'goal';
+
+function shouldRenderReactiveSignal(tagName: string): boolean {
+  return !HIDDEN_REACTIVE_SIGNAL_TAGS.has(tagName);
+}
 
 type MessageWithAttributes = HarnessMessage & {
   attributes?: Record<string, string | number | boolean | null | undefined>;
@@ -47,11 +63,12 @@ function getPendingUserMessageLabel(isInterjection?: boolean): string | undefine
 }
 
 function getCurrentModeColor(state: TUIState): string | undefined {
-  return state.harness.getCurrentMode?.()?.color;
+  const color = state.session.mode.resolve().metadata?.color;
+  return typeof color === 'string' ? color : undefined;
 }
 
 // =============================================================================
-// renderCompletedTasksInline / renderClearedTasksInline
+// renderClearedTasksInline
 // =============================================================================
 
 class TaskHistoryComponent extends Container {
@@ -69,44 +86,6 @@ function insertTaskHistoryComponent(state: TUIState, component: Component, inser
 }
 
 /**
- * Render a completed task list inline in the chat history.
- */
-export function renderCompletedTasksInline(
-  state: TUIState,
-  tasks: TaskItemSnapshot[],
-  insertIndex = -1,
-  collapsed = false,
-): void {
-  const headerText =
-    theme.bold(theme.fg('accent', 'Tasks')) + theme.fg('dim', ` [${tasks.length}/${tasks.length} completed]`);
-
-  const container = new TaskHistoryComponent();
-  container.addChild(new Text(headerText, BOX_INDENT, 0));
-  const MAX_VISIBLE = 4;
-  const shouldCollapse = collapsed && tasks.length > MAX_VISIBLE + 1;
-  const visible = shouldCollapse ? tasks.slice(0, MAX_VISIBLE) : tasks;
-  const remaining = shouldCollapse ? tasks.length - MAX_VISIBLE : 0;
-
-  for (const task of visible) {
-    const icon = chalk.hex(mastra.green)('✓');
-    const text = chalk.hex(mastra.green)(task.content);
-    container.addChild(new Text(`  ${icon} ${text}`, BOX_INDENT, 0));
-  }
-  if (remaining > 0) {
-    container.addChild(
-      new Text(
-        theme.fg('dim', `  ... ${remaining} more completed task${remaining > 1 ? 's' : ''} (ctrl+e to expand)`),
-        BOX_INDENT,
-        0,
-      ),
-    );
-  }
-  container.addChild(new Spacer(1));
-
-  insertTaskHistoryComponent(state, container, insertIndex);
-}
-
-/**
  * Render inline display when tasks are cleared.
  */
 export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItemSnapshot[], insertIndex = -1): void {
@@ -115,12 +94,62 @@ export function renderClearedTasksInline(state: TUIState, clearedTasks: TaskItem
   const label = count === 1 ? 'Task' : 'Tasks';
   container.addChild(new Text(theme.fg('accent', `${label} cleared`), BOX_INDENT, 0));
   for (const task of clearedTasks) {
-    const icon = task.status === 'completed' ? chalk.hex(mastra.green)('✓') : chalk.hex(mastra.darkGray)('○');
-    const text = chalk.hex(theme.getTheme().dim).strikethrough(task.content);
-    container.addChild(new Text(`  ${icon} ${text}`, BOX_INDENT, 0));
+    container.addChild(new Text(formatTaskProgressLine(task, '  '), BOX_INDENT, 0));
   }
-  container.addChild(new Spacer(1));
   insertTaskHistoryComponent(state, container, insertIndex);
+}
+
+export function renderCompletedTasksInline(
+  state: TUIState,
+  completedTasks: TaskItemSnapshot[],
+  insertIndex = -1,
+): void {
+  const container = new TaskHistoryComponent();
+  const count = completedTasks.length;
+  container.addChild(
+    new Text(`${theme.fg('accent', 'Tasks')} ${theme.fg('dim', `[${count}/${count} completed]`)}`, BOX_INDENT, 0),
+  );
+  for (const task of completedTasks) {
+    container.addChild(new Text(formatTaskProgressLine(task, '  '), BOX_INDENT, 0));
+  }
+  insertTaskHistoryComponent(state, container, insertIndex);
+}
+
+function getTaskKey(task: TaskItemSnapshot): string {
+  return task.id || task.content;
+}
+
+export function renderTaskDeltaInline(
+  state: TUIState,
+  previousTasks: TaskItemSnapshot[],
+  nextTasks: TaskItemSnapshot[],
+  insertIndex = -1,
+): boolean {
+  const previousByKey = new Map(previousTasks.map(task => [getTaskKey(task), task]));
+  const addedTasks = nextTasks.filter(task => !previousByKey.has(getTaskKey(task)));
+  const inProgressTasks = nextTasks.filter(task => {
+    const previous = previousByKey.get(getTaskKey(task));
+    return task.status === 'in_progress' && previous?.status !== 'in_progress';
+  });
+  const completedTasks = nextTasks.filter(task => {
+    const previous = previousByKey.get(getTaskKey(task));
+    return task.status === 'completed' && previous?.status !== 'completed';
+  });
+
+  if (addedTasks.length === 0 && inProgressTasks.length === 0 && completedTasks.length === 0) return false;
+
+  const changedTaskKeys = new Set([...addedTasks, ...inProgressTasks, ...completedTasks].map(getTaskKey));
+  const changedTasks = nextTasks.filter(task => changedTaskKeys.has(getTaskKey(task)));
+
+  const container = new TaskHistoryComponent();
+  container.addChild(new Text(theme.fg('accent', 'Tasks'), BOX_INDENT, 0));
+
+  for (const task of changedTasks) {
+    container.addChild(new Text(formatTaskProgressLine(task, '  '), BOX_INDENT, 0));
+  }
+
+  insertTaskHistoryComponent(state, container, insertIndex);
+  return true;
 }
 
 function renderTaskTransitionFromHistory(
@@ -128,12 +157,8 @@ function renderTaskTransitionFromHistory(
   previousTasks: TaskItemSnapshot[],
   nextTasks: TaskItemSnapshot[],
 ): { tasks: TaskItemSnapshot[]; replacedWithInline: boolean } {
-  const wasAllCompleted = previousTasks.length > 0 && previousTasks.every(t => t.status === 'completed');
-
   if (nextTasks.length > 0 && nextTasks.every(t => t.status === 'completed')) {
-    if (!wasAllCompleted) {
-      renderCompletedTasksInline(state, nextTasks, -1, state.quietMode);
-    }
+    renderCompletedTasksInline(state, nextTasks);
     return { tasks: nextTasks, replacedWithInline: true };
   }
 
@@ -145,6 +170,7 @@ function renderTaskTransitionFromHistory(
     return { tasks: [], replacedWithInline: false };
   }
 
+  renderTaskDeltaInline(state, previousTasks, nextTasks);
   return { tasks: nextTasks, replacedWithInline: true };
 }
 
@@ -228,7 +254,12 @@ export function addPendingUserMessage(
   }
 
   const component = new PendingUserMessageComponent(text, images?.length ?? 0);
-  state.pendingSignalMessageComponentsById.set(messageId, { component, text, isInterjection: options?.isInterjection });
+  state.pendingSignalMessageComponentsById.set(messageId, {
+    component,
+    text,
+    images,
+    isInterjection: options?.isInterjection,
+  });
   state.chatContainer.addChild(component);
   reconcileChatBoundarySpacers(state.chatContainer);
   state.ui.requestRender();
@@ -238,7 +269,7 @@ export function confirmPendingUserMessage(state: TUIState, messageId: string, te
   const pending = state.pendingSignalMessageComponentsById.get(messageId);
   if (!pending) return;
 
-  if (state.streamingComponent && state.harness.getDisplayState().isRunning) {
+  if (state.streamingComponent && state.session.displayState.get().isRunning) {
     state.streamingComponent = undefined;
     state.streamingMessage = undefined;
   }
@@ -250,8 +281,10 @@ function replacePendingUserMessage(state: TUIState, messageId: string, text: str
   const pending = state.pendingSignalMessageComponentsById.get(messageId);
   if (!pending) return;
 
+  const imageCount = pending.images?.length ?? 0;
+  const prefix = imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}] ` : '';
   const label = getPendingUserMessageLabel(pending.isInterjection);
-  const confirmed = new UserMessageComponent(text, getMarkdownTheme(), {
+  const confirmed = new UserMessageComponent(prefix + text, getMarkdownTheme(), {
     ...(label ? { label } : {}),
   });
   const idx = state.chatContainer.children.indexOf(pending.component as never);
@@ -271,6 +304,15 @@ export function removePendingUserMessage(state: TUIState, messageId: string): vo
   if (!pending) return;
   state.chatContainer.removeChild(pending.component as never);
   state.pendingSignalMessageComponentsById.delete(messageId);
+  state.ui.requestRender();
+}
+
+export function removeUserMessage(state: TUIState, messageId: string): void {
+  const component = state.messageComponentsById.get(messageId);
+  if (!component) return;
+  state.chatContainer.removeChild(component as never);
+  state.messageComponentsById.delete(messageId);
+  reconcileChatBoundarySpacers(state.chatContainer);
   state.ui.requestRender();
 }
 
@@ -321,7 +363,25 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
   );
 
   if (reminderPart) {
-    const goalMetadata = reminderPart as typeof reminderPart & { goalMaxTurns?: number; judgeModelId?: string };
+    const goalMetadata = reminderPart as typeof reminderPart & {
+      goalMaxTurns?: number;
+      judgeModelId?: string;
+      goalEvaluation?: GoalEvaluationPayload;
+    };
+
+    if (reminderPart.reminderType === 'goal-judge' && goalMetadata.goalEvaluation) {
+      const judgeComponent = new JudgeDisplayComponent(
+        null,
+        goalMetadata.goalEvaluation.iteration,
+        goalMetadata.goalEvaluation.maxRuns,
+      );
+      judgeComponent.setEvaluation(goalMetadata.goalEvaluation);
+      addChildBeforeMessageOrFollowUps(state, judgeComponent, reminderPart.precedesMessageId);
+      state.messageComponentsById.set(message.id, judgeComponent);
+      state.ui.requestRender();
+      return;
+    }
+
     const reminderComponent = createReminderComponent(reminderPart.reminderType, {
       message: reminderPart.message,
       path: reminderPart.path,
@@ -347,12 +407,105 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
     return;
   }
 
+  const stateSignalPart = message.content.find(content => (content as { type?: string }).type === 'state_signal') as
+    | { type: 'state_signal'; stateId: string; mode: 'snapshot' | 'delta'; version?: number; message?: string }
+    | undefined;
+
+  // The `tasks` state signal is rendered by the pinned task list UI (replayed
+  // from task tool history), so skip its raw <current-task-list> snapshot here.
+  // The `goal` state signal is surfaced by the goal/judge UI, so likewise skip
+  // its raw <current-objective> snapshot.
+  if (
+    stateSignalPart &&
+    (stateSignalPart.stateId === TASKS_STATE_ID || stateSignalPart.stateId === GOAL_STATE_SIGNAL_ID)
+  ) {
+    return;
+  }
+
+  if (stateSignalPart) {
+    const component = new StateSignalComponent({
+      stateId: stateSignalPart.stateId,
+      mode: stateSignalPart.mode,
+      version: stateSignalPart.version,
+      message: stateSignalPart.message,
+    });
+    addChildBeforeFollowUps(state, component);
+    state.messageComponentsById.set(message.id, component);
+    state.ui.requestRender();
+    return;
+  }
+
+  const reactiveSignalPart = message.content.find(
+    content => (content as { type?: string }).type === 'reactive_signal',
+  ) as { type: 'reactive_signal'; tagName: string; message?: string } | undefined;
+
+  if (reactiveSignalPart) {
+    if (!shouldRenderReactiveSignal(reactiveSignalPart.tagName)) return;
+    const component = new ReactiveSignalComponent({
+      tagName: reactiveSignalPart.tagName,
+      message: reactiveSignalPart.message,
+    });
+    addChildBeforeFollowUps(state, component);
+    state.messageComponentsById.set(message.id, component);
+    state.ui.requestRender();
+    return;
+  }
+
+  const notificationPart = message.content.find(content => (content as { type?: string }).type === 'notification') as
+    | {
+        type: 'notification';
+        message: string;
+        source?: string;
+        kind?: string;
+        priority?: string;
+        status?: string;
+      }
+    | undefined;
+
+  if (notificationPart) {
+    const component = new NotificationComponent({
+      message: notificationPart.message,
+      source: notificationPart.source,
+      kind: notificationPart.kind,
+      priority: notificationPart.priority,
+      status: notificationPart.status,
+    });
+    addChildBeforeFollowUps(state, component);
+    state.messageComponentsById.set(message.id, component);
+    state.ui.requestRender();
+    return;
+  }
+
+  const notificationSummaryPart = message.content.find(
+    content => (content as { type?: string }).type === 'notification_summary',
+  ) as
+    | {
+        type: 'notification_summary';
+        message: string;
+        pending: number;
+        bySource: Record<string, number>;
+      }
+    | undefined;
+
+  if (notificationSummaryPart) {
+    const component = new NotificationSummaryComponent({
+      message: notificationSummaryPart.message,
+      pending: notificationSummaryPart.pending,
+      bySource: notificationSummaryPart.bySource,
+    });
+    addChildBeforeFollowUps(state, component);
+    state.messageComponentsById.set(message.id, component);
+    state.ui.requestRender();
+    return;
+  }
+
   const textContent = message.content
     .filter(c => c.type === 'text')
     .map(c => (c as { type: 'text'; text: string }).text)
     .join('\n');
 
   const imageCount = message.content.filter(c => c.type === 'image').length;
+  const fileCount = message.content.filter(c => c.type === 'file').length;
 
   // Strip [image] markers from text since we show count separately
   const displayText = imageCount > 0 ? textContent.replace(/\[image\]\s*/g, '').trim() : textContent.trim();
@@ -380,7 +533,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
 
     const slashComp = new SlashCommandComponent(commandName, commandContent);
     state.allSlashCommandComponents.push(slashComp);
-    state.chatContainer.addChild(slashComp);
+    insertChatComponentWithBoundarySpacing(state.chatContainer, slashComp);
     state.ui.requestRender();
     return;
   }
@@ -407,7 +560,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
 
     const skillComp = new SlashCommandComponent(commandName, skillContent);
     state.allSlashCommandComponents.push(skillComp);
-    state.chatContainer.addChild(skillComp);
+    insertChatComponentWithBoundarySpacing(state.chatContainer, skillComp);
     state.ui.requestRender();
     return;
   }
@@ -455,7 +608,11 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
     return;
   }
 
-  const prefix = imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}] ` : '';
+  const attachmentLabels = [
+    imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}]` : '',
+    fileCount > 0 ? `[${fileCount} file${fileCount > 1 ? 's' : ''}]` : '',
+  ].filter(Boolean);
+  const prefix = attachmentLabels.length > 0 ? `${attachmentLabels.join(' ')} ` : '';
   if (displayText || prefix) {
     const label = getUserMessageLabel(message, options?.label);
     const userComponent = new UserMessageComponent(prefix + displayText, getMarkdownTheme(), {
@@ -464,7 +621,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
 
     state.messageComponentsById.set(message.id, userComponent);
 
-    if (state.streamingComponent && state.harness.getDisplayState().isRunning) {
+    if (state.streamingComponent && state.session.displayState.get().isRunning) {
       state.chatContainer.addChild(userComponent);
       state.followUpComponents.push(userComponent);
       reconcileChatBoundarySpacers(state.chatContainer);
@@ -552,7 +709,7 @@ function applyTaskToolResult(
 // renderExistingMessages
 // =============================================================================
 
-const STARTUP_MESSAGE_WINDOW_SIZE = 40;
+const STARTUP_MESSAGE_WINDOW_SIZE = 200;
 
 function getLatestMessageTimestamp(messages: HarnessMessage[]): number | undefined {
   let latest: number | undefined;
@@ -569,7 +726,7 @@ function getLatestMessageTimestamp(messages: HarnessMessage[]): number | undefin
  * Called on thread switch and initial load.
  */
 export async function renderExistingMessages(state: TUIState): Promise<void> {
-  const messages = await state.harness.listMessages({ limit: STARTUP_MESSAGE_WINDOW_SIZE });
+  const messages = await state.session.thread.listActiveMessages({ limit: STARTUP_MESSAGE_WINDOW_SIZE });
   state.lastRenderedMessageAt = getLatestMessageTimestamp(messages);
 
   state.chatContainer.clear();
@@ -634,10 +791,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             // Parse embedded metadata for model ID, duration, tool calls
             const meta = rawResult ? parseSubagentMeta(rawResult) : null;
             const resultText = meta?.text ?? rawResult;
-            const currentModelId =
-              typeof (state.harness as { getFullModelId?: () => string }).getFullModelId === 'function'
-                ? (state.harness as { getFullModelId: () => string }).getFullModelId()
-                : undefined;
+            const currentModelId = state.session.model.get() || undefined;
             const modelId = meta?.modelId ?? subArgs?.modelId ?? (subArgs?.forked ? currentModelId : undefined);
             const durationMs = meta?.durationMs ?? 0;
 
@@ -748,23 +902,32 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             ) {
               resultText = (toolResult.result as any).content;
             }
-            const isApproved = resultText.toLowerCase().includes('approved');
-            // Extract feedback if rejected with feedback
+            // The approved result starts with "Plan approved." while rejected
+            // results start with "Plan was not approved" — a naive `includes`
+            // would match both since "not approved" still contains "approved".
+            const isApproved = resultText.startsWith('Plan approved');
+            // Extract feedback if rejected with inline feedback
             let feedback: string | undefined;
-            if (!isApproved && resultText.includes('Feedback:')) {
-              const feedbackMatch = resultText.match(/Feedback:\s*(.+)/);
-              feedback = feedbackMatch?.[1];
+            if (!isApproved && resultText.includes('not approved')) {
+              const feedbackMatch = resultText.match(/User feedback:\s*(.+?)(?:\n|$)/);
+              // Use extracted feedback or a generic marker so PlanResultComponent
+              // renders "Changes requested" (it checks truthiness of feedback).
+              feedback = feedbackMatch?.[1] || 'Revision requested';
             }
 
             if (args?.title && args?.plan) {
               const planResult = new PlanResultComponent({
                 title: args.title,
                 plan: args.plan,
+                planFilename: getPlanFilename(args.title),
                 isApproved,
                 feedback,
               });
               state.chatContainer.addChild(planResult);
               replacedWithInline = true;
+              // Restore previousPlanSnapshot so that if the agent resubmits after
+              // a restart, the diff can be computed against the last known plan.
+              state.previousPlanSnapshot = { title: args.title, plan: args.plan };
             }
           }
 
@@ -852,22 +1015,16 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
     if (state.taskProgress) {
       state.taskProgress.updateTasks(previousTasksAcc);
     }
-    const currentTasks =
-      typeof state.harness.getState === 'function'
-        ? (state.harness.getState() as { tasks?: TaskItemSnapshot[] }).tasks
-        : undefined;
+    const currentTasks = (state.session.state.get() as { tasks?: TaskItemSnapshot[] } | undefined)?.tasks;
     if (!areTasksEqual(currentTasks, previousTasksAcc)) {
       try {
-        await state.harness.setState({ tasks: previousTasksAcc });
+        await state.session.state.set({ tasks: previousTasksAcc });
       } catch {
         // Custom harness state schemas may not accept TUI replayed task state.
         // Keep the reconstructed task list local to display state in that case.
       }
     }
-    const harnessWithReplayTasks = state.harness as typeof state.harness & {
-      restoreDisplayTasks?: (tasks: TaskItemSnapshot[]) => void;
-    };
-    harnessWithReplayTasks.restoreDisplayTasks?.(previousTasksAcc);
+    state.session.displayState.restoreTasks(previousTasksAcc);
   }
 
   reconcileChatBoundarySpacers(state.chatContainer);

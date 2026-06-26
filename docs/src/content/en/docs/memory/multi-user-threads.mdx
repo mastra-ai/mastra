@@ -74,7 +74,7 @@ const memory = new Memory({
 export const collabAgent = new Agent({
   id: 'collab',
   name: 'CollabAgent',
-  model: '__OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
   memory,
   instructions: `
 You are a collaborative document assistant. Multiple users talk to you in the SAME thread.
@@ -144,7 +144,7 @@ const memory = new Memory({
 
 The model reads identity from the `<turn>` tag on the current message and from prior tagged messages brought back through `lastMessages`.
 
-### With observational memory (recommended)
+### With Observational Memory (recommended)
 
 [Observational Memory](../memory/observational-memory) (OM) extracts per-user facts into a background log without burning the agent's tool budget. The default Observer model reads `<turn>` tags natively and produces named attribution like `Alice stated her favorite color is teal.` and `Bob asked for QA sign-off before publish.`
 

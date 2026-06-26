@@ -41,13 +41,13 @@ export const dailyReport = createWorkflow({
   .commit()
 ```
 
-There is no separate "register schedule" call. The scheduler reads `schedule` straight off the workflow when `Mastra` boots.
+A separate "register schedule" call won't happen. The scheduler reads `schedule` straight off the workflow when `Mastra` boots.
 
 ## What `schedule` changes
 
 A workflow that declares `schedule` is auto-promoted to the **evented execution engine**. The public API (`workflow.start()`, `workflow.startAsync()`, `streamLegacy()`, `resume()`) is unchanged — `EventedWorkflow extends Workflow` and overrides each method with matching signatures. From your code, scheduled fires and manual runs are indistinguishable.
 
-The promotion has one practical implication: evented runs require a storage adapter that supports concurrent updates, for example `@mastra/libsql`. If your adapter does not, `createRun()` throws a clear error pointing at the `schedule` field. Switch adapters or remove the schedule.
+The promotion has one practical implication: evented runs require a storage adapter that supports concurrent updates, for example `@mastra/libsql`. If your adapter doesn't, `createRun()` throws a clear error pointing at the `schedule` field. Switch adapters or remove the schedule.
 
 ## Single schedule
 
@@ -68,7 +68,7 @@ const dailyReport = createWorkflow({
 Fields:
 
 - `cron` (required): a 5-, 6-, or 7-part cron expression. Validated at workflow construction time.
-- `timezone` (optional): IANA timezone, for example `America/New_York`. Defaults to the host's local timezone. Set this explicitly in production so fire times do not depend on server locale.
+- `timezone` (optional): IANA timezone, for example `America/New_York`. Defaults to the host's local timezone. Set this explicitly in production so fire times don't depend on server locale.
 - `inputData` (optional): payload passed as the workflow's input on every fire.
 - `initialState` (optional): initial state for the run.
 - `requestContext` (optional): request context attached to the run.
@@ -112,14 +112,14 @@ Every fire records a trigger row with the run id, scheduled time, actual fire ti
 - The run's status (`running`, `success`, `failed`, `suspended`, `canceled`) as a badge.
 - The run's start time and duration.
 - A link to the run's full graph view at `/workflows/:workflowId/graph/:runId`.
-- A `pending` badge for triggers whose run record has not been written yet, due to a race between trigger publish and run snapshot.
-- A `publish failed` badge with the publish error when the scheduler could not enqueue the run at all.
+- A `pending` badge for triggers whose run record hasn't been written yet, due to a race between trigger publish and run snapshot.
+- A `publish failed` badge with the publish error when the scheduler couldn't enqueue the run at all.
 
-Triggers in a non-terminal state cause the panel to poll every five seconds until they reach a terminal state. The list paginates, so long-running schedules do not load thousands of rows up front.
+Triggers in a non-terminal state cause the panel to poll every five seconds until they reach a terminal state. The list paginates, so long-running schedules don't load thousands of rows up front.
 
 ## Pausing a schedule at runtime
 
-When a scheduled workflow misfires in production, you do not have to redeploy or hand-edit the database. Pause it from the SDK:
+When a scheduled workflow misfires in production, you don't have to redeploy or hand-edit the database. Pause it from the SDK:
 
 ```typescript
 import { MastraClient } from '@mastra/client-js'
@@ -139,8 +139,8 @@ In Studio, open the schedule detail page and select **Pause** or **Resume** in t
 A few rules worth knowing:
 
 - Pause is durable. The status is written to the schedules table and survives process restarts and redeploys. The declarative-config upsert never overwrites a user-set status, even when you change `cron`, `timezone`, or other fields.
-- Resume recomputes `nextFireAt` from now. A schedule paused for a week does not fire seven backlogged runs the moment you resume it. It fires on the next regular cron tick.
-- The only way to unpause is `resumeSchedule` (or the **Resume** button in Studio). Editing the workflow's `schedule` config does not unpause a paused row.
+- Resume recomputes `nextFireAt` from now. A schedule paused for a week doesn't fire seven backlogged runs the moment you resume it. It fires on the next regular cron tick.
+- The only way to unpause is `resumeSchedule` (or the **Resume** button in Studio). Editing the workflow's `schedule` config doesn't unpause a paused row.
 - Pause and resume are idempotent. Calling pause on an already-paused schedule is a no-op.
 - This is an operational override, not a way to author schedules. Creating, deleting, and editing schedules still happens in code via the `schedule` field on `createWorkflow`.
 
@@ -166,7 +166,7 @@ Deploy targets such as Fly Machines, Railway, Render, AWS ECS, GKE, or your own 
 
 ### Serverless platforms
 
-Functions-as-a-service platforms such as Vercel, Netlify, AWS Lambda, and Cloudflare Workers shut the process down after each request. The tick loop never gets a second tick. Schedules declared in code do not fire on these platforms with the built-in scheduler today.
+Functions-as-a-service platforms such as Vercel, Netlify, AWS Lambda, and Cloudflare Workers shut the process down after each request. The tick loop never gets a second tick. Schedules declared in code don't fire on these platforms with the built-in scheduler today.
 
 On these platforms, use [`@mastra/inngest`](#inngest-workflows) instead. Inngest is serverless-native and holds the cron state for you.
 
@@ -176,9 +176,9 @@ The `schedule` field documented on this page drives Mastra's built-in scheduler.
 
 Practical implications:
 
-- Inngest schedules do not appear in Studio's `/workflows/schedules` view.
-- The workflow header **Schedules** action does not show for Inngest workflows.
-- `client.pauseSchedule` and `client.resumeSchedule` do not control Inngest schedules.
+- Inngest schedules don't appear in Studio's `/workflows/schedules` view.
+- The workflow header **Schedules** action doesn't show for Inngest workflows.
+- `client.pauseSchedule` and `client.resumeSchedule` don't control Inngest schedules.
 
 Manage Inngest schedules from the [Inngest dashboard](https://www.inngest.com/docs/guides/scheduled-functions). Use Mastra schedules when you want Mastra to own scheduling end to end.
 

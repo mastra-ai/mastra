@@ -1,3 +1,4 @@
+import type { ActorSignal } from '../../auth/ee';
 import type { RequestContext } from '../../di';
 import type { SerializedError } from '../../error';
 import type { PubSub } from '../../events/pubsub';
@@ -215,6 +216,7 @@ export interface ExecuteEntryParams extends ObservabilityContext {
   pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
+  actor?: ActorSignal;
   outputWriter?: OutputWriter;
   disableScorers?: boolean;
   perStep?: boolean;
@@ -239,6 +241,7 @@ export async function executeEntry(
     pubsub,
     abortController,
     requestContext,
+    actor,
     outputWriter,
     disableScorers,
     perStep,
@@ -277,6 +280,7 @@ export async function executeEntry(
       pubsub,
       abortController,
       requestContext,
+      actor,
       outputWriter,
       disableScorers,
       serializedStepGraph,
@@ -314,6 +318,7 @@ export async function executeEntry(
       pubsub,
       abortController,
       requestContext,
+      actor,
       outputWriter,
       disableScorers,
       perStep,
@@ -387,6 +392,7 @@ export async function executeEntry(
         pubsub,
         abortController,
         requestContext,
+        actor,
         outputWriter,
         disableScorers,
         perStep,
@@ -425,6 +431,7 @@ export async function executeEntry(
         pubsub,
         abortController,
         requestContext,
+        actor,
         outputWriter,
         disableScorers,
         perStep,
@@ -462,6 +469,7 @@ export async function executeEntry(
       pubsub,
       abortController,
       requestContext,
+      actor,
       outputWriter,
       disableScorers,
       perStep,
@@ -483,6 +491,7 @@ export async function executeEntry(
       pubsub,
       abortController,
       requestContext,
+      actor,
       outputWriter,
       disableScorers,
       serializedStepGraph,
@@ -512,6 +521,7 @@ export async function executeEntry(
       pubsub,
       abortController,
       requestContext,
+      actor,
       outputWriter,
       disableScorers,
       serializedStepGraph,

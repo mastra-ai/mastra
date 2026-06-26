@@ -1,6 +1,4 @@
-// @vitest-environment jsdom
 import type { BuilderSettingsResponse, StoredAgentResponse } from '@mastra/client-js';
-import type * as PlaygroundUi from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen } from '@testing-library/react';
@@ -15,15 +13,11 @@ import { server } from '@/test/msw-server';
 // Tooltip primitives render their content lazily on hover; flatten them for
 // these structural tests so we can assert on the inline tooltip copy directly.
 // This is a UI-rendering seam only — it does NOT hide data/auth flow.
-vi.mock('@mastra/playground-ui', async () => {
-  const actual = await vi.importActual<typeof PlaygroundUi>('@mastra/playground-ui');
-  return {
-    ...actual,
-    Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-    TooltipTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-    TooltipContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  };
-});
+vi.mock('@mastra/playground-ui/components/Tooltip', () => ({
+  Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  TooltipTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  TooltipContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -183,6 +177,96 @@ describe('AgentBuilderList', () => {
 
     expect(screen.getAllByTestId('library-agent-row')).toHaveLength(fixtureAgents.length);
     expect(screen.queryByText('Private')).toBeNull();
+  });
+
+  it('renders the resolved author name when the server returned `author`', () => {
+    const agents: StoredAgentResponse[] = [
+      {
+        id: 'a1',
+        status: 'active',
+        createdAt: now,
+        updatedAt: now,
+        name: 'Alpha Agent',
+        description: 'desc',
+        instructions: '',
+        model: { provider: 'openai', name: 'gpt-4' },
+        visibility: 'public',
+        authorId: 'user-1',
+        author: { id: 'user-1', name: 'Alice', avatarUrl: 'https://x/y.png' },
+      },
+    ];
+    renderList({ agents });
+
+    const authors = screen.getAllByTestId('agent-builder-row-author');
+    expect(authors.length).toBeGreaterThan(0);
+    expect(authors.some(node => node.textContent?.includes('Alice'))).toBe(true);
+  });
+
+  it('falls back to email when the resolved author has no name', () => {
+    const agents: StoredAgentResponse[] = [
+      {
+        id: 'a1',
+        status: 'active',
+        createdAt: now,
+        updatedAt: now,
+        name: 'Alpha Agent',
+        description: 'desc',
+        instructions: '',
+        model: { provider: 'openai', name: 'gpt-4' },
+        visibility: 'public',
+        authorId: 'user-1',
+        author: { id: 'user-1', email: 'alice@example.com' },
+      },
+    ];
+    renderList({ agents });
+
+    const authors = screen.getAllByTestId('agent-builder-row-author');
+    expect(authors.length).toBeGreaterThan(0);
+    expect(authors.some(node => node.textContent?.includes('alice@example.com'))).toBe(true);
+  });
+
+  it('falls back to authorId when no resolved author is present', () => {
+    const agents: StoredAgentResponse[] = [
+      {
+        id: 'a1',
+        status: 'active',
+        createdAt: now,
+        updatedAt: now,
+        name: 'Alpha Agent',
+        description: 'desc',
+        instructions: '',
+        model: { provider: 'openai', name: 'gpt-4' },
+        visibility: 'public',
+        authorId: 'user-99',
+      },
+    ];
+    renderList({ agents });
+
+    const authors = screen.getAllByTestId('agent-builder-row-author');
+    expect(authors.length).toBeGreaterThan(0);
+    expect(authors.some(node => node.textContent?.includes('user-99'))).toBe(true);
+  });
+
+  it('omits the author block when neither `author` nor `authorId` is present', () => {
+    const agents: StoredAgentResponse[] = [
+      {
+        id: 'a1',
+        status: 'active',
+        createdAt: now,
+        updatedAt: now,
+        name: 'Alpha Agent',
+        description: 'desc',
+        instructions: '',
+        model: { provider: 'openai', name: 'gpt-4' },
+        visibility: 'public',
+      },
+    ];
+    renderList({ agents });
+
+    expect(screen.queryByTestId('agent-builder-row-author')).toBeNull();
+    // Row still renders all other fields.
+    expect(screen.getByText('Alpha Agent')).toBeTruthy();
+    expect(screen.getByText('desc')).toBeTruthy();
   });
 });
 

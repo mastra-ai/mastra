@@ -132,6 +132,34 @@ describe('Resume API', () => {
       result.cleanup();
     });
 
+    it('prepare() honors a caller-provided runId so resume(runId) can find the run', async () => {
+      // Regression: prepare() previously dropped options.runId when calling
+      // prepareForDurableExecution (unlike stream()), so it registered a random
+      // id. That breaks rehydrating a persisted, suspended run in a fresh
+      // process: resume(runId) couldn't find the registry entry prepare() built.
+      const mockModel = createTextModel('Prepared!');
+
+      const baseAgent = new Agent({
+        id: 'prepare-runid-agent',
+        name: 'Prepare RunId Agent',
+        instructions: 'Test prepare honors runId',
+        model: mockModel as LanguageModelV2,
+      });
+
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const requestedRunId = 'fixed-run-id-aaaaaaaa';
+      const prep = await durableAgent.prepare('Start something', { runId: requestedRunId });
+
+      // prepare() must register the run under the requested id, not a random one.
+      expect(prep.runId).toBe(requestedRunId);
+
+      // ...so a follow-up resume(requestedRunId) finds the registry entry.
+      const result = await durableAgent.resume(requestedRunId, { approved: true });
+      expect(result.runId).toBe(requestedRunId);
+      result.cleanup();
+    });
+
     it('should preserve threadId and resourceId from prepare through resume', async () => {
       const mockModel = createTextModel('Done');
 
@@ -260,14 +288,16 @@ describe('Resume with CachingPubSub Event Replay', () => {
     // Wait a bit for events to be cached
     await new Promise(resolve => setTimeout(resolve, 50));
 
-    // Disconnect (cleanup)
-    initialCleanup();
-
-    // Verify events were cached - use the correct topic format
+    // Verify events were cached - use the correct topic format.
+    // Read history before cleanup: the agent now reuses this CachingPubSub
+    // instance, so cleanup clears this topic's cached history.
     const topic = `agent.stream.${runId}`;
     const cachedEvents = await cachingPubsub.getHistory(topic);
     // Events should be cached (at least the start event)
     expect(cachedEvents.length).toBeGreaterThan(0);
+
+    // Disconnect (cleanup)
+    initialCleanup();
   });
 
   it('should deduplicate events during resume replay', async () => {
@@ -291,13 +321,16 @@ describe('Resume with CachingPubSub Event Replay', () => {
 
     // Wait for events
     await new Promise(resolve => setTimeout(resolve, 100));
-    cleanup();
 
-    // Subscribe with replay - should get events without duplicates
+    // Subscribe with replay - should get events without duplicates.
+    // Replay before cleanup: the agent now reuses this CachingPubSub instance,
+    // so cleanup clears this topic's cached history.
     const topic = `agent.stream.${runId}`;
     await cachingPubsub.subscribeWithReplay(topic, event => {
       receivedEvents.push(event);
     });
+
+    cleanup();
 
     // Each event ID should be unique
     const eventIds = receivedEvents.map(e => e.id);

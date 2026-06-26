@@ -49,18 +49,19 @@ themselves or dictate values for you to write.
 
 ### 0. Auth ON — extract the session cookie for curl
 
-The WorkOS session cookie is `httpOnly`, so `curl` cannot mint it via `/api/auth/login` and `document.cookie` cannot read it in the browser. **Do this before any other auth-on step that uses `curl`.** Don't fall back to "UI only" — every snippet below uses `-H "Cookie: $COOKIE"` and this is how you get the value.
+The WorkOS session cookie is `httpOnly`, so `curl` cannot mint it via `/sign-in` and `document.cookie` cannot read it in the browser. **Do this before any other auth-on step that uses `curl`.** Don't fall back to "UI only" — every snippet below uses `-H "Cookie: $COOKIE"` and this is how you get the value.
 
-The scaffold ships a debug route gated by `SMOKE_TEST_COOKIE_LEAK=1` that echoes back the request's Cookie header.
+The scaffold ships a debug route gated by `SMOKE_TEST_COOKIE_LEAK=1` that echoes back the request's Cookie header. `scaffold.sh` writes this line into `.env` automatically whenever the `--workos-*` flags trigger auth-on mode, so you should not normally need to add it by hand.
 
 > **Ordering gotcha.** The `apiRoutes` array is built **once** when `mastra dev` boots, from `process.env.SMOKE_TEST_COOKIE_LEAK`. If the flag isn't set in `.env` before that boot, `GET /smoke-test/cookie` returns `404` even though it appears in this doc. If you see a 404 here, the fix is always "stop `mastra dev`, confirm the line is in `$PROJECT_DIR/.env`, restart" — never try to enable it at runtime via curl or browser. Verify with `grep SMOKE_TEST_COOKIE_LEAK "$PROJECT_DIR/.env"` before restarting.
 
 Recipe:
 
 ```bash
-# 1. Add the leak flag to $PROJECT_DIR/.env (only for the smoke test)
-echo 'SMOKE_TEST_COOKIE_LEAK=1' >> "$PROJECT_DIR/.env"
-# 2. Restart `mastra dev` so it picks up the env change.
+# 1. Confirm the leak flag is in $PROJECT_DIR/.env (scaffold.sh writes it for auth-on).
+grep -q '^SMOKE_TEST_COOKIE_LEAK=1' "$PROJECT_DIR/.env" \
+  || echo 'SMOKE_TEST_COOKIE_LEAK=1' >> "$PROJECT_DIR/.env"
+# 2. Restart `mastra dev` so it picks up the env change (only needed if step 1 wrote anything).
 # 3. In the browser, sign in via WorkOS (navigate to $BASE/agent-builder).
 # 4. In the same browser session, navigate to $BASE/smoke-test/cookie
 #    and copy the response body (it's the raw Cookie header).

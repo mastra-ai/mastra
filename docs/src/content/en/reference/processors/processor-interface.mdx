@@ -483,8 +483,7 @@ The object form can return any combination of these properties:
   {
     name: 'model',
     type: 'LanguageModelV2 | string',
-    description:
-      "Change the model for this step. Can be a model instance or router ID like '__GATEWAY_OPENAI_MODEL__'.",
+    description: "Change the model for this step. Can be a model instance or router ID like 'openai/gpt-5.5'.",
     isOptional: true,
   },
   {
@@ -575,7 +574,7 @@ System messages are **reset to their original values** at the start of each step
 
 Processes the final LLM request after Mastra converts the `MessageList` into `LanguageModelV2Prompt` and before the provider call. Use this method for transient, model-aware rewrites that should affect only the current outbound request.
 
-Returned prompt changes are forwarded to the model for the current call only. They are not persisted back to `MessageList`, memory, UI history, or later provider calls.
+Returned prompt changes are forwarded to the model for the current call only. They're not persisted back to `MessageList`, memory, UI history, or later provider calls.
 
 ```typescript prettier:false
 processLLMRequest?(
@@ -1133,6 +1132,13 @@ processOutputStep?(args: ProcessOutputStepArgs): ProcessorMessageResult;
     isOptional: true,
   },
   {
+    name: 'providerMetadata',
+    type: 'ProviderMetadata',
+    description:
+      'Provider-specific metadata for the finishing step (e.g. AWS Bedrock guardrail trace). Present when the model step produced provider metadata, including on content-filter blocks where `steps` is empty.',
+    isOptional: true,
+  },
+  {
     name: 'toolCalls',
     type: 'ToolCallInfo[]',
     description: 'Tool calls made in this step (if any).',
@@ -1431,8 +1437,8 @@ export class WordCounter implements Processor {
 
 Every processor receives a `state` object in `processLLMRequest`, `processLLMResponse`, `processOutputStream`, `processOutputStep`, `processOutputResult`, and `processAPIError`. State has three important properties:
 
-- **Per-processor**: Each processor gets its own `state` object, keyed by the processor's `id`. Two processors with different ids cannot read or overwrite each other's state.
-- **Per-request**: A fresh state object is created at the start of every `agent.generate()` or `agent.stream()` call. State does not leak between requests or between users.
+- **Per-processor**: Each processor gets its own `state` object, keyed by the processor's `id`. Two processors with different ids can't read or overwrite each other's state.
+- **Per-request**: A fresh state object is created at the start of every `agent.generate()` or `agent.stream()` call. State doesn't leak between requests or between users.
 - **Shared across methods**: Within one request, the same `state` object is passed to `processLLMRequest` (before the provider call), `processLLMResponse` (after the step completes), `processOutputStream` (for every chunk), `processOutputStep` (after every LLM step), `processOutputResult` (once at the end), and `processAPIError` (when an LLM call fails). For example, `processLLMRequest` can stash a cache key and `processLLMResponse` can read it back to write the response.
 
 Initialize fields defensively on first access, because `state` starts as an empty object:
@@ -1496,7 +1502,7 @@ await writer.custom({
 })
 ```
 
-By default, processors do **not** see `data-*` chunks in `processOutputStream` so they don't accidentally process tool telemetry or their own output. Opt in by setting `processDataParts: true` on the processor:
+By default, processors **don't** see `data-*` chunks in `processOutputStream` so they don't accidentally process tool telemetry or their own output. Opt in by setting `processDataParts: true` on the processor:
 
 ```typescript
 class ModerationCollector implements Processor {

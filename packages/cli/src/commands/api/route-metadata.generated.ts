@@ -108,6 +108,7 @@ export const API_ROUTE_METADATA = {
       "toolChoice",
       "toolsets",
       "tracingOptions",
+      "untilIdle",
       "versions"
     ],
     "hasQuery": false,
@@ -146,8 +147,37 @@ export const API_ROUTE_METADATA = {
       "toolChoice",
       "toolsets",
       "tracingOptions",
+      "untilIdle",
       "versions"
     ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/send-message": {
+    "method": "POST",
+    "path": "/agents/:agentId/send-message",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/queue-message": {
+    "method": "POST",
+    "path": "/agents/:agentId/queue-message",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
     "hasQuery": false,
     "hasBody": true,
     "responseShape": {
@@ -168,6 +198,23 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /agents/:agentId/threads/abort": {
+    "method": "POST",
+    "path": "/agents/:agentId/threads/abort",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "resourceId",
+      "threadId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /agents/:agentId/tools/:toolId/execute": {
     "method": "POST",
     "path": "/agents/:agentId/tools/:toolId/execute",
@@ -179,6 +226,30 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "data",
       "requestContext"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/send-tool-approval": {
+    "method": "POST",
+    "path": "/agents/:agentId/send-tool-approval",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "approved",
+      "format",
+      "messages",
+      "requestContext",
+      "resourceId",
+      "resumeData",
+      "streamOptions",
+      "threadId",
+      "toolCallId"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -409,6 +480,19 @@ export const API_ROUTE_METADATA = {
       "listProperty": "permissions"
     }
   },
+  "GET /auth/permission-patterns": {
+    "method": "GET",
+    "path": "/auth/permission-patterns",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "patterns"
+    }
+  },
   "GET /workflows": {
     "method": "GET",
     "path": "/workflows",
@@ -562,6 +646,29 @@ export const API_ROUTE_METADATA = {
   "POST /workflows/:workflowId/resume-async": {
     "method": "POST",
     "path": "/workflows/:workflowId/resume-async",
+    "pathParams": [
+      "workflowId"
+    ],
+    "queryParams": [
+      "runId"
+    ],
+    "bodyParams": [
+      "forEachIndex",
+      "perStep",
+      "requestContext",
+      "resumeData",
+      "step",
+      "tracingOptions"
+    ],
+    "hasQuery": true,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /workflows/:workflowId/resume-no-wait": {
+    "method": "POST",
+    "path": "/workflows/:workflowId/resume-no-wait",
     "pathParams": [
       "workflowId"
     ],
@@ -2980,6 +3087,7 @@ export const API_ROUTE_METADATA = {
       "toolChoice",
       "toolsets",
       "tracingOptions",
+      "untilIdle",
       "versions"
     ],
     "hasQuery": false,
@@ -3139,6 +3247,92 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /stored/agents/:storedAgentId/dependents": {
+    "method": "GET",
+    "path": "/stored/agents/:storedAgentId/dependents",
+    "pathParams": [
+      "storedAgentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "dependents"
+    }
+  },
+  "POST /stored/agents/:storedAgentId/export": {
+    "method": "POST",
+    "path": "/stored/agents/:storedAgentId/export",
+    "pathParams": [
+      "storedAgentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "agents",
+      "browser",
+      "defaultOptions",
+      "description",
+      "inputProcessors",
+      "instructions",
+      "integrationTools",
+      "mcpClients",
+      "memory",
+      "model",
+      "name",
+      "outputProcessors",
+      "requestContextSchema",
+      "scorers",
+      "skills",
+      "toolProviders",
+      "tools",
+      "workflows",
+      "workspace"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /stored/agents/:storedAgentId/change-request": {
+    "method": "POST",
+    "path": "/stored/agents/:storedAgentId/change-request",
+    "pathParams": [
+      "storedAgentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "agents",
+      "browser",
+      "changeMessage",
+      "defaultOptions",
+      "description",
+      "inputProcessors",
+      "inspectOnly",
+      "instructions",
+      "integrationTools",
+      "mcpClients",
+      "memory",
+      "model",
+      "name",
+      "outputProcessors",
+      "requestContextSchema",
+      "scorers",
+      "skills",
+      "toolProviders",
+      "tools",
+      "userName",
+      "workflows",
+      "workspace"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /stored/agents/:storedAgentId": {
     "method": "GET",
     "path": "/stored/agents/:storedAgentId",
@@ -3179,6 +3373,7 @@ export const API_ROUTE_METADATA = {
       "requestContextSchema",
       "scorers",
       "skills",
+      "toolProviders",
       "tools",
       "visibility",
       "workflows",
@@ -3216,6 +3411,7 @@ export const API_ROUTE_METADATA = {
       "requestContextSchema",
       "scorers",
       "skills",
+      "toolProviders",
       "tools",
       "visibility",
       "workflows",
@@ -4321,6 +4517,164 @@ export const API_ROUTE_METADATA = {
       "kind": "record"
     }
   },
+  "POST /tool-providers/:providerId/authorize": {
+    "method": "POST",
+    "path": "/tool-providers/:providerId/authorize",
+    "pathParams": [
+      "providerId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "config",
+      "connectionId",
+      "label",
+      "scope",
+      "toolName",
+      "toolkit"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /tool-providers/:providerId/auth-status/:authId": {
+    "method": "GET",
+    "path": "/tool-providers/:providerId/auth-status/:authId",
+    "pathParams": [
+      "providerId",
+      "authId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /tool-providers/:providerId/connection-status": {
+    "method": "POST",
+    "path": "/tool-providers/:providerId/connection-status",
+    "pathParams": [
+      "providerId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "items"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /tool-providers/:providerId/connections": {
+    "method": "GET",
+    "path": "/tool-providers/:providerId/connections",
+    "pathParams": [
+      "providerId"
+    ],
+    "queryParams": [
+      "authorId",
+      "page",
+      "perPage",
+      "scope",
+      "toolkit"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "items",
+      "paginationProperty": "pagination"
+    }
+  },
+  "GET /tool-providers/:providerId/connection-fields": {
+    "method": "GET",
+    "path": "/tool-providers/:providerId/connection-fields",
+    "pathParams": [
+      "providerId"
+    ],
+    "queryParams": [
+      "toolkit"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "fields"
+    }
+  },
+  "DELETE /tool-providers/:providerId/connections/:connectionId": {
+    "method": "DELETE",
+    "path": "/tool-providers/:providerId/connections/:connectionId",
+    "pathParams": [
+      "providerId",
+      "connectionId"
+    ],
+    "queryParams": [
+      "force",
+      "toolkit"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PATCH /tool-providers/:providerId/connections/:connectionId": {
+    "method": "PATCH",
+    "path": "/tool-providers/:providerId/connections/:connectionId",
+    "pathParams": [
+      "providerId",
+      "connectionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "label"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /tool-providers/:providerId/connections/:connectionId/usage": {
+    "method": "GET",
+    "path": "/tool-providers/:providerId/connections/:connectionId/usage",
+    "pathParams": [
+      "providerId",
+      "connectionId"
+    ],
+    "queryParams": [
+      "toolkit"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "agents"
+    }
+  },
+  "GET /tool-providers/:providerId/health": {
+    "method": "GET",
+    "path": "/tool-providers/:providerId/health",
+    "pathParams": [
+      "providerId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /processor-providers": {
     "method": "GET",
     "path": "/processor-providers",
@@ -4499,7 +4853,8 @@ export const API_ROUTE_METADATA = {
       "input",
       "metadata",
       "requestContext",
-      "source"
+      "source",
+      "toolMocks"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -4569,7 +4924,8 @@ export const API_ROUTE_METADATA = {
       "input",
       "metadata",
       "requestContext",
-      "source"
+      "source",
+      "toolMocks"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -4879,6 +5235,19 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /editor/builder/models/available": {
+    "method": "GET",
+    "path": "/editor/builder/models/available",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "providers"
+    }
+  },
   "GET /editor/builder/infrastructure": {
     "method": "GET",
     "path": "/editor/builder/infrastructure",
@@ -5128,6 +5497,29 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /agent-builder/:actionId/resume-no-wait": {
+    "method": "POST",
+    "path": "/agent-builder/:actionId/resume-no-wait",
+    "pathParams": [
+      "actionId"
+    ],
+    "queryParams": [
+      "runId"
+    ],
+    "bodyParams": [
+      "forEachIndex",
+      "perStep",
+      "requestContext",
+      "resumeData",
+      "step",
+      "tracingOptions"
+    ],
+    "hasQuery": true,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /agent-builder/:actionId/resume": {
     "method": "POST",
     "path": "/agent-builder/:actionId/resume",
@@ -5299,6 +5691,567 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [],
     "hasQuery": false,
     "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /harness": {
+    "method": "GET",
+    "path": "/harness",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "harnesses"
+    }
+  },
+  "GET /harness/:harnessId/modes": {
+    "method": "GET",
+    "path": "/harness/:harnessId/modes",
+    "pathParams": [
+      "harnessId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "modes"
+    }
+  },
+  "GET /harness/:harnessId/models": {
+    "method": "GET",
+    "path": "/harness/:harnessId/models",
+    "pathParams": [
+      "harnessId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "models"
+    }
+  },
+  "POST /harness/:harnessId/sessions": {
+    "method": "POST",
+    "path": "/harness/:harnessId/sessions",
+    "pathParams": [
+      "harnessId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "resourceId",
+      "tags"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /harness/:harnessId/sessions/:resourceId": {
+    "method": "GET",
+    "path": "/harness/:harnessId/sessions/:resourceId",
+    "pathParams": [
+      "harnessId",
+      "resourceId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /harness/:harnessId/sessions/:resourceId/threads": {
+    "method": "GET",
+    "path": "/harness/:harnessId/sessions/:resourceId/threads",
+    "pathParams": [
+      "harnessId",
+      "resourceId"
+    ],
+    "queryParams": [
+      "limit",
+      "tags"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "threads"
+    }
+  },
+  "POST /harness/:harnessId/sessions/:resourceId/threads": {
+    "method": "POST",
+    "path": "/harness/:harnessId/sessions/:resourceId/threads",
+    "pathParams": [
+      "harnessId",
+      "resourceId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "title"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "DELETE /harness/:harnessId/sessions/:resourceId/threads/:threadId": {
+    "method": "DELETE",
+    "path": "/harness/:harnessId/sessions/:resourceId/threads/:threadId",
+    "pathParams": [
+      "harnessId",
+      "resourceId",
+      "threadId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PUT /harness/:harnessId/sessions/:resourceId/threads/:threadId": {
+    "method": "PUT",
+    "path": "/harness/:harnessId/sessions/:resourceId/threads/:threadId",
+    "pathParams": [
+      "harnessId",
+      "resourceId",
+      "threadId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "title"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /harness/:harnessId/sessions/:resourceId/threads/clone": {
+    "method": "POST",
+    "path": "/harness/:harnessId/sessions/:resourceId/threads/clone",
+    "pathParams": [
+      "harnessId",
+      "resourceId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "sourceThreadId",
+      "title"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /harness/:harnessId/sessions/:resourceId/threads/:threadId/messages": {
+    "method": "GET",
+    "path": "/harness/:harnessId/sessions/:resourceId/threads/:threadId/messages",
+    "pathParams": [
+      "harnessId",
+      "resourceId",
+      "threadId"
+    ],
+    "queryParams": [
+      "limit"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "messages"
+    }
+  },
+  "POST /harness/:harnessId/sessions/:resourceId/messages": {
+    "method": "POST",
+    "path": "/harness/:harnessId/sessions/:resourceId/messages",
+    "pathParams": [
+      "harnessId",
+      "resourceId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "message"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /harness/:harnessId/sessions/:resourceId/steer": {
+    "method": "POST",
+    "path": "/harness/:harnessId/sessions/:resourceId/steer",
+    "pathParams": [
+      "harnessId",
+      "resourceId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "message"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /harness/:harnessId/sessions/:resourceId/follow-up": {
+    "method": "POST",
+    "path": "/harness/:harnessId/sessions/:resourceId/follow-up",
+    "pathParams": [
+      "harnessId",
+      "resourceId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "message"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /harness/:harnessId/sessions/:resourceId/abort": {
+    "method": "POST",
+    "path": "/harness/:harnessId/sessions/:resourceId/abort",
+    "pathParams": [
+      "harnessId",
+      "resourceId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /harness/:harnessId/sessions/:resourceId/tool-approval": {
+    "method": "POST",
+    "path": "/harness/:harnessId/sessions/:resourceId/tool-approval",
+    "pathParams": [
+      "harnessId",
+      "resourceId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "approved",
+      "toolCallId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /harness/:harnessId/sessions/:resourceId/tool-suspension": {
+    "method": "POST",
+    "path": "/harness/:harnessId/sessions/:resourceId/tool-suspension",
+    "pathParams": [
+      "harnessId",
+      "resourceId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "resumeData",
+      "toolCallId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /harness/:harnessId/sessions/:resourceId/mode": {
+    "method": "POST",
+    "path": "/harness/:harnessId/sessions/:resourceId/mode",
+    "pathParams": [
+      "harnessId",
+      "resourceId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "modeId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /harness/:harnessId/sessions/:resourceId/model": {
+    "method": "POST",
+    "path": "/harness/:harnessId/sessions/:resourceId/model",
+    "pathParams": [
+      "harnessId",
+      "resourceId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "modeId",
+      "modelId",
+      "scope"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /harness/:harnessId/sessions/:resourceId/thread": {
+    "method": "POST",
+    "path": "/harness/:harnessId/sessions/:resourceId/thread",
+    "pathParams": [
+      "harnessId",
+      "resourceId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "threadId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /harness/:harnessId/sessions/:resourceId/notifications": {
+    "method": "POST",
+    "path": "/harness/:harnessId/sessions/:resourceId/notifications",
+    "pathParams": [
+      "harnessId",
+      "resourceId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "attributes",
+      "coalesceKey",
+      "dedupeKey",
+      "kind",
+      "metadata",
+      "payload",
+      "priority",
+      "source",
+      "sourceId",
+      "summary"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /harness/:harnessId/workspace": {
+    "method": "GET",
+    "path": "/harness/:harnessId/workspace",
+    "pathParams": [
+      "harnessId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /harness/:harnessId/sessions/:resourceId/om": {
+    "method": "GET",
+    "path": "/harness/:harnessId/sessions/:resourceId/om",
+    "pathParams": [
+      "harnessId",
+      "resourceId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /harness/:harnessId/sessions/:resourceId/resource": {
+    "method": "POST",
+    "path": "/harness/:harnessId/sessions/:resourceId/resource",
+    "pathParams": [
+      "harnessId",
+      "resourceId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "newResourceId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /harness/:harnessId/sessions/:resourceId/resources": {
+    "method": "GET",
+    "path": "/harness/:harnessId/sessions/:resourceId/resources",
+    "pathParams": [
+      "harnessId",
+      "resourceId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "resourceIds"
+    }
+  },
+  "GET /harness/:harnessId/sessions/:resourceId/goal": {
+    "method": "GET",
+    "path": "/harness/:harnessId/sessions/:resourceId/goal",
+    "pathParams": [
+      "harnessId",
+      "resourceId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /harness/:harnessId/sessions/:resourceId/goal": {
+    "method": "POST",
+    "path": "/harness/:harnessId/sessions/:resourceId/goal",
+    "pathParams": [
+      "harnessId",
+      "resourceId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "judgeModelId",
+      "maxRuns",
+      "objective"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PUT /harness/:harnessId/sessions/:resourceId/goal": {
+    "method": "PUT",
+    "path": "/harness/:harnessId/sessions/:resourceId/goal",
+    "pathParams": [
+      "harnessId",
+      "resourceId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "judgeModelId",
+      "maxRuns",
+      "status"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "DELETE /harness/:harnessId/sessions/:resourceId/goal": {
+    "method": "DELETE",
+    "path": "/harness/:harnessId/sessions/:resourceId/goal",
+    "pathParams": [
+      "harnessId",
+      "resourceId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /harness/:harnessId/sessions/:resourceId/permissions": {
+    "method": "GET",
+    "path": "/harness/:harnessId/sessions/:resourceId/permissions",
+    "pathParams": [
+      "harnessId",
+      "resourceId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PUT /harness/:harnessId/sessions/:resourceId/permissions/category": {
+    "method": "PUT",
+    "path": "/harness/:harnessId/sessions/:resourceId/permissions/category",
+    "pathParams": [
+      "harnessId",
+      "resourceId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "category",
+      "policy"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PUT /harness/:harnessId/sessions/:resourceId/permissions/tool": {
+    "method": "PUT",
+    "path": "/harness/:harnessId/sessions/:resourceId/permissions/tool",
+    "pathParams": [
+      "harnessId",
+      "resourceId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "policy",
+      "toolName"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PUT /harness/:harnessId/sessions/:resourceId/state": {
+    "method": "PUT",
+    "path": "/harness/:harnessId/sessions/:resourceId/state",
+    "pathParams": [
+      "harnessId",
+      "resourceId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "state"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
     "responseShape": {
       "kind": "single"
     }

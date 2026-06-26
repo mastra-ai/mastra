@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { CheckIcon, MailIcon, SearchIcon, SendIcon, XIcon } from 'lucide-react';
+import { CheckIcon, MailIcon, MinusIcon, PlusIcon, SearchIcon, SendIcon, XIcon } from 'lucide-react';
+import { useState } from 'react';
 import { Kbd } from '../Kbd';
 import {
   InputGroup,
@@ -16,6 +17,12 @@ const meta: Meta<typeof InputGroup> = {
   parameters: {
     layout: 'centered',
   },
+  argTypes: {
+    variant: {
+      control: { type: 'select' },
+      options: ['default', 'filled', 'outline'],
+    },
+  },
 };
 
 export default meta;
@@ -26,6 +33,34 @@ export const Default: Story = {
     <div className="w-80">
       <InputGroup>
         <InputGroupInput placeholder="Plain input" />
+      </InputGroup>
+    </div>
+  ),
+};
+
+export const Variants: Story = {
+  render: () => (
+    <div className="flex flex-col gap-3 w-80">
+      <InputGroup variant="default">
+        <InputGroupAddon>
+          <SearchIcon />
+        </InputGroupAddon>
+        <InputGroupInput placeholder="Default" />
+      </InputGroup>
+      <InputGroup variant="filled">
+        <InputGroupAddon>
+          <SearchIcon />
+        </InputGroupAddon>
+        <InputGroupInput placeholder="Filled" />
+      </InputGroup>
+      <InputGroup variant="outline">
+        <InputGroupAddon>
+          <SearchIcon />
+        </InputGroupAddon>
+        <InputGroupInput placeholder="Outline" />
+      </InputGroup>
+      <InputGroup variant="outline">
+        <InputGroupTextarea placeholder="Outline textarea" />
       </InputGroup>
     </div>
   ),
@@ -137,6 +172,12 @@ export const BlockEndAddon: Story = {
 export const Sizes: Story = {
   render: () => (
     <div className="flex flex-col gap-3 w-80">
+      <InputGroup size="xs">
+        <InputGroupAddon>
+          <SearchIcon />
+        </InputGroupAddon>
+        <InputGroupInput placeholder="Extra Small" />
+      </InputGroup>
       <InputGroup size="sm">
         <InputGroupAddon>
           <SearchIcon />
@@ -197,6 +238,75 @@ export const Textarea: Story = {
       <InputGroup>
         <InputGroupTextarea placeholder="Write a comment..." />
       </InputGroup>
+    </div>
+  ),
+};
+
+const NumberWithStepperDemo = () => {
+  const [value, setValue] = useState(0);
+  return (
+    <div className="w-80">
+      <InputGroup>
+        <InputGroupInput
+          type="number"
+          value={value}
+          onChange={event => {
+            const next = Number(event.target.value);
+            setValue(Number.isNaN(next) ? 0 : next);
+          }}
+        />
+        <InputGroupAddon align="inline-end">
+          <InputGroupButton aria-label="Decrement" onClick={() => setValue(v => v - 1)}>
+            <MinusIcon />
+          </InputGroupButton>
+          <InputGroupButton aria-label="Increment" onClick={() => setValue(v => v + 1)}>
+            <PlusIcon />
+          </InputGroupButton>
+        </InputGroupAddon>
+      </InputGroup>
+    </div>
+  );
+};
+
+export const NumberWithStepper: Story = {
+  render: () => <NumberWithStepperDemo />,
+};
+
+export const OnDifferentSurfaces: Story = {
+  render: () => (
+    <div className="flex flex-col gap-4 w-96">
+      <div className="bg-surface1 p-4 rounded-lg border border-border1">
+        <InputGroup>
+          <InputGroupAddon>
+            <SearchIcon />
+          </InputGroupAddon>
+          <InputGroupInput placeholder="On bg-surface1" />
+        </InputGroup>
+      </div>
+      <div className="bg-surface2 p-4 rounded-lg border border-border1">
+        <InputGroup>
+          <InputGroupAddon>
+            <SearchIcon />
+          </InputGroupAddon>
+          <InputGroupInput placeholder="On bg-surface2" />
+        </InputGroup>
+      </div>
+      <div className="bg-surface3 p-4 rounded-lg border border-border1">
+        <InputGroup>
+          <InputGroupAddon>
+            <SearchIcon />
+          </InputGroupAddon>
+          <InputGroupInput placeholder="On bg-surface3" />
+        </InputGroup>
+      </div>
+      <div className="bg-surface4 p-4 rounded-lg border border-border1">
+        <InputGroup>
+          <InputGroupAddon>
+            <SearchIcon />
+          </InputGroupAddon>
+          <InputGroupInput placeholder="On bg-surface4" />
+        </InputGroup>
+      </div>
     </div>
   ),
 };

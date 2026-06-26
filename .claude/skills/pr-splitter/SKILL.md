@@ -86,6 +86,7 @@ Base branch: main
    - Scope:
    - Files/hunks extracted:
    - Verification:
+   - Changeset: (package names, bump type, scoped message)
    - Status:
 
 ## Remaining original intent
@@ -97,9 +98,26 @@ Base branch: main
 - Date / branch / reason:
 ```
 
+## Changesets
+
+Each split PR must carry its own changeset scoped to the changes in that PR. Do not keep the original changeset from the source branch — it covers the full combined change and does not belong in any single split PR.
+
+After extracting changes into a split branch:
+
+1. **Delete any changeset files carried over from the original branch.** These were written for the combined diff and will produce incorrect changelog entries.
+2. **Create a new changeset for each PR** using the CLI (see `.mastracode/commands/changeset.md`):
+   ```bash
+   pnpm changeset -s -m "your scoped message" (--major | --minor | --patch) pkg-name
+   ```
+3. **Scope the message to that PR's changes only.** The changeset message should describe what this specific PR does, not the full original feature.
+4. **Include only the packages actually changed in this PR.** If the original changeset listed five packages but this PR only touches `@mastra/core`, the new changeset should only reference `@mastra/core`.
+5. **Match the version bump type to the PR's scope.** A prep/refactor PR is typically `patch`; a PR introducing new API surface is `minor`; a PR with breaking changes is `major`.
+
+Add changeset creation to the scratchpad template under each planned PR's verification checklist so it is not forgotten.
+
 ## Common failure modes
 
-Avoid splitting by file when behavior spans files, extracting tests without code, leaving follow-up PRs uncompilable, force-pushing without a reviewer summary, deleting the original branch early, and reverting review feedback while resolving stack conflicts.
+Avoid splitting by file when behavior spans files, extracting tests without code, leaving follow-up PRs uncompilable, force-pushing without a reviewer summary, deleting the original branch early, reverting review feedback while resolving stack conflicts, and keeping the original branch's changeset in every split PR instead of creating scoped changesets per PR.
 
 ## Default output
 
