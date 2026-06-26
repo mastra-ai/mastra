@@ -367,4 +367,94 @@ describe('InMemoryAgentsStorage - Stored Agents Feature', () => {
       expect(versionsAfter).toBe(0);
     });
   });
+
+  describe('visibility', () => {
+    it("defaults visibility to 'private' when authorId is set", async () => {
+      const result = await storage.create({
+        agent: {
+          id: 'vis-1',
+          authorId: 'user-a',
+          name: 'Vis Agent',
+          instructions: 'hi',
+          model: { provider: 'openai', name: 'gpt-4' },
+        },
+      });
+
+      expect(result.visibility).toBe('private');
+    });
+
+    it('leaves visibility undefined when no authorId is provided', async () => {
+      const result = await storage.create({
+        agent: {
+          id: 'vis-unowned',
+          name: 'Unowned Agent',
+          instructions: 'hi',
+          model: { provider: 'openai', name: 'gpt-4' },
+        },
+      });
+
+      expect(result.visibility).toBeUndefined();
+    });
+
+    it('persists explicit visibility on create', async () => {
+      const result = await storage.create({
+        agent: {
+          id: 'vis-public',
+          authorId: 'user-a',
+          visibility: 'public',
+          name: 'Public Agent',
+          instructions: 'hi',
+          model: { provider: 'openai', name: 'gpt-4' },
+        },
+      });
+
+      expect(result.visibility).toBe('public');
+    });
+
+    it('updates visibility', async () => {
+      await storage.create({
+        agent: {
+          id: 'vis-upd',
+          authorId: 'user-a',
+          name: 'Vis Agent',
+          instructions: 'hi',
+          model: { provider: 'openai', name: 'gpt-4' },
+        },
+      });
+
+      const updated = await storage.update({ id: 'vis-upd', visibility: 'public' });
+      expect(updated.visibility).toBe('public');
+
+      const reverted = await storage.update({ id: 'vis-upd', visibility: 'private' });
+      expect(reverted.visibility).toBe('private');
+    });
+
+    it('filters by visibility in list()', async () => {
+      await storage.create({
+        agent: {
+          id: 'priv-1',
+          authorId: 'user-a',
+          name: 'Priv',
+          instructions: 'hi',
+          model: { provider: 'openai', name: 'gpt-4' },
+        },
+      });
+      await storage.create({
+        agent: {
+          id: 'pub-1',
+          authorId: 'user-a',
+          visibility: 'public',
+          name: 'Pub',
+          instructions: 'hi',
+          model: { provider: 'openai', name: 'gpt-4' },
+        },
+      });
+
+      const priv = await storage.list({ visibility: 'private', status: 'draft' });
+      expect(priv.agents.map(a => a.id).sort()).toEqual(['priv-1']);
+
+      const pub = await storage.list({ visibility: 'public', status: 'draft' });
+      expect(pub.agents.map(a => a.id).sort()).toEqual(['pub-1']);
+    });
+  });
 });

@@ -2,9 +2,14 @@
  * Shared types for WorkOS integration.
  */
 
+import type {
+  EEUser,
+  FGARouteResolver,
+  MastraFGAPermission,
+  MastraFGAPermissionInput,
+  RoleMapping,
+} from '@internal/auth/ee';
 import type { JwtPayload } from '@mastra/auth';
-import type { EEUser, MastraFGAPermission, RoleMapping } from '@mastra/core/auth/ee';
-import type { RequestContext } from '@mastra/core/di';
 import type { User, OrganizationMembership } from '@workos-inc/node';
 
 // ============================================================================
@@ -232,7 +237,7 @@ export interface FGAResourceMappingEntry {
    * Derive the FGA resource ID from request/user context.
    * Return `undefined` to fall back to the raw Mastra resource ID.
    */
-  deriveId?: (ctx: { user: any; resourceId?: string; requestContext?: RequestContext }) => string | undefined;
+  deriveId?: (ctx: { user: any; resourceId?: string; requestContext?: unknown }) => string | undefined;
 }
 
 export type MastraFGAPermissionMapping = Partial<Record<MastraFGAPermission, string>> & Record<string, string>;
@@ -242,7 +247,7 @@ export type MastraFGAPermissionMapping = Partial<Record<MastraFGAPermission, str
  *
  * @example
  * ```typescript
- * import { MastraFGAPermissions } from '@mastra/core/auth/ee';
+ * import { MastraFGAPermissions } from '@internal/auth/ee';
  *
  * new MastraFGAWorkos({
  *   resourceMapping: {
@@ -251,6 +256,8 @@ export type MastraFGAPermissionMapping = Partial<Record<MastraFGAPermission, str
  *   permissionMapping: {
  *     [MastraFGAPermissions.AGENTS_EXECUTE]: 'manage-workflows',
  *   },
+ *   requireForProtectedRoutes: true,
+ *   auditProtectedRoutes: 'warn',
  * });
  * ```
  */
@@ -278,6 +285,32 @@ export interface MastraFGAWorkosOptions {
    * values are WorkOS permission slugs.
    */
   permissionMapping?: MastraFGAPermissionMapping;
+  /**
+   * When true, protected routes without route-level FGA metadata or resolver
+   * output are denied instead of being allowed through.
+   *
+   * @default false
+   */
+  requireForProtectedRoutes?: boolean;
+  /**
+   * Audits protected routes that do not have built-in FGA metadata.
+   * Use `true` or `'warn'` to log a startup warning, `'error'` to fail startup,
+   * or `false` to disable the audit.
+   *
+   * @default false
+   */
+  auditProtectedRoutes?: boolean | 'warn' | 'error';
+  /**
+   * Global route FGA resolver. Prefer route-level `fga` metadata for custom
+   * routes. Use this when metadata must be derived centrally from route,
+   * params, or request context.
+   */
+  resolveRouteFGA?: FGARouteResolver;
+  /**
+   * Optional startup validation for provider-specific permission mappings.
+   * Throw when a permission Mastra may emit is not configured for WorkOS.
+   */
+  validatePermissions?: (permissions: MastraFGAPermissionInput[]) => void | Promise<void>;
 }
 
 // ============================================================================

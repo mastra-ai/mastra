@@ -50,6 +50,7 @@ export async function provisionObservabilityProject({
   observabilityProject,
   mode = 'pick',
   token: providedToken,
+  org,
 }: {
   defaultProjectName?: string;
   /**
@@ -60,16 +61,18 @@ export async function provisionObservabilityProject({
   observabilityProject?: string;
   /**
    * `'create'` (used by `create-mastra`) always provisions a new platform
-   * project named after the local one — no picker, no extra name prompt.
+   * project named after the local one — no project picker, no extra name prompt.
    * `'pick'` (used by `mastra init` in an existing project) lets the user
    * attach to an existing project or create a new one.
    */
   mode?: 'create' | 'pick';
   /** Platform auth token already acquired during the observability opt-in prompt. */
   token?: string;
+  /** Organization already chosen during the observability auth prompt. */
+  org?: { orgId: string; orgName: string };
 } = {}): Promise<ObservabilityProvisionResult> {
   const token = providedToken ?? (await getToken());
-  const { orgId, orgName } = await resolveCurrentOrg(token, { forcePrompt: true });
+  const { orgId, orgName } = org ?? (await resolveCurrentOrg(token, { forcePrompt: true }));
 
   let project: ObservabilityProject;
   if (observabilityProject) {

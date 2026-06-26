@@ -1,47 +1,33 @@
-import { Popover, PopoverContent, PopoverTrigger, ScrollArea, Txt, Icon, cn } from '@mastra/playground-ui';
-import { Braces } from 'lucide-react';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
+import { Settings2 } from 'lucide-react';
 
-import { RequestContext } from './request-context';
-import { RequestContextSchemaForm } from '@/domains/request-context/components/request-context-schema-form';
+import { AgentRunOptionsContent } from './agent-run-options';
 
-interface AgentTopBarControlsProps {
+interface AgentTopBarRunOptionsProps {
   requestContextSchema?: string;
 }
 
-export function AgentTopBarControls({ requestContextSchema }: AgentTopBarControlsProps) {
+export function AgentTopBarRunOptions({ requestContextSchema }: AgentTopBarRunOptionsProps) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
           type="button"
-          className={cn(
-            'flex items-center gap-1.5 px-2 py-1.5 rounded text-sm transition-colors',
-            'text-neutral3 hover:text-neutral5 hover:bg-surface3',
-          )}
-          title="Request Context"
+          tooltip="Run options"
+          data-testid="agent-top-bar-run-options-trigger"
         >
-          <Icon size="sm">
-            <Braces />
-          </Icon>
-          <Txt variant="ui-sm" className="text-inherit">
-            Context
-          </Txt>
-        </button>
+          <Settings2 />
+          Run options
+        </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-[400px] p-0">
-        <ScrollArea className="max-h-[500px]">
-          <div className="p-4 space-y-4">
-            <Txt variant="ui-sm" className="text-neutral3">
-              Request context values are passed into experiments and test chats.
-            </Txt>
-            {requestContextSchema ? (
-              <RequestContextSchemaForm requestContextSchema={requestContextSchema} />
-            ) : (
-              <RequestContext />
-            )}
-          </div>
-        </ScrollArea>
+      <PopoverContent align="end" className="w-[min(760px,calc(100vw-2rem))] p-0">
+        <AgentRunOptionsContent requestContextSchema={requestContextSchema} />
       </PopoverContent>
     </Popover>
   );
 }
+
+export const AgentTopBarControls = AgentTopBarRunOptions;

@@ -2,12 +2,31 @@
  * JudgeDisplayComponent — renders the goal judge's decision inline in the chat.
  */
 
-import { Container, Spacer, Text } from '@mariozechner/pi-tui';
+import { Container, Text } from '@earendil-works/pi-tui';
+import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import chalk from 'chalk';
 import stripAnsi from 'strip-ansi';
 
-import type { GoalJudgeResult } from '../goal-manager.js';
-import { BOX_INDENT, getTermWidth, mastraBrand } from '../theme.js';
+import { BOX_INDENT, getTermWidth, mastraBrand, theme } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
+
+/** Display-only decision derived from a goal evaluation. */
+export interface GoalJudgeResult {
+  decision: 'done' | 'continue' | 'waiting' | 'paused';
+  reason: string;
+}
+
+/** Map a core {@link GoalEvaluationPayload} to a display decision. */
+export function evaluationToJudgeResult(payload: GoalEvaluationPayload): GoalJudgeResult {
+  const decision: GoalJudgeResult['decision'] = payload.passed
+    ? 'done'
+    : payload.waitingForUser
+      ? 'waiting'
+      : payload.status === 'paused'
+        ? 'paused'
+        : 'continue';
+  return { decision, reason: payload.reason ?? '' };
+}
 
 const JUDGE_COLOR = mastraBrand.blue;
 const MUTED_COLOR = '#8a8a8a';
@@ -15,8 +34,54 @@ const PAUSED_COLOR = '#f5a524';
 const WAITING_COLOR = '#8a8a8a';
 
 export class JudgeDisplayComponent extends Container {
-  constructor(result: GoalJudgeResult, turnsUsed: number, maxTurns: number) {
+  private result: GoalJudgeResult | null;
+  private turnsUsed: number;
+  private maxTurns: number;
+  private activity: string[] = [];
+  private streamingReason = '';
+
+  constructor(result: GoalJudgeResult | null = null, turnsUsed = 0, maxTurns = 0) {
     super();
+    this.result = result;
+    this.turnsUsed = turnsUsed;
+    this.maxTurns = maxTurns;
+    this.renderContent();
+  }
+
+  addActivity(line: string): void {
+    if (this.activity[this.activity.length - 1] !== line) {
+      this.activity.push(line);
+    }
+    if (this.activity.length > 6) {
+      this.activity = this.activity.slice(-6);
+    }
+    this.renderContent();
+  }
+
+  setStreamingReason(reason: string): void {
+    this.streamingReason = reason;
+    this.renderContent();
+  }
+
+  setResult(result: GoalJudgeResult, turnsUsed: number, maxTurns: number): void {
+    this.result = result;
+    this.streamingReason = '';
+    this.turnsUsed = turnsUsed;
+    this.maxTurns = maxTurns;
+    this.renderContent();
+  }
+
+  /** Render the result of an in-loop goal evaluation chunk. */
+  setEvaluation(payload: GoalEvaluationPayload): void {
+    this.setResult(evaluationToJudgeResult(payload), payload.iteration, payload.maxRuns);
+  }
+
+  setInterrupted(): void {
+    this.setResult({ decision: 'paused', reason: 'Judge evaluation was interrupted.' }, this.turnsUsed, this.maxTurns);
+  }
+
+  private renderContent(): void {
+    this.clear();
 
     const border = (char: string) => chalk.hex(JUDGE_COLOR)(char);
     const title = chalk.hex(JUDGE_COLOR).bold('Goal');
@@ -24,24 +89,55 @@ export class JudgeDisplayComponent extends Container {
     const innerWidth = Math.max(20, termWidth - BOX_INDENT * 2 - 4);
     const horizontal = '─'.repeat(innerWidth + 1);
 
-    const decisionIcon =
-      result.decision === 'done' ? '●' : result.decision === 'paused' ? '!' : result.decision === 'waiting' ? '◌' : '○';
-    const decisionText = getDecisionText(result.decision);
-    const turnInfo = chalk.hex(MUTED_COLOR)(`(${turnsUsed}/${maxTurns})`);
-
-    this.addChild(new Spacer(1));
     this.addChild(new Text(`${border('╭')}${border(horizontal)}${border('╮')}`, BOX_INDENT, 0));
-    this.addChild(
-      new Text(
-        this.renderRow(`${title}  ${decisionIcon} ${decisionText}  ${turnInfo}`, innerWidth, border),
-        BOX_INDENT,
-        0,
-      ),
-    );
-    for (const line of this.wrapLine(result.reason, innerWidth)) {
-      this.addChild(new Text(this.renderRow(chalk.dim(line), innerWidth, border), BOX_INDENT, 0));
+    this.addChild(new Text(this.renderRow(this.renderHeader(title), innerWidth, border), BOX_INDENT, 0));
+
+    if (!this.result && this.activity.length === 0 && !this.streamingReason) {
+      this.addChild(new Text(this.renderRow(chalk.dim('evaluating…'), innerWidth, border), BOX_INDENT, 0));
     }
+
+    for (const line of this.activity) {
+      this.addChild(new Text(this.renderRow(this.renderActivityLine(line), innerWidth, border), BOX_INDENT, 0));
+    }
+
+    if (this.activity.length > 0 && (this.result || this.streamingReason)) {
+      this.addChild(new Text(this.renderRow('', innerWidth, border), BOX_INDENT, 0));
+    }
+
+    const reason = this.result?.reason ?? this.streamingReason;
+    if (reason) {
+      for (const line of this.wrapLine(reason, innerWidth)) {
+        this.addChild(new Text(this.renderRow(chalk.dim(line), innerWidth, border), BOX_INDENT, 0));
+      }
+    }
+
     this.addChild(new Text(`${border('╰')}${border(horizontal)}${border('╯')}`, BOX_INDENT, 0));
+  }
+
+  private renderActivityLine(line: string): string {
+    const toolName = getActivityToolName(line);
+    if (!toolName) return theme.fg('dim', `• ${line}`);
+
+    const rest = line.slice(toolName.length);
+    return `${theme.fg('dim', '• ')}${theme.fg('dim', theme.italic(toolName))}${theme.fg('dim', rest)}`;
+  }
+
+  private renderHeader(title: string): string {
+    if (!this.result) {
+      return `${title}  ◌ ${chalk.hex(WAITING_COLOR).bold('evaluating')}`;
+    }
+
+    const decisionIcon =
+      this.result.decision === 'done'
+        ? '●'
+        : this.result.decision === 'paused'
+          ? '!'
+          : this.result.decision === 'waiting'
+            ? '◌'
+            : '○';
+    const decisionText = getDecisionText(this.result.decision);
+    const turnInfo = this.maxTurns > 0 ? chalk.hex(MUTED_COLOR)(`(${this.turnsUsed}/${this.maxTurns})`) : '';
+    return `${title}  ${decisionIcon} ${decisionText}${turnInfo ? `  ${turnInfo}` : ''}`;
   }
 
   private renderRow(text: string, width: number, border: (char: string) => string): string {
@@ -69,6 +165,16 @@ export class JudgeDisplayComponent extends Container {
     }
     return text + ' '.repeat(width - visibleLength);
   }
+
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'other';
+  }
+}
+
+function getActivityToolName(line: string): string | null {
+  if (line.startsWith('find files ')) return 'find files';
+  const [toolName] = line.split(' ');
+  return toolName || null;
 }
 
 function getDecisionText(decision: GoalJudgeResult['decision']): string {

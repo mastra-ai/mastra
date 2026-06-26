@@ -1,6 +1,10 @@
 'use client';
 
-import { Button, ButtonWithTooltip, ButtonsGroup, Checkbox, Column, ItemList } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { Column } from '@mastra/playground-ui/components/Columns';
+import { ItemList } from '@mastra/playground-ui/components/ItemList';
 import { format } from 'date-fns';
 import { XIcon, GitCompareIcon, ArrowRightIcon } from 'lucide-react';
 import { useState } from 'react';
@@ -76,15 +80,15 @@ export function DatasetVersionsPanel({
         <Column.Toolbar className="grid justify-stretch gap-3 w-full">
           <ButtonsGroup>
             <Button onClick={handleCancelSelection}>Cancel</Button>
-            <ButtonWithTooltip
+            <Button
               variant="primary"
               disabled={selectedKeys.size !== 2}
               onClick={handleExecuteCompare}
-              tooltipContent={selectedKeys.size !== 2 ? 'Select two versions to enable comparison' : undefined}
+              tooltip={selectedKeys.size !== 2 ? 'Select two versions to enable comparison' : undefined}
               className="w-full"
             >
               <ArrowRightIcon /> Compare
-            </ButtonWithTooltip>
+            </Button>
           </ButtonsGroup>
         </Column.Toolbar>
       ) : (
@@ -92,9 +96,9 @@ export function DatasetVersionsPanel({
           <Button onClick={handleCompareClick}>
             <GitCompareIcon /> Compare Ver.
           </Button>
-          <ButtonWithTooltip onClick={onClose} tooltipContent="Hide Versions Panel">
+          <Button onClick={onClose} tooltip="Hide Versions Panel">
             <XIcon />
-          </ButtonWithTooltip>
+          </Button>
         </Column.Toolbar>
       )}
       <Column.Content>

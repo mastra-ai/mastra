@@ -1,0 +1,38 @@
+{
+  "name": "examples-evals-with-memory",
+  "type": "module",
+  "private": true,
+  "description": "Three ways to run Mastra evals against memory-enabled agents",
+  "version": "0.0.1",
+  "scripts": {
+    "ex:runeval-global": "npx tsx src/runeval-global.ts",
+    "ex:runeval-per-item": "npx tsx src/runeval-per-item.ts",
+    "ex:dataset": "npx tsx src/dataset.ts",
+    "ex:all": "pnpm ex:runeval-global && pnpm ex:runeval-per-item && pnpm ex:dataset",
+    "clean": "rm -rf .mastra"
+  },
+  "dependencies": {
+    "@mastra/core": "latest",
+    "@mastra/evals": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/memory": "latest",
+    "ai": "^4.3.19",
+    "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "@mastra/core": "link:../../packages/core",
+      "@mastra/evals": "link:../../packages/evals",
+      "@mastra/libsql": "link:../../stores/libsql",
+      "@mastra/memory": "link:../../packages/memory"
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.7",
+    "tsx": "catalog:"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.29.3+sha512.498e1fb4cca5aa06c1dcf2611e6fafc50972ffe7189998c409e90de74566444298ffe43e6cd2acdc775ba1aa7cc5e092a8b7054c811ba8c5770f84693d33d2dc"
+}

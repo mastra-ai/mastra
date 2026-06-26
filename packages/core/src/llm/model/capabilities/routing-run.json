@@ -1,0 +1,14 @@
+{
+  "attachment": [
+    "route/deepseek-v3.2",
+    "route/gemma-4-31b-it",
+    "route/kimi-k2.5",
+    "route/kimi-k2.6",
+    "route/kimi-k2.6-6bit",
+    "route/mimo-v2.5",
+    "route/mimo-v2.5-pro",
+    "route/mimo-v2.5-pro-6bit",
+    "route/mistral-medium-2505",
+    "route/mistral-small-2503"
+  ]
+}

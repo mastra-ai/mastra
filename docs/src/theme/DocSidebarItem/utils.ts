@@ -5,6 +5,5 @@ export const getBadgeType = (tags: any) => {
   if (tags.includes('beta')) return 'beta'
   if (tags.includes('advanced')) return 'advanced'
   if (tags.includes('alpha')) return 'alpha'
-  if (tags.includes('experimental')) return 'experimental'
   return null
 }

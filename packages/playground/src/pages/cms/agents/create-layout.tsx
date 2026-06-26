@@ -1,4 +1,7 @@
-import { Button, Icon, MainContentLayout, Spinner } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Check } from 'lucide-react';
 import { Outlet, useLocation } from 'react-router';
 import { AgentCmsFormShell } from '@/domains/agents/components/agent-cms-form-shell';
@@ -18,7 +21,7 @@ function CreateLayoutWrapper() {
   return (
     <MainContentLayout>
       <RouteHeaderActions owner="cms-agent-create">
-        <Button variant="primary" onClick={handlePublish} disabled={isSubmitting || !canPublish}>
+        <Button variant="primary" onClick={() => void handlePublish()} disabled={isSubmitting || !canPublish}>
           {isSubmitting ? (
             <>
               <Spinner className="h-4 w-4" />

@@ -4,6 +4,7 @@ import { getDummyResponseModel } from '../agent/__tests__/mock-model';
 import { signalToMastraDBMessage } from '../agent/signals';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
+import { createMockWorkspace } from './test-utils';
 
 describe('Harness signal history rendering', () => {
   async function createHarnessWithThread() {
@@ -15,21 +16,23 @@ describe('Harness signal history rendering', () => {
       model: getDummyResponseModel('v2'),
     });
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test-harness',
       storage,
       modes: [{ id: 'default', name: 'Default', default: true, agent }],
     });
 
     await harness.init();
-    const thread = await harness.createThread({ title: 'Signal thread' });
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const thread = await session.thread.create({ title: 'Signal thread' });
     const memoryStorage = await storage.getStore('memory');
     if (!memoryStorage) throw new Error('Expected memory storage');
 
-    return { harness, memoryStorage, thread };
+    return { harness, session, memoryStorage, thread };
   }
 
   it('renders persisted user-message signals as user content', async () => {
-    const { harness, memoryStorage, thread } = await createHarnessWithThread();
+    const { session, memoryStorage, thread } = await createHarnessWithThread();
 
     await memoryStorage.saveMessages({
       messages: [
@@ -37,13 +40,10 @@ describe('Harness signal history rendering', () => {
           {
             id: 'signal-user-1',
             type: 'user-message',
-            contents: {
-              role: 'user',
-              content: [
-                { type: 'text', text: 'hello from signal' },
-                { type: 'file', data: 'data:image/png;base64,abc', mediaType: 'image/png' },
-              ],
-            },
+            contents: [
+              { type: 'text', text: 'hello from signal' },
+              { type: 'file', data: 'data:image/png;base64,abc', mediaType: 'image/png' },
+            ],
             createdAt: new Date('2024-01-01T00:00:00.000Z'),
           },
           { threadId: thread.id, resourceId: 'test-harness' },
@@ -51,7 +51,7 @@ describe('Harness signal history rendering', () => {
       ],
     });
 
-    const messages = await harness.listMessages();
+    const messages = await session.thread.listActiveMessages();
 
     expect(messages).toHaveLength(1);
     expect(messages[0]).toMatchObject({
@@ -65,14 +65,14 @@ describe('Harness signal history rendering', () => {
   });
 
   it('emits agent_end when a system-reminder signal starts an idle run', async () => {
-    const { harness } = await createHarnessWithThread();
+    const { harness, session } = await createHarnessWithThread();
     const events: Array<{ type: string; reason?: string }> = [];
-    const unsubscribe = harness.subscribe(event => {
+    const unsubscribe = session.subscribe(event => {
       events.push(event as { type: string; reason?: string });
     });
 
     try {
-      const signal = harness.sendSignal({
+      const signal = session.sendSignal({
         type: 'system-reminder',
         contents: 'keep going',
         attributes: { type: 'goal' },
@@ -89,7 +89,7 @@ describe('Harness signal history rendering', () => {
   });
 
   it('renders persisted system-reminder signals as system reminder content', async () => {
-    const { harness, memoryStorage, thread } = await createHarnessWithThread();
+    const { session, memoryStorage, thread } = await createHarnessWithThread();
 
     await memoryStorage.saveMessages({
       messages: [
@@ -106,7 +106,7 @@ describe('Harness signal history rendering', () => {
       ],
     });
 
-    const messages = await harness.listMessages();
+    const messages = await session.thread.listActiveMessages();
 
     expect(messages).toEqual([
       {

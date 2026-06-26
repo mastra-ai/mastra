@@ -1,11 +1,14 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { modelSupportsAttachments } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import { omDebug } from './debug';
+import { withOmInternalThreadId } from './internal-request-context';
 import type { ModelByInputTokens } from './model-by-input-tokens';
+import type { ObserverAttachmentFilter } from './observer-agent';
 import {
   buildObserverSystemPrompt,
   buildObserverTaskPrompt,
@@ -95,6 +98,53 @@ export class ObserverRunner {
     return agent;
   }
 
+  /**
+   * Extract a router-style model ID (`provider/model`) from a model config.
+   * Handles strings, LanguageModel objects, and function-based models.
+   */
+  private extractModelRouterId(model: ConcreteObservationModel, requestContext?: RequestContext): string | undefined {
+    if (typeof model === 'string') return model;
+
+    // Function-based model — resolve it with requestContext to get the actual model
+    if (typeof model === 'function') {
+      if (!requestContext) return undefined;
+      try {
+        const resolved = model({ requestContext });
+        // Recursion handles the resolved value (string or LanguageModel object)
+        if (resolved instanceof Promise) return undefined; // can't await in sync context
+        return this.extractModelRouterId(resolved as ConcreteObservationModel);
+      } catch {
+        return undefined;
+      }
+    }
+
+    // LanguageModel object — check for provider/modelId properties
+    const obj = model as Record<string, unknown>;
+    if (typeof obj.provider === 'string' && typeof obj.modelId === 'string') {
+      return `${obj.provider}/${obj.modelId}`;
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Resolve the attachment filter for a given model. When set to `'auto'`,
+   * the provider capabilities registry is consulted to decide whether the
+   * model accepts multimodal input.
+   */
+  private resolveAttachmentFilter(
+    model: ConcreteObservationModel,
+    requestContext?: RequestContext,
+  ): ObserverAttachmentFilter {
+    const raw = this.observationConfig.observeAttachments;
+    if (raw !== 'auto') return raw;
+
+    const routerId = this.extractModelRouterId(model, requestContext);
+    if (!routerId) return true; // can't determine — default to forwarding
+    const supports = modelSupportsAttachments(routerId);
+    return supports ?? true;
+  }
+
   private async withAbortCheck<T>(fn: () => Promise<T>, abortSignal?: AbortSignal): Promise<T> {
     if (abortSignal?.aborted) {
       throw new Error('The operation was aborted.');
@@ -133,6 +183,9 @@ export class ObserverRunner {
     const inputTokens = this.tokenCounter.countMessages(messagesToObserve);
     const resolvedModel = options?.model ? { model: options.model } : this.resolveModel(inputTokens);
     const agent = this.createAgent(resolvedModel.model);
+    const internalRequestContext = withOmInternalThreadId(options?.requestContext, agent.id);
+
+    const attachmentFilter = this.resolveAttachmentFilter(resolvedModel.model, options?.requestContext);
 
     const observerMessages = [
       {
@@ -142,7 +195,9 @@ export class ObserverRunner {
           includeThreadTitle: this.observationConfig.threadTitle,
         }),
       },
-      buildObserverHistoryMessage(messagesToObserve),
+      buildObserverHistoryMessage(messagesToObserve, {
+        attachmentFilter,
+      }),
     ];
 
     const doGenerate = async () => {
@@ -171,7 +226,7 @@ export class ObserverRunner {
                   modelSettings: { ...this.observationConfig.modelSettings },
                   providerOptions: this.observationConfig.providerOptions as any,
                   ...(abortSignal ? { abortSignal } : {}),
-                  ...(options?.requestContext ? { requestContext: options.requestContext } : {}),
+                  ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                   ...childObservabilityContext,
                 });
                 return streamResult.getFullOutput();
@@ -256,6 +311,9 @@ export class ObserverRunner {
     );
     const resolvedModel = model ? { model } : this.resolveModel(inputTokens);
     const agent = this.createAgent(resolvedModel.model, true);
+    const internalRequestContext = withOmInternalThreadId(requestContext, agent.id);
+
+    const multiThreadAttachmentFilter = this.resolveAttachmentFilter(resolvedModel.model, requestContext);
 
     const observerMessages = [
       {
@@ -268,7 +326,9 @@ export class ObserverRunner {
           this.observationConfig.threadTitle,
         ),
       },
-      buildMultiThreadObserverHistoryMessage(messagesByThread, threadOrder),
+      buildMultiThreadObserverHistoryMessage(messagesByThread, threadOrder, {
+        attachmentFilter: multiThreadAttachmentFilter,
+      }),
     ];
 
     // Mark all messages as observed
@@ -303,7 +363,7 @@ export class ObserverRunner {
                   modelSettings: { ...this.observationConfig.modelSettings },
                   providerOptions: this.observationConfig.providerOptions as any,
                   ...(abortSignal ? { abortSignal } : {}),
-                  ...(requestContext ? { requestContext } : {}),
+                  ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                   ...childObservabilityContext,
                 });
                 return streamResult.getFullOutput();

@@ -2,9 +2,29 @@ import { z } from 'zod/v4';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { WorkspaceReadOnlyError } from '../errors';
-import { replaceString, StringNotFoundError, StringNotUniqueError } from '../line-utils';
+import { charRangeToLineRange, replaceString, StringNotFoundError, StringNotUniqueError } from '../line-utils';
 import { emitWorkspaceMetadata, getEditDiagnosticsText, requireFilesystem } from './helpers';
 import { startWorkspaceSpan } from './tracing';
+
+function getEditedLineRanges(content: string, oldString: string, newString: string, replaceAll: boolean): string {
+  if (!oldString) return '';
+  const ranges: string[] = [];
+  let position = 0;
+
+  while ((position = content.indexOf(oldString, position)) !== -1) {
+    const range = charRangeToLineRange(content, position, position + Math.max(oldString.length, 1));
+    if (range) {
+      const newLineCount = newString.split('\n').length;
+      const end = range.start + Math.max(newLineCount, range.end - range.start + 1) - 1;
+      ranges.push(end === range.start ? String(range.start) : `${range.start}-${end}`);
+    }
+    position += oldString.length;
+    if (!replaceAll) break;
+  }
+
+  if (ranges.length === 0) return '';
+  return ranges.length === 1 ? ` (lines ${ranges[0]})` : ` (lines ${ranges.join(', ')})`;
+}
 
 export const editFileTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.EDIT_FILE,
@@ -48,13 +68,15 @@ Usage:
         return `Cannot edit binary files. Use the write file tool instead.`;
       }
 
-      const result = replaceString(content, old_string, new_string, replace_all);
+      const shouldReplaceAll = replace_all ?? false;
+      const lineRanges = getEditedLineRanges(content, old_string, new_string, shouldReplaceAll);
+      const result = replaceString(content, old_string, new_string, shouldReplaceAll);
       await filesystem.writeFile(path, result.content, {
         overwrite: true,
         expectedMtime: (context as any)?.__expectedMtime,
       });
 
-      let output = `Replaced ${result.replacements} occurrence${result.replacements !== 1 ? 's' : ''} in ${path}`;
+      let output = `Replaced ${result.replacements} occurrence${result.replacements !== 1 ? 's' : ''} in ${path}${lineRanges}`;
       output += await getEditDiagnosticsText(workspace, path, result.content);
       span.end({ success: true }, { bytesTransferred: Buffer.byteLength(result.content, 'utf-8') });
       return output;

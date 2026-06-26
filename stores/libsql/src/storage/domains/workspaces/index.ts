@@ -170,7 +170,13 @@ export class WorkspacesLibSQL extends WorkspacesStorage {
         });
       }
 
-      const { authorId, activeVersionId, metadata, status, ...configFields } = updates;
+      const { authorId, activeVersionId, metadata, status, ...rawConfigFields } = updates;
+
+      // Strip undefined keys so omitted PATCH fields don't overwrite persisted values
+      const configFields: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(rawConfigFields)) {
+        if (value !== undefined) configFields[key] = value;
+      }
 
       const configFieldNames = SNAPSHOT_FIELDS as readonly string[];
       const hasConfigUpdate = configFieldNames.some(field => field in configFields);

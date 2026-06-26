@@ -10,6 +10,7 @@ import type {
   SerializableModelListEntry,
   SerializableDurableState,
   SerializableDurableOptions,
+  SerializableModelSettings,
   SerializableScorersConfig,
   SerializableScorerEntry,
   DurableAgenticWorkflowInput,
@@ -83,6 +84,7 @@ export function serializeModelListEntry(entry: AgentModelManagerConfig): Seriali
       modelId: model.modelId,
       specificationVersion: model.specificationVersion,
       originalConfig: `${model.provider}/${model.modelId}`,
+      providerOptions: entry.providerOptions,
     },
     maxRetries: entry.maxRetries,
     enabled: entry.enabled,
@@ -155,12 +157,89 @@ export function serializeDurableState(params: {
 }
 
 /**
+ * Pick the JSON-safe call settings out of an arbitrary `modelSettings` input.
+ * Drops any field that is not a primitive value of the expected type so that
+ * non-serializable fields (functions, AbortSignal, etc.) never reach the
+ * workflow input.
+ */
+export function serializeModelSettings(
+  settings: SerializableModelSettings | Record<string, unknown> | undefined,
+): SerializableModelSettings | undefined {
+  if (!settings || typeof settings !== 'object') return undefined;
+
+  const source = settings as Record<string, unknown>;
+  const out: SerializableModelSettings = {};
+  const pickNumber = (key: keyof SerializableModelSettings) => {
+    const value = source[key as string];
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      (out as Record<string, unknown>)[key as string] = value;
+    }
+  };
+
+  pickNumber('maxOutputTokens');
+  pickNumber('temperature');
+  pickNumber('topP');
+  pickNumber('topK');
+  pickNumber('presencePenalty');
+  pickNumber('frequencyPenalty');
+  pickNumber('seed');
+  pickNumber('maxRetries');
+
+  if (Array.isArray(source.stopSequences) && source.stopSequences.every(v => typeof v === 'string')) {
+    out.stopSequences = source.stopSequences as string[];
+  }
+
+  if (source.headers && typeof source.headers === 'object' && !Array.isArray(source.headers)) {
+    const headers: Record<string, string> = {};
+    for (const [key, value] of Object.entries(source.headers as Record<string, unknown>)) {
+      if (typeof value !== 'string') continue;
+      // Durable execution engines (e.g. Inngest) persist the serialized workflow
+      // input to durable storage. Headers carrying secrets (API keys, bearer
+      // tokens, cookies) must never be written there — strip them before
+      // persistence. Callers that need credentials on the LLM HTTP call should
+      // configure them on the model factory (e.g. `openai({ apiKey })`) or via
+      // environment variables, not via per-call `modelSettings.headers`.
+      if (isSensitiveHeaderName(key)) continue;
+      headers[key] = value;
+    }
+    if (Object.keys(headers).length > 0) out.headers = headers;
+  }
+
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * Header names whose values frequently carry credentials. We drop them from the
+ * serialized workflow input so they never reach durable storage. Match is
+ * case-insensitive because HTTP header names are case-insensitive.
+ */
+const SENSITIVE_HEADER_NAMES = new Set<string>([
+  'authorization',
+  'proxy-authorization',
+  'cookie',
+  'set-cookie',
+  'x-api-key',
+  'api-key',
+  'x-auth-token',
+  'x-access-token',
+  'x-amz-security-token',
+  'x-goog-api-key',
+  'openai-api-key',
+  'anthropic-api-key',
+]);
+
+function isSensitiveHeaderName(name: string): boolean {
+  return SENSITIVE_HEADER_NAMES.has(name.toLowerCase());
+}
+
+/**
  * Extract serializable options from agent execution options
  */
 export function serializeDurableOptions(options: {
   maxSteps?: number;
   toolChoice?: any;
-  temperature?: number;
+  activeTools?: string[];
+  modelSettings?: SerializableModelSettings | Record<string, unknown>;
   requireToolApproval?: boolean;
   toolCallConcurrency?: number;
   autoResumeSuspendedTools?: boolean;
@@ -168,8 +247,16 @@ export function serializeDurableOptions(options: {
   includeRawChunks?: boolean;
   returnScorerData?: boolean;
   hasErrorProcessors?: boolean;
+  providerOptions?: SerializableDurableOptions['providerOptions'];
   structuredOutput?: SerializableDurableOptions['structuredOutput'];
   skipBgTaskWait?: boolean;
+  disableBackgroundTasks?: boolean;
+  tracingOptions?: SerializableDurableOptions['tracingOptions'];
+  actor?: SerializableDurableOptions['actor'];
+  instructionsOverride?: SerializableDurableOptions['instructionsOverride'];
+  systemMessage?: SerializableDurableOptions['systemMessage'];
+  transform?: SerializableDurableOptions['transform'];
+  isTaskComplete?: SerializableDurableOptions['isTaskComplete'];
 }): SerializableDurableOptions {
   // Normalize toolChoice to serializable form
   let serializedToolChoice: SerializableDurableOptions['toolChoice'];
@@ -189,7 +276,8 @@ export function serializeDurableOptions(options: {
   return {
     maxSteps: options.maxSteps,
     toolChoice: serializedToolChoice,
-    temperature: options.temperature,
+    activeTools: options.activeTools,
+    modelSettings: serializeModelSettings(options.modelSettings),
     requireToolApproval: options.requireToolApproval,
     toolCallConcurrency: options.toolCallConcurrency,
     autoResumeSuspendedTools: options.autoResumeSuspendedTools,
@@ -197,8 +285,16 @@ export function serializeDurableOptions(options: {
     includeRawChunks: options.includeRawChunks,
     returnScorerData: options.returnScorerData,
     hasErrorProcessors: options.hasErrorProcessors,
+    providerOptions: options.providerOptions,
     structuredOutput: options.structuredOutput,
     skipBgTaskWait: options.skipBgTaskWait,
+    disableBackgroundTasks: options.disableBackgroundTasks,
+    tracingOptions: options.tracingOptions,
+    actor: options.actor,
+    instructionsOverride: options.instructionsOverride,
+    systemMessage: options.systemMessage,
+    transform: options.transform,
+    isTaskComplete: options.isTaskComplete,
   };
 }
 
@@ -217,6 +313,8 @@ export function createWorkflowInput(params: {
   options: Parameters<typeof serializeDurableOptions>[0];
   state: Parameters<typeof serializeDurableState>[0];
   messageId: string;
+  agentSpanData?: unknown;
+  modelSpanData?: unknown;
 }): DurableAgenticWorkflowInput {
   return {
     __workflowKind: 'durable-agent',
@@ -231,6 +329,8 @@ export function createWorkflowInput(params: {
     options: serializeDurableOptions(params.options),
     state: serializeDurableState(params.state),
     messageId: params.messageId,
+    agentSpanData: params.agentSpanData,
+    modelSpanData: params.modelSpanData,
   };
 }
 

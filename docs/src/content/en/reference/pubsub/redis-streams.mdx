@@ -1,0 +1,155 @@
+---
+title: "Reference: RedisStreamsPubSub | PubSub"
+description: API reference for RedisStreamsPubSub, the Redis Streams pub/sub implementation for distributed event delivery.
+packages:
+  - "@mastra/core"
+  - "@mastra/redis-streams"
+---
+
+# RedisStreamsPubSub
+
+`RedisStreamsPubSub` is a [`PubSub`](/reference/pubsub/base) implementation backed by [Redis Streams](https://redis.io/docs/latest/develop/data-types/streams/). It delivers events across processes and hosts, with persistence, consumer groups, and redelivery on failure.
+
+Use it for distributed deployments where several services share an event stream. For single-process delivery, use [`EventEmitterPubSub`](/reference/pubsub/event-emitter). For Google Cloud, use [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub).
+
+Each topic maps to a Redis stream key. Subscriptions with a group use a Redis consumer group, so members share work round-robin. Subscriptions without a group create a private consumer group, so every subscriber receives every event.
+
+`RedisStreamsPubSub` is a pull transport: consumers read events with `XREADGROUP`, so Mastra runs an orchestration worker to read on its behalf.
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/redis-streams
+```
+
+## Usage example
+
+Provide a Redis connection URL.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { RedisStreamsPubSub } from '@mastra/redis-streams'
+
+export const mastra = new Mastra({
+  pubsub: new RedisStreamsPubSub({
+    url: 'redis://localhost:6379',
+  }),
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'url',
+    type: 'string',
+    description: 'Redis connection URL. Falls back to `redisOptions.url`.',
+    isOptional: true,
+    defaultValue: 'redis://localhost:6379',
+  },
+  {
+    name: 'keyPrefix',
+    type: 'string',
+    description: 'Prefix for stream keys. Each topic maps to `<keyPrefix>:<topic>`.',
+    isOptional: true,
+    defaultValue: 'mastra:topic',
+  },
+  {
+    name: 'blockMs',
+    type: 'number',
+    description: 'How long, in milliseconds, each read blocks while waiting for new events.',
+    isOptional: true,
+    defaultValue: '1000',
+  },
+  {
+    name: 'redisOptions',
+    type: 'RedisClientOptions',
+    description: 'Options passed to the underlying `redis` client for advanced configuration.',
+    isOptional: true,
+  },
+  {
+    name: 'maxStreamLength',
+    type: 'number',
+    description: 'Approximate maximum number of entries kept per stream. Set to 0 to disable trimming.',
+    isOptional: true,
+    defaultValue: '10000',
+  },
+  {
+    name: 'reclaimIntervalMs',
+    type: 'number',
+    description:
+      'How often, in milliseconds, a subscription reclaims events that an earlier consumer read but never acknowledged. Set to 0 to disable.',
+    isOptional: true,
+    defaultValue: '30000',
+  },
+  {
+    name: 'reclaimIdleMs',
+    type: 'number',
+    description:
+      'Minimum idle time, in milliseconds, before a pending event is eligible for reclaim. Keep this well above typical processing time to avoid double delivery.',
+    isOptional: true,
+    defaultValue: '60000',
+  },
+  {
+    name: 'maxDeliveryAttempts',
+    type: 'number',
+    description:
+      'Maximum times an event is redelivered through `nack` before it is dropped. Pass `Infinity` to disable the cap.',
+    isOptional: true,
+    defaultValue: '5',
+  },
+  {
+    name: 'logger',
+    type: '{ debug?: Function; warn?: Function }',
+    description: 'Optional logger for diagnostics. When omitted, suppressed errors are silent.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'supportedModes',
+    type: 'ReadonlyArray<"pull" | "push">',
+    description: 'Returns `["pull"]`.',
+  },
+]}
+/>
+
+## Methods
+
+`RedisStreamsPubSub` implements the [`PubSub`](/reference/pubsub/base) contract. The methods below have behavior specific to this implementation.
+
+### `subscribe(topic, cb, options?)`
+
+Subscribes to a topic. With `options.group`, members of the group share events through a Redis consumer group. Without a group, the subscriber receives every event through a private consumer group.
+
+```typescript
+await pubsub.subscribe('workflow.events', (event, ack, nack) => {
+  console.log(event)
+})
+```
+
+### `flush()`
+
+Waits for in-flight publishes to complete.
+
+```typescript
+await pubsub.flush()
+```
+
+### `close()`
+
+Closes the Redis connections and stops all subscriptions. Call this during graceful shutdown.
+
+```typescript
+await pubsub.close()
+```
+
+## Redelivery and reclaim
+
+When a subscriber calls `nack`, the event is republished with an incremented `deliveryAttempt` and the original is acknowledged. Once an event reaches `maxDeliveryAttempts`, it's dropped instead of redelivered. Separately, each subscription periodically reclaims events that an earlier consumer in the group read but never acknowledged, controlled by `reclaimIntervalMs` and `reclaimIdleMs`.

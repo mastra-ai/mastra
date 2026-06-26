@@ -1,0 +1,160 @@
+{
+  "meta": {
+    "name": "test-ec76f34b",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
+    "testName": "Gemini Model Compatibility Tests > Agent network() method > should handle messages starting with assistant-with-tool-call in network",
+    "createdAt": "2026-05-18T10:51:14.719Z",
+    "updatedAt": "2026-05-28T17:34:17.480Z"
+  },
+  "recordings": [
+    {
+      "hash": "f774579858790ef2",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": {
+              "required": ["primitiveId", "primitiveType", "prompt", "selectionReason"],
+              "type": "object",
+              "properties": {
+                "primitiveId": {
+                  "description": "The id of the primitive to be called",
+                  "type": "string"
+                },
+                "primitiveType": {
+                  "description": "The type of the primitive to be called",
+                  "type": "string",
+                  "enum": ["agent", "workflow", "none", "tool"]
+                },
+                "prompt": {
+                  "description": "The json string or text value to be sent to the primitive",
+                  "type": "string"
+                },
+                "selectionReason": {
+                  "description": "The reason you picked the primitive",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "."
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "functionCall": {
+                    "name": "test-tool",
+                    "args": {
+                      "query": "test"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "functionResponse": {
+                    "name": "test-tool",
+                    "response": {
+                      "name": "test-tool",
+                      "content": "previous result"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Explain what this result means."
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "text": "You will be calling just *one* primitive at a time to accomplish the user task, every call to you is one decision in the process of accomplishing the user task. Make sure to pick primitives that are the best suited to accomplish the whole task. Completeness is the highest priority.\n\n                    The user has given you the following task:\n                    Explain what this result means.\n\n                    # Rules:\n\n                    ## Agent:\n                    - prompt should be a text value, like you would call an LLM in a chat interface.\n                    - If you are calling the same agent again, make sure to adjust the prompt to be more specific.\n\n                    ## Workflow/Tool:\n                    - prompt should be a JSON value that corresponds to the input schema of the workflow or tool. The JSON value is stringified.\n                    - Make sure to use inputs corresponding to the input schema when calling a workflow or tool.\n\n                    DO NOT CALL THE PRIMITIVE YOURSELF. Make sure to not call the same primitive twice, unless you call it with different arguments and believe it adds something to the task completion criteria. Take into account previous decision making history and results in your decision making and final result. These are messages whose text is a JSON structure with \"isNetwork\" true.\n\n                    Please select the most appropriate primitive to handle this task and the prompt to be sent to the primitive. If no primitive is appropriate, return \"none\" for the primitiveId and \"none\" for the primitiveType.\n\n                    {\n                        \"primitiveId\": string,\n                        \"primitiveType\": \"agent\" | \"workflow\" | \"tool\",\n                        \"prompt\": string,\n                        \"selectionReason\": string\n                    }\n\n                    The 'selectionReason' property should explain why you picked the primitive, as well as why the other primitives were not picked."
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "\n          You are a router in a network of specialized AI agents.\n          Your job is to decide which agent should handle each step of a task.\n          If asking for completion of a task, make sure to follow system instructions closely.\n\n          Every step will result in a prompt message. It will be a JSON object with a \"selectionReason\" and \"finalResult\" property. Make your decision based on previous decision history, as well as the overall task criteria. If you already called a primitive, you shouldn't need to call it again, unless you strongly believe it adds something to the task completion criteria. Make sure to call enough primitives to complete the task.\n\n          ## System Instructions\n          You help users understand tool results. Explain tool outputs clearly.\n          You can only pick agents and workflows that are available in the lists below. Never call any agents or workflows that are not available in the lists below.\n          ## Available Agents in Network\n          \n          ## Available Workflows in Network (make sure to use inputs corresponding to the input schema when calling a workflow)\n          \n          ## Available Tools in Network (make sure to use inputs corresponding to the input schema when calling a tool)\n           - **testTool**: A test tool, input schema: {\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"}},\"required\":[\"query\"],\"additionalProperties\":false}\n          If you have multiple entries that need to be called with a workflow or agent, call them separately with each input.\n          When calling a workflow, the prompt should be a JSON value that corresponds to the input schema of the workflow. The JSON value is stringified.\n          When calling a tool, the prompt should be a JSON value that corresponds to the input schema of the tool. The JSON value is stringified.\n          When calling an agent, the prompt should be a text value, like you would call an LLM in a chat interface.\n          Keep in mind that the user only sees the final result of the task. When reviewing completion, you should know that the user will not see the intermediate results.\n          \n        "
+              }
+            ]
+          }
+        },
+        "timestamp": 1779989656050
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Thu, 28 May 2026 17:34:17 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=1312",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "{\n  \"primitiveId\": \"none\",\n  \"primitiveType\": \"agent\",\n  \"prompt\": \"The tool returned a response with content 'previous result' and name 'test-tool'. Can you explain what this response means in the context of the user's request to 'Explain what this result means.'?\",\n  \"selectionReason\": \"The user wants an explanation of the tool's response. An agent is best suited for this task as it can provide a natural language explanation.\"\n}"
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "avgLogprobs": -0.304161899494675
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 909,
+            "candidatesTokenCount": 106,
+            "totalTokenCount": 1015,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 909
+              }
+            ],
+            "candidatesTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 106
+              }
+            ],
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-2.0-flash",
+          "responseId": "mHwYareiFoLmjMcPg5Sy4QY"
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

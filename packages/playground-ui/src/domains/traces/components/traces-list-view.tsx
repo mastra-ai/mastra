@@ -17,6 +17,8 @@ export type TracesListViewTrace = {
   traceId: string;
   /** Required for branch rows; absent on plain trace rows (which are root-rooted). */
   spanId?: string | null;
+  /** `null`/missing → root span. Drives the Kind column's icon (top-level trace vs nested branch). */
+  parentSpanId?: string | null;
   name: string;
   entityType?: string | null;
   entityId?: string | null;
@@ -28,7 +30,7 @@ export type TracesListViewTrace = {
 };
 
 // Fixed widths on non-flex columns prevent track shifts as the virtualizer swaps rows in/out.
-const COLUMNS = '7rem 6rem 9rem 14rem minmax(8rem,1fr) 14rem 6rem';
+const COLUMNS = '6rem 9rem 14rem minmax(8rem,1fr) 14rem 6rem';
 
 const ROW_HEIGHT = 36;
 const OVERSCAN = 8;
@@ -47,6 +49,13 @@ export type TracesListViewProps = {
    * a row is featured only when both `traceId` and `spanId` match.
    */
   featuredSpanId?: string | null;
+  /** Branches mode mixes root traces with subtraces — enables the Trace/Subtrace tooltip on the
+   *  level icon in the Name column, which is meaningless when every row is a root. */
+  isBranchesMode?: boolean;
+  /** Keys (`traceId:spanId`) of rows that just arrived via delta polling. Rows whose key is in
+   *  this set get a temporary tint to distinguish them from rows present since the last page-mode
+   *  fetch. Auto-expires upstream (in useTraces) after a short window. */
+  recentlyAddedKeys?: Set<string>;
   /** Called when a row is clicked. The current selection logic (toggle on same id) is the consumer's call. */
   onTraceClick: (trace: TracesListViewTrace) => void;
 };
@@ -64,6 +73,8 @@ export function TracesListView({
   filtersApplied,
   featuredTraceId,
   featuredSpanId,
+  isBranchesMode,
+  recentlyAddedKeys,
   onTraceClick,
 }: TracesListViewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -104,9 +115,8 @@ export function TracesListView({
     virtualItems.length > 0 ? Math.max(0, totalSize - (virtualItems[virtualItems.length - 1]?.end ?? 0)) : 0;
 
   return (
-    <TracesDataList columns={COLUMNS} scrollRef={scrollRef} className="min-w-0">
+    <TracesDataList columns={COLUMNS} variant="striped" scrollRef={scrollRef} className="min-w-0">
       <TracesDataList.Top>
-        <TracesDataList.TopCell>ID</TracesDataList.TopCell>
         <TracesDataList.TopCell>Date</TracesDataList.TopCell>
         <TracesDataList.TopCell>Time</TracesDataList.TopCell>
         <TracesDataList.TopCell>Name</TracesDataList.TopCell>
@@ -128,22 +138,28 @@ export function TracesListView({
 
             const isFeatured =
               trace.traceId === featuredTraceId && (featuredSpanId == null || trace.spanId === featuredSpanId);
+            const rowKey = `${trace.traceId}:${trace.spanId ?? ''}`;
+            const isRecentlyAdded = recentlyAddedKeys?.has(rowKey) ?? false;
             const displayDate = trace.startedAt ?? trace.createdAt;
             const entityName =
               trace.entityName || trace.entityId || trace.attributes?.agentId || trace.attributes?.workflowId;
 
             return (
               <TracesDataList.RowButton
-                key={`${trace.traceId}:${trace.spanId ?? ''}`}
+                key={rowKey}
                 ref={virtualizer.measureElement}
                 data-index={vi.index}
                 onClick={() => onTraceClick(trace)}
-                className={cn(isFeatured && 'bg-surface4')}
+                featured={isFeatured}
+                className={cn(isRecentlyAdded && 'animate-row-highlight')}
               >
-                <TracesDataList.IdCell traceId={trace.traceId} />
                 <TracesDataList.DateCell timestamp={displayDate} />
                 <TracesDataList.TimeCell timestamp={displayDate} />
-                <TracesDataList.NameCell name={trace.name} />
+                <TracesDataList.NameCell
+                  name={trace.name}
+                  parentSpanId={trace.parentSpanId}
+                  showLevelTooltip={isBranchesMode}
+                />
                 <TracesDataList.InputCell input={getInputPreview(trace.input)} />
                 <TracesDataList.EntityCell entityType={trace.entityType} entityName={entityName} />
                 <TracesDataList.StatusCell status={trace.attributes?.status} />

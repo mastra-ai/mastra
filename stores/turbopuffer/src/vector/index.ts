@@ -14,11 +14,12 @@ import type {
 } from '@mastra/core/vector';
 import { MastraVector } from '@mastra/core/vector';
 import { Turbopuffer } from '@turbopuffer/turbopuffer';
-import type { DistanceMetric, QueryResults, Schema, Vector } from '@turbopuffer/turbopuffer';
+import type { DistanceMetric, NamespaceWriteParams, Row } from '@turbopuffer/turbopuffer/resources/namespaces';
 import { TurbopufferFilterTranslator } from './filter';
 import type { TurbopufferVectorFilter } from './filter';
 
 type TurbopufferQueryVectorParams = QueryVectorParams<TurbopufferVectorFilter>;
+type Schema = NonNullable<NamespaceWriteParams['schema']>;
 
 export interface TurbopufferVectorOptions {
   /** The API key to authenticate with. */
@@ -159,10 +160,10 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     try {
       const distanceMetric = createIndex.tpufDistanceMetric;
       const vectorIds = ids || vectors.map(() => crypto.randomUUID());
-      const records: Vector[] = vectors.map((vector, i) => ({
+      const records: Row[] = vectors.map((vector, i) => ({
         id: vectorIds[i]!,
-        vector: vector,
-        attributes: metadata?.[i] || {},
+        vector,
+        ...(metadata?.[i] || {}),
       }));
 
       // limit is 256 MB per upsert request, so set a reasonable batch size here that will stay under that for most cases
@@ -170,20 +171,15 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
       const batchSize = 100;
       for (let i = 0; i < records.length; i += batchSize) {
         const batch = records.slice(i, i + batchSize);
-        const upsertOptions: {
-          vectors: Vector[];
-          distance_metric: DistanceMetric;
-          schema?: Schema;
-          batchSize?: number;
-        } = {
-          vectors: batch,
+        const writeOptions: NamespaceWriteParams = {
+          upsert_rows: batch,
           distance_metric: distanceMetric,
         };
 
         // Use the schemaForIndex callback if provided
         const schemaConfig = this.opts.schemaConfigForIndex?.(indexName);
         if (schemaConfig) {
-          upsertOptions.schema = schemaConfig.schema;
+          writeOptions.schema = schemaConfig.schema;
           if (vectors[0]?.length !== schemaConfig.dimensions) {
             throw new Error(
               `Turbopuffer index ${indexName} was configured with dimensions=${schemaConfig.dimensions} but attempting to upsert vectors[0].length=${vectors[0]?.length}`,
@@ -191,7 +187,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
           }
         }
 
-        await index.upsert(upsertOptions);
+        await index.write(writeOptions);
       }
 
       return vectorIds;
@@ -255,21 +251,24 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     try {
       const index = this.client.namespace(indexName);
       const translatedFilter = this.filterTranslator.translate(filter);
-      const results: QueryResults = await index.query({
+      const results = await index.query({
         distance_metric: distanceMetric,
-        vector: queryVector,
+        rank_by: ['vector', 'ANN', queryVector],
         top_k: topK,
         filters: translatedFilter,
-        include_vectors: includeVector,
+        vector_encoding: includeVector ? 'float' : undefined,
         include_attributes: true,
         consistency: { level: 'strong' }, // todo: make this configurable somehow?
       });
-      return results.map(item => ({
-        id: String(item.id),
-        score: typeof item.dist === 'number' ? item.dist : 0,
-        metadata: item.attributes || {},
-        ...(includeVector && item.vector ? { vector: item.vector } : {}),
-      }));
+      return (results.rows ?? []).map(item => {
+        const { id, vector, $dist, ...metadata } = item;
+        return {
+          id: String(id),
+          score: typeof $dist === 'number' ? $dist : 0,
+          metadata,
+          ...(includeVector && Array.isArray(vector) ? { vector } : {}),
+        };
+      });
     } catch (error) {
       throw new MastraError(
         {
@@ -313,8 +312,8 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
       if (!createIndex) {
         throw new Error(`createIndex() not called for this index`);
       }
-      const dimension = metadata.dimensions;
-      const count = metadata.approx_count;
+      const dimension = createIndex.dimension;
+      const count = metadata.approx_row_count;
       return {
         dimension,
         count,
@@ -438,31 +437,33 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
         const translatedFilter = this.filterTranslator.translate(filter);
 
         const results = await namespace.query({
-          vector: dummyVector,
+          rank_by: ['vector', 'ANN', dummyVector],
           top_k: 10000, // Get all matching vectors
           filters: translatedFilter,
-          include_vectors: update.vector ? true : false, // Only fetch vectors if we're not replacing them
-          include_attributes: ['*'],
+          vector_encoding: update.vector ? undefined : 'float', // Only fetch vectors if we're not replacing them
+          include_attributes: true,
         });
+        const rows = results.rows ?? [];
 
-        idsToUpdate = results.map(r => String(r.id));
+        idsToUpdate = rows.map(r => String(r.id));
 
         // If we're doing a partial update (only metadata or only vector), we need existing data
         if (!update.vector || !update.metadata) {
-          for (const result of results) {
-            const record: Vector = { id: result.id };
+          for (const result of rows) {
+            const { id: resultId, vector, $dist, ...metadata } = result;
+            const record: Row = { id: resultId };
             if (update.vector) {
               record.vector = update.vector;
-            } else if (result.vector) {
-              record.vector = result.vector;
+            } else if (Array.isArray(vector)) {
+              record.vector = vector;
             }
             if (update.metadata) {
-              record.attributes = update.metadata;
-            } else if (result.attributes) {
-              record.attributes = result.attributes;
+              Object.assign(record, update.metadata);
+            } else {
+              Object.assign(record, metadata);
             }
-            await namespace.upsert({
-              vectors: [record],
+            await namespace.write({
+              upsert_rows: [record],
               distance_metric: distanceMetric,
             });
           }
@@ -477,19 +478,18 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
       }
 
       // Full update - we have both vector and metadata (or just one without needing existing data)
-      const records: Vector[] = idsToUpdate.map(vecId => {
-        const record: Vector = { id: vecId };
-        if (update.vector) record.vector = update.vector;
-        if (update.metadata) record.attributes = update.metadata;
-        return record;
-      });
+      const records: Row[] = idsToUpdate.map(vecId => ({
+        id: vecId,
+        ...(update.vector ? { vector: update.vector } : {}),
+        ...(update.metadata || {}),
+      }));
 
       // Batch updates in chunks of 1000
       const batchSize = 1000;
       for (let i = 0; i < records.length; i += batchSize) {
         const batch = records.slice(i, i + batchSize);
-        await namespace.upsert({
-          vectors: batch,
+        await namespace.write({
+          upsert_rows: batch,
           distance_metric: distanceMetric,
         });
       }
@@ -521,7 +521,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
   async deleteVector({ indexName, id }: DeleteVectorParams): Promise<void> {
     try {
       const namespace = this.client.namespace(indexName);
-      await namespace.delete({ ids: [id] });
+      await namespace.write({ deletes: [id] });
     } catch (error: any) {
       throw new MastraError(
         {
@@ -595,14 +595,13 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
         const translatedFilter = this.filterTranslator.translate(filter);
 
         const results = await namespace.query({
-          vector: dummyVector,
+          rank_by: ['vector', 'ANN', dummyVector],
           top_k: 10000, // Get all matching vectors
           filters: translatedFilter,
-          include_vectors: false,
           include_attributes: [],
         });
 
-        idsToDelete = results.map(r => String(r.id));
+        idsToDelete = (results.rows ?? []).map(r => String(r.id));
       }
 
       // If no IDs to delete, return early
@@ -615,7 +614,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
       const batchSize = 1000;
       for (let i = 0; i < idsToDelete.length; i += batchSize) {
         const batch = idsToDelete.slice(i, i + batchSize);
-        await namespace.delete({ ids: batch });
+        await namespace.write({ deletes: batch });
       }
     } catch (error: any) {
       if (error instanceof MastraError) throw error;

@@ -15,4 +15,4 @@ export * from './versioned-skill-source';
 export * from './composite-versioned-skill-source';
 export * from './workspace-skills';
 export * from './publish';
-export { createSkillTools } from './tools';
+export { createSkillTools, formatSkillActivation } from './tools';

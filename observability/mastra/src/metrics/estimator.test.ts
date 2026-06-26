@@ -422,4 +422,32 @@ describe('estimateCosts', () => {
       },
     });
   });
+
+  it('resolves OpenRouter "vendor/model" ids whose version contains a dot', () => {
+    // OpenRouter keeps the dotted version in the route id (e.g.
+    // "google/gemini-2.5-flash"), but pricing keys flatten dots to dashes
+    // ("gemini-2-5-flash"). The vendor-stripped id must be dot-flattened too.
+    const costs = estimateCosts(
+      {
+        provider: 'openrouter',
+        model: 'google/gemini-2.5-flash',
+        usage: {
+          inputTokens: 1_000,
+          outputTokens: 100,
+        },
+      },
+      pricingRegistry,
+    );
+
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)).toEqual({
+      provider: 'openrouter',
+      model: 'gemini-2-5-flash',
+      estimatedCost: 0.001,
+      costUnit: 'USD',
+      costMetadata: {
+        pricing_id: 'openrouter-gemini-2-5-flash',
+        tier_index: 0,
+      },
+    });
+  });
 });

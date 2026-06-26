@@ -1,10 +1,9 @@
 {
   "meta": {
     "name": "core-src-llm-model-embedding-router.e2e",
-    "testFile": "src/llm/model/embedding-router.e2e.test.ts",
+    "testFile": "packages/core/src/llm/model/embedding-router.e2e.test.ts",
     "model": "text-embedding-3-small",
-    "createdAt": "2026-03-09T19:12:44.870Z",
-    "updatedAt": "2026-03-24T15:26:48.832Z"
+    "createdAt": "2026-05-18T10:50:50.091Z"
   },
   "recordings": [
     {
@@ -17,21 +16,21 @@
           "input": ["hello world"],
           "encoding_format": "float"
         },
-        "timestamp": 1774366003865
+        "timestamp": 1779101447213
       },
       "response": {
         "status": 200,
         "statusText": "OK",
         "headers": {
-          "access-control-expose-headers": "X-Request-ID",
+          "access-control-expose-headers": "X-Request-ID, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e16b2249d8bb9b9-BRU",
+          "cf-ray": "9fda4d8e1ee668b2-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 24 Mar 2026 15:26:46 GMT",
+          "date": "Mon, 18 May 2026 10:50:49 GMT",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "63",
+          "openai-processing-ms": "177",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -44,7 +43,7 @@
           "x-ratelimit-remaining-tokens": "999998",
           "x-ratelimit-reset-requests": "20ms",
           "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_914d552e6ae34b27bc660e010044d044"
+          "x-request-id": "req_a70995637b8c49e6948d4adba1e111b2"
         },
         "body": {
           "object": "list",
@@ -392,29 +391,30 @@
           "input": ["test"],
           "encoding_format": "float"
         },
-        "timestamp": 1774366006525
+        "timestamp": 1779101449059
       },
       "response": {
         "status": 200,
         "statusText": "OK",
         "headers": {
           "access-control-allow-origin": "*",
-          "access-control-expose-headers": "X-Request-ID",
+          "access-control-expose-headers": "X-Request-ID, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e16b234dd43b9b9-BRU",
+          "cf-ray": "9fda4d98fb6568b2-BRU",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 24 Mar 2026 15:26:48 GMT",
+          "date": "Mon, 18 May 2026 10:50:49 GMT",
           "openai-model": "text-embedding-ada-002-v2",
           "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "53",
+          "openai-processing-ms": "162",
           "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
-          "via": "envoy-router-canary-68654bd76-tjsr7",
+          "via": "envoy-router-67b4bb5674-mj6d7",
           "x-content-type-options": "nosniff",
+          "x-engine-geography": "EU",
           "x-openai-proxy-wasm": "v0.1",
           "x-ratelimit-limit-requests": "3000",
           "x-ratelimit-limit-tokens": "1000000",
@@ -422,7 +422,7 @@
           "x-ratelimit-remaining-tokens": "999999",
           "x-ratelimit-reset-requests": "20ms",
           "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_9f2cfcc9402649bd9204740512d7f57e"
+          "x-request-id": "req_00a65e052b1a4cb2b519307af597b775"
         },
         "body": {
           "object": "list",
@@ -676,7 +676,7 @@
             ]
           }
         },
-        "timestamp": 1774366008529
+        "timestamp": 1779101449684
       },
       "response": {
         "status": 200,
@@ -684,9 +684,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Tue, 24 Mar 2026 15:26:48 GMT",
+          "date": "Mon, 18 May 2026 10:50:50 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=226",
+          "server-timing": "gfet4t7; dur=284",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",

@@ -12,6 +12,7 @@ import crypto from 'node:crypto';
 import { serve } from '@hono/node-server';
 import type { ServerType } from '@hono/node-server';
 import { Mastra } from '@mastra/core/mastra';
+import type { ApiRoute } from '@mastra/core/server';
 import { createHonoServer } from '@mastra/deployer/server';
 import { DefaultStorage } from '@mastra/libsql';
 import { Inngest } from 'inngest';
@@ -30,6 +31,9 @@ let sharedInngest: Inngest | null = null;
 let sharedMastra: Mastra | null = null;
 let sharedServer: ServerType | null = null;
 let inngestDevServer: ChildProcess | null = null;
+
+type ApiRouteCreateHandler = Extract<ApiRoute, { createHandler: unknown }>['createHandler'];
+type ApiRouteHandler = Awaited<ReturnType<ApiRouteCreateHandler>>;
 
 /**
  * Generate unique test ID to isolate each test.
@@ -196,7 +200,7 @@ export async function setupSharedTestInfrastructure(): Promise<void> {
         {
           path: '/inngest/api',
           method: 'ALL',
-          createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
+          createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }) as unknown as ApiRouteHandler,
         },
       ],
     },

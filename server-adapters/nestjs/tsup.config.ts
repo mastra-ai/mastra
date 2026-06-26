@@ -22,6 +22,6 @@ export default defineConfig({
     });
   },
   onSuccess: async () => {
-    await generateTypes(process.cwd());
+    await generateTypes(process.cwd(), new Set(['rxjs']));
   },
 });

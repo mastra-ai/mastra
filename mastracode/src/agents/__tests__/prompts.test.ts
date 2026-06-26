@@ -91,6 +91,122 @@ describe('buildFullPrompt', () => {
     expect(prompt).not.toContain('<coding_behavior>');
   });
 
+  it('does not advertise the removed audit-tests subagent exception', () => {
+    const prompt = buildFullPrompt({
+      projectPath: '/tmp/project',
+      projectName: 'test-project',
+      gitBranch: 'main',
+      platform: 'darwin',
+      date: '2026-03-23',
+      mode: 'build',
+      activePlan: null,
+      modeId: 'build',
+      currentDate: '2026-03-23',
+      workingDir: '/tmp/project',
+      state: {
+        permissionRules: { tools: {} },
+      },
+    });
+
+    expect(prompt).toContain('Only use subagents when you will spawn **multiple subagents in parallel**');
+    expect(prompt).not.toContain('audit-tests');
+    expect(prompt).not.toContain('subagent may be used on its own');
+  });
+
+  it('describes goal mode and goal-ready plan expectations in the base prompt', () => {
+    const prompt = buildFullPrompt({
+      projectPath: '/tmp/project',
+      projectName: 'test-project',
+      gitBranch: 'main',
+      platform: 'darwin',
+      date: '2026-03-23',
+      mode: 'build',
+      activePlan: null,
+      modeId: 'build',
+      currentDate: '2026-03-23',
+      workingDir: '/tmp/project',
+      state: {
+        permissionRules: { tools: {} },
+      },
+    });
+
+    expect(prompt).toContain('## Goal Mode Awareness');
+    expect(prompt).toContain('A goal is a persistent objective');
+    expect(prompt).toContain('submit_plan tool may also be started as a goal');
+    expect(prompt).toContain('make them goal-ready');
+    expect(prompt).toContain('concrete, outcome-focused, verifiable, and bounded');
+  });
+
+  it('includes goal mode as a submit_plan approval option in plan mode', () => {
+    const prompt = buildFullPrompt({
+      projectPath: '/tmp/project',
+      projectName: 'test-project',
+      gitBranch: 'main',
+      platform: 'darwin',
+      date: '2026-03-23',
+      mode: 'plan',
+      activePlan: null,
+      modeId: 'plan',
+      currentDate: '2026-03-23',
+      workingDir: '/tmp/project',
+      state: {
+        permissionRules: { tools: {} },
+      },
+    });
+
+    expect(prompt).toContain('## Goal-Ready Plans');
+    expect(prompt).toContain(
+      'The submit_plan approval UI can let the user approve the plan normally or start it as a persistent goal',
+    );
+    expect(prompt).toContain('**Start as goal**');
+    expect(prompt).toContain('goal judge can tell when the work is done');
+  });
+
+  it('includes the selected model id in commit co-author guidance', () => {
+    const prompt = buildFullPrompt({
+      projectPath: '/tmp/project',
+      projectName: 'test-project',
+      gitBranch: 'main',
+      platform: 'darwin',
+      date: '2026-03-23',
+      mode: 'build',
+      modelId: 'openai/gpt-5.5',
+      activePlan: null,
+      modeId: 'build',
+      currentDate: '2026-03-23',
+      workingDir: '/tmp/project',
+      state: {
+        currentModelId: 'openai/gpt-5.5',
+        permissionRules: { tools: {} },
+      },
+    });
+
+    expect(prompt).toContain(
+      'Include `Co-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>` in the message body.',
+    );
+  });
+
+  it('uses the model-less commit co-author fallback when no model id is available', () => {
+    const prompt = buildFullPrompt({
+      projectPath: '/tmp/project',
+      projectName: 'test-project',
+      gitBranch: 'main',
+      platform: 'darwin',
+      date: '2026-03-23',
+      mode: 'build',
+      activePlan: null,
+      modeId: 'build',
+      currentDate: '2026-03-23',
+      workingDir: '/tmp/project',
+      state: {
+        permissionRules: { tools: {} },
+      },
+    });
+
+    expect(prompt).toContain('Include `Co-Authored-By: Mastra Code <noreply@mastra.ai>` in the message body.');
+    expect(prompt).not.toContain('Co-Authored-By: Mastra Code ()');
+  });
+
   it('includes common binary availability in environment details', () => {
     const prompt = buildFullPrompt({
       projectPath: '/tmp/project',

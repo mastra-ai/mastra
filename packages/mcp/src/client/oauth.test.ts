@@ -16,10 +16,15 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server as HttpServer, IncomingMessage, ServerResponse } from 'node:http';
 
+import { exchangeAuthorization, refreshAuthorization } from '@modelcontextprotocol/sdk/client/auth.js';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 
 import type { OAuthMiddlewareResult } from '../server/oauth-middleware.js';
-import { createOAuthMiddleware, createStaticTokenValidator, createIntrospectionValidator } from '../server/oauth-middleware.js';
+import {
+  createOAuthMiddleware,
+  createStaticTokenValidator,
+  createIntrospectionValidator,
+} from '../server/oauth-middleware.js';
 import { MCPServer } from '../server/server.js';
 import type { MCPServerOAuthConfig } from '../shared/oauth-types.js';
 import {
@@ -76,9 +81,7 @@ describe('OAuth Types and Helpers', () => {
       const header = generateWWWAuthenticateHeader({
         resourceMetadataUrl: 'https://mcp.example.com/.well-known/oauth-protected-resource',
       });
-      expect(header).toBe(
-        'Bearer resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource"',
-      );
+      expect(header).toBe('Bearer resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource"');
     });
 
     it('should include additional params', () => {
@@ -262,6 +265,112 @@ describe('MCPOAuthClientProvider', () => {
     });
 
     expect(await provider.state?.()).toBe(customState);
+  });
+
+  // Regression for https://github.com/mastra-ai/mastra/issues/16854.
+  // The MCP SDK only attaches client_id/client_secret to token requests when
+  // the provider does NOT implement addClientAuthentication. A previous empty
+  // stub on this provider was truthy and short-circuited that default,
+  // dropping credentials and breaking confidential-client OAuth.
+  it('should not implement addClientAuthentication so the SDK attaches client credentials by default', () => {
+    const provider = new MCPOAuthClientProvider({
+      redirectUrl: 'http://localhost:3000/callback',
+      clientMetadata: {
+        redirect_uris: ['http://localhost:3000/callback'],
+        client_name: 'Test Client',
+      },
+    });
+
+    // Bracket access since the property is intentionally absent from the type.
+    expect((provider as unknown as Record<string, unknown>)['addClientAuthentication']).toBeUndefined();
+  });
+
+  // End-to-end checks that drive the real MCP SDK token-exchange path with a
+  // mocked fetch. These prove the bug fix from the consumer's perspective:
+  // when our provider's (undefined) addClientAuthentication is forwarded to
+  // the SDK, client_id and client_secret end up on the wire.
+  describe('SDK token requests include client credentials', () => {
+    const clientInformation = {
+      client_id: 'test-client-id',
+      client_secret: 'test-client-secret',
+      redirect_uris: ['http://localhost:3000/callback'],
+    };
+
+    const makeProvider = () =>
+      new MCPOAuthClientProvider({
+        redirectUrl: 'http://localhost:3000/callback',
+        clientMetadata: {
+          redirect_uris: ['http://localhost:3000/callback'],
+          client_name: 'Test Client',
+        },
+      });
+
+    const mockTokenFetch = () => {
+      const fetchFn = vi.fn(
+        async () =>
+          new Response(JSON.stringify({ access_token: 'new-access-token', token_type: 'Bearer' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+      );
+      return fetchFn as unknown as typeof fetch;
+    };
+
+    // Reads addClientAuthentication off the provider the same way the SDK would,
+    // via bracket access since the property is intentionally absent from the type.
+    type AddClientAuthentication = Parameters<typeof exchangeAuthorization>[1]['addClientAuthentication'];
+    const readAddClientAuthentication = (provider: MCPOAuthClientProvider): AddClientAuthentication =>
+      (provider as unknown as Record<string, AddClientAuthentication>)['addClientAuthentication'];
+
+    // Force client_secret_post so credentials land in the request body,
+    // which is the exact failure mode described in the issue.
+    const postAuthMetadata = {
+      issuer: 'https://auth.example.com',
+      authorization_endpoint: 'https://auth.example.com/authorize',
+      token_endpoint: 'https://auth.example.com/token',
+      response_types_supported: ['code'],
+      token_endpoint_auth_methods_supported: ['client_secret_post'],
+    };
+
+    it('attaches client_id and client_secret during authorization code exchange', async () => {
+      const provider = makeProvider();
+      const fetchFn = mockTokenFetch();
+
+      await exchangeAuthorization('https://auth.example.com', {
+        metadata: postAuthMetadata,
+        clientInformation,
+        authorizationCode: 'auth-code',
+        codeVerifier: 'code-verifier',
+        redirectUri: 'http://localhost:3000/callback',
+        addClientAuthentication: readAddClientAuthentication(provider),
+        fetchFn,
+      });
+
+      const fetchMock = fetchFn as unknown as ReturnType<typeof vi.fn>;
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const body = fetchMock.mock.calls[0]![1]!.body as URLSearchParams;
+      expect(body.get('client_id')).toBe('test-client-id');
+      expect(body.get('client_secret')).toBe('test-client-secret');
+    });
+
+    it('attaches client_id and client_secret during refresh', async () => {
+      const provider = makeProvider();
+      const fetchFn = mockTokenFetch();
+
+      await refreshAuthorization('https://auth.example.com', {
+        metadata: postAuthMetadata,
+        clientInformation,
+        refreshToken: 'refresh-token',
+        addClientAuthentication: readAddClientAuthentication(provider),
+        fetchFn,
+      });
+
+      const fetchMock = fetchFn as unknown as ReturnType<typeof vi.fn>;
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const body = fetchMock.mock.calls[0]![1]!.body as URLSearchParams;
+      expect(body.get('client_id')).toBe('test-client-id');
+      expect(body.get('client_secret')).toBe('test-client-secret');
+    });
   });
 });
 
@@ -507,7 +616,7 @@ describe('OAuth Middleware Integration', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer invalid-token',
+        Authorization: 'Bearer invalid-token',
       },
       body: JSON.stringify({ jsonrpc: '2.0', method: 'initialize', id: 1 }),
     });
@@ -526,7 +635,7 @@ describe('OAuth Middleware Integration', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${VALID_TOKEN}`,
+        Authorization: `Bearer ${VALID_TOKEN}`,
       },
       body: JSON.stringify({
         jsonrpc: '2.0',

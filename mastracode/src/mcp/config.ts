@@ -3,30 +3,39 @@
  * Loads from:
  *   1. .claude/settings.local.json  (Claude Code compat — lowest priority)
  *   2. ~/.mastracode/mcp.json       (global)
- *   3. .mastracode/mcp.json         (project — highest priority)
+ *   3. .mcp.json                    (project root — Claude Code compatible)
+ *   4. .mastracode/mcp.json         (project — highest priority)
  *
- * Project overrides global by server name. Claude Code config is lowest priority.
+ * Higher-priority configs override lower ones by server name. The project root
+ * `.mcp.json` is read so a project that already keeps MCP servers there for
+ * Claude Code does not need to duplicate them under `.mastracode/`.
  */
 
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import type { McpConfig, McpHttpOAuthConfig, McpServerConfig, McpSkippedServer } from './types.js';
 
-export function loadMcpConfig(projectDir: string): McpConfig {
+export function loadMcpConfig(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): McpConfig {
   const claudeConfig = loadClaudeSettings(projectDir);
-  const globalConfig = loadSingleConfig(getGlobalMcpPath());
-  const projectConfig = loadSingleConfig(getProjectMcpPath(projectDir));
+  const globalConfig = loadSingleConfig(getGlobalMcpPath(configDirName));
+  const rootConfig = loadSingleConfig(getRootMcpPath(projectDir));
+  const projectConfig = loadSingleConfig(getProjectMcpPath(projectDir, configDirName));
 
-  return mergeConfigs(claudeConfig, globalConfig, projectConfig);
+  return mergeConfigs(claudeConfig, globalConfig, rootConfig, projectConfig);
 }
 
-export function getProjectMcpPath(projectDir: string): string {
-  return path.join(projectDir, '.mastracode', 'mcp.json');
+export function getProjectMcpPath(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): string {
+  return path.join(projectDir, configDirName, 'mcp.json');
 }
 
-export function getGlobalMcpPath(): string {
-  return path.join(os.homedir(), '.mastracode', 'mcp.json');
+export function getRootMcpPath(projectDir: string): string {
+  return path.join(projectDir, '.mcp.json');
+}
+
+export function getGlobalMcpPath(configDirName = DEFAULT_CONFIG_DIR): string {
+  return path.join(os.homedir(), configDirName, 'mcp.json');
 }
 
 export function getClaudeSettingsPath(projectDir: string): string {
@@ -57,6 +66,37 @@ function loadClaudeSettings(projectDir: string): McpConfig {
   } catch {
     return {};
   }
+}
+
+/**
+ * Expand `${VAR}` and `${VAR:-default}` references in a string from the
+ * environment, matching how Claude Code resolves values in `.mcp.json`.
+ * A referenced variable that is unset or empty falls back to its default,
+ * or to an empty string when no default is given.
+ */
+export function expandEnvVars(value: string, env: NodeJS.ProcessEnv = process.env): string {
+  return value.replace(
+    /\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}|\$([A-Za-z_][A-Za-z0-9_]*)/g,
+    (_match, bracedName, fallback, bareName) => {
+      const name = bracedName ?? bareName;
+      const resolved = env[name];
+      if (resolved !== undefined && resolved !== '') return resolved;
+      return fallback ?? '';
+    },
+  );
+}
+
+/**
+ * Expand `${VAR}` and `$VAR` references in every string-valued HTTP header so that
+ * secrets like API keys can be referenced from the environment instead of
+ * being hardcoded in `mcp.json`.
+ */
+function expandHeaderEnvVars(headers: Record<string, unknown>): Record<string, string> {
+  const expanded: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (typeof value === 'string') expanded[key] = expandEnvVars(value);
+  }
+  return expanded;
 }
 
 /**
@@ -121,7 +161,9 @@ export function validateConfig(raw: unknown): McpConfig {
       servers[name] = {
         url: e.url as string,
         headers:
-          typeof e.headers === 'object' && e.headers !== null ? (e.headers as Record<string, string>) : undefined,
+          typeof e.headers === 'object' && e.headers !== null
+            ? expandHeaderEnvVars(e.headers as Record<string, unknown>)
+            : undefined,
         oauth: oauthResult.config,
       };
     } else {

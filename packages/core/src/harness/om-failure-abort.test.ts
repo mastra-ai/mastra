@@ -2,31 +2,36 @@ import { describe, it, expect } from 'vitest';
 import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
-import type { HarnessEvent } from './types';
+import { createMockWorkspace } from './test-utils';
+import type { AgentControllerEvent } from './types';
 
-function createHarness() {
+async function createSession() {
   const agent = new Agent({
     name: 'test-agent',
     instructions: 'You are a test agent.',
     model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
   });
 
-  return new Harness({
+  const harness = new Harness({
+    workspace: createMockWorkspace(),
     id: 'test-harness',
     storage: new InMemoryStore(),
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
   });
+  await harness.init();
+  const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+  return { session };
 }
 
 describe('Harness OM failure abort behavior', () => {
   it('aborts stream and emits an error when OM buffering fails', async () => {
-    const harness = createHarness();
-    const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    const { session } = await createSession();
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => events.push(event));
 
-    (harness as any).abortController = new AbortController();
+    session.run.ensureAbortController();
 
-    await (harness as any).processStream({
+    await (session as any).processStream({
       fullStream: (async function* () {
         yield {
           type: 'data-om-buffering-failed',
@@ -43,23 +48,23 @@ describe('Harness OM failure abort behavior', () => {
     expect(events.some(e => e.type === 'om_buffering_failed')).toBe(true);
     const errorEvent = events.find(e => e.type === 'error');
     expect(errorEvent?.type).toBe('error');
-    expect((errorEvent as Extract<HarnessEvent, { type: 'error' }>).error.message).toContain(
+    expect((errorEvent as Extract<AgentControllerEvent, { type: 'error' }>).error.message).toContain(
       'Observational memory observation buffering failed: Bad Request',
     );
     expect(events.some(e => e.type === 'agent_end' && e.reason === 'aborted')).toBe(true);
-    expect((harness as any).abortRequested).toBe(false);
-    expect((harness as any).abortController).toBeNull();
+    expect(session.run.isAbortRequested()).toBe(false);
+    expect(session.run.hasAbortController()).toBe(false);
     expect(events.some(e => e.type === 'message_start')).toBe(false);
   });
 
   it('aborts stream and emits an error when OM observation run fails', async () => {
-    const harness = createHarness();
-    const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    const { session } = await createSession();
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => events.push(event));
 
-    (harness as any).abortController = new AbortController();
+    session.run.ensureAbortController();
 
-    await (harness as any).processStream({
+    await (session as any).processStream({
       fullStream: (async function* () {
         yield {
           type: 'data-om-observation-failed',
@@ -77,11 +82,11 @@ describe('Harness OM failure abort behavior', () => {
     expect(events.some(e => e.type === 'om_reflection_failed')).toBe(true);
     const errorEvent = events.find(e => e.type === 'error');
     expect(errorEvent?.type).toBe('error');
-    expect((errorEvent as Extract<HarnessEvent, { type: 'error' }>).error.message).toContain(
+    expect((errorEvent as Extract<AgentControllerEvent, { type: 'error' }>).error.message).toContain(
       'Observational memory reflection run failed: Model unavailable',
     );
     expect(events.some(e => e.type === 'agent_end' && e.reason === 'aborted')).toBe(true);
-    expect((harness as any).abortRequested).toBe(false);
+    expect(session.run.isAbortRequested()).toBe(false);
     expect(events.some(e => e.type === 'message_start')).toBe(false);
   });
 });

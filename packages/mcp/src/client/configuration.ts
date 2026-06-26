@@ -734,6 +734,22 @@ To fix this you have three different options:
   }
 
   /**
+   * Returns instructions advertised by connected MCP servers during initialize.
+   *
+   * Servers that have not connected yet, or did not advertise instructions,
+   * return `undefined`.
+   */
+  public getServerInstructions(): Record<string, string | undefined> {
+    const instructions: Record<string, string | undefined> = {};
+
+    for (const serverName of Object.keys(this.serverConfigs)) {
+      instructions[serverName] = this.mcpClientsById.get(serverName)?.instructions;
+    }
+
+    return instructions;
+  }
+
+  /**
    * Retrieves all tools from all configured servers with namespaced names.
    *
    * Tool names are namespaced as `serverName_toolName` to prevent conflicts between servers.
@@ -755,8 +771,35 @@ To fix this you have three different options:
    * ```
    */
   public async listTools(): Promise<Record<string, Tool<any, any, any, any>>> {
+    const result = await this.listToolsWithErrors();
+    return result.tools;
+  }
+
+  /**
+   * Retrieves all tools from all configured servers with namespaced names,
+   * along with any per-server errors.
+   *
+   * Like listTools(), but also returns errors for servers that failed to connect
+   * or list tools. This allows callers to report specific failure reasons per server.
+   *
+   * @returns Object with `tools` (successful tools) and `errors` (failed servers with error messages).
+   * Transient connection failures are retried once after reconnecting the affected server.
+   *
+   * @example
+   * ```typescript
+   * const { tools, errors } = await mcp.listToolsWithErrors();
+   * for (const [name, err] of Object.entries(errors)) {
+   *   console.error(`Server ${name} failed: ${err}`);
+   * }
+   * ```
+   */
+  public async listToolsWithErrors(): Promise<{
+    tools: Record<string, Tool<any, any, any, any>>;
+    errors: Record<string, string>;
+  }> {
     this.addToInstanceCache();
     const connectedTools: Record<string, Tool<any, any, any, any>> = {};
+    const errors: Record<string, string> = {};
 
     for (const serverName of Object.keys(this.serverConfigs)) {
       try {
@@ -778,10 +821,11 @@ To fix this you have three different options:
         );
         this.logger.trackException(mastraError);
         this.logger.error('Failed to list tools from server:', { error: mastraError.toString() });
+        errors[serverName] = error instanceof Error ? error.message : String(error);
       }
     }
 
-    return connectedTools;
+    return { tools: connectedTools, errors };
   }
 
   /**

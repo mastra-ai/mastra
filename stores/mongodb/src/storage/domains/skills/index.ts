@@ -22,6 +22,7 @@ import type {
   ListSkillVersionsInput,
   ListSkillVersionsOutput,
 } from '@mastra/core/storage/domains/skills';
+import { skillSnapshotFieldValuesEqual } from '@mastra/core/storage/domains/skills';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
@@ -39,6 +40,7 @@ const SNAPSHOT_FIELDS = [
   'references',
   'scripts',
   'assets',
+  'files',
   'metadata',
   'tree',
 ] as const;
@@ -169,12 +171,15 @@ export class MongoDBSkillsStorage extends SkillsStorage {
 
       const now = new Date();
 
+      const visibility = skill.visibility ?? (skill.authorId ? 'private' : undefined);
+
       // Create thin skill record
       const newSkill: StorageSkillType = {
         id,
         status: 'draft',
         activeVersionId: undefined,
         authorId: skill.authorId,
+        visibility,
         createdAt: now,
         updatedAt: now,
       };
@@ -246,6 +251,7 @@ export class MongoDBSkillsStorage extends SkillsStorage {
       // Metadata-level fields
       const metadataFields = {
         authorId: updates.authorId,
+        visibility: updates.visibility,
         activeVersionId: updates.activeVersionId,
         status: updates.status,
       };
@@ -258,7 +264,6 @@ export class MongoDBSkillsStorage extends SkillsStorage {
         }
       }
 
-      // If we have config updates, create a new version
       if (Object.keys(configFields).length > 0) {
         const latestVersion = await this.getLatestVersion(id);
 
@@ -272,22 +277,31 @@ export class MongoDBSkillsStorage extends SkillsStorage {
           });
         }
 
-        // Extract existing snapshot and merge with updates
         const existingSnapshot = this.extractSnapshotFields(latestVersion);
+        const changedFields = Object.keys(configFields).filter(
+          field =>
+            !skillSnapshotFieldValuesEqual(
+              configFields[field],
+              existingSnapshot[field as keyof typeof existingSnapshot],
+            ),
+        );
 
-        await this.createVersion({
-          id: randomUUID(),
-          skillId: id,
-          versionNumber: latestVersion.versionNumber + 1,
-          ...existingSnapshot,
-          ...configFields,
-          changedFields: Object.keys(configFields),
-          changeMessage: `Updated: ${Object.keys(configFields).join(', ')}`,
-        } as CreateSkillVersionInput);
+        if (changedFields.length > 0) {
+          await this.createVersion({
+            id: randomUUID(),
+            skillId: id,
+            versionNumber: latestVersion.versionNumber + 1,
+            ...existingSnapshot,
+            ...configFields,
+            changedFields,
+            changeMessage: `Updated: ${changedFields.join(', ')}`,
+          } as CreateSkillVersionInput);
+        }
       }
 
       // Handle metadata-level updates
       if (metadataFields.authorId !== undefined) updateDoc.authorId = metadataFields.authorId;
+      if (metadataFields.visibility !== undefined) updateDoc.visibility = metadataFields.visibility;
       if (metadataFields.activeVersionId !== undefined) {
         updateDoc.activeVersionId = metadataFields.activeVersionId;
         // Auto-set status to 'published' when activeVersionId is set, consistent with InMemory and LibSQL
@@ -351,7 +365,7 @@ export class MongoDBSkillsStorage extends SkillsStorage {
 
   async list(args?: StorageListSkillsInput): Promise<StorageListSkillsOutput> {
     try {
-      const { page = 0, perPage: perPageInput, orderBy, authorId, metadata } = args || {};
+      const { page = 0, perPage: perPageInput, orderBy, authorId, visibility, metadata } = args || {};
       const { field, direction } = this.parseOrderBy(orderBy);
 
       if (page < 0) {
@@ -375,6 +389,9 @@ export class MongoDBSkillsStorage extends SkillsStorage {
       const filter: Record<string, any> = {};
       if (authorId) {
         filter.authorId = authorId;
+      }
+      if (visibility) {
+        filter.visibility = visibility;
       }
       if (metadata) {
         for (const [key, value] of Object.entries(metadata)) {
@@ -673,6 +690,7 @@ export class MongoDBSkillsStorage extends SkillsStorage {
       status: rest.status as 'draft' | 'published' | 'archived',
       activeVersionId: rest.activeVersionId,
       authorId: rest.authorId,
+      visibility: rest.visibility,
       createdAt: rest.createdAt instanceof Date ? rest.createdAt : new Date(rest.createdAt),
       updatedAt: rest.updatedAt instanceof Date ? rest.updatedAt : new Date(rest.updatedAt),
     };
@@ -684,6 +702,7 @@ export class MongoDBSkillsStorage extends SkillsStorage {
       status: skill.status,
       activeVersionId: skill.activeVersionId,
       authorId: skill.authorId,
+      visibility: skill.visibility,
       createdAt: skill.createdAt,
       updatedAt: skill.updatedAt,
     };

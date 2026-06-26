@@ -40,7 +40,7 @@ const workspace = new Workspace({
 
 const agent = new Agent({
   name: 'dev-agent',
-  model: 'anthropic/claude-opus-4-6',
+  model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
   workspace,
 })
 ```
@@ -52,9 +52,17 @@ const agent = new Agent({
   {
     name: 'id',
     type: 'string',
-    description: 'Unique identifier for this sandbox instance. Used for container naming and reconnection via labels.',
+    description: 'Unique identifier for this sandbox instance. Used for label-based reconnection.',
     isOptional: true,
     defaultValue: 'Auto-generated',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description:
+      'Container display name passed to Docker as `--name`. Characters outside `[a-zA-Z0-9_.-]` are replaced with `-` and the result is prefixed if it would not start with an alphanumeric character.',
+    isOptional: true,
+    defaultValue: 'The sandbox `id`',
   },
   {
     name: 'image',

@@ -1,13 +1,9 @@
-import {
-  ErrorState,
-  MetricsFlexGrid,
-  NoDataPageLayout,
-  PageLayout,
-  PermissionDenied,
-  SessionExpired,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { MetricsFlexGrid } from '@mastra/playground-ui/components/MetricsFlexGrid';
+import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useMemo } from 'react';
 import { DatasetHealthCard } from '@/domains/datasets';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
@@ -69,7 +65,7 @@ export default function Evaluation() {
 
   return (
     <PageLayout width="wide" height="full">
-      <div className="flex flex-col gap-6 pt-6">
+      <div className="flex flex-col gap-6">
         <MetricsFlexGrid>
           <EvaluationKpiCards
             scorers={scorers}

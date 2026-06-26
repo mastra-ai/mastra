@@ -5,9 +5,10 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
-import archiver from 'archiver';
+import { ZipArchive } from 'archiver';
 import { config } from 'dotenv';
 import { runBuild } from '../../utils/run-build.js';
+import { checkBuildStaleness } from '../../utils/source-hash.js';
 import { fetchOrgs } from '../auth/api.js';
 import { MASTRA_STUDIO_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
@@ -69,7 +70,7 @@ async function zipOutput(projectDir: string): Promise<string> {
 
   return new Promise((resolvePromise, reject) => {
     const output = createWriteStream(zipPath);
-    const archive = archiver('zip', { zlib: { level: 6 } });
+    const archive = new ZipArchive({ zlib: { level: 6 } });
 
     output.on('close', () => resolvePromise(zipPath));
     archive.on('error', reject);
@@ -490,12 +491,32 @@ export async function deployAction(
 
   let t: number;
 
+  // Check build staleness to determine if we need to rebuild
+  const mastraDir = join(targetDir, 'src', 'mastra');
+  const outputDirectory = join(targetDir, '.mastra');
+  const staleness = await checkBuildStaleness(targetDir, mastraDir, outputDirectory);
+
   if (opts.skipBuild) {
+    if (staleness.isStale && staleness.reason !== 'no-build') {
+      // User explicitly skipped build, but sources have changed — warn them
+      if (staleness.reason === 'hash-mismatch') {
+        p.log.warn('Source files have changed since last build. Deploy may not reflect latest changes.');
+      } else if (staleness.reason === 'no-manifest') {
+        p.log.warn('No build manifest found. Cannot verify if build is up-to-date.');
+      }
+    }
     p.log.step('Skipping build (--skip-build)');
-  } else {
+  } else if (staleness.isStale) {
+    // Build is stale or doesn't exist — rebuild
     t = performance.now();
+    if (staleness.reason === 'hash-mismatch') {
+      p.log.step('Source files changed, rebuilding...');
+    }
     await runBuild(targetDir, { debug: opts.debug });
     p.log.step(`Build completed (${elapsed(performance.now() - t)})`);
+  } else {
+    // Build is up-to-date — skip rebuild
+    p.log.step('Build is up-to-date, skipping rebuild');
   }
 
   // Verify build output exists

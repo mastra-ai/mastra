@@ -10,7 +10,7 @@
  */
 
 import { createRequire } from 'node:module';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 
 import type { ProcessHandle, SandboxProcessManager } from '../sandbox/process-manager';
 import type { LSPServerDef } from './types';
@@ -101,6 +101,31 @@ function toFileUri(fsPath: string): string {
   return pathToFileURL(fsPath).toString();
 }
 
+/**
+ * Normalize a file:// URI to a canonical fs-path-based key for diagnostics
+ * map storage/lookup. On Windows, different LSP servers emit different
+ * canonical forms for the same path (e.g. `file:///C:/...` vs
+ * `file:///c%3A/...`), so we convert back to an OS path and compare those
+ * instead of comparing URI strings directly.
+ */
+export function diagnosticsKey(uriOrPath: string): string {
+  let fsPath: string;
+  try {
+    fsPath = uriOrPath.startsWith('file:') ? fileURLToPath(uriOrPath) : uriOrPath;
+  } catch {
+    return uriOrPath;
+  }
+  // Normalize Windows drive-letter paths so they compare equal regardless of
+  // drive-letter casing or whether fileURLToPath produced a leading slash
+  // (e.g. '/C:/Users/...' vs 'C:/Users/...' vs 'c:\\Users\\...'), independent
+  // of the OS this code happens to run on.
+  const driveMatch = fsPath.match(/^[\\/]?([a-zA-Z]):([\\/].*)$/);
+  if (driveMatch) {
+    return `${driveMatch[1]!.toLowerCase()}:${driveMatch[2]}`;
+  }
+  return fsPath;
+}
+
 // =============================================================================
 // Timeout Helper
 // =============================================================================
@@ -175,7 +200,7 @@ export class LSPClient {
 
     // Listen for published diagnostics
     this.connection.onNotification('textDocument/publishDiagnostics', (params: any) => {
-      this.diagnostics.set(params.uri, params.diagnostics);
+      this.diagnostics.set(diagnosticsKey(params.uri), params.diagnostics);
     });
 
     this.connection.listen();
@@ -280,7 +305,7 @@ export class LSPClient {
   notifyOpen(filePath: string, content: string, languageId: string): void {
     if (!this.connection) return;
     const uri = toFileUri(filePath);
-    this.diagnostics.delete(uri);
+    this.diagnostics.delete(diagnosticsKey(uri));
     this.connection.sendNotification('textDocument/didOpen', {
       textDocument: { uri, languageId, version: 0, text: content },
     });
@@ -314,7 +339,7 @@ export class LSPClient {
     settleMs: number = 500,
   ): Promise<any[]> {
     if (!this.connection) return [];
-    const uri = toFileUri(filePath);
+    const uri = diagnosticsKey(toFileUri(filePath));
     const startTime = Date.now();
     const initialDiagnostics = this.diagnostics.get(uri);
     let emptyReceivedAt: number | undefined;
@@ -350,7 +375,7 @@ export class LSPClient {
   notifyClose(filePath: string): void {
     if (!this.connection) return;
     const uri = toFileUri(filePath);
-    this.diagnostics.delete(uri);
+    this.diagnostics.delete(diagnosticsKey(uri));
     this.connection.sendNotification('textDocument/didClose', {
       textDocument: { uri },
     });

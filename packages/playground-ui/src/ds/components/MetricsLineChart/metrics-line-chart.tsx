@@ -83,7 +83,7 @@ export function MetricsLineChart({
                     ? {
                         r: 4,
                         style: { cursor: 'pointer' },
-                        onClick: (_, payload) => {
+                        onClick: (_: unknown, payload: unknown) => {
                           const datum = (payload as { payload?: Record<string, unknown> } | undefined)?.payload;
                           if (datum) onPointClick(datum, s.dataKey);
                         },

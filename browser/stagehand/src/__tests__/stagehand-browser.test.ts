@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Create mocks BEFORE vi.mock using vi.hoisted so they're available in the mock
-const { mockPage, mockContext, mockStagehand, mockCdpSession } = vi.hoisted(() => {
+const { mockPage, mockContext, mockStagehand, mockCdpSession, mockStagehandConstructor } = vi.hoisted(() => {
+  const mockStagehandConstructor = vi.fn();
   const mockCdpSession = {
     send: vi.fn().mockResolvedValue({}),
     on: vi.fn(),
@@ -44,11 +45,15 @@ const { mockPage, mockContext, mockStagehand, mockCdpSession } = vi.hoisted(() =
     ]),
   };
 
-  return { mockPage, mockContext, mockStagehand, mockCdpSession };
+  return { mockPage, mockContext, mockStagehand, mockCdpSession, mockStagehandConstructor };
 });
 
 vi.mock('@browserbasehq/stagehand', () => ({
   Stagehand: class MockStagehand {
+    constructor(options: unknown) {
+      mockStagehandConstructor(options);
+    }
+
     init = mockStagehand.init;
     close = mockStagehand.close;
     context = mockStagehand.context;
@@ -179,6 +184,62 @@ describe('StagehandBrowser', () => {
       expect(mockStagehand.init).toHaveBeenCalled();
     });
 
+    it('creates Stagehand with TUI-safe logging defaults', async () => {
+      await browser.launch();
+
+      expect(mockStagehandConstructor).toHaveBeenCalledWith(
+        expect.objectContaining({
+          verbose: 0,
+          disablePino: true,
+          logger: expect.any(Function),
+        }),
+      );
+    });
+
+    it('preserves explicit verbose level and custom logger', async () => {
+      const logger = vi.fn();
+      const customBrowser = new StagehandBrowser({ scope: 'shared', verbose: 2, logger });
+      await customBrowser.launch();
+      await customBrowser.close();
+
+      expect(mockStagehandConstructor).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          verbose: 2,
+          disablePino: true,
+          logger,
+        }),
+      );
+    });
+
+    it('preserves explicit disablePino override', async () => {
+      const customBrowser = new StagehandBrowser({ scope: 'shared', disablePino: false });
+      await customBrowser.launch();
+      await customBrowser.close();
+
+      expect(mockStagehandConstructor).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          disablePino: false,
+        }),
+      );
+    });
+
+    it('passes model configuration objects through to Stagehand', async () => {
+      const model = {
+        modelName: '__GATEWAY_OPENAI_MODEL__',
+        apiKey: 'test-openai-compatible-key',
+        baseURL: 'https://openai-compatible.example.com/v1',
+      };
+      const customBrowser = new StagehandBrowser({ scope: 'shared', model });
+      await customBrowser.launch();
+      await customBrowser.close();
+
+      expect(mockStagehandConstructor).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          model,
+        }),
+      );
+    });
+
     it('should close successfully', async () => {
       await browser.launch();
       await browser.close();
@@ -246,6 +307,18 @@ describe('StagehandBrowser', () => {
       // expect(tools[STAGEHAND_TOOLS.SCREENSHOT]).toBeDefined();
       expect(tools[STAGEHAND_TOOLS.TABS]).toBeDefined();
       expect(tools[STAGEHAND_TOOLS.CLOSE]).toBeDefined();
+    });
+
+    it('should include recording tools only when opted in', () => {
+      expect(browser.getTools().browser_record).toBeUndefined();
+      expect(browser.getTools().browser_record_caption).toBeUndefined();
+
+      const recordingBrowser = new StagehandBrowser({ scope: 'shared', recording: { outputDir: '/tmp/recordings' } });
+      const tools = recordingBrowser.getTools();
+
+      expect(tools.browser_record).toBeDefined();
+      expect(tools.browser_record_caption).toBeDefined();
+      expect(tools[STAGEHAND_TOOLS.NAVIGATE]).toBeDefined();
     });
   });
 

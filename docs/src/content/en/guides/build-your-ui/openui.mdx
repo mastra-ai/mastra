@@ -1,0 +1,245 @@
+---
+title: "Using OpenUI | Frameworks"
+description: "Learn how to integrate OpenUI with Mastra"
+---
+
+import Steps from "@site/src/components/Steps";
+import StepItem from "@site/src/components/StepItem";
+
+# Using OpenUI
+
+[OpenUI](https://openui.com) is an open standard for generative UI. It pairs a compact streaming-first language (OpenUI Lang) with a React runtime and built-in component libraries, so model output can render as structured UI as it streams.
+
+OpenUI connects to Mastra through the [AG-UI protocol](https://docs.ag-ui.com). The `@ag-ui/mastra` adapter wraps a Mastra `Agent` and emits AG-UI events, which OpenUI's `agUIAdapter()` parses on the client.
+
+:::tip
+
+For a complete working example, see the [`mastra-chat`](https://github.com/thesysdev/openui/tree/main/examples/mastra-chat) example in the OpenUI repository.
+
+:::
+
+## Integration guide
+
+Embed Mastra in your Next.js API route and connect an OpenUI `<FullScreen />` chat surface to it through the AG-UI protocol.
+
+<Steps>
+  <StepItem>
+    Scaffold a new OpenUI app:
+
+    ```bash npm2yarn
+    npx @openuidev/cli@latest create --name openui-mastra-chat
+    ```
+
+    Navigate to your newly created project directory:
+
+    ```bash
+    cd openui-mastra-chat
+    ```
+
+    The scaffolded app is a Next.js project with the following structure:
+
+    ```bash
+    openui-mastra-chat
+    └── src
+        ├── app
+        │   ├── api
+        │   │   └── chat
+        │   │       └── route.ts
+        │   ├── globals.css
+        │   ├── layout.tsx
+        │   └── page.tsx
+        ├── generated
+        │   └── system-prompt.txt
+        └── library.ts
+    ```
+
+    The chat route lives in `src/app/api/chat/route.ts`, the chat surface in `src/app/page.tsx`, and the component library in `src/library.ts`. The OpenUI CLI writes `src/generated/system-prompt.txt` from your library; regenerate it whenever the library changes.
+
+    Add your OpenAI key to `.env.local`:
+
+    ```bash title=".env.local"
+    OPENAI_API_KEY=sk-...
+    ```
+
+    :::note
+
+    OpenUI requires a model provider key. Use any provider supported by Mastra and adjust the agent configuration in the next step.
+
+    :::
+  </StepItem>
+
+  <StepItem>
+    Install the Mastra packages and the AG-UI adapter for Mastra:
+
+    ```bash npm2yarn
+    npm install @mastra/core @ag-ui/mastra @ag-ui/core zod
+    ```
+
+    `@ag-ui/mastra` wraps a Mastra `Agent` in a `MastraAgent` that emits [AG-UI protocol](https://docs.ag-ui.com) events. OpenUI's `agUIAdapter()` consumes those events on the client.
+  </StepItem>
+
+  <StepItem>
+    Open `src/app/api/chat/route.ts`. Define any tools your agent needs with `createTool` from `@mastra/core/tools`:
+
+    ```typescript title="src/app/api/chat/route.ts"
+    import { createTool } from '@mastra/core/tools'
+    import { z } from 'zod'
+
+    const getWeather = createTool({
+      id: 'get_weather',
+      description: 'Get current weather for a city.',
+      inputSchema: z.object({ location: z.string().describe('City name') }),
+      execute: async ({ location }) => {
+        return { location, temperature_celsius: 22, condition: 'Clear' }
+      },
+    })
+    ```
+
+    Wrap a Mastra `Agent` in `MastraAgent`. Inject the generated system prompt so the agent knows how to use the OpenUI component library:
+
+    ```typescript title="src/app/api/chat/route.ts"
+    import { MastraAgent } from '@ag-ui/mastra'
+    import { Agent } from '@mastra/core/agent'
+    import { readFileSync } from 'fs'
+    import { join } from 'path'
+
+    const systemPrompt = readFileSync(join(process.cwd(), 'src/generated/system-prompt.txt'), 'utf-8')
+
+    const agent = new MastraAgent({
+      agent: new Agent({
+        id: 'openui-agent',
+        name: 'OpenUI Agent',
+        instructions: `You are a helpful assistant. Use tools when relevant.\n\n${systemPrompt}`,
+        model: {
+          id: '__GATEWAY_OPENAI_MODEL__',
+          apiKey: process.env.OPENAI_API_KEY,
+        },
+        tools: { getWeather },
+      }),
+      resourceId: 'chat-user',
+    })
+    ```
+
+    Export a `POST` handler that streams the agent's AG-UI events as Server-Sent Events (SSE):
+
+    ```typescript title="src/app/api/chat/route.ts"
+    import type { Message } from '@ag-ui/core'
+    import { NextRequest } from 'next/server'
+
+    export async function POST(req: NextRequest) {
+      const { messages, threadId }: { messages: Message[]; threadId: string } = await req.json()
+      const encoder = new TextEncoder()
+
+      const stream = new ReadableStream({
+        start(controller) {
+          const subscription = agent
+            .run({ messages, threadId, runId: crypto.randomUUID(), tools: [], context: [] })
+            .subscribe({
+              next: event => {
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+              },
+              complete: () => {
+                controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+                controller.close()
+              },
+              error: error => {
+                controller.enqueue(
+                  encoder.encode(`data: ${JSON.stringify({ error: error.message })}\n\n`),
+                )
+                controller.close()
+              },
+            })
+
+          req.signal.addEventListener('abort', () => subscription.unsubscribe())
+        },
+      })
+
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache, no-transform',
+          Connection: 'keep-alive',
+        },
+      })
+    }
+    ```
+  </StepItem>
+
+  <StepItem>
+    Wire the OpenUI `<FullScreen />` chat surface to the route. Set `streamProtocol` to `agUIAdapter()` so OpenUI knows to parse AG-UI events.
+
+    ```tsx title="src/app/page.tsx" {5,11-13,20}
+    'use client'
+
+    import '@openuidev/react-ui/components.css'
+
+    import { agUIAdapter } from '@openuidev/react-headless'
+    import { FullScreen } from '@openuidev/react-ui'
+    import { openuiChatLibrary } from '@openuidev/react-ui/genui-lib'
+
+    export default function Page() {
+      return (
+        <div className="relative h-screen w-screen overflow-hidden">
+          <FullScreen
+            processMessage={async ({ messages, threadId, abortController }) => {
+              return fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ messages, threadId }),
+                signal: abortController.signal,
+              })
+            }}
+            streamProtocol={agUIAdapter()}
+            componentLibrary={openuiChatLibrary}
+            agentName="OpenUI + Mastra Chat"
+          />
+        </div>
+      )
+    }
+    ```
+
+    The `componentLibrary` prop controls which components the model can generate. Replace `openuiChatLibrary` with your own library to restrict or extend the output.
+  </StepItem>
+
+  <StepItem>
+    Start the development server:
+
+    ```bash npm2yarn
+    npm run dev
+    ```
+
+    Open [http://localhost:3000](http://localhost:3000). You can now chat with your Mastra agent through the OpenUI chat surface, with structured UI rendered progressively as the model streams.
+  </StepItem>
+</Steps>
+
+## Streaming with AG-UI
+
+OpenUI consumes the [AG-UI protocol](https://docs.ag-ui.com), a transport-agnostic stream of typed events for AI agents. `@ag-ui/mastra` translates a Mastra `Agent` into this protocol:
+
+- The server calls `agent.run({ messages, threadId, runId, ... })` and serializes each emitted event as an SSE message.
+- The client passes `streamProtocol={agUIAdapter()}` to `<FullScreen />`, which parses the SSE stream into the internal events that drive OpenUI Lang rendering.
+
+`threadId` ties a conversation together across requests, and `runId` identifies a single execution. Generate a fresh `runId` per request and persist `threadId` on the client.
+
+## Component libraries
+
+OpenUI generates UI from a component library. The library defines which components are available, their props, and how the model is instructed to use them.
+
+### Built-in libraries
+
+`@openuidev/react-ui` ships two libraries you can use as-is:
+
+- `openuiChatLibrary`: components for chat interfaces (cards, forms, tables, charts).
+- `openuiDashboardLibrary`: components for dashboards and data-heavy surfaces.
+
+Pass the library to `<FullScreen componentLibrary={...} />` to make its components available to the model.
+
+### Customizing the library
+
+To restrict or extend the output, define your own library in `src/library.ts` and export a subset of components. Pass that library to `<FullScreen />` and regenerate the system prompt whenever the library changes:
+
+```bash npm2yarn
+npx @openuidev/cli generate src/library.ts --out src/generated/system-prompt.txt
+```
+
+The generated prompt is read by the API route and merged into the agent's `instructions`, so the agent knows exactly which components it can emit.

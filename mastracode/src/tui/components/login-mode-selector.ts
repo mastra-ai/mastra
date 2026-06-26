@@ -5,8 +5,8 @@
  * an env var.
  */
 
-import { Box, Container, getEditorKeybindings, Spacer, Text } from '@mariozechner/pi-tui';
-import type { TUI } from '@mariozechner/pi-tui';
+import { Box, Container, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
+import type { TUI } from '@earendil-works/pi-tui';
 import type { AuthMode } from '../../auth/types.js';
 import { showModalOverlay } from '../overlay.js';
 import { theme } from '../theme.js';
@@ -61,20 +61,20 @@ export class LoginModeSelectorComponent extends Box {
   }
 
   handleInput(keyData: string): void {
-    const kb = getEditorKeybindings();
+    const kb = getKeybindings();
 
-    if (kb.matches(keyData, 'selectUp')) {
+    if (kb.matches(keyData, 'tui.select.up')) {
       this.selectedIndex = Math.max(0, this.selectedIndex - 1);
       this.updateList();
-    } else if (kb.matches(keyData, 'selectDown')) {
+    } else if (kb.matches(keyData, 'tui.select.down')) {
       this.selectedIndex = Math.min(this.modes.length - 1, this.selectedIndex + 1);
       this.updateList();
-    } else if (kb.matches(keyData, 'selectConfirm')) {
+    } else if (kb.matches(keyData, 'tui.select.confirm')) {
       const selected = this.modes[this.selectedIndex];
       if (selected) {
         this.onSelectCallback(selected.id);
       }
-    } else if (kb.matches(keyData, 'selectCancel')) {
+    } else if (kb.matches(keyData, 'tui.select.cancel')) {
       this.onCancelCallback();
     }
   }
