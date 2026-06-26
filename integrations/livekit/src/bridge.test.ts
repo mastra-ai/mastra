@@ -1,4 +1,4 @@
-import type { ReadableStream } from 'node:stream/web';
+import { ReadableStream } from 'node:stream/web';
 import { llm } from '@livekit/agents';
 import type { voice } from '@livekit/agents';
 import type { Agent as MastraAgent } from '@mastra/core/agent';
@@ -150,6 +150,36 @@ describe('MastraVoiceAgent.llmNode', () => {
     const voiceAgent = new MastraVoiceAgent({ agent });
     const result = await voiceAgent.llmNode(userTurnContext(), toolCtx, modelSettings);
     await expect(readAll(result!)).rejects.toThrow('boom');
+  });
+});
+
+describe('MastraVoiceAgent reply generator seam', () => {
+  it('delegates to a custom generate function with the turn context', async () => {
+    const generate = vi.fn(() => {
+      return new ReadableStream<string>({
+        start: controller => {
+          controller.enqueue('from generator');
+          controller.close();
+        },
+      }) as unknown as ReadableStream<llm.ChatChunk | string>;
+    });
+    const voiceAgent = new MastraVoiceAgent({ generate, memory: { thread: 't1', resource: 'r1' } });
+    const result = await voiceAgent.llmNode(userTurnContext('hello'), toolCtx, modelSettings);
+    expect(await readAll(result!)).toEqual(['from generator']);
+    const ctx = generate.mock.calls[0]![0] as { messages: unknown; memory: unknown };
+    expect(ctx.messages).toEqual([{ role: 'user', content: 'hello' }]);
+    expect(ctx.memory).toEqual({ thread: 't1', resource: 'r1' });
+  });
+
+  it('returns null without invoking the generator when there is no new input', async () => {
+    const generate = vi.fn();
+    const voiceAgent = new MastraVoiceAgent({ generate, memory: { thread: 't1' } });
+    expect(await voiceAgent.llmNode(llm.ChatContext.empty(), toolCtx, modelSettings)).toBeNull();
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it('throws when neither agent nor generate is provided', () => {
+    expect(() => new MastraVoiceAgent({})).toThrow(/requires `agent` or `generate`/);
   });
 });
 

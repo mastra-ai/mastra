@@ -1,7 +1,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import {
-  SERVICES,
+  TRADES,
   appointments,
   createAppointment,
   customers,
@@ -11,16 +11,16 @@ import {
   simulateBackendLatency,
   upcomingBusinessDays,
 } from '../data';
-import type { ServiceId } from '../data';
+import type { TradeId } from '../data';
 
-const serviceSchema = z.enum(['cleaning', 'checkup', 'whitening', 'filling']);
+const tradeSchema = z.enum(['plumbing', 'electrical', 'roofing', 'carpentry', 'painting']);
 
 function appointmentSummary(appointmentId: string) {
   const appointment = appointments.find(a => a.id === appointmentId);
   if (!appointment) return undefined;
   return {
     confirmationCode: appointment.confirmationCode,
-    service: SERVICES[appointment.service].label,
+    trade: TRADES[appointment.trade].label,
     date: appointment.date,
     dateSpoken: describeDate(appointment.date),
     time: appointment.time,
@@ -31,7 +31,7 @@ function appointmentSummary(appointmentId: string) {
 export const lookupCustomer = createTool({
   id: 'lookupCustomer',
   description:
-    'Look up a customer record by phone number or name. Returns the profile, insurance plan, notes, and any upcoming appointments.',
+    'Look up a customer record by phone number or name. Returns the profile, property type, notes, and any upcoming site visits.',
   inputSchema: z.object({
     phone: z.string().optional().describe('Phone number, any format'),
     name: z.string().optional().describe('Full or partial name'),
@@ -51,24 +51,24 @@ export const lookupCustomer = createTool({
     const upcoming = appointments
       .filter(a => a.customerId === customer.id && a.status === 'confirmed')
       .map(a => appointmentSummary(a.id));
-    return { found: true as const, customer, upcomingAppointments: upcoming };
+    return { found: true as const, customer, upcomingVisits: upcoming };
   },
 });
 
 export const checkAvailability = createTool({
   id: 'checkAvailability',
   description:
-    'Check open appointment slots for a service. Without a date it returns the next three business days; dates are ISO format with a spoken label.',
+    'Check open site-visit slots for a trade. Without a date it returns the next three business days; dates are ISO format with a spoken label.',
   inputSchema: z.object({
-    service: serviceSchema,
+    trade: tradeSchema,
     date: z.string().optional().describe('ISO date like 2026-06-12. Omit to see the next few days.'),
   }),
-  execute: async ({ service, date }) => {
+  execute: async ({ trade, date }) => {
     await simulateBackendLatency();
     const days = date ? [date] : upcomingBusinessDays(3);
     return {
-      service: SERVICES[service as ServiceId].label,
-      durationMinutes: SERVICES[service as ServiceId].durationMinutes,
+      trade: TRADES[trade as TradeId].label,
+      durationMinutes: TRADES[trade as TradeId].durationMinutes,
       availability: days.map(day => ({
         date: day,
         dateSpoken: describeDate(day),
@@ -81,14 +81,14 @@ export const checkAvailability = createTool({
 export const bookAppointment = createTool({
   id: 'bookAppointment',
   description:
-    'Book an appointment for a customer. Requires the customer id from lookupCustomer and a slot from checkAvailability. Returns a confirmation code.',
+    'Book a site visit for a customer. Requires the customer id from lookupCustomer and a slot from checkAvailability. Returns a confirmation code.',
   inputSchema: z.object({
     customerId: z.string(),
-    service: serviceSchema,
+    trade: tradeSchema,
     date: z.string().describe('ISO date like 2026-06-12'),
     time: z.string().describe('24-hour time like 14:00'),
   }),
-  execute: async ({ customerId, service, date, time }) => {
+  execute: async ({ customerId, trade, date, time }) => {
     await simulateBackendLatency();
     const customer = customers.find(c => c.id === customerId);
     if (!customer) {
@@ -101,7 +101,7 @@ export const bookAppointment = createTool({
         openTimes: openSlots(date),
       };
     }
-    const appointment = createAppointment({ customerId, service: service as ServiceId, date, time });
+    const appointment = createAppointment({ customerId, trade: trade as TradeId, date, time });
     return {
       booked: true as const,
       confirmationCode: appointment.confirmationCode,
@@ -112,9 +112,9 @@ export const bookAppointment = createTool({
 
 export const rescheduleAppointment = createTool({
   id: 'rescheduleAppointment',
-  description: 'Move an existing appointment to a new date and time using its confirmation code.',
+  description: 'Move an existing site visit to a new date and time using its confirmation code.',
   inputSchema: z.object({
-    confirmationCode: z.string().describe('Code like BSD-1001'),
+    confirmationCode: z.string().describe('Code like MT-1001'),
     date: z.string().describe('New ISO date'),
     time: z.string().describe('New 24-hour time'),
   }),
@@ -122,9 +122,9 @@ export const rescheduleAppointment = createTool({
     await simulateBackendLatency();
     const appointment = findAppointmentByCode(confirmationCode);
     if (!appointment || appointment.status !== 'confirmed') {
-      return { rescheduled: false as const, message: 'No active appointment found for that confirmation code.' };
+      return { rescheduled: false as const, message: 'No active site visit found for that confirmation code.' };
     }
-    // openSlots(date) excludes this appointment's own slot (it's booked by it), so a no-op
+    // openSlots(date) excludes this visit's own slot (it's booked by it), so a no-op
     // move to the same date/time would otherwise read as unavailable.
     const isSameSlot = appointment.date === date && appointment.time === time;
     const availableTimes = openSlots(date);
@@ -143,15 +143,15 @@ export const rescheduleAppointment = createTool({
 
 export const cancelAppointment = createTool({
   id: 'cancelAppointment',
-  description: 'Cancel an appointment using its confirmation code.',
+  description: 'Cancel a site visit using its confirmation code.',
   inputSchema: z.object({
-    confirmationCode: z.string().describe('Code like BSD-1001'),
+    confirmationCode: z.string().describe('Code like MT-1001'),
   }),
   execute: async ({ confirmationCode }) => {
     await simulateBackendLatency();
     const appointment = findAppointmentByCode(confirmationCode);
     if (!appointment || appointment.status !== 'confirmed') {
-      return { cancelled: false as const, message: 'No active appointment found for that confirmation code.' };
+      return { cancelled: false as const, message: 'No active site visit found for that confirmation code.' };
     }
     appointment.status = 'cancelled';
     return { cancelled: true as const, summary: appointmentSummary(appointment.id) };

@@ -3,10 +3,11 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "description": "Customer service call center voice agent built with @mastra/livekit",
+  "description": "Trades contractor call center voice agent built with @mastra/livekit, with agent and workflow entrypoints",
   "scripts": {
     "dev": "mastra dev",
     "worker": "node --env-file=.env --import tsx src/mastra/voice-worker.ts dev",
+    "worker:workflow": "node --env-file=.env --import tsx src/mastra/voice-worker-workflow.ts dev",
     "worker:download-files": "pnpm --dir ../../integrations/livekit exec livekit-agents download-files",
     "dev:ui": "concurrently --kill-others-on-fail --names mastra,studio \"mastra dev\" \"pnpm --dir ../.. dev:playground\"",
     "typecheck": "tsc --noEmit",

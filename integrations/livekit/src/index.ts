@@ -1,5 +1,14 @@
-export { createMastraVoiceAgent, MastraVoiceAgent } from './bridge';
-export type { MastraVoiceAgentOptions, MastraVoiceAgentMemory, VoiceToolCall } from './bridge';
+export { createMastraVoiceAgent, MastraVoiceAgent, createAgentReplyGenerator } from './bridge';
+export type {
+  MastraVoiceAgentOptions,
+  MastraVoiceAgentMemory,
+  VoiceToolCall,
+  VoiceReplyGenerator,
+  VoiceTurnContext,
+  AgentReplyGeneratorOptions,
+} from './bridge';
+export { createWorkflowReplyGenerator, unwrapStepText } from './workflow-generator';
+export type { WorkflowReplyGeneratorOptions } from './workflow-generator';
 export { createLiveKitWorker } from './worker';
 export type { CreateLiveKitWorkerOptions, ResolveMastraAgentArgs, SessionStartArgs } from './worker';
 export { runLiveKitWorker, resolveWorkerEntryPath } from './run';

@@ -3,13 +3,21 @@ import type { JobContext, JobProcess, VAD } from '@livekit/agents';
 import type { Agent as MastraAgent } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
+import type { Workflow } from '@mastra/core/workflows';
 import { createMastraVoiceAgent } from './bridge';
-import type { MastraVoiceAgent, MastraVoiceAgentMemory, VoiceToolCall } from './bridge';
+import type {
+  MastraVoiceAgent,
+  MastraVoiceAgentMemory,
+  VoiceReplyGenerator,
+  VoiceToolCall,
+  VoiceTurnContext,
+} from './bridge';
 import { parseSessionMetadata } from './metadata';
 import type { LiveKitSessionMetadata } from './metadata';
 import { startVoiceCallObservability } from './observability';
 import { ensureVoiceCallThread, persistSpokenGreeting } from './voice-thread';
 import { isEouMethodRequested, queueWorkerSetup, requestEouMethod } from './worker-setup';
+import { createWorkflowReplyGenerator } from './workflow-generator';
 
 const EOU_METHODS = {
   english: 'lk_end_of_utterance_en',
@@ -43,6 +51,26 @@ export interface CreateLiveKitWorkerOptions {
    * per session with the dispatch metadata. Defaults to `metadata.agentId`.
    */
   agent?: string | ((args: ResolveMastraAgentArgs) => string | MastraAgent | Promise<string | MastraAgent>);
+  /**
+   * Generate each turn's reply with a Mastra workflow instead of an agent: a `Workflow`
+   * instance, a fixed workflow key/id, or a resolver that returns a workflow id per session.
+   * The workflow runs once to completion per turn (LiveKit owns the turn boundary, so there is
+   * no suspend/resume). Mutually exclusive with `agent`; requires
+   * {@link CreateLiveKitWorkerOptions.workflowInput}.
+   */
+  workflow?: string | Workflow | ((args: ResolveMastraAgentArgs) => string | Promise<string>);
+  /**
+   * Maps a turn into the workflow's `inputData`. Required when `workflow` is set. A stateless
+   * mapping that passes the full transcript each turn avoids carrying conversation state in the
+   * workflow, e.g. `({ chatCtx }) => ({ history: chatContextToMessages(chatCtx) })`.
+   */
+  workflowInput?: (args: VoiceTurnContext & { metadata: LiveKitSessionMetadata }) => unknown | Promise<unknown>;
+  /** Only stream text from this workflow step id. Defaults to every step that writes to its `writer`. */
+  replyStep?: string;
+  /** Fallback when the workflow streams no text via `writer`: derive the spoken reply from the final result. */
+  resultText?: (result: unknown) => string | undefined | void;
+  /** Lowest-level escape hatch: supply any reply generator directly (a custom workflow, remote bridge, …). */
+  generate?: VoiceReplyGenerator;
   /** Speech-to-text: a LiveKit plugin instance or an inference model string like 'deepgram/nova-3'. */
   stt?: voice.AgentSessionOptions['stt'];
   /** Text-to-speech: a LiveKit plugin instance or an inference model string like 'cartesia/sonic-3'. */
@@ -142,15 +170,36 @@ async function resolveMastraAgent(
   }
 }
 
+// Returns the workflow boxed in an object: `Workflow` is thenable (it has a `.then()` builder
+// method), so a bare `Promise<Workflow>` return — or awaiting a `Workflow`-typed value — trips
+// TS's thenable checks and, at runtime, `await workflow` would call the builder's `.then`.
+async function resolveWorkflow(
+  options: CreateLiveKitWorkerOptions,
+  args: ResolveMastraAgentArgs,
+): Promise<{ workflow: Workflow }> {
+  const resolver = options.workflow;
+  // The function form resolves to an id string (safe to await); a Workflow instance is only
+  // accepted as a direct value, never awaited.
+  const ref: string | Workflow = typeof resolver === 'function' ? await resolver(args) : (resolver ?? '');
+  if (!ref) {
+    throw new Error('@mastra/livekit: no workflow specified. Set `workflow` on createLiveKitWorker.');
+  }
+  if (typeof ref !== 'string') return { workflow: ref };
+  // getWorkflowById matches by workflow id and falls back to the registration key.
+  return { workflow: options.mastra.getWorkflowById(ref as never) as Workflow };
+}
+
 function resolveMemory(
   options: CreateLiveKitWorkerOptions,
-  mastraAgent: MastraAgent,
+  mastraAgent: MastraAgent | undefined,
   args: ResolveMastraAgentArgs,
   roomName: string,
 ): MastraVoiceAgentMemory | false {
   if (options.memory === false) return false;
   if (typeof options.memory === 'function') return options.memory({ ...args, roomName });
-  if (!mastraAgent.hasOwnMemory()) return false;
+  // With an agent, default to memory only when the agent has its own. With a workflow (no
+  // agent), default the thread/resource mapping so the workflow input can use it.
+  if (mastraAgent && !mastraAgent.hasOwnMemory()) return false;
   const thread = args.metadata.threadId ?? roomName;
   return { thread, resource: args.metadata.resourceId ?? thread };
 }
@@ -208,6 +257,18 @@ async function resolveInstructions(
  * ```
  */
 export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
+  if (options.agent && options.workflow) {
+    throw new Error(
+      '@mastra/livekit: set `agent` or `workflow`, not both — they are mutually exclusive reply generators.',
+    );
+  }
+  if (options.workflow && !options.workflowInput) {
+    throw new Error(
+      '@mastra/livekit: `workflowInput` is required when `workflow` is set. Map the turn into the ' +
+        'workflow inputData, e.g. workflowInput: ({ chatCtx }) => ({ history: chatContextToMessages(chatCtx) }).',
+    );
+  }
+
   const wantsSileroVad = options.vad === undefined || options.vad === 'silero';
 
   // The turn detector's inference runners register at plugin-import time, and the agent
@@ -242,10 +303,32 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
     entry: async (ctx: JobContext<WorkerUserData>) => {
       const metadata = parseSessionMetadata(ctx.job.metadata);
       const args: ResolveMastraAgentArgs = { metadata, ctx };
-      const mastraAgent = await resolveMastraAgent(options, args);
       const requestContext = metadata.requestContext
         ? new RequestContext<unknown>(Object.entries(metadata.requestContext))
         : undefined;
+
+      // Resolve the per-turn reply generator. Precedence: an explicit `generate` function, then
+      // a `workflow` (run-to-completion per turn), then a Mastra `agent` (the default).
+      let mastraAgent: MastraAgent | undefined;
+      let replyGenerator: VoiceReplyGenerator | undefined;
+      let agentLabel: string;
+      if (options.generate) {
+        replyGenerator = options.generate;
+        agentLabel = 'mastra-voice';
+      } else if (options.workflow) {
+        const { workflow } = await resolveWorkflow(options, args);
+        agentLabel = workflow.id;
+        const mapInput = options.workflowInput!;
+        replyGenerator = createWorkflowReplyGenerator({
+          workflow,
+          workflowInput: turnCtx => mapInput({ ...turnCtx, metadata }),
+          replyStep: options.replyStep,
+          resultText: options.resultText,
+        });
+      } else {
+        mastraAgent = await resolveMastraAgent(options, args);
+        agentLabel = mastraAgent.id ?? mastraAgent.name;
+      }
 
       await ctx.connect();
       const roomName = ctx.room.name ?? 'mastra-voice';
@@ -265,7 +348,10 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
       }
 
       const memory = resolveMemory(options, mastraAgent, args, roomName);
-      const memoryInstance = memory ? await mastraAgent.getMemory({ requestContext }) : null;
+      // The memory instance comes from the resolved agent. With a workflow/custom generator
+      // there is no agent here, so up-front thread bootstrap and greeting persistence are
+      // skipped — the generator owns persistence (e.g. saveMessages inside a step).
+      const memoryInstance = memory && mastraAgent ? await mastraAgent.getMemory({ requestContext }) : null;
       if (memory && memoryInstance) {
         try {
           await ensureVoiceCallThread({
@@ -287,7 +373,7 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
           ? undefined
           : startVoiceCallObservability({
               mastra: options.mastra,
-              agentId: mastraAgent.id ?? mastraAgent.name,
+              agentId: agentLabel,
               roomName,
               metadata,
               requestContext,
@@ -301,8 +387,8 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
       }
 
       const agent = createMastraVoiceAgent({
-        agent: mastraAgent,
-        instructions: await resolveInstructions(mastraAgent, requestContext),
+        ...(replyGenerator ? { generate: replyGenerator } : { agent: mastraAgent! }),
+        instructions: mastraAgent ? await resolveInstructions(mastraAgent, requestContext) : undefined,
         memory,
         requestContext,
         toolFeedback: options.toolFeedback,

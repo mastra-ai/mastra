@@ -50,6 +50,40 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     isOptional: true,
   },
   {
+    name: 'workflow',
+    type: 'string | Workflow | (args) => string | Promise<string>',
+    description:
+      "Generate each turn's reply with a Mastra workflow instead of an agent: a Workflow instance, a fixed workflow key or id, or a resolver that returns a workflow id per session. The workflow runs once to completion per turn (no suspend or resume). Mutually exclusive with agent; requires workflowInput.",
+    isOptional: true,
+  },
+  {
+    name: 'workflowInput',
+    type: '(args: VoiceTurnContext & { metadata }) => unknown | Promise<unknown>',
+    description:
+      'Maps a turn into the workflow inputData. Required when workflow is set. A stateless mapping that passes the full transcript each turn avoids carrying conversation state in the workflow.',
+    isOptional: true,
+  },
+  {
+    name: 'replyStep',
+    type: 'string',
+    description: 'Only stream text from this workflow step id. Defaults to every step that writes to its writer.',
+    isOptional: true,
+  },
+  {
+    name: 'resultText',
+    type: '(result: unknown) => string | undefined',
+    description:
+      'Fallback when the workflow streams no text via writer: derive the spoken reply from the final run result.',
+    isOptional: true,
+  },
+  {
+    name: 'generate',
+    type: 'VoiceReplyGenerator',
+    description:
+      'Lowest-level escape hatch: supply any reply generator directly (a custom workflow, remote bridge, and so on).',
+    isOptional: true,
+  },
+  {
     name: 'stt',
     type: 'STT | string',
     description: "Speech-to-text: a LiveKit plugin instance or an inference model string such as 'deepgram/nova-3'.",
@@ -192,7 +226,7 @@ const session = new voice.AgentSession({ stt, tts, vad })
 await session.start({ agent, room: ctx.room })
 ```
 
-The returned agent overrides LiveKit's `llmNode`: each turn it calls the Mastra agent's `stream()` and streams text deltas to text-to-speech. Tool calls execute inside Mastra and are never exposed to LiveKit. When the user interrupts, LiveKit cancels the stream, which aborts Mastra generation through an `AbortSignal`.
+The returned agent overrides LiveKit's `llmNode`: each turn it builds the turn's messages and asks a reply generator for a text stream, which it speaks through text-to-speech. By default the generator is the Mastra agent's `stream()` (tool calls execute inside Mastra and are never exposed to LiveKit). Pass `generate` instead to drive replies with a workflow or a custom generator — see [`createWorkflowReplyGenerator()`](#createworkflowreplygenerator). When the user interrupts, LiveKit cancels the stream, which aborts generation through an `AbortSignal`.
 
 When building the `AgentSession` yourself, disable `turnHandling.preemptiveGeneration` unless duplicate persisted user messages are acceptable: each preemptive attempt re-runs the Mastra agent on an interim transcript, and every run saves the user message to the thread. `createLiveKitWorker()` disables it by default.
 
@@ -203,7 +237,15 @@ When building the `AgentSession` yourself, disable `turnHandling.preemptiveGener
   {
     name: 'agent',
     type: 'Agent',
-    description: 'The Mastra agent that generates replies.',
+    description: 'The Mastra agent that generates replies. Provide this or generate.',
+    isOptional: true,
+  },
+  {
+    name: 'generate',
+    type: 'VoiceReplyGenerator',
+    description:
+      'A reply generator used instead of agent, such as one from createWorkflowReplyGenerator(). Provide this or agent.',
+    isOptional: true,
   },
   {
     name: 'memory',
@@ -242,6 +284,59 @@ When building the `AgentSession` yourself, disable `turnHandling.preemptiveGener
     name: 'id / stt / vad / tts / turnHandling',
     type: 'voice.AgentOptions fields',
     description: 'Passed through to the underlying LiveKit voice.Agent.',
+    isOptional: true,
+  },
+]}
+/>
+
+## `createWorkflowReplyGenerator()`
+
+Creates a reply generator backed by a Mastra workflow, for use as the `generate` option of `createMastraVoiceAgent()`. `createLiveKitWorker()` builds this for you when you pass `workflow`; use it directly only when you build the bridge yourself.
+
+```typescript
+import {
+  createMastraVoiceAgent,
+  createWorkflowReplyGenerator,
+  chatContextToMessages,
+} from '@mastra/livekit'
+
+const agent = createMastraVoiceAgent({
+  generate: createWorkflowReplyGenerator({
+    workflow: mastra.getWorkflow('phoneConversation'),
+    workflowInput: ({ chatCtx }) => ({ history: chatContextToMessages(chatCtx) }),
+    replyStep: 'generateResponse',
+  }),
+})
+```
+
+Per turn it starts a fresh run to completion and streams the text its steps write to their `writer`, which arrives as `workflow-step-output` chunks. A step that doesn't write to `writer` produces no spoken text unless you set `resultText`. When the user interrupts, the generator cancels the run.
+
+### Options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'workflow',
+    type: 'Workflow',
+    description: "The Mastra workflow that generates each turn's reply. Runs once to completion per turn.",
+  },
+  {
+    name: 'workflowInput',
+    type: '(ctx: VoiceTurnContext) => unknown | Promise<unknown>',
+    description:
+      'Maps a turn into the workflow inputData. A stateless mapping that passes the full transcript each turn avoids carrying conversation state in the workflow.',
+  },
+  {
+    name: 'replyStep',
+    type: 'string',
+    description: 'Only stream text from this step id. Defaults to every step that writes text to its writer.',
+    isOptional: true,
+  },
+  {
+    name: 'resultText',
+    type: '(result: unknown) => string | undefined',
+    description:
+      'Fallback when the workflow streams no text via writer: derive the spoken reply from the final run result.',
     isOptional: true,
   },
 ]}

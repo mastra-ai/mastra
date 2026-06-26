@@ -155,6 +155,48 @@ export default createLiveKitWorker({
 
 The phrase is spoken as part of the reply and appears in the transcript.
 
+## Generate replies with a workflow
+
+By default the worker generates each reply with a Mastra agent. To run multi-step logic per turn — for example classify intent, route, call tools in sequence, then compose a reply — generate replies with a Mastra [workflow](/docs/workflows/overview) instead. Set `workflow` in place of `agent`.
+
+LiveKit still owns the audio loop and calls into Mastra once per turn, so the workflow runs to completion each turn. There is no suspend or resume, and no conversation state is carried between turns. Pass the transcript in through `workflowInput` so the workflow stays stateless:
+
+```typescript title="src/mastra/voice-worker.ts"
+import { createLiveKitWorker, chatContextToMessages } from '@mastra/livekit'
+import { mastra } from './index'
+
+export default createLiveKitWorker({
+  mastra,
+  workflow: 'phoneConversation',
+  workflowInput: ({ chatCtx }) => ({ history: chatContextToMessages(chatCtx) }),
+  replyStep: 'generateResponse',
+  stt: 'deepgram/nova-3',
+  tts: 'cartesia/sonic-3',
+  turnDetection: 'multilingual',
+})
+```
+
+A workflow streams structured step events, not text. To speak tokens as they generate, the reply step pipes its agent's text into the step `writer`:
+
+```typescript title="src/mastra/workflows/phone-conversation.ts"
+const generateResponse = createStep({
+  id: 'generateResponse',
+  // input and output schemas omitted
+  execute: async ({ inputData, mastra, writer, abortSignal }) => {
+    const stream = await mastra.getAgent('voice').stream(inputData.history, { abortSignal })
+    await stream.textStream.pipeTo(writer)
+    return { assistantMessage: await stream.text }
+  },
+})
+```
+
+- `replyStep`: Restricts spoken output to one step. Omit it to speak every step that writes to its `writer`.
+- `resultText`: A fallback that derives the reply from the final run result when no step streams text. Streaming through `writer` gives lower time-to-first-token, so prefer it.
+- `abortSignal`: Forward the step's `abortSignal` into `agent.stream()` so barge-in stops generation promptly. When the user interrupts, the worker cancels the run.
+- `generate`: For full control, pass a `generate` function instead — any reply generator that turns a turn into a text stream.
+
+With a workflow, the worker doesn't persist turns automatically the way an agent's `stream()` does. Persist conversation history inside the workflow, or keep the LiveKit transcript as the source of truth and pass it in each turn.
+
 ## Server-initiated sessions
 
 Use `dispatchVoiceSession()` to add a voice agent to a room from your own code, for example to join an existing room or to drive an outbound [SIP call](https://docs.livekit.io/sip/):
