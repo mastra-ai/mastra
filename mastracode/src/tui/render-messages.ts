@@ -11,7 +11,7 @@ import type { TaskItemInput, TaskItemSnapshot } from '@mastra/core/signals';
 import { assignTaskIds } from '@mastra/core/signals';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { TASKS_STATE_ID } from '@mastra/core/tools';
-import { readPlanFile, resolvePlanPath } from '../utils/plans.js';
+import { getPlanPathForTitle, getSuggestedPlanRelativePath, readPlanFile } from '../utils/plans.js';
 import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
@@ -891,18 +891,22 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
 
           // If this was submit_plan, show the plan with approval status
           if (content.name === 'submit_plan' && toolResult?.type === 'tool_result') {
-            const args = content.args as { path?: string } | undefined;
+            const args = content.args as { title?: string } | undefined;
             // Result could be a string or an object with content property
             let resultText = '';
+            let submittedPlan: { title?: string; path?: string; plan?: string } | undefined;
             if (typeof toolResult.result === 'string') {
               resultText = toolResult.result;
-            } else if (
-              typeof toolResult.result === 'object' &&
-              toolResult.result !== null &&
-              'content' in toolResult.result &&
-              typeof (toolResult.result as any).content === 'string'
-            ) {
-              resultText = (toolResult.result as any).content;
+            } else if (typeof toolResult.result === 'object' && toolResult.result !== null) {
+              if ('content' in toolResult.result && typeof (toolResult.result as any).content === 'string') {
+                resultText = (toolResult.result as any).content;
+              }
+              if (
+                'submittedPlan' in toolResult.result &&
+                typeof (toolResult.result as any).submittedPlan === 'object'
+              ) {
+                submittedPlan = (toolResult.result as any).submittedPlan;
+              }
             }
             // The approved result starts with "Plan approved." while rejected
             // results start with "Plan was not approved" — a naive `includes`
@@ -917,29 +921,36 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
               feedback = feedbackMatch?.[1] || 'Revision requested';
             }
 
-            if (args?.path) {
-              // The plan body lives in the submitted file, not in the tool args.
-              // Recover it from disk when it still exists; derive the title from
-              // the file's leading heading and fall back to the path otherwise.
+            const submittedTitle = submittedPlan?.title || args?.title;
+            if (submittedTitle) {
+              // Prefer the submitted plan snapshot persisted in the tool result.
+              // Older history entries may not have it, so fall back to deriving the
+              // title-based plan path and reading the current file when safe.
               const sessionState = state.session.state.get() as any;
               const projectPath = sessionState?.projectPath as string | undefined;
-              const absPath = projectPath ? resolvePlanPath(projectPath, args.path) : undefined;
-              const recovered = absPath ? await readPlanFile(absPath) : undefined;
-              const planBody = recovered?.plan ?? '';
-              const planTitle = recovered?.title || args.path;
+              const fallbackPath = getSuggestedPlanRelativePath(submittedTitle);
+              const fallbackAbsPath = projectPath ? getPlanPathForTitle(projectPath, submittedTitle) : undefined;
+              const recovered = submittedPlan?.plan
+                ? undefined
+                : fallbackAbsPath
+                  ? await readPlanFile(fallbackAbsPath)
+                  : undefined;
+              const planBody = submittedPlan?.plan ?? recovered?.plan ?? '';
+              const planTitle = submittedPlan?.title || recovered?.title || submittedTitle;
+              const planPath = submittedPlan?.path || fallbackPath;
               const planResult = new PlanResultComponent({
                 title: planTitle,
                 plan: planBody,
-                planFilename: args.path,
+                planFilename: planPath,
                 isApproved,
                 feedback,
               });
               state.chatContainer.addChild(planResult);
               replacedWithInline = true;
-              // Restore previousPlanSnapshot (keyed by path) so that if the agent
-              // resubmits after a restart, the diff can be computed against the
-              // last known plan.
-              state.previousPlanSnapshot = { path: args.path, plan: planBody };
+              // Restore previousPlanSnapshot (keyed by derived path) so that if the
+              // agent resubmits after a restart, the diff can be computed against
+              // the last submitted plan body, not whatever the mutable file now contains.
+              state.previousPlanSnapshot = { path: planPath, plan: planBody };
             }
           }
 

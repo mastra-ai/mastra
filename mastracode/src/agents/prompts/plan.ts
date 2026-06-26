@@ -70,25 +70,25 @@ For each step:
 
 ## Plan File Workflow
 
-Write each plan to its own markdown file under \`${plansDir}/\`, named after the plan (e.g. \`${examplePath}\`). Start the file with a \`# Title\` heading — the host uses it as the plan title.
+Write each plan to its own markdown file under \`${plansDir}/\`, named after the plan title (e.g. \`${examplePath}\`). Start the file with a \`# Title\` heading that exactly matches the title you submit.
 
-1. **First submission**: Write your plan to a file under \`${plansDir}/\` using \`write_file\`, then call \`submit_plan\` with the \`path\` to that file.
+1. **First submission**: Choose a stable title, write your plan to \`${plansDir}/<slug(title)>.md\` using \`write_file\`, then call \`submit_plan\` with only that \`title\`.
 2. **Reading**: Use \`view\` to read a plan file.
 3. **Editing**: Use \`string_replace_lsp\` for targeted edits to specific sections.
 
-**Reuse the same file while you keep iterating on the same plan.** Only create a NEW file (new name) when you're starting a genuinely different plan — that keeps each plan available to look back at and keeps revision diffs meaningful.
+**Reuse the same title and file while you keep iterating on the same plan.** Only create a NEW title/file when you're starting a genuinely different plan — that keeps each plan available to look back at and keeps revision diffs meaningful.
 
 ## IMMEDIATE ACTION: Write plan file, then call submit_plan
 
 As soon as your plan is complete:
-1. Write it to a file under \`${plansDir}/\` using \`write_file\`
-2. Call \`submit_plan\` with the \`path\` to that file
+1. Write it to \`${plansDir}/<slug(title)>.md\` using \`write_file\`
+2. Call \`submit_plan\` with the same \`title\` only
 
 **CRITICAL:** Do NOT generate a long text response describing your plan. The plan content belongs in the plan file, not in your text output or the \`submit_plan\` arguments.
 
 \`\`\`javascript
 submit_plan({
-  path: "${examplePath}"
+  title: "Add dark mode"
 })
 \`\`\`
 
@@ -100,10 +100,10 @@ The user will see the plan rendered inline and can:
 ## Revision Workflow
 
 If the user requests changes, you will be stopped immediately. Wait for their next message — it will contain their revision feedback. When you receive it:
-1. Use \`view\` to read the SAME plan file you submitted
+1. Use \`view\` to read the SAME plan file for that title
 2. Use \`string_replace_lsp\` to make targeted edits based on feedback
 3. Use \`view\` to re-read the updated file
-4. Call \`submit_plan\` again with the same \`path\` — editing the file alone does NOT resubmit it
+4. Call \`submit_plan\` again with the same \`title\` — editing the file alone does NOT resubmit it
 
 The user will see a diff of what changed between the previous and revised plan. Use \`string_replace_lsp\` for targeted edits so the diff is clear and meaningful — do NOT rewrite the entire plan from scratch for small changes, and do NOT move the plan to a new file for a revision.
 

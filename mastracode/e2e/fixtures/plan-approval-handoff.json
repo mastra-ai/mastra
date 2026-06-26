@@ -38,7 +38,7 @@
             "id": "call_plan_approval_e2e_submit",
             "name": "submit_plan",
             "arguments": {
-              "path": ".mastracode/plans/e2e-approval-plan.md"
+              "title": "E2E Approval Plan"
             }
           }
         ]

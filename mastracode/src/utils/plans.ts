@@ -40,6 +40,11 @@ export function getSuggestedPlanRelativePath(title?: string): string {
   return path.join(getLocalPlansRelativeDir(), filename);
 }
 
+/** Absolute path for a plan title in the local project plans directory. */
+export function getPlanPathForTitle(projectPath: string, title: string): string {
+  return path.join(getLocalPlansDir(projectPath), getPlanFilename(title));
+}
+
 /**
  * Resolve a plan path submitted by the agent (absolute or project-relative) to an
  * absolute path. Returns `undefined` when no usable path was provided.
@@ -108,7 +113,7 @@ export async function readPlanFile(absPath: string): Promise<{ title: string; pl
     return undefined;
   }
 
-  const lines = raw.split('\n');
+  const lines = raw.split(/\r?\n/);
   const headingIndex = lines.findIndex(line => line.trim().length > 0);
   const heading = headingIndex >= 0 ? lines[headingIndex] : undefined;
   if (heading?.startsWith('# ')) {

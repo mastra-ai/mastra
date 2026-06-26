@@ -4,7 +4,33 @@
       "match": {
         "model": "gpt-5.4-mini",
         "endpoint": "chat",
-        "userMessage": "Create a concise goal implementation plan for the plan approval e2e test."
+        "userMessage": "Create a concise goal implementation plan for the plan approval e2e test.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_plan_goal_e2e_write",
+            "name": "write_file",
+            "arguments": {
+              "path": ".mastracode/plans/e2e-goal-plan.md",
+              "content": "# E2E Goal Plan\n\n## Overview\nUse this plan as a persistent goal from the real TUI.\n\n## Steps\n1. Render the submitted plan.\n2. Select Use as /goal.\n3. Start the goal handoff.\n\n## Verification\nConfirm the goal handoff starts the canonical goal run.\n",
+              "overwrite": true
+            }
+          }
+        ]
+      },
+      "streamingProfile": {
+        "ttft": 200,
+        "tps": 30
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": true,
+        "toolCallId": "call_plan_goal_e2e_write"
       },
       "response": {
         "toolCalls": [
@@ -12,8 +38,7 @@
             "id": "call_plan_goal_e2e_submit",
             "name": "submit_plan",
             "arguments": {
-              "title": "E2E Goal Plan",
-              "plan": "## Overview\nUse this plan as a persistent goal from the real TUI.\n\n## Steps\n1. Render the submitted plan.\n2. Select Use as /goal.\n3. Start the goal handoff.\n\n## Verification\nConfirm the goal handoff starts the canonical goal run."
+              "title": "E2E Goal Plan"
             }
           }
         ]

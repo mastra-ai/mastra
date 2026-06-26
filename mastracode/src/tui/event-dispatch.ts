@@ -442,7 +442,7 @@ export async function dispatchEvent(
           payload.selectionMode as AskUserSelectionMode | undefined,
         );
       } else if (event.toolName === 'submit_plan') {
-        await handlePlanApproval(ectx, event.toolCallId, String(payload.path ?? ''));
+        await handlePlanApproval(ectx, event.toolCallId, String(payload.title ?? ''));
       }
       break;
     }

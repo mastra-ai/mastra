@@ -26,13 +26,13 @@ export const planMode: AgentControllerMode = {
 - **Parallelize**: Make multiple independent tool calls when exploring different areas
 
 ## Plan Delivery
-- Write your plan to a markdown file under \`.mastracode/plans/\` (named after the plan, e.g. \`.mastracode/plans/add-dark-mode.md\`) using \`write_file\`, then call \`submit_plan({ path })\` with the path to that file (never the plan body).
-- Start the file with a \`# Title\` heading — the host uses it as the plan title.
-- Reuse the same file while iterating on the same plan; only create a new file for a genuinely different plan so each plan stays available to review.
+- Choose a stable title, write your plan to the matching markdown file under \`.mastracode/plans/\` (e.g. title \`Add dark mode\` → \`.mastracode/plans/add-dark-mode.md\`) using \`write_file\`, then call \`submit_plan({ title })\` with only that title (never the plan body or path).
+- Start the file with a \`# Title\` heading that exactly matches the submitted title.
+- Reuse the same title/file while iterating on the same plan; only create a new title/file for a genuinely different plan so each plan stays available to review.
 - Do NOT output the plan as text — it MUST live in the plan file.
 - Be concise: reference files by path and line number, don't include raw contents.
 - Focus on actionable details, not general observations.
-- To revise after "Request changes", read the same file, edit it in place with \`string_replace_lsp\`, and call \`submit_plan\` again with the same path.`,
+- To revise after "Request changes", read the same file, edit it in place with \`string_replace_lsp\`, and call \`submit_plan\` again with the same title.`,
 
   metadata: {
     default: false,

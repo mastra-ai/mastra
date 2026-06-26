@@ -14,8 +14,8 @@ export interface DiffEntry {
 
 /** Produce structured diff entries between two plan texts using an LCS diff. */
 export function generatePlanDiff(oldText: string, newText: string): DiffEntry[] {
-  const oldLines = oldText.split('\n');
-  const newLines = newText.split('\n');
+  const oldLines = oldText.split(/\r?\n/);
+  const newLines = newText.split(/\r?\n/);
   const n = oldLines.length;
   const m = newLines.length;
 

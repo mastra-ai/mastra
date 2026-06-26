@@ -5,7 +5,7 @@ import { Container } from '@earendil-works/pi-tui';
 import type { AgentControllerMessage } from '@mastra/core/agent-controller';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { getLocalPlansDir } from '../utils/plans.js';
+import { getLocalPlansDir, getPlanFilename, getSuggestedPlanRelativePath } from '../utils/plans.js';
 import { isChatBoundarySpacer } from './components/chat-boundary-spacer.js';
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
@@ -19,10 +19,10 @@ function visibleChildren(state: TUIState) {
 
 const tmpProjects: string[] = [];
 const TEST_THREAD_ID = 'thread-test-render-messages';
-const PLAN_FILENAME = 'my-plan.md';
-const PLAN_PATH = `.mastracode/plans/${PLAN_FILENAME}`;
+const PLAN_TITLE = 'My Plan';
+const PLAN_PATH = getSuggestedPlanRelativePath(PLAN_TITLE);
 
-function createTmpProjectWithPlan(title: string, plan: string, filename = PLAN_FILENAME): string {
+function createTmpProjectWithPlan(title: string, plan: string, filename = getPlanFilename(title)): string {
   const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-render-test-'));
   tmpProjects.push(projectPath);
   const planPath = path.join(getLocalPlansDir(projectPath), filename);
@@ -883,7 +883,7 @@ describe('renderExistingMessages submit_plan approval status', () => {
             type: 'tool_call',
             id: 'call-1',
             name: 'submit_plan',
-            args: { path: PLAN_PATH },
+            args: { title: PLAN_TITLE },
           },
           {
             type: 'tool_result',
@@ -891,6 +891,7 @@ describe('renderExistingMessages submit_plan approval status', () => {
             result: {
               content:
                 'Plan was not approved. The user wants revisions.\n\nUser feedback: Add more tests\n\nPlease revise the plan based on the feedback and submit again with submit_plan.',
+              submittedPlan: { title: PLAN_TITLE, path: PLAN_PATH, plan: 'Step 1\nStep 2' },
             },
             isError: false,
           },
@@ -924,12 +925,15 @@ describe('renderExistingMessages submit_plan approval status', () => {
             type: 'tool_call',
             id: 'call-1',
             name: 'submit_plan',
-            args: { path: PLAN_PATH },
+            args: { title: PLAN_TITLE },
           },
           {
             type: 'tool_result',
             id: 'call-1',
-            result: { content: 'Plan approved. Proceed with implementation following the approved plan.' },
+            result: {
+              content: 'Plan approved. Proceed with implementation following the approved plan.',
+              submittedPlan: { title: PLAN_TITLE, path: PLAN_PATH, plan: 'Step 1\nStep 2' },
+            },
             isError: false,
           },
         ],

@@ -18,6 +18,17 @@ describe('generatePlanDiff', () => {
     const entries = generatePlanDiff('a\nb\nc', 'a\nc');
     expect(entries.filter(e => e.type === 'removed').map(e => e.text)).toEqual(['b']);
   });
+
+  it('normalizes CRLF and LF line endings before diffing', () => {
+    const entries = generatePlanDiff('Step 1\r\nStep 2\r\nStep 3', 'Step 1\nStep 2 updated\nStep 3');
+
+    expect(entries).toEqual([
+      { type: 'context', text: 'Step 1' },
+      { type: 'removed', text: 'Step 2' },
+      { type: 'added', text: 'Step 2 updated' },
+      { type: 'context', text: 'Step 3' },
+    ]);
+  });
 });
 
 describe('shouldShowDiff (real-diff size gate)', () => {

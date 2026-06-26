@@ -4,7 +4,7 @@
  */
 import type { AskUserSelectionMode } from '@mastra/core/tools';
 import { shouldShowDiff } from '../../utils/plan-diff.js';
-import { approvePlanFile, readPlanFile, resolvePlanPath } from '../../utils/plans.js';
+import { approvePlanFile, getPlanPathForTitle, getSuggestedPlanRelativePath, readPlanFile } from '../../utils/plans.js';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { PlanApprovalInlineComponent } from '../components/plan-approval-inline.js';
@@ -255,6 +255,7 @@ async function approvePlan(
   title: string,
   plan: string,
   planPath: string | undefined,
+  submittedPath: string,
 ): Promise<void> {
   const { state } = ctx;
   await state.session.state.set({
@@ -281,7 +282,7 @@ async function approvePlan(
 
   await state.session.respondToToolSuspension({
     toolCallId,
-    resumeData: { action: 'approved' },
+    resumeData: { action: 'approved', title, path: submittedPath, plan },
   });
 }
 
@@ -292,36 +293,38 @@ function formatPlanGoalObjective(title: string, plan: string): string {
 export async function handlePlanApproval(
   ctx: EventHandlerContext,
   toolCallId: string,
-  submittedPath: string,
+  submittedTitle: string,
 ): Promise<void> {
   const { state } = ctx;
 
-  // submit_plan carries only the path to the plan file. Read the real content
-  // from disk so the approval UI renders and diffs the actual plan.
+  // submit_plan carries only the title. Derive the named plan file from it so the
+  // model cannot submit arbitrary paths for the host to read.
+  const resolvedTitle = submittedTitle || 'Implementation Plan';
+  const relativePlanPath = getSuggestedPlanRelativePath(resolvedTitle);
   const projectPath = (state.session.state.get() as any)?.projectPath as string | undefined;
-  const planPath = projectPath ? resolvePlanPath(projectPath, submittedPath) : undefined;
+  const planPath = projectPath ? getPlanPathForTitle(projectPath, resolvedTitle) : undefined;
   const current = planPath ? await readPlanFile(planPath) : undefined;
   if (!current) {
     state.previousPlanSnapshot = undefined;
   }
   const plan = current?.plan ?? '';
-  const resolvedTitle = current?.title || 'Implementation Plan';
 
   // A previous snapshot is only a valid diff base for a revision of the SAME
   // plan file. A different path means a brand-new plan, so render it in full
   // rather than diffing against an unrelated plan.
   const snapshot = state.previousPlanSnapshot;
-  const snapshotPlan = snapshot && snapshot.path === submittedPath ? snapshot.plan : undefined;
+  const snapshotPlan = snapshot && snapshot.path === relativePlanPath ? snapshot.plan : undefined;
   const previousPlan = snapshotPlan && shouldShowDiff(snapshotPlan, plan) ? snapshotPlan : undefined;
 
-  // Snapshot this submission (keyed by path) so the next resubmission of the same
-  // file can diff against it. Skip seeding history when the file couldn't be read.
+  // Snapshot this submission (keyed by derived path) so the next resubmission of
+  // the same title/file can diff against it. Skip seeding history when the file
+  // couldn't be read.
   if (current) {
-    state.previousPlanSnapshot = { path: submittedPath, plan };
+    state.previousPlanSnapshot = { path: relativePlanPath, plan };
   }
 
   return new Promise(resolve => {
-    const planFilename = submittedPath;
+    const planFilename = relativePlanPath;
     const approvalOptions = {
       toolCallId,
       title: resolvedTitle,
@@ -331,13 +334,13 @@ export async function handlePlanApproval(
       onApprove: async () => {
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
-        await approvePlan(ctx, toolCallId, resolvedTitle, plan, planPath);
+        await approvePlan(ctx, toolCallId, resolvedTitle, plan, planPath, relativePlanPath);
         resolve();
       },
       onGoal: async () => {
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
-        await approvePlan(ctx, toolCallId, resolvedTitle, plan, planPath);
+        await approvePlan(ctx, toolCallId, resolvedTitle, plan, planPath, relativePlanPath);
 
         // `approvePlan` waits for plan mode to idle before `startGoal` sends
         // the canonical goal reminder, so this starts a fresh build-mode run.
@@ -368,7 +371,7 @@ export async function handlePlanApproval(
           try {
             await state.session.respondToToolSuspension({
               toolCallId,
-              resumeData: { action: 'rejected' },
+              resumeData: { action: 'rejected', title: resolvedTitle, path: relativePlanPath, plan },
             });
           } finally {
             state.planRejectionAbort = true;

@@ -39,7 +39,7 @@
             "id": "call_plan_rc_e2e_initial",
             "name": "submit_plan",
             "arguments": {
-              "path": ".mastracode/plans/e2e-request-changes-plan.md"
+              "title": "E2E Request Changes Plan"
             }
           }
         ]
@@ -62,7 +62,7 @@
             "id": "call_plan_rc_e2e_revised",
             "name": "submit_plan",
             "arguments": {
-              "path": ".mastracode/plans/e2e-request-changes-plan.md"
+              "title": "E2E Request Changes Plan"
             }
           }
         ]
