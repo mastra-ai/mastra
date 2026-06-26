@@ -6,8 +6,8 @@ import path from 'path'
  * Validates that sidebar entries tagged as "new" were introduced recently.
  *
  * Usage:
- *   pnpm validate:sidebar-new-tags
- *   pnpm validate:sidebar-new-tags --days=14
+ *   pnpm validate:sidebar-new-badges
+ *   pnpm validate:sidebar-new-badges --days=14
  */
 
 interface NewTagEntry {
@@ -37,8 +37,8 @@ const SIDEBAR_FILES = [
 
 const DEFAULT_DAYS = 30
 const DAY_MS = 86_400_000
-const TAGS_START_RE = /tags:\s*\[/
-const NEW_TAG_RE = /tags:\s*\[[^\]]*['"]new['"][^\]]*\]/
+const BADGE_START_RE = /badge:\s*\[/
+const NEW_TAG_RE = /badge:\s*\[[^\]]*['"]new['"][^\]]*\]/
 const NEW_TOKEN_RE = /['"]new['"]/
 const LABEL_RE = /label:\s*['"]([^'"]+)['"]/
 const ID_RE = /id:\s*['"]([^'"]+)['"]/
@@ -61,7 +61,7 @@ function findNewTagEntries(text: string): NewTagEntry[] {
 
 	for (let index = 0; index < lines.length; index++) {
 		const line = lines[index]!
-		if (!TAGS_START_RE.test(line)) continue
+		if (!BADGE_START_RE.test(line)) continue
 
 		const tagLines: string[] = []
 		let newTagLineNo = index + 1
@@ -158,13 +158,13 @@ async function main(): Promise<void> {
 	const days = parseDaysArg()
 	const thresholdMs = Date.now() - days * DAY_MS
 	const stale: StaleNewTag[] = []
-	let totalNewTags = 0
+	let totalNewBadge = 0
 
 	for (const sidebarFile of SIDEBAR_FILES) {
 		const fullPath = path.join(process.cwd(), sidebarFile)
 		const text = await fs.readFile(fullPath, 'utf-8')
 		const entries = findNewTagEntries(text)
-		totalNewTags += entries.length
+		totalNewBadge += entries.length
 
 		if (entries.length === 0) continue
 
@@ -199,19 +199,19 @@ async function main(): Promise<void> {
 			)
 		}
 
-		console.log('\nRemove the stale `new` tag(s) from these sidebar entries.')
+		console.log('\nRemove the stale `new` badge(s) from these sidebar entries.')
 		process.exit(1)
 	}
 
-	if (totalNewTags > 0) {
-		console.log(`All ${totalNewTags} 'new' tags are within the ${days}-day window.`)
+	if (totalNewBadge > 0) {
+		console.log(`All ${totalNewBadge} 'new' badges are within the ${days}-day window.`)
 		return
 	}
 
-	console.log("No 'new' tags found in any sidebar.")
+	console.log("No 'new' badges found in any sidebar.")
 }
 
 main().catch(error => {
-	console.error('Failed to validate sidebar new tags:', error instanceof Error ? error.message : error)
+	console.error('Failed to validate sidebar new badges:', error instanceof Error ? error.message : error)
 	process.exit(1)
 })
