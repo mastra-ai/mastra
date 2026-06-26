@@ -1,4 +1,5 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import type { LanguageModelV4CallOptions } from '@ai-sdk/provider-v7';
 import type {
   CallSettings,
   IdGenerator,
@@ -52,6 +53,15 @@ type StopCondition = StopConditionV5<any> | StopConditionV6<any>;
  * effective per-thread settings (overriding these with the objective record).
  */
 export type GoalLoopConfig = GoalConfig;
+
+/**
+ * Reasoning effort level for the model. Controls how much reasoning
+ * the model performs before generating a response.
+ *
+ * Only effective with LanguageModelV4 (AI SDK v7) model providers that support reasoning.
+ * When used with older model providers (V2/V3), this option is a no-op.
+ */
+export type ReasoningLevel = NonNullable<LanguageModelV4CallOptions['reasoning']>;
 
 /**
  * Bootstrap bag for run-scoped runtime state passed into `loop()`.
@@ -171,7 +181,18 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   toolCallStreaming?: boolean;
   messageList: MessageList;
   includeRawChunks?: boolean;
-  modelSettings?: Omit<CallSettings, 'abortSignal'>;
+  modelSettings?: Omit<CallSettings, 'abortSignal'> & {
+    /**
+     * Reasoning effort level for the model. Controls how much reasoning
+     * the model performs before generating a response.
+     *
+     * Only effective with LanguageModelV4 (AI SDK v7) model providers that support reasoning.
+     * When used with older model providers (V2/V3), this option is a no-op.
+     *
+     * @default undefined (provider default behavior)
+     */
+    reasoning?: ReasoningLevel;
+  };
   toolChoice?: ToolChoice<TOOLS>;
   activeTools?: Array<keyof TOOLS>;
   options?: LoopConfig<OUTPUT>;
