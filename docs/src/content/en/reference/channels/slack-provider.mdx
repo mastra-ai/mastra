@@ -165,7 +165,8 @@ await slack.configure({
     name: 'state',
     type: "ChannelConfig['state']",
     isOptional: true,
-    description: 'State adapter for message deduplication, locking, and subscriptions.',
+    description:
+      "State adapter for message deduplication, locking, and subscriptions. Defaults to the `MastraStateAdapter` backed by the Mastra instance's configured storage, so subscriptions persist across restarts.",
   },
   {
     name: 'chatOptions',
