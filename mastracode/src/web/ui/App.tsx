@@ -705,6 +705,7 @@ export default function App() {
               goal={transcript.goal}
               workspaceReady={transcript.workspaceReady}
               projectName={activeProject?.name}
+              tokensPerSec={transcript.tokensPerSec}
             />
           </>
         )}

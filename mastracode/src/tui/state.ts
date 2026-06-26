@@ -248,6 +248,14 @@ export interface TUIState {
   githubPrGradientAnimator?: GradientAnimator;
   githubPrPollingActive: boolean;
 
+  // ── Tokens/sec tracking ────────────────────────────────────────────────
+  /** Previous completion token count for rate calculation */
+  prevCompletionTokens: number;
+  /** Timestamp of previous token snapshot (ms) */
+  prevTokenTimestamp: number;
+  /** Current computed tokens/sec rate (0 when idle) */
+  tokensPerSec: number;
+
   // ── Observational Memory ──────────────────────────────────────────────
   omProgressComponent?: OMProgressComponent;
   activeOMMarker?: OMMarkerComponent;
@@ -373,6 +381,11 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     projectInfo: detectProject(process.cwd()),
     modelAuthStatus: { hasAuth: true },
     githubPrPollingActive: false,
+
+    // Tokens/sec tracking
+    prevCompletionTokens: 0,
+    prevTokenTimestamp: 0,
+    tokensPerSec: 0,
 
     // Goal loop
     goalManager: new GoalManager(),

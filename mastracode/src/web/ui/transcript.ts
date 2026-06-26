@@ -181,6 +181,12 @@ export interface TranscriptState {
   workspaceReady?: boolean;
   /** Latest goal evaluation. */
   goal?: GoalSnapshot;
+  /** Current tokens/sec throughput (0 when idle). */
+  tokensPerSec: number;
+  /** @internal Previous completion token count for rate calculation. */
+  _prevCompletionTokens: number;
+  /** @internal Timestamp of previous token snapshot (ms). */
+  _prevTokenTimestamp: number;
 }
 
 export const initialTranscript: TranscriptState = {
@@ -190,6 +196,9 @@ export const initialTranscript: TranscriptState = {
   tasks: [],
   followUpCount: 0,
   omPhase: 'idle',
+  tokensPerSec: 0,
+  _prevCompletionTokens: 0,
+  _prevTokenTimestamp: 0,
 };
 
 let noticeSeq = 0;
@@ -256,7 +265,7 @@ function applyEvent(state: TranscriptState, raw: HarnessEvent): TranscriptState 
     case 'agent_start':
       return { ...state, running: true };
     case 'agent_end':
-      return { ...state, running: false, pending: false };
+      return { ...state, running: false, pending: false, tokensPerSec: 0, _prevTokenTimestamp: 0 };
 
     case 'message_start':
     case 'message_update': {
@@ -400,8 +409,25 @@ function applyEvent(state: TranscriptState, raw: HarnessEvent): TranscriptState 
       return pushNotice(state, 'info', `Deleted thread ${event.threadId}`);
 
     // Usage tracking.
-    case 'usage_update':
-      return { ...state, usage: event.usage as UsageSnapshot };
+    case 'usage_update': {
+      const usageSnap = event.usage as UsageSnapshot;
+      const now = Date.now();
+      const currentTokens = usageSnap.completionTokens ?? 0;
+      let tps = state.tokensPerSec;
+      if (state._prevTokenTimestamp > 0 && currentTokens > state._prevCompletionTokens) {
+        const elapsedSec = (now - state._prevTokenTimestamp) / 1000;
+        if (elapsedSec > 0) {
+          tps = Math.round((currentTokens - state._prevCompletionTokens) / elapsedSec);
+        }
+      }
+      return {
+        ...state,
+        usage: usageSnap,
+        tokensPerSec: tps,
+        _prevCompletionTokens: currentTokens,
+        _prevTokenTimestamp: now,
+      };
+    }
 
     // Canonical display-state snapshot — carries the status-line figures
     // (OM msg/mem budgets and cumulative token usage).

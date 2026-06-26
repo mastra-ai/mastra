@@ -69,6 +69,9 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       } else {
         handleAgentEnd(ectx);
       }
+      // Reset tokens/sec when agent finishes
+      state.tokensPerSec = 0;
+      state.prevTokenTimestamp = 0;
       break;
 
     case 'message_start':
@@ -215,9 +218,22 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       break;
     }
 
-    case 'usage_update':
-      // Token accumulation handled by Harness display state
+    case 'usage_update': {
+      // Token accumulation handled by Harness display state.
+      // Compute tokens/sec from completion token deltas.
+      const now = Date.now();
+      const currentTokens = event.usage.completionTokens;
+      if (state.prevTokenTimestamp > 0 && currentTokens > state.prevCompletionTokens) {
+        const elapsedSec = (now - state.prevTokenTimestamp) / 1000;
+        if (elapsedSec > 0) {
+          const delta = currentTokens - state.prevCompletionTokens;
+          state.tokensPerSec = Math.round(delta / elapsedSec);
+        }
+      }
+      state.prevCompletionTokens = currentTokens;
+      state.prevTokenTimestamp = now;
       break;
+    }
 
     // Observational Memory events
     case 'om_status':

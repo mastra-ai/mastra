@@ -583,6 +583,7 @@ export function StatusLine({
   goal,
   workspaceReady,
   projectName,
+  tokensPerSec,
 }: {
   status: string;
   modeId?: string;
@@ -595,6 +596,7 @@ export function StatusLine({
   goal?: GoalSnapshot;
   workspaceReady?: boolean;
   projectName?: string;
+  tokensPerSec?: number;
 }) {
   // OM budgets, mirroring the TUI: msg = active message window before an
   // observation fires; mem = accumulated observations before a reflection fires.
@@ -648,6 +650,7 @@ export function StatusLine({
           <BrainIcon size={13} /> {omPhase}
         </span>
       )}
+      {(tokensPerSec ?? 0) > 0 && <span className="status-item">{tokensPerSec} tok/s</span>}
       {(followUpCount ?? 0) > 0 && <span className="status-item">{followUpCount} queued</span>}
       {goal && goal.status !== 'done' && (
         <span className="status-goal">
