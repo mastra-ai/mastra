@@ -1,7 +1,7 @@
 import { describe, it } from 'vitest';
 
-import type { WebScenario } from './harness';
-import { runScenario } from './harness';
+import type { WebScenario } from './scenario-runner';
+import { runScenario } from './scenario-runner';
 
 const scenario: WebScenario = {
   name: 'permissions-auto-approve',
@@ -12,7 +12,7 @@ const scenario: WebScenario = {
   run: async ({ driver }) => {
     // Set the specific tool to allow via the permissions API (per-tool overrides).
     const client = driver.getClient();
-    const session = client.getHarness('code').session(`web-scenario-${scenario.name}`);
+    const session = client.getAgentController('code').session(`web-scenario-${scenario.name}`);
     await session.setPermissionForTool('mastra_workspace_write_file', 'allow');
 
     // Verify permissions are set.

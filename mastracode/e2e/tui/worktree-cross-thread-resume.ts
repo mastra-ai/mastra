@@ -15,18 +15,18 @@ function gitInDir(args: string[], cwd: string): void {
 /**
  * Bug: #createSessionForResource picks the most-recent thread by updatedAt
  * filtered only by resourceId — it ignores projectPath. When multiple worktrees
- * share the same git URL (and thus the same resourceId), the harness can load a
+ * share the same git URL (and thus the same resourceId), the controller can load a
  * thread from a DIFFERENT worktree into the session, contaminating it with the
  * wrong model pack, settings, and conversation history.
  *
  * This test seeds a single thread under the shared resourceId, tagged for a
  * DIFFERENT worktree path. MC launches in a worktree that has NO thread. Without
- * the fix, the harness loads the wrong thread (promptForThreadSelection sets
+ * the fix, the controller loads the wrong thread (promptForThreadSelection sets
  * pendingNewThread but the wrong thread's metadata is already bound).
  *
- * Expected (with fix): harness filters by projectPath, finds 0 matches, does
+ * Expected (with fix): controller filters by projectPath, finds 0 matches, does
  * NOT load the other worktree's thread.
- * Actual (without fix): harness loads the wrong worktree's thread by updatedAt.
+ * Actual (without fix): controller loads the wrong worktree's thread by updatedAt.
  */
 export const worktreeCrossThreadResumeScenario: McE2eScenario = {
   name: 'worktree-cross-thread-resume',
@@ -50,7 +50,7 @@ export const worktreeCrossThreadResumeScenario: McE2eScenario = {
     gitInDir(['worktree', 'add', projectDir, '-b', 'worktree-current'], mainRepoDir);
 
     // Seed ONE thread: tagged for a DIFFERENT worktree. The current worktree
-    // (projectDir) has no thread. Without the fix, the harness loads this wrong
+    // (projectDir) has no thread. Without the fix, the controller loads this wrong
     // thread because it's the most recent (and only) match by resourceId.
     const otherWorktreePath = join(dirname(projectDir), 'other-worktree');
     const futureDate = new Date('2099-06-01T00:00:00.000Z');
@@ -80,8 +80,8 @@ VALUES
     runtime.printScreen('after /thread', terminal);
 
     // The critical assertion: the wrong worktree's thread must NOT be loaded.
-    // Without the fix, the harness picked "WRONG_WORKTREE_THREAD" by updatedAt.
-    // With the fix, the harness filters by projectPath first, finds 0 matches
+    // Without the fix, the controller picked "WRONG_WORKTREE_THREAD" by updatedAt.
+    // With the fix, the controller filters by projectPath first, finds 0 matches
     // for this worktree, and creates a fresh (untitled) thread instead.
     await runtime.waitForScreenTextAbsent(/WRONG_WORKTREE_THREAD/i, terminal, 2_000);
 

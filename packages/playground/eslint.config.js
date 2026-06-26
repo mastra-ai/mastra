@@ -95,6 +95,60 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import cn from @mastra/playground-ui/utils/cn.',
   },
   {
+    importNames: [
+      'is401UnauthorizedError',
+      'is403ForbiddenError',
+      'is404NotFoundError',
+      'isBranchesNotSupportedError',
+      'isUnsupportedObservabilityOperationError',
+      'isNonRetryableError',
+      'parseError',
+    ],
+    message: 'Import error helpers from @mastra/playground-ui/utils/errors.',
+  },
+  {
+    importNames: ['shouldRetryQuery'],
+    message: 'Import query helpers from @mastra/playground-ui/utils/query-utils.',
+  },
+  {
+    importNames: ['JsonSchema', 'JsonSchemaProperty', 'JsonSchemaType'],
+    message: 'Import JSON schema types from @mastra/playground-ui/utils/json-schema.',
+  },
+  {
+    importNames: ['Rule', 'RuleGroup', 'ConditionOperator', 'countLeafRules'],
+    message: 'Import rule-engine types and helpers from @mastra/playground-ui/utils/rule-engine.',
+  },
+  {
+    importNames: ['truncateString'],
+    message: 'Import truncateString from @mastra/playground-ui/utils/truncate-string.',
+  },
+  {
+    importNames: ['stringToColor'],
+    message: 'Import stringToColor from @mastra/playground-ui/utils/colors.',
+  },
+  {
+    importNames: ['formatJSON', 'formatTypeScript', 'isValidJson'],
+    message: 'Import formatting helpers from @mastra/playground-ui/utils/formatting.',
+  },
+  {
+    importNames: [
+      'fileToBase64',
+      'getFileContentType',
+      'isRemoteUrl',
+      'isBrowserFetchableUrl',
+      'isNonFetchableRemoteUrl',
+    ],
+    message: 'Import file helpers from @mastra/playground-ui/utils/file.',
+  },
+  {
+    importNames: ['toSigFigs'],
+    message: 'Import toSigFigs from @mastra/playground-ui/utils/number.',
+  },
+  {
+    importNames: ['lodashTitleCase'],
+    message: 'Import lodashTitleCase from @mastra/playground-ui/utils/string.',
+  },
+  {
     importNames: ['toast'],
     message: 'Import toast from @mastra/playground-ui/utils/toast.',
   },
@@ -540,6 +594,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import RadioGroup exports from @mastra/playground-ui/components/RadioGroup.',
   },
   {
+    importNames: ['RuleBuilder', 'RuleBuilderProps'],
+    message: 'Import RuleBuilder exports from @mastra/playground-ui/components/RuleBuilder.',
+  },
+  {
     importNames: ['Searchbar', 'SearchbarWrapper', 'SearchbarProps'],
     message: 'Import Searchbar exports from @mastra/playground-ui/components/Searchbar.',
   },
@@ -696,10 +754,16 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import Truncate exports from @mastra/playground-ui/components/Truncate.',
   },
 ].flatMap(restriction =>
-  restriction.importNames.map(importName => ({
-    selector: `ImportDeclaration[source.value="@mastra/playground-ui"] > ImportSpecifier[imported.name="${importName}"]`,
-    message: restriction.message,
-  })),
+  restriction.importNames.flatMap(importName => [
+    {
+      selector: `ImportDeclaration[source.value="@mastra/playground-ui"] > ImportSpecifier[imported.name="${importName}"]`,
+      message: restriction.message,
+    },
+    {
+      selector: `ExportNamedDeclaration[source.value="@mastra/playground-ui"] > ExportSpecifier[local.name="${importName}"]`,
+      message: restriction.message,
+    },
+  ]),
 );
 
 // Enforce the playground testing contract (packages/playground/AGENTS.md + the

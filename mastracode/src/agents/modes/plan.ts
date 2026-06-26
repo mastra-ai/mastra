@@ -1,10 +1,10 @@
 /**
  * Plan mode — read-only analysis and planning.
  */
-import type { HarnessMode } from '@mastra/core/harness';
+import type { AgentControllerMode } from '@mastra/core/agent-controller';
 import { PLAN_MODE_AVAILABLE_TOOLS } from '../tool-availability.js';
 
-export const planMode: HarnessMode = {
+export const planMode: AgentControllerMode = {
   id: 'plan',
   name: 'Plan',
   transitionsTo: 'build',

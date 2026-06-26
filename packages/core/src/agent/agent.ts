@@ -55,7 +55,7 @@ import {
   summarizeNotifications,
 } from '../notifications/signals';
 import type { SendNotificationSignalInput } from '../notifications/types';
-import type { DefinitionSource, TracingProperties, ObservabilityContext } from '../observability';
+import type { DefinitionSource, TracingProperties, ObservabilityContext, TracingPolicy } from '../observability';
 import {
   EntityType,
   InternalSpans,
@@ -983,7 +983,7 @@ export class Agent<
 
   /**
    * Returns true if this agent was configured with its own browser instance.
-   * Used by Harness to avoid overwriting agent-level browser configuration.
+   * Used by AgentController to avoid overwriting agent-level browser configuration.
    */
   hasOwnBrowser(): boolean {
     return this.#hasExplicitBrowser;
@@ -2229,6 +2229,17 @@ export class Agent<
    */
   public getDescription(): string {
     return this.#description ?? '';
+  }
+
+  /**
+   * Returns the tracing policy configured at agent construction time.
+   *
+   * Exposed so out-of-process consumers (e.g. the durable agent runner) can
+   * forward the same policy onto AGENT_RUN spans without reaching into private
+   * fields.
+   */
+  public getTracingPolicy(): TracingPolicy | undefined {
+    return this.#options?.tracingPolicy;
   }
 
   /**
@@ -5551,6 +5562,8 @@ export class Agent<
     memoryConfig?: MemoryConfig;
     autoResumeSuspendedTools?: boolean;
     hooks?: ToolHooks;
+    delegation?: DelegationConfig;
+    methodType?: AgentMethodType;
   }): Promise<Record<string, CoreTool>> {
     const requestContext = options.requestContext ?? new RequestContext();
     const defaultOptions = await this.getDefaultOptions({ requestContext });
@@ -5581,7 +5594,10 @@ export class Agent<
       requestContext,
       memoryConfig: options.memoryConfig ?? mergedMemory?.options,
       autoResumeSuspendedTools: mergedOptions.autoResumeSuspendedTools,
-      methodType: 'stream',
+      // Use the deep-merged delegation so default callbacks (e.g. messageFilter)
+      // survive when callers pass a partial per-call delegation override.
+      delegation: mergedOptions.delegation,
+      methodType: options.methodType ?? 'stream',
     });
   }
 

@@ -50,7 +50,7 @@ function createContext() {
         },
       },
     },
-    harness: {
+    controller: {
       sendSignal,
       session,
     },
@@ -169,7 +169,7 @@ describe('handleGithubCommand', () => {
 
   it('unsubscribes the only current subscription without prompting', async () => {
     const { ctx, unsubscribeThreadFromPR } = createContext();
-    vi.mocked((ctx.harness as any).session.thread.list).mockResolvedValue([
+    vi.mocked((ctx.controller as any).session.thread.list).mockResolvedValue([
       {
         id: 'thread-1',
         resourceId: 'resource-1',
@@ -195,7 +195,7 @@ describe('handleGithubCommand', () => {
 
   it('syncs GitHub subscriptions for the current thread', async () => {
     const { ctx, sendSignal, syncThreadNow } = createContext();
-    vi.mocked((ctx.harness as any).session.thread.list).mockResolvedValue([
+    vi.mocked((ctx.controller as any).session.thread.list).mockResolvedValue([
       { id: 'thread-1', resourceId: 'resource-from-thread' },
     ]);
 
@@ -218,7 +218,7 @@ describe('handleGithubCommand', () => {
   it('shows GitHub subscription debug information for the current thread', async () => {
     const { ctx, sendSignal } = createContext();
     vi.mocked((ctx.state as any).options.githubSignals.isPollingThread).mockReturnValue(true);
-    vi.mocked((ctx.harness as any).session.thread.list).mockResolvedValue([
+    vi.mocked((ctx.controller as any).session.thread.list).mockResolvedValue([
       {
         id: 'thread-1',
         resourceId: 'resource-1',
