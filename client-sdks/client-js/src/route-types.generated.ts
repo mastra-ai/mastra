@@ -90254,6 +90254,7 @@ export interface GetHeartbeatsHeartbeatId_RouteContract {
 // Route: POST /heartbeats
 // ============================================================================
 export type PostHeartbeats_Body = {
+  id?: string | undefined;
   agentId: string;
   cron: string;
   timezone?: string | undefined;

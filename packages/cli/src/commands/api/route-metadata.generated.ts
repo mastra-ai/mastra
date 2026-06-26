@@ -5678,6 +5678,7 @@ export const API_ROUTE_METADATA = {
       "agentId",
       "broadcast",
       "cron",
+      "id",
       "ifActive",
       "ifIdle",
       "metadata",
