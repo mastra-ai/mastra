@@ -173,7 +173,6 @@ Creates a new Slack app for the agent via the Manifest API and returns an OAuth 
 ```typescript
 const result = await slack.connect('support-agent', {
   name: 'Support Bot',
-  slashCommands: ['/ask'],
 })
 
 // Redirect the user to result.authorizationUrl to install the app
@@ -211,13 +210,6 @@ interface ChannelConnectResult {
     isOptional: true,
     description:
       'URL to a square image (min 512x512) for the app icon. Downloaded and uploaded to Slack automatically.',
-  },
-  {
-    name: 'slashCommands',
-    type: '(string | SlashCommandConfig)[]',
-    isOptional: true,
-    description:
-      "Slash commands this agent supports. A string (for example, `'/ask'`) triggers the agent with the input text; an object form adds a custom prompt template with `{{text}}` as the input placeholder.",
   },
   {
     name: 'manifest',
