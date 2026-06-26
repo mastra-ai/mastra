@@ -446,7 +446,7 @@ export function createStepFromAgent<TStepId extends string, TStepOutput>(
     scorers?: DynamicArgument<MastraScorers>;
     metadata?: StepMetadata;
   },
-): Step<TStepId, unknown, any, TStepOutput, unknown, unknown, DefaultEngineType> {
+): Step<TStepId, unknown, { prompt: string }, TStepOutput, unknown, unknown, DefaultEngineType> {
   const options = (agentOrToolOptions ?? {}) as
     | (AgentStepOptions<TStepOutput> & {
         retries?: number;
@@ -759,7 +759,13 @@ export function createMappingStep(
  */
 function toSingleStepEntry(step: any): SingleStepEntry {
   if (step?.component === 'AGENT' && step.__agentRef) {
-    return { type: 'agent', id: step.id, agentId: step.__agentRef.id, agent: step.__agentRef, options: step.__agentOptions };
+    return {
+      type: 'agent',
+      id: step.id,
+      agentId: step.__agentRef.id,
+      agent: step.__agentRef,
+      options: step.__agentOptions,
+    };
   }
   if (step?.component === 'TOOL' && step.__toolRef) {
     return { type: 'tool', id: step.id, toolId: step.__toolRef.id, tool: step.__toolRef, options: step.__toolOptions };
@@ -1668,6 +1674,25 @@ export function isProcessor(obj: unknown): obj is Processor {
  */
 export type AnyWorkflow = Workflow<any, any, any, any, any, any, any, any>;
 
+/**
+ * Compile-time guard for the declarative `.agent()` builder. Agent steps require a
+ * `{ prompt: string }` input. When the previous step output `TPrev` is assignable to
+ * that, this resolves to `unknown` (a no-op intersection); otherwise it resolves to a
+ * branded object the passed agent can't satisfy, surfacing a readable error on the
+ * argument that names the expected input.
+ *
+ * `[any] extends [...]` is `true` => `unknown`, so a `.map()` returning `any` stays a
+ * deliberate escape hatch. A `unknown`/mismatched prev output errors. The tuple wrap
+ * prevents distribution over union prev-output types.
+ */
+type RequireAgentInput<TPrev> = [TPrev] extends [{ prompt: string }]
+  ? unknown
+  : {
+      readonly __chainError: 'Previous step output must be assignable to { prompt: string }';
+      readonly expectedInput: { prompt: string };
+      readonly receivedPrevOutput: TPrev;
+    };
+
 export class Workflow<
   TEngineType = DefaultEngineType,
   TSteps extends Step<string, any, any, any, any, any, TEngineType, any>[] = Step<
@@ -1850,7 +1875,9 @@ export class Workflow<
    * provided) or `{ text: string }` otherwise.
    */
   agent<TStepId extends string>(
-    agent: SubAgent<TStepId, any> | Agent<TStepId, any>,
+    // The previous step output (TPrevSchema) must satisfy the agent step input
+    // `{ prompt: string }`; otherwise the guard makes this argument unsatisfiable.
+    agent: (SubAgent<TStepId, any> | Agent<TStepId, any>) & RequireAgentInput<TPrevSchema>,
     options?: Omit<AgentStepOptions<{ text: string }>, 'structuredOutput'> & {
       structuredOutput?: never;
       retries?: number;
@@ -1860,7 +1887,7 @@ export class Workflow<
     stepOptions?: { id?: string },
   ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, { text: string }, TRequestContext>;
   agent<TStepId extends string, TStepOutput>(
-    agent: SubAgent<TStepId, any> | Agent<TStepId, any>,
+    agent: (SubAgent<TStepId, any> | Agent<TStepId, any>) & RequireAgentInput<TPrevSchema>,
     options: Omit<AgentStepOptions<TStepOutput>, 'structuredOutput'> & {
       structuredOutput: { schema: StandardSchemaWithJSON<TStepOutput> };
       retries?: number;
@@ -1910,7 +1937,18 @@ export class Workflow<
     TId extends string,
     TToolRC extends Record<string, any> | unknown = unknown,
   >(
-    tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TToolRC>,
+    // The previous step output (TPrevSchema) must satisfy the tool's input (TSchemaIn).
+    // On a mismatch the input slot resolves to TPrevSchema, making the passed tool
+    // unassignable so the call errors — same mechanics as `.then`.
+    tool: Tool<
+      TPrevSchema extends TSchemaIn ? TSchemaIn : TPrevSchema,
+      TSchemaOut,
+      TSuspend,
+      TResume,
+      TContext,
+      TId,
+      TToolRC
+    >,
     options?: { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata },
     stepOptions?: { id?: string },
   ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TSchemaOut, TRequestContext>;

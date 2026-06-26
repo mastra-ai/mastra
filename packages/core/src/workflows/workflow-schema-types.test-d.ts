@@ -639,3 +639,91 @@ describe('declarative builder output inference', () => {
       });
   });
 });
+
+/**
+ * Input-chaining constraints for the declarative builders: the previous step's
+ * output must be assignable to the next step's input. These lock in that
+ * `.tool()` / `.agent()` (and the `.then(createStep(...))` paths) reject
+ * mismatched chains, not just infer the output direction.
+ */
+describe('declarative builder input chaining', () => {
+  // tool consuming `{ doubled: number }` (the output of `numberTool`)
+  const halveTool = createTool({
+    id: 'halve-tool',
+    description: 'tool',
+    inputSchema: z.object({ doubled: z.number() }),
+    outputSchema: z.object({ halved: z.number() }),
+    execute: async ({ doubled }) => ({ halved: doubled / 2 }),
+  });
+
+  // step that produces a concrete `{ prompt: string }` output (so a downstream
+  // agent receives a real type rather than `any`)
+  const toPrompt = createStep({
+    id: 'to-prompt',
+    inputSchema: z.object({ value: z.number() }),
+    outputSchema: z.object({ prompt: z.string() }),
+    execute: async () => ({ prompt: 'x' }),
+  });
+
+  // step whose output is intentionally incompatible with `numberTool`'s input
+  const wrongShape = createStep({
+    id: 'wrong-shape',
+    inputSchema: z.object({ value: z.number() }),
+    outputSchema: z.object({ nope: z.boolean() }),
+    execute: async () => ({ nope: true }),
+  });
+
+  it('.tool() accepts a chain whose prev output matches the tool input', () => {
+    const wf = createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
+      .tool(numberTool) // -> { doubled: number }
+      .tool(halveTool); // input { doubled: number } -> OK
+    expectTypeOf(wf).not.toBeNever();
+  });
+
+  it('.tool() rejects chaining a tool whose input does not match the prev output', () => {
+    createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
+      .tool(numberTool) // -> { doubled: number }
+      // @ts-expect-error - { doubled: number } is not assignable to tool input { value: number }
+      .tool(numberTool);
+  });
+
+  it('.tool() rejects a tool after a step producing the wrong shape', () => {
+    createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
+      .then(wrongShape) // -> { nope: boolean }
+      // @ts-expect-error - { nope: boolean } is not assignable to tool input { value: number }
+      .tool(numberTool);
+  });
+
+  it('.tool() keeps the `.map()` (any output) escape hatch', () => {
+    const wf = createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
+      .map(async () => ({ anything: 'goes' })) // map output is `any`
+      .tool(numberTool); // compiles via the `any` escape hatch
+    expectTypeOf(wf).not.toBeNever();
+  });
+
+  it('.agent() accepts a chain whose prev output is { prompt: string }', () => {
+    const wf = createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
+      .then(toPrompt) // -> { prompt: string }
+      .agent(agent); // input { prompt: string } -> OK
+    expectTypeOf(wf).not.toBeNever();
+  });
+
+  it('.agent() rejects a chain whose prev output is not { prompt: string }', () => {
+    createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
+      // @ts-expect-error - { value: number } is not assignable to agent input { prompt: string }
+      .agent(agent);
+  });
+
+  it('.then(createStep(tool)) rejects a mismatched prev output', () => {
+    createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
+      .tool(numberTool) // -> { doubled: number }
+      // @ts-expect-error - { doubled: number } is not assignable to tool input { value: number }
+      .then(createStep(numberTool));
+  });
+
+  it('.then(createStep(agent)) requires { prompt: string } (locks in createStepFromAgent input type)', () => {
+    createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
+      // @ts-expect-error - { value: number } is not assignable to agent input { prompt: string }
+      .then(createStep(agent));
+  });
+});

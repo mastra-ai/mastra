@@ -44,7 +44,6 @@ describe('inngest declarative step entries', () => {
       .agent(writer)
       .map(async () => ({ value: 1 }))
       .tool(doubleTool)
-      .tool(doubleTool)
       .commit();
 
     expect(wf.serializedStepGraph.map(e => e.type)).toEqual(['agent', 'mapping', 'tool']);

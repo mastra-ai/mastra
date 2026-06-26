@@ -32,6 +32,18 @@ You can also reference a registered agent or tool by id:
 workflow.agent('my-registered-agent');
 ```
 
+**Type-safe chaining**
+
+The `.tool()` and `.agent()` builders now enforce input/output schema chaining the same way `.then()` does: the previous step's output must be assignable to the next step's input, so mismatched chains are caught at compile time.
+
+```ts
+workflow
+  .tool(doubleTool) // outputs { doubled: number }
+  .tool(doubleTool); // type error: { doubled: number } is not assignable to input { value: number }
+```
+
+Agent steps type their input as `{ prompt: string }`, so an agent (via `.agent(...)` or `.then(createStep(agent))`) requires the previous output to be assignable to `{ prompt: string }`.
+
 **Backward compatible**
 
 Existing `.then(createStep(agent))`, `.then(createStep(tool))`, `.map()`, `.parallel()`, and `.branch()` usages keep working and now emit the new declarative entries automatically.
