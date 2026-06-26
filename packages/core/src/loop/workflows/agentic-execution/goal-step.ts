@@ -134,6 +134,7 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
         judgeModelId: typeof goal.judge === 'string' ? goal.judge : undefined,
         maxRuns: goal.maxRuns,
         prompt: goal.prompt,
+        maxSteps: goal.maxSteps,
       });
 
       // Defensive budget guard. Normally an objective that exhausts its budget is
@@ -289,6 +290,7 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
             prompt: effective.prompt,
             tools: goalTools,
             onStream: observeJudgeStream,
+            ...(effective.maxSteps ? { maxSteps: effective.maxSteps } : {}),
             ...(_internal?.memory
               ? {
                   memory: _internal.memory,

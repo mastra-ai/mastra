@@ -490,6 +490,11 @@ export interface GoalConfig {
    */
   tools?: DynamicArgument<ToolsInput | undefined>;
   /**
+   * Max steps the judge agent may take per evaluation (its internal agentic-loop
+   * budget). When omitted the judge uses the model loop's default (5).
+   */
+  maxSteps?: number;
+  /**
    * Custom goal scorer (a {@link MastraScorer} or a registered scorer id). When
    * omitted, a default rubric scorer judges the objective with the judge model.
    */
