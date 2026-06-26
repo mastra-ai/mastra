@@ -32,7 +32,7 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   model: {
     modelId: string | undefined;
     provider: string | undefined;
-    version: 'v2' | 'v3';
+    version: 'v2' | 'v3' | 'v4';
   };
   /** Thread ID for memory */
   threadId?: string;

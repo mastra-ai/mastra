@@ -128,6 +128,36 @@ describe('Harness workspace — dynamic factory', () => {
       'A session requires a valid workspace instance.',
     );
   });
+
+  it('resolveWorkspace provides session state to the factory', async () => {
+    const ws = createMockWorkspace('dynamic-ws');
+    // Simulates a dynamic workspace factory that reads session state via
+    // getState() — the recommended accessor on HarnessRequestContext.
+    // Before the fix, resolveWorkspace built a minimal context missing
+    // state accessors, causing "Cannot read properties of undefined".
+    const factory = vi.fn(async ({ requestContext }) => {
+      const ctx = requestContext.get('harness');
+      const state = ctx.getState();
+      expect(state).toEqual({ projectPath: '/tmp/test' });
+      return ws;
+    });
+    const harness = new Harness({
+      id: 'test',
+      storage: new InMemoryStore(),
+      modes: [{ id: 'default', name: 'Default', default: true, agent: createAgent() }],
+      workspace: factory,
+      initialState: { projectPath: '/tmp/test' },
+    });
+    await harness.init();
+
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+
+    // resolveWorkspace is called outside the request flow (e.g. from slash
+    // commands). createSession does not cache the resolved workspace on
+    // this.workspace, so this re-invokes the factory with a fresh context.
+    const resolved = await harness.resolveWorkspace({ session });
+    expect(resolved).toBe(ws);
+  });
 });
 
 // ===========================================================================
