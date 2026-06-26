@@ -1,5 +1,5 @@
 import type { DatasetItemToolMock } from '@mastra/client-js';
-import { collectToolMocks } from '@mastra/core/evals';
+import { collectToolMocks } from '@mastra/core/utils/collect-tool-mocks';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Label } from '@mastra/playground-ui/components/Label';

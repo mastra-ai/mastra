@@ -1,7 +1,7 @@
 'use client';
 
-import { collectToolMocks } from '@mastra/core/evals';
 import type { SpanRecord } from '@mastra/core/storage';
+import { collectToolMocks } from '@mastra/core/utils/collect-tool-mocks';
 import { useSpanDetail } from '@mastra/playground-ui';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
 import { TextAndIcon, getShortId } from '@mastra/playground-ui/components/Text';
