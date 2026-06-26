@@ -26,7 +26,7 @@ export async function getDynamicInstructions({ requestContext }: { requestContex
     modeId: modeId,
     currentDate: new Date().toISOString().split('T')[0]!,
     workingDir: state?.projectPath ?? process.cwd(),
-    state: state,
+    state,
   };
 
   return buildFullPrompt(promptCtx);
