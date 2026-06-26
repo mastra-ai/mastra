@@ -4,6 +4,18 @@
 '@mastra/client-js': minor
 '@mastra/deployer': patch
 'mastra': patch
+'@mastra/deployer-cloud': patch
+'@mastra/deployer-cloudflare': patch
+'@mastra/deployer-netlify': patch
+'@mastra/deployer-vercel': patch
+'@mastra/express': patch
+'@mastra/fastify': patch
+'@mastra/hono': patch
+'@mastra/koa': patch
+'@mastra/nestjs': patch
+'@mastra/next': patch
+'@mastra/tanstack-start': patch
+'@mastra/temporal': patch
 ---
 
 Rename the `Harness` class to `AgentController` and its associated `Harness*` types to `AgentController*` (e.g. `HarnessConfig` → `AgentControllerConfig`, `HarnessMode` → `AgentControllerMode`, `HarnessEvent` → `AgentControllerEvent`).
@@ -14,4 +26,4 @@ Rename the `Harness` class to `AgentController` and its associated `Harness*` ty
 
 `@mastra/client-js`: `AgentController` and `AgentControllerSession` are now the canonical resource classes, with `MastraClient.getAgentController(id)` / `listAgentControllers()` targeting the `/agent-controller` routes and reading the canonical `agentControllers` / `controllerId` response keys. The deprecated `getHarness` / `listHarnesses` methods and `Harness` / `HarnessSession` classes have been removed. This is a breaking change for the recently released client.
 
-The `@mastra/core` peer dependency floor for `@mastra/server`, `@mastra/deployer`, and `mastra` (CLI) is raised to `>=1.47.0-0` so consumers must be on the release that introduces the canonical agent-controller surface.
+The `@mastra/core` peer dependency floor is raised to `>=1.47.0-0` so consumers must be on the release that introduces the canonical agent-controller surface. This applies to `@mastra/server`, `@mastra/deployer`, and `mastra` (CLI), and is propagated to the packages that depend on them: the deployers (`@mastra/deployer-cloud`, `@mastra/deployer-cloudflare`, `@mastra/deployer-netlify`, `@mastra/deployer-vercel`), the server adapters (`@mastra/express`, `@mastra/fastify`, `@mastra/hono`, `@mastra/koa`, `@mastra/nestjs`, `@mastra/next`, `@mastra/tanstack-start`), and `@mastra/temporal`.
