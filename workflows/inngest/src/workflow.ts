@@ -59,7 +59,7 @@ export class InngestWorkflow<
    * a fresh `InngestPubSub`. This is what lets `DurableAgent.observe()` see
    * cached history when the agent wraps its PubSub in a `CachingPubSub`.
    */
-  #pubsubFactory?: () => PubSub;
+  #pubsubFactory?: (defaultPubsub: PubSub) => PubSub;
 
   constructor(
     params: InngestWorkflowConfig<
@@ -117,12 +117,20 @@ export class InngestWorkflow<
    * `createInngestAgent` use this to route workflow event publishes through the
    * agent's `CachingPubSub`, so `observe()` can replay cached history.
    *
-   * The factory is also propagated to every nested `InngestWorkflow` in the
-   * step graph. Nested workflows run as their own Inngest functions and resolve
-   * their own pubsub at runtime, so without propagation they would publish
-   * through a bare `InngestPubSub` and bypass the agent's cache.
+   * The factory receives the workflow's own default `InngestPubSub` (constructed
+   * with this workflow's id) as input. Hosts should wrap that instance rather
+   * than substitute it, so workflow-event channels (which encode the workflow
+   * id) remain workflow-local. Returning a `CachingPubSub` wrapping the default
+   * is the canonical pattern.
+   *
+   * The factory is propagated to every nested `InngestWorkflow` in the step
+   * graph. Nested workflows run as their own Inngest functions and resolve
+   * their own pubsub at runtime; each invocation passes its own workflow-local
+   * default into the same factory, so the host can share cross-workflow state
+   * (e.g. a single agent-scoped cache) without collapsing per-workflow channel
+   * isolation.
    */
-  __setPubsubFactory(factory: () => PubSub) {
+  __setPubsubFactory(factory: (defaultPubsub: PubSub) => PubSub) {
     this.#pubsubFactory = factory;
     const updateNested = (step: StepFlowEntry) => {
       if (
@@ -146,7 +154,7 @@ export class InngestWorkflow<
    * a host (e.g. `createInngestAgent`) wired the workflow to its agent pubsub
    * without having to drive a real Inngest invocation.
    */
-  __getPubsubFactory(): (() => PubSub) | undefined {
+  __getPubsubFactory(): ((defaultPubsub: PubSub) => PubSub) | undefined {
     return this.#pubsubFactory;
   }
 
@@ -310,10 +318,13 @@ export class InngestWorkflow<
         // (Inngest SDK v4 client API), which auto-includes the current runId from the
         // function's async context.
         //
-        // Hosts (e.g. `createInngestAgent`) can override this via `__setPubsubFactory`
-        // to route publishes through a wrapping PubSub such as `CachingPubSub`, which is
-        // required for `observe()` to replay cached history.
-        const pubsub: PubSub = this.#pubsubFactory?.() ?? new InngestPubSub(this.inngest, this.id);
+        // The default is constructed with `this.id` so workflow-event channels stay
+        // workflow-local (InngestPubSub encodes the workflowId in `workflow:<id>:<runId>`).
+        // Hosts (e.g. `createInngestAgent`) can override via `__setPubsubFactory` to
+        // wrap this default - typically with a `CachingPubSub` so `observe()` can replay
+        // cached history - without disturbing per-workflow channel isolation.
+        const defaultPubsub = new InngestPubSub(this.inngest, this.id);
+        const pubsub: PubSub = this.#pubsubFactory?.(defaultPubsub) ?? defaultPubsub;
 
         // Create requestContext before execute so we can reuse it in finalize
         const requestContext: RequestContext = new RequestContext(Object.entries(event.data.requestContext ?? {}));

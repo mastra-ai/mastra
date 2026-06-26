@@ -383,13 +383,6 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   // Mastra's addWorkflow handles deduplication, so creating multiple times is fine
   const workflow = createInngestDurableAgenticWorkflow({ inngest });
 
-  // Route workflow event publishes through the agent's CachingPubSub. Without this,
-  // workflow steps publish to a bare InngestPubSub instance the workflow constructs
-  // internally, while observe() subscribes via the agent's CachingPubSub - the two
-  // never share cached history, so observe() can only deliver live events.
-  // The chained `.commit()` builder loses the InngestWorkflow subtype, so cast back.
-  (workflow as unknown as InngestWorkflow).__setPubsubFactory(() => getPubsub());
-
   // Track whether user provided a custom cache (if not, we'll inherit from mastra)
   let _customCache = cache;
 
@@ -398,18 +391,25 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   let innerPubsub: PubSub = customPubsub ?? new InngestPubSub(inngest, InngestDurableStepIds.AGENTIC_LOOP);
   let _cachingPubsub: PubSub | null = null;
 
-  // Lazily create CachingPubSub - this allows inheriting cache from mastra if not provided.
+  // Resolve the cache that backs CachingPubSub history.
+  //
+  // Resolution order: user-provided > mastra's serverCache > InMemoryServerCache fallback.
+  // The fallback gives single-process observe replay parity with the in-memory durable agent.
+  // Cross-process observe still requires a shared cache backend (Redis, etc.) supplied via
+  // `cache` or `mastra.serverCache`.
+  function resolveCache(): MastraServerCache {
+    const resolved = _customCache ?? mastra?.serverCache ?? new InMemoryServerCache();
+    _customCache = resolved;
+    return resolved;
+  }
+
+  // Lazily create CachingPubSub for the agent.
   //
   // We always wrap the inner pubsub with CachingPubSub (mirroring the in-memory DurableAgent
   // at packages/core/src/agent/durable/durable-agent.ts#ensurePubsubInitialized). Without it,
   // `observe()` would only see live events: the bare InngestPubSub.subscribe streams from the
   // current point in the realtime channel, with no history replay, so reconnects and late
   // observers miss everything emitted before they attached.
-  //
-  // Cache resolution: user-provided > mastra's serverCache > InMemoryServerCache fallback.
-  // The fallback gives single-process observe replay parity with the in-memory durable agent.
-  // Cross-process observe still requires a shared cache backend (Redis, etc.) supplied via
-  // `cache` or `mastra.serverCache`.
   //
   // If the inner pubsub is already a CachingPubSub (e.g. a user passed `new Mastra({ pubsub })`
   // with their own caching layer), we reuse it instead of double-wrapping (issue #18148).
@@ -419,13 +419,27 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         _cachingPubsub = innerPubsub;
         _customCache = _customCache ?? mastra?.serverCache;
       } else {
-        const resolvedCache = _customCache ?? mastra?.serverCache ?? new InMemoryServerCache();
-        _customCache = resolvedCache; // Store for the cache getter
-        _cachingPubsub = new CachingPubSub(innerPubsub, resolvedCache);
+        _cachingPubsub = new CachingPubSub(innerPubsub, resolveCache());
       }
     }
     return _cachingPubsub;
   }
+
+  // Route workflow event publishes through a CachingPubSub backed by the same cache
+  // as the agent's pubsub. Each InngestWorkflow function (including nested ones)
+  // passes its own workflow-local InngestPubSub as `defaultPubsub`, which we wrap.
+  // This keeps per-workflow event channels (`workflow:<workflowId>:<runId>`)
+  // workflow-local while sharing the cache that `observe()` reads from for
+  // agent-stream replay.
+  // The chained `.commit()` builder loses the InngestWorkflow subtype, so cast back.
+  (workflow as unknown as InngestWorkflow).__setPubsubFactory(defaultPubsub => {
+    // If the caller already supplied a CachingPubSub upstream, defer to it.
+    if (defaultPubsub instanceof CachingPubSub) return defaultPubsub;
+    // Ensure the agent's CachingPubSub (and its cache) is resolved so workflow
+    // events and agent.stream events share the same history backend.
+    getPubsub();
+    return new CachingPubSub(defaultPubsub, resolveCache());
+  });
 
   // Lazily resolve cache
   function getCache(): MastraServerCache | undefined {
