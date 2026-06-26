@@ -7,10 +7,10 @@ const STANDALONE_URI = process.env.MONGODB_URL || 'mongodb://localhost:27017';
 const REPLICA_SET_URI =
   process.env.MONGODB_RS_URL ||
   'mongodb://mongodb:mongodb@localhost:27018/?authSource=admin&directConnection=true&serverSelectionTimeoutMS=2000';
-const DB = 'mastra-hardening-tx';
+const DB = 'mastra-transactions-test';
 
-describe('Hardening: NODE-7556 — transactions (Tranche B)', () => {
-  test('B1: supportsTransactions() is false on a standalone server', async () => {
+describe('MongoDB storage — topology-aware transactions', () => {
+  test('supportsTransactions() returns false on a standalone server', async () => {
     const connector = MongoDBConnector.fromDatabaseConfig({ id: 'tx-standalone', url: STANDALONE_URI, dbName: DB });
     try {
       expect(await connector.supportsTransactions()).toBe(false);
@@ -19,7 +19,7 @@ describe('Hardening: NODE-7556 — transactions (Tranche B)', () => {
     }
   });
 
-  test('B1: supportsTransactions() is true on a replica set', async () => {
+  test('supportsTransactions() returns true on a replica set', async () => {
     const connector = MongoDBConnector.fromDatabaseConfig({ id: 'tx-rs', url: REPLICA_SET_URI, dbName: DB });
     try {
       expect(await connector.supportsTransactions()).toBe(true);
@@ -28,7 +28,7 @@ describe('Hardening: NODE-7556 — transactions (Tranche B)', () => {
     }
   });
 
-  test('B1: withTransaction rolls back all writes when the callback throws (replica set)', async () => {
+  test('withTransaction rolls back all writes when the callback throws (replica set)', async () => {
     const connector = MongoDBConnector.fromDatabaseConfig({ id: 'tx-rollback', url: REPLICA_SET_URI, dbName: DB });
     try {
       const col = await connector.getCollection('tx_probe');
@@ -45,7 +45,7 @@ describe('Hardening: NODE-7556 — transactions (Tranche B)', () => {
     }
   });
 
-  test('B1: withTransaction degrades on standalone — write persists, error still propagates', async () => {
+  test('withTransaction degrades gracefully on standalone: writes persist and errors still propagate', async () => {
     const connector = MongoDBConnector.fromDatabaseConfig({ id: 'tx-degrade', url: STANDALONE_URI, dbName: DB });
     try {
       const col = await connector.getCollection('tx_probe');
@@ -62,8 +62,8 @@ describe('Hardening: NODE-7556 — transactions (Tranche B)', () => {
     }
   });
 
-  test('B2: deleteThread rolls back the message deletion if the thread deletion fails (replica set)', async () => {
-    const store = new MongoDBStore({ id: 'b2', uri: REPLICA_SET_URI, dbName: DB });
+  test('deleteThread rolls back message deletion when the thread delete fails (replica set)', async () => {
+    const store = new MongoDBStore({ id: 'tx-delete-thread', uri: REPLICA_SET_URI, dbName: DB });
     await store.init();
     const memory = await store.getStore('memory');
 
@@ -105,8 +105,8 @@ describe('Hardening: NODE-7556 — transactions (Tranche B)', () => {
     }
   });
 
-  test('B3: saveMessages rolls back the message write if the thread updatedAt update fails (replica set)', async () => {
-    const store = new MongoDBStore({ id: 'b3', uri: REPLICA_SET_URI, dbName: DB });
+  test('saveMessages rolls back the message write when the thread timestamp update fails (replica set)', async () => {
+    const store = new MongoDBStore({ id: 'tx-save-messages', uri: REPLICA_SET_URI, dbName: DB });
     await store.init();
     const memory = await store.getStore('memory');
 

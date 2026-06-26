@@ -5,7 +5,7 @@ import { MemoryStorageMongoDB } from './domains/memory';
 import { MongoDBStore } from './index';
 
 const URI = process.env.MONGODB_URL || 'mongodb://localhost:27017';
-const DB = 'mastra-hardening-test'; // dedicated, fresh db so "absence of dropped index" assertions are valid
+const DB = 'mastra-memory-data-modeling-test'; // dedicated, fresh db so "absence of dropped index" assertions are valid
 
 const dropTestDb = async () => {
   const client = new MongoClient(URI);
@@ -17,12 +17,12 @@ const dropTestDb = async () => {
   }
 };
 
-describe('Hardening: NODE-7556 — data modeling (Tranche A)', () => {
+describe('MemoryStorageMongoDB — index definitions and metadata storage', () => {
   beforeAll(dropTestDb);
   afterAll(dropTestDb);
 
-  test('A1: memory collections have exactly the audited index set after init', async () => {
-    const store = new MongoDBStore({ id: 'hardening-a1', uri: URI, dbName: DB });
+  test('memory collections have the expected index set after init', async () => {
+    const store = new MongoDBStore({ id: 'memory-data-modeling-a1', uri: URI, dbName: DB });
     await store.init();
 
     const client = new MongoClient(URI);
@@ -60,7 +60,9 @@ describe('Hardening: NODE-7556 — data modeling (Tranche A)', () => {
 
       // The id indexes must remain unique.
       for (const coll of ['mastra_threads', 'mastra_messages', 'mastra_resources', 'mastra_observational_memory']) {
-        const idx = (await db.collection(coll).indexes()).find(i => JSON.stringify(i.key) === JSON.stringify({ id: 1 }));
+        const idx = (await db.collection(coll).indexes()).find(
+          i => JSON.stringify(i.key) === JSON.stringify({ id: 1 }),
+        );
         expect(idx?.unique).toBe(true);
       }
     } finally {
@@ -69,8 +71,8 @@ describe('Hardening: NODE-7556 — data modeling (Tranche A)', () => {
     }
   });
 
-  test('A3: resource metadata is stored as a native object and reads back as an object (and legacy strings still parse)', async () => {
-    const store = new MongoDBStore({ id: 'hardening-a3', uri: URI, dbName: DB });
+  test('resource metadata is stored as a native sub-document; legacy string rows still parse on read', async () => {
+    const store = new MongoDBStore({ id: 'memory-data-modeling-a3', uri: URI, dbName: DB });
     await store.init();
     const memory = await store.getStore('memory');
 
@@ -122,7 +124,7 @@ describe('Hardening: NODE-7556 — data modeling (Tranche A)', () => {
     }
   });
 
-  test('A4: createDefaultIndexes throws a MastraError when an index cannot be created', async () => {
+  test('createDefaultIndexes throws a MastraError when index creation fails', async () => {
     const throwingMemory = new MemoryStorageMongoDB({
       connectorHandler: {
         getCollection: async () =>
@@ -140,7 +142,7 @@ describe('Hardening: NODE-7556 — data modeling (Tranche A)', () => {
     expect(String(err.id)).toContain('CREATE_DEFAULT_INDEXES');
   });
 
-  test('A4: createDefaultIndexes resolves when index creation succeeds', async () => {
+  test('createDefaultIndexes resolves when index creation succeeds', async () => {
     const okMemory = new MemoryStorageMongoDB({
       connectorHandler: {
         getCollection: async () => ({ createIndex: async () => 'ok' }) as any,
