@@ -22,7 +22,7 @@ import type { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
 import { createMockWorkspace } from './test-utils';
-import type { HarnessEvent } from './types';
+import type { AgentControllerEvent } from './types';
 
 /** Push-only wrapper around EventEmitterPubSub — mimics mc's SignalsPubSub. */
 class PushOnlyPubSub extends EventEmitterPubSub {
@@ -92,8 +92,8 @@ describe('mc send-message reproduction', () => {
     await harness.getMastra()?.startWorkers();
     await session.thread.create();
 
-    const events: HarnessEvent[] = [];
-    session.subscribe((event: HarnessEvent) => {
+    const events: AgentControllerEvent[] = [];
+    session.subscribe((event: AgentControllerEvent) => {
       events.push(event);
     });
 
@@ -102,7 +102,7 @@ describe('mc send-message reproduction', () => {
     await session.sendMessage({ content: 'Hello!' });
 
     const assistantEnd = events.find(
-      (e): e is Extract<HarnessEvent, { type: 'message_end' }> =>
+      (e): e is Extract<AgentControllerEvent, { type: 'message_end' }> =>
         e.type === 'message_end' && e.message.role === 'assistant',
     );
     expect(assistantEnd).toBeDefined();
@@ -137,8 +137,8 @@ describe('mc send-message reproduction', () => {
     await harness.getMastra()?.startWorkers();
     await session.thread.create();
 
-    const events: HarnessEvent[] = [];
-    session.subscribe((event: HarnessEvent) => {
+    const events: AgentControllerEvent[] = [];
+    session.subscribe((event: AgentControllerEvent) => {
       events.push(event);
     });
 
@@ -146,7 +146,7 @@ describe('mc send-message reproduction', () => {
 
     // With the fix, the error should propagate through the subscription stream
     // and the harness should emit an error event instead of silently completing
-    const errorEvent = events.find((e): e is Extract<HarnessEvent, { type: 'error' }> => e.type === 'error');
+    const errorEvent = events.find((e): e is Extract<AgentControllerEvent, { type: 'error' }> => e.type === 'error');
     expect(errorEvent).toBeDefined();
     expect(errorEvent!.error.message).toContain('No model selected');
   }, 30000);
@@ -192,8 +192,8 @@ describe('mc send-message reproduction', () => {
     await harness.getMastra()?.startWorkers();
     await session.thread.create();
 
-    const events: HarnessEvent[] = [];
-    session.subscribe((event: HarnessEvent) => {
+    const events: AgentControllerEvent[] = [];
+    session.subscribe((event: AgentControllerEvent) => {
       events.push(event);
     });
 
@@ -202,7 +202,7 @@ describe('mc send-message reproduction', () => {
     await session.sendMessage({ content: 'Hello!' });
 
     const assistantEnd = events.find(
-      (e): e is Extract<HarnessEvent, { type: 'message_end' }> =>
+      (e): e is Extract<AgentControllerEvent, { type: 'message_end' }> =>
         e.type === 'message_end' && e.message.role === 'assistant',
     );
     expect(assistantEnd).toBeDefined();

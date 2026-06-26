@@ -45,18 +45,18 @@ import {
 import type {
   AvailableModel,
   HeartbeatHandler,
-  HarnessConfig,
-  HarnessMessage,
-  HarnessMessageContent,
-  HarnessMode,
-  HarnessRequestContext,
-  HarnessRequestStateUpdater,
-  HarnessThread,
+  AgentControllerConfig,
+  AgentControllerMessage,
+  AgentControllerMessageContent,
+  AgentControllerMode,
+  AgentControllerRequestContext,
+  AgentControllerRequestStateUpdater,
+  AgentControllerThread,
   ModelAuthStatus,
   ToolCategory,
 } from './types';
 
-function validateModes(modes: HarnessMode[]): void {
+function validateModes(modes: AgentControllerMode[]): void {
   const modeIds = new Set<string>();
 
   for (const mode of modes) {
@@ -153,7 +153,7 @@ export function buildFableFallbackProviderOptions(
  *
  * @example
  * ```ts
- * const harness = new Harness({
+ * const controller = new AgentController({
  *   id: "my-coding-agent",
  *   storage: new LibSQLStore({ url: "file:./data.db" }),
  *   stateSchema: z.object({
@@ -165,18 +165,18 @@ export function buildFableFallbackProviderOptions(
  *   ],
  * })
  *
- * harness.subscribe((event) => {
+ * controller.subscribe((event) => {
  *   if (event.type === "message_update") renderMessage(event.message)
  * })
  *
- * await harness.init()
- * await harness.sendMessage({ content: "Hello!" })
+ * await controller.init()
+ * await controller.sendMessage({ content: "Hello!" })
  * ```
  */
-export class Harness<TState = {}> {
+export class AgentController<TState = {}> {
   readonly id: string;
 
-  private config: HarnessConfig<TState>;
+  private config: AgentControllerConfig<TState>;
   private workspaceInitialized = false;
   private initPromise: Promise<void> | undefined = undefined;
   private browser: DynamicArgument<MastraBrowser | undefined> = undefined;
@@ -187,7 +187,7 @@ export class Harness<TState = {}> {
    * `config.defaultModeId` (or the configured default/first mode) and reused by
    * every {@link createSession} call. The Harness itself holds no session.
    */
-  readonly #defaultMode: HarnessMode;
+  readonly #defaultMode: AgentControllerMode;
   /**
    * Live sessions created by {@link createSession}, keyed by resourceId. A
    * resourceId maps to exactly one session per Harness (get-or-create). Stores
@@ -211,7 +211,7 @@ export class Harness<TState = {}> {
   #gatewayManager: GatewayManager | undefined = undefined;
   #legacyAgentMode: Record<string, Agent<any, any, any, any>> = {};
 
-  constructor(config: HarnessConfig<TState>) {
+  constructor(config: AgentControllerConfig<TState>) {
     validateModes(config.modes);
 
     this.id = config.id;
@@ -413,7 +413,7 @@ export class Harness<TState = {}> {
       setState: (updates: Partial<TState>) => {
         initialState = { ...initialState, ...updates };
       },
-      updateState: (updater: HarnessRequestStateUpdater<TState, unknown>) => {
+      updateState: (updater: AgentControllerRequestStateUpdater<TState, unknown>) => {
         return Promise.resolve(updater(initialState as Readonly<TState>)).then(result => {
           if (result.updates) {
             initialState = { ...initialState, ...result.updates };
@@ -435,7 +435,7 @@ export class Harness<TState = {}> {
             initialState = { ...initialState, ...updates };
             return Promise.resolve();
           },
-          update: <TResult>(updater: HarnessRequestStateUpdater<TState, TResult>) => {
+          update: <TResult>(updater: AgentControllerRequestStateUpdater<TState, TResult>) => {
             return Promise.resolve(updater(initialState as Readonly<TState>)).then(result => {
               if (result.updates) {
                 initialState = { ...initialState, ...result.updates };
@@ -788,7 +788,7 @@ export class Harness<TState = {}> {
   }
 
   /** Persist a thread row to memory storage (gateway primitive for the Session thread domain). */
-  private async persistThreadRow(thread: HarnessThread): Promise<void> {
+  private async persistThreadRow(thread: AgentControllerThread): Promise<void> {
     if (!this.#resolveStorage()) return;
     const memoryStorage = await this.getMemoryStorage();
     await memoryStorage.saveThread({
@@ -821,7 +821,7 @@ export class Harness<TState = {}> {
     resourceId: string;
     title?: string;
     metadata?: Record<string, unknown>;
-  }): Promise<HarnessThread> {
+  }): Promise<AgentControllerThread> {
     const storage = this.#resolveStorage();
     const memory = storage ? await storage.getStore('memory') : await this.resolveConfiguredMemory();
     if (!memory) {
@@ -898,7 +898,7 @@ export class Harness<TState = {}> {
     }
   }
 
-  private async queryThreadById({ threadId }: { threadId: string }): Promise<HarnessThread | null> {
+  private async queryThreadById({ threadId }: { threadId: string }): Promise<AgentControllerThread | null> {
     if (!this.#resolveStorage()) return null;
     const memoryStorage = await this.getMemoryStorage();
     const thread = await memoryStorage.getThreadById({ threadId });
@@ -921,7 +921,7 @@ export class Harness<TState = {}> {
     resourceId?: string;
     includeForkedSubagents?: boolean;
     metadata?: Record<string, unknown>;
-  }): Promise<HarnessThread[]> {
+  }): Promise<AgentControllerThread[]> {
     if (!this.#resolveStorage()) {
       return [];
     }
@@ -960,7 +960,7 @@ export class Harness<TState = {}> {
   }: {
     threadId: string;
     limit?: number;
-  }): Promise<HarnessMessage[]> {
+  }): Promise<AgentControllerMessage[]> {
     if (!this.#resolveStorage()) return [];
 
     const memoryStorage = await this.getMemoryStorage();
@@ -979,7 +979,11 @@ export class Harness<TState = {}> {
     return result.messages.map(msg => this.convertToHarnessMessage(msg));
   }
 
-  private async queryFirstUserMessages({ threadIds }: { threadIds: string[] }): Promise<Map<string, HarnessMessage>> {
+  private async queryFirstUserMessages({
+    threadIds,
+  }: {
+    threadIds: string[];
+  }): Promise<Map<string, AgentControllerMessage>> {
     if (!this.#resolveStorage() || threadIds.length === 0) return new Map();
 
     const memoryStorage = await this.getMemoryStorage();
@@ -989,7 +993,7 @@ export class Harness<TState = {}> {
       orderBy: { field: 'createdAt', direction: 'ASC' },
     });
 
-    const firstUserMessages = new Map<string, HarnessMessage>();
+    const firstUserMessages = new Map<string, AgentControllerMessage>();
     for (const message of result.messages) {
       if (message.role !== 'user' || !message.threadId || firstUserMessages.has(message.threadId)) continue;
       firstUserMessages.set(message.threadId, this.convertToHarnessMessage(message));
@@ -1006,7 +1010,7 @@ export class Harness<TState = {}> {
   // Mode Management
   // ===========================================================================
 
-  listModes(): HarnessMode[] {
+  listModes(): AgentControllerMode[] {
     return this.config.modes;
   }
 
@@ -1045,7 +1049,7 @@ export class Harness<TState = {}> {
     return agent;
   }
 
-  private getAgentForMode(mode: HarnessMode): Agent<any, any, any, any> {
+  private getAgentForMode(mode: AgentControllerMode): Agent<any, any, any, any> {
     // Deprecated per-mode agent — use directly, no forking.
     if (mode.agent) {
       if (!this.#legacyAgentMode[mode.id]) {
@@ -1522,7 +1526,7 @@ export class Harness<TState = {}> {
   /**
    * Persist a system-reminder message for a thread (host-owned storage). Throws
    * when no storage is configured — the Session guards the no-thread case before
-   * calling. Returns the saved message converted to {@link HarnessMessage}.
+   * calling. Returns the saved message converted to {@link AgentControllerMessage}.
    */
   private async saveSystemReminder({
     threadId,
@@ -1538,7 +1542,7 @@ export class Harness<TState = {}> {
     reminderType: string;
     role: 'user' | 'assistant' | 'system';
     metadata?: Record<string, unknown>;
-  }): Promise<HarnessMessage | null> {
+  }): Promise<AgentControllerMessage | null> {
     if (!this.#resolveStorage()) return null;
     const memoryStorage = await this.getMemoryStorage();
     const dbMessage = {
@@ -1609,8 +1613,8 @@ export class Harness<TState = {}> {
       }>;
       metadata?: Record<string, unknown>;
     };
-  }): HarnessMessage {
-    const content: HarnessMessageContent[] = [];
+  }): AgentControllerMessage {
+    const content: AgentControllerMessageContent[] = [];
     const systemReminder = getRecordValue(msg.content.metadata?.systemReminder);
 
     if (systemReminder && typeof systemReminder.type === 'string') {
@@ -2065,7 +2069,7 @@ export class Harness<TState = {}> {
     requestContext?: RequestContext,
   ): Promise<RequestContext> {
     requestContext ??= new RequestContext();
-    const harnessContext: HarnessRequestContext<TState> = {
+    const harnessContext: AgentControllerRequestContext<TState> = {
       harnessId: this.id,
       state: session.state.get(),
       getState: () => session.state.get(),
@@ -2236,3 +2240,14 @@ export class Harness<TState = {}> {
     return randomUUID();
   }
 }
+
+/**
+ * @deprecated Use {@link AgentController} instead. `Harness` is retained as a
+ * backwards-compatible alias and will be removed in a future major release.
+ */
+export const Harness = AgentController;
+/**
+ * @deprecated Use {@link AgentController} instead. `Harness` is retained as a
+ * backwards-compatible alias and will be removed in a future major release.
+ */
+export type Harness<TState = {}> = AgentController<TState>;

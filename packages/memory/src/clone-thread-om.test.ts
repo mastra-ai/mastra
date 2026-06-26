@@ -1,6 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { Harness } from '@mastra/core/harness';
+import { AgentController } from '@mastra/core/harness';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MemoryStorage, ObservationalMemoryRecord, BufferedObservationChunk } from '@mastra/core/storage';
 import { Workspace } from '@mastra/core/workspace';
@@ -489,7 +489,7 @@ describe('cloneThread – Observational Memory', () => {
       });
 
       const memoryFactory = vi.fn().mockResolvedValue(memory);
-      const harness = new Harness({
+      const harness = new AgentController({
         id: 'clone-thread-dynamic-memory-test',
         resourceId,
         memory: memoryFactory,

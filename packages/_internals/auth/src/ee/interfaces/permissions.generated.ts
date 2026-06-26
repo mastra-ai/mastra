@@ -14,6 +14,7 @@
 export const RESOURCES = [
   'a2a',
   'agent-builder',
+  'agent-controller',
   'agents',
   'auth',
   'background-tasks',
@@ -92,6 +93,8 @@ export const PERMISSION_PATTERNS = {
   'a2a:*': 'a2a:*',
   /** Full access to agent builder */
   'agent-builder:*': 'agent-builder:*',
+  /** Full access to agent controller sessions */
+  'agent-controller:*': 'agent-controller:*',
   /** Full access to agents */
   'agents:*': 'agents:*',
   /** Full access to auth */
@@ -162,6 +165,10 @@ export const PERMISSION_PATTERNS = {
   'agent-builder:read': 'agent-builder:read',
   /** Create and modify agent builder */
   'agent-builder:write': 'agent-builder:write',
+  /** Execute agent controller sessions */
+  'agent-controller:execute': 'agent-controller:execute',
+  /** View agent controller sessions */
+  'agent-controller:read': 'agent-controller:read',
   /** Create agents */
   'agents:create': 'agents:create',
   /** Delete agents */
@@ -349,6 +356,8 @@ export const PERMISSIONS = [
   'agent-builder:execute',
   'agent-builder:read',
   'agent-builder:write',
+  'agent-controller:execute',
+  'agent-controller:read',
   'agents:create',
   'agents:delete',
   'agents:execute',
@@ -450,6 +459,10 @@ export const MastraFGAPermissions = {
   AGENT_BUILDER_READ: 'agent-builder:read',
   /** Create and modify agent builder */
   AGENT_BUILDER_WRITE: 'agent-builder:write',
+  /** Execute agent controller sessions */
+  AGENT_CONTROLLER_EXECUTE: 'agent-controller:execute',
+  /** View agent controller sessions */
+  AGENT_CONTROLLER_READ: 'agent-controller:read',
   /** Create agents */
   AGENTS_CREATE: 'agents:create',
   /** Delete agents */

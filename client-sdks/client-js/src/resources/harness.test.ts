@@ -47,6 +47,24 @@ describe('Harness Resource', () => {
     expect(url).toBe('http://localhost:4111/api/harness');
   });
 
+  it('lists agent controllers via the canonical route', async () => {
+    mockJson({ harnesses: [{ id: 'code' }, { id: 'docs' }] });
+    const controllers = await client.listAgentControllers();
+    expect(controllers).toEqual([{ id: 'code' }, { id: 'docs' }]);
+    const [url] = lastCall();
+    expect(url).toBe('http://localhost:4111/api/agent-controller');
+  });
+
+  it('creates a session via the canonical agent-controller route', async () => {
+    mockJson({ harnessId: 'code', resourceId: 'user-1', threadId: 't-123' });
+    const res = await client.getAgentController('code').session('user-1').create();
+    expect(res).toEqual({ harnessId: 'code', resourceId: 'user-1', threadId: 't-123' });
+    const [url, init] = lastCall();
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ resourceId: 'user-1' });
+  });
+
   it('creates (or resumes) a session', async () => {
     mockJson({ harnessId: 'code', resourceId: 'user-1', threadId: 't-123' });
     const res = await client.getHarness('code').session('user-1').create();

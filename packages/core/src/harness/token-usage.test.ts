@@ -3,7 +3,7 @@ import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
 import { createMockWorkspace } from './test-utils';
-import type { HarnessEvent } from './types';
+import type { AgentControllerEvent } from './types';
 
 function createHarness(storage = new InMemoryStore()) {
   const agent = new Agent({
@@ -89,7 +89,7 @@ describe('step-finish token usage extraction', () => {
       cacheCreationInputTokens: 5,
       raw: { provider: 'test-provider' },
     };
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => events.push(event));
 
     await (session as any).processStream({ fullStream: mockStream(usage) });

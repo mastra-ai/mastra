@@ -3,11 +3,11 @@ import type { AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import { getServerSideFallbackInfo } from '../llm/model/server-side-fallback';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../tools/payload-transform';
 import type { ToolPayloadTransformPhase } from '../tools/types';
-import type { HarnessMessage, HarnessMessageContent, TokenUsage } from './types';
+import type { AgentControllerMessage, AgentControllerMessageContent, TokenUsage } from './types';
 
 /**
  * Pure transforms that map raw agent-stream chunk payloads into the
- * `HarnessMessage` / `HarnessMessageContent` shapes a Session renders. They hold
+ * `AgentControllerMessage` / `AgentControllerMessageContent` shapes a Session renders. They hold
  * no Harness or Session state, so they live in their own module and are shared
  * by the run engine (which folds chunks into messages) and the Harness signal
  * paths (which surface signals as messages).
@@ -26,9 +26,9 @@ export function getRecordValue(value: unknown): Record<string, unknown> | undefi
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
-export function signalContentsToHarnessContent(contents: AgentSignalContents): HarnessMessageContent[] {
+export function signalContentsToHarnessContent(contents: AgentSignalContents): AgentControllerMessageContent[] {
   if (typeof contents === 'string') return [{ type: 'text', text: contents }];
-  return contents.flatMap((part): HarnessMessageContent[] => {
+  return contents.flatMap((part): AgentControllerMessageContent[] => {
     if (part.type === 'text') {
       return [{ type: 'text', text: part.text }];
     }
@@ -49,7 +49,7 @@ export function signalContentsToHarnessContent(contents: AgentSignalContents): H
 
 export function toSystemReminderContent(
   payload: Record<string, unknown>,
-): Extract<HarnessMessageContent, { type: 'system_reminder' }> | undefined {
+): Extract<AgentControllerMessageContent, { type: 'system_reminder' }> | undefined {
   const attributes = getRecordValue(payload.attributes);
   const metadata = getRecordValue(payload.metadata);
   const message = signalContentsToText(payload.contents);
@@ -78,12 +78,12 @@ export function toSystemReminderContent(
           : undefined,
     judgeModelId: getStringValue(payload.judgeModelId) ?? getStringValue(metadata?.judgeModelId),
     goalEvaluation: getRecordValue(metadata?.goalEvaluation) as
-      | Extract<HarnessMessageContent, { type: 'system_reminder' }>['goalEvaluation']
+      | Extract<AgentControllerMessageContent, { type: 'system_reminder' }>['goalEvaluation']
       | undefined,
   };
 }
 
-export function toUserSignalMessage(payload: Record<string, unknown>): HarnessMessage | undefined {
+export function toUserSignalMessage(payload: Record<string, unknown>): AgentControllerMessage | undefined {
   const id = getStringValue(payload.id);
   const rawContents = payload.contents;
   if (!id || rawContents === undefined) return undefined;
@@ -119,7 +119,7 @@ export function signalContentsToText(contents: unknown): string {
 
 export function toStateSignalContent(
   payload: Record<string, unknown>,
-): Extract<HarnessMessageContent, { type: 'state_signal' }> | undefined {
+): Extract<AgentControllerMessageContent, { type: 'state_signal' }> | undefined {
   const stateMetadata = getRecordValue(getRecordValue(payload.metadata)?.state);
   const stateId = getStringValue(stateMetadata?.id) ?? getStringValue(payload.tagName) ?? 'state';
 
@@ -136,7 +136,7 @@ export function toStateSignalContent(
 
 export function toNotificationSummaryContent(
   payload: Record<string, unknown>,
-): Extract<HarnessMessageContent, { type: 'notification_summary' }> | undefined {
+): Extract<AgentControllerMessageContent, { type: 'notification_summary' }> | undefined {
   const metadataSummary = getRecordValue(getRecordValue(payload.metadata)?.notificationSummary);
   const bySource = getRecordValue(metadataSummary?.bySource) ?? {};
   const byPriority = getRecordValue(metadataSummary?.byPriority) ?? {};
@@ -162,7 +162,7 @@ export function toNotificationSummaryContent(
 
 export function toReactiveSignalContent(
   payload: Record<string, unknown>,
-): Extract<HarnessMessageContent, { type: 'reactive_signal' }> | undefined {
+): Extract<AgentControllerMessageContent, { type: 'reactive_signal' }> | undefined {
   const tagName = getStringValue(payload.tagName);
   if (!tagName) return undefined;
 
@@ -178,7 +178,7 @@ export function toReactiveSignalContent(
 
 export function toNotificationContent(
   payload: Record<string, unknown>,
-): Extract<HarnessMessageContent, { type: 'notification' }> | undefined {
+): Extract<AgentControllerMessageContent, { type: 'notification' }> | undefined {
   const attributes = getRecordValue(payload.attributes) ?? {};
   const metadata = getRecordValue(payload.metadata) ?? {};
   const notificationMetadata = getRecordValue(metadata.notification);

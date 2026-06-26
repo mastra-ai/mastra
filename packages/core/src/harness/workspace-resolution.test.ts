@@ -132,7 +132,7 @@ describe('Harness workspace — dynamic factory', () => {
   it('resolveWorkspace provides session state to the factory', async () => {
     const ws = createMockWorkspace('dynamic-ws');
     // Simulates a dynamic workspace factory that reads session state via
-    // getState() — the recommended accessor on HarnessRequestContext.
+    // getState() — the recommended accessor on AgentControllerRequestContext.
     // Before the fix, resolveWorkspace built a minimal context missing
     // state accessors, causing "Cannot read properties of undefined".
     const factory = vi.fn(async ({ requestContext }) => {
