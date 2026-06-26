@@ -166,6 +166,15 @@ function textPart(text: string): MastraMessagePart {
   return { type: 'text', text };
 }
 
+function filePart(providerMetadata: Record<string, unknown>): MastraMessagePart {
+  return {
+    type: 'file',
+    mimeType: 'text/plain',
+    data: 'data:text/plain;base64,SGVsbG8=',
+    providerMetadata,
+  } as MastraMessagePart;
+}
+
 async function createStartedTurn(messageList: MessageList, om = createMockOM()) {
   const turn = new ObservationTurn({
     om: om as any,
@@ -256,6 +265,33 @@ describe('ObservationTurn assistant persistence', () => {
         part.type === 'tool-invocation' ? part.toolInvocation.toolCallId : part.type === 'text' ? part.text : undefined,
       ),
     ).toEqual(['I will check the current weather.', 'weather', 'Here is the summary.']);
+  });
+
+  it('does not duplicate non-tool parts when metadata keys are ordered differently', async () => {
+    const messageList = createMessageList();
+    const { turn, om } = await createStartedTurn(messageList);
+
+    messageList.add(
+      createAssistantMessage(
+        [filePart({ provider: { alpha: 1, beta: 2 } })],
+        new Date('2026-01-01T00:00:00.000Z'),
+        { sealed: true },
+      ),
+      'response',
+    );
+    await turn.step(1).prepare();
+
+    messageList.add(
+      createAssistantMessage(
+        [filePart({ provider: { beta: 2, alpha: 1 } }), textPart('Here is the summary.')],
+        new Date('2026-01-01T00:00:01.000Z'),
+      ),
+      'response',
+    );
+    await turn.end();
+
+    const persisted = om.persistedMessages.get(assistantId);
+    expect(persisted?.content.parts.map(part => part.type)).toEqual(['file', 'text']);
   });
 
   it('re-persists tracked memory-source assistant snapshots that gained parts before turn end', async () => {
