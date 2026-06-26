@@ -681,6 +681,16 @@
         "default": "./dist/zod-to-json.cjs"
       }
     },
+    "./utils/collect-tool-mocks": {
+      "import": {
+        "types": "./dist/utils/collect-tool-mocks.d.ts",
+        "default": "./dist/utils/collect-tool-mocks.js"
+      },
+      "require": {
+        "types": "./dist/utils/collect-tool-mocks.d.ts",
+        "default": "./dist/utils/collect-tool-mocks.cjs"
+      }
+    },
     "./loop/server": {
       "import": {
         "types": "./dist/loop/server.d.ts",
