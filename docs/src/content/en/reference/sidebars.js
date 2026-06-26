@@ -25,6 +25,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'agents/agent', label: 'Agent Class' },
         { type: 'doc', id: 'agents/channels', label: 'Channels' },
+        { type: 'doc', id: 'agents/slack-provider', label: 'SlackProvider' },
         { type: 'doc', id: 'agents/inngest-agent', label: 'createInngestAgent()' },
         { type: 'doc', id: 'agents/createSkill', label: 'createSkill()' },
         { type: 'doc', id: 'agents/durable-agent', label: 'DurableAgent' },
