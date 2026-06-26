@@ -242,6 +242,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   };
 
   #consumptionStarted = false;
+  #consumeStreamPromise: Promise<void> | undefined;
+  #consumeStreamErrored = false;
+  #consumeStreamError: unknown;
   #returnScorerData = false;
   #structuredOutputMode: 'direct' | 'processor' | undefined = undefined;
 
@@ -1376,20 +1379,26 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }
 
   async consumeStream(options?: ConsumeStreamOptions): Promise<void> {
-    if (this.#consumptionStarted) {
-      return;
-    }
-
-    this.#consumptionStarted = true;
-
-    try {
-      await consumeStream({
+    // Drain #baseStream exactly once but let every caller await full consumption,
+    // so `await consumeStream()` holds regardless of who started it. Capture any
+    // drain error once (don't bind a caller's onError to the drain), then fire each
+    // caller's own onError after the shared promise settles.
+    if (!this.#consumeStreamPromise) {
+      this.#consumptionStarted = true;
+      this.#consumeStreamPromise = consumeStream({
         stream: this.#baseStream as globalThis.ReadableStream<any>,
-        onError: options?.onError,
+        onError: error => {
+          this.#consumeStreamErrored = true;
+          this.#consumeStreamError = error;
+        },
         logger: this.logger,
       });
-    } catch (error) {
-      options?.onError?.(error);
+    }
+
+    await this.#consumeStreamPromise;
+
+    if (this.#consumeStreamErrored) {
+      options?.onError?.(this.#consumeStreamError);
     }
   }
 
