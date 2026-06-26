@@ -55,7 +55,7 @@ import {
   summarizeNotifications,
 } from '../notifications/signals';
 import type { SendNotificationSignalInput } from '../notifications/types';
-import type { DefinitionSource, TracingProperties, ObservabilityContext } from '../observability';
+import type { DefinitionSource, TracingProperties, ObservabilityContext, TracingPolicy } from '../observability';
 import {
   EntityType,
   InternalSpans,
@@ -2229,6 +2229,17 @@ export class Agent<
    */
   public getDescription(): string {
     return this.#description ?? '';
+  }
+
+  /**
+   * Returns the tracing policy configured at agent construction time.
+   *
+   * Exposed so out-of-process consumers (e.g. the durable agent runner) can
+   * forward the same policy onto AGENT_RUN spans without reaching into private
+   * fields.
+   */
+  public getTracingPolicy(): TracingPolicy | undefined {
+    return this.#options?.tracingPolicy;
   }
 
   /**
@@ -5551,6 +5562,7 @@ export class Agent<
     memoryConfig?: MemoryConfig;
     autoResumeSuspendedTools?: boolean;
     hooks?: ToolHooks;
+    delegation?: DelegationConfig;
   }): Promise<Record<string, CoreTool>> {
     const requestContext = options.requestContext ?? new RequestContext();
     const defaultOptions = await this.getDefaultOptions({ requestContext });
@@ -5581,6 +5593,7 @@ export class Agent<
       requestContext,
       memoryConfig: options.memoryConfig ?? mergedMemory?.options,
       autoResumeSuspendedTools: mergedOptions.autoResumeSuspendedTools,
+      delegation: options.delegation ?? mergedOptions.delegation,
       methodType: 'stream',
     });
   }

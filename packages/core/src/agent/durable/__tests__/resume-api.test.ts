@@ -190,6 +190,50 @@ describe('Resume API', () => {
       expect(result.resourceId).toBe('resource-456');
       result.cleanup();
     });
+
+    it('accepts untilIdle: true and returns a DurableAgentStreamResult', async () => {
+      // No memory + no bgManager — the idle-loop wrapper short-circuits to
+      // firstTurn (agent.resume) directly, so this exercises the resume-side
+      // delegate without needing a real suspend/resume cycle.
+      const mockModel = createTextModel('Resumed!');
+
+      const baseAgent = new Agent({
+        id: 'resume-untilidle-agent',
+        name: 'Resume UntilIdle Agent',
+        instructions: 'Test resume untilIdle',
+        model: mockModel as LanguageModelV2,
+      });
+
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const { runId } = await durableAgent.prepare('Start');
+
+      const result = await durableAgent.resume(runId, { approved: true }, { untilIdle: true });
+
+      expect(result.runId).toBe(runId);
+      expect(typeof result.cleanup).toBe('function');
+      expect(typeof result.abort).toBe('function');
+      result.cleanup();
+    });
+
+    it('accepts untilIdle as { maxIdleMs } and returns a DurableAgentStreamResult', async () => {
+      const mockModel = createTextModel('Resumed!');
+
+      const baseAgent = new Agent({
+        id: 'resume-untilidle-ms-agent',
+        name: 'Resume UntilIdle MaxIdleMs Agent',
+        instructions: 'Test resume untilIdle maxIdleMs',
+        model: mockModel as LanguageModelV2,
+      });
+
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const { runId } = await durableAgent.prepare('Start');
+
+      const result = await durableAgent.resume(runId, { approved: true }, { untilIdle: { maxIdleMs: 30_000 } });
+
+      expect(result.runId).toBe(runId);
+      expect(typeof result.cleanup).toBe('function');
+      result.cleanup();
+    });
   });
 
   describe('createDurableAgent resume()', () => {
@@ -624,5 +668,79 @@ describe('Observe API', () => {
 
     expect(result.runId).toBe(runId);
     result.cleanup();
+  });
+});
+
+// ============================================================================
+// Per-call tool injection (toolsets / clientTools) — in-process resume
+// ============================================================================
+
+describe('per-call tool injection survives in-process resume', () => {
+  let pubsub: EventEmitterPubSub;
+
+  beforeEach(() => {
+    pubsub = new EventEmitterPubSub();
+  });
+
+  afterEach(async () => {
+    await pubsub.close();
+  });
+
+  it('preserves per-call clientTools on the run registry after prepare', async () => {
+    const mockModel = createTextModel('ok');
+
+    const baseAgent = new Agent({
+      id: 'clienttools-resume-agent',
+      name: 'ClientTools Resume Agent',
+      instructions: 'Test',
+      model: mockModel as LanguageModelV2,
+    });
+
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const perCallClientTool = createTool({
+      id: 'perCallClientTool',
+      description: 'Injected per-call only',
+      inputSchema: z.object({ q: z.string() }),
+      execute: async ({ context }) => `client:${context.q}`,
+    });
+
+    const { runId } = await durableAgent.prepare('Start', {
+      clientTools: { perCallClientTool },
+    });
+
+    const tools = durableAgent.runRegistry.getTools(runId);
+    expect(tools).toBeDefined();
+    expect(tools?.perCallClientTool).toBeDefined();
+  });
+
+  it('preserves per-call toolsets on the run registry after prepare', async () => {
+    const mockModel = createTextModel('ok');
+
+    const baseAgent = new Agent({
+      id: 'toolsets-resume-agent',
+      name: 'Toolsets Resume Agent',
+      instructions: 'Test',
+      model: mockModel as LanguageModelV2,
+    });
+
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const perCallToolsetTool = createTool({
+      id: 'perCallToolsetTool',
+      description: 'Injected via toolset only',
+      inputSchema: z.object({ q: z.string() }),
+      execute: async ({ context }) => `toolset:${context.q}`,
+    });
+
+    const { runId } = await durableAgent.prepare('Start', {
+      toolsets: {
+        perCallToolset: { perCallToolsetTool },
+      },
+    });
+
+    const tools = durableAgent.runRegistry.getTools(runId);
+    expect(tools).toBeDefined();
+    expect(tools?.perCallToolsetTool).toBeDefined();
   });
 });

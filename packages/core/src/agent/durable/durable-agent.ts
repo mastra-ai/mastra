@@ -5,7 +5,7 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
 import type { Mastra } from '../../mastra';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
-import type { MastraModelOutput } from '../../stream/base/output';
+import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
 import type { ChunkType } from '../../stream/types';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
@@ -13,7 +13,7 @@ import type { MessageListInput } from '../message-list';
 import type { ToolsInput } from '../types';
 
 import { AGENT_STREAM_TOPIC } from './constants';
-import { runDurableStreamUntilIdle } from './durable-stream-until-idle';
+import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './durable-stream-until-idle';
 import { prepareForDurableExecution } from './preparation';
 import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './run-registry';
 import { createDurableAgentStream, emitErrorEvent } from './stream-adapter';
@@ -24,6 +24,14 @@ import type {
   DurableAgenticWorkflowInput,
 } from './types';
 import { createDurableAgenticWorkflow } from './workflows';
+
+/**
+ * Internal flag used by `generate()`/`resumeGenerate()` to tell the stream
+ * adapter to close the underlying ReadableStream on SUSPENDED events so that
+ * `getFullOutput()` resolves instead of hanging on a suspended run.
+ * Not part of the public `DurableAgentStreamOptions` surface.
+ */
+const CLOSE_ON_SUSPEND = Symbol('mastra.durable.closeOnSuspend');
 
 /**
  * Options for DurableAgent.stream()
@@ -116,6 +124,15 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
    */
   isTaskComplete?: AgentExecutionOptions<OUTPUT>['isTaskComplete'];
   /**
+   * Sub-agent delegation hooks (`onDelegationStart`, `onDelegationComplete`,
+   * `messageFilter`, etc.). The callbacks are forwarded into `convertTools`
+   * at prepare time and burned into the sub-agent `CoreTool` wrappers on the
+   * in-process run registry. Cross-process resumes lose the callbacks (only
+   * `includeSubAgentToolResultsInModelContext` would be JSON-safe), so a
+   * fresh worker degrades to default delegation behaviour.
+   */
+  delegation?: AgentExecutionOptions<OUTPUT>['delegation'];
+  /**
    * When set, `stream()` delegates to the idle-loop wrapper that keeps the
    * outer stream open across background-task continuations — the same
    * behaviour as the now-deprecated `streamUntilIdle()`.
@@ -134,6 +151,17 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   untilIdle?: boolean | { maxIdleMs?: number };
   /** When true, the in-loop background task check step skips waiting (streamUntilIdle sets this) */
   _skipBgTaskWait?: boolean;
+  /**
+   * External abort signal. The durable agent always installs its own internal
+   * `AbortController` for the run; when this signal is provided, its `abort`
+   * event is forwarded to the internal controller so either source can cancel
+   * the run.
+   *
+   * Cross-process resumes (e.g. Inngest after a worker restart) cannot
+   * recover the signal — call `resume(runId, ..., { abortSignal })` with a
+   * fresh signal on each segment if you need abortability post-resume.
+   */
+  abortSignal?: AbortSignal;
 }
 
 /**
@@ -152,6 +180,15 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
   resourceId?: string;
   /** Cleanup function to call when done (unsubscribes from pubsub) */
   cleanup: () => void;
+  /**
+   * Abort the run. Flips the internal `AbortController` for this run, which
+   * surfaces as an `AbortError` inside the durable LLM-execution step and
+   * is bridged to the user's `onAbort` callback via the run's pubsub topic.
+   *
+   * Safe to call after the run has already finished — it's a no-op in that
+   * case.
+   */
+  abort: (reason?: unknown) => void;
 }
 
 /**
@@ -617,6 +654,27 @@ export class DurableAgent<
 
     const { runId, messageId, workflowInput, registryEntry, messageList, threadId, resourceId } = preparation;
 
+    // 1a. Install the abort controller for this run. The controller is owned
+    // by this DurableAgent instance; the result's abort() method flips it,
+    // and the durable LLM-execution step reads `abortSignal` off the registry
+    // to thread it into the model call + abort short-circuits. If the caller
+    // also supplied an external signal, forward its abort to the internal
+    // controller so either source can cancel the run.
+    const abortController = new AbortController();
+    if (options?.abortSignal) {
+      if (options.abortSignal.aborted) {
+        abortController.abort((options.abortSignal as AbortSignal & { reason?: unknown }).reason);
+      } else {
+        options.abortSignal.addEventListener(
+          'abort',
+          () => abortController.abort((options.abortSignal as AbortSignal & { reason?: unknown }).reason),
+          { once: true },
+        );
+      }
+    }
+    registryEntry.abortController = abortController;
+    registryEntry.abortSignal = abortController.signal;
+
     // 2. Register non-serializable state (both local and global registries)
     this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
     globalRunRegistry.set(runId, { ...registryEntry, messageList });
@@ -677,15 +735,20 @@ export class DurableAgent<
             await (options.onIterationComplete as (ctx: any) => void | Promise<void>)?.(data);
           }
         : undefined,
+      closeOnSuspend: (options as any)?.[CLOSE_ON_SUSPEND] === true,
     });
 
     // 4. Wait for subscription to be ready, then execute workflow
     // This prevents race conditions where events are published before subscription
-    ready
+    const workflowExecution = ready
       .then(() => this.executeWorkflow(runId, workflowInput))
       .catch(error => {
         void this.emitError(runId, error);
       });
+    const trackedEntry = globalRunRegistry.get(runId);
+    if (trackedEntry) {
+      trackedEntry.workflowExecution = workflowExecution;
+    }
 
     // 5. Create cleanup function (cancels auto-cleanup timer if called)
     const cleanup = () => {
@@ -702,6 +765,12 @@ export class DurableAgent<
       }
     };
 
+    const abort = (reason?: unknown) => {
+      if (!abortController.signal.aborted) {
+        abortController.abort(reason);
+      }
+    };
+
     return {
       output,
       get fullStream() {
@@ -711,6 +780,7 @@ export class DurableAgent<
       threadId,
       resourceId,
       cleanup,
+      abort,
     };
   }
 
@@ -726,11 +796,68 @@ export class DurableAgent<
       onFinish?: (result: AgentFinishEventData) => void | Promise<void>;
       onError?: (error: Error) => void | Promise<void>;
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
+      /**
+       * Optional abort signal scoped to the resumed segment. Forwarded onto a
+       * fresh internal controller installed on the run's registry entry, so
+       * `result.abort()` and the external signal can both cancel the resumed
+       * iterations.
+       */
+      abortSignal?: AbortSignal;
+      /**
+       * When set, keep the resumed segment open after the workflow's initial
+       * resume turn finishes and continue streaming follow-up turns until the
+       * agent goes idle (no in-flight background tasks for the same memory
+       * scope). Same semantics as `stream({ untilIdle })`. Pass an object to
+       * tune `maxIdleMs`.
+       */
+      untilIdle?: boolean | { maxIdleMs?: number };
     },
   ): Promise<DurableAgentStreamResult<TOutput>> {
+    // Delegate to the idle-loop wrapper when `untilIdle` is set. Strip
+    // `untilIdle` before passing to the wrapper so the inner agent.resume()
+    // call (and subsequent agent.stream([]) continuations) don't recurse.
+    if (options?.untilIdle) {
+      const { untilIdle, ...rest } = options;
+      const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
+      return runResumeDurableStreamUntilIdle<TOutput>(
+        this as unknown as DurableAgent<any, any, TOutput>,
+        runId,
+        resumeData,
+        { ...rest, maxIdleMs } as DurableAgentStreamOptions<TOutput> & { maxIdleMs?: number },
+        {
+          activeStreams: this.#activeStreamUntilIdle,
+          bgManager: this.#mastra?.backgroundTaskManager,
+        },
+      );
+    }
+
     const entry = this.#runRegistry.get(runId);
     if (!entry) {
       throw new Error(`No registry entry found for run ${runId}. Cannot resume.`);
+    }
+
+    // Install a fresh abort controller for the resumed segment. The original
+    // controller is gone (the stream that owned it has already settled), so
+    // we overwrite the registry slot. If the caller passed an external
+    // signal, forward it onto the new internal controller.
+    const abortController = new AbortController();
+    if (options?.abortSignal) {
+      if (options.abortSignal.aborted) {
+        abortController.abort((options.abortSignal as AbortSignal & { reason?: unknown }).reason);
+      } else {
+        options.abortSignal.addEventListener(
+          'abort',
+          () => abortController.abort((options.abortSignal as AbortSignal & { reason?: unknown }).reason),
+          { once: true },
+        );
+      }
+    }
+    entry.abortController = abortController;
+    entry.abortSignal = abortController.signal;
+    const globalEntryForAbort = globalRunRegistry.get(runId);
+    if (globalEntryForAbort) {
+      globalEntryForAbort.abortController = abortController;
+      globalEntryForAbort.abortSignal = abortController.signal;
     }
 
     const memoryInfo = this.#runRegistry.getMemoryInfo(runId);
@@ -754,6 +881,11 @@ export class DurableAgent<
     const globalEntry = globalRunRegistry.get(runId);
     const resumeModel = globalEntry?.model as any;
 
+    // Skip events already broadcast by the original run (e.g. the SUSPENDED
+    // chunk that paused it). Without this, a resume that closes on suspend
+    // (resumeGenerate) would immediately close on the replayed SUSPENDED.
+    const resumeOffset = await this.#getPubsubOffset(runId);
+
     const {
       output,
       cleanup: streamCleanup,
@@ -769,6 +901,7 @@ export class DurableAgent<
       },
       threadId: memoryInfo?.threadId,
       resourceId: memoryInfo?.resourceId,
+      offset: resumeOffset,
       onChunk: options?.onChunk,
       onStepFinish: options?.onStepFinish,
       onFinish: async result => {
@@ -780,6 +913,7 @@ export class DurableAgent<
         scheduleAutoCleanup();
       },
       onSuspended: options?.onSuspended,
+      closeOnSuspend: (options as any)?.[CLOSE_ON_SUSPEND] === true,
     });
 
     // Wait for subscription to be ready, then resume workflow
@@ -790,16 +924,29 @@ export class DurableAgent<
     // traceId — the originals were ended as `suspended` and can't be reopened. Post-resume
     // steps + terminal end() target these via the registry override. (Linking = follow-up.)
     const origTraceId = entry.agentSpan?.traceId;
+    const origSpanId = entry.agentSpan?.id;
     if (origTraceId && this.#mastra?.observability) {
       try {
         const ag = this.#wrappedAgent as Agent<string, any, any>;
+        // Match non-durable Agent.stream() resume-span shape: same name suffix
+        // `(resumed)`, forward agent-level tracingPolicy, link to the original
+        // span via `resumedFromSpanId` metadata, and carry the resolvedVersionId.
+        const rawConfig = typeof (ag as any).toRawConfig === 'function' ? (ag as any).toRawConfig() : undefined;
+        const resolvedVersionId = rawConfig?.resolvedVersionId as string | undefined;
+        const agentTracingPolicy = typeof ag.getTracingPolicy === 'function' ? ag.getTracingPolicy() : undefined;
         const resumeAgentSpan = getOrCreateSpan({
           type: SpanType.AGENT_RUN,
-          name: `agent run (resumed): '${ag.id}'`,
+          name: `agent run: '${ag.id}' (resumed)`,
           entityType: EntityType.AGENT,
           entityId: ag.id,
           entityName: ag.name,
-          metadata: { runId, resumed: true },
+          metadata: {
+            runId,
+            resumed: true,
+            ...(origSpanId ? { resumedFromSpanId: origSpanId } : {}),
+            ...(resolvedVersionId ? { entityVersionId: resolvedVersionId } : {}),
+          },
+          tracingPolicy: agentTracingPolicy,
           tracingOptions: { traceId: origTraceId },
           requestContext,
           mastra: this.#mastra,
@@ -824,7 +971,7 @@ export class DurableAgent<
       }
     }
 
-    ready
+    const workflowExecution = ready
       .then(async () => {
         const run = await workflow.createRun({ runId, pubsub: this.pubsub });
         const result = await run.resume({
@@ -840,6 +987,10 @@ export class DurableAgent<
       .catch(error => {
         void this.emitError(runId, error);
       });
+    const trackedResumeEntry = globalRunRegistry.get(runId);
+    if (trackedResumeEntry) {
+      trackedResumeEntry.workflowExecution = workflowExecution;
+    }
 
     const cleanup = () => {
       if (autoCleanupTimer) {
@@ -855,6 +1006,12 @@ export class DurableAgent<
       }
     };
 
+    const abort = (reason?: unknown) => {
+      if (!abortController.signal.aborted) {
+        abortController.abort(reason);
+      }
+    };
+
     return {
       output,
       get fullStream() {
@@ -864,7 +1021,94 @@ export class DurableAgent<
       threadId: memoryInfo?.threadId,
       resourceId: memoryInfo?.resourceId,
       cleanup,
+      abort,
     };
+  }
+
+  /**
+   * Generate a complete response from the agent using durable execution.
+   *
+   * Convenience wrapper over {@link DurableAgent.stream} that drains the
+   * stream to completion and returns the same {@link FullOutput} shape as
+   * non-durable `Agent.generate`. The underlying workflow is identical to
+   * `stream()` — it just collects the final result for callers that don't
+   * want to consume chunks themselves.
+   *
+   * If the run suspends (e.g. tool approval or `suspend()` from a tool),
+   * the returned output's `finishReason` will be `'suspended'` and
+   * `suspendPayload` will be populated. Use {@link DurableAgent.resumeGenerate}
+   * to continue.
+   */
+  // @ts-expect-error - Intentionally different signature for durable execution
+  async generate(
+    messages: MessageListInput,
+    options?: DurableAgentStreamOptions<TOutput>,
+  ): Promise<FullOutput<TOutput>> {
+    const result = await this.stream(messages, {
+      ...(options ?? {}),
+      [CLOSE_ON_SUSPEND]: true,
+    } as DurableAgentStreamOptions<TOutput>);
+    let suspended = false;
+    try {
+      const fullOutput = (await result.output.getFullOutput()) as FullOutput<TOutput>;
+      if (fullOutput.error) {
+        throw fullOutput.error;
+      }
+      suspended = fullOutput.finishReason === 'suspended';
+      // On suspend, the SUSPENDED event is emitted before the workflow engine
+      // has persisted the snapshot. Await the workflow execution so a later
+      // `resumeGenerate()` can find a snapshot to resume from.
+      if (suspended) {
+        await globalRunRegistry.get(result.runId)?.workflowExecution;
+      }
+      // Fall back to the stream-level runId if MastraModelOutput.runId wasn't
+      // populated (no chunk surfaced before suspend).
+      if (!fullOutput.runId) {
+        (fullOutput as { runId?: string }).runId = result.runId;
+      }
+      return fullOutput;
+    } finally {
+      // Keep the registry entry alive on suspend so `resumeGenerate()` can
+      // pick it up. Auto-cleanup is scheduled by FINISH/ERROR/ABORT paths.
+      if (!suspended) {
+        result.cleanup();
+      }
+    }
+  }
+
+  /**
+   * Resume a suspended durable run and drain it to a single
+   * {@link FullOutput}. Mirrors {@link Agent.resumeGenerate} on top of
+   * {@link DurableAgent.resume}.
+   */
+  async resumeGenerate(
+    runId: string,
+    resumeData: unknown,
+    options?: Parameters<DurableAgent<TAgentId, TTools, TOutput>['resume']>[2],
+  ): Promise<FullOutput<TOutput>> {
+    const result = await this.resume(runId, resumeData, {
+      ...(options ?? {}),
+      [CLOSE_ON_SUSPEND]: true,
+    } as Parameters<DurableAgent<TAgentId, TTools, TOutput>['resume']>[2]);
+    let suspended = false;
+    try {
+      const fullOutput = (await result.output.getFullOutput()) as FullOutput<TOutput>;
+      if (fullOutput.error) {
+        throw fullOutput.error;
+      }
+      suspended = fullOutput.finishReason === 'suspended';
+      if (suspended) {
+        await globalRunRegistry.get(result.runId)?.workflowExecution;
+      }
+      if (!fullOutput.runId) {
+        (fullOutput as { runId?: string }).runId = result.runId;
+      }
+      return fullOutput;
+    } finally {
+      if (!suspended) {
+        result.cleanup();
+      }
+    }
   }
 
   /**
@@ -952,6 +1196,17 @@ export class DurableAgent<
       }
     };
 
+    // observe() doesn't own the run's lifecycle, but for API symmetry the
+    // returned `abort` flips the in-process controller currently installed
+    // on the registry. If the run already ended (or is running in a
+    // different process), this is a best-effort no-op.
+    const abort = (reason?: unknown) => {
+      const controller = (globalRunRegistry.get(runId) ?? this.#runRegistry.get(runId))?.abortController;
+      if (controller && !controller.signal.aborted) {
+        controller.abort(reason);
+      }
+    };
+
     return {
       output,
       get fullStream() {
@@ -961,6 +1216,7 @@ export class DurableAgent<
       threadId: memoryInfo?.threadId,
       resourceId: memoryInfo?.resourceId,
       cleanup,
+      abort,
     };
   }
 
@@ -972,6 +1228,25 @@ export class DurableAgent<
     const pubsub = this.pubsub;
     if ('clearTopic' in pubsub && typeof (pubsub as any).clearTopic === 'function') {
       void (pubsub as any).clearTopic(AGENT_STREAM_TOPIC(runId));
+    }
+  }
+
+  /**
+   * Read the current number of cached events for this run's stream topic.
+   * Used by `resume()` as the subscription offset so we don't re-deliver
+   * events emitted by the original run (notably the SUSPENDED chunk that
+   * paused it).
+   */
+  async #getPubsubOffset(runId: string): Promise<number> {
+    const pubsub = this.pubsub as PubSub & {
+      getHistory?: (topic: string) => Promise<unknown[]>;
+    };
+    if (typeof pubsub.getHistory !== 'function') return 0;
+    try {
+      const history = await pubsub.getHistory(AGENT_STREAM_TOPIC(runId));
+      return Array.isArray(history) ? history.length : 0;
+    } catch {
+      return 0;
     }
   }
 
@@ -1064,6 +1339,16 @@ export class DurableAgent<
    */
   getDurableWorkflows() {
     return [this.getWorkflow()];
+  }
+
+  /**
+   * Delegate scorer listing to the wrapped agent so that callers querying the
+   * durable wrapper still see the underlying agent's scorers.
+   */
+  async listScorers(
+    opts?: Parameters<Agent<TAgentId, TTools, TOutput>['listScorers']>[0],
+  ): ReturnType<Agent<TAgentId, TTools, TOutput>['listScorers']> {
+    return this.#wrappedAgent.listScorers(opts);
   }
 
   /**

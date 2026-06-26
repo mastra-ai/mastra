@@ -503,8 +503,19 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
             const { scorerName, sampling } = scorerEntry;
 
             try {
-              // Resolve the scorer from Mastra
-              const scorer = (mastra as Mastra)?.getScorer?.(scorerName) as MastraScorer | undefined;
+              // Resolve the scorer from Mastra. Try registration key first, then
+              // fall back to id/name lookup (mirrors non-durable behavior where
+              // scorers may be registered under either a config key or scorer.id).
+              let scorer: MastraScorer | undefined;
+              try {
+                scorer = (mastra as Mastra)?.getScorer?.(scorerName) as MastraScorer | undefined;
+              } catch {
+                try {
+                  scorer = (mastra as Mastra)?.getScorerById?.(scorerName) as MastraScorer | undefined;
+                } catch {
+                  scorer = undefined;
+                }
+              }
 
               if (!scorer) {
                 logger?.warn?.(`Scorer ${scorerName} not found in Mastra, skipping`, {
