@@ -34,7 +34,6 @@ interface SettingsPanelProps {
   models: HarnessAvailableModel[];
   currentModelId: string | null;
   settings: HarnessSessionSettings | null;
-  baseUrl?: string;
   /** Active project's resourceId — required to activate a model pack on its session. */
   resourceId?: string;
   onThemeChange: (theme: Theme) => void;
@@ -86,7 +85,6 @@ export function SettingsPanel({
   models,
   currentModelId,
   settings,
-  baseUrl,
   resourceId,
   onThemeChange,
   onDensityChange,
@@ -147,8 +145,8 @@ export function SettingsPanel({
                 onBehaviorChange={onBehaviorChange}
               />
             )}
-            {tab === 'packs' && <ModelPacksSection baseUrl={baseUrl} resourceId={resourceId} models={models} />}
-            {tab === 'memory' && <OMSection baseUrl={baseUrl} resourceId={resourceId} models={models} />}
+            {tab === 'packs' && <ModelPacksSection resourceId={resourceId} models={models} />}
+            {tab === 'memory' && <OMSection resourceId={resourceId} models={models} />}
             {tab === 'behavior' && (
               <BehaviorTab
                 settings={settings}
@@ -157,8 +155,8 @@ export function SettingsPanel({
                 setPermissionForCategory={setPermissionForCategory}
               />
             )}
-            {tab === 'providers' && <ProvidersSection baseUrl={baseUrl} />}
-            {tab === 'custom-providers' && <CustomProvidersSection baseUrl={baseUrl} />}
+            {tab === 'providers' && <ProvidersSection />}
+            {tab === 'custom-providers' && <CustomProvidersSection />}
           </div>
         </div>
       </div>

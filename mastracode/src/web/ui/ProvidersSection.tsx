@@ -1,12 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import type { ProviderInfo } from '../../shared/api/types';
+import { useProvidersQuery, useRemoveProviderKey, useSaveProviderKey } from '../../shared/hooks/use-providers';
 import { CheckIcon, SearchIcon } from './icons';
-
-interface ProviderInfo {
-  provider: string;
-  envVar?: string;
-  source: 'oauth' | 'stored' | 'env' | 'none';
-}
 
 const SOURCE_LABEL: Record<ProviderInfo['source'], string> = {
   oauth: 'Signed in',
@@ -23,33 +19,23 @@ const SOURCE_LABEL: Record<ProviderInfo['source'], string> = {
  * typing filters the full catalog so any provider is reachable. Keys are
  * written to the server credential store and never read back to the client.
  */
-export function ProvidersSection({ baseUrl = '' }: { baseUrl?: string }) {
-  const [providers, setProviders] = useState<ProviderInfo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export function ProvidersSection() {
+  const providersQuery = useProvidersQuery();
+  const saveKeyMutation = useSaveProviderKey();
+  const removeKeyMutation = useRemoveProviderKey();
+
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
   const [keyDraft, setKeyDraft] = useState('');
-  const [busy, setBusy] = useState(false);
   const keyInputRef = useRef<HTMLInputElement>(null);
 
-  const load = async () => {
-    try {
-      const res = await fetch(`${baseUrl}/api/web/config/providers`);
-      if (!res.ok) throw new Error(`Failed to load providers (${res.status})`);
-      const data = (await res.json()) as { providers: ProviderInfo[] };
-      setProviders(data.providers ?? []);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void load();
-  }, [baseUrl]);
+  const providers = providersQuery.data ?? [];
+  const loading = providersQuery.isPending;
+  const busy = saveKeyMutation.isPending || removeKeyMutation.isPending;
+  const error =
+    (providersQuery.error ?? saveKeyMutation.error ?? removeKeyMutation.error) instanceof Error
+      ? (providersQuery.error ?? saveKeyMutation.error ?? removeKeyMutation.error)!.message
+      : null;
 
   useEffect(() => {
     if (editing) keyInputRef.current?.focus();
@@ -77,36 +63,20 @@ export function ProvidersSection({ baseUrl = '' }: { baseUrl?: string }) {
   const saveKey = async (provider: string, envVar?: string) => {
     const key = keyDraft.trim();
     if (!key) return;
-    setBusy(true);
     try {
-      const res = await fetch(`${baseUrl}/api/web/config/providers/${encodeURIComponent(provider)}/key`, {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ key, envVar }),
-      });
-      if (!res.ok) throw new Error(`Failed to save key (${res.status})`);
+      await saveKeyMutation.mutateAsync({ provider, key, envVar });
       setEditing(null);
       setKeyDraft('');
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
+    } catch {
+      // Error surfaced via the mutation state above.
     }
   };
 
   const removeKey = async (provider: string) => {
-    setBusy(true);
     try {
-      const res = await fetch(`${baseUrl}/api/web/config/providers/${encodeURIComponent(provider)}/key`, {
-        method: 'DELETE',
-      });
-      if (!res.ok) throw new Error(`Failed to remove key (${res.status})`);
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
+      await removeKeyMutation.mutateAsync({ provider });
+    } catch {
+      // Error surfaced via the mutation state above.
     }
   };
 

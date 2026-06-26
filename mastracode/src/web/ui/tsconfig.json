@@ -10,7 +10,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
-    "types": ["vite/client", "node"]
+    "types": ["vite/client", "node", "@testing-library/jest-dom"]
   },
-  "include": ["."]
+  "include": [".", "../shared"]
 }
