@@ -785,6 +785,7 @@ export type ProviderModelsMap = {
     'accounts/fireworks/models/minimax-m3',
     'accounts/fireworks/models/qwen3p7-plus',
     'accounts/fireworks/routers/glm-5p1-fast',
+    'accounts/fireworks/routers/glm-5p2-fast',
     'accounts/fireworks/routers/kimi-k2p6-fast',
     'accounts/fireworks/routers/kimi-k2p6-turbo',
     'accounts/fireworks/routers/kimi-k2p7-code-fast',
@@ -989,6 +990,7 @@ export type ProviderModelsMap = {
     'nvidia/Nemotron-3-Nano-Omni',
     'nvidia/nemotron-3-super-120b-a12b',
     'openai/gpt-oss-120b',
+    'zai-org/GLM-5.2',
   ];
   readonly auriko: readonly [
     'claude-opus-4-6',
@@ -1576,8 +1578,6 @@ export type ProviderModelsMap = {
     'gpt-5.2-codex',
   ];
   readonly 'xiaomi-token-plan-ams': readonly [
-    'mimo-v2-omni',
-    'mimo-v2-pro',
     'mimo-v2-tts',
     'mimo-v2.5',
     'mimo-v2.5-pro',
@@ -2299,14 +2299,7 @@ export type ProviderModelsMap = {
     'openai/whisper-large-v3',
     'openai/whisper-large-v3-turbo',
   ];
-  readonly xiaomi: readonly [
-    'mimo-v2-flash',
-    'mimo-v2-omni',
-    'mimo-v2-pro',
-    'mimo-v2.5',
-    'mimo-v2.5-pro',
-    'mimo-v2.5-pro-ultraspeed',
-  ];
+  readonly xiaomi: readonly ['mimo-v2.5', 'mimo-v2.5-pro', 'mimo-v2.5-pro-ultraspeed'];
   readonly inception: readonly ['mercury-2', 'mercury-edit-2'];
   readonly anthropic: readonly [
     'claude-3-5-haiku-latest',
@@ -2711,8 +2704,6 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5.1-FP8',
   ];
   readonly 'xiaomi-token-plan-cn': readonly [
-    'mimo-v2-omni',
-    'mimo-v2-pro',
     'mimo-v2-tts',
     'mimo-v2.5',
     'mimo-v2.5-pro',
@@ -2725,6 +2716,7 @@ export type ProviderModelsMap = {
     'bge-multilingual-gemma2',
     'gemma-3-27b-it',
     'gemma-4-26b-a4b-it',
+    'glm-5.2',
     'gpt-oss-120b',
     'llama-3.3-70b-instruct',
     'mistral-medium-3.5-128b',
@@ -2757,6 +2749,8 @@ export type ProviderModelsMap = {
   readonly friendli: readonly [
     'MiniMaxAI/MiniMax-M2.5',
     'Qwen/Qwen3-235B-A22B-Instruct-2507',
+    'deepseek-ai/DeepSeek-V3.2',
+    'google/gemma-4-31B-it',
     'meta-llama/Llama-3.1-8B-Instruct',
     'meta-llama/Llama-3.3-70B-Instruct',
     'zai-org/GLM-5',
@@ -4624,8 +4618,6 @@ export type ProviderModelsMap = {
     'qwen3-vl-plus',
   ];
   readonly 'xiaomi-token-plan-sgp': readonly [
-    'mimo-v2-omni',
-    'mimo-v2-pro',
     'mimo-v2-tts',
     'mimo-v2.5',
     'mimo-v2.5-pro',

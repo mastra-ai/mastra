@@ -1,7 +1,11 @@
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { Container } from '@earendil-works/pi-tui';
 import type { AgentControllerMessage } from '@mastra/core/agent-controller';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { getLocalPlansDir, getPlanFilename, getSuggestedPlanRelativePath } from '../utils/plans.js';
 import { isChatBoundarySpacer } from './components/chat-boundary-spacer.js';
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
@@ -12,6 +16,27 @@ import type { TUIState } from './state.js';
 function visibleChildren(state: TUIState) {
   return state.chatContainer.children.filter(child => !isChatBoundarySpacer(child));
 }
+
+const tmpProjects: string[] = [];
+const TEST_THREAD_ID = 'thread-test-render-messages';
+const PLAN_TITLE = 'My Plan';
+const PLAN_PATH = getSuggestedPlanRelativePath(PLAN_TITLE);
+
+function createTmpProjectWithPlan(title: string, plan: string, filename = getPlanFilename(title)): string {
+  const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-render-test-'));
+  tmpProjects.push(projectPath);
+  const planPath = path.join(getLocalPlansDir(projectPath), filename);
+  fs.mkdirSync(path.dirname(planPath), { recursive: true });
+  fs.writeFileSync(planPath, `# ${title}\n\n${plan}\n`, 'utf-8');
+  return projectPath;
+}
+
+afterEach(() => {
+  while (tmpProjects.length) {
+    const dir = tmpProjects.pop()!;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 function createRestoreDisplayTasks(displayState: { tasks?: unknown[]; previousTasks?: unknown[] }) {
   return vi.fn((tasks: unknown[]) => {
@@ -31,7 +56,7 @@ function createState(): TUIState {
     state: sessionState,
     mode: { resolve: vi.fn(() => ({ metadata: {} })) },
     model: { get: vi.fn(() => 'anthropic/claude-sonnet-4') },
-    thread: { listActiveMessages: vi.fn().mockResolvedValue([]) },
+    thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue([]) },
     displayState: { get: () => displayState, restoreTasks: createRestoreDisplayTasks(displayState) },
   };
   return {
@@ -161,12 +186,12 @@ describe('renderExistingMessages startup history loading', () => {
     const listActiveMessages = vi.fn().mockResolvedValue(messages);
     state.session = {
       ...(state.session as any),
-      thread: { listActiveMessages },
+      thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages },
       state: createSessionState(),
     } as unknown as TUIState['session'];
     state.controller = {
       session: {
-        thread: { listActiveMessages },
+        thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages },
         displayState: { get: () => ({ isRunning: false }), restoreTasks: vi.fn() },
       },
       setState: vi.fn().mockResolvedValue(undefined),
@@ -190,12 +215,12 @@ describe('renderExistingMessages startup history loading', () => {
     const state = createState();
     state.session = {
       ...(state.session as any),
-      thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
+      thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue(messages) },
       state: createSessionState(),
     } as unknown as TUIState['session'];
     state.controller = {
       session: {
-        thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
+        thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue(messages) },
         displayState: { get: () => ({ isRunning: false }), restoreTasks: vi.fn() },
       },
       setState: vi.fn().mockResolvedValue(undefined),
@@ -217,12 +242,12 @@ describe('renderExistingMessages startup history loading', () => {
     state.taskProgress = { updateTasks, getTasks: () => existingTasks } as unknown as TUIState['taskProgress'];
     state.session = {
       ...(state.session as any),
-      thread: { listActiveMessages },
+      thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages },
       state: createSessionState({ tasks: existingTasks }, setState),
     } as unknown as TUIState['session'];
     state.controller = {
       session: {
-        thread: { listActiveMessages },
+        thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages },
         displayState: {
           get: () => ({ isRunning: false, tasks: existingTasks, previousTasks: [] }),
           restoreTasks: restoreDisplayTasks,
@@ -270,7 +295,7 @@ describe('renderExistingMessages subagents', () => {
     const state = createState();
     state.session = {
       ...(state.session as any),
-      thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
+      thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue([message]) },
       state: createSessionState(),
       displayState: { get: () => ({ isRunning: false }), restoreTasks: vi.fn() },
       model: { get: () => 'openai/gpt-5.5' },
@@ -343,7 +368,7 @@ describe('renderExistingMessages task tools', () => {
     state.taskProgress = { updateTasks, getTasks: () => [] } as unknown as TUIState['taskProgress'];
     state.session = {
       ...(state.session as any),
-      thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
+      thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue(messages) },
       state: createSessionState({}, setState),
       displayState: { get: () => displayState, restoreTasks: createRestoreDisplayTasks(displayState) },
     } as unknown as TUIState['session'];
@@ -408,7 +433,7 @@ describe('renderExistingMessages task tools', () => {
     state.taskProgress = { updateTasks, getTasks: () => [] } as unknown as TUIState['taskProgress'];
     state.session = {
       ...(state.session as any),
-      thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
+      thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue(messages) },
       state: createSessionState({}, setState),
       displayState: { get: () => displayState, restoreTasks: createRestoreDisplayTasks(displayState) },
     } as unknown as TUIState['session'];
@@ -468,12 +493,12 @@ describe('renderExistingMessages task tools', () => {
     state.taskProgress = { updateTasks, getTasks: () => [] } as unknown as TUIState['taskProgress'];
     state.session = {
       ...(state.session as any),
-      thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
+      thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue(messages) },
       state: createSessionState({}, setState),
     } as unknown as TUIState['session'];
     state.controller = {
       session: {
-        thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
+        thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue(messages) },
         displayState: { get: () => ({ isRunning: false }), restoreTasks: vi.fn() },
       },
       setState,
@@ -520,7 +545,7 @@ describe('renderExistingMessages task tools', () => {
     state.taskProgress = { updateTasks, getTasks: () => [] } as unknown as TUIState['taskProgress'];
     state.session = {
       ...(state.session as any),
-      thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
+      thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue(messages) },
       state: createSessionState({}, setState),
       displayState: { get: () => displayState, restoreTasks: createRestoreDisplayTasks(displayState) },
     } as unknown as TUIState['session'];
@@ -592,12 +617,12 @@ describe('renderExistingMessages task tools', () => {
     state.taskProgress = { updateTasks, getTasks: () => [] } as unknown as TUIState['taskProgress'];
     state.session = {
       ...(state.session as any),
-      thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
+      thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue(messages) },
       state: createSessionState({}, setState),
     } as unknown as TUIState['session'];
     state.controller = {
       session: {
-        thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
+        thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue(messages) },
         displayState: { get: () => ({ isRunning: false }), restoreTasks: vi.fn() },
       },
       setState,
@@ -652,12 +677,12 @@ describe('renderExistingMessages task tools', () => {
     state.taskProgress = { updateTasks, getTasks: () => [] } as unknown as TUIState['taskProgress'];
     state.session = {
       ...(state.session as any),
-      thread: { listActiveMessages },
+      thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages },
       state: createSessionState({}, setState),
     } as unknown as TUIState['session'];
     state.controller = {
       session: {
-        thread: { listActiveMessages },
+        thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages },
         displayState: { get: () => ({ isRunning: false }), restoreTasks: vi.fn() },
       },
       setState,
@@ -735,12 +760,12 @@ describe('renderExistingMessages task tools', () => {
     const state = createState();
     state.session = {
       ...(state.session as any),
-      thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
+      thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue(messages) },
       state: createSessionState(),
     } as unknown as TUIState['session'];
     state.controller = {
       session: {
-        thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
+        thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue(messages) },
         displayState: { get: () => ({ isRunning: false }), restoreTasks: vi.fn() },
       },
       setState: vi.fn().mockResolvedValue(undefined),
@@ -795,12 +820,12 @@ describe('renderExistingMessages task tools', () => {
     const state = createState();
     state.session = {
       ...(state.session as any),
-      thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
+      thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue(messages) },
       state: createSessionState(),
     } as unknown as TUIState['session'];
     state.controller = {
       session: {
-        thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
+        thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue(messages) },
         displayState: { get: () => ({ isRunning: false }), restoreTasks: vi.fn() },
       },
       setState: vi.fn().mockResolvedValue(undefined),
@@ -825,12 +850,12 @@ describe('renderExistingMessages task tools', () => {
     } as unknown as TUIState['taskProgress'];
     state.session = {
       ...(state.session as any),
-      thread: { listActiveMessages: vi.fn().mockResolvedValue([]) },
+      thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue([]) },
       state: createSessionState({}, setState),
     } as unknown as TUIState['session'];
     state.controller = {
       session: {
-        thread: { listActiveMessages: vi.fn().mockResolvedValue([]) },
+        thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue([]) },
         displayState: { get: () => ({ isRunning: false }), restoreTasks: restoreDisplayTasks },
       },
       setState,
@@ -846,7 +871,9 @@ describe('renderExistingMessages task tools', () => {
 
 describe('renderExistingMessages submit_plan approval status', () => {
   it('renders rejected plan as "Changes requested", not "Approved"', async () => {
+    const projectPath = createTmpProjectWithPlan('My Plan', 'Step 1\nStep 2');
     const state = createState();
+    (state.session.state.get as any).mockReturnValue({ projectPath });
     (state.session.thread.listActiveMessages as any).mockResolvedValue([
       {
         id: 'msg-1',
@@ -856,7 +883,7 @@ describe('renderExistingMessages submit_plan approval status', () => {
             type: 'tool_call',
             id: 'call-1',
             name: 'submit_plan',
-            args: { title: 'My Plan', plan: 'Step 1\nStep 2' },
+            args: { path: PLAN_PATH },
           },
           {
             type: 'tool_result',
@@ -864,6 +891,7 @@ describe('renderExistingMessages submit_plan approval status', () => {
             result: {
               content:
                 'Plan was not approved. The user wants revisions.\n\nUser feedback: Add more tests\n\nPlease revise the plan based on the feedback and submit again with submit_plan.',
+              submittedPlan: { title: PLAN_TITLE, path: PLAN_PATH, plan: 'Step 1\nStep 2' },
             },
             isError: false,
           },
@@ -882,8 +910,8 @@ describe('renderExistingMessages submit_plan approval status', () => {
     expect(rendered).not.toContain('Approved');
     // Should contain "Changes requested"
     expect(rendered).toContain('Changes requested');
-    // Should restore previousPlanSnapshot for future diff computation
-    expect(state.previousPlanSnapshot).toEqual({ title: 'My Plan', plan: 'Step 1\nStep 2' });
+    // Should restore previousPlanSnapshot (keyed by path) for future diff computation
+    expect(state.previousPlanSnapshot).toEqual({ path: PLAN_PATH, plan: 'Step 1\nStep 2' });
   });
 
   it('renders approved plan as "Approved"', async () => {
@@ -897,12 +925,15 @@ describe('renderExistingMessages submit_plan approval status', () => {
             type: 'tool_call',
             id: 'call-1',
             name: 'submit_plan',
-            args: { title: 'My Plan', plan: 'Step 1\nStep 2' },
+            args: { path: PLAN_PATH },
           },
           {
             type: 'tool_result',
             id: 'call-1',
-            result: { content: 'Plan approved. Proceed with implementation following the approved plan.' },
+            result: {
+              content: 'Plan approved. Proceed with implementation following the approved plan.',
+              submittedPlan: { title: PLAN_TITLE, path: PLAN_PATH, plan: 'Step 1\nStep 2' },
+            },
             isError: false,
           },
         ],

@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 1.3.1-alpha.0
+
+### Patch Changes
+
+- Fixed createTool type error when passing jsonSchema() or a Schema object from @ai-sdk/provider-utils as inputSchema — no more cast needed ([#17435](https://github.com/mastra-ai/mastra/pull/17435))
+
 ## 1.3.0
 
 ### Minor Changes

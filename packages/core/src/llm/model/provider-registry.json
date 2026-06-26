@@ -895,6 +895,7 @@
         "accounts/fireworks/models/minimax-m3",
         "accounts/fireworks/models/qwen3p7-plus",
         "accounts/fireworks/routers/glm-5p1-fast",
+        "accounts/fireworks/routers/glm-5p2-fast",
         "accounts/fireworks/routers/kimi-k2p6-fast",
         "accounts/fireworks/routers/kimi-k2p6-turbo",
         "accounts/fireworks/routers/kimi-k2p7-code-fast"
@@ -1138,7 +1139,8 @@
         "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
         "nvidia/Nemotron-3-Nano-Omni",
         "nvidia/nemotron-3-super-120b-a12b",
-        "openai/gpt-oss-120b"
+        "openai/gpt-oss-120b",
+        "zai-org/GLM-5.2"
       ],
       "docUrl": "https://docs.tokenfactory.nebius.com/",
       "gateway": "models.dev"
@@ -1893,8 +1895,6 @@
       "apiKeyHeader": "Authorization",
       "name": "Xiaomi Token Plan (Europe)",
       "models": [
-        "mimo-v2-omni",
-        "mimo-v2-pro",
         "mimo-v2-tts",
         "mimo-v2.5",
         "mimo-v2.5-pro",
@@ -2775,14 +2775,7 @@
       "apiKeyEnvVar": "XIAOMI_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Xiaomi",
-      "models": [
-        "mimo-v2-flash",
-        "mimo-v2-omni",
-        "mimo-v2-pro",
-        "mimo-v2.5",
-        "mimo-v2.5-pro",
-        "mimo-v2.5-pro-ultraspeed"
-      ],
+      "models": ["mimo-v2.5", "mimo-v2.5-pro", "mimo-v2.5-pro-ultraspeed"],
       "docUrl": "https://platform.xiaomimimo.com/#/docs",
       "gateway": "models.dev"
     },
@@ -3374,8 +3367,6 @@
       "apiKeyHeader": "Authorization",
       "name": "Xiaomi Token Plan (China)",
       "models": [
-        "mimo-v2-omni",
-        "mimo-v2-pro",
         "mimo-v2-tts",
         "mimo-v2.5",
         "mimo-v2.5-pro",
@@ -3404,6 +3395,7 @@
         "bge-multilingual-gemma2",
         "gemma-3-27b-it",
         "gemma-4-26b-a4b-it",
+        "glm-5.2",
         "gpt-oss-120b",
         "llama-3.3-70b-instruct",
         "mistral-medium-3.5-128b",
@@ -3452,6 +3444,8 @@
       "models": [
         "MiniMaxAI/MiniMax-M2.5",
         "Qwen/Qwen3-235B-A22B-Instruct-2507",
+        "deepseek-ai/DeepSeek-V3.2",
+        "google/gemma-4-31B-it",
         "meta-llama/Llama-3.1-8B-Instruct",
         "meta-llama/Llama-3.3-70B-Instruct",
         "zai-org/GLM-5",
@@ -5630,8 +5624,6 @@
       "apiKeyHeader": "Authorization",
       "name": "Xiaomi Token Plan (Singapore)",
       "models": [
-        "mimo-v2-omni",
-        "mimo-v2-pro",
         "mimo-v2-tts",
         "mimo-v2.5",
         "mimo-v2.5-pro",
@@ -6497,6 +6489,7 @@
       "accounts/fireworks/models/minimax-m3",
       "accounts/fireworks/models/qwen3p7-plus",
       "accounts/fireworks/routers/glm-5p1-fast",
+      "accounts/fireworks/routers/glm-5p2-fast",
       "accounts/fireworks/routers/kimi-k2p6-fast",
       "accounts/fireworks/routers/kimi-k2p6-turbo",
       "accounts/fireworks/routers/kimi-k2p7-code-fast"
@@ -6700,7 +6693,8 @@
       "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B",
       "nvidia/Nemotron-3-Nano-Omni",
       "nvidia/nemotron-3-super-120b-a12b",
-      "openai/gpt-oss-120b"
+      "openai/gpt-oss-120b",
+      "zai-org/GLM-5.2"
     ],
     "auriko": [
       "claude-opus-4-6",
@@ -7288,8 +7282,6 @@
       "gpt-5.2-codex"
     ],
     "xiaomi-token-plan-ams": [
-      "mimo-v2-omni",
-      "mimo-v2-pro",
       "mimo-v2-tts",
       "mimo-v2.5",
       "mimo-v2.5-pro",
@@ -8011,14 +8003,7 @@
       "openai/whisper-large-v3",
       "openai/whisper-large-v3-turbo"
     ],
-    "xiaomi": [
-      "mimo-v2-flash",
-      "mimo-v2-omni",
-      "mimo-v2-pro",
-      "mimo-v2.5",
-      "mimo-v2.5-pro",
-      "mimo-v2.5-pro-ultraspeed"
-    ],
+    "xiaomi": ["mimo-v2.5", "mimo-v2.5-pro", "mimo-v2.5-pro-ultraspeed"],
     "inception": ["mercury-2", "mercury-edit-2"],
     "anthropic": [
       "claude-3-5-haiku-latest",
@@ -8423,8 +8408,6 @@
       "zai-org/GLM-5.1-FP8"
     ],
     "xiaomi-token-plan-cn": [
-      "mimo-v2-omni",
-      "mimo-v2-pro",
       "mimo-v2-tts",
       "mimo-v2.5",
       "mimo-v2.5-pro",
@@ -8437,6 +8420,7 @@
       "bge-multilingual-gemma2",
       "gemma-3-27b-it",
       "gemma-4-26b-a4b-it",
+      "glm-5.2",
       "gpt-oss-120b",
       "llama-3.3-70b-instruct",
       "mistral-medium-3.5-128b",
@@ -8469,6 +8453,8 @@
     "friendli": [
       "MiniMaxAI/MiniMax-M2.5",
       "Qwen/Qwen3-235B-A22B-Instruct-2507",
+      "deepseek-ai/DeepSeek-V3.2",
+      "google/gemma-4-31B-it",
       "meta-llama/Llama-3.1-8B-Instruct",
       "meta-llama/Llama-3.3-70B-Instruct",
       "zai-org/GLM-5",
@@ -10328,8 +10314,6 @@
       "qwen3-vl-plus"
     ],
     "xiaomi-token-plan-sgp": [
-      "mimo-v2-omni",
-      "mimo-v2-pro",
       "mimo-v2-tts",
       "mimo-v2.5",
       "mimo-v2.5-pro",

@@ -1,5 +1,51 @@
 # mastracode
 
+## 0.26.0-alpha.8
+
+### Patch Changes
+
+- Reworked plan mode to use named plan files. The agent writes its plan to a markdown file under `.mastracode/plans/` and calls `submit_plan` with the `path` to that file, so multiple plans stay on disk for review. The host validates the submitted path is a `.md` file inside `.mastracode/plans/` before reading it, so the tool can't be pointed at arbitrary files. Plan mode can write any `.md` file inside `.mastracode/plans/` (enforced by a tool guard) but nothing else, submitted plan snapshots are persisted for history replay, revision diffs are computed from a real line-ending-normalized LCS diff and only shown when the change is small relative to the plan, "Request Changes" stops the run immediately with no trailing model output, and diffs only compare revisions of the same plan file. ([#18490](https://github.com/mastra-ai/mastra/pull/18490))
+
+- Updated dependencies [[`8a68844`](https://github.com/mastra-ai/mastra/commit/8a688443013816105a09f89c6afa34b5ff13e26d)]:
+  - @mastra/core@1.47.0-alpha.7
+  - @mastra/server@1.47.0-alpha.7
+  - @mastra/hono@1.5.2-alpha.7
+
+## 0.26.0-alpha.7
+
+### Patch Changes
+
+- Fixed MastraCode queued follow-up E2E tests to wait for stable terminal output. ([#18507](https://github.com/mastra-ai/mastra/pull/18507))
+
+## 0.26.0-alpha.6
+
+### Minor Changes
+
+- Added a live tokens/sec counter to the MastraCode terminal and web status lines. ([#18501](https://github.com/mastra-ai/mastra/pull/18501))
+
+  The counter shows how fast the model is generating, measured over decode time only — the window from the first streamed token of a step to when that step finishes. This excludes time-to-first-token, tool execution, and scheduling gaps, so the number reflects real generation speed instead of reading artificially low. Reasoning tokens are included, and the rate is smoothed with an exponential moving average for a stable readout.
+
+  The last reading stays visible while idle so you can read it after a turn finishes, and it clears when the next turn begins.
+
+### Patch Changes
+
+- Switched internal imports to the canonical `@mastra/core/agent-controller` entrypoint, replacing the deprecated `@mastra/core/harness` path and `Harness` types. Updated the web client to call `getAgentController()` and use the new `AgentControllerEvent` type, renamed the `useHarnessSession` hook to `useAgentControllerSession`, and renamed the `handleHarnessEvent` ACP mapper to `handleAgentControllerEvent`. ([#18510](https://github.com/mastra-ai/mastra/pull/18510))
+
+- Fixed OAuth logins (such as Anthropic and OpenAI sign-in) not being recognized for the selected model. The model status bar no longer shows a false "missing API key" error, and the `/api-keys` command and web settings panel now display a distinct "oauth" status for providers you are signed into instead of treating them as unset. ([#18503](https://github.com/mastra-ai/mastra/pull/18503))
+
+- Added support for reading MCP server config from a project root `.mcp.json` (the file Claude Code uses). Projects that already keep their MCP servers there no longer need a duplicate under `.mastracode/`. The root file sits below `.mastracode/mcp.json` in priority, so project-specific config still wins. ([#18494](https://github.com/mastra-ai/mastra/pull/18494))
+
+- Add MastraCode browser tool availability scenarios ([#18498](https://github.com/mastra-ai/mastra/pull/18498))
+
+- Updated dependencies [[`0200e75`](https://github.com/mastra-ai/mastra/commit/0200e7552d02d4221cd6040bf4eddf189a97a156), [`42d74d5`](https://github.com/mastra-ai/mastra/commit/42d74d5671f95aa6076576e32a9b7d11f13dd208), [`b4e97e6`](https://github.com/mastra-ai/mastra/commit/b4e97e676232a3a398ef32d3e78faa0c91c5fa1c), [`06e0d63`](https://github.com/mastra-ai/mastra/commit/06e0d63d42bc2a202e18bc091f3781f409f5e6fb), [`438a971`](https://github.com/mastra-ai/mastra/commit/438a9715c8b4398e5eaf8914a1f19dc8a85dc1de), [`77518cc`](https://github.com/mastra-ai/mastra/commit/77518ccb5bb8cc684875081e64213dc85cffdbee), [`bb2a13b`](https://github.com/mastra-ai/mastra/commit/bb2a13bb4b32e6bb807200fe7b18ae8fa4322118), [`a73cd1a`](https://github.com/mastra-ai/mastra/commit/a73cd1a62a5e4ca023dcc39ba150029f4f1f74c1), [`0b5cc47`](https://github.com/mastra-ai/mastra/commit/0b5cc4726dc18d9a685a27520db39ff1b36bb89a), [`87f38a3`](https://github.com/mastra-ai/mastra/commit/87f38a3de03e24731f2dd6f8ed6a60b6722b85a1), [`d5fa3cd`](https://github.com/mastra-ai/mastra/commit/d5fa3cda1788c3cb93a361a3c6ec47de6ba21e98), [`fe98ef2`](https://github.com/mastra-ai/mastra/commit/fe98ef2e66dbfcbd7d645c88c9ee1e67b458a136), [`793ea0f`](https://github.com/mastra-ai/mastra/commit/793ea0f52f831178837f21c83af6af93bf4ce638), [`507a5c4`](https://github.com/mastra-ai/mastra/commit/507a5c461bdc3136ad80744c0efbb55ce1f18f97), [`79b3626`](https://github.com/mastra-ai/mastra/commit/79b3626f8d647307eb07c8da14c9073c2699719d)]:
+  - @mastra/server@1.47.0-alpha.6
+  - @mastra/core@1.47.0-alpha.6
+  - @mastra/observability@1.15.2-alpha.1
+  - @mastra/memory@1.21.2-alpha.1
+  - @mastra/schema-compat@1.3.1-alpha.0
+  - @mastra/hono@1.5.2-alpha.6
+  - @mastra/mcp@1.12.0
+
 ## 0.26.0-alpha.5
 
 ### Minor Changes
