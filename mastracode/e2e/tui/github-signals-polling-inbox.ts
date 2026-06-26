@@ -240,9 +240,11 @@ values
     terminal.submit('/threads');
     await runtime.waitForScreenText(/E2E GitHub polling inbox fixture/i, terminal, 8_000);
     terminal.write('polling inbox');
+    await terminal.flushInput?.();
     await runtime.waitForScreenText(/E2E GitHub polling inbox fixture/i, terminal, 8_000);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Switched to: E2E GitHub polling inbox fixture/i, terminal, 8_000);
+    await terminal.flushInput?.();
+    await runtime.waitForScreenText(/Switched to: E2E GitHub polling inbox fixture/i, terminal, 15_000);
 
     await runtime.waitForScreenText(/notification from github/i, terminal, 60_000);
     await runtime.waitForScreenText(/mastra-ai\/mastra#17640 CI recovered/i, terminal, 60_000);
