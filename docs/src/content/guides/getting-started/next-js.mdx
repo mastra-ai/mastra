@@ -9,27 +9,31 @@ In this guide, you'll build a tool-calling AI agent using Mastra, then connect i
 
 You'll use [AI SDK UI](https://ai-sdk.dev/docs/ai-sdk-ui/overview) and [AI Elements](https://ai-sdk.dev/elements) to create a beautiful, interactive chat experience.
 
-<CopyPrompt identifier="next-js-quickstart" description="Use this pre-built prompt to build your project">
-  Build a Mastra + Next.js project. Follow this guide exactly:
-  [https://mastra.ai/guides/getting-started/next-js.md](https://mastra.ai/guides/getting-started/next-js.md)
+<Card>
+  Use this pre-built prompt to build your project.
 
-  Before starting, ask these questions one by one. Wait for answers unless already given:
+  <CopyPrompt identifier="next-js-quickstart" description="Copy prompt">
+    Build a Mastra + Next.js project. Follow this guide exactly:
+    [https://mastra.ai/guides/getting-started/next-js.md](https://mastra.ai/guides/getting-started/next-js.md)
 
-  1. Project name? (default: "my-nextjs-agent")
-  1. Provider? (default: "openai", options: "openai", "anthropic", "groq", "google", "cerebras", "mistral")
-  1. Already have a Next.js app? (default: "no")
+    Before starting, ask these questions one by one. Wait for answers unless already given:
 
-  Provider rules:
+    1. Project name? (default: "my-nextjs-agent")
+    1. Provider? (default: "openai", options: "openai", "anthropic", "groq", "google", "cerebras", "mistral")
+    1. Already have a Next.js app? (default: "no")
 
-  - Allowed provider -> use it.
-  - Any other value -> use "openai".
+    Provider rules:
 
-  If new app: run `npx create-next-app@latest <project-name> --yes --ts --eslint --tailwind --src-dir --app --turbopack --no-react-compiler --no-import-alias`
+    - Allowed provider -> use it.
+    - Any other value -> use "openai".
 
-  For the "Initialize Mastra" step, do NOT run the interactive command from the guide. Instead run: `cd <project-name> && npx mastra@latest init --default --llm <provider>`
+    If new app: run `npx create-next-app@latest <project-name> --yes --ts --eslint --tailwind --src-dir --app --turbopack --no-react-compiler --no-import-alias`
 
-  Then follow every step in the guide. Copy code from the guide exactly. Do not improvise.
-</CopyPrompt>
+    For the "Initialize Mastra" step, do NOT run the interactive command from the guide. Instead run: `cd <project-name> && npx mastra@latest init --default --llm <provider>`
+
+    Then follow every step in the guide. Copy code from the guide exactly. Do not improvise.
+  </CopyPrompt>
+</Card>
 
 ## Before you begin
 
