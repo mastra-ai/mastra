@@ -3,25 +3,116 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import { findMatchingCustomRoute, isProtectedCustomRoute } from '@mastra/server/auth';
-import { formatZodError } from '@mastra/server/handlers/error';
-import type { MCPHttpTransportResult } from '@mastra/server/handlers/mcp';
+import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
+  isZodError,
   normalizeQueryParams,
   redactStreamChunk,
+  serializeStreamChunk,
 } from '@mastra/server/server-adapter';
 import type { AnyElysia, MaybePromise } from 'elysia';
 import type Elysia from 'elysia';
-import { sse } from 'elysia';
 import { toReqRes, toFetchResponse } from 'fetch-to-node';
-import { ZodError } from 'zod';
 export { createAuthMiddleware } from './auth-middleware';
 export type { ElysiaAuthMiddlewareOptions } from './auth-middleware';
 
 // Export helper functions for OpenAPI integration
 export { getMastraOpenAPIDoc, clearMastraOpenAPICache } from './helper';
+
+/**
+ * Normalizes route path parameters to position-based names (:p0, :p1, ...)
+ * to avoid Elysia router conflicts when different routes use different
+ * parameter names at the same path segment position (e.g. :agentId vs
+ * :storedAgentId under /stored/agents/...).
+ * Returns the normalized path and the original parameter names in order.
+ */
+function normalizeRouteParams(path: string): { normalizedPath: string; paramNames: string[] } {
+  const paramNames: string[] = [];
+  const normalizedPath = path.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, paramName: string) => {
+    paramNames.push(paramName);
+    return `:p${paramNames.length - 1}`;
+  });
+  return { normalizedPath, paramNames };
+}
+
+/**
+ * Remaps Elysia's parsed params from position-based names (p0, p1, ...)
+ * back to the original parameter names expected by the route handler.
+ */
+function remapParams(rawParams: Record<string, string>, paramNames: string[]): Record<string, string> {
+  if (paramNames.length === 0) return rawParams;
+  const result: Record<string, string> = {};
+  paramNames.forEach((paramName, i) => {
+    const key = `p${i}`;
+    if (key in rawParams) {
+      result[paramName] = rawParams[key] as string;
+    }
+  });
+  return result;
+}
+
+async function createForwardRequest(ctx: any): Promise<Request> {
+  const request = ctx.request as Request;
+  const method = request.method;
+
+  if (method === 'GET' || method === 'HEAD') {
+    return request;
+  }
+
+  const headers = new Headers(request.headers);
+  let body: any;
+
+  if (ctx.body !== undefined) {
+    if (typeof ctx.body === 'string' || ctx.body instanceof FormData || ctx.body instanceof Blob) {
+      body = ctx.body;
+    } else {
+      body = JSON.stringify(ctx.body);
+      if (!headers.has('content-type')) {
+        headers.set('content-type', 'application/json');
+      }
+    }
+  } else if (!request.bodyUsed) {
+    const bodyBuffer = await request.clone().arrayBuffer();
+    if (bodyBuffer.byteLength > 0) {
+      body = bodyBuffer;
+    }
+  }
+
+  headers.delete('content-length');
+
+  return new Request(request.url, {
+    method,
+    headers,
+    body,
+    signal: request.signal,
+    ...(body ? { duplex: 'half' as const } : {}),
+  } as RequestInit);
+}
+
+function createSafeReadableStream(body: ReadableStream<Uint8Array> | null): ReadableStream<Uint8Array> | null {
+  if (!body) return null;
+
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const reader = body.getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          controller.enqueue(value);
+        }
+      } catch {
+        // Preserve chunks already sent before upstream stream errors.
+      } finally {
+        controller.close();
+        reader.releaseLock();
+      }
+    },
+  });
+}
 
 type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
@@ -78,7 +169,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         const contentType = ctx.request.headers.get('content-type');
         if (contentType?.includes('application/json')) {
           try {
-            const body = (await ctx.request.clone().json()) as { requestContext?: Record<string, any> };
+            const body = (ctx.body ?? (await ctx.request.clone().json())) as { requestContext?: Record<string, any> };
             if (body.requestContext) {
               bodyRequestContext = body.requestContext;
             }
@@ -113,6 +204,10 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       }
 
       const requestContext = this.mergeRequestContext({ paramsRequestContext, bodyRequestContext });
+      this.applyRequestMetadataToContext({
+        requestContext,
+        getHeader: (name: string) => ctx.request.headers.get(name) || undefined,
+      });
 
       // Add relevant contexts to Elysia context
       return {
@@ -126,89 +221,90 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
     };
   }
 
-  async stream(route: ServerRoute, res: Response, result: { fullStream: ReadableStream }): Promise<any> {
+  async stream(route: ServerRoute, _res: Response, result: { fullStream: ReadableStream }): Promise<any> {
     const streamFormat = route.streamFormat || 'stream';
+    const encoder = new TextEncoder();
 
-    if (streamFormat === 'sse') {
-      // Return generator function for SSE format
-      return async function* (this: MastraServer) {
+    const headers: Record<string, string> =
+      streamFormat === 'sse'
+        ? {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            Connection: 'keep-alive',
+            'X-Accel-Buffering': 'no',
+          }
+        : {
+            'Content-Type': 'text/plain',
+          };
+
+    const stream = new ReadableStream({
+      start: async controller => {
         const readableStream = result instanceof ReadableStream ? result : result.fullStream;
         const reader = readableStream.getReader();
 
         try {
+          if (streamFormat === 'sse' && route.sseFlushOnConnect) {
+            controller.enqueue(encoder.encode(': connected\n\n'));
+          }
+
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
 
             if (value) {
-              // Optionally redact sensitive data
+              // SSE comment passthrough — strings starting with ':' are written as-is
+              if (streamFormat === 'sse' && typeof value === 'string' && value.startsWith(':')) {
+                controller.enqueue(encoder.encode(value));
+                continue;
+              }
+
+              // Optionally redact sensitive data (system prompts, tool definitions, API keys) before sending to the client
               const shouldRedact = this.streamOptions?.redact ?? true;
               const outputValue = shouldRedact ? redactStreamChunk(value) : value;
-              yield sse({ data: JSON.stringify(outputValue) });
+              // A chunk that can't be serialized must not kill the stream — skip it and keep streaming
+              const serialized = serializeStreamChunk(outputValue);
+              if (!serialized.ok) {
+                this.mastra.getLogger()?.error('Failed to serialize stream chunk, skipping', {
+                  path: route.path,
+                  chunkType: (outputValue as { type?: string })?.type,
+                  error: serialized.error.message,
+                });
+                continue;
+              }
+              if (streamFormat === 'sse') {
+                controller.enqueue(encoder.encode(`data: ${serialized.json}\n\n`));
+              } else {
+                controller.enqueue(encoder.encode(serialized.json + '\x1E'));
+              }
             }
           }
 
-          yield sse({ data: '[DONE]' });
+          if (streamFormat === 'sse') {
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+          }
+          controller.close();
         } catch (error) {
           this.mastra.getLogger()?.error('Error in stream processing', {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
+          controller.error(error);
         } finally {
           await reader.cancel();
         }
-      }.bind(this)();
-    } else {
-      // Return Response with ReadableStream for regular stream format
-      const stream = new ReadableStream({
-        start: async controller => {
-          const readableStream = result instanceof ReadableStream ? result : result.fullStream;
-          const reader = readableStream.getReader();
+      },
+    });
 
-          try {
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-
-              if (value) {
-                const shouldRedact = this.streamOptions?.redact ?? true;
-                const outputValue = shouldRedact ? redactStreamChunk(value) : value;
-                const encoded = new TextEncoder().encode(JSON.stringify(outputValue) + '\x1E');
-                controller.enqueue(encoded);
-              }
-            }
-            controller.close();
-          } catch (error) {
-            this.mastra.getLogger()?.error('Error in stream processing', {
-              error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
-            });
-            controller.error(error);
-          } finally {
-            await reader.cancel();
-          }
-        },
-      });
-
-      return new Response(stream, {
-        headers: {
-          'Content-Type': 'text/plain',
-          'Transfer-Encoding': 'chunked',
-        },
-      });
-    }
+    return new Response(stream, { headers });
   }
 
   async getParams(route: ServerRoute, request: Request): Promise<ParsedRequestParams> {
-    // For Elysia, we need to extract from the context that was passed
-    // We'll use a different approach - get context from the request
-    // Note: Elysia pre-parses params, query, and body, but we're getting Request here
-    // We'll need to work with what we have
-
-    // This is a bit tricky - in Elysia, the params are available on the context, not the Request
-    // We'll need to adjust the approach. Let's extract what we can from the Request directly
     const url = new URL(request.url);
 
     // URL params - extract from request context if available (Elysia stores params in ctx)
-    const urlParams: Record<string, string> = (request as any).params || (request as any).ctx?.params || {};
+    // Params may be normalized (p0, p1, ...) — remap back to original names from route path
+    const { paramNames } = normalizeRouteParams(route.path);
+    const rawUrlParams: Record<string, string> = (request as any).params || (request as any).ctx?.params || {};
+    const urlParams = paramNames.length > 0 ? remapParams(rawUrlParams, paramNames) : rawUrlParams;
 
     // Query params - parse from URL
     const queryParams = normalizeQueryParams(Object.fromEntries(url.searchParams));
@@ -286,9 +382,15 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
 
     // Handle Elysia's pre-parsed object format
     for (const [key, value] of Object.entries(data)) {
-      if (value && typeof value === 'object' && 'name' in value && 'type' in value) {
-        // This is a File-like object from Elysia
-        result[key] = value;
+      if (value && typeof value === 'object' && 'arrayBuffer' in value && typeof value.arrayBuffer === 'function') {
+        const arrayBuffer = await value.arrayBuffer();
+        result[key] = Buffer.from(arrayBuffer);
+      } else if (typeof value === 'string') {
+        try {
+          result[key] = JSON.parse(value);
+        } catch {
+          result[key] = value;
+        }
       } else {
         result[key] = value;
       }
@@ -299,56 +401,94 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
   async sendResponse(route: ServerRoute, response: Response, result: unknown, prefix?: string): Promise<any> {
     const resolvedPrefix = prefix ?? this.prefix ?? '';
 
+    // Apply refresh headers from transparent session refresh (e.g. Set-Cookie after token refresh)
+    const refreshHeaders: Record<string, string> = {};
+    if (result && typeof result === 'object' && '__refreshHeaders' in result) {
+      const headers = (result as any).__refreshHeaders as Record<string, string>;
+      for (const [key, value] of Object.entries(headers)) {
+        refreshHeaders[key] = value;
+      }
+      delete (result as any).__refreshHeaders;
+    }
+
     if (route.responseType === 'json') {
-      return result;
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', ...refreshHeaders },
+      });
     } else if (route.responseType === 'stream') {
       return this.stream(route, response, result as { fullStream: ReadableStream });
     } else if (route.responseType === 'datastream-response') {
       const fetchResponse = result as globalThis.Response;
-      return fetchResponse;
+      const headers = new Headers(fetchResponse.headers);
+      headers.delete('Transfer-Encoding');
+      return new Response(createSafeReadableStream(fetchResponse.body), {
+        status: fetchResponse.status,
+        statusText: fetchResponse.statusText,
+        headers,
+      });
     } else if (route.responseType === 'mcp-http') {
       // MCP Streamable HTTP transport
       const { server, httpPath, mcpOptions: routeMcpOptions } = result as MCPHttpTransportResult;
 
-      // We need to get the Request object - it's passed as the response parameter in Elysia context
-      // Actually, we need to work with the context differently
-      // Let's create a proper Request object from what we have
-      const request = response as any; // This will be the context in reality
+      const request = response as any; // Elysia context
+      const forwardRequest = await createForwardRequest(request);
+      const { req, res } = toReqRes(forwardRequest);
 
-      const { req, res } = toReqRes(request.request);
+      const options = { ...this.mcpOptions, ...routeMcpOptions };
 
-      try {
-        const options = { ...this.mcpOptions, ...routeMcpOptions };
-
-        await server.startHTTP({
-          url: new URL(request.request.url),
+      // Do NOT await startHTTP — let it run in the background so SSE
+      // notifications stream to the client as they are written.
+      // toFetchResponse resolves when headers are sent, not when the body finishes.
+      server
+        .startHTTP({
+          url: new URL(forwardRequest.url),
           httpPath: `${resolvedPrefix}${httpPath}`,
           req,
           res,
           options: Object.keys(options).length > 0 ? options : undefined,
+        })
+        .catch((e: unknown) => {
+          this.mastra.getLogger()?.error('[MCP HTTP] Error in background startHTTP:', {
+            error: e instanceof Error ? { message: e.message, stack: e.stack } : e,
+          });
         });
-        return await toFetchResponse(res);
-      } catch {
-        if (!res.headersSent) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(
-            JSON.stringify({
-              jsonrpc: '2.0',
-              error: { code: -32603, message: 'Internal server error' },
-              id: null,
-            }),
-          );
-          return await toFetchResponse(res);
-        }
-        return await toFetchResponse(res);
-      }
+
+      const mcpResponse = await toFetchResponse(res);
+      const headers = new Headers(mcpResponse.headers);
+      headers.delete('Transfer-Encoding');
+      return new Response(createSafeReadableStream(mcpResponse.body), {
+        status: mcpResponse.status,
+        statusText: mcpResponse.statusText,
+        headers,
+      });
     } else if (route.responseType === 'mcp-sse') {
-      // MCP SSE transport - not supported yet for Elysia
-      // We would need to implement startElysiaSSE on the MCP server
-      this.mastra.getLogger()?.error('MCP SSE transport not yet implemented for Elysia');
-      return new Response(JSON.stringify({ error: 'MCP SSE transport not yet implemented for Elysia' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
+      const { server, ssePath, messagePath } = result as MCPSseTransportResult;
+      const request = response as any; // Elysia context
+      const forwardRequest = await createForwardRequest(request);
+      const { req, res } = toReqRes(forwardRequest);
+
+      server
+        .startSSE({
+          url: new URL(forwardRequest.url),
+          ssePath: `${resolvedPrefix}${ssePath}`,
+          messagePath: `${resolvedPrefix}${messagePath}`,
+          req,
+          res,
+        })
+        .catch((e: unknown) => {
+          this.mastra.getLogger()?.error('[MCP SSE] Error in background startSSE:', {
+            error: e instanceof Error ? { message: e.message, stack: e.stack } : e,
+          });
+        });
+
+      const sseResponse = await toFetchResponse(res);
+      const headers = new Headers(sseResponse.headers);
+      headers.delete('Transfer-Encoding');
+      return new Response(createSafeReadableStream(sseResponse.body), {
+        status: sseResponse.status,
+        statusText: sseResponse.statusText,
+        headers,
       });
     } else {
       return new Response(null, { status: 500 });
@@ -362,6 +502,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
   ): Promise<void> {
     const prefix = prefixParam ?? this.prefix ?? '';
     const fullPath = `${prefix}${route.path}`;
+    const { normalizedPath, paramNames } = normalizeRouteParams(fullPath);
 
     const handler = async (ctx: any) => {
       // Check route-level authentication/authorization
@@ -397,13 +538,29 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         }
       }
 
-      // Extract params - with Elysia, params are pre-parsed
-      const urlParams = ctx.params || {};
+      // Extract params - remap from normalized param names back to original
+      const rawParams = ctx.params || {};
+      const urlParams = paramNames.length > 0 ? remapParams(rawParams, paramNames) : rawParams;
       const queryParams = normalizeQueryParams(ctx.query || {});
       let body: unknown;
       let bodyParseError: { message: string } | undefined;
 
       if (route.method === 'POST' || route.method === 'PUT' || route.method === 'PATCH' || route.method === 'DELETE') {
+        const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
+        const contentLength = ctx.request.headers.get('content-length');
+        if (this.bodyLimitOptions && maxSize && contentLength && parseInt(contentLength, 10) > maxSize) {
+          let errorResponse: unknown = { error: 'Request body too large' };
+          try {
+            errorResponse = this.bodyLimitOptions.onError({ error: 'Request body too large' });
+          } catch {
+            // Fall back to the default error response.
+          }
+          return new Response(JSON.stringify(errorResponse), {
+            status: 413,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+
         const contentType = ctx.request.headers.get('content-type') || '';
 
         if (contentType.includes('multipart/form-data')) {
@@ -467,9 +624,10 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
           this.mastra.getLogger()?.error('Error parsing query params', {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
-          if (error instanceof ZodError) {
-            return new Response(JSON.stringify(formatZodError(error, 'query parameters')), {
-              status: 400,
+          if (isZodError(error)) {
+            const { status, body } = this.resolveValidationError(route, error, 'query');
+            return new Response(JSON.stringify(body), {
+              status,
               headers: { 'Content-Type': 'application/json' },
             });
           }
@@ -493,15 +651,44 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
           this.mastra.getLogger()?.error('Error parsing body', {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
-          if (error instanceof ZodError) {
-            return new Response(JSON.stringify(formatZodError(error, 'request body')), {
-              status: 400,
+          if (isZodError(error)) {
+            const { status, body } = this.resolveValidationError(route, error, 'body');
+            return new Response(JSON.stringify(body), {
+              status,
               headers: { 'Content-Type': 'application/json' },
             });
           }
           return new Response(
             JSON.stringify({
               error: 'Invalid request body',
+              issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+            }),
+            {
+              status: 400,
+              headers: { 'Content-Type': 'application/json' },
+            },
+          );
+        }
+      }
+
+      // Parse path params through pathParamSchema for type coercion (e.g., z.coerce.number())
+      if (params.urlParams) {
+        try {
+          params.urlParams = await this.parsePathParams(route, params.urlParams);
+        } catch (error) {
+          this.mastra.getLogger()?.error('Error parsing path params', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
+          if (isZodError(error)) {
+            const { status, body } = this.resolveValidationError(route, error, 'path');
+            return new Response(JSON.stringify(body), {
+              status,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+          return new Response(
+            JSON.stringify({
+              error: 'Invalid path parameters',
               issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
             }),
             {
@@ -534,6 +721,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         taskStore: ctx.taskStore,
         abortSignal: ctx.abortSignal,
         routePrefix: prefix,
+        request: ctx.request,
       };
 
       try {
@@ -573,7 +761,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
 
     // Register the route using Elysia's method chaining
     const method = route.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete' | 'patch' | 'all';
-    app[method](fullPath, handler);
+    app[method](normalizedPath, handler);
   }
 
   async registerCustomApiRoutes(): Promise<void> {
@@ -583,7 +771,8 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
 
     for (const route of routes) {
       const method = route.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete' | 'patch' | 'all';
-      (this.app as ElysiaApp)[method](route.path, async (ctx: any) => {
+      const { normalizedPath: customNormalizedPath } = normalizeRouteParams(route.path);
+      (this.app as ElysiaApp)[method](customNormalizedPath, async (ctx: any) => {
         const path = new URL(ctx.request.url).pathname;
         const requestMethod = ctx.request.method;
         const matchedRoute = findMatchingCustomRoute(
@@ -630,10 +819,13 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
                 const userPermissions = ctx.requestContext.get('userPermissions') as string[] | undefined;
                 const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
                 if (permissionError) {
-                  return new Response(JSON.stringify({ error: permissionError.error, message: permissionError.message }), {
-                    status: permissionError.status,
-                    headers: { 'Content-Type': 'application/json' },
-                  });
+                  return new Response(
+                    JSON.stringify({ error: permissionError.error, message: permissionError.message }),
+                    {
+                      status: permissionError.status,
+                      headers: { 'Content-Type': 'application/json' },
+                    },
+                  );
                 }
               }
             }
@@ -663,6 +855,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
           headers,
           ctx.body,
           ctx.requestContext,
+          ctx.request.signal,
         );
 
         if (!response) {
@@ -684,6 +877,28 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
   registerAuthMiddleware(): void {
     // Auth is handled per-route in registerRoute() and registerCustomApiRoutes()
     // No global middleware needed
+
+    // Register global error handler to catch Elysia body parsing errors
+    // and return structured JSON responses instead of plain text "Bad Request"
+    this.app.onError((ctx: any) => {
+      const error = ctx.error;
+      const status = error?.status ?? error?.code ?? 500;
+      const message = error?.message ?? 'Internal server error';
+
+      // Body parsing / validation errors from Elysia are 400s
+      const httpStatus = typeof status === 'number' && status >= 400 && status < 500 ? status : 500;
+
+      return new Response(
+        JSON.stringify({
+          error: httpStatus < 500 ? message : 'Internal server error',
+          ...(httpStatus < 500 ? { issues: [] } : {}),
+        }),
+        {
+          status: httpStatus,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+    });
   }
 
   registerHttpLoggingMiddleware(): void {
@@ -710,7 +925,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
 
       const duration = Date.now() - (ctx.httpLogStart ?? Date.now());
       const method = ctx.request.method;
-      const status = ctx.set?.status ?? ctx.response?.status ?? 200;
+      const status = ctx.response?.status ?? ctx.set?.status ?? 200;
       const level = this.httpLoggingConfig?.level || 'info';
 
       const logData: Record<string, any> = {
