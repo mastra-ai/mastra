@@ -101,6 +101,7 @@ export function createGoalScorer({
   memory,
   defaultMemoryOptions,
   onStream,
+  maxSteps,
 }: {
   judgeModel: MastraModelConfig;
   prompt?: string;
@@ -108,6 +109,7 @@ export function createGoalScorer({
   memory?: MastraMemory;
   defaultMemoryOptions?: AgentMemoryOption;
   onStream?: ScorerJudgeConfig['onStream'];
+  maxSteps?: number;
 }) {
   const hasTools = !!tools && Object.keys(tools).length > 0;
   const instructions = prompt ?? DEFAULT_GOAL_JUDGE_PROMPT;
@@ -123,6 +125,7 @@ export function createGoalScorer({
       ...(memory ? { memory } : {}),
       ...(defaultMemoryOptions ? { defaultMemoryOptions } : {}),
       ...(onStream ? { onStream } : {}),
+      ...(maxSteps ? { maxSteps } : {}),
     },
   })
     .analyze({

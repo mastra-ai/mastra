@@ -80,6 +80,8 @@ export interface ScorerJudgeConfig {
   defaultMemoryOptions?: AgentMemoryOption;
   /** Optional callback for observing the internal judge agent stream as soon as it starts. */
   onStream?: (stream: Awaited<ReturnType<Agent['stream']>>) => void | Promise<void>;
+  /** Optional maximum number of agentic loop iterations for the internal judge agent. */
+  maxSteps?: number;
 }
 
 export type ScorerStepJudgeConfig = Omit<ScorerJudgeConfig, 'memory' | 'defaultMemoryOptions'> & {
@@ -876,6 +878,7 @@ class MastraScorer<
     const defaultMemoryOptions = this.config.judge?.defaultMemoryOptions;
     const stepMemoryOptions = originalStep.judge?.memory;
     const onStream = originalStep.judge?.onStream ?? this.config.judge?.onStream;
+    const maxSteps = originalStep.judge?.maxSteps ?? this.config.judge?.maxSteps;
     const memoryOptions = stepMemoryOptions
       ? {
           ...defaultMemoryOptions,
@@ -916,6 +919,7 @@ class MastraScorer<
     const judgeRunOptions = {
       ...observabilityContext,
       ...(memoryOptions ? { memory: memoryOptions } : {}),
+      ...(maxSteps ? { maxSteps } : {}),
     };
 
     // GenerateScore output must be a number
