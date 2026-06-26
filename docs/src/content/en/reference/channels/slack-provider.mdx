@@ -109,6 +109,14 @@ await slack.configure({
       "How tool calls are rendered in Slack: `'cards'`, `'text'`, `'timeline'`, `'grouped'`, `'hidden'`, or a function. `'hidden'` suppresses tool call/result rendering entirely. `'timeline'` and `'grouped'` require streaming. With `streaming: false`, only static modes are available and the default is `'cards'`.",
   },
   {
+    name: 'typingStatus',
+    type: 'boolean | TypingStatusFn',
+    isOptional: true,
+    defaultValue: 'true',
+    description:
+      'Show a typing indicator while the agent works. Set `false` to disable, or pass a function to return custom status text per stream chunk (return `undefined` to fall back to the default for that chunk).',
+  },
+  {
     name: 'waitUntil',
     type: 'WaitUntilFn',
     isOptional: true,
