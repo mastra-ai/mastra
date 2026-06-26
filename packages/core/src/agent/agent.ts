@@ -7463,7 +7463,7 @@ export class Agent<
       const result = agentThreadStreamRuntime.sendSignal<OUTPUT>(
         this as Agent<any, any, any, any>,
         signal,
-        target,
+        { ...target, ifIdle: { ...target.ifIdle, behavior: record.priority === 'low' ? 'persist' : 'wake' } },
         this.getPubSub(),
       );
       let delivered: SendAgentSignalAccepted<OUTPUT>;
@@ -7515,6 +7515,20 @@ export class Agent<
     }
 
     return results;
+  }
+
+  /**
+   * @experimental Agent notification signal APIs are experimental and may change in a future release.
+   *
+   * Resolves stream options for deferred notification dispatch. Called by the
+   * notification dispatcher so idle-thread wakes carry the requestContext and
+   * model configuration the agent needs.
+   */
+  getNotificationStreamOptions(target: {
+    resourceId: string;
+    threadId: string;
+  }): Record<string, unknown> | Promise<Record<string, unknown> | undefined> | undefined {
+    return this.#notifications?.getNotificationStreamOptions?.(target);
   }
 
   /**
