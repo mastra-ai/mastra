@@ -8,7 +8,7 @@ packages:
 
 # RedisStreamsPubSub
 
-`RedisStreamsPubSub` is a [`PubSub`](/reference/pubsub/base) implementation backed by [Redis Streams](https://redis.io/docs/latest/develop/data-types/streams/). It delivers events across processes and hosts, with persistence, consumer groups, and redelivery on failure. It also implements [`LeaseProvider`](/reference/pubsub/lease-provider), so the signals layer can elect a single owner per resource across instances, which is what lets channels and signals coordinate runs in distributed and serverless deployments.
+`RedisStreamsPubSub` is a [`PubSub`](/reference/pubsub/base) implementation backed by [Redis Streams](https://redis.io/docs/latest/develop/data-types/streams/). It delivers events across processes and hosts, with persistence, consumer groups, and redelivery on failure. It also implements [`LeaseProvider`](/reference/pubsub/lease-provider), so the signals layer can elect a single owner per resource across instances, which is what lets signals coordinate runs in distributed and serverless deployments.
 
 Use it for distributed deployments where several services share an event stream. For single-process delivery, use [`EventEmitterPubSub`](/reference/pubsub/event-emitter). For Google Cloud, use [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub).
 
@@ -156,7 +156,7 @@ When a subscriber calls `nack`, the event is republished with an incremented `de
 
 ## Distributed leasing
 
-`RedisStreamsPubSub` implements the [`LeaseProvider`](/reference/pubsub/lease-provider) contract on top of the same Redis connection. The signals runtime uses it to elect a single owner (usually per thread key) so that across instances only one process wakes and runs the agent, and others route follow-up work to the holder. This is what makes channels and signals work on serverless and multi-instance deployments; without a shared lease, each instance would start its own competing run.
+`RedisStreamsPubSub` implements the [`LeaseProvider`](/reference/pubsub/lease-provider) contract on top of the same Redis connection. The signals runtime uses it to elect a single owner (usually per thread key) so that across instances only one process wakes and runs the agent, and others route follow-up work to the holder. This is what makes signals work on serverless and multi-instance deployments; without a shared lease, each instance would start its own competing run.
 
 Lease keys are namespaced under the same `keyPrefix` as topics, as `<keyPrefix>:lease:<key>`. All operations are atomic: `acquireLease` uses `SET NX PX` and refreshes its own TTL idempotently, while `releaseLease`, `renewLease`, and `transferLease` use Lua scripts that check ownership before mutating, so a concurrent renewal from another owner is never clobbered.
 

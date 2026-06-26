@@ -11,7 +11,7 @@ packages:
 
 Leasing is a distinct concern from pub/sub. A backend implements `LeaseProvider` only when it can genuinely coordinate a lock, such as Redis via atomic `SET`/Lua, or an in-memory map for single-process. Backends that cannot lease omit it; the signals runtime feature-detects the capability and falls back to a no-op provider, preserving single-process behavior.
 
-The built-in [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) implements `LeaseProvider`, which is what enables channels and signals to coordinate across instances in distributed and serverless deployments.
+The built-in [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) implements `LeaseProvider`, which is what enables signals to coordinate across instances in distributed and serverless deployments.
 
 ## Usage example
 
