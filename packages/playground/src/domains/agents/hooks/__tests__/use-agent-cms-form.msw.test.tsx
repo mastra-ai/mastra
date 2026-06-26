@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+import type { AgentEditorConfig } from '@mastra/core/agent';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
@@ -150,5 +150,86 @@ describe('useAgentCmsForm — code agent instruction ownership', () => {
     // Mirrors the server's getCodeAgentOwnership: an editor object only owns instructions when it
     // sets `instructions: true`. Omitting the key must not send instructions the server would strip.
     expect(sink.body!.instructions).toEqual([]);
+  });
+});
+
+const EDITED_TOOL = { 'get-weather': { description: 'Get the current weather for a city' } };
+
+/** Render the hook for a code-agent override with the given editor config, set a tool edit, save. */
+const saveWithEditedTool = async (editorConfig: AgentEditorConfig | undefined) => {
+  const sink: { body: Record<string, unknown> | null } = { body: null };
+  captureCreateBody(sink);
+
+  const { result } = renderHook(
+    () =>
+      useAgentCmsForm({
+        mode: 'edit',
+        agentId: AGENT_ID,
+        dataSource,
+        isCodeAgentOverride: true,
+        hasStoredOverride: false,
+        editorConfig,
+        onSuccess: () => {},
+      }),
+    { wrapper: makeWrapper() },
+  );
+
+  act(() => {
+    // Keep instructions valid (so form.trigger passes) and add a tool edit.
+    result.current.form.setValue('instructionBlocks', [createInstructionBlock('Original code instructions')], {
+      shouldDirty: true,
+    });
+    result.current.form.setValue('tools', EDITED_TOOL, { shouldDirty: true });
+  });
+
+  await act(async () => {
+    await result.current.handleSaveDraft();
+  });
+
+  await waitFor(() => expect(sink.body).not.toBeNull());
+  return sink.body!;
+};
+
+// Regression coverage: saving a code-defined agent must persist tool edits instead of dropping them
+// when the agent has no explicit editor config. Mirrors the server's getCodeAgentOwnership for tools.
+describe('useAgentCmsForm — code agent tool ownership', () => {
+  it('sends tool edits when the code agent has no editor config', async () => {
+    const body = await saveWithEditedTool(undefined);
+
+    // The edited tool is on the wire — previously the whole tools block was omitted,
+    // so the server never received (and silently dropped) the change.
+    expect(body.tools).toEqual(EDITED_TOOL);
+  });
+
+  it('sends tool edits when editor.tools is true', async () => {
+    const body = await saveWithEditedTool({ tools: true });
+
+    expect(body.tools).toEqual(EDITED_TOOL);
+  });
+
+  it('sends tool edits when editor owns tool descriptions only', async () => {
+    const body = await saveWithEditedTool({ tools: { description: true } });
+
+    // Description-only ownership still sends the tools block so the server can apply
+    // the description override (it rejects membership changes in this mode).
+    expect(body.tools).toEqual(EDITED_TOOL);
+  });
+
+  it('does not send tools when the editor object omits the tools key', async () => {
+    const body = await saveWithEditedTool({ instructions: true });
+
+    // An editor object that says nothing about tools does not own them — the tools block
+    // must be omitted so the server keeps the code-defined tools.
+    expect(body.tools).toBeUndefined();
+    expect(body.integrationTools).toBeUndefined();
+    expect(body.mcpClients).toBeUndefined();
+  });
+
+  it('does not send tools when editor is false', async () => {
+    const body = await saveWithEditedTool(false);
+
+    expect(body.tools).toBeUndefined();
+    expect(body.integrationTools).toBeUndefined();
+    expect(body.mcpClients).toBeUndefined();
   });
 });

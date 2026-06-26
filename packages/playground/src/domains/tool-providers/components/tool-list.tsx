@@ -1,4 +1,10 @@
-import { Badge, Checkbox, ScrollArea, Searchbar, SearchbarWrapper, Skeleton, Txt, cn } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Searchbar, SearchbarWrapper } from '@mastra/playground-ui/components/Searchbar';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { useState } from 'react';
 
 import { useProviderTools } from '../hooks/use-provider-tools';

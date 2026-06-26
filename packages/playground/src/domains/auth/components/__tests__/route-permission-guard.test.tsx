@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
@@ -42,7 +41,7 @@ vi.mock('react-router', async importOriginal => {
   };
 });
 
-vi.mock('@mastra/playground-ui', () => ({
+vi.mock('@mastra/playground-ui/components/Spinner', () => ({
   Spinner: () => <div data-testid="route-guard-spinner" />,
 }));
 

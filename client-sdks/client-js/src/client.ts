@@ -89,6 +89,7 @@ import {
   Workspace,
   Responses,
   Channels,
+  AgentController,
 } from './resources';
 import type {
   ListScoresBySpanParams,
@@ -250,6 +251,25 @@ export class MastraClient extends BaseResource {
    */
   public getAgent(agentId: string, version?: AgentVersionIdentifier) {
     return new Agent(this.options, agentId, version);
+  }
+
+  /**
+   * Lists the agent controllers hosted on the connected Mastra instance.
+   * @returns Promise containing an array of agent controller identifiers
+   */
+  public async listAgentControllers(): Promise<{ id: string }[]> {
+    const body = await this.request<{ agentControllers: { id: string }[] }>('/agent-controller');
+    return body.agentControllers;
+  }
+
+  /**
+   * Scopes to an agent controller hosted on the connected Mastra instance. Use
+   * `getAgentController(id).session(resourceId)` to create/resume a session,
+   * stream its events, and send messages.
+   * @param controllerId - The id the agent controller is registered under on Mastra
+   */
+  public getAgentController(controllerId: string) {
+    return new AgentController(this.options, controllerId);
   }
 
   /**

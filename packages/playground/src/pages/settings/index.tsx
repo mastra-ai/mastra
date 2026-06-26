@@ -1,15 +1,9 @@
-import {
-  PageLayout,
-  SectionCard,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  useTheme,
-} from '@mastra/playground-ui';
-import type { Theme } from '@mastra/playground-ui';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { SectionCard } from '@mastra/playground-ui/components/SectionCard';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
+import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
+import type { Theme } from '@mastra/playground-ui/components/ThemeProvider';
 import type { LucideIcon } from 'lucide-react';
 import { MonitorIcon, MoonIcon, SunIcon } from 'lucide-react';
 import { StudioConfigForm } from '@/domains/configuration/components/studio-config-form';

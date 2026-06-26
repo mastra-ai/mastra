@@ -18,7 +18,7 @@ export interface SubmitPlanSuspendPayload {
  * means the user wants revisions; the optional `feedback` is surfaced to the model so it
  * can revise and submit again.
  *
- * Hosts that layer additional behavior on approval (e.g. a Harness switching from a
+ * Hosts that layer additional behavior on approval (e.g. a AgentController switching from a
  * planning mode to an execution mode) drive that from their own response handling; the
  * tool itself only reports the outcome back to the model.
  */
@@ -41,9 +41,9 @@ const resumeSchema = z.object({
  * and continues the run via `agent.resumeStream({ action, feedback })`; the tool re-runs
  * with `resumeData` set to that decision and reports it back to the model.
  *
- * This tool is deliberately host-agnostic: it does not know about Harness modes or any
+ * This tool is deliberately host-agnostic: it does not know about AgentController modes or any
  * UI. A plain Agent (e.g. embedded in Studio or a customer app) can use it directly, and
- * a Harness can layer mode-switch behavior on top of the approval in its own response
+ * a AgentController can layer mode-switch behavior on top of the approval in its own response
  * handling without the tool needing to change.
  *
  * When executed without an agent `suspend` (e.g. direct invocation outside an agent run),
@@ -78,9 +78,18 @@ export const submitPlanTool = createTool({
           };
         }
 
-        const feedback = resumeData.feedback ? `\n\nUser feedback: ${resumeData.feedback}` : '';
+        if (resumeData.feedback) {
+          return {
+            content: `Plan was not approved. The user wants revisions.\n\nUser feedback: ${resumeData.feedback}\n\nPlease revise the plan based on the feedback and submit again with submit_plan.`,
+            isError: false,
+          };
+        }
+
+        // No inline feedback — the user will provide revision instructions in
+        // their next chat message. Stop and wait for it.
         return {
-          content: `Plan was not approved. The user wants revisions.${feedback}\n\nPlease revise the plan based on the feedback and submit again with submit_plan.`,
+          content:
+            'Plan was not approved. The user will send revision instructions in their next message. Stop now and wait for the user to provide feedback before revising the plan.',
           isError: false,
         };
       }

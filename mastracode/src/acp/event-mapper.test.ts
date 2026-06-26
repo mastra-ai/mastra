@@ -1,14 +1,14 @@
 import type { AgentSideConnection } from '@agentclientprotocol/sdk';
-import type { Harness, HarnessEvent } from '@mastra/core/harness';
+import type { AgentControllerEvent, Session } from '@mastra/core/agent-controller';
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import type { PromptState } from './event-mapper.js';
-import { handleHarnessEvent } from './event-mapper.js';
+import { handleAgentControllerEvent } from './event-mapper.js';
 
 describe('ACP Event Mapper', () => {
   let mockConnection: AgentSideConnection;
-  let mockHarness: Harness;
+  let mockSession: Session;
   let sessionUpdateSpy: ReturnType<typeof vi.fn>;
   let requestPermissionSpy: ReturnType<typeof vi.fn>;
 
@@ -23,12 +23,10 @@ describe('ACP Event Mapper', () => {
       requestPermission: requestPermissionSpy,
     } as unknown as AgentSideConnection;
 
-    mockHarness = {
-      session: {
-        respondToToolApproval: vi.fn(),
-      },
+    mockSession = {
+      respondToToolApproval: vi.fn(),
       respondToToolSuspension: vi.fn(),
-    } as unknown as Harness;
+    } as unknown as Session;
   });
 
   function createPromptState(sessionId: string): PromptState {
@@ -49,7 +47,7 @@ describe('ACP Event Mapper', () => {
       const state = createPromptState('session-1');
 
       // First message_update with "Hello"
-      const event1: Extract<HarnessEvent, { type: 'message_update' }> = {
+      const event1: Extract<AgentControllerEvent, { type: 'message_update' }> = {
         type: 'message_update',
         message: {
           id: 'msg-1',
@@ -59,7 +57,7 @@ describe('ACP Event Mapper', () => {
         },
       };
 
-      handleHarnessEvent(event1, state, mockConnection, mockHarness);
+      handleAgentControllerEvent(event1, state, mockConnection, mockSession);
 
       expect(sessionUpdateSpy).toHaveBeenCalledWith({
         sessionId: 'session-1',
@@ -76,7 +74,7 @@ describe('ACP Event Mapper', () => {
       state.lastTextLength = 5; // Already seen "Hello"
 
       // Second message_update with "Hello, world!"
-      const event: Extract<HarnessEvent, { type: 'message_update' }> = {
+      const event: Extract<AgentControllerEvent, { type: 'message_update' }> = {
         type: 'message_update',
         message: {
           id: 'msg-1',
@@ -86,7 +84,7 @@ describe('ACP Event Mapper', () => {
         },
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleAgentControllerEvent(event, state, mockConnection, mockSession);
 
       expect(sessionUpdateSpy).toHaveBeenCalledWith({
         sessionId: 'session-1',
@@ -101,7 +99,7 @@ describe('ACP Event Mapper', () => {
     it('ignores non-assistant messages', () => {
       const state = createPromptState('session-1');
 
-      const event: Extract<HarnessEvent, { type: 'message_update' }> = {
+      const event: Extract<AgentControllerEvent, { type: 'message_update' }> = {
         type: 'message_update',
         message: {
           id: 'msg-1',
@@ -111,7 +109,7 @@ describe('ACP Event Mapper', () => {
         },
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleAgentControllerEvent(event, state, mockConnection, mockSession);
       expect(sessionUpdateSpy).not.toHaveBeenCalled();
     });
   });
@@ -120,14 +118,14 @@ describe('ACP Event Mapper', () => {
     it('emits tool_call with correct kind mapping', () => {
       const state = createPromptState('session-1');
 
-      const event: Extract<HarnessEvent, { type: 'tool_start' }> = {
+      const event: Extract<AgentControllerEvent, { type: 'tool_start' }> = {
         type: 'tool_start',
         toolCallId: 'tool-123',
         toolName: 'edit_file',
         args: { path: '/test.js', content: 'code' },
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleAgentControllerEvent(event, state, mockConnection, mockSession);
 
       expect(sessionUpdateSpy).toHaveBeenCalledWith({
         sessionId: 'session-1',
@@ -154,14 +152,14 @@ describe('ACP Event Mapper', () => {
 
       testCases.forEach(({ name, expectedKind }) => {
         sessionUpdateSpy.mockClear();
-        const event: Extract<HarnessEvent, { type: 'tool_start' }> = {
+        const event: Extract<AgentControllerEvent, { type: 'tool_start' }> = {
           type: 'tool_start',
           toolCallId: `tool-${name}`,
           toolName: name,
           args: {},
         };
 
-        handleHarnessEvent(event, state, mockConnection, mockHarness);
+        handleAgentControllerEvent(event, state, mockConnection, mockSession);
 
         expect(sessionUpdateSpy).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -178,14 +176,14 @@ describe('ACP Event Mapper', () => {
     it('emits tool_call_update with completed status', () => {
       const state = createPromptState('session-1');
 
-      const event: Extract<HarnessEvent, { type: 'tool_end' }> = {
+      const event: Extract<AgentControllerEvent, { type: 'tool_end' }> = {
         type: 'tool_end',
         toolCallId: 'tool-123',
         result: 'File written successfully',
         isError: false,
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleAgentControllerEvent(event, state, mockConnection, mockSession);
 
       expect(sessionUpdateSpy).toHaveBeenCalledWith({
         sessionId: 'session-1',
@@ -201,14 +199,14 @@ describe('ACP Event Mapper', () => {
     it('emits tool_call_update with failed status on error', () => {
       const state = createPromptState('session-1');
 
-      const event: Extract<HarnessEvent, { type: 'tool_end' }> = {
+      const event: Extract<AgentControllerEvent, { type: 'tool_end' }> = {
         type: 'tool_end',
         toolCallId: 'tool-123',
         result: { error: 'Permission denied' },
         isError: true,
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleAgentControllerEvent(event, state, mockConnection, mockSession);
 
       expect(sessionUpdateSpy).toHaveBeenCalledWith({
         sessionId: 'session-1',
@@ -226,14 +224,14 @@ describe('ACP Event Mapper', () => {
     it('requests permission and responds with approve on allow_once', async () => {
       const state = createPromptState('session-1');
 
-      const event: Extract<HarnessEvent, { type: 'tool_approval_required' }> = {
+      const event: Extract<AgentControllerEvent, { type: 'tool_approval_required' }> = {
         type: 'tool_approval_required',
         toolCallId: 'tool-123',
         toolName: 'delete_file',
         args: { path: '/important.js' },
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleAgentControllerEvent(event, state, mockConnection, mockSession);
 
       // Wait for async permission handling
       await vi.waitFor(() => {
@@ -251,7 +249,7 @@ describe('ACP Event Mapper', () => {
         });
       });
 
-      expect(mockHarness.session.respondToToolApproval).toHaveBeenCalledWith({
+      expect(mockSession.respondToToolApproval).toHaveBeenCalledWith({
         decision: 'approve',
       });
     });
@@ -263,20 +261,20 @@ describe('ACP Event Mapper', () => {
 
       const state = createPromptState('session-1');
 
-      const event: Extract<HarnessEvent, { type: 'tool_approval_required' }> = {
+      const event: Extract<AgentControllerEvent, { type: 'tool_approval_required' }> = {
         type: 'tool_approval_required',
         toolCallId: 'tool-123',
         toolName: 'delete_file',
         args: {},
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleAgentControllerEvent(event, state, mockConnection, mockSession);
 
       await vi.waitFor(() => {
         expect(requestPermissionSpy).toHaveBeenCalled();
       });
 
-      expect(mockHarness.session.respondToToolApproval).toHaveBeenCalledWith({
+      expect(mockSession.respondToToolApproval).toHaveBeenCalledWith({
         decision: 'decline',
       });
     });
@@ -288,18 +286,18 @@ describe('ACP Event Mapper', () => {
       try {
         const state = createPromptState('session-1');
 
-        const event: Extract<HarnessEvent, { type: 'tool_approval_required' }> = {
+        const event: Extract<AgentControllerEvent, { type: 'tool_approval_required' }> = {
           type: 'tool_approval_required',
           toolCallId: 'tool-123',
           toolName: 'delete_file',
           args: {},
         };
 
-        handleHarnessEvent(event, state, mockConnection, mockHarness);
+        handleAgentControllerEvent(event, state, mockConnection, mockSession);
 
         // Should not request permission
         expect(requestPermissionSpy).not.toHaveBeenCalled();
-        expect(mockHarness.session.respondToToolApproval).toHaveBeenCalledWith({
+        expect(mockSession.respondToToolApproval).toHaveBeenCalledWith({
           decision: 'approve',
         });
       } finally {
@@ -312,7 +310,7 @@ describe('ACP Event Mapper', () => {
     it('auto-resolves request_access suspension', () => {
       const state = createPromptState('session-1');
 
-      const event: Extract<HarnessEvent, { type: 'tool_suspended' }> = {
+      const event: Extract<AgentControllerEvent, { type: 'tool_suspended' }> = {
         type: 'tool_suspended',
         toolCallId: 'tool-123',
         toolName: 'request_access',
@@ -320,9 +318,9 @@ describe('ACP Event Mapper', () => {
         suspendPayload: {},
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleAgentControllerEvent(event, state, mockConnection, mockSession);
 
-      expect(mockHarness.respondToToolSuspension).toHaveBeenCalledWith({
+      expect(mockSession.respondToToolSuspension).toHaveBeenCalledWith({
         toolCallId: 'tool-123',
         resumeData: 'Yes',
       });
@@ -331,7 +329,7 @@ describe('ACP Event Mapper', () => {
     it('auto-resolves sandbox_access_request suspension', () => {
       const state = createPromptState('session-1');
 
-      const event: Extract<HarnessEvent, { type: 'tool_suspended' }> = {
+      const event: Extract<AgentControllerEvent, { type: 'tool_suspended' }> = {
         type: 'tool_suspended',
         toolCallId: 'tool-123',
         toolName: 'some_tool',
@@ -339,9 +337,9 @@ describe('ACP Event Mapper', () => {
         suspendPayload: { kind: 'sandbox_access_request' },
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleAgentControllerEvent(event, state, mockConnection, mockSession);
 
-      expect(mockHarness.respondToToolSuspension).toHaveBeenCalledWith({
+      expect(mockSession.respondToToolSuspension).toHaveBeenCalledWith({
         toolCallId: 'tool-123',
         resumeData: 'Yes',
       });
@@ -350,7 +348,7 @@ describe('ACP Event Mapper', () => {
     it('requests permission for submit_plan and approves', async () => {
       const state = createPromptState('session-1');
 
-      const event: Extract<HarnessEvent, { type: 'tool_suspended' }> = {
+      const event: Extract<AgentControllerEvent, { type: 'tool_suspended' }> = {
         type: 'tool_suspended',
         toolCallId: 'tool-123',
         toolName: 'submit_plan',
@@ -358,7 +356,7 @@ describe('ACP Event Mapper', () => {
         suspendPayload: {},
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleAgentControllerEvent(event, state, mockConnection, mockSession);
 
       await vi.waitFor(() => {
         expect(requestPermissionSpy).toHaveBeenCalledWith({
@@ -375,7 +373,7 @@ describe('ACP Event Mapper', () => {
         });
       });
 
-      expect(mockHarness.respondToToolSuspension).toHaveBeenCalledWith({
+      expect(mockSession.respondToToolSuspension).toHaveBeenCalledWith({
         toolCallId: 'tool-123',
         resumeData: { action: 'approved' },
       });
@@ -384,7 +382,7 @@ describe('ACP Event Mapper', () => {
     it('auto-resolves ask_user with default message', () => {
       const state = createPromptState('session-1');
 
-      const event: Extract<HarnessEvent, { type: 'tool_suspended' }> = {
+      const event: Extract<AgentControllerEvent, { type: 'tool_suspended' }> = {
         type: 'tool_suspended',
         toolCallId: 'tool-123',
         toolName: 'ask_user',
@@ -392,9 +390,9 @@ describe('ACP Event Mapper', () => {
         suspendPayload: {},
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleAgentControllerEvent(event, state, mockConnection, mockSession);
 
-      expect(mockHarness.respondToToolSuspension).toHaveBeenCalledWith({
+      expect(mockSession.respondToToolSuspension).toHaveBeenCalledWith({
         toolCallId: 'tool-123',
         resumeData: 'Proceed with your best judgment. Do not ask further questions.',
       });
@@ -405,7 +403,7 @@ describe('ACP Event Mapper', () => {
     it('accumulates token usage', () => {
       const state = createPromptState('session-1');
 
-      const event1: Extract<HarnessEvent, { type: 'usage_update' }> = {
+      const event1: Extract<AgentControllerEvent, { type: 'usage_update' }> = {
         type: 'usage_update',
         usage: {
           promptTokens: 100,
@@ -415,7 +413,7 @@ describe('ACP Event Mapper', () => {
         },
       };
 
-      handleHarnessEvent(event1, state, mockConnection, mockHarness);
+      handleAgentControllerEvent(event1, state, mockConnection, mockSession);
 
       expect(state.usage).toEqual({
         promptTokens: 100,
@@ -424,7 +422,7 @@ describe('ACP Event Mapper', () => {
         reasoningTokens: 10,
       });
 
-      const event2: Extract<HarnessEvent, { type: 'usage_update' }> = {
+      const event2: Extract<AgentControllerEvent, { type: 'usage_update' }> = {
         type: 'usage_update',
         usage: {
           promptTokens: 50,
@@ -433,7 +431,7 @@ describe('ACP Event Mapper', () => {
         },
       };
 
-      handleHarnessEvent(event2, state, mockConnection, mockHarness);
+      handleAgentControllerEvent(event2, state, mockConnection, mockSession);
 
       expect(state.usage).toEqual({
         promptTokens: 150,
@@ -448,12 +446,12 @@ describe('ACP Event Mapper', () => {
     it('resolves with complete reason', () => {
       const state = createPromptState('session-1');
 
-      const event: Extract<HarnessEvent, { type: 'agent_end' }> = {
+      const event: Extract<AgentControllerEvent, { type: 'agent_end' }> = {
         type: 'agent_end',
         reason: 'complete',
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleAgentControllerEvent(event, state, mockConnection, mockSession);
 
       expect(state.resolve).toHaveBeenCalledWith('complete');
     });
@@ -461,12 +459,12 @@ describe('ACP Event Mapper', () => {
     it('resolves with aborted reason', () => {
       const state = createPromptState('session-1');
 
-      const event: Extract<HarnessEvent, { type: 'agent_end' }> = {
+      const event: Extract<AgentControllerEvent, { type: 'agent_end' }> = {
         type: 'agent_end',
         reason: 'aborted',
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleAgentControllerEvent(event, state, mockConnection, mockSession);
 
       expect(state.resolve).toHaveBeenCalledWith('aborted');
     });
@@ -474,12 +472,12 @@ describe('ACP Event Mapper', () => {
     it('resolves with error reason', () => {
       const state = createPromptState('session-1');
 
-      const event: Extract<HarnessEvent, { type: 'agent_end' }> = {
+      const event: Extract<AgentControllerEvent, { type: 'agent_end' }> = {
         type: 'agent_end',
         reason: 'error',
       };
 
-      handleHarnessEvent(event, state, mockConnection, mockHarness);
+      handleAgentControllerEvent(event, state, mockConnection, mockSession);
 
       expect(state.resolve).toHaveBeenCalledWith('error');
     });
@@ -487,7 +485,7 @@ describe('ACP Event Mapper', () => {
 
   describe('null state handling', () => {
     it('ignores events when state is null', () => {
-      const event: Extract<HarnessEvent, { type: 'message_update' }> = {
+      const event: Extract<AgentControllerEvent, { type: 'message_update' }> = {
         type: 'message_update',
         message: {
           id: 'msg-1',
@@ -497,7 +495,7 @@ describe('ACP Event Mapper', () => {
         },
       };
 
-      handleHarnessEvent(event, null, mockConnection, mockHarness);
+      handleAgentControllerEvent(event, null, mockConnection, mockSession);
 
       expect(sessionUpdateSpy).not.toHaveBeenCalled();
     });
@@ -507,14 +505,14 @@ describe('ACP Event Mapper', () => {
     it('ignores om_*, subagent_*, workspace_* events', () => {
       const state = createPromptState('session-1');
 
-      const ignoredEvents: HarnessEvent[] = [
+      const ignoredEvents: AgentControllerEvent[] = [
         { type: 'om_status', status: 'active' } as any,
         { type: 'subagent_start', agentType: 'explore' } as any,
         { type: 'workspace_ready', workspaceId: 'ws-1', workspaceName: 'test' } as any,
       ];
 
       ignoredEvents.forEach(event => {
-        handleHarnessEvent(event, state, mockConnection, mockHarness);
+        handleAgentControllerEvent(event, state, mockConnection, mockSession);
       });
 
       expect(sessionUpdateSpy).not.toHaveBeenCalled();

@@ -1,5 +1,5 @@
 import type { SessionNotification, RequestPermissionRequest, AgentSideConnection } from '@agentclientprotocol/sdk';
-import type { Harness, HarnessEvent, TokenUsage } from '@mastra/core/harness';
+import type { AgentControllerEvent, Session, TokenUsage } from '@mastra/core/agent-controller';
 
 let autoApprove = false;
 
@@ -47,15 +47,15 @@ export interface PromptState {
 }
 
 /**
- * Translate a HarnessEvent into an ACP SessionNotification and send it
+ * Translate an AgentControllerEvent into an ACP SessionNotification and send it
  * via the provided connection. Returns null for events that don't produce
  * a session update.
  */
-export function handleHarnessEvent(
-  event: HarnessEvent,
+export function handleAgentControllerEvent(
+  event: AgentControllerEvent,
   state: PromptState | null,
   connection: AgentSideConnection,
-  harness: Harness,
+  session: Session,
 ): void {
   if (!state) return;
 
@@ -106,13 +106,13 @@ export function handleHarnessEvent(
       break;
 
     case 'tool_approval_required':
-      void handleToolApproval(state, connection, harness, event).catch(err => {
+      void handleToolApproval(state, connection, session, event).catch(err => {
         process.stderr.write(`[acp] handleToolApproval error: ${err}\n`);
       });
       break;
 
     case 'tool_suspended':
-      void handleToolSuspended(state, connection, harness, event).catch(err => {
+      void handleToolSuspended(state, connection, session, event).catch(err => {
         process.stderr.write(`[acp] handleToolSuspended error: ${err}\n`);
       });
       break;
@@ -140,12 +140,12 @@ function sendUpdate(connection: AgentSideConnection, sessionId: string, update: 
 async function handleToolApproval(
   state: PromptState,
   connection: AgentSideConnection,
-  harness: Harness,
-  event: Extract<HarnessEvent, { type: 'tool_approval_required' }>,
+  session: Session,
+  event: Extract<AgentControllerEvent, { type: 'tool_approval_required' }>,
 ): Promise<void> {
   // Auto-approve if --dangerous-auto-approve flag is set
   if (autoApprove) {
-    harness.session.respondToToolApproval({ decision: 'approve' });
+    session.respondToToolApproval({ decision: 'approve' });
     return;
   }
 
@@ -166,27 +166,27 @@ async function handleToolApproval(
     const resp = await connection.requestPermission(req);
     if (resp.outcome.outcome === 'selected') {
       const decision = resp.outcome.optionId === 'approve' ? 'approve' : 'decline';
-      harness.session.respondToToolApproval({ decision });
+      session.respondToToolApproval({ decision });
     } else {
-      harness.session.respondToToolApproval({ decision: 'decline' });
+      session.respondToToolApproval({ decision: 'decline' });
     }
   } catch (err) {
     process.stderr.write(`[acp] requestPermission error: ${err}\n`);
-    harness.session.respondToToolApproval({ decision: 'decline' });
+    session.respondToToolApproval({ decision: 'decline' });
   }
 }
 
 async function handleToolSuspended(
   state: PromptState,
   connection: AgentSideConnection,
-  harness: Harness,
-  event: Extract<HarnessEvent, { type: 'tool_suspended' }>,
+  session: Session,
+  event: Extract<AgentControllerEvent, { type: 'tool_suspended' }>,
 ): Promise<void> {
   const { toolCallId, toolName, args, suspendPayload } = event;
 
   // Auto-resolve certain suspensions (mirrors headless.ts autoResolve)
   if (toolName === 'request_access' || (suspendPayload as any)?.kind === 'sandbox_access_request') {
-    harness.respondToToolSuspension({ toolCallId, resumeData: 'Yes' });
+    void session.respondToToolSuspension({ toolCallId, resumeData: 'Yes' });
     return;
   }
 
@@ -209,15 +209,15 @@ async function handleToolSuspended(
       const resp = await connection.requestPermission(req);
       const action =
         resp.outcome.outcome === 'selected' && resp.outcome.optionId === 'approve' ? 'approved' : 'rejected';
-      harness.respondToToolSuspension({ toolCallId, resumeData: { action } });
+      void session.respondToToolSuspension({ toolCallId, resumeData: { action } });
     } catch {
-      harness.respondToToolSuspension({ toolCallId, resumeData: { action: 'rejected' } });
+      void session.respondToToolSuspension({ toolCallId, resumeData: { action: 'rejected' } });
     }
     return;
   }
 
   // For ask_user and other suspensions, auto-resolve
-  harness.respondToToolSuspension({
+  void session.respondToToolSuspension({
     toolCallId,
     resumeData: 'Proceed with your best judgment. Do not ask further questions.',
   });

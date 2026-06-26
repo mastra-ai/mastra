@@ -3,7 +3,7 @@
  * tool_suspended (ask_user / request_access / submit_plan).
  */
 import type { AskUserSelectionMode } from '@mastra/core/tools';
-import { savePlanToDisk } from '../../utils/plans.js';
+import { savePlanToDisk, savePlanSnapshot, getPlanFilename } from '../../utils/plans.js';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import { PlanApprovalInlineComponent } from '../components/plan-approval-inline.js';
@@ -240,7 +240,13 @@ export async function handleSandboxAccessRequest(
 
 /**
  * Handle a suspended submit_plan tool call.
- * Shows the plan inline with Approve/Reject/Request Changes options.
+ * Shows the plan inline with Approve/Use as Goal/Request Changes options.
+ *
+ * On each submission the plan is saved to a `.md` file and the previous plan
+ * content is snapshotted so that resubmissions can show a diff.
+ *
+ * "Request changes" rejects the tool call and aborts the agent so the user can
+ * provide revision feedback via a normal chat message.
  */
 async function approvePlan(ctx: EventHandlerContext, toolCallId: string, title: string, plan: string): Promise<void> {
   const { state } = ctx;
@@ -273,35 +279,29 @@ export async function handlePlanApproval(
   plan: string,
 ): Promise<void> {
   const { state } = ctx;
+
+  // Snapshot current plan for diff display on resubmission
+  const previousPlan = state.previousPlanSnapshot?.plan;
+
+  // Save a snapshot of this submission and write to local plans dir
+  state.previousPlanSnapshot = { title, plan };
+  const projectPath = (state.session.state.get() as any)?.projectPath as string | undefined;
+  if (projectPath) {
+    savePlanSnapshot({ title, plan, projectPath }).catch(() => {});
+  }
+
   return new Promise(resolve => {
+    const planFilename = getPlanFilename(title);
     const approvalOptions = {
       toolCallId,
       title,
       plan,
+      planFilename,
+      previousPlan,
       onApprove: async () => {
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
         await approvePlan(ctx, toolCallId, title, plan);
-
-        // Fire a structured system-reminder signal to wake the freshly
-        // switched-to default-mode agent. The signal echoes back as a
-        // `system_reminder` content part and renders through the same
-        // path as any other reminder — no legacy XML regex, no companion
-        // `addUserMessage` call, so the reminder shows up exactly once.
-        //
-        // `approvePlan` (via `respondToToolSuspension` → `switchMode`) waits
-        // for the aborted plan-mode run to fully idle before returning, so
-        // this signal always starts a fresh build-mode run instead of
-        // queuing onto the dying one.
-        try {
-          await state.session.sendSignal({
-            type: 'system-reminder',
-            contents: 'The user has approved the plan, begin executing.',
-          }).accepted;
-        } catch (err) {
-          ctx.showError(`Failed to start build agent: ${err instanceof Error ? err.message : String(err)}`);
-        }
-
         resolve();
       },
       onGoal: async () => {
@@ -321,12 +321,16 @@ export async function handlePlanApproval(
 
         resolve();
       },
-      onReject: async (feedback?: string) => {
+      onReject: async () => {
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
+        // Resume the tool with a rejection so the result is persisted in thread
+        // history. The PlanRejectionAbortProcessor detects the rejection tool
+        // result and aborts from within the agentic loop — preventing any
+        // additional LLM call without a timing gap.
         await state.session.respondToToolSuspension({
           toolCallId,
-          resumeData: { action: 'rejected', feedback },
+          resumeData: { action: 'rejected' },
         });
         resolve();
       },

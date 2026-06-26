@@ -50,12 +50,12 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_EXPERIMENTS,
       schema: EXPERIMENTS_SCHEMA,
-      ifNotExists: ['agentVersion'],
+      ifNotExists: ['agentVersion', 'organizationId', 'projectId'],
     });
     await this.#db.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: EXPERIMENT_RESULTS_SCHEMA,
-      ifNotExists: ['status', 'tags'],
+      ifNotExists: ['status', 'tags', 'toolMockReport', 'organizationId', 'projectId'],
     });
 
     // Indexes — idempotent, safe to run on every init
@@ -71,6 +71,15 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         },
         {
           sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_experiment_results_exp_item ON "${TABLE_EXPERIMENT_RESULTS}" ("experimentId", "itemId")`,
+          args: [],
+        },
+        // Tenancy: leading-tenant indexes for multi-tenant scans (parity with datasets domain).
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_experiments_org_project ON "${TABLE_EXPERIMENTS}" ("organizationId", "projectId")`,
+          args: [],
+        },
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_experiment_results_org_project ON "${TABLE_EXPERIMENT_RESULTS}" ("organizationId", "projectId")`,
           args: [],
         },
       ],
@@ -90,6 +99,8 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       datasetId: (row.datasetId as string | null) ?? null,
       datasetVersion: row.datasetVersion != null ? (row.datasetVersion as number) : null,
       agentVersion: (row.agentVersion as string | null) ?? null,
+      organizationId: (row.organizationId as string | null) ?? null,
+      projectId: (row.projectId as string | null) ?? null,
       targetType: row.targetType as Experiment['targetType'],
       targetId: row.targetId as string,
       name: (row.name as string) ?? undefined,
@@ -114,6 +125,8 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       experimentId: row.experimentId as string,
       itemId: row.itemId as string,
       itemDatasetVersion: row.itemDatasetVersion != null ? (row.itemDatasetVersion as number) : null,
+      organizationId: (row.organizationId as string | null) ?? null,
+      projectId: (row.projectId as string | null) ?? null,
       input: safelyParseJSON(row.input as string),
       output: row.output ? safelyParseJSON(row.output as string) : null,
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth as string) : null,
@@ -124,6 +137,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       traceId: (row.traceId as string | null) ?? null,
       status: (row.status as ExperimentResult['status']) ?? null,
       tags: row.tags ? safelyParseJSON(row.tags as string) : null,
+      toolMockReport: row.toolMockReport ? safelyParseJSON(row.toolMockReport as string) : null,
       createdAt: ensureDate(row.createdAt as string | Date)!,
     };
   }
@@ -142,6 +156,8 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
           datasetId: input.datasetId ?? null,
           datasetVersion: input.datasetVersion ?? null,
           agentVersion: input.agentVersion ?? null,
+          organizationId: input.organizationId ?? null,
+          projectId: input.projectId ?? null,
           targetType: input.targetType,
           targetId: input.targetId,
           name: input.name ?? null,
@@ -164,6 +180,8 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         datasetId: input.datasetId,
         datasetVersion: input.datasetVersion,
         agentVersion: input.agentVersion ?? null,
+        organizationId: input.organizationId ?? null,
+        projectId: input.projectId ?? null,
         targetType: input.targetType,
         targetId: input.targetId,
         name: input.name,
@@ -318,6 +336,17 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         conditions.push('status = ?');
         queryParams.push(args.status);
       }
+      if (args.filters) {
+        const { organizationId, projectId } = args.filters;
+        if (organizationId !== undefined) {
+          conditions.push('organizationId = ?');
+          queryParams.push(organizationId);
+        }
+        if (projectId !== undefined) {
+          conditions.push('projectId = ?');
+          queryParams.push(projectId);
+        }
+      }
 
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -403,6 +432,8 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
           experimentId: input.experimentId,
           itemId: input.itemId,
           itemDatasetVersion: input.itemDatasetVersion ?? null,
+          organizationId: input.organizationId ?? null,
+          projectId: input.projectId ?? null,
           input: input.input,
           output: input.output,
           groundTruth: input.groundTruth,
@@ -413,6 +444,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
           traceId: input.traceId ?? null,
           status: input.status ?? null,
           tags: input.tags !== undefined && input.tags !== null ? JSON.stringify(input.tags) : null,
+          toolMockReport: input.toolMockReport ?? null,
           createdAt: nowIso,
         },
       });
@@ -422,6 +454,8 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         experimentId: input.experimentId,
         itemId: input.itemId,
         itemDatasetVersion: input.itemDatasetVersion,
+        organizationId: input.organizationId ?? null,
+        projectId: input.projectId ?? null,
         input: input.input,
         output: input.output,
         groundTruth: input.groundTruth,
@@ -432,6 +466,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         traceId: input.traceId ?? null,
         status: input.status ?? null,
         tags: input.tags ?? null,
+        toolMockReport: input.toolMockReport ?? null,
         createdAt: now,
       };
     } catch (error) {
@@ -550,6 +585,17 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       if (args.status) {
         conditions.push('status = ?');
         queryParams.push(args.status);
+      }
+      if (args.filters) {
+        const { organizationId, projectId } = args.filters;
+        if (organizationId !== undefined) {
+          conditions.push('organizationId = ?');
+          queryParams.push(organizationId);
+        }
+        if (projectId !== undefined) {
+          conditions.push('projectId = ?');
+          queryParams.push(projectId);
+        }
       }
 
       const whereClause = `WHERE ${conditions.join(' AND ')}`;

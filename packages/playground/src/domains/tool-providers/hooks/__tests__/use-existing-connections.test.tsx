@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
@@ -12,14 +11,22 @@ import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 
-const wrapper = ({ children }: PropsWithChildren) => {
+const makeWrapper = () => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return (
+  const wrapper = ({ children }: PropsWithChildren) => (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </MastraReactProvider>
   );
+  return { wrapper, queryClient };
 };
+
+// Waits for the `useCurrentUser` query (queryKey ['auth', 'me']) to reach an
+// error state, so the "fail closed" assertion runs *after* the 500 resolves
+// rather than racing it with an arbitrary sleep (which leaks a state update
+// outside act).
+const waitForAuthError = (queryClient: QueryClient) =>
+  waitFor(() => expect(queryClient.getQueryState(['auth', 'me'])?.status).toBe('error'));
 
 describe('useExistingConnections — scopeToSelf', () => {
   it('resolves connections for an authenticated caller', async () => {
@@ -30,6 +37,7 @@ describe('useExistingConnections — scopeToSelf', () => {
       ),
     );
 
+    const { wrapper } = makeWrapper();
     const { result } = renderHook(() => useExistingConnections('composio', 'gmail', { scopeToSelf: true }), {
       wrapper,
     });
@@ -47,6 +55,7 @@ describe('useExistingConnections — scopeToSelf', () => {
       ),
     );
 
+    const { wrapper } = makeWrapper();
     const { result } = renderHook(() => useExistingConnections('composio', 'gmail', { scopeToSelf: true }), {
       wrapper,
     });
@@ -65,11 +74,12 @@ describe('useExistingConnections — scopeToSelf', () => {
       }),
     );
 
+    const { wrapper, queryClient } = makeWrapper();
     const { result } = renderHook(() => useExistingConnections('composio', 'gmail', { scopeToSelf: true }), {
       wrapper,
     });
 
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await waitForAuthError(queryClient);
 
     expect(onConnections).not.toHaveBeenCalled();
     expect(result.current.fetchStatus).toBe('idle');

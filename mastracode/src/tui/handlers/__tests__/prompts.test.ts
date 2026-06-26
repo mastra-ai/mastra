@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createMockState } from '../../__tests__/harness-mock.js';
+import { createMockState } from '../../__tests__/agent-controller-mock.js';
 import { PlanApprovalInlineComponent } from '../../components/plan-approval-inline.js';
 import type { TUIState } from '../../state.js';
 import { handleAskQuestion, handlePlanApproval } from '../prompts.js';
@@ -145,7 +145,7 @@ describe('handlePlanApproval goal mode', () => {
     expect(state.ui.setFocus).toHaveBeenLastCalledWith(state.editor);
     // `startGoal` is invoked with the title+plan as the objective and the
     // default trigger — it owns sending the canonical goal-reminder signal
-    // via `harness.sendSignal`, so the handler does not also send one.
+    // via `controller.sendSignal`, so the handler does not also send one.
     expect(ctx.startGoal).toHaveBeenCalledTimes(1);
     expect(ctx.startGoal).toHaveBeenCalledWith('# Ship it\n\n1. Build\n2. Test', 'Goal cancelled.');
     expect(ctx.addUserMessage).not.toHaveBeenCalled();
@@ -187,7 +187,7 @@ describe('handlePlanApproval regular approval', () => {
     expect(streamedComponent.render(80).join('\n')).toContain('Use as /goal');
   });
 
-  it('approves the plan and sends a single begin-executing system-reminder through harness.sendSignal', async () => {
+  it('approves the plan without sending a handoff signal', async () => {
     const { state, ctx, sendSignal } = createPlanApprovalCtx();
 
     const promise = handlePlanApproval(ctx, 'plan-1', 'Ship it', '1. Build\n2. Test');
@@ -201,16 +201,9 @@ describe('handlePlanApproval regular approval', () => {
       resumeData: { action: 'approved' },
     });
     expect(state.ui.setFocus).toHaveBeenLastCalledWith(state.editor);
-    // The trigger goes through the structured signal pathway. We do not
-    // also call `addUserMessage` or `fireMessage` — either would render
-    // the reminder a second time.
     expect(ctx.addUserMessage).not.toHaveBeenCalled();
     expect(ctx.fireMessage).not.toHaveBeenCalled();
-    expect(sendSignal).toHaveBeenCalledTimes(1);
-    expect(sendSignal).toHaveBeenCalledWith({
-      type: 'system-reminder',
-      contents: 'The user has approved the plan, begin executing.',
-    });
+    expect(sendSignal).not.toHaveBeenCalled();
     // Regular approval should not enter goal mode or set the return flag.
     expect(ctx.startGoal).not.toHaveBeenCalled();
     expect(state.planStartedGoalId).toBeUndefined();

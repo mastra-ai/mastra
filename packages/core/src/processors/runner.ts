@@ -18,7 +18,7 @@ import type { TracingContext } from '../observability/types';
 import type { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
-import type { LanguageModelUsage } from '../stream/types';
+import type { LanguageModelUsage, ProviderMetadata } from '../stream/types';
 import { isProcessorWorkflow } from './is-processor-workflow';
 import { createProcessorSendSignal } from './send-signal';
 import {
@@ -701,7 +701,7 @@ export class ProcessorRunner {
             processableMessages = processResult || [];
             for (const message of processResult) {
               messageList.removeByIds([message.id]);
-              messageList.add(message, check.getSource(message) || 'response');
+              messageList.add(message, check.getSource(message) || 'response', { merge: false });
             }
           }
         }
@@ -1231,7 +1231,7 @@ export class ProcessorRunner {
             if (nonSystemMessages.length > 0) {
               for (const message of nonSystemMessages) {
                 messageList.removeByIds([message.id]);
-                messageList.add(message, check.getSource(message) || 'input');
+                messageList.add(message, check.getSource(message) || 'input', { merge: false });
               }
             }
           }
@@ -1265,7 +1265,7 @@ export class ProcessorRunner {
             if (nonSystemMessages.length > 0) {
               for (const message of nonSystemMessages) {
                 messageList.removeByIds([message.id]);
-                messageList.add(message, check.getSource(message) || 'input');
+                messageList.add(message, check.getSource(message) || 'input', { merge: false });
               }
             }
 
@@ -1813,6 +1813,7 @@ export class ProcessorRunner {
       messageList: MessageList;
       stepNumber: number;
       finishReason?: string;
+      providerMetadata?: ProviderMetadata;
       toolCalls?: ToolCallInfo[];
       text?: string;
       usage?: LanguageModelUsage;
@@ -1826,6 +1827,7 @@ export class ProcessorRunner {
       messageList,
       stepNumber,
       finishReason,
+      providerMetadata,
       toolCalls,
       text,
       usage,
@@ -1852,6 +1854,7 @@ export class ProcessorRunner {
             messageList,
             stepNumber,
             finishReason,
+            providerMetadata,
             toolCalls,
             text,
             usage,
@@ -1919,6 +1922,7 @@ export class ProcessorRunner {
           messageList,
           stepNumber,
           finishReason,
+          providerMetadata,
           toolCalls,
           text,
           usage: usage ?? defaultUsage,
@@ -1966,7 +1970,7 @@ export class ProcessorRunner {
                 '';
               messageList.addSystem(systemText);
             } else {
-              messageList.add(message, check.getSource(message) || 'response');
+              messageList.add(message, check.getSource(message) || 'response', { merge: false });
             }
           }
         }
@@ -2197,7 +2201,7 @@ export class ProcessorRunner {
           '';
         messageList.addSystem(systemText);
       } else {
-        messageList.add(message, check.getSource(message) || defaultSource);
+        messageList.add(message, check.getSource(message) || defaultSource, { merge: false });
       }
     }
   }

@@ -1,11 +1,11 @@
-import type { TaskItemSnapshot } from '@mastra/core/harness';
+import type { TaskItemSnapshot } from '@mastra/core/signals';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { dispatchEvent } from './event-dispatch.js';
 import type { EventHandlerContext } from './handlers/types.js';
 import type { TUIState } from './state.js';
 
-function createMockHarness(initialState: Record<string, unknown> = {}, previousTasks: TaskItemSnapshot[] = []) {
+function createMockAgentController(initialState: Record<string, unknown> = {}, previousTasks: TaskItemSnapshot[] = []) {
   let state = { ...initialState };
   const setState = vi.fn(async (updates: Record<string, unknown>) => {
     state = { ...state, ...updates };
@@ -32,10 +32,10 @@ function createMockHarness(initialState: Record<string, unknown> = {}, previousT
   };
 }
 
-function createMockTUIState(harness: ReturnType<typeof createMockHarness>): TUIState {
+function createMockTUIState(controller: ReturnType<typeof createMockAgentController>): TUIState {
   return {
-    harness: harness as any,
-    session: harness.session as any,
+    controller: controller as any,
+    session: controller.session as any,
     taskProgress: {
       updateTasks: vi.fn(),
       getTasks: () => [],
@@ -63,22 +63,24 @@ function createMockEctx(): EventHandlerContext {
     renderExistingMessages: vi.fn().mockResolvedValue(undefined),
     refreshModelAuthStatus: vi.fn().mockResolvedValue(undefined),
     renderClearedTasksInline: vi.fn(),
+    renderCompletedTasksInline: vi.fn(),
+    renderTaskDeltaInline: vi.fn(),
   } as unknown as EventHandlerContext;
 }
 
 describe('dispatchEvent thread lifecycle', () => {
-  let harness: ReturnType<typeof createMockHarness>;
+  let controller: ReturnType<typeof createMockAgentController>;
   let state: TUIState;
   let ectx: EventHandlerContext;
 
   beforeEach(() => {
-    harness = createMockHarness({
+    controller = createMockAgentController({
       tasks: [{ content: 'Old task', status: 'in_progress', activeForm: 'Working' }],
       activePlan: { title: 'Old plan', plan: '# Plan', approvedAt: '2026-01-01' },
       sandboxAllowedPaths: ['/tmp/allowed'],
       currentModelId: 'openai/gpt-5.4',
     });
-    state = createMockTUIState(harness);
+    state = createMockTUIState(controller);
     ectx = createMockEctx();
   });
 
@@ -197,16 +199,35 @@ describe('dispatchEvent thread lifecycle', () => {
 });
 
 describe('dispatchEvent task updates', () => {
-  it('updates the pinned list and resets the insert index without an inline receipt when all tasks complete', async () => {
-    const tasks = [{ id: 'task-1', content: 'Task 1', status: 'completed' as const, activeForm: 'Completing task 1' }];
-    const state = createMockTUIState(createMockHarness());
+  it('renders task delta receipts for live non-terminal task updates', async () => {
+    const previousTasks = [
+      { id: 'task-1', content: 'Task 1', status: 'pending' as const, activeForm: 'Working on task 1' },
+    ];
+    const tasks = [
+      { id: 'task-1', content: 'Task 1', status: 'completed' as const, activeForm: 'Working on task 1' },
+      { id: 'task-2', content: 'Task 2', status: 'in_progress' as const, activeForm: 'Working on task 2' },
+      { id: 'task-3', content: 'Task 3', status: 'pending' as const, activeForm: 'Working on task 3' },
+    ];
+    const state = createMockTUIState(createMockAgentController({}, previousTasks));
     const ectx = createMockEctx();
 
     await dispatchEvent({ type: 'task_updated', tasks }, ectx, state);
 
-    // The pinned list hides itself once everything is completed; we must not
-    // leave a redundant completed-task receipt in the transcript.
     expect(state.taskProgress!.updateTasks).toHaveBeenCalledWith(tasks);
+    expect(ectx.renderTaskDeltaInline).toHaveBeenCalledWith(previousTasks, tasks, 5);
+    expect(ectx.renderCompletedTasksInline).not.toHaveBeenCalled();
+    expect(ectx.renderClearedTasksInline).not.toHaveBeenCalled();
+  });
+
+  it('renders a completed-task receipt when all tasks complete live', async () => {
+    const tasks = [{ id: 'task-1', content: 'Task 1', status: 'completed' as const, activeForm: 'Completing task 1' }];
+    const state = createMockTUIState(createMockAgentController());
+    const ectx = createMockEctx();
+
+    await dispatchEvent({ type: 'task_updated', tasks }, ectx, state);
+
+    expect(state.taskProgress!.updateTasks).toHaveBeenCalledWith(tasks);
+    expect(ectx.renderCompletedTasksInline).toHaveBeenCalledWith(tasks, 5);
     expect(ectx.renderClearedTasksInline).not.toHaveBeenCalled();
     expect(state.taskToolInsertIndex).toBe(-1);
   });
@@ -215,7 +236,7 @@ describe('dispatchEvent task updates', () => {
     const previousTasks = [
       { id: 'task-1', content: 'Task 1', status: 'in_progress' as const, activeForm: 'Working on task 1' },
     ];
-    const state = createMockTUIState(createMockHarness({}, previousTasks));
+    const state = createMockTUIState(createMockAgentController({}, previousTasks));
     const ectx = createMockEctx();
 
     await dispatchEvent({ type: 'task_updated', tasks: [] }, ectx, state);

@@ -8,19 +8,27 @@ import type { LanguageModelUsage } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z } from 'zod';
 
+import type { ActorSignal } from '../../auth/ee/fga-check';
 import type { BackgroundTaskManager } from '../../background-tasks/manager';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
+import type { SystemMessage } from '../../llm';
 import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig } from '../../memory/types';
-import type { AIModelGenerationSpan, Span, SpanType } from '../../observability';
+import type { AIModelGenerationSpan, Span, SpanType, TracingOptions } from '../../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcessorOrWorkflow } from '../../processors';
 import type { ProcessorState } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
 import type { ChunkType } from '../../stream/types';
-import type { CoreTool } from '../../tools/types';
+import type {
+  CoreTool,
+  RequireToolApproval,
+  ToolPayloadTransformPolicy,
+  ToolPayloadTransformTarget,
+} from '../../tools/types';
 import type { Workspace } from '../../workspace';
+import type { AgentExecutionOptions } from '../agent.types';
 import type { MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
@@ -135,6 +143,28 @@ export interface SerializableStructuredOutput {
 }
 
 /**
+ * Serializable subset of the AI SDK `CallSettings` passed to the model on each
+ * step of a durable agentic loop. Mirrors `LoopOptions['modelSettings']` minus
+ * `abortSignal` (non-serializable; handled separately via the run registry).
+ *
+ * `headers` is restricted to a plain record of strings so it survives JSON
+ * round-trips across workers / persistence; provider extensions belong in
+ * `providerOptions` on `SerializableDurableOptions`.
+ */
+export interface SerializableModelSettings {
+  maxOutputTokens?: number;
+  temperature?: number;
+  topP?: number;
+  topK?: number;
+  presencePenalty?: number;
+  frequencyPenalty?: number;
+  stopSequences?: string[];
+  seed?: number;
+  maxRetries?: number;
+  headers?: Record<string, string>;
+}
+
+/**
  * Options for durable agent execution (serializable subset)
  */
 export interface SerializableDurableOptions {
@@ -144,8 +174,8 @@ export interface SerializableDurableOptions {
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   /** Tool names enabled for this execution */
   activeTools?: string[];
-  /** Temperature for LLM sampling */
-  temperature?: number;
+  /** Serializable LLM call settings (temperature, maxOutputTokens, topP, topK, presencePenalty, frequencyPenalty, stopSequences, seed, headers). */
+  modelSettings?: SerializableModelSettings;
   /** Whether to require tool approval globally */
   requireToolApproval?: boolean;
   /** Concurrency limit for parallel tool calls */
@@ -166,6 +196,42 @@ export interface SerializableDurableOptions {
   structuredOutput?: SerializableStructuredOutput;
   /** When true, the background task check step skips its in-loop wait (external driver handles continuation) */
   skipBgTaskWait?: boolean;
+  /** When true, background tasks are disabled for this run (the registry will not receive a BackgroundTaskManager). */
+  disableBackgroundTasks?: boolean;
+  /** Tracing options forwarded to the agent/model spans (metadata, tags, requestContextKeys, parentSpanId, hideInput/hideOutput, traceId). */
+  tracingOptions?: TracingOptions;
+  /**
+   * Per-call actor signal (e.g. `true` for system, or `{ actorKind: 'system', sourceWorkflow }`).
+   * Used by FGA checks and propagated to tool execution.
+   */
+  actor?: ActorSignal;
+  /** Per-call instructions override (replaces the agent's default instructions for this run). */
+  instructionsOverride?: SystemMessage;
+  /** Per-call extra system message appended after context but before user messages. */
+  systemMessage?: SystemMessage;
+  /**
+   * Serializable shadow of the per-call `transform` policy. Only the
+   * JSON-safe `targets` array is carried here; the actual
+   * `transformToolPayload` closure lives on the run registry and is only
+   * applied for in-process durable runs.
+   */
+  transform?: {
+    targets?: ToolPayloadTransformTarget[];
+  };
+  /**
+   * Serializable shadow of the per-call `isTaskComplete` policy. The
+   * `MastraScorer` instances and `onComplete` closure live on the run
+   * registry and are only applied for in-process durable runs; the
+   * JSON-safe primitives below are carried in workflow input for
+   * observability and cross-process engines.
+   */
+  isTaskComplete?: {
+    scorerNames?: string[];
+    strategy?: 'all' | 'any';
+    timeout?: number;
+    parallel?: boolean;
+    suppressFeedback?: boolean;
+  };
 }
 
 /**
@@ -336,7 +402,15 @@ export interface DurableAgenticLoopOutput {
 /**
  * Event types emitted via pubsub for agent streaming
  */
-export type AgentStreamEventType = 'chunk' | 'step-start' | 'step-finish' | 'finish' | 'error' | 'suspended';
+export type AgentStreamEventType =
+  | 'chunk'
+  | 'step-start'
+  | 'step-finish'
+  | 'finish'
+  | 'error'
+  | 'suspended'
+  | 'abort'
+  | 'iteration-complete';
 
 /**
  * Event emitted via pubsub for agent streaming
@@ -392,6 +466,41 @@ export interface AgentSuspendedEventData {
   suspendPayload?: unknown;
   resumeSchema?: string;
   type: 'approval' | 'suspension';
+}
+
+/**
+ * Abort event data (emitted when execution is cancelled via abortSignal)
+ */
+export interface AgentAbortEventData {
+  /** Steps accumulated up to the point of abort */
+  steps: unknown[];
+}
+
+/**
+ * Iteration-complete event data (emitted after each agentic loop iteration)
+ */
+export interface AgentIterationCompleteEventData {
+  iteration: number;
+  maxIterations?: number;
+  text?: string;
+  toolCalls?: Array<{
+    id: string;
+    name: string;
+    args?: Record<string, unknown>;
+  }>;
+  toolResults?: Array<{
+    id: string;
+    name: string;
+    result: unknown;
+    error?: { name: string; message: string };
+  }>;
+  isFinal: boolean;
+  finishReason?: string;
+  runId: string;
+  threadId?: string;
+  resourceId?: string;
+  agentId: string;
+  agentName?: string;
 }
 
 /**
@@ -452,6 +561,89 @@ export interface RunRegistryEntry {
   /** Exported forms of the resume spans, read by the workflow steps (same process). */
   resumeAgentSpanData?: unknown;
   resumeModelSpanData?: unknown;
+  /**
+   * Loop stop-condition predicate(s). Non-serializable (a closure), so the
+   * durable workflow reads this from the in-process registry rather than from
+   * the serialized workflow input. In cross-process engines (e.g. Inngest after
+   * a worker restart) this slot is unavailable and the loop falls back to
+   * `maxSteps` only — document this limitation at the call site.
+   */
+  stopWhen?: AgentExecutionOptions['stopWhen'];
+  /**
+   * Iteration-complete handler. Non-serializable (a closure). The durable
+   * workflow reads this from the in-process registry inside the dowhile
+   * predicate and may halt the loop early when the handler returns
+   * `{ continue: false }`. In cross-process engines the slot is unavailable
+   * and the handler simply does not fire.
+   */
+  onIterationComplete?: AgentExecutionOptions['onIterationComplete'];
+  /**
+   * Tool payload transform policy. The `transformToolPayload` function is a
+   * closure (non-serializable) and only fires for in-process durable runs;
+   * the JSON-safe `targets` shadow is also serialized into
+   * `SerializableDurableOptions.transform` for observability and cross-process
+   * engines.
+   */
+  toolPayloadTransform?: ToolPayloadTransformPolicy;
+  /**
+   * Per-step preparation hook (mirrors `Agent.stream({ prepareStep })`). The
+   * function is a closure, so it lives only on the in-process registry. Each
+   * iteration of the durable agentic loop wraps it in a `PrepareStepProcessor`
+   * and appends it to the per-step input-processor chain, so its returned
+   * fields (`model`, `tools`, `toolChoice`, `activeTools`, `providerOptions`,
+   * `modelSettings`, `messageId`) flow into the LLM call the same way they do
+   * in the non-durable agent. Cross-process engines do not honour it.
+   */
+  prepareStep?: AgentExecutionOptions['prepareStep'];
+  /**
+   * Per-call `isTaskComplete` policy. Holds the `MastraScorer` instances and
+   * the `onComplete` closure that cannot survive the wire; the JSON-safe
+   * primitives (`strategy`, `timeout`, `parallel`, `suppressFeedback`,
+   * `scorerNames`) are also serialized into `SerializableDurableOptions`.
+   * Cross-process engines without this slot fall back to maxSteps only.
+   */
+  isTaskComplete?: AgentExecutionOptions['isTaskComplete'];
+  /**
+   * Per-call global tool-approval policy. When `RequireToolApproval` is a
+   * function it cannot be serialized into the workflow input, so the closure
+   * lives on the in-process registry. The durable tool-call step prefers this
+   * slot over the JSON-safe boolean shadow (`SerializableDurableOptions.requireToolApproval`).
+   * Cross-process engines (e.g. Inngest after a worker restart) lose the
+   * closure and fall back to the boolean shadow — function policies degrade
+   * safely to "require approval for every tool call" rather than silently
+   * allowing them.
+   */
+  requireToolApproval?: RequireToolApproval;
+  /**
+   * Abort signal for the run. Non-serializable, so it lives only on the
+   * in-process registry; cross-process resumes cannot recover it.
+   *
+   * `DurableAgent.stream()` always installs an internal `AbortController`
+   * here so the result's `abort()` method has something to flip. If the
+   * caller also passed an external `abortSignal`, its `abort` event is
+   * forwarded to the internal controller and both signals end up aborted
+   * together.
+   *
+   * The durable LLM-execution step reads this slot to thread the signal
+   * into `model.doStream({ abortSignal })`, into input-processor runs, and
+   * into the abort short-circuits in the inner and outer catch blocks.
+   */
+  abortSignal?: AbortSignal;
+  /**
+   * Internal `AbortController` backing `abortSignal`. Owned by the
+   * `DurableAgent` instance — callers should not flip it directly; they
+   * should call `result.abort()` instead, which routes through here.
+   */
+  abortController?: AbortController;
+  /**
+   * Promise tracking the in-flight workflow execution (or resume) for this
+   * run. Resolves once the workflow has fully settled (finished, errored,
+   * suspended-and-persisted, or aborted). Used by `generate()` /
+   * `resumeGenerate()` to make sure a SUSPENDED snapshot is persisted
+   * before they hand control back to the caller. Not part of the public
+   * surface — purely an internal coordination primitive.
+   */
+  workflowExecution?: Promise<unknown>;
 }
 
 /**

@@ -19,7 +19,7 @@ function createContext(subagents?: Array<{ id: string; name: string; description
 
   const ctx = {
     state: {
-      harness: {
+      controller: {
         config: {
           subagents,
         },
@@ -73,7 +73,7 @@ describe('handleSubagentsCommand', () => {
     ]);
   });
 
-  it('renders configured subagents from the harness config', async () => {
+  it('renders configured subagents from the controller config', async () => {
     const { ctx } = createContext([
       {
         id: 'explore',

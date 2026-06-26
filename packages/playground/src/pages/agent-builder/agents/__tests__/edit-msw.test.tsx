@@ -1,19 +1,21 @@
-// @vitest-environment jsdom
 import type * as PlaygroundUi from '@mastra/playground-ui';
-import { TooltipProvider } from '@mastra/playground-ui';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import React from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import AgentBuilderAgentEdit from '../edit';
-import type * as AgentBuilderModule from '@/domains/agent-builder';
+import { authEnabledNoRbacCapabilities, currentUser } from './fixtures/auth';
 import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
 
+// toast/store are allowed presentational seams. The gating hooks
+// (useCurrentUser, useBuilderAgentAccess, useBuilderAgentFeatures) run for real
+// against the MSW auth/settings handlers below.
 vi.mock('@mastra/playground-ui', async () => {
   const actual = await vi.importActual<typeof PlaygroundUi>('@mastra/playground-ui');
   return {
@@ -23,38 +25,8 @@ vi.mock('@mastra/playground-ui', async () => {
   };
 });
 
-vi.mock('@/domains/agent-builder', async () => {
-  const actual = await vi.importActual<typeof AgentBuilderModule>('@/domains/agent-builder');
-  return {
-    ...actual,
-    useBuilderAgentFeatures: () => ({
-      tools: false,
-      memory: false,
-      workflows: false,
-      agents: false,
-      skills: false,
-      avatarUpload: false,
-      model: false,
-      favorites: false,
-      browser: false,
-    }),
-  };
-});
-
-vi.mock('@/domains/auth/hooks/use-current-user', () => ({
-  useCurrentUser: () => ({ data: { id: 'user-1' }, isLoading: false }),
-  isUnauthenticatedError: () => false,
-}));
-
-vi.mock('@/domains/agent-builder/hooks/use-builder-agent-access', () => ({
-  useBuilderAgentAccess: () => ({
-    hasAccess: true,
-    canWrite: true,
-    canExecute: true,
-    canManageSkills: true,
-    canUseFavorites: true,
-    denialReason: null,
-  }),
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
 }));
 
 // Stub heavy chat panels to keep this focused on the header.
@@ -167,8 +139,15 @@ const installRadixDomShims = () => {
 };
 
 const baseHandlers = (overrides?: Partial<typeof storedAgent>) => [
-  http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: true, user: { id: 'user-1' } })),
+  // auth enabled (so the library visibility UI renders) but rbac off ⇒
+  // useBuilderAgentAccess resolves canWrite/canExecute true.
+  http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authEnabledNoRbacCapabilities)),
+  // current user owns the agent (authorId === user-1) ⇒ owner-only header actions show.
+  http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json(currentUser)),
   http.get(`${BASE_URL}/api/stored/agents/agent-123`, () => HttpResponse.json({ ...storedAgent, ...overrides })),
+  http.get(`${BASE_URL}/api/stored/agents/agent-123/dependents`, () =>
+    HttpResponse.json({ agents: [], workflows: [] }),
+  ),
   http.get(`${BASE_URL}/api/stored/workspaces`, () => HttpResponse.json({ workspaces: [] })),
   http.get(`${BASE_URL}/api/tool-providers`, () => HttpResponse.json({ providers: [] })),
   http.get(`${BASE_URL}/api/channels/platforms`, () => HttpResponse.json([])),
@@ -212,9 +191,7 @@ describe('AgentBuilderAgentEdit MSW integration — visibility immediate-persist
     const addButton = await screen.findByTestId('agent-builder-visibility-add', undefined, { timeout: 10_000 });
     fireEvent.click(addButton);
 
-    await act(async () => {
-      fireEvent.click(await screen.findByTestId('agent-builder-visibility-confirm-yes'));
-    });
+    fireEvent.click(await screen.findByTestId('agent-builder-visibility-confirm-yes'));
 
     await waitFor(() => {
       expect(capturedBody).toEqual({ visibility: 'public' });

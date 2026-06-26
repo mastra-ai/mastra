@@ -5,9 +5,10 @@
  * "understand how module Y works") and uses read-only tools to explore
  * the codebase, then returns a concise summary of its findings.
  */
-import type { HarnessMode } from '@mastra/core/harness';
+import type { AgentControllerMode } from '@mastra/core/agent-controller';
+import { EXPLORE_MODE_AVAILABLE_TOOLS } from '../tool-availability.js';
 
-export const fastMode: HarnessMode = {
+export const fastMode: AgentControllerMode = {
   id: 'fast',
   name: 'Explore',
   description:
@@ -39,4 +40,6 @@ End with a structured summary:
 . **Details**: Additional context if needed
 
 Keep your summary under 300 words.`,
+
+  availableTools: [...EXPLORE_MODE_AVAILABLE_TOOLS],
 };

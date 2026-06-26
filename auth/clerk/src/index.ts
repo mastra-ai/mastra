@@ -1,7 +1,5 @@
 import { createClerkClient } from '@clerk/backend';
 import type { ClerkClient } from '@clerk/backend';
-import { verifyJwks } from '@mastra/auth';
-import type { JwtPayload } from '@mastra/auth';
 import type {
   ISSOProvider,
   ISessionProvider,
@@ -9,10 +7,12 @@ import type {
   Session,
   SSOCallbackResult,
   SSOLoginConfig,
-} from '@mastra/core/auth';
-import type { EEUser } from '@mastra/core/auth/ee';
-import type { MastraAuthProviderOptions } from '@mastra/core/server';
-import { MastraAuthProvider } from '@mastra/core/server';
+} from '@internal/auth';
+import type { EEUser } from '@internal/auth/ee';
+import type { MastraAuthProviderOptions } from '@internal/auth/provider';
+import { MastraAuthProvider } from '@internal/auth/provider';
+import { verifyJwks } from '@mastra/auth';
+import type { JwtPayload } from '@mastra/auth';
 
 type ClerkUser = JwtPayload;
 
