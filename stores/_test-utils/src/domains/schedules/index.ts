@@ -233,14 +233,59 @@ export function createSchedulesTests({ storage }: SchedulesTestOptions) {
         expect(triggers.map(t => t.runId)).toEqual(['r3', 'r2']);
       });
 
-      it('records failed status with error', async () => {
+      it('records failed outcome with error', async () => {
         if (!scheduleStore) return;
         await scheduleStore.recordTrigger(
-          createSampleTrigger({ scheduleId: 's1', runId: 'r1', status: 'failed', error: 'pubsub down' }),
+          createSampleTrigger({ scheduleId: 's1', runId: 'r1', outcome: 'failed', error: 'pubsub down' }),
         );
         const [trigger] = await scheduleStore.listTriggers('s1');
-        expect(trigger?.status).toBe('failed');
+        expect(trigger?.outcome).toBe('failed');
         expect(trigger?.error).toBe('pubsub down');
+      });
+
+      it('records drain rows with parentTriggerId and null runId', async () => {
+        if (!scheduleStore) return;
+        await scheduleStore.recordTrigger(
+          createSampleTrigger({
+            scheduleId: 's1',
+            runId: 'r1',
+            id: 'fire_1',
+            outcome: 'deferred',
+          }),
+        );
+        await scheduleStore.recordTrigger(
+          createSampleTrigger({
+            scheduleId: 's1',
+            id: 'drain_1',
+            runId: null,
+            outcome: 'appended-from-queue',
+            triggerKind: 'queue-drain',
+            parentTriggerId: 'fire_1',
+            actualFireAt: Date.now() + 1_000,
+            metadata: { appendedMessageId: 'msg_1' },
+          }),
+        );
+        const [drain, fire] = await scheduleStore.listTriggers('s1');
+        expect(drain?.triggerKind).toBe('queue-drain');
+        expect(drain?.parentTriggerId).toBe('fire_1');
+        expect(drain?.runId).toBeNull();
+        expect(drain?.metadata).toEqual({ appendedMessageId: 'msg_1' });
+        expect(fire?.triggerKind).toBe('schedule-fire');
+      });
+    });
+
+    describe('listSchedules ownership filters', () => {
+      it('filters by ownerType and ownerId', async () => {
+        if (!scheduleStore) return;
+        await scheduleStore.createSchedule(createSampleSchedule({ id: 'wf' }));
+        await scheduleStore.createSchedule(createSampleSchedule({ id: 'hb1', ownerType: 'agent', ownerId: 'agentA' }));
+        await scheduleStore.createSchedule(createSampleSchedule({ id: 'hb2', ownerType: 'agent', ownerId: 'agentB' }));
+
+        const allAgent = await scheduleStore.listSchedules({ ownerType: 'agent' });
+        expect(allAgent.map(s => s.id).sort()).toEqual(['hb1', 'hb2']);
+
+        const agentA = await scheduleStore.listSchedules({ ownerType: 'agent', ownerId: 'agentA' });
+        expect(agentA.map(s => s.id)).toEqual(['hb1']);
       });
     });
   });

@@ -139,11 +139,26 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
     description: 'Whether to enable logging for this server.',
   },
   {
+    name: 'forwardInstructions',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      "Whether to append instructions advertised by this MCP server to an agent's system prompt when the agent uses this server's tools. Disabled by default; enable it only for servers you trust, since the instructions are injected into the agent's system prompt.",
+  },
+  {
+    name: 'instructionsMaxLength',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '512',
+    description: "Maximum number of server instruction characters to append to an agent's system prompt.",
+  },
+  {
     name: 'requireToolApproval',
     type: 'boolean | (params: RequireToolApprovalContext) => boolean | Promise<boolean>',
     isOptional: true,
     description:
-      'Require human approval before executing tools from this server. When set to `true`, all tools require approval. When set to a function, the function is called with the tool name, arguments, and request context to dynamically decide whether approval is needed.',
+      'Require human approval before executing tools from this server. When set to `true`, all tools require approval. When set to a function, the function is called with the tool name, arguments, request context, and any tool annotations advertised by the server to dynamically decide whether approval is needed.',
   },
 ]}
 />
@@ -169,7 +184,7 @@ const mcp = new MCPClient({
 
 ### Dynamic approval with a function
 
-Pass a function to decide per-call whether approval is needed. The function receives the tool name, the arguments the model passed, and any request context from the incoming request:
+Pass a function to decide per-call whether approval is needed. The function receives the tool name, the arguments the model passed, any request context from the incoming request, and the tool's MCP `annotations` (when the server advertises them):
 
 ```typescript
 const mcp = new MCPClient({
@@ -191,6 +206,61 @@ const mcp = new MCPClient({
 
 The function can also be async. It receives `requestContext` from the incoming request, which you can use for auth checks or other per-request logic.
 
+### Use tool annotations from a trusted server
+
+If you trust the MCP server, you can use its [tool annotations](https://modelcontextprotocol.io/specification/2025-11-25/server/tools#tool-annotations) (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`, `title`) to drive approval decisions:
+
+```typescript
+const mcp = new MCPClient({
+  servers: {
+    github: {
+      url: new URL('http://localhost:3000/mcp'),
+      requireToolApproval: ({ annotations }) => {
+        // Skip approval for tools the server has marked read-only
+        if (annotations?.readOnlyHint) return false
+        // Always require approval for destructive tools
+        if (annotations?.destructiveHint) return true
+        return true
+      },
+    },
+  },
+})
+```
+
+Per the MCP specification, **clients MUST consider tool annotations to be untrusted unless they come from trusted servers**. Annotations are advisory hints, not a security boundary — a malicious or buggy server can claim a tool is read-only when it isn't. Only use annotations to relax approval requirements for servers you trust.
+
+The same annotations are also exposed on the tools returned by `listTools()` and `listToolsets()` under `tool.mcp.annotations`, so you can inspect them when wiring tools into an agent.
+
+## Server instructions
+
+When an MCP server advertises instructions during initialization, `MCPClient` stores them for that server. Forwarding those instructions into an agent's system prompt is **opt-in**: set `forwardInstructions: true` on a server to have agents that use its tools (via `listTools()` or `listToolsets()`) receive its instructions automatically.
+
+The guidance is grouped by server name and truncated to `instructionsMaxLength` characters per server.
+
+```typescript
+const mcp = new MCPClient({
+  servers: {
+    db: {
+      url: new URL('http://localhost:3000/mcp'),
+      forwardInstructions: true,
+      instructionsMaxLength: 512,
+    },
+  },
+})
+
+const agent = new Agent({
+  id: 'db-agent',
+  name: 'DB Agent',
+  instructions: 'Help with database changes.',
+  model,
+  tools: await mcp.listTools(),
+})
+```
+
+When `forwardInstructions` is omitted (the default), instructions are still cached and can be inspected via [`getServerInstructions()`](#getserverinstructions), but aren't added to any agent's system prompt.
+
+> **Security note:** server instructions are forwarded verbatim (subject only to length truncation) into the agent's system prompt. A malicious or compromised MCP server can use them to inject instructions the agent will treat as trusted system guidance. Only enable `forwardInstructions` for servers you trust, and prefer reviewing instructions with `getServerInstructions()` before forwarding instructions from third-party servers.
+
 ## Methods
 
 ### `listTools()`
@@ -200,6 +270,17 @@ Intended to be passed onto an Agent definition.
 
 ```ts
 new Agent({ id: 'agent', tools: await mcp.listTools() })
+```
+
+### `listToolsWithErrors()`
+
+Retrieves all tools from all configured servers, with tool names namespaced by their server name. Also returns per-server errors for servers that failed to connect or list tools.
+
+```typescript
+const { tools, errors } = await mcp.listToolsWithErrors()
+
+new Agent({ id: 'agent', tools })
+console.log(errors)
 ```
 
 ### `listToolsets()`
@@ -213,6 +294,23 @@ const res = await agent.stream(prompt, {
 })
 ```
 
+### `getServerInstructions()`
+
+Returns the instructions currently known for each configured MCP server. Servers that haven't connected yet, or don't advertise instructions, return `undefined`.
+
+```typescript prettier:false
+getServerInstructions(): Record<string, string | undefined>
+```
+
+Example:
+
+```typescript
+await mcp.listTools()
+
+const instructionsByServer = mcp.getServerInstructions()
+console.log(instructionsByServer.db)
+```
+
 ### `disconnect()`
 
 Disconnects from all MCP servers and cleans up resources.
@@ -220,6 +318,38 @@ Disconnects from all MCP servers and cleans up resources.
 ```typescript prettier:false
 async disconnect(): Promise<void>
 ```
+
+### `toMCPServerProxies()`
+
+Returns a map of `MCPClientServerProxy` instances, one per configured server. Each proxy wraps the underlying client connection as an `MCPServerBase` instance, allowing external (non-Mastra) MCP servers to be registered in `mcpServers` and appear in Studio.
+
+```typescript prettier:false
+async toMCPServerProxies(): Promise<Record<string, MCPClientServerProxy>>
+```
+
+Spread the result into the `mcpServers` config on `Mastra`:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { MCPClient } from '@mastra/mcp'
+
+const mcpClient = new MCPClient({
+  servers: {
+    'color-mixer': {
+      command: 'node',
+      args: ['path/to/color-mixer-server.js'],
+    },
+  },
+})
+
+export const mastra = new Mastra({
+  mcpServers: {
+    ...(await mcpClient.toMCPServerProxies()),
+  },
+})
+```
+
+This is useful for connecting external MCP servers that implement the MCP Apps extension or other features to Studio without wrapping them in a Mastra `MCPServer`.
 
 ### `resources` Property
 
@@ -876,7 +1006,7 @@ const agent = new Agent({
   id: 'multi-tool-agent',
   name: 'Multi-tool Agent',
   instructions: 'You have access to multiple tool servers.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   tools: await mcp.listTools(),
 })
 
@@ -927,7 +1057,7 @@ const agent = new Agent({
   id: 'multi-tool-agent',
   name: 'Multi-tool Agent',
   instructions: 'You help users check stocks and weather.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 // Later, configure MCP with user-specific settings
@@ -1048,6 +1178,53 @@ await agent.generate('Hello!', {
   requestContext: myRequestContext, // forwarded to the custom fetch
 })
 ```
+
+## Handling auth failures inside custom fetch
+
+A custom `fetch` shouldn't `throw` when authentication is unavailable. The Streamable HTTP transport in the MCP SDK opens a long-lived `GET /mcp` "standalone listener" stream in the background to receive server-pushed notifications. Errors on that stream are retried with exponential backoff, and a thrown `fetch` or a cleanly-closed stream can produce an indefinite reconnect loop at roughly one attempt per second.
+
+Return a synthetic `Response` instead. The [MCP Streamable HTTP specification](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports) defines `405 Method Not Allowed` as the signal a server returns when it doesn't offer the GET SSE stream, and the SDK honors it as a terminal status that stops the listener cleanly. Use this to disable the listener when your server doesn't push notifications.
+
+The following pattern waits for an auth token on POST requests, attaches it to outgoing headers, and short-circuits the GET listener with a synthetic 405:
+
+```typescript
+async function waitForToken(timeoutMs = 5000): Promise<string | null> {
+  // Replace with your token lookup. Return null if no token is available.
+  return getAuthToken({ timeoutMs })
+}
+
+const mcpClient = new MCPClient({
+  servers: {
+    apiServer: {
+      url: new URL('https://api.example.com/mcp'),
+      fetch: async (url, init) => {
+        const method = (init?.method || 'GET').toUpperCase()
+
+        // The SDK opens a background GET stream for server-pushed notifications.
+        // If your server does not use it, short-circuit with 405 to stop reconnect attempts.
+        if (method === 'GET') {
+          return new Response(null, { status: 405, statusText: 'Method Not Allowed' })
+        }
+
+        // POST: wait for the token, then forward the request with an Authorization header.
+        const token = await waitForToken()
+        if (!token) {
+          // Forward the request without a token and let the server reject it.
+          // The SDK surfaces non-2xx POST responses as errors to the caller of
+          // tools/list, tools/call, etc., which is the desired behavior here.
+          return fetch(url, init)
+        }
+
+        const headers = new Headers(init?.headers)
+        headers.set('authorization', `Bearer ${token}`)
+        return fetch(url, { ...init, headers })
+      },
+    },
+  },
+})
+```
+
+Return `405` for the GET listener only when your server doesn't push notifications back to the client. If your server uses the standalone GET stream, attach the auth token on `GET` requests as well and let the request through.
 
 ## Using SSE request headers
 

@@ -1,6 +1,31 @@
 {
   "redirects": [
     {
+      "source": "/docs/observability/tracing/exporters/cloud",
+      "destination": "/docs/observability/integrations/exporters/mastra-platform",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/exporters/default",
+      "destination": "/docs/observability/integrations/exporters/mastra-storage",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/exporters/:path*",
+      "destination": "/docs/observability/integrations/exporters/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/bridges/:path*",
+      "destination": "/docs/observability/integrations/bridges/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/processors/:path*",
+      "destination": "/docs/observability/integrations/processors/:path*",
+      "permanent": true
+    },
+    {
       "source": "/docs/getting-started/start",
       "destination": "/docs",
       "permanent": true
@@ -582,7 +607,7 @@
     },
     {
       "source": "/docs/getting-started/mcp-docs-server",
-      "destination": "/docs/build-with-ai/mcp-docs-server",
+      "destination": "/docs/getting-started/build-with-ai#mcp-docs-server",
       "permanent": true
     },
     {
@@ -723,6 +748,51 @@
     {
       "source": "/docs/mcp/publishing-mcp-server",
       "destination": "/guides/guide/publishing-mcp-server",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/response-caching",
+      "destination": "/docs/agents/processors#response-caching",
+      "permanent": true
+    },
+    {
+      "source": "/docs/build-with-ai/skills",
+      "destination": "/docs/getting-started/build-with-ai#mastra-skills",
+      "permanent": true
+    },
+    {
+      "source": "/docs/build-with-ai/mcp-docs-server",
+      "destination": "/docs/getting-started/build-with-ai#mcp-docs-server",
+      "permanent": true
+    },
+    {
+      "source": "/docs/streaming",
+      "destination": "/guides/concepts/streaming",
+      "permanent": true
+    },
+    {
+      "source": "/docs/streaming/overview",
+      "destination": "/guides/concepts/streaming",
+      "permanent": true
+    },
+    {
+      "source": "/docs/streaming/events",
+      "destination": "/guides/concepts/streaming#event-types",
+      "permanent": true
+    },
+    {
+      "source": "/docs/streaming/tool-streaming",
+      "destination": "/docs/agents/using-tools#streaming",
+      "permanent": true
+    },
+    {
+      "source": "/docs/streaming/workflow-streaming",
+      "destination": "/docs/workflows/overview#inspecting-workflow-stream-payloads",
+      "permanent": true
+    },
+    {
+      "source": "/docs/streaming/background-task-streaming",
+      "destination": "/docs/agents/background-tasks#subscribe-to-all-task-events",
       "permanent": true
     }
   ]

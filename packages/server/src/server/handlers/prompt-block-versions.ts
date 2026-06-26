@@ -14,6 +14,7 @@ import {
   comparePromptBlockVersionsResponseSchema,
 } from '../schemas/prompt-block-versions';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { assertStoredResourceScope, getStoredResourceScope } from '../utils';
 
 import { handleError } from './error';
 import {
@@ -41,7 +42,7 @@ export const LIST_PROMPT_BLOCK_VERSIONS_ROUTE = createRoute({
   summary: 'List prompt block versions',
   description: 'Returns a paginated list of all versions for a stored prompt block',
   tags: ['Prompt Block Versions'],
-  handler: async ({ mastra, promptBlockId, page, perPage, orderBy }) => {
+  handler: async ({ mastra, promptBlockId, page, perPage, orderBy, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -58,6 +59,7 @@ export const LIST_PROMPT_BLOCK_VERSIONS_ROUTE = createRoute({
       if (!promptBlock) {
         throw new HTTPException(404, { message: `Prompt block with id ${promptBlockId} not found` });
       }
+      assertStoredResourceScope(promptBlock, await getStoredResourceScope(mastra, requestContext));
 
       const result = await promptBlockStore.listVersions({
         blockId: promptBlockId,
@@ -87,7 +89,7 @@ export const CREATE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
   summary: 'Create prompt block version',
   description: 'Creates a new version snapshot of the current prompt block configuration',
   tags: ['Prompt Block Versions'],
-  handler: async ({ mastra, promptBlockId, changeMessage }) => {
+  handler: async ({ mastra, promptBlockId, changeMessage, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -104,6 +106,7 @@ export const CREATE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
       if (!promptBlock) {
         throw new HTTPException(404, { message: `Prompt block with id ${promptBlockId} not found` });
       }
+      assertStoredResourceScope(promptBlock, await getStoredResourceScope(mastra, requestContext));
 
       let currentConfig: Record<string, unknown> = {};
       if (promptBlock.activeVersionId) {
@@ -172,7 +175,7 @@ export const GET_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
   summary: 'Get prompt block version',
   description: 'Returns a specific version of a prompt block by its version ID',
   tags: ['Prompt Block Versions'],
-  handler: async ({ mastra, promptBlockId, versionId }) => {
+  handler: async ({ mastra, promptBlockId, versionId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -196,6 +199,8 @@ export const GET_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
           message: `Version with id ${versionId} not found for prompt block ${promptBlockId}`,
         });
       }
+      const promptBlock = await promptBlockStore.getById(promptBlockId);
+      assertStoredResourceScope(promptBlock, await getStoredResourceScope(mastra, requestContext));
 
       return version;
     } catch (error) {
@@ -217,7 +222,7 @@ export const ACTIVATE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
   summary: 'Activate prompt block version',
   description: 'Sets a specific version as the active version for the prompt block',
   tags: ['Prompt Block Versions'],
-  handler: async ({ mastra, promptBlockId, versionId }) => {
+  handler: async ({ mastra, promptBlockId, versionId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -234,6 +239,7 @@ export const ACTIVATE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
       if (!promptBlock) {
         throw new HTTPException(404, { message: `Prompt block with id ${promptBlockId} not found` });
       }
+      assertStoredResourceScope(promptBlock, await getStoredResourceScope(mastra, requestContext));
 
       const version = await promptBlockStore.getVersion(versionId);
       if (!version) {
@@ -278,7 +284,7 @@ export const RESTORE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
   summary: 'Restore prompt block version',
   description: 'Restores the prompt block configuration from a version, creating a new version',
   tags: ['Prompt Block Versions'],
-  handler: async ({ mastra, promptBlockId, versionId }) => {
+  handler: async ({ mastra, promptBlockId, versionId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -295,6 +301,7 @@ export const RESTORE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
       if (!promptBlock) {
         throw new HTTPException(404, { message: `Prompt block with id ${promptBlockId} not found` });
       }
+      assertStoredResourceScope(promptBlock, await getStoredResourceScope(mastra, requestContext));
 
       const versionToRestore = await promptBlockStore.getVersion(versionId);
       if (!versionToRestore) {
@@ -369,7 +376,7 @@ export const DELETE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
   summary: 'Delete prompt block version',
   description: 'Deletes a specific version (cannot delete the active version)',
   tags: ['Prompt Block Versions'],
-  handler: async ({ mastra, promptBlockId, versionId }) => {
+  handler: async ({ mastra, promptBlockId, versionId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -386,6 +393,7 @@ export const DELETE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
       if (!promptBlock) {
         throw new HTTPException(404, { message: `Prompt block with id ${promptBlockId} not found` });
       }
+      assertStoredResourceScope(promptBlock, await getStoredResourceScope(mastra, requestContext));
 
       const version = await promptBlockStore.getVersion(versionId);
       if (!version) {
@@ -432,7 +440,7 @@ export const COMPARE_PROMPT_BLOCK_VERSIONS_ROUTE = createRoute({
   summary: 'Compare prompt block versions',
   description: 'Compares two versions and returns the differences between them',
   tags: ['Prompt Block Versions'],
-  handler: async ({ mastra, promptBlockId, from, to }) => {
+  handler: async ({ mastra, promptBlockId, from, to, requestContext }) => {
     try {
       const storage = mastra.getStorage();
 
@@ -444,6 +452,8 @@ export const COMPARE_PROMPT_BLOCK_VERSIONS_ROUTE = createRoute({
       if (!promptBlockStore) {
         throw new HTTPException(500, { message: 'Prompt blocks storage domain is not available' });
       }
+      const promptBlock = await promptBlockStore.getById(promptBlockId);
+      assertStoredResourceScope(promptBlock, await getStoredResourceScope(mastra, requestContext));
 
       const fromVersion = await promptBlockStore.getVersion(from);
       if (!fromVersion) {

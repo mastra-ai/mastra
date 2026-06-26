@@ -299,6 +299,26 @@ describe('schemas', () => {
       expect(result.errors).toHaveLength(0);
     });
 
+    it('should accept user-invocable boolean metadata', () => {
+      const result = validateSkillMetadata({
+        name: 'my-skill',
+        description: 'A helpful skill',
+        'user-invocable': false,
+      });
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('should reject non-boolean user-invocable metadata', () => {
+      const result = validateSkillMetadata({
+        name: 'my-skill',
+        description: 'A helpful skill',
+        'user-invocable': 'false',
+      });
+      expect(result.valid).toBe(false);
+      expect(result.errors).toContain('user-invocable: Expected boolean, received string');
+    });
+
     it('should reject missing name', () => {
       const result = validateSkillMetadata({ description: 'A skill' });
       expect(result.valid).toBe(false);

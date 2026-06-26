@@ -51,7 +51,7 @@ Never include placeholder text like [TODO] or [PLACEHOLDER].
 Avoid excessive repetition in your responses.
 Provide at least a few sentences in your response.`,
 
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5-mini',
 
   // Input processors check user messages before LLM call
   inputProcessors: [piiDetectionProcessor, toxicityCheckProcessor],
@@ -296,7 +296,7 @@ export const agentWithProcessorWorkflow = new Agent({
   name: 'Agent with Processor Workflow',
   instructions: `You are a helpful assistant. Always provide detailed responses.`,
 
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5-mini',
 
   // Use the advanced workflow with parallel processing
   inputProcessors: [advancedModerationWorkflow],
@@ -317,7 +317,7 @@ export const agentWithBranchingWorkflow = new Agent({
   name: 'Agent with Branching Workflow',
   instructions: `You are a helpful assistant.`,
 
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5-mini',
 
   // Use the branching workflow
   inputProcessors: [branchingModerationWorkflow],
@@ -339,5 +339,5 @@ export const simpleAssistantAgent = new Agent({
   id: 'simple-assistant',
   name: 'Simple Assistant',
   instructions: 'You are a helpful assistant.',
-  model: 'openai/gpt-4o-mini',
+  model: 'openai/gpt-5-mini',
 });

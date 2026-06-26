@@ -1,8 +1,8 @@
-import { MastraFGAPermissions } from '@mastra/core/auth/ee';
 import { isVercelTool, isProviderDefinedTool } from '@mastra/core/tools';
 import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import type { PublicSchema } from '@mastra/schema-compat/schema';
 import { stringify } from 'superjson';
+import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import {
   executeToolContextBodySchema,
@@ -121,8 +121,32 @@ export const LIST_TOOLS_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, registeredTools, requestContext }) => {
     try {
-      const allTools =
-        registeredTools && Object.keys(registeredTools).length > 0 ? registeredTools : mastra.listTools() || {};
+      // Merge tools from two sources: mastra.listTools() includes dynamically created tools
+      // (e.g. MCP tools, or agent tools registered by their intrinsic id), while registeredTools
+      // includes tools discovered by the CLI bundler (keyed by export name).
+      //
+      // The same tool instance can appear in both maps under different keys (e.g. an agent
+      // registers it by `tool.id` while the bundler registers it by export name). Dedupe by
+      // `tool.id`, preferring the registeredTools (bundler) key, so each tool appears once.
+      const registered = registeredTools && Object.keys(registeredTools).length > 0 ? registeredTools : {};
+
+      const allTools: Record<string, any> = {};
+      const seenToolIds = new Map<string, string>();
+
+      // registeredTools first so their key wins for a given tool.id.
+      for (const [key, tool] of Object.entries(registered)) {
+        const toolId = typeof (tool as any)?.id === 'string' ? (tool as any).id : undefined;
+        if (toolId !== undefined) seenToolIds.set(toolId, key);
+        allTools[key] = tool;
+      }
+
+      for (const [key, tool] of Object.entries(mastra.listTools() ?? {})) {
+        const toolId = typeof (tool as any)?.id === 'string' ? (tool as any).id : undefined;
+        // Skip if this exact tool.id was already registered (under any key) by registeredTools.
+        if (toolId !== undefined && seenToolIds.has(toolId)) continue;
+        if (toolId !== undefined) seenToolIds.set(toolId, key);
+        allTools[key] = tool;
+      }
 
       const serializedTools = Object.entries(allTools).reduce(
         (acc, [id, _tool]) => {
@@ -163,7 +187,6 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
   description: 'Returns details for a specific tool including its schema and configuration',
   tags: ['Tools'],
   requiresAuth: true,
-  fga: { resourceType: 'tool', resourceIdParam: 'toolId', permission: MastraFGAPermissions.TOOLS_READ },
   handler: async ({ mastra, registeredTools, toolId, requestContext }) => {
     try {
       let tool: any;
@@ -208,7 +231,6 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
   description: 'Executes a specific tool with the provided input data',
   tags: ['Tools'],
   requiresAuth: true,
-  fga: { resourceType: 'tool', resourceIdParam: 'toolId', permission: MastraFGAPermissions.TOOLS_EXECUTE },
   handler: async ({ mastra, runId, toolId, registeredTools, requestContext, ...bodyParams }) => {
     try {
       if (!toolId) {
@@ -287,11 +309,6 @@ export const GET_AGENT_TOOL_ROUTE = createRoute({
   description: 'Returns details for a specific tool assigned to the agent',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
-  fga: {
-    resourceType: 'tool',
-    resourceId: ({ agentId, toolId }) => `${String(agentId)}:${String(toolId)}`,
-    permission: MastraFGAPermissions.TOOLS_READ,
-  },
   handler: async ({ mastra, agentId, toolId, requestContext }) => {
     try {
       if (!agentId) {
@@ -325,11 +342,6 @@ export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
   description: 'Executes a specific tool assigned to the agent with the provided input data',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
-  fga: {
-    resourceType: 'tool',
-    resourceId: ({ agentId, toolId }) => `${String(agentId)}:${String(toolId)}`,
-    permission: MastraFGAPermissions.TOOLS_EXECUTE,
-  },
   handler: async ({ mastra, agentId, toolId, data, requestContext }) => {
     try {
       if (!agentId) {

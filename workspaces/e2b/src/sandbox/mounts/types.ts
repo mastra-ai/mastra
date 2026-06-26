@@ -62,6 +62,20 @@ export function validateEndpoint(endpoint: string): void {
 }
 
 /**
+ * Validate an AWS region (or R2's "auto") before interpolating into shell commands.
+ * Accepts standard AWS region codes like "us-east-1", "ap-northeast-1", and "auto".
+ */
+const SAFE_REGION = /^[a-z0-9-]{2,32}$/;
+
+export function validateRegion(region: unknown): asserts region is string {
+  if (typeof region !== 'string' || !SAFE_REGION.test(region)) {
+    throw new Error(
+      `Invalid region: ${JSON.stringify(region)}. Region must be a string of lowercase alphanumeric or hyphens (e.g., "us-east-1", "ap-northeast-1", "auto").`,
+    );
+  }
+}
+
+/**
  * Validate and normalize a mount prefix before interpolating into shell commands.
  * Returns the normalized prefix (no leading/trailing slashes).
  *

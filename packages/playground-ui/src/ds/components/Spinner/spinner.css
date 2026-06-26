@@ -1,0 +1,114 @@
+.spinner {
+  --spinner-stroke: 2.2;
+  --spinner-pulse-ring-stroke: 2;
+
+  shape-rendering: geometricprecision;
+}
+
+.spinner[data-size='sm'] {
+  --spinner-stroke: 2.8;
+  --spinner-pulse-ring-stroke: 2.4;
+}
+
+.spinner[data-variant='default'] {
+  transform-origin: center;
+  animation: spinner-spin 1.1s linear infinite;
+}
+
+.spinner-ring {
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: var(--spinner-stroke, 2.2);
+  stroke-linecap: round;
+  stroke-dashoffset: 0;
+  stroke-dasharray: 8 200;
+  animation: spinner-flex 1.4s ease-in-out infinite;
+}
+
+.spinner[data-variant='pulse'] {
+  overflow: visible;
+}
+
+.spinner-pulse-core,
+.spinner-pulse-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.spinner-pulse-core {
+  fill: currentcolor;
+  animation: spinner-pulse-breath 1.5s ease-in-out infinite;
+}
+
+.spinner-pulse-ring {
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: var(--spinner-pulse-ring-stroke, 2);
+  animation: spinner-pulse-ping 1.5s ease-out infinite;
+}
+
+@keyframes spinner-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes spinner-flex {
+  0%,
+  100% {
+    stroke-dasharray: 8 200;
+  }
+
+  50% {
+    stroke-dasharray: 40 200;
+  }
+}
+
+@keyframes spinner-pulse-breath {
+  0%,
+  100% {
+    transform: scale(0.78);
+  }
+
+  45% {
+    transform: scale(1.05);
+  }
+}
+
+@keyframes spinner-pulse-ping {
+  0% {
+    transform: scale(0.62);
+    opacity: 0;
+  }
+
+  18% {
+    opacity: 0.5;
+  }
+
+  75%,
+  100% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner[data-variant='default'],
+  .spinner-ring,
+  .spinner-pulse-core,
+  .spinner-pulse-ring {
+    animation: none;
+  }
+
+  .spinner-ring {
+    stroke-dasharray: 40 200;
+  }
+
+  .spinner-pulse-core {
+    transform: scale(0.92);
+  }
+
+  .spinner-pulse-ring {
+    opacity: 0.35;
+  }
+}

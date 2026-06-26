@@ -1,17 +1,10 @@
-import {
-  ArrowLeftIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  FilterIcon,
-  ListFilterPlusIcon,
-  PlusIcon,
-} from 'lucide-react';
+import { ArrowLeftIcon, ChevronRightIcon, FilterIcon, ListFilterPlusIcon, PlusIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PickMultiPanel } from './pick-multi-panel';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
 import { Button } from '@/ds/components/Button/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
-import { MultiCombobox } from '@/ds/components/Combobox/multi-combobox';
+import { Combobox } from '@/ds/components/Combobox/combobox';
 import { Input } from '@/ds/components/Input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
 import { cn } from '@/lib/utils';
@@ -30,6 +23,12 @@ export type PropertyFilterCreatorProps = {
    * can type the value inline instead of in this popover.
    */
   onStartTextFilter?: (fieldId: string) => void;
+  /**
+   * Field ids hidden from the Add Filter dropdown. Use to prevent users from
+   * recreating a filter that an upstream context already owns (e.g. the agent
+   * id when viewing the agent-scoped traces tab).
+   */
+  hiddenFieldIds?: readonly string[];
 };
 
 /**
@@ -48,7 +47,13 @@ export function PropertyFilterCreator({
   disabled,
   size,
   onStartTextFilter,
+  hiddenFieldIds,
 }: PropertyFilterCreatorProps) {
+  const visibleFields = useMemo(() => {
+    if (!hiddenFieldIds || hiddenFieldIds.length === 0) return fields;
+    const hidden = new Set(hiddenFieldIds);
+    return fields.filter(f => !hidden.has(f.id));
+  }, [fields, hiddenFieldIds]);
   const [open, setOpen] = useState(false);
   const [fieldId, setFieldId] = useState<string | undefined>();
   const [textValue, setTextValue] = useState('');
@@ -74,7 +79,7 @@ export function PropertyFilterCreator({
     if (!open) setOpenPickMultiFieldId(undefined);
   }, [open]);
 
-  const selectedField = useMemo(() => fields.find(f => f.id === fieldId), [fields, fieldId]);
+  const selectedField = useMemo(() => visibleFields.find(f => f.id === fieldId), [visibleFields, fieldId]);
   // Only single-use kinds (text, multi-select) count as "used". `pick-multi`
   // allows multiple tokens with the same fieldId.
   const singleUseFieldIds = useMemo(() => {
@@ -166,12 +171,13 @@ export function PropertyFilterCreator({
       <PopoverContent
         align="end"
         className="p-3 w-64"
-        onOpenAutoFocus={e => e.preventDefault()}
-        onCloseAutoFocus={e => {
+        initialFocus={false}
+        finalFocus={() => {
           if (skipCloseFocusRef.current) {
             skipCloseFocusRef.current = false;
-            e.preventDefault();
+            return false;
           }
+          return true;
         }}
       >
         <div className="grid gap-3">
@@ -216,8 +222,8 @@ export function PropertyFilterCreator({
                 buttons[next]?.focus();
               }}
             >
-              {fields.length > 0 ? (
-                fields.map(f => {
+              {visibleFields.length > 0 ? (
+                visibleFields.map(f => {
                   const used = singleUseFieldIds.has(f.id);
                   if (f.kind === 'pick-multi') {
                     return (
@@ -293,7 +299,8 @@ export function PropertyFilterCreator({
           )}
 
           {selectedField && selectedField.kind === 'multi-select' && (
-            <MultiCombobox
+            <Combobox
+              multiple
               options={selectedField.options ?? []}
               value={multiValue}
               onValueChange={v => {
@@ -375,7 +382,7 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
             });
           }}
         >
-          {open && <ChevronLeftIcon className="h-4 w-4 text-neutral3 shrink-0" />}
+          {open && <ChevronRightIcon className="h-4 w-4 text-neutral3 shrink-0" />}
           <span className="truncate">{field.label}</span>
           {!open && <ChevronRightIcon className="h-4 w-4 ml-auto text-neutral3 shrink-0" />}
         </button>
@@ -386,7 +393,7 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
         align="start"
         sideOffset={8}
         className="w-64 p-2"
-        onOpenAutoFocus={e => e.preventDefault()}
+        initialFocus={false}
         onKeyDown={e => {
           if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;
           const items = Array.from(

@@ -1,21 +1,13 @@
-import {
-  ButtonWithTooltip,
-  ErrorState,
-  NoDataPageLayout,
-  PageHeader,
-  PageLayout,
-  PermissionDenied,
-  SessionExpired,
-  Spinner,
-  Tab,
-  TabContent,
-  TabList,
-  Tabs,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-  toast,
-} from '@mastra/playground-ui';
-import { BookIcon, Folder, FileText, Wand2, Search, ChevronDown, Bot, Server } from 'lucide-react';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { toast } from '@mastra/playground-ui/utils/toast';
+import { FileText, Wand2, Search, ChevronDown, Bot, Server } from 'lucide-react';
 import { useState, useCallback } from 'react';
 import { useSearchParams, useParams, useNavigate } from 'react-router';
 import { isWorkspaceNotSupportedError } from '@/domains/workspace/compatibility';
@@ -165,12 +157,11 @@ export default function Workspace() {
   // None of these operations require sandbox - all are done via GitHub API + filesystem
   const canManageSkills = hasFilesystem && !isReadOnly;
 
-  // Derive writable mounts and mount paths for CompositeFilesystem
+  // Derive writable mounts for CompositeFilesystem
   const mounts = workspaceInfo?.mounts;
   const writableMounts = mounts
     ?.filter(m => !m.readOnly)
     .map(m => ({ path: m.path, displayName: m.displayName, icon: m.icon, provider: m.provider, name: m.name }));
-  const mountPaths = mounts && mounts.length > 1 ? mounts.map(m => m.path) : undefined;
 
   // Skills.sh handlers
   const handleInstallSkill = useCallback(
@@ -301,7 +292,7 @@ export default function Workspace() {
   // Show loading while fetching workspace list
   if (isLoadingWorkspaces) {
     return (
-      <NoDataPageLayout title="Workspace" icon={<Folder />}>
+      <NoDataPageLayout>
         <Spinner />
       </NoDataPageLayout>
     );
@@ -310,7 +301,7 @@ export default function Workspace() {
   // If session expired (401 error)
   if (isSessionExpired) {
     return (
-      <NoDataPageLayout title="Workspace" icon={<Folder />}>
+      <NoDataPageLayout>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -319,7 +310,7 @@ export default function Workspace() {
   // If permission denied (403 error)
   if (isPermissionDenied) {
     return (
-      <NoDataPageLayout title="Workspace" icon={<Folder />}>
+      <NoDataPageLayout>
         <PermissionDenied resource="workspaces" />
       </NoDataPageLayout>
     );
@@ -328,7 +319,7 @@ export default function Workspace() {
   // If workspace v1 is not supported by the server's @mastra/core version
   if (isWorkspaceNotSupported) {
     return (
-      <NoDataPageLayout title="Workspace" icon={<Folder />}>
+      <NoDataPageLayout>
         <WorkspaceNotSupported />
       </NoDataPageLayout>
     );
@@ -338,7 +329,7 @@ export default function Workspace() {
   const genericError = workspacesError || workspaceInfoError;
   if (genericError) {
     return (
-      <NoDataPageLayout title="Workspace" icon={<Folder />}>
+      <NoDataPageLayout>
         <ErrorState title="Failed to load workspace" message={(genericError as Error).message} />
       </NoDataPageLayout>
     );
@@ -347,7 +338,7 @@ export default function Workspace() {
   // If the workspace feature is configured but no workspaces exist yet, show empty state
   if (!isLoadingWorkspaces && workspaces.length === 0) {
     return (
-      <NoDataPageLayout title="Workspace" icon={<Folder />}>
+      <NoDataPageLayout>
         <NoWorkspacesInfo />
       </NoDataPageLayout>
     );
@@ -357,7 +348,7 @@ export default function Workspace() {
   // Also wait for workspaces list to load to avoid showing this before 403 is detected
   if (!isLoadingInfo && !isLoadingWorkspaces && !isWorkspaceConfigured) {
     return (
-      <NoDataPageLayout title="Workspace" icon={<Folder />}>
+      <NoDataPageLayout>
         <WorkspaceNotConfigured />
       </NoDataPageLayout>
     );
@@ -365,39 +356,15 @@ export default function Workspace() {
 
   return (
     <PageLayout>
-      <PageLayout.TopArea>
-        <PageLayout.Row>
-          <PageLayout.Column>
-            <PageHeader>
-              <PageHeader.Title>
-                <Folder /> Workspace
-              </PageHeader.Title>
-              <PageHeader.Description>Manage files, skills, and search your workspace</PageHeader.Description>
-            </PageHeader>
-          </PageLayout.Column>
-          <PageLayout.Column className="flex justify-end gap-2">
-            {hasSearchCapability && (
-              <ButtonWithTooltip
-                onClick={() => setShowSearch(!showSearch)}
-                tooltipContent="Search workspace"
-                aria-label="Search workspace"
-              >
-                <Search />
-              </ButtonWithTooltip>
-            )}
-            <ButtonWithTooltip
-              as="a"
-              href="https://mastra.ai/en/docs/workspace/overview"
-              target="_blank"
-              rel="noopener noreferrer"
-              tooltipContent="Go to Workspaces documentation"
-              aria-label="Workspaces documentation"
-            >
-              <BookIcon />
-            </ButtonWithTooltip>
-          </PageLayout.Column>
-        </PageLayout.Row>
-      </PageLayout.TopArea>
+      {hasSearchCapability && (
+        <PageLayout.TopArea>
+          <PageLayout.Row className="justify-end">
+            <Button onClick={() => setShowSearch(!showSearch)} tooltip="Search workspace" aria-label="Search workspace">
+              <Search />
+            </Button>
+          </PageLayout.Row>
+        </PageLayout.TopArea>
+      )}
 
       <PageLayout.MainArea className="grid content-start gap-6">
         {/* Workspace Selector - shown when multiple workspaces exist */}
@@ -538,7 +505,7 @@ export default function Workspace() {
                     entries={files}
                     currentPath={currentPath}
                     isLoading={isLoadingFiles}
-                    error={filesError}
+                    error={filesError instanceof Error ? filesError : null}
                     onNavigate={setCurrentPath}
                     onFileSelect={setSelectedFile}
                     onRefresh={() => refetchFiles()}
@@ -580,7 +547,6 @@ export default function Workspace() {
                   onRemoveSkill={canManageSkills ? handleRemoveSkill : undefined}
                   updatingSkillName={updatingSkillName ?? undefined}
                   removingSkillName={removingSkillName ?? undefined}
-                  mountPaths={mountPaths}
                 />
               </TabContent>
             )}

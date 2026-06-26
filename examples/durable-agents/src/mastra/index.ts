@@ -57,7 +57,7 @@ export const mastra = new Mastra({
     host: '0.0.0.0',
     apiRoutes: [
       {
-        path: '/api/inngest',
+        path: '/inngest/api',
         method: 'ALL',
         createHandler: async ({ mastra }) => inngestServe({ mastra, inngest }),
       },

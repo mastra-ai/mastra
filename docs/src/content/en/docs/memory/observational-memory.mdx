@@ -23,7 +23,7 @@ import { Agent } from '@mastra/core/agent'
 export const agent = new Agent({
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
   memory: new Memory({
     options: {
       // highlight-next-line
@@ -33,7 +33,7 @@ export const agent = new Agent({
 })
 ```
 
-That's it. The agent now has humanlike long-term memory that persists across conversations. Setting `observationalMemory: true` uses `google/gemini-2.5-flash` by default. To use a different model or customize thresholds, pass a config object instead:
+That's it. The agent now has humanlike long-term memory that persists across conversations. Setting `observationalMemory: true` uses `google/gemini-2.5-flash` by default. Config objects also use this model unless you set a different one. To use a different model, pass it in the config object:
 
 ```typescript
 const memory = new Memory({
@@ -58,7 +58,7 @@ For an AI SDK example, see [Using Mastra Memory](/guides/build-your-ui/ai-sdk-ui
 :::note
 
 OM currently only supports `@mastra/pg`, `@mastra/libsql`, and `@mastra/mongodb` storage adapters.
-It uses background agents for managing memory. When using `observationalMemory: true`, the default model is `google/gemini-2.5-flash`. When passing a config object, a `model` must be explicitly set.
+It uses background agents for managing memory. When no model is set, the default model is `google/gemini-2.5-flash`.
 
 :::
 
@@ -75,7 +75,7 @@ import { Agent } from '@mastra/core/agent'
 export const agent = new Agent({
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
   memory: new Memory({
     options: {
       observationalMemory: {
@@ -90,6 +90,67 @@ export const agent = new Agent({
 Mastra inserts a temporal gap marker when the gap is at least 10 minutes. The marker is stored in memory and also emitted as a transient reminder event, so clients can render it as a lightweight timeline hint.
 
 The observer also sees these markers when it processes the thread, so the observations it writes can anchor memories to when they happened (for example, "User asked about deployment after a 2-day gap").
+
+See [the API reference](/reference/memory/observational-memory#configuration) for the full configuration shape.
+
+## Early activation
+
+OM can activate buffered observations before the token threshold is reached. This is useful when a prompt cache is likely to expire, or when the agent changes model providers.
+
+Top-level early activation settings apply to observations by default:
+
+```typescript title="src/mastra/agents/agent.ts"
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: 'google/gemini-2.5-flash',
+      activateAfterIdle: 'auto',
+      activateOnProviderChange: true,
+    },
+  },
+})
+```
+
+Use nested `observation` and `reflection` settings for per-phase control. Reflection early activation is opt-in, so top-level settings affect only observations.
+
+```typescript title="src/mastra/agents/agent.ts"
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: 'google/gemini-2.5-flash',
+      activateAfterIdle: '5m',
+      observation: {
+        activateAfterIdle: false,
+      },
+      reflection: {
+        activateAfterIdle: '10m',
+        activateOnProviderChange: true,
+      },
+    },
+  },
+})
+```
+
+In this example, the top-level idle setting is disabled for observations, while reflections opt into idle and provider-change activation.
+
+### Buffer on idle
+
+Set `observation.bufferOnIdle` to `true` to run background observation buffering when an agent turn ends and the agent becomes idle. This is useful for apps that want short turns to be observed without waiting for the next turn or the `messageTokens` threshold.
+
+```typescript title="src/mastra/agents/agent.ts"
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: '__GATEWAY_OPENAI_MODEL_MINI__',
+      observation: {
+        bufferOnIdle: true,
+      },
+    },
+  },
+})
+```
+
+`bufferOnIdle` is off by default. It's separate from `bufferTokens`: `bufferTokens` controls step-time async buffering, while `bufferOnIdle` controls end-of-turn buffering for idle turns.
 
 See [the API reference](/reference/memory/observational-memory#configuration) for the full configuration shape.
 
@@ -118,6 +179,28 @@ OM uses fast local token estimation for this thresholding work. Text is estimate
 
 The Observer can also see attachments in the history it reviews. OM keeps readable placeholders like `[Image #1: reference-board.png]` or `[File #1: floorplan.pdf]` in the transcript for readability, and forwards the actual attachment parts alongside the text. Image-like `file` parts are upgraded to image inputs for the Observer when possible, while non-image attachments are forwarded as file parts with normalized token counting. This applies to both normal thread observation and batched resource-scope observation.
 
+If your Observer model is text-only or its API rejects multimodal input, set `observation.observeAttachments` to `false` to drop attachments before they reach the Observer. The readable placeholders (`[Image #1: ...]`, `[File #1: ...]`) are kept in the transcript so the Observer can still reason about what was shared without receiving the binary payload. The same filter applies to tool results that contain image or file parts:
+
+```typescript
+new Agent({
+  name: 'assistant',
+  instructions: 'You are a helpful assistant.',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  memory: new Memory({
+    options: {
+      observationalMemory: {
+        observation: {
+          model: 'deepseek/deepseek-reasoner',
+          observeAttachments: false,
+        },
+      },
+    },
+  }),
+})
+```
+
+You can also pass an allowlist of mimeType globs (for example `['image/*']`) to forward only the kinds the Observer can handle.
+
 ```md
 Date: 2026-01-15
 
@@ -143,11 +226,7 @@ The result is a three-tier system:
 1. **Observations**: A log of what the Observer has seen
 1. **Reflections**: Condensed observations when memory becomes too long
 
-### Retrieval mode (experimental)
-
-:::note
-Retrieval mode is experimental. The API may change in future releases.
-:::
+### Retrieval mode
 
 Normal OM compresses messages into observations, which is great for staying on task, but the original wording is gone. Retrieval mode fixes this by keeping each observation group linked to the raw messages that produced it. When the agent needs exact wording, tool output, or chronology that the summary compressed away, it can call a `recall` tool to page through the source messages.
 
@@ -227,11 +306,11 @@ The progress bars update live while the agent is observing or reflecting, showin
 
 ## Models
 
-The Observer and Reflector run in the background. Any model that works with Mastra's [model routing](/models) (`provider/model`) can be used. When using `observationalMemory: true`, the default model is `google/gemini-2.5-flash`. When passing a config object, a `model` must be explicitly set.
+The Observer and Reflector run in the background. Any model that works with Mastra's [model routing](/models) (`provider/model`) can be used. When no model is set, the default model is `google/gemini-2.5-flash`.
 
 Generally speaking, we recommend using a model that has a large context window (128K+ tokens) and is fast enough to run in the background without slowing down your actions.
 
-If you're unsure which model to use, start with the default `google/gemini-2.5-flash`. We've also successfully tested `openai/gpt-5-mini`, `anthropic/claude-haiku-4-5`, `deepseek/deepseek-reasoner`, `qwen3`, and `glm-4.7`.
+If you're unsure which model to use, start with the default `google/gemini-2.5-flash`. We've also successfully tested `__GATEWAY_OPENAI_MODEL_MINI__`, `__GATEWAY_ANTHROPIC_MODEL_HAIKU__`, `deepseek/deepseek-reasoner`, `deepseek/deepseek-v4-pro`, `deepseek/deepseek-v4-flash`, `xai/grok-4-1-fast`, `qwen3`, and `glm-4.7`.
 
 ```typescript
 const memory = new Memory({
@@ -244,6 +323,14 @@ const memory = new Memory({
 ```
 
 See [model configuration](/reference/memory/observational-memory#custom-model) for using different models per agent.
+
+:::note
+
+`google/gemini-2.5-flash` is unusually good at preserving detail in long output. As a result, the Reflector can produce reflections that stay above the configured `reflection.observationTokens` threshold even after the maximum compression retry. When this happens, the Reflector returns the smallest non-degenerate candidate produced during retries so the loop terminates instead of running forever.
+
+If you'd rather have more aggressive compression on the Reflector, swap to a model that condenses more readily, such as `xai/grok-4-1-fast`, `deepseek/deepseek-v4-pro`, or `deepseek/deepseek-v4-flash`. You can keep `google/gemini-2.5-flash` for the Observer and use a different model for the Reflector — see [different models per agent](/reference/memory/observational-memory#different-models-per-agent).
+
+:::
 
 ### Token-tiered model selection
 
@@ -263,7 +350,7 @@ const memory = new Memory({
             // Faster, cheaper models for smaller inputs; stronger models for larger contexts
             5_000: 'openrouter/mistralai/ministral-8b-2512',
             20_000: 'openrouter/mistralai/mistral-small-2603',
-            40_000: 'openai/gpt-5.4-mini',
+            40_000: '__GATEWAY_OPENAI_MODEL_MINI__',
             1_000_000: 'google/gemini-3.1-flash-lite-preview',
           },
         }),
@@ -271,7 +358,7 @@ const memory = new Memory({
       reflection: {
         model: new ModelByInputTokens({
           upTo: {
-            20_000: 'openai/gpt-5.4-mini',
+            20_000: '__GATEWAY_OPENAI_MODEL_MINI__',
             100_000: 'google/gemini-2.5-flash',
           },
         }),
@@ -366,6 +453,40 @@ OM caches token estimates in message metadata to reduce repeat counting work dur
 - Message and conversation overhead are still recalculated on every pass. The cache only stores payload estimates, so counting semantics stay the same.
 - `data-*` and `reasoning` parts are still skipped and aren't cached.
 
+### Caller-supplied token estimates for file parts
+
+You can attach a token estimate directly to an `image` or `file` part using `providerMetadata.mastra.tokenEstimate`. The Token Counter honors this value verbatim and skips its own estimator:
+
+```typescript
+const filePart = {
+  type: 'file',
+  data: 'storage://bucket/large-report.pdf',
+  mimeType: 'application/pdf',
+  filename: 'large-report.pdf',
+  providerMetadata: {
+    mastra: {
+      tokenEstimate: {
+        v: 0,
+        source: 'client',
+        key: 'client',
+        tokens: 100_000,
+      },
+    },
+  },
+}
+```
+
+The `tokenEstimate` object follows the same shape the Token Counter uses internally for cached estimates:
+
+- `v` — cache schema version. Set to `0`. Caller-supplied entries are exempt from the framework's version check, so the value isn't read.
+- `source` — cache lineage marker. Must be `'client'`. This is what tells the Token Counter the entry is authoritative and should be honored verbatim instead of being recomputed or overwritten.
+- `key` — content fingerprint slot. Set to `'client'`. Framework entries use a content hash here so they invalidate when the payload changes; the `'client'` sentinel keeps caller estimates stable across writes.
+- `tokens` — the token count to use. Must be a finite non-negative number.
+
+Additional notes:
+
+- The estimate is only honored on `image` and `file` parts. `text` and `tool-invocation` parts are always counted normally, even if they carry a `tokenEstimate`.
+
 ## Async buffering
 
 Without async buffering, the Observer runs synchronously when the message threshold is reached — the agent pauses mid-conversation while the Observer LLM call completes. With async buffering (enabled by default), observations are pre-computed in the background as the conversation grows. When the threshold is hit, buffered observations activate instantly with no pause.
@@ -389,28 +510,43 @@ Reflection works similarly — the Reflector runs in the background when observa
 | `observation.bufferTokens` | `0.2` | How often to buffer. `0.2` means every 20% of `messageTokens` — with the default 30k threshold, that's roughly every 6k tokens. Can also be an absolute token count (e.g. `5000`). |
 | `observation.bufferActivation` | `0.8` | How aggressively to clear the message window on activation. `0.8` means remove enough messages to keep only 20% of `messageTokens` remaining. Lower values keep more message history. |
 | `observation.blockAfter` | `1.2` | Safety threshold as a multiplier of `messageTokens`. At `1.2`, synchronous observation is forced at 36k tokens (1.2 × 30k). Only matters if buffering can't keep up. |
-| `activateAfterIdle` | none | Forces buffered observations and buffered reflections to activate after a period of inactivity, even if their token thresholds have not been reached yet. Accepts milliseconds or duration strings like `300_000`, `"5m"`, or `"1hr"`. Set this to your prompt cache TTL if you want activation to happen before the next cold prompt. |
-| `activateOnProviderChange` | `false` | Forces buffered observations and reflections to activate when the next step uses a different `provider/model` than the one that produced the latest assistant step. Use this when switching providers or models would invalidate prompt cache reuse. |
+| `activateAfterIdle` | none | Forces buffered observations to activate after a period of inactivity, even before `observation.messageTokens` is reached. Accepts a numeric millisecond value such as `300_000`, duration strings like `"5m"` or `"1hr"`, or `"auto"` for a provider-aware prompt cache TTL. |
+| `activateOnProviderChange` | `false` | Forces buffered observations to activate when the next step uses a different `provider/model` than the one that produced the latest assistant step. Use this when switching providers or models would invalidate prompt cache reuse. |
 | `reflection.bufferActivation` | `0.5` | When to start background reflection. `0.5` means reflection begins when observations reach 50% of the `observationTokens` threshold. |
+| `reflection.activateAfterIdle` | none | Opts buffered reflections into idle activation. Reflections don't inherit top-level `activateAfterIdle`. |
+| `reflection.activateOnProviderChange` | `false` | Opts buffered reflections into provider-change activation. Reflections don't inherit top-level `activateOnProviderChange`. |
 | `reflection.blockAfter` | `1.2` | Safety threshold for reflection, same logic as observation. |
 
-If you're relying on prompt caching, set `activateAfterIdle` to match your cache TTL. That way, once a thread has been idle long enough for the cache to expire, the next request can activate buffered observations or reflections first and send a smaller compressed context window.
+If you're relying on prompt caching, set `activateAfterIdle` to `"auto"` or to a specific cache TTL. That way, once a thread has been idle long enough for the cache to expire, the next request can activate buffered observations first and send a smaller compressed context window.
+
+With `"auto"`, Mastra chooses an idle activation TTL from the active model provider:
+
+| Provider | Auto TTL |
+| - | - |
+| Anthropic, OpenRouter, unknown providers, xAI | 5 minutes |
+| DeepSeek | 1 hour |
+| Google Gemini | 24 hours |
+| Groq | 2 hours |
+| OpenAI with `providerOptions.openai.promptCacheRetention: "24h"` | 1 hour |
+| OpenAI with `providerOptions.openai.promptCacheRetention: "in_memory"` | 5 minutes |
+| OpenAI `gpt-4*`, `gpt-5`, `gpt-5-*`, `gpt-5.1*`, `gpt-5.2*`, `gpt-5.3*`, and `gpt-5.4*` | 5 minutes |
+| Other OpenAI models | 1 hour |
 
 ```typescript
 const memory = new Memory({
   options: {
     observationalMemory: {
       model: 'google/gemini-2.5-flash',
-      activateAfterIdle: '5m',
+      activateAfterIdle: 'auto',
       activateOnProviderChange: true,
     },
   },
 })
 ```
 
-With a 5-minute prompt cache TTL, this activates buffered context after 5 minutes of inactivity so the next uncached prompt uses observations and reflections instead of a larger raw message window. If you prefer, `300_000` works the same way.
+With `"auto"`, this activates buffered observations based on the active provider's prompt cache behavior so the next uncached prompt uses compressed observations instead of a larger raw message window. If you prefer a fixed 5-minute TTL, use `"5m"` or `300_000`.
 
-Changing model or providers mid-thread will invalidate the prompt cache. If your agent can switch between providers or models mid-thread, `activateOnProviderChange: true` forces buffered context to activate before the new provider runs. That avoids sending a large raw window to a provider that cannot reuse the previous prompt cache.
+Changing models or providers mid-thread will invalidate the prompt cache. If your agent can switch between providers or models mid-thread, `activateOnProviderChange: true` forces buffered observations to activate before the new provider runs. That avoids sending a large raw window to a provider that can't reuse the previous prompt cache.
 
 ### Disabling
 
@@ -472,6 +608,7 @@ No manual migration needed. OM reads existing messages and observes them lazily 
 - **[Message history](/docs/memory/message-history)**: High-fidelity record of the current conversation
 - **[Working memory](/docs/memory/working-memory)**: Small, structured state (JSON or markdown) for user preferences, names, goals
 - **[Semantic Recall](/docs/memory/semantic-recall)**: RAG-based retrieval of relevant past messages
+- **[Multi-user threads](/docs/memory/multi-user-threads)**: How OM attributes facts to individual users when several people share a single thread
 
 If you're using working memory to store conversation summaries or ongoing state that grows over time, OM is a better fit. Working memory is for small, structured data; OM is for long-running event logs. OM also manages message history automatically—the `messageTokens` setting controls how much raw history remains before observation runs.
 
@@ -483,3 +620,4 @@ In practical terms, OM replaces both working memory and message history, and has
 - [Memory Overview](/docs/memory/overview)
 - [Message History](/docs/memory/message-history)
 - [Memory Processors](/docs/memory/memory-processors)
+- [Mastra Code](https://code.mastra.ai/): A coding agent using Observational Memory

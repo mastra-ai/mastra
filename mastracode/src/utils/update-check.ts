@@ -118,6 +118,8 @@ export function getCurrentVersion(): string {
  * Returns null if the fetch fails (network error, timeout, etc.).
  */
 export async function fetchLatestVersion(): Promise<string | null> {
+  if (process.env.MASTRACODE_UPDATE_LATEST_VERSION) return process.env.MASTRACODE_UPDATE_LATEST_VERSION;
+
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -153,7 +155,7 @@ export function isNewerVersion(current: string, latest: string): boolean {
 }
 
 /** Max entries to show in the changelog summary. */
-const MAX_CHANGELOG_ENTRIES = 10;
+const MAX_CHANGELOG_ENTRIES = 20;
 
 /**
  * Fetch the CHANGELOG.md for a specific published version from the npm CDN
@@ -161,6 +163,8 @@ const MAX_CHANGELOG_ENTRIES = 10;
  * Returns null if the fetch fails or the changelog can't be parsed.
  */
 export async function fetchChangelog(version: string): Promise<string | null> {
+  if (process.env.MASTRACODE_UPDATE_CHANGELOG) return process.env.MASTRACODE_UPDATE_CHANGELOG;
+
   try {
     const url = `https://unpkg.com/${PACKAGE_NAME}@${version}/CHANGELOG.md`;
     const controller = new AbortController();
@@ -219,13 +223,8 @@ export function parseChangelog(markdown: string, version: string): string | null
     entry = entry.replace(/\s*\(#\d+\)\s*/g, ' ');
     // Strip commit SHA references like (`abc123`)
     entry = entry.replace(/\s*\(`[a-f0-9]+`\)\s*/g, ' ');
-    // Take only the first sentence for long entries
-    const sentenceEnd = entry.search(/\.\s/);
-    if (sentenceEnd !== -1 && sentenceEnd < 100) {
-      entry = entry.slice(0, sentenceEnd + 1);
-    } else if (entry.length > 120) {
-      entry = entry.slice(0, 117).trimEnd() + '…';
-    }
+    // Trim trailing periods for cleaner bullet display
+    entry = entry.replace(/\.\s*$/, '');
     entry = entry.trim();
     if (entry) entries.push(entry);
     if (entries.length >= MAX_CHANGELOG_ENTRIES) break;

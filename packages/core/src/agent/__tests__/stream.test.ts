@@ -49,6 +49,40 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
       ).toBe(true);
     });
 
+    it.skipIf(version === 'v1')(
+      'keeps direct stream consumption working when a thread subscriber is attached',
+      async () => {
+        const mockMemory = new MockMemory();
+        const agent = new Agent({
+          id: 'test-agent-with-subscriber',
+          name: 'Test Agent With Subscriber',
+          instructions: 'test',
+          model: dummyResponseModel,
+          memory: mockMemory,
+        });
+        const threadId = 'thread-with-subscriber';
+        const resourceId = 'resource-with-subscriber';
+        const subscription = await agent.subscribeToThread({ threadId, resourceId });
+
+        try {
+          const stream = await agent.stream('repeat tool calls', {
+            memory: { thread: threadId, resource: resourceId },
+          });
+          await stream.consumeStream();
+
+          const result = await mockMemory.recall({ threadId, resourceId });
+          const messages = result.messages;
+          expect(
+            messages[messages.length - 1]?.content?.parts?.some(
+              p => p.type === 'text' && p.text?.includes('Dummy response'),
+            ),
+          ).toBe(true);
+        } finally {
+          subscription.unsubscribe();
+        }
+      },
+    );
+
     // Regression test for https://github.com/mastra-ai/mastra/issues/12566
     // stream-legacy creates threads with saveThread: false, causing a race condition
     // where output processors try to save messages before the thread exists in the DB.

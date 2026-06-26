@@ -1,5 +1,5 @@
 import type { ScheduleTriggerResponse } from '@mastra/client-js';
-import { useInView } from '@mastra/playground-ui';
+import { useInView } from '@mastra/playground-ui/hooks/use-in-view';
 import { useMastraClient } from '@mastra/react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
@@ -32,7 +32,7 @@ export const useScheduleTriggers = (scheduleId: string | undefined) => {
     refetchInterval: query => {
       const triggers = query.state.data?.pages.flatMap(p => p.triggers) ?? [];
       const hasActive = triggers.some(t => {
-        if (!t.run) return t.status === 'published';
+        if (!t.run) return t.outcome === 'published';
         return t.run.status === 'pending' || t.run.status === 'running' || t.run.status === 'waiting';
       });
       return hasActive ? 5_000 : false;

@@ -28,11 +28,13 @@ export function createSampleSchedule(overrides?: Partial<Schedule>): Schedule {
 export function createSampleTrigger(overrides?: Partial<ScheduleTrigger>): ScheduleTrigger {
   const now = Date.now();
   return {
+    id: `tr_${randomUUID()}`,
     scheduleId: 'sched_1',
     runId: `run_${randomUUID()}`,
     scheduledFireAt: now,
     actualFireAt: now,
-    status: 'published',
+    outcome: 'published',
+    triggerKind: 'schedule-fire',
     ...overrides,
   };
 }

@@ -3,19 +3,27 @@ import type { DescribeRouteOptions } from 'hono-openapi';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
-import type { ApiRoute, MastraAuthConfig, Methods } from './types';
+import type { ApiRoute, ApiRouteHandler, MastraAuthConfig, Methods } from './types';
 
 export type {
   MastraAuthConfig,
+  A2AAgentCardSigningConfig,
+  A2AConfig,
   ContextWithMastra,
+  CorsOptions,
   ApiRoute,
+  ApiRouteHandler,
   HttpLoggingConfig,
   ValidationErrorContext,
   ValidationErrorResponse,
   ValidationErrorHook,
+  StudioConfig,
+  Middleware,
 } from './types';
 export { MastraAuthProvider } from './auth';
 export type { MastraAuthProviderOptions } from './auth';
+export type { HonoRequestLike, MastraAuthRequest } from './request-types';
+export { getRequestHeader, getWebRequest } from './request-types';
 export { CompositeAuth } from './composite-auth';
 export { MastraServerBase } from './base';
 export { SimpleAuth } from './simple-auth';
@@ -25,9 +33,6 @@ export type { SimpleAuthOptions } from './simple-auth';
 type ParamsFromPath<P extends string> = {
   [K in P extends `${string}:${infer Param}/${string}` | `${string}:${infer Param}` ? Param : never]: string;
 };
-
-type RegisterApiRoutePathError = `Param 'path' must not start with '/api', it is reserved for internal API routes.`;
-type ValidatePath<P extends string, T> = P extends `/api/${string}` ? RegisterApiRoutePathError : T;
 
 /**
  * Variables available in the Hono context for custom API route handlers.
@@ -48,16 +53,12 @@ type RegisterApiRouteOptions<P extends string> = {
     P,
     ParamsFromPath<P>
   >;
-  createHandler?: (c: Context) => Promise<
-    Handler<
-      {
-        Variables: CustomRouteVariables;
-      },
-      P,
-      ParamsFromPath<P>
-    >
-  >;
+  createHandler?: (c: Context) => Promise<ApiRouteHandler>;
   middleware?: MiddlewareHandler | MiddlewareHandler[];
+  /**
+   * Route-specific CORS configuration.
+   */
+  cors?: ApiRoute['cors'];
   /**
    * When false, skips Mastra auth for this route (defaults to true)
    */
@@ -72,13 +73,8 @@ type RegisterApiRouteOptions<P extends string> = {
   fga?: ApiRoute['fga'];
 };
 
-function validateOptions<P extends string>(
-  path: P,
-  options: RegisterApiRoutePathError | RegisterApiRouteOptions<P>,
-): asserts options is RegisterApiRouteOptions<P> {
-  const opts = options as RegisterApiRouteOptions<P>;
-
-  if (opts.method === undefined) {
+function validateOptions<P extends string>(path: P, options: RegisterApiRouteOptions<P>): void {
+  if (options.method === undefined) {
     throw new MastraError({
       id: 'MASTRA_SERVER_API_INVALID_ROUTE_OPTIONS',
       text: `Invalid options for route "${path}", missing "method" property`,
@@ -87,7 +83,7 @@ function validateOptions<P extends string>(
     });
   }
 
-  if (opts.handler === undefined && opts.createHandler === undefined) {
+  if (options.handler === undefined && options.createHandler === undefined) {
     throw new MastraError({
       id: 'MASTRA_SERVER_API_INVALID_ROUTE_OPTIONS',
       text: `Invalid options for route "${path}", you must define a "handler" or "createHandler" property`,
@@ -96,7 +92,7 @@ function validateOptions<P extends string>(
     });
   }
 
-  if (opts.handler !== undefined && opts.createHandler !== undefined) {
+  if (options.handler !== undefined && options.createHandler !== undefined) {
     throw new MastraError({
       id: 'MASTRA_SERVER_API_INVALID_ROUTE_OPTIONS',
       text: `Invalid options for route "${path}", you can only define one of the following properties: "handler" or "createHandler"`,
@@ -106,19 +102,7 @@ function validateOptions<P extends string>(
   }
 }
 
-export function registerApiRoute<P extends string>(
-  path: P,
-  options: ValidatePath<P, RegisterApiRouteOptions<P>>,
-): ValidatePath<P, ApiRoute> {
-  if (path.startsWith('/api/')) {
-    throw new MastraError({
-      id: 'MASTRA_SERVER_API_PATH_RESERVED',
-      text: 'Path must not start with "/api", it\'s reserved for internal API routes',
-      domain: ErrorDomain.MASTRA_SERVER,
-      category: ErrorCategory.USER,
-    });
-  }
-
+export function registerApiRoute<P extends string>(path: P, options: RegisterApiRouteOptions<P>): ApiRoute {
   validateOptions(path, options);
 
   return {
@@ -128,10 +112,11 @@ export function registerApiRoute<P extends string>(
     createHandler: options.createHandler,
     openapi: options.openapi,
     middleware: options.middleware,
+    cors: options.cors,
     requiresAuth: options.requiresAuth,
     requiresPermission: options.requiresPermission,
     fga: options.fga,
-  } as unknown as ValidatePath<P, ApiRoute>;
+  } as ApiRoute;
 }
 
 export function defineAuth<TUser>(config: MastraAuthConfig<TUser>): MastraAuthConfig<TUser> {

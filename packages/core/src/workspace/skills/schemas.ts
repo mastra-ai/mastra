@@ -42,6 +42,8 @@ export interface SkillMetadataInput {
   license?: string;
   /** Environment requirements or compatibility notes (string or object for flexibility) */
   compatibility?: unknown;
+  /** Whether this skill should be directly invokable by users. Defaults to true. */
+  'user-invocable'?: boolean;
   /** Arbitrary key-value metadata - values can be strings, arrays, objects, etc. */
   metadata?: Record<string, unknown>;
 }
@@ -212,6 +214,11 @@ function validateSkillMetadataField(metadata: unknown): string[] {
   return errors;
 }
 
+function validateUserInvocable(userInvocable: unknown): string[] {
+  if (userInvocable === undefined || typeof userInvocable === 'boolean') return [];
+  return [`user-invocable: Expected boolean, received ${typeof userInvocable}`];
+}
+
 // =============================================================================
 // Validation Helpers
 // =============================================================================
@@ -283,6 +290,7 @@ export function validateSkillMetadata(
   errors.push(...validateSkillDescription(data.description));
   errors.push(...validateSkillLicense(data.license));
   errors.push(...validateSkillCompatibility(data.compatibility));
+  errors.push(...validateUserInvocable(data['user-invocable']));
   errors.push(...validateSkillMetadataField(data.metadata));
 
   // Check directory name match (only if no name errors and name is valid)

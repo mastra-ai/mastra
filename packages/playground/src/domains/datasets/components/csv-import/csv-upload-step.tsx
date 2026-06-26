@@ -1,6 +1,8 @@
 'use client';
 
-import { Spinner, Icon, cn } from '@mastra/playground-ui';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Upload } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
 
@@ -103,7 +105,7 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
       >
         {isParsing ? (
           <>
-            <Spinner size="lg" />
+            <Spinner />
             <span className="text-sm text-neutral4">Parsing CSV...</span>
           </>
         ) : (

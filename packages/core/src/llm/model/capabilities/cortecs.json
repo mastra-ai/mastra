@@ -1,0 +1,19 @@
+{
+  "attachment": [
+    "claude-4-5-sonnet",
+    "claude-4-6-sonnet",
+    "claude-haiku-4-5",
+    "claude-opus4-5",
+    "claude-opus4-6",
+    "claude-opus4-7",
+    "claude-opus4-8",
+    "glm-5v-turbo",
+    "gpt-5.4",
+    "intellect-3",
+    "kimi-k2-thinking",
+    "kimi-k2.7-code",
+    "llama-4-maverick",
+    "minimax-m3",
+    "mistral-large-2512"
+  ]
+}

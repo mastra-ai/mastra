@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import { join } from 'node:path';
 import { config } from 'dotenv';
+import { getAnalytics } from '../../analytics/index.js';
 import { logger } from '../../utils/logger';
 import { shouldSkipDotenvLoading } from '../utils';
 interface StartOptions {
@@ -39,27 +40,32 @@ export async function start(options: StartOptions = {}) {
       env: {
         ...process.env,
         NODE_ENV: 'production',
+        MASTRA_TELEMETRY_COMMAND: 'start',
+        MASTRA_PROJECT_ROOT: process.cwd(),
+        ...(getAnalytics()?.getDistinctId() ? { MASTRA_CLI_DISTINCT_ID: getAnalytics()!.getDistinctId() } : {}),
       },
     });
 
     let stderrBuffer = '';
     server.stderr.on('data', data => {
       stderrBuffer += data.toString();
+      // Stream the server's stderr through live so logs from a healthy,
+      // running process (warnings, channel/adapter errors) are visible.
+      // The buffer above is retained only for the non-zero exit diagnostics.
+      process.stderr.write(data);
     });
 
     server.on('exit', code => {
-      if (code !== 0 && stderrBuffer) {
+      if (code !== 0) {
+        // Raw stderr has already been streamed live above. On a crash, add a
+        // friendly hint for the common "missing dependency" case on top of it.
         if (stderrBuffer.includes('ERR_MODULE_NOT_FOUND')) {
           const packageNameMatch = stderrBuffer.match(/Cannot find package '([^']+)'/);
           const packageName = packageNameMatch ? packageNameMatch[1] : null;
 
-          if (!packageName) {
-            logger.error(stderrBuffer.trim());
-          } else {
+          if (packageName) {
             logger.error('Module not found while starting Mastra server', { package: packageName });
           }
-        } else {
-          logger.error(stderrBuffer.trim());
         }
         process.exit(code);
       }

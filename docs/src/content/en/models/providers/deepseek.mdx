@@ -84,8 +84,8 @@ for await (const chunk of stream) {
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 1.74,
-    "outputCost": 3.48
+    "inputCost": 0.435,
+    "outputCost": 0.87
   }
 ]}
 />
@@ -145,6 +145,12 @@ const response = await agent.generate("Hello!", {
     {
         "name": "thinking",
         "type": "{ type?: \"enabled\" | \"disabled\" | undefined; } | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "reasoningEffort",
+        "type": "\"high\" | \"max\" | undefined",
         "description": "",
         "isOptional": true
     }

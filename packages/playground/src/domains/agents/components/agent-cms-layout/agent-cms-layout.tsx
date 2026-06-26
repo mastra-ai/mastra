@@ -1,4 +1,4 @@
-import { cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { AgentCmsSidebar } from '../agent-cms-sidebar';
 import { AgentCmsBottomBar } from './agent-cms-bottom-bar';
 
@@ -14,7 +14,7 @@ export function AgentsCmsLayout({ children, currentPath, basePath, versionId, ri
   return (
     <div
       className={cn(
-        'grid overflow-y-auto h-full bg-surface1',
+        'grid overflow-y-auto h-full',
         rightPanel ? 'grid-cols-[240px_1fr_240px]' : 'grid-cols-[240px_1fr]',
       )}
     >

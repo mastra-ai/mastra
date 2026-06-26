@@ -1,8 +1,11 @@
-import { CodeEditor, Combobox, Txt } from '@mastra/playground-ui';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState, useCallback, useMemo } from 'react';
 
 import type { InMemoryFileNode } from '../agent-edit-page/utils/form-validation';
-import { SkillFileTree, updateNodeContent, isImageContent } from './skill-file-tree';
+import { SkillFileTree } from './skill-file-tree';
+import { updateNodeContent, isImageContent } from './skill-file-tree-utils';
 
 function findFileContent(nodes: InMemoryFileNode[], fileId: string): string | undefined {
   for (const node of nodes) {
@@ -76,18 +79,20 @@ export function SkillFolder({
   return (
     <div className="grid grid-cols-[300px_1fr] h-full">
       <div className="overflow-y-auto h-full border-r border-border1 p-4">
-        <div className="flex flex-col gap-1.5 pb-4">
-          <Txt as="label" variant="ui-sm" className="text-neutral3">
-            Workspace
-          </Txt>
-          <Combobox
-            options={workspaceOptions}
-            value={workspaceId}
-            onValueChange={setWorkspaceId}
-            placeholder="Select a workspace..."
-            disabled={readOnly}
-          />
-        </div>
+        {workspaceOptions.length > 0 && (
+          <div className="flex flex-col gap-1.5 pb-4">
+            <Txt as="label" variant="ui-sm" className="text-neutral3">
+              Workspace
+            </Txt>
+            <Combobox
+              options={workspaceOptions}
+              value={workspaceId}
+              onValueChange={setWorkspaceId}
+              placeholder="Select a workspace..."
+              disabled={readOnly}
+            />
+          </div>
+        )}
 
         <SkillFileTree
           files={files}
@@ -114,7 +119,7 @@ export function SkillFolder({
                 key={selectedFileId}
                 language={editorLanguage}
                 value={selectedFileContent}
-                onChange={readOnly ? undefined : val => handleFileContentChange(val ?? '')}
+                onChange={readOnly ? undefined : (val: string | undefined) => handleFileContentChange(val ?? '')}
                 showCopyButton={false}
                 autoFocus
                 className="h-full"

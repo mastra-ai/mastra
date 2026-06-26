@@ -37,6 +37,7 @@ export interface ProviderAccess {
   cerebras: ProviderAccessLevel;
   google: ProviderAccessLevel;
   deepseek: ProviderAccessLevel;
+  'github-copilot': ProviderAccessLevel;
   [provider: string]: ProviderAccessLevel;
 }
 
@@ -85,6 +86,19 @@ export function getAvailableModePacks(
         build: openaiCodex,
         plan: openaiCodex,
         fast: openaiFast,
+      },
+    });
+  }
+
+  if (access['github-copilot']) {
+    packs.push({
+      id: 'github-copilot',
+      name: 'GitHub Copilot',
+      description: 'GitHub Copilot subscription',
+      models: {
+        build: 'github-copilot/gpt-4.1',
+        plan: 'github-copilot/gemini-2.5-pro',
+        fast: 'github-copilot/grok-code-fast-1',
       },
     });
   }

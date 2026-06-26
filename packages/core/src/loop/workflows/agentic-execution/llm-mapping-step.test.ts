@@ -4,8 +4,8 @@ import { z } from 'zod/v4';
 import type { MessageList } from '../../../agent/message-list';
 import { RequestContext } from '../../../request-context';
 import { ToolStream } from '../../../tools/stream';
-import { createStep } from '../../../workflows';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../../../workflows/constants';
+import { createStep } from '../../../workflows/evented';
 import type { ExecuteFunctionParams } from '../../../workflows/step';
 import { createLLMMappingStep } from './llm-mapping-step';
 
@@ -1002,6 +1002,131 @@ describe('createLLMMappingStep toModelOutput', () => {
         }),
       }),
     );
+
+    // The emitted tool-result chunk should also carry modelOutput on providerMetadata
+    // so harness consumers (e.g. mastracode TUI) can read it without going through the messageList.
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-result',
+        payload: expect.objectContaining({
+          toolCallId: 'call-1',
+          providerMetadata: expect.objectContaining({
+            mastra: expect.objectContaining({
+              modelOutput: {
+                type: 'text',
+                value: 'Transformed: {"temperature":72,"conditions":"sunny"}',
+              },
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('should preserve media parts in toModelOutput', async () => {
+    const toModelOutputMock = vi.fn(() => ({
+      type: 'content',
+      value: [
+        { type: 'media', data: 'base64png', mediaType: 'image/png' },
+        { type: 'media', data: 'base64pdf', mediaType: 'application/pdf' },
+        { type: 'text', text: 'caption' },
+      ],
+    }));
+
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: { generateId: () => 'test-message-id' },
+        tools: {
+          screenshot: {
+            execute: async () => ({ base64: 'abc' }),
+            toModelOutput: toModelOutputMock,
+            inputSchema: z.object({}),
+          },
+        },
+      } as any,
+      llmExecutionStep,
+    );
+
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'screenshot',
+        args: {},
+        result: { base64: 'abc' },
+      },
+    ];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerMetadata: expect.objectContaining({
+          mastra: expect.objectContaining({
+            modelOutput: {
+              type: 'content',
+              value: [
+                { type: 'media', data: 'base64png', mediaType: 'image/png' },
+                { type: 'media', data: 'base64pdf', mediaType: 'application/pdf' },
+                { type: 'text', text: 'caption' },
+              ],
+            },
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('should not throw when toModelOutput returns malformed content entries', async () => {
+    const toModelOutputMock = vi.fn(() => ({
+      type: 'content',
+      value: [null, undefined, 'not-an-object', { type: 'media', data: 'abc', mediaType: 'image/png' }],
+    }));
+
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: { generateId: () => 'test-message-id' },
+        tools: {
+          screenshot: {
+            execute: async () => ({ base64: 'abc' }),
+            toModelOutput: toModelOutputMock,
+            inputSchema: z.object({}),
+          },
+        },
+      } as any,
+      llmExecutionStep,
+    );
+
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'screenshot',
+        args: {},
+        result: { base64: 'abc' },
+      },
+    ];
+
+    await expect(llmMappingStep.execute(createExecuteParams(inputData))).resolves.not.toThrow();
+
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerMetadata: expect.objectContaining({
+          mastra: expect.objectContaining({
+            modelOutput: {
+              type: 'content',
+              value: [null, undefined, 'not-an-object', { type: 'media', data: 'abc', mediaType: 'image/png' }],
+            },
+          }),
+        }),
+      }),
+    );
   });
 
   it('should NOT call toModelOutput for tools without it defined', async () => {
@@ -1194,5 +1319,199 @@ describe('createLLMMappingStep toModelOutput', () => {
 
     // toModelOutput should NOT be called for undefined results
     expect(toModelOutputMock).not.toHaveBeenCalled();
+  });
+
+  // ---- MAPPING span coverage (issue #15486) ----
+
+  type MockChildSpan = {
+    createOptions: any;
+    endOptions?: any;
+    errorOptions?: any;
+    ended: boolean;
+    errored: boolean;
+    end: Mock;
+    error: Mock;
+  };
+
+  function createMockParentSpan() {
+    const childSpans: MockChildSpan[] = [];
+    const parentSpan: any = {
+      createChildSpan: vi.fn((opts: any) => {
+        const child: MockChildSpan = {
+          createOptions: opts,
+          ended: false,
+          errored: false,
+          end: vi.fn(),
+          error: vi.fn(),
+        };
+        child.end = vi.fn((endOpts: any) => {
+          child.endOptions = endOpts;
+          child.ended = true;
+        }) as any;
+        child.error = vi.fn((errOpts: any) => {
+          child.errorOptions = errOpts;
+          child.errored = true;
+        }) as any;
+        childSpans.push(child);
+        return child;
+      }),
+    };
+    return { parentSpan, childSpans };
+  }
+
+  it('should emit a MAPPING child span when toModelOutput is defined and runs', async () => {
+    const { parentSpan, childSpans } = createMockParentSpan();
+    const toModelOutputMock = vi.fn((output: any) => ({ type: 'text', value: output.temperature }));
+
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: { generateId: () => 'test-message-id' },
+        tools: {
+          weather: {
+            execute: async () => ({ temperature: 72 }),
+            toModelOutput: toModelOutputMock,
+            inputSchema: z.object({}),
+          },
+        },
+        modelSpanTracker: {
+          getTracingContext: () => ({ currentSpan: parentSpan }),
+        },
+      } as any,
+      llmExecutionStep,
+    );
+
+    const inputData: ToolCallOutput[] = [
+      { toolCallId: 'call-1', toolName: 'weather', args: {}, result: { temperature: 72 } },
+    ];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    expect(parentSpan.createChildSpan).toHaveBeenCalledTimes(1);
+    expect(childSpans).toHaveLength(1);
+    const [span] = childSpans;
+    expect(span.createOptions).toMatchObject({
+      type: 'mapping',
+      name: "tool output mapping: 'weather'",
+      entityType: 'tool',
+      entityId: 'weather',
+      entityName: 'weather',
+      input: { temperature: 72 },
+      attributes: {
+        mappingType: 'toModelOutput',
+        toolCallId: 'call-1',
+      },
+    });
+    expect(span.ended).toBe(true);
+    expect(span.endOptions).toEqual({ output: { type: 'text', value: 72 } });
+    expect(span.errored).toBe(false);
+  });
+
+  it('should NOT emit a MAPPING span when the tool has no toModelOutput', async () => {
+    const { parentSpan, childSpans } = createMockParentSpan();
+
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: { generateId: () => 'test-message-id' },
+        tools: {
+          plain: {
+            execute: async () => ({ temperature: 72 }),
+            inputSchema: z.object({}),
+          },
+        },
+        modelSpanTracker: {
+          getTracingContext: () => ({ currentSpan: parentSpan }),
+        },
+      } as any,
+      llmExecutionStep,
+    );
+
+    const inputData: ToolCallOutput[] = [
+      { toolCallId: 'call-1', toolName: 'plain', args: {}, result: { temperature: 72 } },
+    ];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    expect(parentSpan.createChildSpan).not.toHaveBeenCalled();
+    expect(childSpans).toHaveLength(0);
+  });
+
+  it('should NOT emit a MAPPING span when tool result is null/undefined even if toModelOutput is defined', async () => {
+    const { parentSpan, childSpans } = createMockParentSpan();
+
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: { generateId: () => 'test-message-id' },
+        tools: {
+          hitlTool: {
+            toModelOutput: vi.fn(),
+            inputSchema: z.object({}),
+          },
+        },
+        modelSpanTracker: {
+          getTracingContext: () => ({ currentSpan: parentSpan }),
+        },
+      } as any,
+      llmExecutionStep,
+    );
+
+    const inputData: ToolCallOutput[] = [{ toolCallId: 'call-1', toolName: 'hitlTool', args: {}, result: undefined }];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    expect(parentSpan.createChildSpan).not.toHaveBeenCalled();
+    expect(childSpans).toHaveLength(0);
+  });
+
+  it('should mark the MAPPING span as errored and re-throw when toModelOutput throws', async () => {
+    const { parentSpan, childSpans } = createMockParentSpan();
+    const failure = new Error('transform failed');
+    const toModelOutputMock = vi.fn(() => {
+      throw failure;
+    });
+
+    const llmMappingStep = createLLMMappingStep(
+      {
+        models: {} as any,
+        controller,
+        messageList,
+        runId: 'test-run',
+        _internal: { generateId: () => 'test-message-id' },
+        tools: {
+          broken: {
+            execute: async () => ({ data: 'raw' }),
+            toModelOutput: toModelOutputMock,
+            inputSchema: z.object({}),
+          },
+        },
+        modelSpanTracker: {
+          getTracingContext: () => ({ currentSpan: parentSpan }),
+        },
+      } as any,
+      llmExecutionStep,
+    );
+
+    const inputData: ToolCallOutput[] = [
+      { toolCallId: 'call-1', toolName: 'broken', args: {}, result: { data: 'raw' } },
+    ];
+
+    await expect(llmMappingStep.execute(createExecuteParams(inputData))).rejects.toBe(failure);
+
+    expect(childSpans).toHaveLength(1);
+    const [span] = childSpans;
+    expect(span.ended).toBe(false);
+    expect(span.errored).toBe(true);
+    expect(span.errorOptions).toEqual({ error: failure, endSpan: true });
   });
 });

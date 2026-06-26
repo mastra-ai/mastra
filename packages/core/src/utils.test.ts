@@ -1,17 +1,22 @@
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import type { ToolBackgroundConfig } from './background-tasks';
 import { MastraError } from './error';
 import { ConsoleLogger } from './logger';
 import { RequestContext } from './request-context';
 import { toStandardSchema } from './schema';
 import { createTool, isVercelTool } from './tools';
 import {
+  deepEqual,
+  deepMerge,
   ensureSerializable,
   fetchWithRetry,
   generateEmptyFromSchema,
   makeCoreTool,
   maskStreamTags,
+  omitKeys,
+  removeUndefinedValues,
   resolveSerializedZodOutput,
   safeStringify,
   selectFields,
@@ -170,6 +175,9 @@ describe('makeCoreTool', () => {
     requestContext: new RequestContext(),
     tracingContext: {},
   };
+
+  const getCoreToolBackgroundConfig = (tool: ReturnType<typeof makeCoreTool>) =>
+    (tool as unknown as { backgroundConfig?: ToolBackgroundConfig }).backgroundConfig;
 
   it('should convert a Vercel tool correctly', async () => {
     const vercelTool = {
@@ -349,6 +357,78 @@ describe('makeCoreTool', () => {
     const coreToolWithoutFlag = makeCoreTool(tool, mockOptions);
     expect((coreToolWithoutFlag as any).requireApproval).toBe(false);
   });
+
+  it('should accept a createTool wrapper without casting and preserve backgroundConfig from options', () => {
+    const onComplete = vi.fn();
+    const wrapperTool = createTool({
+      id: 'agent-specialist',
+      description: 'Delegates to a specialist agent',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.object({ text: z.string() }),
+      execute: async ({ prompt }) => ({ text: prompt }),
+    });
+
+    const backgroundConfig = {
+      enabled: true,
+      waitTimeoutMs: 250,
+      timeoutMs: 1_000,
+      maxRetries: 2,
+      onComplete,
+    } satisfies ToolBackgroundConfig;
+
+    const coreTool = makeCoreTool(wrapperTool, {
+      ...mockOptions,
+      backgroundConfig,
+    });
+
+    expect(getCoreToolBackgroundConfig(coreTool)).toBe(backgroundConfig);
+  });
+
+  it('should prefer ToolOptions.backgroundConfig over conflicting tool-level background metadata', () => {
+    const wrapperTool = createTool({
+      id: 'agent-specialist',
+      description: 'Delegates to a specialist agent',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.object({ text: z.string() }),
+      execute: async ({ prompt }) => ({ text: prompt }),
+    });
+    const toolWithConflictingBackground = Object.assign(wrapperTool, {
+      background: { enabled: false, waitTimeoutMs: 1 },
+      backgroundConfig: { enabled: false, waitTimeoutMs: 2 },
+    } satisfies {
+      background: ToolBackgroundConfig;
+      backgroundConfig: ToolBackgroundConfig;
+    });
+    const optionsBackgroundConfig = { enabled: true, waitTimeoutMs: 500 } satisfies ToolBackgroundConfig;
+
+    const coreTool = makeCoreTool(toolWithConflictingBackground, {
+      ...mockOptions,
+      backgroundConfig: optionsBackgroundConfig,
+    });
+
+    expect(getCoreToolBackgroundConfig(coreTool)).toBe(optionsBackgroundConfig);
+  });
+
+  it('should not synthesize backgroundConfig from raw tool background fields when options omit it', () => {
+    const wrapperTool = createTool({
+      id: 'agent-specialist',
+      description: 'Delegates to a specialist agent',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.object({ text: z.string() }),
+      execute: async ({ prompt }) => ({ text: prompt }),
+    });
+    const toolWithRawBackground = Object.assign(wrapperTool, {
+      background: { enabled: true, waitTimeoutMs: 100 },
+      backgroundConfig: { enabled: true, waitTimeoutMs: 200 },
+    } satisfies {
+      background: ToolBackgroundConfig;
+      backgroundConfig: ToolBackgroundConfig;
+    });
+
+    const coreTool = makeCoreTool(toolWithRawBackground, mockOptions);
+
+    expect(getCoreToolBackgroundConfig(coreTool)).toBeUndefined();
+  });
 });
 
 it('should log correctly for Vercel tool execution', async () => {
@@ -383,7 +463,7 @@ describe('fetchWithRetry', () => {
     vi.unstubAllGlobals();
   });
 
-  it('should use exponential backoff delays capped at 10 seconds', async () => {
+  function mockRetryDelays() {
     const delays: number[] = [];
 
     vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, delay?: number) => {
@@ -395,6 +475,104 @@ describe('fetchWithRetry', () => {
       return 0 as unknown as ReturnType<typeof setTimeout>;
     }) as typeof setTimeout);
 
+    return delays;
+  }
+
+  it('should return a successful response without retrying', async () => {
+    const response = new Response('ok', { status: 200 });
+    const mockFetch = vi.fn().mockResolvedValue(response);
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(fetchWithRetry('https://example.com', { method: 'POST' }, 3)).resolves.toBe(response);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledWith('https://example.com', { method: 'POST' });
+  });
+
+  it('should retry a failed response and return a later success', async () => {
+    const delays = mockRetryDelays();
+    const response = new Response('ok', { status: 200 });
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('error', { status: 500, statusText: 'Server Error' }))
+      .mockResolvedValueOnce(response);
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(fetchWithRetry('https://example.com', {}, 3)).resolves.toBe(response);
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(delays).toEqual([2000]);
+  });
+
+  it('should retry network failures until retries are exhausted', async () => {
+    const delays = mockRetryDelays();
+    const mockFetch = vi.fn().mockRejectedValue(new Error('Network error'));
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(fetchWithRetry('https://example.com', {}, 3)).rejects.toThrow('Network error');
+
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(delays).toEqual([2000, 4000]);
+  });
+
+  it.each([404, 408, 429])('should preserve public retry behavior for %s responses by default', async status => {
+    const delays = mockRetryDelays();
+    const mockFetch = vi.fn().mockResolvedValue(new Response('error', { status }));
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(fetchWithRetry('https://example.com/missing', {}, 2)).rejects.toThrow(`status: ${status}`);
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(delays).toEqual([2000]);
+  });
+
+  it('should not retry a response when shouldRetryResponse returns false', async () => {
+    const delays = mockRetryDelays();
+    const mockFetch = vi.fn().mockResolvedValue(new Response('not found', { status: 404, statusText: 'Not Found' }));
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      fetchWithRetry('https://example.com/missing', {}, 3, {
+        shouldRetryResponse: response => response.status >= 500,
+      }),
+    ).rejects.toThrow('status: 404 Not Found');
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(delays).toEqual([]);
+  });
+
+  it('should retry network errors even when the error message contains a 4xx status', async () => {
+    const delays = mockRetryDelays();
+    const response = new Response('ok', { status: 200 });
+    const mockFetch = vi.fn().mockRejectedValueOnce(new Error('upstream status: 404')).mockResolvedValueOnce(response);
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      fetchWithRetry('https://example.com/transient', {}, 3, {
+        shouldRetryResponse: response => response.status >= 500,
+      }),
+    ).resolves.toBe(response);
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(delays).toEqual([2000]);
+  });
+
+  it('should throw the last response error after exhausting retries', async () => {
+    const delays = mockRetryDelays();
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('first', { status: 500, statusText: 'First Error' }))
+      .mockResolvedValueOnce(new Response('second', { status: 503, statusText: 'Second Error' }));
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(fetchWithRetry('https://example.com/flaky', {}, 2)).rejects.toThrow('status: 503 Second Error');
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(delays).toEqual([2000]);
+  });
+
+  it('should use exponential backoff delays capped at 10 seconds', async () => {
+    const delays = mockRetryDelays();
     const mockFetch = vi.fn().mockRejectedValue(new Error('Network error'));
     vi.stubGlobal('fetch', mockFetch);
 
@@ -678,5 +856,179 @@ describe('selectFields', () => {
     const result = selectFields(src, ['__proto__.polluted']);
     expect(result).toEqual({});
     expect(({} as any).polluted).toBeUndefined();
+  });
+});
+
+describe('deepMerge', () => {
+  it('merges two flat objects', () => {
+    const result = deepMerge({ a: 1, b: 2 }, { b: 3, c: 4 });
+    expect(result).toEqual({ a: 1, b: 3, c: 4 });
+  });
+
+  it('recursively merges nested plain objects', () => {
+    const target = { a: { x: 1, y: 2 }, b: 'hello' };
+    const source = { a: { y: 99, z: 3 } };
+    const result = deepMerge(target, source);
+    expect(result).toEqual({ a: { x: 1, y: 99, z: 3 }, b: 'hello' });
+  });
+
+  it('does not mutate the original target', () => {
+    const target = { a: 1, b: { c: 2 } };
+    const source = { b: { c: 42 } };
+    const result = deepMerge(target, source);
+    expect(target.b.c).toBe(2);
+    expect(result.b.c).toBe(42);
+  });
+
+  it('replaces arrays rather than merging them', () => {
+    const result = deepMerge({ items: [1, 2, 3] }, { items: [4, 5] });
+    expect(result.items).toEqual([4, 5]);
+  });
+
+  it('replaces a nested plain object with an array from source', () => {
+    const result = deepMerge({ a: { x: 1 } } as any, { a: [1, 2, 3] } as any);
+    expect(result.a).toEqual([1, 2, 3]);
+  });
+
+  it('keeps target keys that are absent from source', () => {
+    const result = deepMerge({ a: 1, b: 2 }, { b: 99 });
+    expect(result.a).toBe(1);
+  });
+
+  it('handles a falsy source gracefully', () => {
+    const target = { a: 1 };
+    const result = deepMerge(target, null as any);
+    expect(result).toEqual({ a: 1 });
+  });
+
+  it('source undefined values do not overwrite target keys', () => {
+    const result = deepMerge({ a: 1 }, { a: undefined });
+    expect(result.a).toBe(1);
+  });
+});
+
+describe('deepEqual', () => {
+  it('returns true for identical primitives', () => {
+    expect(deepEqual(1, 1)).toBe(true);
+    expect(deepEqual('hello', 'hello')).toBe(true);
+    expect(deepEqual(true, true)).toBe(true);
+  });
+
+  it('returns false for different primitives', () => {
+    expect(deepEqual(1, 2)).toBe(false);
+    expect(deepEqual('a', 'b')).toBe(false);
+  });
+
+  it('returns true for the same object reference', () => {
+    const obj = { a: 1 };
+    expect(deepEqual(obj, obj)).toBe(true);
+  });
+
+  it('returns true for deeply equal plain objects', () => {
+    expect(deepEqual({ a: 1, b: { c: 2 } }, { a: 1, b: { c: 2 } })).toBe(true);
+  });
+
+  it('returns false when object keys differ', () => {
+    expect(deepEqual({ a: 1 }, { b: 1 })).toBe(false);
+  });
+
+  it('returns false when object values differ', () => {
+    expect(deepEqual({ a: 1 }, { a: 2 })).toBe(false);
+  });
+
+  it('returns false when objects have different key counts', () => {
+    expect(deepEqual({ a: 1, b: 2 }, { a: 1 })).toBe(false);
+  });
+
+  it('returns true for equal arrays', () => {
+    expect(deepEqual([1, 2, 3], [1, 2, 3])).toBe(true);
+  });
+
+  it('returns false for arrays of different length', () => {
+    expect(deepEqual([1, 2], [1, 2, 3])).toBe(false);
+  });
+
+  it('returns false for arrays with different elements', () => {
+    expect(deepEqual([1, 2, 3], [1, 2, 4])).toBe(false);
+  });
+
+  it('returns true for equal Date instances', () => {
+    const d1 = new Date('2024-01-01');
+    const d2 = new Date('2024-01-01');
+    expect(deepEqual(d1, d2)).toBe(true);
+  });
+
+  it('returns false for different Date instances', () => {
+    const d1 = new Date('2024-01-01');
+    const d2 = new Date('2025-06-01');
+    expect(deepEqual(d1, d2)).toBe(false);
+  });
+
+  it('returns true for both null values', () => {
+    expect(deepEqual(null, null)).toBe(true);
+  });
+
+  it('returns false when only one side is null', () => {
+    expect(deepEqual(null, {})).toBe(false);
+    expect(deepEqual({}, null)).toBe(false);
+  });
+
+  it('returns false for values of different types', () => {
+    expect(deepEqual(1, '1')).toBe(false);
+  });
+});
+
+describe('omitKeys', () => {
+  it('removes specified keys from an object', () => {
+    const obj = { a: 1, b: 2, c: 3 };
+    expect(omitKeys(obj, ['b'])).toEqual({ a: 1, c: 3 });
+  });
+
+  it('removes multiple keys at once', () => {
+    const obj = { a: 1, b: 2, c: 3, d: 4 };
+    expect(omitKeys(obj, ['a', 'c'])).toEqual({ b: 2, d: 4 });
+  });
+
+  it('returns the original object structure when no matching keys', () => {
+    const obj = { a: 1, b: 2 };
+    expect(omitKeys(obj, ['z'])).toEqual({ a: 1, b: 2 });
+  });
+
+  it('returns an empty object when all keys are omitted', () => {
+    const obj = { a: 1, b: 2 };
+    expect(omitKeys(obj, ['a', 'b'])).toEqual({});
+  });
+
+  it('does not mutate the original object', () => {
+    const obj = { a: 1, b: 2 };
+    omitKeys(obj, ['a']);
+    expect(obj).toEqual({ a: 1, b: 2 });
+  });
+});
+
+describe('removeUndefinedValues', () => {
+  it('removes keys with undefined values', () => {
+    const obj = { a: 1, b: undefined, c: 'hello' };
+    expect(removeUndefinedValues(obj)).toEqual({ a: 1, c: 'hello' });
+  });
+
+  it('keeps keys with null values', () => {
+    const obj = { a: null, b: undefined };
+    expect(removeUndefinedValues(obj)).toEqual({ a: null });
+  });
+
+  it('keeps keys with falsy-but-defined values', () => {
+    const obj = { a: 0, b: false, c: '', d: undefined };
+    expect(removeUndefinedValues(obj)).toEqual({ a: 0, b: false, c: '' });
+  });
+
+  it('returns an empty object when all values are undefined', () => {
+    const obj = { a: undefined, b: undefined };
+    expect(removeUndefinedValues(obj)).toEqual({});
+  });
+
+  it('returns the same entries when no values are undefined', () => {
+    const obj = { a: 1, b: 'x', c: true };
+    expect(removeUndefinedValues(obj)).toEqual({ a: 1, b: 'x', c: true });
   });
 });

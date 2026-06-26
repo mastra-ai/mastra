@@ -85,6 +85,7 @@ export function TraceTimeline({
               <TraceTimelineSpan
                 key={span.id}
                 span={span}
+                siblings={hierarchicalSpans}
                 onSpanClick={onSpanClick}
                 selectedSpanId={selectedSpanId}
                 overallLatency={overallLatency}

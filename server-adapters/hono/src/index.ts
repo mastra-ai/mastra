@@ -8,14 +8,15 @@ import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-ada
 import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
+  isZodError,
   normalizeQueryParams,
   redactStreamChunk,
+  serializeStreamChunk,
 } from '@mastra/server/server-adapter';
 import { toReqRes, toFetchResponse } from 'fetch-to-node';
 import type { Context, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { stream } from 'hono/streaming';
-import { ZodError } from 'zod';
 export { createAuthMiddleware } from './auth-middleware';
 export type { HonoAuthMiddlewareOptions } from './auth-middleware';
 // Browser stream setup (Hono-specific WebSocket implementation)
@@ -136,6 +137,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       }
 
       const requestContext = this.mergeRequestContext({ paramsRequestContext, bodyRequestContext });
+      this.applyRequestMetadataToContext({
+        requestContext,
+        getHeader: name => c.req.header(name),
+      });
 
       // Add relevant contexts to hono context
       c.set('requestContext', requestContext);
@@ -164,6 +169,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     return stream(
       res,
       async stream => {
+        if (streamFormat === 'sse' && route.sseFlushOnConnect) {
+          await stream.write(': connected\n\n');
+        }
+
         const readableStream = result instanceof ReadableStream ? result : result.fullStream;
         const reader = readableStream.getReader();
 
@@ -177,13 +186,28 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             if (done) break;
 
             if (value) {
+              if (streamFormat === 'sse' && typeof value === 'string' && value.startsWith(':')) {
+                await stream.write(value);
+                continue;
+              }
+
               // Optionally redact sensitive data (system prompts, tool definitions, API keys) before sending to the client
               const shouldRedact = this.streamOptions?.redact ?? true;
               const outputValue = shouldRedact ? redactStreamChunk(value) : value;
+              // A chunk that can't be serialized must not kill the stream — skip it and keep streaming
+              const serialized = serializeStreamChunk(outputValue);
+              if (!serialized.ok) {
+                this.mastra.getLogger()?.error('Failed to serialize stream chunk, skipping', {
+                  path: route.path,
+                  chunkType: (outputValue as { type?: string })?.type,
+                  error: serialized.error.message,
+                });
+                continue;
+              }
               if (streamFormat === 'sse') {
-                await stream.write(`data: ${JSON.stringify(outputValue)}\n\n`);
+                await stream.write(`data: ${serialized.json}\n\n`);
               } else {
-                await stream.write(JSON.stringify(outputValue) + '\x1E');
+                await stream.write(serialized.json + '\x1E');
               }
             }
           }
@@ -437,7 +461,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             this.mastra.getLogger()?.error('Error parsing query params', {
               error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
             });
-            if (error instanceof ZodError) {
+            if (isZodError(error)) {
               const { status, body } = this.resolveValidationError(route, error, 'query');
               return c.json(body as any, status as any);
             }
@@ -458,7 +482,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             this.mastra.getLogger()?.error('Error parsing body', {
               error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
             });
-            if (error instanceof ZodError) {
+            if (isZodError(error)) {
               const { status, body } = this.resolveValidationError(route, error, 'body');
               return c.json(body as any, status as any);
             }
@@ -480,7 +504,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             this.mastra.getLogger()?.error('Error parsing path params', {
               error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
             });
-            if (error instanceof ZodError) {
+            if (isZodError(error)) {
               const { status, body } = this.resolveValidationError(route, error, 'path');
               return c.json(body as any, status as any);
             }
@@ -510,12 +534,14 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         // Check route permission requirement (EE feature)
         // Uses convention-based permission derivation: permissions are auto-derived
         // from route path/method unless explicitly set or route is public
-        const authConfig = this.mastra.getServer()?.auth;
-        if (authConfig) {
+        const requestContext = c.get('requestContext');
+        // Check if any auth is configured (studio or server) for RBAC
+        const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
+        if (hasAuth) {
           const hasPermission = await loadHasPermission();
           if (hasPermission) {
-            const userPermissions = c.get('requestContext').get('userPermissions') as string[] | undefined;
-            const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
+            const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
+            const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, requestContext);
 
             if (permissionError) {
               return c.json(
@@ -543,11 +569,19 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           const result = await route.handler(handlerParams);
           return this.sendResponse(route, c, result, prefix);
         } catch (error) {
-          this.mastra.getLogger()?.error('Error calling handler', {
-            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
-            path: route.path,
-            method: route.method,
-          });
+          // 4xx errors are client conditions (e.g. no session, expired token) and are
+          // already returned as structured HTTP responses below. Logging them as errors
+          // produces noise for callers — skip the logger call for those cases.
+          const httpStatus =
+            error && typeof error === 'object' && 'status' in error ? (error as any).status : undefined;
+          const isClientError = typeof httpStatus === 'number' && httpStatus >= 400 && httpStatus < 500;
+          if (!isClientError) {
+            this.mastra.getLogger()?.error('Error calling handler', {
+              error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+              path: route.path,
+              method: route.method,
+            });
+          }
           // Check if it's an HTTPException or MastraError with a status code
           if (error && typeof error === 'object') {
             // Check for direct status property (HTTPException)
@@ -627,12 +661,19 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           }
         }
 
-        const authConfig = this.mastra.getServer()?.auth;
-        if (authConfig) {
+        const requestContext = c.get('requestContext');
+        // Check if any auth is configured (studio or server) for RBAC
+        const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
+        if (hasAuth) {
           const hasPermission = await loadHasPermission();
           if (hasPermission) {
-            const userPermissions = c.get('requestContext').get('userPermissions') as string[] | undefined;
-            const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
+            const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
+            const permissionError = this.checkRoutePermission(
+              serverRoute,
+              userPermissions,
+              hasPermission,
+              requestContext,
+            );
             if (permissionError) {
               return c.json(
                 { error: permissionError.error, message: permissionError.message },
@@ -683,6 +724,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           reqHeaders,
           c.req.raw.body,
           c.get('requestContext'),
+          c.req.raw.signal,
         );
         if (!response) {
           return c.json({ error: 'Not Found' }, 404);

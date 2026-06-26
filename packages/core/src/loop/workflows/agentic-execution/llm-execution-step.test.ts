@@ -3,7 +3,10 @@ import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mock } from 'vitest';
 import { z } from 'zod/v4';
+import { MODEL_TOKENS } from '../../../../../../docs/src/plugins/remark-model-tokens/models';
 import { MessageList } from '../../../agent/message-list';
+import { SpanType } from '../../../observability';
+import { ProviderHistoryCompat } from '../../../processors/provider-history-compat';
 import { RequestContext } from '../../../request-context';
 import { ToolStream } from '../../../tools/stream';
 import { createTool } from '../../../tools/tool';
@@ -326,6 +329,456 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     ]);
     expect(result.stepResult.reason).toBe('length');
     expect(result.stepResult.isContinued).toBe(false);
+  });
+
+  it('does not continue when finishReason is content-filter', async () => {
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: vi.fn(async () => ({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'finish',
+                  finishReason: 'content-filter',
+                  providerMetadata: {
+                    anthropic: {
+                      stopDetails: { type: 'refusal', category: 'cyber', explanation: 'blocked' },
+                    },
+                  },
+                  usage: testUsage,
+                },
+              ]),
+              request: {},
+              response: {
+                headers: undefined,
+              },
+              warnings: [],
+            })),
+          } as any,
+        },
+      ],
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun);
+
+    const result = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    // A content-filter refusal is terminal: continuing would re-send the same
+    // request and re-trigger the refusal, hanging the run until maxSteps.
+    expect(result.stepResult.reason).toBe('content-filter');
+    expect(result.stepResult.isContinued).toBe(false);
+  });
+
+  it('does not continue when finishReason is content-filter even with a pending tool call', async () => {
+    const tools = {
+      echo: createTool({
+        id: 'echo',
+        description: 'Echo input text',
+        inputSchema: z.object({
+          text: z.string(),
+        }),
+        execute: vi.fn(async ({ text }) => ({ text })),
+      }),
+    };
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: vi.fn(async () => ({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'tool-call',
+                  toolCallId: 'call-1',
+                  toolName: 'echo',
+                  input: '{"text":"partial"}',
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'content-filter',
+                  usage: testUsage,
+                },
+              ]),
+              request: {},
+              response: {
+                headers: undefined,
+              },
+              warnings: [],
+            })),
+          } as any,
+        },
+      ],
+      tools,
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<typeof tools>);
+
+    const result = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    expect(result.stepResult.reason).toBe('content-filter');
+    expect(result.stepResult.isContinued).toBe(false);
+  });
+
+  it('does not continue when finishReason is error even with a pending tool call', async () => {
+    const tools = {
+      echo: createTool({
+        id: 'echo',
+        description: 'Echo input text',
+        inputSchema: z.object({
+          text: z.string(),
+        }),
+        execute: vi.fn(async ({ text }) => ({ text })),
+      }),
+    };
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: vi.fn(async () => ({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'tool-call',
+                  toolCallId: 'call-1',
+                  toolName: 'echo',
+                  input: '{"text":"partial"}',
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'error',
+                  usage: testUsage,
+                },
+              ]),
+              request: {},
+              response: {
+                headers: undefined,
+              },
+              warnings: [],
+            })),
+          } as any,
+        },
+      ],
+      tools,
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<typeof tools>);
+
+    const result = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    // An error finish is terminal: a pending tool call must not flip the loop
+    // back into continuing, otherwise the failed request is re-sent instead of
+    // surfacing the terminal error.
+    expect(result.stepResult.reason).toBe('error');
+    expect(result.stepResult.isContinued).toBe(false);
+  });
+
+  it('creates a client tool observability span early and ends it with streamed args', async () => {
+    const carrier = {
+      traceparent: '00-1234567890abcdef1234567890abcdef-abcdef1234567890-01',
+    };
+    const clientToolSpan = {
+      id: 'abcdef1234567890',
+      traceId: '1234567890abcdef1234567890abcdef',
+      type: SpanType.CLIENT_TOOL_CALL,
+      end: vi.fn(),
+    };
+    const agentRunSpan = {
+      id: 'agent-span',
+      traceId: '1234567890abcdef1234567890abcdef',
+      type: SpanType.AGENT_RUN,
+      createChildSpan: vi.fn(() => clientToolSpan),
+      findParent: vi.fn(),
+    };
+    const inject = vi.fn(() => carrier);
+
+    const tools = {
+      getWeather: {
+        id: 'getWeather',
+        description: 'Get weather',
+        inputSchema: z.object({ location: z.string() }),
+      },
+    };
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: vi.fn(async () => ({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'tool-input-start',
+                  id: 'call-1',
+                  toolName: 'getWeather',
+                  providerExecuted: false,
+                },
+                {
+                  type: 'tool-input-delta',
+                  id: 'call-1',
+                  delta: '{"location":"Paris"}',
+                },
+                {
+                  type: 'tool-input-end',
+                  id: 'call-1',
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: testUsage,
+                },
+              ]),
+              request: {},
+              response: {
+                headers: undefined,
+              },
+              warnings: [],
+            })),
+          } as any,
+        },
+      ],
+      tools,
+      toolCallStreaming: true,
+      mastra: {
+        observability: {
+          getClientObservabilityProxy: () => ({ inject }),
+        },
+      } as any,
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<typeof tools>);
+
+    const executeParams = createExecuteParams(createIterationInput());
+    executeParams.tracingContext = { currentSpan: agentRunSpan } as any;
+
+    const result = await llmExecutionStep.execute(executeParams);
+    const enqueuedChunks = (controller.enqueue as Mock).mock.calls.map(([chunk]) => chunk);
+    const streamingStartChunk = enqueuedChunks.find(chunk => chunk.type === 'tool-call-input-streaming-start');
+
+    expect(agentRunSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: SpanType.CLIENT_TOOL_CALL,
+        name: "client_tool: 'getWeather'",
+        entityType: 'tool',
+        entityId: 'getWeather',
+        entityName: 'getWeather',
+        attributes: expect.objectContaining({
+          toolDescription: 'Get weather',
+          toolType: 'client-tool',
+        }),
+      }),
+    );
+    expect(inject).toHaveBeenCalledWith(clientToolSpan);
+    expect(streamingStartChunk?.payload.observability).toEqual(carrier);
+    expect(clientToolSpan.end).toHaveBeenCalledWith({ metadata: { args: { location: 'Paris' } } });
+    expect(result.output.toolCalls?.[0]).toMatchObject({
+      toolCallId: 'call-1',
+      toolName: 'getWeather',
+      args: { location: 'Paris' },
+      observability: carrier,
+    });
+  });
+
+  it('resolves streamed tool payload transforms without rescanning tools per delta', async () => {
+    const onInputDelta = vi.fn();
+    const rawTools = {
+      registeredLookup: {
+        id: 'lookup_by_model_name',
+        inputSchema: z.object({ query: z.string() }),
+        onInputDelta,
+        transform: {
+          display: {
+            inputDelta: ({ inputTextDelta }: { inputTextDelta?: string }) => inputTextDelta?.toUpperCase(),
+          },
+        },
+      },
+    };
+    let toolEnumerationCount = 0;
+    const tools = new Proxy(rawTools, {
+      ownKeys(target) {
+        toolEnumerationCount += 1;
+        return Reflect.ownKeys(target);
+      },
+    });
+    const toolInputDeltas = ['{"query":"', ...Array.from({ length: 12 }, (_, index) => `part-${index} `), '"}'];
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: MODEL_TOKENS.__GATEWAY_OPENAI_MODEL_BASE__,
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: vi.fn(async () => ({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'tool-input-start',
+                  id: 'call-1',
+                  toolName: 'lookup_by_model_name',
+                  providerExecuted: false,
+                },
+                ...toolInputDeltas.map(delta => ({
+                  type: 'tool-input-delta' as const,
+                  id: 'call-1',
+                  delta,
+                })),
+                {
+                  type: 'tool-input-end',
+                  id: 'call-1',
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: testUsage,
+                },
+              ]),
+              request: {},
+              response: {
+                headers: undefined,
+              },
+              warnings: [],
+            })),
+          } as any,
+        },
+      ],
+      tools,
+      toolCallStreaming: true,
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<typeof tools>);
+
+    await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    const enqueuedChunks = (controller.enqueue as Mock).mock.calls.map(([chunk]) => chunk);
+    const deltaChunks = enqueuedChunks.filter(chunk => chunk.type === 'tool-call-delta');
+
+    expect(toolEnumerationCount).toBeLessThanOrEqual(5);
+    expect(onInputDelta).toHaveBeenCalledTimes(toolInputDeltas.length);
+    expect(deltaChunks).toHaveLength(toolInputDeltas.length);
+    expect(deltaChunks.map(chunk => chunk.metadata?.mastra?.toolPayloadTransform?.display?.['input-delta'])).toEqual(
+      toolInputDeltas.map(delta => ({ transformed: delta.toUpperCase() })),
+    );
   });
 
   it('merges model config headers with explicit modelSettings headers and lets modelSettings override duplicates', async () => {
@@ -777,6 +1230,389 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     expect(stepStartPart).toMatchObject({
       type: 'step-start',
       model: 'override-provider/override-model-id',
+    });
+  });
+
+  it('runs processLLMRequest before invoking the model without persisting prompt changes', async () => {
+    const processLLMRequest = vi.fn(async ({ prompt }: any) => ({
+      prompt: prompt.map((message: any) =>
+        message.role === 'user'
+          ? {
+              ...message,
+              content: [{ type: 'text' as const, text: 'rewritten outbound prompt' }],
+            }
+          : message,
+      ),
+    }));
+    const doStream = vi.fn(async () => ({
+      stream: convertArrayToReadableStream([
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: testUsage,
+        },
+      ]),
+      request: {},
+      response: { headers: undefined },
+      warnings: [],
+    }));
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream,
+          } as any,
+        },
+      ],
+      inputProcessors: [{ id: 'rewrite-prompt', processLLMRequest }],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    await llmExecutionStep.execute(
+      createExecuteParams({
+        ...createIterationInput(),
+        processorRetryCount: 2,
+      }),
+    );
+
+    expect(processLLMRequest).toHaveBeenCalledOnce();
+    expect(processLLMRequest).toHaveBeenCalledWith(expect.objectContaining({ retryCount: 2 }));
+    expect(doStream).toHaveBeenCalledOnce();
+    expect(doStream.mock.calls[0]?.[0]?.prompt).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'user',
+          content: [{ type: 'text', text: 'rewritten outbound prompt' }],
+        }),
+      ]),
+    );
+    expect(messageList.get.input.aiV5.model()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'user',
+          content: expect.arrayContaining([
+            expect.objectContaining({ type: 'text', text: 'Find the latest AI agent news' }),
+          ]),
+        }),
+      ]),
+    );
+  });
+
+  it('runs processLLMRequest from both request-specific and direct input processor lists', async () => {
+    const appendToUserRequestPrompt =
+      (suffix: string) =>
+      async ({ prompt }: any) => ({
+        prompt: prompt.map((message: any) => {
+          if (message.role !== 'user') return message;
+          const text = Array.isArray(message.content)
+            ? message.content.find((part: any) => part.type === 'text')?.text
+            : message.content;
+          return {
+            ...message,
+            content: [{ type: 'text' as const, text: `${text} ${suffix}` }],
+          };
+        }),
+      });
+    const llmRequestProcessor = vi.fn(appendToUserRequestPrompt('from request list'));
+    const inputProcessor = vi.fn(appendToUserRequestPrompt('from input list'));
+    const doStream = vi.fn(async () => ({
+      stream: convertArrayToReadableStream([
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: testUsage,
+        },
+      ]),
+      request: {},
+      response: { headers: undefined },
+      warnings: [],
+    }));
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream,
+          } as any,
+        },
+      ],
+      llmRequestInputProcessors: [{ id: 'llm-request-processor', processLLMRequest: llmRequestProcessor }],
+      inputProcessors: [{ id: 'input-request-processor', processLLMRequest: inputProcessor }],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    expect(llmRequestProcessor).toHaveBeenCalledOnce();
+    expect(inputProcessor).toHaveBeenCalledOnce();
+    expect(doStream.mock.calls[0]?.[0]?.prompt).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'user',
+          content: [{ type: 'text', text: 'Find the latest AI agent news from request list from input list' }],
+        }),
+      ]),
+    );
+  });
+
+  it('strips foreign reasoning history before sending prompts to Anthropic models', async () => {
+    messageList.add(
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'reasoning',
+            text: 'OpenAI-only reasoning trace',
+            providerOptions: {
+              openai: {
+                itemId: 'rs_openai_123',
+              },
+            },
+          },
+          { type: 'text', text: 'Previous answer' },
+        ],
+      } as any,
+      'response',
+    );
+
+    const doStream = vi.fn(async ({ prompt }) => {
+      const hasForeignReasoning = prompt.some(
+        (message: any) =>
+          message.role === 'assistant' &&
+          Array.isArray(message.content) &&
+          message.content.some((part: any) => part.type === 'reasoning' && !part.providerOptions?.anthropic),
+      );
+
+      if (hasForeignReasoning) {
+        throw new APICallError({
+          message: 'messages: reasoning content is not supported from non-Anthropic providers',
+          url: 'https://api.anthropic.com/v1/messages',
+          requestBodyValues: {},
+          statusCode: 400,
+          responseHeaders: {},
+          responseBody: JSON.stringify({
+            error: {
+              type: 'invalid_request_error',
+              message: 'reasoning content is not supported',
+            },
+          }),
+          isRetryable: false,
+        });
+      }
+
+      return {
+        stream: convertArrayToReadableStream([
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: testUsage,
+          },
+        ]),
+        request: {},
+        response: { headers: undefined },
+        warnings: [],
+      };
+    });
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'anthropic.messages',
+            modelId: 'claude-3-7-sonnet-20250219',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream,
+          } as any,
+        },
+      ],
+      inputProcessors: [new ProviderHistoryCompat()],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    expect(doStream).toHaveBeenCalledOnce();
+    expect(doStream.mock.calls[0]?.[0]?.prompt).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'assistant',
+          content: expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'Previous answer' })]),
+        }),
+      ]),
+    );
+    expect(messageList.get.response.aiV5.model()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'assistant',
+          content: expect.arrayContaining([expect.objectContaining({ type: 'reasoning' })]),
+        }),
+      ]),
+    );
+  });
+
+  it('bails with a tripwire response when processLLMRequest aborts', async () => {
+    const doStream = vi.fn(async () => ({
+      stream: convertArrayToReadableStream([
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: testUsage,
+        },
+      ]),
+      request: {},
+      response: { headers: undefined },
+      warnings: [],
+    }));
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream,
+          } as any,
+        },
+      ],
+      inputProcessors: [
+        {
+          id: 'prompt-abort',
+          processLLMRequest: vi.fn(async ({ abort }) => {
+            abort('Prompt aborted', { metadata: { phase: 'prompt' } });
+          }),
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    const result = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    expect(doStream).not.toHaveBeenCalled();
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tripwire',
+        payload: expect.objectContaining({
+          reason: 'Prompt aborted',
+          metadata: { phase: 'prompt' },
+          processorId: 'prompt-abort',
+        }),
+      }),
+    );
+    expect(result).toMatchObject({
+      stepResult: { reason: 'tripwire', isContinued: false },
+      output: { text: '' },
     });
   });
 

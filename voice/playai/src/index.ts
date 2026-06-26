@@ -1,6 +1,6 @@
 import { PassThrough } from 'node:stream';
 
-import { MastraVoice } from '@mastra/core/voice';
+import { MastraVoice } from '@internal/voice';
 
 interface PlayAIVoiceInfo {
   name: string;

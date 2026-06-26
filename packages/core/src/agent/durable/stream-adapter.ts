@@ -2,6 +2,7 @@ import { ReadableStream } from 'node:stream/web';
 import type { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
 import type { IMastraLogger } from '../../logger';
+import { safeClose, safeEnqueue } from '../../stream/base';
 import { MastraModelOutput } from '../../stream/base/output';
 import type { ChunkType } from '../../stream/types';
 import { MessageList } from '../message-list';
@@ -13,6 +14,8 @@ import type {
   AgentFinishEventData,
   AgentErrorEventData,
   AgentSuspendedEventData,
+  AgentAbortEventData,
+  AgentIterationCompleteEventData,
 } from './types';
 
 /**
@@ -29,7 +32,7 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   model: {
     modelId: string | undefined;
     provider: string | undefined;
-    version: 'v2' | 'v3';
+    version: 'v2' | 'v3' | 'v4';
   };
   /** Thread ID for memory */
   threadId?: string;
@@ -51,6 +54,10 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   onError?: (error: Error) => void | Promise<void>;
   /** Callback when workflow suspends */
   onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
+  /** Callback when execution is aborted via abortSignal */
+  onAbort?: (data: AgentAbortEventData) => void | Promise<void>;
+  /** Callback fired after each agentic-loop iteration */
+  onIterationComplete?: (data: AgentIterationCompleteEventData) => void | Promise<void>;
   /** Optional logger for structured logging */
   logger?: IMastraLogger;
 }
@@ -90,6 +97,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     onFinish,
     onError,
     onSuspended,
+    onAbort,
+    onIterationComplete,
     logger,
   } = options;
 
@@ -121,7 +130,16 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     rejectReady = reject;
   });
 
-  // Handler for pubsub events
+  // Handler for pubsub events.
+  //
+  // All `controller.enqueue` / `controller.close` / `controller.error` calls
+  // are wrapped in safe* helpers because pubsub events can arrive AFTER the
+  // stream has already been closed (e.g. a stale background-task lifecycle
+  // event published after the agent's FINISH chunk closed the controller).
+  // Without the guards, those late events surface as
+  // `TypeError: Invalid state: Controller is already closed` from the
+  // controller, which the outer try/catch logs but which floods the
+  // console and (in test runs) causes timeouts as event handlers retry.
   const handleEvent = async (event: Event) => {
     if (!controller) return;
 
@@ -132,7 +150,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       switch (streamEvent.type) {
         case AgentStreamEventTypes.CHUNK: {
           const chunk = streamEvent.data as AgentChunkEventData;
-          controller.enqueue(chunk as ChunkType<OUTPUT>);
+          safeEnqueue(controller, chunk as ChunkType<OUTPUT>);
           await onChunk?.(chunk as ChunkType<OUTPUT>);
           break;
         }
@@ -141,7 +159,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           // Step start - enqueue if it's a chunk type
           const chunk = streamEvent.data as ChunkType<OUTPUT>;
           if (chunk && 'type' in chunk) {
-            controller.enqueue(chunk);
+            safeEnqueue(controller, chunk);
           }
           break;
         }
@@ -162,8 +180,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
               stepResult: data.stepResult,
             },
           } as ChunkType<OUTPUT>;
-          controller.enqueue(finishChunk);
-          controller.close();
+          safeEnqueue(controller, finishChunk);
+          safeClose(controller);
           // Call callback after closing stream (errors don't prevent closure)
           try {
             await onFinish?.(data);
@@ -180,8 +198,14 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           if (data.error.stack) {
             error.stack = data.error.stack;
           }
-          // Close stream with error first, then call callback
-          controller.error(error);
+          // Close stream with error first, then call callback. Wrapped in
+          // try/catch because `controller.error` throws if the controller
+          // has already been closed/errored by an earlier event.
+          try {
+            controller.error(error);
+          } catch {
+            // Stream already closed/errored — drop silently.
+          }
           try {
             await onError?.(error);
           } catch (callbackError) {
@@ -194,6 +218,28 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           const data = streamEvent.data as AgentSuspendedEventData;
           await onSuspended?.(data);
           // Don't close the stream on suspend - it can be resumed
+          break;
+        }
+
+        case AgentStreamEventTypes.ABORT: {
+          const data = streamEvent.data as AgentAbortEventData;
+          try {
+            await onAbort?.(data);
+          } catch (callbackError) {
+            logError(`[DurableAgentStream] onAbort callback error:`, callbackError);
+          }
+          // Abort closes the stream — the run will not continue.
+          safeClose(controller);
+          break;
+        }
+
+        case AgentStreamEventTypes.ITERATION_COMPLETE: {
+          const data = streamEvent.data as AgentIterationCompleteEventData;
+          try {
+            await onIterationComplete?.(data);
+          } catch (callbackError) {
+            logError(`[DurableAgentStream] onIterationComplete callback error:`, callbackError);
+          }
           break;
         }
 
@@ -361,6 +407,32 @@ export async function emitErrorEvent(pubsub: PubSub, runId: string, error: Error
 export async function emitSuspendedEvent(pubsub: PubSub, runId: string, data: AgentSuspendedEventData): Promise<void> {
   await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.SUSPENDED,
+    runId,
+    data,
+  });
+}
+
+/**
+ * Helper to emit an abort event to pubsub
+ */
+export async function emitAbortEvent(pubsub: PubSub, runId: string, data: AgentAbortEventData): Promise<void> {
+  await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+    type: AgentStreamEventTypes.ABORT,
+    runId,
+    data,
+  });
+}
+
+/**
+ * Helper to emit an iteration-complete event to pubsub
+ */
+export async function emitIterationCompleteEvent(
+  pubsub: PubSub,
+  runId: string,
+  data: AgentIterationCompleteEventData,
+): Promise<void> {
+  await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+    type: AgentStreamEventTypes.ITERATION_COMPLETE,
     runId,
     data,
   });

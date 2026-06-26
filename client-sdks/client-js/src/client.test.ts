@@ -717,6 +717,65 @@ describe('MastraClient', () => {
         expect(result).toEqual(mockMessages);
       });
     });
+
+    describe('deleteThread', () => {
+      it('should delete a thread with agentId', async () => {
+        const mockResponse = { success: true, message: 'Thread deleted' };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => mockResponse,
+        });
+
+        const result = await client.deleteThread('thread-1', { agentId: 'agent-1' });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:4111/api/memory/threads/thread-1?agentId=agent-1',
+          expect.objectContaining({ method: 'DELETE' }),
+        );
+        expect(result).toEqual(mockResponse);
+      });
+
+      it('should delete a network thread with networkId', async () => {
+        const mockResponse = { success: true, message: 'Thread deleted' };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => mockResponse,
+        });
+
+        const result = await client.deleteThread('thread-1', { networkId: 'network-1' });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:4111/api/memory/network/threads/thread-1?networkId=network-1',
+          expect.objectContaining({ method: 'DELETE' }),
+        );
+        expect(result).toEqual(mockResponse);
+      });
+
+      it('should throw when neither agentId nor networkId is provided', () => {
+        expect(() => client.deleteThread('thread-1', {} as any)).toThrow(
+          /requires exactly one of agentId or networkId/,
+        );
+        expect(global.fetch).not.toHaveBeenCalled();
+      });
+
+      it('should throw when opts is missing entirely', () => {
+        expect(() => client.deleteThread('thread-1', undefined as any)).toThrow(
+          /requires exactly one of agentId or networkId/,
+        );
+        expect(global.fetch).not.toHaveBeenCalled();
+      });
+
+      it('should throw when both agentId and networkId are provided', () => {
+        expect(() => client.deleteThread('thread-1', { agentId: 'agent-1', networkId: 'network-1' } as any)).toThrow(
+          /requires exactly one of agentId or networkId/,
+        );
+        expect(global.fetch).not.toHaveBeenCalled();
+      });
+    });
   });
 
   describe('Background Tasks', () => {
@@ -802,6 +861,102 @@ describe('MastraClient', () => {
         );
         expect(result).toEqual(mockTask);
       });
+    });
+  });
+
+  describe('Agent Builder Actions', () => {
+    let client: MastraClient;
+
+    beforeEach(() => {
+      vi.resetAllMocks();
+      client = new MastraClient({ baseUrl: 'http://localhost:4111', retries: 0 });
+    });
+
+    it('getAgentBuilderActions should hit /agent-builder (no trailing slash)', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({}),
+      });
+
+      await client.getAgentBuilderActions();
+
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:4111/api/agent-builder', expect.any(Object));
+    });
+  });
+
+  describe('Stored Skills', () => {
+    let client: MastraClient;
+
+    beforeEach(() => {
+      vi.resetAllMocks();
+      client = new MastraClient({ baseUrl: 'http://localhost:4111', retries: 0 });
+    });
+
+    it('createStoredSkill should POST the required description and other fields', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({}),
+      });
+
+      await client.createStoredSkill({
+        name: 'my-skill',
+        description: 'Does a thing',
+        instructions: 'Run the thing',
+      });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/stored/skills');
+      expect(init.method).toBe('POST');
+      const body = JSON.parse(init.body);
+      expect(body).toMatchObject({
+        name: 'my-skill',
+        description: 'Does a thing',
+        instructions: 'Run the thing',
+      });
+    });
+  });
+
+  describe('Dataset Item Tool Mocks', () => {
+    let client: MastraClient;
+
+    beforeEach(() => {
+      vi.resetAllMocks();
+      client = new MastraClient({ baseUrl: 'http://localhost:4111', retries: 0 });
+    });
+
+    it('addDatasetItem posts toolMocks in the request body', async () => {
+      const toolMocks = [{ toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 52 } }];
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ id: 'item-1', toolMocks }),
+      });
+
+      const result = await client.addDatasetItem({ datasetId: 'ds-1', input: { q: 'x' }, toolMocks });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/datasets/ds-1/items');
+      expect(init.method).toBe('POST');
+      expect(JSON.parse(init.body)).toMatchObject({ input: { q: 'x' }, toolMocks });
+      expect(result.toolMocks).toEqual(toolMocks);
+    });
+
+    it('updateDatasetItem posts toolMocks in the request body', async () => {
+      const toolMocks = [{ toolName: 'write', args: { f: 'a' }, output: 'ok' }];
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ id: 'item-1', toolMocks }),
+      });
+
+      await client.updateDatasetItem({ datasetId: 'ds-1', itemId: 'item-1', toolMocks });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/datasets/ds-1/items/item-1');
+      expect(init.method).toBe('PATCH');
+      expect(JSON.parse(init.body)).toMatchObject({ toolMocks });
     });
   });
 });

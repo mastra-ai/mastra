@@ -1,9 +1,12 @@
 import { convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 
+import { Mastra } from '../../..';
 import { MessageList } from '../../../agent/message-list';
 import type { MastraDBMessage } from '../../../agent/message-list/state/types';
+import { EventEmitterPubSub } from '../../../events';
 import { RequestContext } from '../../../request-context';
+import { InMemoryStore } from '../../../storage';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../../../workflows/constants';
 import { testUsage } from '../../test-utils/utils';
 import type { OuterLLMRun } from '../../types';
@@ -98,32 +101,47 @@ describe('createAgenticExecutionWorkflow response message handling', () => {
       } as any,
     } as unknown as OuterLLMRun<{}>);
 
-    const run = await workflow.createRun({ runId: 'test-run' });
-    const result = await run.start({
-      inputData: {
-        messageId: 'msg-1',
-        messages: {
-          all: messageList.get.all.aiV5.model(),
-          user: messageList.get.input.aiV5.model(),
-          nonUser: messageList.get.response.aiV5.model(),
-        },
-        output: {
-          usage: testUsage,
-          steps: [],
-        },
-        metadata: {},
-        stepResult: {
-          reason: 'stop',
-          warnings: [],
-          isContinued: true,
-          totalUsage: testUsage,
-        },
+    const mastra = new Mastra({
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub: new EventEmitterPubSub(),
+      workflows: {
+        executionWorkflow: workflow,
       },
-      [PUBSUB_SYMBOL]: {} as any,
-      [STREAM_FORMAT_SYMBOL]: undefined,
-    } as any);
+    });
+    await mastra.startWorkers();
 
-    expect(result.status).toBe('success');
-    expect(countOpenAIItemIds(messageList.get.all.db()).get('msg_duplicate')).toBe(1);
+    try {
+      const run = await workflow.createRun({ runId: 'test-run' });
+      const result = await run.start({
+        inputData: {
+          messageId: 'msg-1',
+          messages: {
+            all: messageList.get.all.aiV5.model(),
+            user: messageList.get.input.aiV5.model(),
+            nonUser: messageList.get.response.aiV5.model(),
+          },
+          output: {
+            usage: testUsage,
+            steps: [],
+          },
+          metadata: {},
+          stepResult: {
+            reason: 'stop',
+            warnings: [],
+            isContinued: true,
+            totalUsage: testUsage,
+          },
+        },
+        [PUBSUB_SYMBOL]: {} as any,
+        [STREAM_FORMAT_SYMBOL]: undefined,
+      } as any);
+
+      expect(result.status).toBe('success');
+
+      expect(countOpenAIItemIds(messageList.get.all.db()).get('msg_duplicate')).toBe(1);
+    } finally {
+      await mastra.stopWorkers();
+    }
   });
 });

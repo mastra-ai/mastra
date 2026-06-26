@@ -4,24 +4,73 @@ import { MastraEditor } from '@mastra/editor';
 import { ComposioToolProvider } from '@mastra/editor/composio';
 import { LibSQLStore } from '@mastra/libsql';
 import { DuckDBStore } from '@mastra/duckdb';
-import { Observability, DefaultExporter, SensitiveDataFilter } from '@mastra/observability';
+import { Observability, MastraStorageExporter, SensitiveDataFilter } from '@mastra/observability';
 import { SlackProvider } from '@mastra/slack';
 
-import { mastraAuth, rbacProvider, fgaProvider } from './auth';
+import {
+  mastraAuth,
+  rbacProvider,
+  fgaProvider,
+  studioAuth,
+  studioRbac,
+  studioFga,
+  serverAuth,
+  serverRbac,
+  serverFga,
+} from './auth';
 
 import {
   agentThatHarassesYou,
   chefAgent,
   chefAgentResponses,
+  codeOverrideEditableAgent,
+  codeOverrideLockedAgent,
+  codeOverrideDescriptionsOnlyAgent,
   dynamicAgent,
   evalAgent,
   dynamicToolsAgent,
   schemaValidatedAgent,
   requestContextDemoAgent,
+  mcpAppsAgent,
   slackDemoAgent,
+  billingAgent,
+  balanceAgent,
 } from './agents/index';
-import { myMcpServer, myMcpServerTwo } from './mcp/server';
+import { MCPClient } from '@mastra/mcp';
+import { myMcpServer, myMcpServerTwo, mcpAppsServer } from './mcp/server';
+
+// Non-Mastra MCP server — uses @modelcontextprotocol/sdk directly via stdio.
+// toMCPServerProxies() wraps each MCPClient connection as an MCPServerBase so
+// it appears in Studio alongside native MCPServer instances.
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
+
+// Resolve the project root reliably even when running from the bundled output.
+// Walk up from the bundled file's directory, skipping the .mastra output tree.
+function findProjectRoot(startDir: string): string {
+  let dir = startDir;
+  while (dir !== dirname(dir)) {
+    const hasPackageJson = existsSync(resolve(dir, 'package.json'));
+    const isInsideMastraOutput = dir.includes('.mastra');
+    if (hasPackageJson && !isInsideMastraOutput) return dir;
+    dir = dirname(dir);
+  }
+  return startDir;
+}
+const projectRoot = findProjectRoot(dirname(fileURLToPath(import.meta.url)));
+
+const externalMcpClient = new MCPClient({
+  servers: {
+    'external-mcp-apps': {
+      command: 'npx',
+      args: ['tsx', resolve(projectRoot, 'src', 'mastra', 'mcp', 'external-app-server.ts')],
+      cwd: projectRoot,
+    },
+  },
+});
 import { lessComplexWorkflow, myWorkflow } from './workflows';
+import { refundWorkflow } from './workflows/refund-workflow';
 import { heartbeatWorkflow, multiCadenceWorkflow } from './workflows/scheduled';
 import {
   chefModelV2Agent,
@@ -51,6 +100,9 @@ import {
   stepLoggerProcessor,
 } from './processors/index';
 import { gatewayAgent } from './agents/gateway';
+import { askUserAgent } from './agents/ask-user-agent';
+import { codeModeAgent } from './agents/code-mode-agent';
+import { clinicDirectAgent, clinicSpecialistAgent, clinicSupervisorAgent } from './agents/clinic-context-agents';
 
 const libsqlStore = new LibSQLStore({
   id: 'mastra-storage',
@@ -69,14 +121,21 @@ const storage = new MastraCompositeStore({
 export const mastra = new Mastra({
   agents: {
     gatewayAgent,
+    askUserAgent,
     chefAgent,
     chefAgentResponses,
+    codeOverrideEditableAgent,
+    codeOverrideLockedAgent,
+    codeOverrideDescriptionsOnlyAgent,
     dynamicAgent,
     dynamicToolsAgent,
+    billingAgent,
+    balanceAgent,
     agentThatHarassesYou,
     evalAgent,
     schemaValidatedAgent,
     requestContextDemoAgent,
+    mcpAppsAgent,
     chefModelV2Agent,
     networkAgent,
     moderatedAssistantAgent,
@@ -90,6 +149,10 @@ export const mastra = new Mastra({
     subscriptionOrchestratorAgent,
     cryptoResearchAgent,
     slackDemoAgent,
+    codeModeAgent,
+    clinicDirectAgent,
+    clinicSpecialistAgent,
+    clinicSupervisorAgent,
   },
   processors: {
     moderationProcessor,
@@ -103,6 +166,8 @@ export const mastra = new Mastra({
   mcpServers: {
     myMcpServer,
     myMcpServerTwo,
+    mcpAppsServer,
+    ...externalMcpClient.toMCPServerProxies(),
   },
   workflows: {
     myWorkflow,
@@ -114,11 +179,13 @@ export const mastra = new Mastra({
     findUserWorkflow,
     heartbeatWorkflow,
     multiCadenceWorkflow,
+    refundWorkflow,
   },
   bundler: {
     sourcemap: true,
   },
   editor: new MastraEditor({
+    source: 'code',
     toolProviders: {
       composio: new ComposioToolProvider({ apiKey: '' }),
     },
@@ -129,10 +196,18 @@ export const mastra = new Mastra({
     }),
   },
   server: {
-    auth: mastraAuth,
-    rbac: rbacProvider,
-    fga: fgaProvider,
+    // Use dual auth providers if available, otherwise fall back to single auth
+    auth: serverAuth ?? mastraAuth,
+    rbac: serverRbac ?? rbacProvider,
+    fga: serverFga ?? fgaProvider,
   },
+  studio: studioAuth
+    ? {
+        auth: studioAuth,
+        rbac: studioRbac,
+        fga: studioFga,
+      }
+    : undefined,
   backgroundTasks: {
     enabled: true,
     globalConcurrency: 10,
@@ -142,7 +217,7 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: 'mastra',
-        exporters: [new DefaultExporter()],
+        exporters: [new MastraStorageExporter()],
         spanOutputProcessors: [new SensitiveDataFilter()],
       },
     },

@@ -1,10 +1,10 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { ObservabilityContext } from '@mastra/core/observability';
-import type { ProcessorStreamWriter } from '@mastra/core/processors';
+import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
-import type { ObserveHooks } from '../types';
+import type { ObservationModelContext, ObserveHooks } from '../types';
 
 /** Parameters for running an observation via a strategy. */
 export interface ObservationRunOpts {
@@ -21,7 +21,9 @@ export interface ObservationRunOpts {
   writer?: ProcessorStreamWriter;
   abortSignal?: AbortSignal;
   reflectionHooks?: Pick<ObserveHooks, 'onReflectionStart' | 'onReflectionEnd'>;
+  sendSignal?: ProcessorContext['sendSignal'];
   requestContext?: RequestContext;
+  currentModel?: ObservationModelContext;
   observabilityContext?: ObservabilityContext;
 }
 

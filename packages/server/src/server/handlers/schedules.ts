@@ -1,6 +1,7 @@
 import type { Mastra } from '@mastra/core';
-import { computeNextFireAt } from '@mastra/core/workflows';
 import type { WorkflowRunState } from '@mastra/core/workflows';
+// `computeNextFireAt` is new in @mastra/core@1.32.0; route it through a shim
+// that tolerates older cores (see ./schedules-workflows-shim.ts).
 import { HTTPException } from '../http-exception';
 import {
   listSchedulesQuerySchema,
@@ -11,6 +12,7 @@ import {
   listScheduleTriggersResponseSchema,
 } from '../schemas/schedules';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { computeNextFireAt } from './schedules-workflows-shim';
 
 type RunSummary = {
   status: WorkflowRunState['status'];
@@ -77,15 +79,20 @@ export const LIST_SCHEDULES_ROUTE = createRoute({
   description: 'Returns the configured schedules, optionally filtered by workflowId or status.',
   tags: ['Schedules'],
   requiresAuth: true,
-  handler: async ({ mastra, workflowId, status }) => {
+  handler: async ({ mastra, workflowId, status, ownerType, ownerId }) => {
     const schedulesStore = await mastra.getStorage()?.getStore('schedules');
     if (!schedulesStore) {
       // Schedules domain not configured — there are no schedules to return.
       return { schedules: [] };
     }
-    const schedules = await schedulesStore.listSchedules({ workflowId, status });
+    const schedules = await schedulesStore.listSchedules({ workflowId, status, ownerType, ownerId });
+    // Filter out owned schedules (e.g. heartbeats) unless caller explicitly
+    // asks for them via ownerType/ownerId. The /schedules surface is for
+    // workflow schedules; owned schedules have dedicated UIs.
+    const visible =
+      ownerType !== undefined || ownerId !== undefined ? schedules : schedules.filter(s => s.ownerType == null);
     const hydrated = await Promise.all(
-      schedules.map(async schedule => {
+      visible.map(async schedule => {
         if (!schedule.lastRunId || schedule.target.type !== 'workflow') {
           return schedule;
         }
@@ -144,7 +151,7 @@ export const LIST_SCHEDULE_TRIGGERS_ROUTE = createRoute({
     const workflowName = schedule.target.workflowId;
     const hydrated = await Promise.all(
       triggers.map(async trigger => {
-        if (trigger.status !== 'published' || !trigger.runId) return trigger;
+        if (trigger.outcome !== 'published' || !trigger.runId) return trigger;
         const run = await fetchRunSummary(mastra, workflowName, trigger.runId);
         return run ? { ...trigger, run } : trigger;
       }),

@@ -1,10 +1,13 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import { Button, TooltipProvider, Tree } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { Tree } from '@mastra/playground-ui/components/Tree';
 import { File, FileCode, FileJson, FileText, Folder, FolderOpen, FolderPlus, Image, Plus, Trash2 } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import { useCallback, useRef, useState } from 'react';
 
 import type { InMemoryFileNode } from '../agent-edit-page/utils/form-validation';
+import { STRUCTURAL_IDS } from './skill-file-tree-utils';
 
 export interface SkillFileTreeProps {
   files: InMemoryFileNode[];
@@ -12,59 +15,6 @@ export interface SkillFileTreeProps {
   selectedFileId: string | null;
   onSelectFile: (id: string | null) => void;
   readOnly?: boolean;
-}
-
-// Well-known IDs for structural nodes
-const STRUCTURAL_IDS = new Set(['root', 'skill-md', 'license-md', 'references', 'scripts', 'assets']);
-
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-
-export function createInitialStructure(name: string): InMemoryFileNode[] {
-  const slug = slugify(name) || 'untitled';
-  return [
-    {
-      id: 'root',
-      name: slug,
-      type: 'folder',
-      children: [
-        { id: 'skill-md', name: 'SKILL.md', type: 'file', content: '' },
-        { id: 'license-md', name: 'LICENSE.md', type: 'file', content: '' },
-        { id: 'references', name: 'references', type: 'folder', children: [] },
-        { id: 'scripts', name: 'scripts', type: 'folder', children: [] },
-        { id: 'assets', name: 'assets', type: 'folder', children: [] },
-      ],
-    },
-  ];
-}
-
-export function updateRootFolderName(files: InMemoryFileNode[], name: string): InMemoryFileNode[] {
-  const slug = slugify(name) || 'untitled';
-  return files.map(node => (node.id === 'root' ? { ...node, name: slug } : node));
-}
-
-export function extractSkillInstructions(files: InMemoryFileNode[]): string {
-  const root = files.find(n => n.id === 'root');
-  if (!root?.children) return '';
-  const skillMd = root.children.find(n => n.id === 'skill-md');
-  return skillMd?.content ?? '';
-}
-
-export function extractSkillLicense(files: InMemoryFileNode[]): string | undefined {
-  const root = files.find(n => n.id === 'root');
-  if (!root?.children) return undefined;
-  const licenseMd = root.children.find(n => n.id === 'license-md');
-  const content = licenseMd?.content?.trim();
-  return content || undefined;
-}
-
-export function isImageContent(content: string | undefined): boolean {
-  return !!content && content.startsWith('data:image/');
 }
 
 function getFileIcon(name: string): ReactNode {
@@ -138,18 +88,6 @@ function containsNode(nodes: InMemoryFileNode[], targetId: string): boolean {
   return false;
 }
 
-export function updateNodeContent(nodes: InMemoryFileNode[], nodeId: string, content: string): InMemoryFileNode[] {
-  return nodes.map(node => {
-    if (node.id === nodeId) {
-      return { ...node, content };
-    }
-    if (node.children) {
-      return { ...node, children: updateNodeContent(node.children, nodeId, content) };
-    }
-    return node;
-  });
-}
-
 function FolderAddAction({ tooltip, onClick }: { tooltip: string; onClick: () => void }) {
   return (
     <span className="opacity-0 group-hover:opacity-100">
@@ -180,7 +118,7 @@ function FileDeleteAction({ nodeId, onRemove }: { nodeId: string; onRemove: (id:
         size="icon-sm"
         variant="ghost"
         tooltip="Delete file"
-        onClick={e => {
+        onClick={(e: MouseEvent<HTMLButtonElement>) => {
           e.stopPropagation();
           onRemove(nodeId);
         }}
@@ -220,7 +158,7 @@ function UserNodeList({
       if (node.type === 'folder') {
         const isOpen = openFolders[node.id] ?? true;
         return (
-          <Tree.Folder key={node.id} open={isOpen} onOpenChange={open => onFolderOpenChange(node.id, open)}>
+          <Tree.Folder key={node.id} open={isOpen} onOpenChange={(open: boolean) => onFolderOpenChange(node.id, open)}>
             <Tree.FolderTrigger
               actions={
                 !readOnly && (
@@ -235,7 +173,7 @@ function UserNodeList({
                       size="icon-sm"
                       variant="ghost"
                       tooltip="Delete folder"
-                      onClick={e => {
+                      onClick={(e: MouseEvent<HTMLButtonElement>) => {
                         e.stopPropagation();
                         onRemove(node.id);
                       }}
@@ -414,7 +352,10 @@ export function SkillFileTree({ files, onChange, selectedFileId, onSelectFile, r
             </Tree.File>
 
             {referencesFolder && (
-              <Tree.Folder open={openFolders.references} onOpenChange={open => setFolderOpen('references', open)}>
+              <Tree.Folder
+                open={openFolders.references}
+                onOpenChange={(open: boolean) => setFolderOpen('references', open)}
+              >
                 <Tree.FolderTrigger
                   actions={
                     !readOnly && (
@@ -454,7 +395,7 @@ export function SkillFileTree({ files, onChange, selectedFileId, onSelectFile, r
             )}
 
             {scriptsFolder && (
-              <Tree.Folder open={openFolders.scripts} onOpenChange={open => setFolderOpen('scripts', open)}>
+              <Tree.Folder open={openFolders.scripts} onOpenChange={(open: boolean) => setFolderOpen('scripts', open)}>
                 <Tree.FolderTrigger
                   actions={
                     !readOnly && (
@@ -494,7 +435,7 @@ export function SkillFileTree({ files, onChange, selectedFileId, onSelectFile, r
             )}
 
             {assetsFolder && (
-              <Tree.Folder open={openFolders.assets} onOpenChange={open => setFolderOpen('assets', open)}>
+              <Tree.Folder open={openFolders.assets} onOpenChange={(open: boolean) => setFolderOpen('assets', open)}>
                 <Tree.FolderTrigger
                   actions={!readOnly && <FolderAddAction tooltip="Add image" onClick={handleAddImage} />}
                 >

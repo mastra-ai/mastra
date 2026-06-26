@@ -21,11 +21,13 @@ export const scoringSourceSchema = z.enum(['LIVE', 'TEST']);
 
 export type ScoringSource = z.infer<typeof scoringSourceSchema>;
 
-export const scoringEntityTypeSchema = z.enum(['AGENT', 'WORKFLOW', ...Object.values(SpanType)] as [
-  string,
-  string,
-  ...string[],
-]);
+export const scoringEntityTypeSchema = z.enum([
+  'AGENT',
+  'WORKFLOW',
+  'TRAJECTORY',
+  'STEP',
+  ...Object.values(SpanType),
+] as [string, string, ...string[]]);
 
 export type ScoringEntityType = z.infer<typeof scoringEntityTypeSchema>;
 
@@ -610,8 +612,16 @@ export function extractTrajectory(output: ScorerRunOutputForAgent): Trajectory {
   const steps: ToolCallStep[] = [];
 
   for (const message of output) {
-    const toolInvocations = message?.content?.toolInvocations;
-    if (!toolInvocations) continue;
+    // Prefer the legacy toolInvocations array when present; fall back to
+    // V2 content.parts for messages that only store tool calls there.
+    const legacy = message?.content?.toolInvocations;
+    const fromParts = legacy
+      ? undefined
+      : message?.content?.parts
+          ?.filter((p): p is Extract<typeof p, { type: 'tool-invocation' }> => p.type === 'tool-invocation')
+          .map(p => p.toolInvocation);
+    const toolInvocations = legacy ?? fromParts;
+    if (!toolInvocations?.length) continue;
 
     for (const invocation of toolInvocations) {
       if (invocation && invocation.toolName && (invocation.state === 'result' || invocation.state === 'call')) {
@@ -735,6 +745,7 @@ const SKIPPED_SPAN_TYPES = new Set([
   SpanType.SCORER_STEP,
   SpanType.GENERIC,
   SpanType.MODEL_STEP,
+  SpanType.MODEL_INFERENCE,
   SpanType.MODEL_CHUNK,
   SpanType.WORKFLOW_CONDITIONAL_EVAL,
 ]);

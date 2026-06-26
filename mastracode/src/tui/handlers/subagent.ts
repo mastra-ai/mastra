@@ -2,6 +2,7 @@
  * Event handlers for subagent delegation events:
  * subagent_start, subagent_tool_start, subagent_tool_end, subagent_end.
  */
+import { insertChatComponentWithBoundarySpacing } from '../chat-boundary-reconciliation.js';
 import { SubagentExecutionComponent } from '../components/subagent-execution.js';
 
 import type { EventHandlerContext } from './types.js';
@@ -16,7 +17,8 @@ export function handleSubagentStart(
 ): void {
   const { state } = ctx;
   const component = new SubagentExecutionComponent(agentType, task, state.ui, modelId, {
-    collapseOnComplete: state.quietMode,
+    collapseOnComplete: false,
+    expandOnComplete: state.quietMode,
     forked,
   });
   state.pendingSubagents.set(toolCallId, component);
@@ -27,13 +29,12 @@ export function handleSubagentStart(
   if (state.streamingComponent) {
     const idx = state.chatContainer.children.indexOf(state.streamingComponent as any);
     if (idx >= 0) {
-      (state.chatContainer.children as unknown[]).splice(idx, 0, component);
-      state.chatContainer.invalidate();
+      insertChatComponentWithBoundarySpacing(state.chatContainer, component, idx);
     } else {
-      state.chatContainer.addChild(component);
+      insertChatComponentWithBoundarySpacing(state.chatContainer, component);
     }
   } else {
-    state.chatContainer.addChild(component);
+    insertChatComponentWithBoundarySpacing(state.chatContainer, component);
   }
 
   state.ui.requestRender();

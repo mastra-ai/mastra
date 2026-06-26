@@ -30,7 +30,7 @@ const myAgent = new Agent({
   name: 'MyExampleAgent',
   description: 'A generalist to help with basic questions.',
   instructions: 'You are a helpful assistant.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 const weatherTool = createTool({
@@ -114,6 +114,20 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
     description: 'Optional instructions describing how to use the server and its features.',
   },
   {
+    name: 'mapAuthInfoToUser',
+    type: '({ authInfo, extra, requestContext }) => unknown | null | undefined | Promise<unknown | null | undefined>',
+    isOptional: true,
+    description:
+      'Maps MCP transport auth data from `extra.authInfo` into the `user` value used by Mastra FGA checks. Use this when an OAuth-protected MCP server is registered on a Mastra instance with an FGA provider.',
+  },
+  {
+    name: 'fga',
+    type: "{ resourceMapping?: Partial<Record<'tool' | 'tools', { fgaResourceType: string; deriveId?: ({ user, resourceId, requestContext }) => string | undefined }>>; permissionMapping?: Record<string, string> }",
+    isOptional: true,
+    description:
+      "Overrides resource and permission mappings for this MCP server's `tools/list` and `tools/call` FGA checks. Use this when MCP authorization should be scoped differently from internal agent or workflow tool execution.",
+  },
+  {
     name: 'repository',
     type: 'Repository', // { url: string; source: string; id: string; }
     isOptional: true,
@@ -164,6 +178,13 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
     isOptional: true,
     description:
       'An object defining how the server should handle MCP prompts. See Prompt Handling section for details.',
+  },
+  {
+    name: 'appResources',
+    type: 'AppResources',
+    isOptional: true,
+    description:
+      'A map of `ui://` URIs to app resource configurations. Each entry defines an interactive HTML UI served via the MCP Apps extension (SEP-1865). See the MCP Apps section for details.',
   },
 ]}
 />
@@ -1318,6 +1339,79 @@ Whatever you set on `req.auth` in your HTTP middleware becomes available as `con
 req.auth = { ... }  →  context?.mcp?.extra?.authInfo.extra = { ... }
 ```
 
+### Map auth data for FGA
+
+When an `MCPServer` is registered on a Mastra instance with a fine-grained authorization (FGA) provider, Mastra checks `requestContext.get('user')` before listing or calling tools. HTTP MCP transports pass authenticated data as `extra.authInfo`, so use `mapAuthInfoToUser` to set the user shape expected by your FGA provider.
+
+```typescript
+const server = new MCPServer({
+  id: 'my-server',
+  name: 'My Server',
+  version: '1.0.0',
+  tools: { getUserData },
+  mapAuthInfoToUser: ({ authInfo }) => {
+    const user = authInfo as {
+      extra?: {
+        userId?: string
+        organizationMembershipId?: string
+      }
+    }
+
+    if (!user.extra?.userId) {
+      return null
+    }
+
+    return {
+      id: user.extra.userId,
+      organizationMembershipId: user.extra.organizationMembershipId,
+    }
+  },
+})
+```
+
+### Scope MCP tool FGA separately
+
+Use `fga.resourceMapping` and `fga.permissionMapping` when MCP clients need a different authorization scope than internal agent or workflow tool execution. The override applies only to `tools/list` and `tools/call` checks for this MCP server.
+
+```typescript
+import { MastraFGAPermissions } from '@mastra/core/auth/ee'
+
+const server = new MCPServer({
+  id: 'my-server',
+  name: 'My Server',
+  version: '1.0.0',
+  tools: { getUserData },
+  mapAuthInfoToUser: ({ authInfo }) => {
+    const user = authInfo as {
+      extra?: {
+        userId?: string
+        organizationMembershipId?: string
+      }
+    }
+
+    if (!user.extra?.userId) {
+      return null
+    }
+
+    return {
+      id: user.extra.userId,
+      organizationMembershipId: user.extra.organizationMembershipId,
+    }
+  },
+  fga: {
+    resourceMapping: {
+      tool: {
+        fgaResourceType: 'user',
+        deriveId: ({ user }) => (user as { id: string }).id,
+      },
+    },
+    permissionMapping: {
+      [MastraFGAPermissions.TOOLS_EXECUTE]: 'read',
+    },
+  },
+})
+```
+
 ### Setting Up Authentication Middleware
 
 To pass data to your tools, populate `req.auth` on the Node.js request object in your HTTP server middleware before calling `server.startHTTP()`.
@@ -1485,6 +1579,105 @@ app.all('/mcp', async (req, res) => {
 
 app.listen(3000)
 ```
+
+## MCP Apps (`appResources`)
+
+The `appResources` option lets you serve interactive HTML UIs from your MCP server via the [MCP Apps extension](https://github.com/modelcontextprotocol/ext-apps). Each entry maps a `ui://` URI to an HTML app that renders in a sandboxed iframe in Mastra Studio.
+
+### `AppResources` type
+
+<PropertiesTable
+  content={[
+  {
+    name: 'Key (URI)',
+    type: 'string',
+    description: 'A `ui://` URI that identifies the app resource (e.g., `ui://calculator/main`).',
+  },
+]}
+/>
+
+Each value is an `AppResource` object:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'name',
+    type: 'string',
+    isOptional: false,
+    description: 'Display name for the UI resource.',
+  },
+  {
+    name: 'description',
+    type: 'string',
+    isOptional: true,
+    description: 'Optional description of the UI resource.',
+  },
+  {
+    name: 'html',
+    type: 'string',
+    isOptional: true,
+    description: 'Inline HTML content for the UI. Provide either `html` or `htmlPath`.',
+  },
+  {
+    name: 'htmlPath',
+    type: 'string',
+    isOptional: true,
+    description: 'Path to an HTML file. Resolved at server startup. Provide either `html` or `htmlPath`.',
+  },
+  {
+    name: 'meta',
+    type: 'McpUiResourceMeta',
+    isOptional: true,
+    description: 'UI resource metadata (CSP, permissions, rendering preferences) from the official ext-apps SDK.',
+  },
+]}
+/>
+
+### Example
+
+```typescript
+import { MCPServer } from '@mastra/mcp'
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+const calculatorTool = createTool({
+  id: 'calculatorWithUI',
+  description: 'An interactive calculator',
+  inputSchema: z.object({
+    num1: z.number(),
+    num2: z.number(),
+    operation: z.enum(['add', 'subtract']),
+  }),
+  execute: async ({ num1, num2, operation }) => {
+    const result = operation === 'add' ? num1 + num2 : num1 - num2
+    return {
+      content: [{ type: 'text', text: 'An interactive calculator is displayed.' }],
+      structuredContent: { result },
+    }
+  },
+})
+
+const server = new MCPServer({
+  id: 'app-server',
+  name: 'App Server',
+  version: '1.0.0',
+  tools: { calculatorTool },
+  appResources: {
+    'ui://calculator/main': {
+      name: 'Interactive Calculator',
+      html: '<html><body><h2>Calculator</h2>...</body></html>',
+    },
+  },
+})
+```
+
+Link a tool to its app resource by setting `_meta.ui.resourceUri` on the tool to the matching `ui://` URI. The server auto-normalizes this metadata when registering tools.
+
+:::note
+
+Visit [MCP Apps](/docs/mcp/mcp-apps) for the full app bridge API and usage patterns.
+
+:::
 
 ## Related information
 

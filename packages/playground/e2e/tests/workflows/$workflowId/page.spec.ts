@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { resetStorage } from '../../__utils__/reset-storage';
+import { expectRouteDocsLink } from '../../__utils__/route-header';
 
 test.afterEach(async () => {
   await resetStorage();
@@ -12,22 +13,19 @@ test.beforeEach(async ({ page }) => {
 test('overall layout information', async ({ page }) => {
   // Header
   await expect(page).toHaveTitle(/Mastra Studio/);
-  await expect(page.locator('text=Workflows documentation')).toHaveAttribute(
-    'href',
-    'https://mastra.ai/en/docs/workflows/overview',
-  );
+  await expectRouteDocsLink(page, 'Workflows documentation', 'https://mastra.ai/en/docs/workflows/overview');
   const breadcrumb = page.locator('header>nav');
   expect(breadcrumb).toMatchAriaSnapshot();
 
   // Information side panel
-  await expect(page.locator('h2:has-text("complex-workflow")')).toBeVisible();
-  await expect(page.locator('button:has-text("complexWorkflow")')).toBeVisible();
+  await expect(page.getByText('complex-workflow').first()).toBeVisible();
+  await expect(page.getByRole('combobox').filter({ hasText: 'complex-workflow' })).toBeVisible();
   await expect(page.getByRole('radio', { name: 'Form' })).toBeChecked();
   await expect(page.getByRole('radio', { name: 'JSON' })).not.toBeChecked();
 
   // Shows the dynamic form when FORM is selected (default)
   await expect(page.getByRole('textbox', { name: 'Text' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Run' })).toBeVisible();
+  await expect(getRunButton(page)).toBeVisible();
 
   // Shows the JSON input when JSON is selected
   await page.getByRole('radio', { name: 'JSON' }).click();
@@ -45,22 +43,22 @@ test('initial workflow run state', async ({ page }) => {
   await expect(nodes.nth(0)).toContainText('add-letter');
   await expect(nodes.nth(1)).toContainText('add-letter-b');
   await expect(nodes.nth(2)).toContainText('add-letter-c');
-  await expect(nodes.nth(3)).toContainText('MAP'); // MAP badge now shows formatted label
-  await expect(nodes.nth(4)).toContainText('WHEN');
+  await expect(nodes.nth(3).getByRole('img', { name: 'Map step' })).toBeVisible();
+  await expect(nodes.nth(4).getByRole('img', { name: 'When condition' })).toBeVisible();
   await expect(nodes.nth(5)).toContainText('short-text'); // condition short path
-  await expect(nodes.nth(6)).toContainText('WHEN');
+  await expect(nodes.nth(6).getByRole('img', { name: 'When condition' })).toBeVisible();
   await expect(nodes.nth(7)).toContainText('long-text'); // condition long path
-  await expect(nodes.nth(8)).toContainText('MAP'); // MAP badge now shows formatted label
+  await expect(nodes.nth(8).getByRole('img', { name: 'Map step' })).toBeVisible();
   await expect(nodes.nth(9)).toContainText('nested-text-processor');
   await expect(nodes.nth(10)).toContainText('add-letter-with-count');
-  await expect(nodes.nth(11)).toContainText('DOUNTIL');
+  await expect(nodes.nth(11).getByRole('img', { name: 'Do until condition' })).toBeVisible();
   await expect(nodes.nth(12)).toContainText('suspend-resume');
   await expect(nodes.nth(13)).toContainText('final-step');
 });
 
 test('running the workflow (form) - short condition', async ({ page }) => {
   await page.getByRole('textbox', { name: 'Text' }).fill('A');
-  await page.getByRole('button', { name: 'Run' }).click();
+  await getRunButton(page).click();
 
   await runWorkflow(page);
   await checkShortPath(page);
@@ -68,7 +66,7 @@ test('running the workflow (form) - short condition', async ({ page }) => {
 
 test('running the workflow (form) - long condition', async ({ page }) => {
   await page.getByRole('textbox', { name: 'Text' }).fill('SuperLongTextToStartWith');
-  await page.getByRole('button', { name: 'Run' }).click();
+  await getRunButton(page).click();
 
   await runWorkflow(page);
   await checkLongPath(page);
@@ -77,7 +75,7 @@ test('running the workflow (form) - long condition', async ({ page }) => {
 test('running the workflow (json) - short condition', async ({ page }) => {
   await page.getByRole('radio', { name: 'JSON' }).click();
   await page.locator('.cm-content').fill('{"text":"A"}');
-  await page.getByRole('button', { name: 'Run' }).click();
+  await getRunButton(page).click();
 
   await runWorkflow(page);
   await checkShortPath(page);
@@ -86,30 +84,57 @@ test('running the workflow (json) - short condition', async ({ page }) => {
 test('running the workflow (json) - long condition', async ({ page }) => {
   await page.getByRole('radio', { name: 'JSON' }).click();
   await page.locator('.cm-content').fill('{"text":"SuperLongTextToStartWith"}');
-  await page.getByRole('button', { name: 'Run' }).click();
+  await getRunButton(page).click();
 
   await runWorkflow(page);
   await checkLongPath(page);
 });
 
+test('running a workflow with an enum input uses the selected form value', async ({ page }) => {
+  // FEATURE: Workflow enum input forms
+  // USER STORY: As a Studio user, I want enum dropdown choices to update run input so workflows execute with my selection.
+  // BEHAVIOR UNDER TEST: Selecting a non-default enum option persists in the form and reaches the workflow output.
+  await page.goto('/workflows/enumWorkflow/graph');
+
+  await page.getByRole('combobox', { name: 'Mode' }).click();
+  await page.getByRole('option', { name: 'b' }).click();
+
+  await expect(page.getByRole('combobox', { name: 'Mode' })).toContainText('b');
+
+  await getRunButton(page).click();
+
+  const nodes = page.locator('[data-workflow-node]');
+  await expect(nodes.nth(0)).toHaveAttribute('data-workflow-step-status', 'success', { timeout: 20000 });
+
+  await page.getByRole('button', { name: 'Run output' }).click();
+  await expect(page.getByRole('dialog')).toContainText('"mode": "b"');
+});
+
 test('resuming a workflow', async ({ page }) => {
   await page.getByRole('textbox', { name: 'Text' }).fill('A');
-  await page.getByRole('button', { name: 'Run' }).click();
+  await getRunButton(page).click();
   await runWorkflow(page);
 
-  await page.getByRole('textbox', { name: 'User Input' }).fill('Hello');
-  await page.getByRole('button', { name: 'Resume workflow' }).click();
+  const suspendedSteps = page.getByTestId('workflow-suspended-steps');
+  await suspendedSteps.getByRole('textbox', { name: 'User Input' }).fill('Hello');
+  await suspendedSteps.getByRole('button', { name: 'Resume' }).click();
   const nodes = await page.locator('[data-workflow-node]');
 
   await expect(nodes.nth(12)).toHaveAttribute('data-workflow-step-status', 'success', { timeout: 20000 });
   await expect(nodes.nth(13)).toHaveAttribute('data-workflow-step-status', 'success');
 });
 
+function getRunButton(page: Page) {
+  return page.getByRole('button', { name: 'Run', exact: true });
+}
+
 async function checkShortPath(page: Page) {
   const nodes = await page.locator('[data-workflow-node]');
 
   await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'success');
   await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'idle');
+  await expect(page.getByTestId('workflow-suspended-steps')).toContainText('Step suspended');
+  await page.getByRole('button', { name: /suspend-resume|reason/ }).click();
   await expect(page.locator('[data-testid="suspended-payload"]').locator('[role="textbox"]')).toContainText(
     `"reason": "Please provide user input to continue"`,
   );
@@ -120,6 +145,8 @@ async function checkLongPath(page: Page) {
 
   await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'idle');
   await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'success');
+  await expect(page.getByTestId('workflow-suspended-steps')).toContainText('Step suspended');
+  await page.getByRole('button', { name: /suspend-resume|reason/ }).click();
   await expect(page.locator('[data-testid="suspended-payload"]').locator('[role="textbox"]')).toContainText(
     `"reason": "Please provide user input to continue"`,
   );

@@ -1,7 +1,8 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import { Button, CodeEditor, WorkflowIcon } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 
-import type { MastraUIMessage } from '@mastra/react';
 import { useContext, useEffect } from 'react';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import { BadgeWrapper } from './badge-wrapper';
@@ -9,17 +10,24 @@ import { LoadingBadge } from './loading-badge';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
-import { WorkflowGraph, WorkflowRunContext, WorkflowRunProvider } from '@/domains/workflows';
+import {
+  WorkflowGraph,
+  WorkflowRunContext,
+  WorkflowRunProvider,
+  WorkflowSelectedStepProvider,
+  WorkflowStepDetailProvider,
+} from '@/domains/workflows';
 import type { WorkflowRunStreamResult } from '@/domains/workflows/context/workflow-run-context';
 import { useWorkflow } from '@/hooks';
 import { useWorkflowRuns } from '@/hooks/use-workflow-runs';
+import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface WorkflowBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   workflowId: string;
   result?: any;
   isStreaming?: boolean;
-  metadata?: MastraUIMessage['metadata'];
+  metadata?: MessageMetadata;
   suspendPayload?: any;
   toolCalled?: boolean;
 }
@@ -46,8 +54,10 @@ export const WorkflowBadge = ({
 
   const snapshot = typeof run?.snapshot === 'object' ? run?.snapshot : undefined;
 
-  const selectionReason = metadata?.mode === 'network' ? metadata.selectionReason : undefined;
-  const agentNetworkInput = metadata?.mode === 'network' ? metadata.agentInput : undefined;
+  const routingDecision = metadata?.mode === 'network' ? metadata.routingDecision : undefined;
+  const selectionReason =
+    metadata?.mode === 'network' ? (routingDecision?.selectionReason ?? metadata.selectionReason) : undefined;
+  const agentNetworkInput = metadata?.mode === 'network' ? (routingDecision ?? metadata.agentInput) : undefined;
 
   const bgEntry =
     (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata?.backgroundTasks
@@ -76,11 +86,7 @@ export const WorkflowBadge = ({
             input={agentNetworkInput as string | Record<string, unknown> | undefined}
           />
         ) : bgEntry?.taskId && bgEntry?.startedAt ? (
-          <BackgroundTaskMetadataDialogTrigger
-            backgroundTaskTaskId={bgEntry.taskId}
-            backgroundTaskStartedAt={bgEntry.startedAt}
-            backgroundTaskCompletedAt={bgEntry.completedAt}
-          />
+          <BackgroundTaskMetadataDialogTrigger backgroundTask={bgEntry} />
         ) : null
       }
     >
@@ -134,7 +140,11 @@ const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExt
       </div>
 
       <div className="rounded-md overflow-hidden h-[60vh] w-full">
-        <WorkflowGraph workflowId={workflowId} workflow={workflow!} />
+        <WorkflowSelectedStepProvider>
+          <WorkflowStepDetailProvider>
+            <WorkflowGraph workflowId={workflowId} workflow={workflow!} />
+          </WorkflowStepDetailProvider>
+        </WorkflowSelectedStepProvider>
       </div>
     </>
   );

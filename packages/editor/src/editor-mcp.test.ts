@@ -39,6 +39,12 @@ class TestMCPServer extends MCPServerBase {
   async executeTool() {
     return {};
   }
+  async readResource() {
+    return { contents: [] };
+  }
+  async listResources() {
+    return { resources: [] };
+  }
 }
 
 const createTestStorage = () => {
@@ -176,13 +182,6 @@ describe('EditorMCPNamespace', () => {
 
       expect(result.mcpClients).toHaveLength(2);
       expect(result.total).toBe(2);
-    });
-
-    it('should throw when storage is not configured', async () => {
-      const editorNoStorage = new MastraEditor();
-      const mastraNoStorage = new Mastra({ editor: editorNoStorage });
-
-      await expect(editorNoStorage.mcp.getById('test-id')).rejects.toThrow('Storage is not configured');
     });
   });
 

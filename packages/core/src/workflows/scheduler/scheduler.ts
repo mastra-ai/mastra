@@ -8,6 +8,7 @@ import type { WorkflowSchedulerConfig } from './types';
 const TOPIC_WORKFLOWS = 'workflows';
 const DEFAULT_TICK_INTERVAL_MS = 10_000;
 const DEFAULT_BATCH_SIZE = 100;
+const DEFAULT_MISSES_BEFORE_DELETE = 3;
 
 /**
  * Drives cron-based workflow triggers.
@@ -33,6 +34,14 @@ export class WorkflowScheduler extends MastraBase {
   #started = false;
   #stopping = false;
 
+  /**
+   * Per-schedule count of consecutive ticks where the target workflow was
+   * not registered with the host Mastra instance. Reset when the workflow
+   * resolves or the schedule is deleted. Used to ride out deploy/startup
+   * ordering races before reclaiming a ghost row.
+   */
+  #missingWorkflowCounts = new Map<string, number>();
+
   constructor({
     schedulesStore,
     pubsub,
@@ -46,9 +55,9 @@ export class WorkflowScheduler extends MastraBase {
     this.#schedulesStore = schedulesStore;
     this.#pubsub = pubsub;
     this.#config = {
+      ...config,
       tickIntervalMs: config?.tickIntervalMs ?? DEFAULT_TICK_INTERVAL_MS,
       batchSize: config?.batchSize ?? DEFAULT_BATCH_SIZE,
-      ...config,
     };
   }
 
@@ -57,6 +66,10 @@ export class WorkflowScheduler extends MastraBase {
     if (this.#started) return;
     this.#started = true;
     this.#stopping = false;
+    // Fresh process / fresh grace window — old miss counts shouldn't carry
+    // over into a new start() since the workflow registry may now look
+    // different.
+    this.#missingWorkflowCounts.clear();
 
     try {
       // Run one tick immediately so newly-due schedules don't wait the full interval.
@@ -146,7 +159,69 @@ export class WorkflowScheduler extends MastraBase {
     }
   }
 
+  /**
+   * Check whether a schedule's target workflow is registered with the host
+   * Mastra instance. Returns `true` if no predicate is configured (we can't
+   * verify, so assume the consumer will reject) or if the workflow resolves.
+   *
+   * When the workflow is missing, we increment an in-memory counter and
+   * delete the schedule after `missesBeforeDelete` consecutive misses. The
+   * grace window protects against deploy/startup ordering races where the
+   * scheduler ticks before workflows finish registering on a fresh process.
+   * Returns `false` to tell `#fireSchedule` to skip publishing for this tick.
+   */
+  async #ensureWorkflowExists(schedule: Schedule): Promise<boolean> {
+    const predicate = this.#config.isWorkflowRegistered;
+    if (!predicate) return true;
+    if (schedule.target.type !== 'workflow') return true;
+
+    const workflowId = schedule.target.workflowId;
+    if (predicate(workflowId)) {
+      this.#missingWorkflowCounts.delete(schedule.id);
+      return true;
+    }
+
+    const limit = this.#config.missesBeforeDelete ?? DEFAULT_MISSES_BEFORE_DELETE;
+    const prev = this.#missingWorkflowCounts.get(schedule.id) ?? 0;
+    const next = prev + 1;
+
+    if (next < limit) {
+      this.#missingWorkflowCounts.set(schedule.id, next);
+      if (prev === 0) {
+        this.logger.warn('Schedule target workflow is not registered; skipping until it appears', {
+          scheduleId: schedule.id,
+          workflowId,
+          missesBeforeDelete: limit,
+        });
+      }
+      return false;
+    }
+
+    // Hit the grace limit — reclaim the row.
+    this.logger.error('Deleting schedule whose target workflow has not been registered', {
+      scheduleId: schedule.id,
+      workflowId,
+      consecutiveMisses: next,
+    });
+    try {
+      await this.#schedulesStore.deleteSchedule(schedule.id);
+    } catch (err) {
+      this.logger.error('Failed to delete ghost schedule', {
+        scheduleId: schedule.id,
+        workflowId,
+        error: err,
+      });
+      // Keep the counter so we try again next tick rather than reset and
+      // start the grace window over.
+      return false;
+    }
+    this.#missingWorkflowCounts.delete(schedule.id);
+    return false;
+  }
+
   async #fireSchedule(schedule: Schedule): Promise<void> {
+    if (!(await this.#ensureWorkflowExists(schedule))) return;
+
     const actualFireAt = Date.now();
 
     let newNextFireAt: number;
@@ -193,7 +268,7 @@ export class WorkflowScheduler extends MastraBase {
       return;
     }
 
-    let triggerStatus: ScheduleTrigger['status'] = 'published';
+    let triggerStatus: ScheduleTrigger['outcome'] = 'published';
     let triggerError: string | undefined;
 
     try {
@@ -215,8 +290,9 @@ export class WorkflowScheduler extends MastraBase {
         runId,
         scheduledFireAt: schedule.nextFireAt,
         actualFireAt,
-        status: triggerStatus,
+        outcome: triggerStatus,
         error: triggerError,
+        triggerKind: 'schedule-fire',
       });
     } catch (err) {
       this.logger.error('Failed to record schedule trigger', {

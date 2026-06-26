@@ -1,31 +1,32 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import { coreFeatures } from '@mastra/core/features';
-
-// Extend window type for Mastra config
-declare global {
-  interface Window {
-    MASTRA_STUDIO_BASE_PATH?: string;
-    MASTRA_SERVER_HOST: string;
-    MASTRA_SERVER_PORT: string;
-    MASTRA_API_PREFIX?: string;
-    MASTRA_TELEMETRY_DISABLED?: string;
-    MASTRA_HIDE_CLOUD_CTA: string;
-    MASTRA_SERVER_PROTOCOL: string;
-    MASTRA_CLOUD_API_ENDPOINT: string;
-    MASTRA_EXPERIMENTAL_FEATURES?: string;
-    MASTRA_TEMPLATES?: string;
-    MASTRA_AUTO_DETECT_URL?: string;
-    MASTRA_REQUEST_CONTEXT_PRESETS?: string;
-    MASTRA_EXPERIMENTAL_UI?: string;
-  }
-}
-
 import { MastraReactProvider } from '@mastra/react';
+import { CalendarClockIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } from 'react-router';
+import type { LoaderFunctionArgs, RouteObject } from 'react-router';
+import { AgentBuilderRootLayout } from './domains/agent-builder/layouts/agent-builder-root-layout';
+import { RoutePermissionGuard } from './domains/auth/components/route-permission-guard';
+import { RoutePermissionsGate } from './domains/auth/components/route-permissions-gate';
+import { DatasetCrumb } from './domains/datasets/dataset-crumb';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
+import SignalsOverviewPage, { SignalDetailsPage, SignalTraceIdPage } from './ee/signals';
+import { SignalCrumb } from './ee/signals/signal-crumb';
 import { PostHogProvider } from './lib/analytics';
 import { Link } from './lib/link';
+import { StudioIndexRedirect } from './lib/studio-index-redirect';
+import { AgentBuilderRoot } from './pages/agent-builder';
+import AgentBuilderAgents from './pages/agent-builder/agents';
+import AgentBuilderCreate from './pages/agent-builder/agents/create';
+import AgentBuilderAgentEdit from './pages/agent-builder/agents/edit';
+import AgentBuilderAgentView from './pages/agent-builder/agents/view';
+import AgentBuilderFavorite from './pages/agent-builder/favorite';
+import AgentBuilderInfrastructure from './pages/agent-builder/infrastructure';
+import AgentBuilderLibrary from './pages/agent-builder/library';
+import AgentBuilderSkills from './pages/agent-builder/skills';
+import AgentBuilderSkillsCreate from './pages/agent-builder/skills/create';
+import AgentBuilderSkillsEdit from './pages/agent-builder/skills/edit';
+import AgentBuilderSkillsView from './pages/agent-builder/skills/view';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
 import AgentSession from './pages/agents/agent/session';
@@ -59,14 +60,13 @@ import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
 import Evaluation from './pages/evaluation';
 import Experiments from './pages/experiments';
 import ExperimentPage from './pages/experiments/experiment';
+import IntegrationsPage from './pages/integrations';
 import { Login } from './pages/login';
 import Logs from './pages/logs';
 import MCPs from './pages/mcps';
 import { McpServerPage } from './pages/mcps/[serverId]';
 import MCPServerToolExecutor from './pages/mcps/tool';
 import Metrics from './pages/metrics';
-import ObservabilityOverview from './pages/observability-overview';
-import Primitives from './pages/primitives';
 import PromptBlocks from './pages/prompt-blocks';
 import RequestContext from './pages/request-context';
 import Resources from './pages/resources';
@@ -88,16 +88,52 @@ import Workspace from './pages/workspace';
 import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
 import { Layout } from '@/components/layout';
 import { MinimalLayout } from '@/components/minimal-layout';
+import { AgentBuilderEditionLayout, AgentBuilderLayout } from '@/domains/agent-builder/layouts/agent-builder-layout';
+import { AgentCrumb, AgentToolCrumb } from '@/domains/agents/agent-crumb';
 import { AgentLayout } from '@/domains/agents/agent-layout';
+import { RoleImpersonationProvider } from '@/domains/auth/context/role-impersonation-context';
 import { createFetchWithRefresh } from '@/domains/auth/hooks/fetch-with-refresh';
+
 import { PlaygroundConfigGuard } from '@/domains/configuration/components/playground-config-guard';
-import { StudioConfigProvider, useStudioConfig } from '@/domains/configuration/context/studio-config-context';
+import { StudioConfigProvider } from '@/domains/configuration/context/studio-config-context';
+import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
+import { McpServerCrumb, McpServerToolCrumb } from '@/domains/mcps/mcp-crumbs';
+import { ProcessorCrumb } from '@/domains/processors/processor-crumb';
+import { PromptBlockCrumb } from '@/domains/prompt-blocks/prompt-block-crumb';
+import { StoredScorerCrumb, ScorerCrumb } from '@/domains/scores/scorer-crumb';
+import { ToolCrumb } from '@/domains/tools/tool-crumb';
+import { TraceCrumb } from '@/domains/traces/trace-crumb';
+import { WorkflowCrumb, WorkflowRunCrumb } from '@/domains/workflows/workflow-crumbs';
 import { LinkComponentProvider } from '@/lib/framework';
 import type { LinkComponentProviderProps } from '@/lib/framework';
+import { navCrumb, navHandle, navHandleWithChildren } from '@/lib/nav';
+import type { CrumbDef, RouteHeaderHandle } from '@/lib/route-header';
 import { PlaygroundQueryClient } from '@/lib/tanstack-query';
 import { Processors } from '@/pages/processors';
 import { Processor } from '@/pages/processors/processor';
 import Tools from '@/pages/tools';
+
+// Extend window type for Mastra config
+declare global {
+  interface Window {
+    MASTRA_STUDIO_BASE_PATH?: string;
+    MASTRA_SERVER_HOST: string;
+    MASTRA_SERVER_PORT: string;
+    MASTRA_API_PREFIX?: string;
+    MASTRA_TELEMETRY_DISABLED?: string;
+    MASTRA_HIDE_CLOUD_CTA: string;
+    MASTRA_SERVER_PROTOCOL: string;
+    MASTRA_CLOUD_API_ENDPOINT: string;
+    MASTRA_PLATFORM_PROJECT_ID?: string;
+    MASTRA_EXPERIMENTAL_FEATURES?: string;
+    MASTRA_TEMPLATES?: string;
+    MASTRA_AUTO_DETECT_URL?: string;
+    MASTRA_REQUEST_CONTEXT_PRESETS?: string;
+    MASTRA_EXPERIMENTAL_UI?: string;
+    MASTRA_AGENT_SIGNALS?: string;
+    MASTRA_SIGNALS_UI?: string;
+  }
+}
 
 const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}/chat/new`,
@@ -156,7 +192,9 @@ const RootLayout = () => {
   return (
     <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
       <Layout>
-        <Outlet />
+        <RoutePermissionGuard>
+          <Outlet />
+        </RoutePermissionGuard>
       </Layout>
     </LinkComponentProvider>
   );
@@ -179,6 +217,9 @@ const MinimalRootLayout = () => {
 const isMastraPlatform = Boolean(window.MASTRA_CLOUD_API_ENDPOINT);
 const isExperimentalFeatures = coreFeatures.has('datasets');
 
+// Signals is an opt-in experimental UI, gated by the server-injected `MASTRA_SIGNALS_UI` flag.
+const isSignalsEnabled = window.MASTRA_SIGNALS_UI === 'true';
+
 const agentCmsChildRoutes = [
   { index: true, element: <CmsAgentInformationPage /> },
   { path: 'instruction-blocks', element: <CmsAgentInstructionBlocksPage /> },
@@ -191,10 +232,114 @@ const agentCmsChildRoutes = [
   { path: 'variables', element: <CmsAgentVariablesPage /> },
 ];
 
-const routes = [
+const schedulesCrumb = {
+  id: 'workflow-schedules',
+  label: 'Schedules',
+  icon: CalendarClockIcon,
+  to: '/workflows/schedules',
+} satisfies CrumbDef;
+
+const decodeRouteParam = (value: string | undefined) => {
+  if (!value) return '';
+
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+};
+
+// eslint-disable-next-line react-refresh/only-export-components -- route metadata is covered by regression tests.
+export const routes: RouteObject[] = [
   // Auth pages - no layout
   { path: '/login', element: <Login /> },
   { path: '/signup', element: <SignUp /> },
+  {
+    path: '/agent-builder',
+    element: <AgentBuilderRootLayout paths={paths} />,
+    children: [
+      {
+        index: true,
+        element: <AgentBuilderRoot />,
+      },
+      {
+        path: 'agents',
+        element: <AgentBuilderLayout />,
+        children: [
+          {
+            index: true,
+            element: <AgentBuilderAgents />,
+          },
+        ],
+      },
+      {
+        path: 'agents',
+        element: <AgentBuilderEditionLayout />,
+        children: [
+          { path: 'create', element: <AgentBuilderCreate /> },
+          {
+            path: ':id',
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agent-builder/agents/${params.id}/view`),
+          },
+          { path: ':id/edit', element: <AgentBuilderAgentEdit /> },
+          { path: ':id/view', element: <AgentBuilderAgentView /> },
+        ],
+      },
+      {
+        path: 'skills',
+        element: <AgentBuilderLayout />,
+        children: [
+          {
+            index: true,
+            element: <AgentBuilderSkills />,
+          },
+        ],
+      },
+      {
+        path: 'skills',
+        element: <AgentBuilderEditionLayout />,
+        children: [
+          { path: 'create', element: <AgentBuilderSkillsCreate /> },
+          {
+            path: ':id',
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agent-builder/skills/${params.id}/edit`),
+          },
+          { path: ':id/edit', element: <AgentBuilderSkillsEdit /> },
+          { path: ':id/view', element: <AgentBuilderSkillsView /> },
+        ],
+      },
+      {
+        path: 'infrastructure',
+        element: <AgentBuilderLayout />,
+        children: [
+          {
+            index: true,
+            element: <AgentBuilderInfrastructure />,
+          },
+        ],
+      },
+      {
+        path: 'favorite',
+        element: <AgentBuilderLayout />,
+        children: [
+          {
+            index: true,
+            element: <AgentBuilderFavorite />,
+          },
+        ],
+      },
+      {
+        path: 'library',
+        element: <AgentBuilderLayout />,
+        children: [
+          {
+            index: true,
+            element: <AgentBuilderLibrary />,
+          },
+        ],
+      },
+    ],
+  },
   {
     element: <MinimalRootLayout />,
     children: [
@@ -209,38 +354,120 @@ const routes = [
       ...(isMastraPlatform
         ? []
         : [
-            { path: '/settings', element: <StudioSettingsPage /> },
-            { path: '/templates', element: <Templates /> },
-            { path: '/templates/:templateSlug', element: <Template /> },
+            { path: '/settings', element: <StudioSettingsPage />, handle: navHandle('/settings') },
+            {
+              path: '/templates',
+              element: <Templates />,
+              handle: { crumbs: [{ id: 'templates', label: 'Templates' }] },
+            },
+            {
+              path: '/templates/:templateSlug',
+              element: <Template />,
+              handle: {
+                crumbs: ({ params }) => [
+                  { id: 'templates', label: 'Templates', to: '/templates' },
+                  { id: 'template', label: decodeRouteParam(params.templateSlug) },
+                ],
+              } satisfies RouteHeaderHandle,
+            },
           ]),
 
-      { path: '/logs', element: <Logs /> },
-      { path: '/primitives', element: <Primitives /> },
-      { path: '/evaluation', element: <Evaluation /> },
-      { path: '/scorers', element: <Scorers /> },
-      { path: '/scorers/:scorerId', element: <Scorer /> },
-      { path: '/metrics', element: <Metrics /> },
-      { path: '/observability-overview', element: <ObservabilityOverview /> },
-      { path: '/observability', element: <Traces /> },
-      { path: '/traces/:traceId', element: <TraceDetails /> },
-      { path: '/resources', element: <Resources /> },
-      { path: '/agents', element: <Agents /> },
+      { path: '/logs', element: <Logs />, handle: navHandle('/logs') },
+      { path: '/evaluation', element: <Evaluation />, handle: navHandle('/evaluation') },
+      { path: '/scorers', element: <Scorers />, handle: navHandle('/scorers') },
+      {
+        path: '/scorers/:scorerId',
+        element: <Scorer />,
+        handle: navHandleWithChildren('/scorers', [{ id: 'scorer', Component: ScorerCrumb, heading: 'Scorer' }]),
+      },
+      { path: '/metrics', element: <Metrics />, handle: navHandle('/metrics') },
+      ...(isSignalsEnabled
+        ? [
+            {
+              path: '/signals',
+              handle: {
+                ...navHandle('/signals'),
+                crumbs: [navCrumb('/signals')],
+              },
+              children: [
+                { index: true, element: <SignalsOverviewPage /> },
+                {
+                  path: ':signalId',
+                  element: <SignalDetailsPage />,
+                  handle: {
+                    crumbs: [{ id: 'signal', Component: SignalCrumb, heading: 'Signal' }],
+                  } satisfies RouteHeaderHandle,
+                },
+                {
+                  path: ':signalId/traces/:traceId',
+                  element: <SignalTraceIdPage />,
+                  handle: {
+                    crumbs: ({ params }) => [
+                      {
+                        id: 'signal',
+                        Component: SignalCrumb,
+                        heading: 'Signal',
+                        to: params.signalId ? `/signals/${encodeURIComponent(params.signalId)}` : '/signals',
+                      },
+                      { id: 'trace', Component: TraceCrumb, heading: 'Trace' },
+                    ],
+                  } satisfies RouteHeaderHandle,
+                },
+              ],
+            },
+          ]
+        : []),
+      { path: '/observability', element: <Traces />, handle: navHandle('/observability') },
+      {
+        path: '/traces/:traceId',
+        element: <TraceDetails />,
+        handle: navHandleWithChildren('/observability', [{ id: 'trace', Component: TraceCrumb, heading: 'Trace' }]),
+      },
+      { path: '/resources', element: <Resources />, handle: navHandle('/resources') },
+      { path: '/agents', element: <Agents />, handle: navHandle('/agents') },
       {
         path: '/cms/agents/create',
         element: <CreateLayoutWrapper />,
+        handle: navHandleWithChildren('/agents', [{ id: 'create-agent', label: 'Create agent' }]),
         children: agentCmsChildRoutes,
       },
       {
         path: '/cms/agents/:agentId/edit',
         element: <EditLayoutWrapper />,
+        handle: navHandleWithChildren('/agents', [{ id: 'agent', Component: AgentCrumb, heading: 'Agent' }]),
         children: agentCmsChildRoutes,
       },
-      { path: '/cms/scorers/create', element: <CmsScorersCreatePage /> },
-      { path: '/cms/scorers/:scorerId/edit', element: <CmsScorersEditPage /> },
-      { path: '/prompts', element: <PromptBlocks /> },
-      { path: '/cms/prompts/create', element: <CmsPromptBlocksCreatePage /> },
-      { path: '/cms/prompts/:promptBlockId/edit', element: <CmsPromptBlocksEditPage /> },
-      { path: '/agents/:agentId/tools/:toolId', element: <AgentTool /> },
+      {
+        path: '/cms/scorers/create',
+        element: <CmsScorersCreatePage />,
+        handle: navHandleWithChildren('/scorers', [{ id: 'create-scorer', label: 'Create scorer' }]),
+      },
+      {
+        path: '/cms/scorers/:scorerId/edit',
+        element: <CmsScorersEditPage />,
+        handle: navHandleWithChildren('/scorers', [{ id: 'scorer', Component: StoredScorerCrumb, heading: 'Scorer' }]),
+      },
+      { path: '/prompts', element: <PromptBlocks />, handle: navHandle('/prompts') },
+      {
+        path: '/cms/prompts/create',
+        element: <CmsPromptBlocksCreatePage />,
+        handle: navHandleWithChildren('/prompts', [{ id: 'create-prompt-block', label: 'Create prompt block' }]),
+      },
+      {
+        path: '/cms/prompts/:promptBlockId/edit',
+        element: <CmsPromptBlocksEditPage />,
+        handle: navHandleWithChildren('/prompts', [
+          { id: 'prompt-block', Component: PromptBlockCrumb, heading: 'Prompt block' },
+        ]),
+      },
+      {
+        path: '/agents/:agentId/tools/:toolId',
+        element: <AgentTool />,
+        handle: navHandleWithChildren('/agents', [
+          { id: 'agent', Component: AgentCrumb, heading: 'Agent' },
+          { id: 'agent-tool', Component: AgentToolCrumb, heading: 'Agent tool' },
+        ]),
+      },
       {
         path: '/agents/:agentId',
         element: (
@@ -248,13 +475,15 @@ const routes = [
             <Outlet />
           </AgentLayout>
         ),
+        handle: navHandleWithChildren('/agents', [{ id: 'agent', Component: AgentCrumb, heading: 'Agent' }]),
         children: [
           {
             index: true,
-            loader: ({ params }: { params: { agentId: string } }) => redirect(`/agents/${params.agentId}/chat`),
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/chat`),
           },
           { path: 'chat', element: <Agent /> },
           { path: 'chat/:threadId', element: <Agent /> },
+          { path: 'settings', element: <Agent view="settings" /> },
           ...(isExperimentalFeatures
             ? [
                 { path: 'editor', element: <AgentPlayground /> },
@@ -263,26 +492,89 @@ const routes = [
               ]
             : []),
           { path: 'traces', element: <AgentTraces /> },
+          {
+            // Channels is configuration, not a tool tab: it now lives in the
+            // agent settings view. Keep old links working.
+            path: 'channels',
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/settings?tab=channels`),
+          },
         ],
       },
 
-      { path: '/tools', element: <Tools /> },
-      { path: '/tools/:toolId', element: <Tool /> },
+      { path: '/tools', element: <Tools />, handle: navHandle('/tools') },
+      {
+        path: '/tools/:toolId',
+        element: <Tool />,
+        handle: navHandleWithChildren('/tools', [{ id: 'tool', Component: ToolCrumb, heading: 'Tool' }]),
+      },
 
-      { path: '/processors', element: <Processors /> },
-      { path: '/processors/:processorId', element: <Processor /> },
+      {
+        path: '/integrations',
+        element: <IntegrationsPage />,
+        handle: { crumbs: [{ id: 'integrations', label: 'Integrations' }] } satisfies RouteHeaderHandle,
+      },
 
-      { path: '/mcps', element: <MCPs /> },
-      { path: '/mcps/:serverId', element: <McpServerPage /> },
-      { path: '/mcps/:serverId/tools/:toolId', element: <MCPServerToolExecutor /> },
+      { path: '/processors', element: <Processors />, handle: navHandle('/processors') },
+      {
+        path: '/processors/:processorId',
+        element: <Processor />,
+        handle: navHandleWithChildren('/processors', [
+          { id: 'processor', Component: ProcessorCrumb, heading: 'Processor' },
+        ]),
+      },
 
-      { path: '/workspaces', element: <Workspace /> },
-      { path: '/workspaces/:workspaceId', element: <Workspace /> },
-      { path: '/workspaces/:workspaceId/skills/:skillName', element: <WorkspaceSkillDetailPage /> },
+      { path: '/mcps', element: <MCPs />, handle: navHandle('/mcps') },
+      {
+        path: '/mcps/:serverId',
+        element: <McpServerPage />,
+        handle: navHandleWithChildren('/mcps', [
+          { id: 'mcp-server', Component: McpServerCrumb, heading: 'MCP server' },
+        ]),
+      },
+      {
+        path: '/mcps/:serverId/tools/:toolId',
+        element: <MCPServerToolExecutor />,
+        handle: navHandleWithChildren('/mcps', [
+          { id: 'mcp-server', Component: McpServerCrumb, heading: 'MCP server' },
+          { id: 'mcp-server-tool', Component: McpServerToolCrumb, heading: 'MCP server tool' },
+        ]),
+      },
 
-      { path: '/workflows', element: <Workflows /> },
-      { path: '/workflows/schedules', element: <SchedulesPage /> },
-      { path: '/workflows/schedules/:scheduleId', element: <SchedulePage /> },
+      { path: '/workspaces', element: <Workspace />, handle: navHandle('/workspaces') },
+      { path: '/workspaces/:workspaceId', element: <Workspace />, handle: navHandle('/workspaces') },
+      {
+        path: '/workspaces/:workspaceId/skills/:skillName',
+        element: <WorkspaceSkillDetailPage />,
+        handle: {
+          crumbs: ({ params }) => [
+            navCrumb('/workspaces'),
+            {
+              id: 'workspace',
+              label: decodeRouteParam(params.workspaceId),
+              to: params.workspaceId ? `/workspaces/${encodeURIComponent(params.workspaceId)}` : undefined,
+            },
+            { id: 'skill', label: decodeRouteParam(params.skillName) },
+          ],
+        } satisfies RouteHeaderHandle,
+      },
+
+      { path: '/workflows', element: <Workflows />, handle: navHandle('/workflows') },
+      {
+        path: '/workflows/schedules',
+        element: <SchedulesPage />,
+        handle: navHandleWithChildren('/workflows', [schedulesCrumb]),
+      },
+      {
+        path: '/workflows/schedules/:scheduleId',
+        element: <SchedulePage />,
+        handle: {
+          crumbs: ({ params }) => [
+            navCrumb('/workflows'),
+            schedulesCrumb,
+            { id: 'schedule', label: decodeRouteParam(params.scheduleId), icon: CalendarClockIcon },
+          ],
+        } satisfies RouteHeaderHandle,
+      },
       {
         path: '/workflows/:workflowId',
         element: (
@@ -290,37 +582,129 @@ const routes = [
             <Outlet />
           </WorkflowLayout>
         ),
+        handle: navHandleWithChildren('/workflows', [
+          { id: 'workflow', Component: WorkflowCrumb, heading: 'Workflow' },
+        ]),
         children: [
           {
             index: true,
-            loader: ({ params }: { params: { workflowId: string } }) =>
-              redirect(`/workflows/${params.workflowId}/graph`),
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/workflows/${params.workflowId}/graph`),
           },
           { path: 'graph', element: <Workflow /> },
-          { path: 'graph/:runId', element: <Workflow /> },
+          {
+            path: 'graph/:runId',
+            element: <Workflow />,
+            handle: {
+              crumbs: [{ id: 'workflow-run', Component: WorkflowRunCrumb, heading: 'Workflow run' }],
+            } satisfies RouteHeaderHandle,
+          },
         ],
       },
 
       ...(isExperimentalFeatures
         ? [
-            { path: '/datasets', element: <Datasets /> },
-            { path: '/datasets/:datasetId', element: <DatasetPage /> },
-            { path: '/datasets/:datasetId/items/:itemId', element: <DatasetItemPage /> },
+            { path: '/datasets', element: <Datasets />, handle: navHandle('/datasets') },
+            {
+              path: '/datasets/:datasetId',
+              element: <DatasetPage />,
+              handle: {
+                crumbs: () => [navCrumb('/datasets'), { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' }],
+              } satisfies RouteHeaderHandle,
+            },
+            {
+              path: '/datasets/:datasetId/items/:itemId',
+              element: <DatasetItemPage />,
+              handle: {
+                crumbs: ({ params }) => [
+                  navCrumb('/datasets'),
+                  { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
+                  { id: 'dataset-item', label: decodeRouteParam(params.itemId) },
+                ],
+              } satisfies RouteHeaderHandle,
+            },
             {
               path: '/datasets/:datasetId/items/:itemId/versions',
               element: <DatasetItemVersionsComparePage />,
+              handle: {
+                crumbs: ({ params }) => [
+                  navCrumb('/datasets'),
+                  { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
+                  {
+                    id: 'dataset-item',
+                    label: decodeRouteParam(params.itemId),
+                    to:
+                      params.datasetId && params.itemId
+                        ? `/datasets/${encodeURIComponent(params.datasetId)}/items/${encodeURIComponent(params.itemId)}`
+                        : undefined,
+                  },
+                  { id: 'dataset-item-versions', label: 'Versions' },
+                ],
+              } satisfies RouteHeaderHandle,
             },
-            { path: '/datasets/:datasetId/experiments/:experimentId', element: <DatasetExperiment /> },
-            { path: '/experiments', element: <Experiments /> },
-            { path: '/experiments/:experimentId', element: <ExperimentPage /> },
-            { path: '/datasets/:datasetId/experiments', element: <CompareDatasetExperimentsPage /> },
-            { path: '/datasets/:datasetId/items', element: <DatasetItemsComparePage /> },
-            { path: '/datasets/:datasetId/versions', element: <DatasetCompareDatasetVersions /> },
+            {
+              path: '/datasets/:datasetId/experiments/:experimentId',
+              element: <DatasetExperiment />,
+              handle: {
+                crumbs: ({ params }) => [
+                  navCrumb('/datasets'),
+                  { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
+                  { id: 'dataset-experiment', label: decodeRouteParam(params.experimentId) },
+                ],
+              } satisfies RouteHeaderHandle,
+            },
+            { path: '/experiments', element: <Experiments />, handle: navHandle('/experiments') },
+            {
+              path: '/experiments/:experimentId',
+              element: <ExperimentPage />,
+              handle: {
+                crumbs: ({ params }) => [
+                  navCrumb('/experiments'),
+                  { id: 'experiment', label: decodeRouteParam(params.experimentId) },
+                ],
+              } satisfies RouteHeaderHandle,
+            },
+            {
+              path: '/datasets/:datasetId/experiments',
+              element: <CompareDatasetExperimentsPage />,
+              handle: {
+                crumbs: () => [
+                  navCrumb('/datasets'),
+                  { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
+                  { id: 'dataset-experiments', label: 'Experiments' },
+                ],
+              },
+            },
+            {
+              path: '/datasets/:datasetId/items',
+              element: <DatasetItemsComparePage />,
+              handle: {
+                crumbs: () => [
+                  navCrumb('/datasets'),
+                  { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
+                  { id: 'dataset-items', label: 'Items' },
+                ],
+              },
+            },
+            {
+              path: '/datasets/:datasetId/versions',
+              element: <DatasetCompareDatasetVersions />,
+              handle: {
+                crumbs: () => [
+                  navCrumb('/datasets'),
+                  { id: 'dataset', Component: DatasetCrumb, heading: 'Dataset' },
+                  { id: 'dataset-versions', label: 'Versions' },
+                ],
+              },
+            },
           ]
         : []),
 
-      { index: true, loader: () => redirect('/agents') },
-      { path: '/request-context', element: <RequestContext /> },
+      {
+        index: true,
+        element: <StudioIndexRedirect />,
+        handle: { crumbs: [{ id: 'home', label: 'Home' }] },
+      },
+      { path: '/request-context', element: <RequestContext />, handle: navHandle('/request-context') },
     ],
   },
 ];
@@ -334,6 +718,8 @@ function App() {
     () => (baseUrl ? createFetchWithRefresh(baseUrl, apiPrefix) : undefined),
     [baseUrl, apiPrefix],
   );
+  const studioHeaders = useMemo(() => ({ ...headers, 'x-mastra-client-type': 'studio' }), [headers]);
+  const router = useMemo(() => createBrowserRouter(routes, { basename: studioBasePath }), [studioBasePath]);
 
   if (isLoading) {
     // Config is loaded from localStorage. However, there might be a race condition
@@ -345,13 +731,15 @@ function App() {
     return <PlaygroundConfigGuard />;
   }
 
-  const router = createBrowserRouter(routes, { basename: studioBasePath });
-
   return (
-    <MastraReactProvider baseUrl={baseUrl} headers={headers} apiPrefix={apiPrefix} customFetch={customFetch}>
-      <PostHogProvider>
-        <RouterProvider router={router} />
-      </PostHogProvider>
+    <MastraReactProvider baseUrl={baseUrl} headers={studioHeaders} apiPrefix={apiPrefix} customFetch={customFetch}>
+      <RoleImpersonationProvider>
+        <PostHogProvider>
+          <RoutePermissionsGate baseUrl={baseUrl}>
+            <RouterProvider router={router} />
+          </RoutePermissionsGate>
+        </PostHogProvider>
+      </RoleImpersonationProvider>
     </MastraReactProvider>
   );
 }

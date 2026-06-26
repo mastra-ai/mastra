@@ -115,6 +115,7 @@ const mastra = new Mastra({
 
 - `sentry.origin`: `auto.ai.mastra` (identifies spans from Mastra)
 - `ai.span.type`: Mastra span type (e.g., `model_generation`, `tool_call`)
+- `gen_ai.conversation.id`: Chat thread identifier, set from `metadata.threadId` (groups spans in Sentry's Conversations view)
 
 **For `MODEL_GENERATION` and `MODEL_STEP` spans:**
 

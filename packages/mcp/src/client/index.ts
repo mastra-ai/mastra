@@ -9,7 +9,9 @@ export type {
   RequireToolApproval,
   RequireToolApprovalFn,
   RequireToolApprovalContext,
+  ToolAnnotations,
 } from './types';
 export * from './client';
 export * from './configuration';
 export * from './oauth-provider';
+export { MCPClientServerProxy } from './server-proxy';

@@ -1,5 +1,5 @@
 import type { AutoFormUIComponents } from '@autoform/react';
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { ArrayElementWrapper } from './components/array-element-wrapper';
 import { ArrayWrapper } from './components/array-wrapper';
 import { BooleanField } from './components/boolean-field';

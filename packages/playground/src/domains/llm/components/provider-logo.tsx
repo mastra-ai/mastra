@@ -1,5 +1,7 @@
-import { Icon, cn } from '@mastra/playground-ui';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { useState } from 'react';
+import type { CSSProperties } from 'react';
 import { cleanProviderId as cleanProviderIdUtil } from '../utils';
 import { providerMapToIcon } from '@/domains/agents/components/provider-map-icon';
 
@@ -7,13 +9,14 @@ interface ProviderLogoProps {
   providerId: string;
   className?: string;
   size?: number;
+  style?: CSSProperties;
 }
 
 /**
  * Component to display provider logos from models.dev
  * Falls back to local icons if the logo fails to load
  */
-export const ProviderLogo = ({ providerId, className = '', size = 20 }: ProviderLogoProps) => {
+export const ProviderLogo = ({ providerId, className = '', size = 20, style }: ProviderLogoProps) => {
   const [imageError, setImageError] = useState(false);
 
   // Clean provider ID (remove .chat, .x, .messages, etc. suffixes)
@@ -50,7 +53,12 @@ export const ProviderLogo = ({ providerId, className = '', size = 20 }: Provider
     if (providerMapToIcon[fallbackIcon as keyof typeof providerMapToIcon]) {
       return <Icon>{providerMapToIcon[fallbackIcon as keyof typeof providerMapToIcon]}</Icon>;
     }
-    return <div className={`bg-surface4 rounded ${className}`} style={{ width: size, height: size }} />;
+    return (
+      <div
+        className={cn('bg-surface4 rounded shrink-0', className)}
+        style={{ width: size, height: size, minWidth: size, minHeight: size, ...style }}
+      />
+    );
   }
 
   return (
@@ -59,12 +67,14 @@ export const ProviderLogo = ({ providerId, className = '', size = 20 }: Provider
       alt={`${providerId} logo`}
       width={size}
       height={size}
-      className={cn(className, 'dark:brightness-0 dark:invert')}
+      className={cn('shrink-0 dark:brightness-0 dark:invert', className)}
       onError={() => setImageError(true)}
       loading="lazy"
       style={{
         width: `${size}px`,
         height: `${size}px`,
+        minWidth: `${size}px`,
+        minHeight: `${size}px`,
         objectFit: 'contain',
         opacity: 0.9,
       }}

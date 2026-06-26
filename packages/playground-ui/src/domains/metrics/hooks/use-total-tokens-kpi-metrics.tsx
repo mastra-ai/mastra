@@ -5,22 +5,22 @@ import { useMetricsFilters } from './use-metrics-filters';
 /** Total Tokens — sum of all input + output tokens */
 export function useTotalTokensKpiMetrics() {
   const client = useMastraClient();
-  const { datePreset, customRange, timestamp } = useMetricsFilters();
+  const { filters, filterKey } = useMetricsFilters();
 
   return useQuery({
-    queryKey: ['metrics', 'total-tokens-kpi', datePreset, customRange],
+    queryKey: ['metrics', 'total-tokens-kpi', filterKey],
     queryFn: async () => {
       const [input, output] = await Promise.all([
         client.getMetricAggregate({
           name: ['mastra_model_total_input_tokens'],
           aggregation: 'sum',
-          filters: { timestamp },
+          filters,
           comparePeriod: 'previous_period',
         }),
         client.getMetricAggregate({
           name: ['mastra_model_total_output_tokens'],
           aggregation: 'sum',
-          filters: { timestamp },
+          filters,
           comparePeriod: 'previous_period',
         }),
       ]);

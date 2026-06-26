@@ -1,8 +1,5 @@
-import type { JsonSchema, RuleGroup } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import {
-  Button,
-  RuleBuilder,
-  countLeafRules,
   Dialog,
   DialogTrigger,
   DialogContent,
@@ -10,7 +7,11 @@ import {
   DialogBody,
   DialogTitle,
   DialogDescription,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Dialog';
+import { RuleBuilder } from '@mastra/playground-ui/components/RuleBuilder';
+import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
+import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
+import { countLeafRules } from '@mastra/playground-ui/utils/rule-engine';
 import { Ruler } from 'lucide-react';
 
 interface DisplayConditionsDialogProps {

@@ -209,6 +209,15 @@ export const agentCardResponseSchema = z.object({
   defaultInputModes: z.array(z.string()),
   defaultOutputModes: z.array(z.string()),
   supportsAuthenticatedExtendedCard: z.boolean().optional(),
+  signatures: z
+    .array(
+      z.object({
+        protected: z.string(),
+        signature: z.string(),
+        header: z.record(z.string(), z.unknown()).optional(),
+      }),
+    )
+    .optional(),
   skills: z.array(
     z.object({
       id: z.string(),

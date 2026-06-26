@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { InMemoryServerCache } from '../cache/inmemory';
 import { CachingPubSub, withCaching } from './caching-pubsub';
 import { EventEmitterPubSub } from './event-emitter';
+import { isLeaseProvider, PubSub } from './pubsub';
 import type { Event } from './types';
 
 describe('CachingPubSub', () => {
@@ -170,6 +171,44 @@ describe('CachingPubSub', () => {
         expect.any(Function),
       );
     });
+
+    it('forwards options (including batch) verbatim to the inner PubSub', async () => {
+      const subscribeSpy = vi.fn(async () => {});
+      class StubInner extends PubSub {
+        get supportsNativeBatching() {
+          return true;
+        }
+        async publish() {}
+        subscribe = subscribeSpy;
+        async unsubscribe() {}
+        async flush() {}
+      }
+      const wrapped = new CachingPubSub(new StubInner(), cache);
+      const cb = () => {};
+      const options = { batch: { maxSize: 2, maxWaitMs: 50 } };
+      await wrapped.subscribe('t', cb, options);
+      expect(subscribeSpy).toHaveBeenCalledWith('t', cb, options);
+    });
+
+    it('reports supportsNativeBatching by delegating to the inner PubSub', () => {
+      class NativeInner extends PubSub {
+        get supportsNativeBatching() {
+          return true;
+        }
+        async publish() {}
+        async subscribe() {}
+        async unsubscribe() {}
+        async flush() {}
+      }
+      class NonNativeInner extends PubSub {
+        async publish() {}
+        async subscribe() {}
+        async unsubscribe() {}
+        async flush() {}
+      }
+      expect(new CachingPubSub(new NativeInner(), cache).supportsNativeBatching).toBe(true);
+      expect(new CachingPubSub(new NonNativeInner(), cache).supportsNativeBatching).toBe(false);
+    });
   });
 
   describe('subscribeWithReplay', () => {
@@ -225,6 +264,42 @@ describe('CachingPubSub', () => {
       expect(boundaryEvents).toHaveLength(1);
     });
 
+    it('should not duplicate an event published while the subscription is being established', async () => {
+      // Regression for #18148: a subscriber attaches with replay while the
+      // producer is still publishing. The event published in the window between
+      // inner.subscribe() and getHistory() is delivered BOTH live (via the inner
+      // pubsub) AND via cache replay. Dedup must collapse it to a single
+      // delivery even though the inner pubsub regenerates event.id.
+      const topic = 'replay-race-topic';
+      const received: string[] = [];
+
+      // Pre-fill history before any subscriber exists.
+      await cachingPubsub.publish(topic, { type: 'chunk', runId: 'r1', data: { c: '0' } });
+      await cachingPubsub.publish(topic, { type: 'chunk', runId: 'r1', data: { c: '1' } });
+
+      // Force the race: publish "2" exactly between inner.subscribe() and
+      // getHistory(), so it lands in both the live stream and the replayed history.
+      const realGetHistory = cachingPubsub.getHistory.bind(cachingPubsub);
+      let raced = false;
+      vi.spyOn(cachingPubsub, 'getHistory').mockImplementation(async (t: string, offset?: number) => {
+        if (!raced) {
+          raced = true;
+          await cachingPubsub.publish(topic, { type: 'chunk', runId: 'r1', data: { c: '2' } });
+        }
+        return realGetHistory(t, offset);
+      });
+
+      await cachingPubsub.subscribeWithReplay(topic, (event: Event) => {
+        received.push((event.data as { c: string }).c);
+      });
+
+      const counts = received.reduce<Record<string, number>>((acc, c) => {
+        acc[c] = (acc[c] ?? 0) + 1;
+        return acc;
+      }, {});
+      expect(counts).toEqual({ '0': 1, '1': 1, '2': 1 });
+    });
+
     it('should handle empty cache gracefully', async () => {
       const topic = 'empty-topic';
       const callback = vi.fn();
@@ -238,6 +313,38 @@ describe('CachingPubSub', () => {
       await cachingPubsub.publish(topic, { type: 'first-event', runId: 'run-1', data: {} });
 
       expect(callback).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('subscribeFromOffset', () => {
+    it('should not duplicate an event published while the subscription is being established', async () => {
+      // Regression for #18148, offset variant: same replay/live race as
+      // subscribeWithReplay, but attaching from a specific index.
+      const topic = 'offset-race-topic';
+      const received: string[] = [];
+
+      await cachingPubsub.publish(topic, { type: 'chunk', runId: 'r1', data: { c: '0' } });
+      await cachingPubsub.publish(topic, { type: 'chunk', runId: 'r1', data: { c: '1' } });
+
+      const realGetHistory = cachingPubsub.getHistory.bind(cachingPubsub);
+      let raced = false;
+      vi.spyOn(cachingPubsub, 'getHistory').mockImplementation(async (t: string, offset?: number) => {
+        if (!raced) {
+          raced = true;
+          await cachingPubsub.publish(topic, { type: 'chunk', runId: 'r1', data: { c: '2' } });
+        }
+        return realGetHistory(t, offset);
+      });
+
+      await cachingPubsub.subscribeFromOffset(topic, 0, (event: Event) => {
+        received.push((event.data as { c: string }).c);
+      });
+
+      const counts = received.reduce<Record<string, number>>((acc, c) => {
+        acc[c] = (acc[c] ?? 0) + 1;
+        return acc;
+      }, {});
+      expect(counts).toEqual({ '0': 1, '1': 1, '2': 1 });
     });
   });
 
@@ -343,6 +450,46 @@ describe('CachingPubSub', () => {
   describe('getInner', () => {
     it('should return the inner pubsub instance', () => {
       expect(cachingPubsub.getInner()).toBe(innerPubsub);
+    });
+  });
+
+  describe('lease provider', () => {
+    it('exposes the inner pubsub as the lease provider when the inner can lease', () => {
+      const leaseProvider = cachingPubsub.getLeaseProvider();
+      expect(leaseProvider).toBe(innerPubsub);
+      expect(isLeaseProvider(leaseProvider)).toBe(true);
+    });
+
+    it('returns undefined when the inner pubsub cannot lease', () => {
+      class NonLeaseInner extends PubSub {
+        async publish() {}
+        async subscribe() {}
+        async unsubscribe() {}
+        async flush() {}
+      }
+      const wrapped = new CachingPubSub(new NonLeaseInner(), cache);
+      expect(wrapped.getLeaseProvider()).toBeUndefined();
+    });
+
+    it('preserves real lease semantics through the inner lease provider', async () => {
+      // Caching is transparent to leasing: callers resolve the inner's
+      // provider and coordinate through it, so wrapping with caching must
+      // not fake or weaken the lock. This guards against a regression where
+      // a second owner could "acquire" an already-held lease.
+      const leaseProvider = cachingPubsub.getLeaseProvider();
+      expect(leaseProvider).toBeDefined();
+
+      const first = await leaseProvider!.acquireLease('thread-1', 'owner-a', 5000);
+      expect(first).toEqual({ acquired: true, owner: 'owner-a' });
+
+      const second = await leaseProvider!.acquireLease('thread-1', 'owner-b', 5000);
+      expect(second.acquired).toBe(false);
+      expect(second.owner).toBe('owner-a');
+
+      expect(await leaseProvider!.getLeaseOwner('thread-1')).toBe('owner-a');
+
+      await leaseProvider!.releaseLease('thread-1', 'owner-a');
+      expect(await leaseProvider!.getLeaseOwner('thread-1')).toBeUndefined();
     });
   });
 

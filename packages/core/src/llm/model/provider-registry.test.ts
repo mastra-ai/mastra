@@ -6,7 +6,34 @@ import type { ProviderConfig } from './gateways/base.js';
 import { MastraGateway } from './gateways/mastra.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
-import { GatewayRegistry } from './provider-registry.js';
+import { GatewayRegistry, modelSupportsAttachments } from './provider-registry.js';
+
+describe('modelSupportsAttachments', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('falls back to checked-in source capabilities when dist capability files are absent', async () => {
+    const originalExistsSync = fs.existsSync;
+    const packageRoot = process.cwd();
+    const distCapabilitiesDir = path.join(packageRoot, 'dist', 'capabilities');
+    const distOpenRouterCapabilities = path.join(distCapabilitiesDir, 'openrouter.json');
+
+    vi.spyOn(fs, 'existsSync').mockImplementation(filePath => {
+      if (typeof filePath !== 'string') return originalExistsSync(filePath);
+      const normalizedPath = path.normalize(filePath);
+      if (normalizedPath === path.normalize(distCapabilitiesDir)) return true;
+      if (normalizedPath === path.normalize(distOpenRouterCapabilities)) return false;
+      return originalExistsSync(filePath);
+    });
+
+    expect(modelSupportsAttachments('openrouter/deepseek-v4-flash')).toBe(false);
+    expect(modelSupportsAttachments('openrouter/deepseek/deepseek-v4-flash')).toBe(false);
+    expect(modelSupportsAttachments('mastra/openrouter/deepseek/deepseek-v4-flash')).toBe(false);
+    expect(modelSupportsAttachments('openrouter/openai/gpt-4o')).toBe(true);
+    expect(modelSupportsAttachments('mastra/openrouter/openai/gpt-4o')).toBe(true);
+  });
+});
 
 describe('GatewayRegistry Auto-Refresh', () => {
   const CACHE_DIR = path.join(os.homedir(), '.cache', 'mastra');
@@ -773,7 +800,7 @@ describe('Corrupted JSON recovery', () => {
     originalRmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('should delete corrupted JSON file and log warning', async () => {
+  it('should delete corrupted JSON file silently without logging', async () => {
     const tempDir = path.join(os.tmpdir(), `mastra-corrupted-json-delete-test-${Date.now()}`);
     const distDir = path.join(tempDir, 'dist');
     originalMkdirSync(distDir, { recursive: true });
@@ -823,6 +850,10 @@ describe('Corrupted JSON recovery', () => {
     } catch {
       // May throw if static registry also has issues in test environment
     }
+
+    // The corruption is auto-recoverable (next gateway sync rewrites the file),
+    // so we should not log a warning that worries users.
+    expect(warnSpy).not.toHaveBeenCalled();
 
     // Clean up mocks
     readFileSyncSpy.mockRestore();

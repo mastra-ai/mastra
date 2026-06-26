@@ -122,6 +122,31 @@ describe('runCompletionScorers', () => {
       expect(result.scorers[0].reason).toContain('Scorer threw an error');
       expect(result.scorers[0].reason).toContain('Scorer crashed');
     });
+
+    it('flags a thrown scorer with errored:true to distinguish failure from a legitimate score 0', async () => {
+      const errorScorer = {
+        id: 'error-scorer',
+        name: 'Error Scorer',
+        run: vi.fn().mockRejectedValue(new Error('judge crashed')),
+      };
+      const okScorer = {
+        id: 'ok-scorer',
+        name: 'OK Scorer',
+        run: vi.fn().mockResolvedValue({ score: 0, reason: 'keep working' }),
+      };
+      const context = createMockContext();
+
+      const result = await runCompletionScorers([errorScorer, okScorer], context);
+
+      const errored = result.scorers.find(s => s.scorerId === 'error-scorer');
+      const ok = result.scorers.find(s => s.scorerId === 'ok-scorer');
+      // The thrown scorer is flagged; a legitimate score-0 scorer is not — both
+      // report score 0, so `errored` is the only reliable discriminator.
+      expect(errored?.errored).toBe(true);
+      expect(errored?.score).toBe(0);
+      expect(ok?.errored).toBeFalsy();
+      expect(ok?.score).toBe(0);
+    });
   });
 
   describe('sequential execution', () => {

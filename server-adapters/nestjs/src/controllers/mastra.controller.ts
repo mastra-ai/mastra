@@ -13,6 +13,32 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 
+/**
+ * Convert Express request to Web API Request for accessing headers, cookies, etc.
+ */
+function toWebRequest(req: Request): globalThis.Request {
+  const protocol = req.protocol || 'http';
+  const host = req.get('host') || 'localhost';
+  const url = `${protocol}://${host}${req.originalUrl || req.url}`;
+
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (value) {
+      if (Array.isArray(value)) {
+        value.forEach(v => headers.append(key, v));
+      } else {
+        headers.set(key, value);
+      }
+    }
+  }
+
+  return new globalThis.Request(url, {
+    method: req.method,
+    headers,
+    // Note: body is not needed as it's already parsed
+  });
+}
+
 import { MASTRA_OPTIONS } from '../constants';
 import { MastraExceptionFilter } from '../filters/mastra-exception.filter';
 import { MastraRouteGuard } from '../guards/mastra-route.guard';
@@ -53,6 +79,10 @@ export class MastraController {
 
     const routePath = getMastraRoutePath(path, this.options.prefix);
 
+    if (!routePath) {
+      throw new NotFoundException(`Route not found: ${method} ${path}`);
+    }
+
     // Reject paths with double slashes (e.g., /api//agents)
     if (routePath.includes('//')) {
       throw new NotFoundException(`Route not found: ${method} ${path}`);
@@ -75,12 +105,19 @@ export class MastraController {
       body,
       requestContext: this.requestContext.requestContext,
       abortSignal: this.requestContext.abortSignal,
+      request: toWebRequest(req),
     });
   }
 
   /**
    * Parse and normalize query parameters.
-   * Handles type coercion for numbers, booleans, arrays, and JSON strings.
+   *
+   * Values are forwarded as the raw strings (or string arrays) the HTTP layer
+   * delivered. The route's `queryParamSchema` decides whether and how to parse
+   * or coerce each field — exactly as in `@mastra/hono`, `@mastra/express`,
+   * `@mastra/fastify`, and `@mastra/koa`. Users who want booleans, numbers, or
+   * parsed JSON should opt in via `z.coerce.boolean()`, `z.coerce.number()`,
+   * or a JSON preprocessor on the field. See #16114.
    */
   private parseQueryParams(query: Record<string, unknown>): Record<string, unknown> {
     const result: Record<string, unknown> = {};
@@ -96,68 +133,10 @@ export class MastraController {
         continue;
       }
 
-      result[key] = this.coerceQueryValue(value);
+      result[key] = value;
     }
 
     return result;
-  }
-
-  /**
-   * Coerce a query parameter value to its appropriate type.
-   *
-   * Type coercion rules:
-   * - "true"/"false" → boolean
-   * - "null" → null
-   * - Numeric strings → number (except IDs with leading zeros like "007")
-   * - JSON objects/arrays → parsed object/array
-   *
-   * @example
-   * // Numbers
-   * coerceQueryValue("42")      // → 42
-   * coerceQueryValue("3.14")    // → 3.14
-   * coerceQueryValue("007")     // → "007" (preserved as string)
-   *
-   * // Booleans
-   * coerceQueryValue("true")    // → true
-   * coerceQueryValue("false")   // → false
-   *
-   * // JSON
-   * coerceQueryValue('{"a":1}') // → { a: 1 }
-   */
-  private coerceQueryValue(value: unknown): unknown {
-    // Handle arrays
-    if (Array.isArray(value)) {
-      return value.map(v => this.coerceQueryValue(v));
-    }
-
-    // Handle strings
-    if (typeof value === 'string') {
-      // Boolean coercion
-      if (value === 'true') return true;
-      if (value === 'false') return false;
-
-      // Null coercion
-      if (value === 'null') return null;
-
-      // Number coercion (only if the entire string is a valid number)
-      if (value !== '' && !isNaN(Number(value)) && isFinite(Number(value))) {
-        // Don't coerce strings that look like phone numbers or IDs with leading zeros
-        if (!value.startsWith('0') || value === '0' || value.includes('.')) {
-          return Number(value);
-        }
-      }
-
-      // JSON object/array coercion
-      if ((value.startsWith('{') && value.endsWith('}')) || (value.startsWith('[') && value.endsWith(']'))) {
-        try {
-          return JSON.parse(value);
-        } catch {
-          // Not valid JSON, use as string
-        }
-      }
-    }
-
-    return value;
   }
 
   /**

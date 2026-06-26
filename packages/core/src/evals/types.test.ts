@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SpanType } from '../observability';
 import type { SpanRecord } from '../storage';
-import { extractTrajectoryFromTrace } from './types';
+import { extractTrajectory, extractTrajectoryFromTrace, saveScorePayloadSchema } from './types';
 
 function createSpan(overrides: Partial<SpanRecord> & { spanId: string; spanType: SpanRecord['spanType'] }): SpanRecord {
   return {
@@ -750,5 +750,296 @@ describe('extractTrajectoryFromTrace', () => {
       expect(step.toolResult).toEqual({ results: [] });
       expect(step.success).toBe(true);
     }
+  });
+});
+
+describe('saveScorePayloadSchema', () => {
+  const buildPayload = (entityType: string) => ({
+    scorerId: 'test-scorer',
+    entityId: 'test-entity',
+    runId: 'run-1',
+    output: { result: 'ok' },
+    score: 0.85,
+    scorer: { id: 'test-scorer', name: 'test-scorer' },
+    source: 'TEST' as const,
+    entity: { id: 'test-entity' },
+    entityType,
+  });
+
+  it.each(['AGENT', 'WORKFLOW', 'TRAJECTORY', 'STEP'])('accepts entityType %s emitted by runEvals', entityType => {
+    expect(() => saveScorePayloadSchema.parse(buildPayload(entityType))).not.toThrow();
+  });
+
+  it('accepts SpanType values forwarded from observability', () => {
+    expect(() => saveScorePayloadSchema.parse(buildPayload(SpanType.AGENT_RUN))).not.toThrow();
+  });
+
+  it('rejects entityType values outside the allowed set', () => {
+    expect(() => saveScorePayloadSchema.parse(buildPayload('NOT_A_REAL_TYPE'))).toThrow();
+  });
+});
+
+describe('extractTrajectory', () => {
+  // --- legacy toolInvocations path ---
+
+  it('extracts tool calls from content.toolInvocations when present', () => {
+    const output = [
+      {
+        role: 'assistant',
+        content: {
+          toolInvocations: [
+            { state: 'result', toolCallId: 'c1', toolName: 'legacyTool', args: { q: 'x' }, result: { ok: true } },
+          ],
+          parts: [],
+        },
+      },
+    ] as any;
+
+    const result = extractTrajectory(output);
+
+    expect(result.steps).toHaveLength(1);
+    expect(result.steps[0]).toMatchObject({
+      stepType: 'tool_call',
+      name: 'legacyTool',
+      toolArgs: { q: 'x' },
+      toolResult: { ok: true },
+      success: true,
+    });
+  });
+
+  // --- V2 parts fallback path ---
+
+  it('extracts tool calls from V2 content.parts when toolInvocations is absent', () => {
+    const output = [
+      {
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'c1',
+                toolName: 'weatherTool',
+                args: { city: 'Seoul' },
+                result: { temperature: 22 },
+              },
+            },
+          ],
+        },
+      },
+    ] as any;
+
+    const result = extractTrajectory(output);
+
+    expect(result.steps).toHaveLength(1);
+    expect(result.steps[0]).toMatchObject({
+      stepType: 'tool_call',
+      name: 'weatherTool',
+      toolArgs: { city: 'Seoul' },
+      toolResult: { temperature: 22 },
+      success: true,
+    });
+  });
+
+  it('extracts multiple tool calls from V2 parts in a single message', () => {
+    const output = [
+      {
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'result', toolCallId: 'c1', toolName: 'toolA', args: { a: 1 }, result: 'ok' },
+            },
+            { type: 'text', text: 'some text in between' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'result', toolCallId: 'c2', toolName: 'toolB', args: { b: 2 }, result: 'done' },
+            },
+          ],
+        },
+      },
+    ] as any;
+
+    const result = extractTrajectory(output);
+
+    expect(result.steps).toHaveLength(2);
+    expect(result.steps[0]).toMatchObject({ name: 'toolA', toolArgs: { a: 1 }, success: true });
+    expect(result.steps[1]).toMatchObject({ name: 'toolB', toolArgs: { b: 2 }, success: true });
+  });
+
+  it('marks V2 call-state invocations as not successful', () => {
+    const output = [
+      {
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: 'c1', toolName: 'pendingTool', args: { x: 1 } },
+            },
+          ],
+        },
+      },
+    ] as any;
+
+    const result = extractTrajectory(output);
+
+    expect(result.steps).toHaveLength(1);
+    expect(result.steps[0]).toMatchObject({ name: 'pendingTool', success: false });
+    expect((result.steps[0] as any).toolResult).toBeUndefined();
+  });
+
+  // --- precedence ---
+
+  it('prefers content.toolInvocations over content.parts when both are present', () => {
+    const output = [
+      {
+        role: 'assistant',
+        content: {
+          toolInvocations: [{ state: 'call', toolCallId: 'c-top', toolName: 'topLevelTool', args: { source: 'top' } }],
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'c-part',
+                toolName: 'partsTool',
+                args: { source: 'parts' },
+                result: { ok: true },
+              },
+            },
+          ],
+        },
+      },
+    ] as any;
+
+    const result = extractTrajectory(output);
+
+    expect(result.steps).toHaveLength(1);
+    expect(result.steps[0]).toMatchObject({ name: 'topLevelTool', success: false });
+    expect(result.steps[0].name).not.toBe('partsTool');
+  });
+
+  // --- edge cases ---
+
+  it('skips non-assistant messages', () => {
+    const output = [
+      { role: 'user', content: { parts: [{ type: 'text', text: 'hello' }] } },
+      {
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'result', toolCallId: 'c1', toolName: 'myTool', args: {}, result: 'ok' },
+            },
+          ],
+        },
+      },
+    ] as any;
+
+    const result = extractTrajectory(output);
+
+    // user message has no toolInvocations — skipped; only assistant message extracted
+    expect(result.steps).toHaveLength(1);
+    expect(result.steps[0]).toMatchObject({ name: 'myTool' });
+  });
+
+  it('skips messages with empty parts and no toolInvocations', () => {
+    const output = [
+      { role: 'assistant', content: { format: 2, parts: [] } },
+      { role: 'assistant', content: { format: 2, parts: [{ type: 'text', text: 'just text' }] } },
+    ] as any;
+
+    const result = extractTrajectory(output);
+
+    expect(result.steps).toHaveLength(0);
+  });
+
+  it('handles messages with no content gracefully', () => {
+    const output = [{ role: 'assistant', content: null }, { role: 'assistant' }] as any;
+
+    const result = extractTrajectory(output);
+
+    expect(result.steps).toHaveLength(0);
+  });
+
+  it('collects steps across multiple assistant messages', () => {
+    const output = [
+      {
+        role: 'assistant',
+        content: {
+          toolInvocations: [{ state: 'result', toolCallId: 'c1', toolName: 'toolA', args: { a: 1 }, result: 'r1' }],
+        },
+      },
+      {
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'result', toolCallId: 'c2', toolName: 'toolB', args: { b: 2 }, result: 'r2' },
+            },
+          ],
+        },
+      },
+    ] as any;
+
+    const result = extractTrajectory(output);
+
+    expect(result.steps).toHaveLength(2);
+    expect(result.steps[0]).toMatchObject({ name: 'toolA' });
+    expect(result.steps[1]).toMatchObject({ name: 'toolB' });
+  });
+
+  it('wraps primitive args and results in { value } objects', () => {
+    const output = [
+      {
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'result', toolCallId: 'c1', toolName: 'echo', args: 'hello', result: 42 },
+            },
+          ],
+        },
+      },
+    ] as any;
+
+    const result = extractTrajectory(output);
+
+    expect(result.steps).toHaveLength(1);
+    expect(result.steps[0]).toMatchObject({ toolArgs: { value: 'hello' }, toolResult: { value: 42 } });
+  });
+
+  it('preserves rawOutput on the returned Trajectory', () => {
+    const output = [
+      {
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'result', toolCallId: 'c1', toolName: 'tool', args: {}, result: {} },
+            },
+          ],
+        },
+      },
+    ] as any;
+
+    const result = extractTrajectory(output);
+
+    expect(result.rawOutput).toBe(output);
   });
 });

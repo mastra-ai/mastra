@@ -203,7 +203,7 @@ export abstract class MastraSandbox extends MastraBase implements WorkspaceSandb
           const fullCommand = args?.length ? `${command} ${args.map(a => shellQuote(a)).join(' ')}` : command;
           this.logger.debug('Executing command', { sandbox: this.name, command: fullCommand, cwd: opts?.cwd });
 
-          const handle = await pm.spawn(fullCommand, opts ?? {});
+          const handle = await pm.spawn(fullCommand, { ...opts, maxRetainedBytes: opts?.maxRetainedBytes ?? Infinity });
           const result = await handle.wait();
 
           this.logger.debug('Command completed', {

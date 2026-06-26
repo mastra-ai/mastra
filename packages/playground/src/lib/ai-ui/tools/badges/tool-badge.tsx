@@ -1,16 +1,24 @@
-import { CodeEditor, ToolsIcon } from '@mastra/playground-ui';
-import type { MastraUIMessage } from '@mastra/react';
+import { CodeBlock } from '@mastra/playground-ui/components/CodeBlock';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import { BadgeWrapper } from './badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
+import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
+
+const JsonCodeBlock = ({ value, testId }: { value: unknown; testId: string }) => (
+  <div data-testid={testId}>
+    <CodeBlock code={JSON.stringify(value, null, 2) ?? String(value)} lang="json" overflow="scroll" />
+  </div>
+);
 
 export interface ToolBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   toolName: string;
   args: Record<string, unknown> | string;
   result: any;
-  metadata?: MastraUIMessage['metadata'];
+  metadata?: MessageMetadata;
   toolOutput: Array<{ toolId: string }>;
   suspendPayload?: any;
   toolCalled?: boolean;
@@ -34,7 +42,7 @@ export const ToolBadge = ({
 
   try {
     const { __mastraMetadata: _, _background, ...formattedArgs } = typeof args === 'object' ? args : JSON.parse(args);
-    argSlot = <CodeEditor data={formattedArgs} data-testid="tool-args" />;
+    argSlot = <JsonCodeBlock value={formattedArgs} testId="tool-args" />;
   } catch {
     argSlot = <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{args as string}</pre>;
   }
@@ -43,7 +51,7 @@ export const ToolBadge = ({
     typeof result === 'string' ? (
       <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{result}</pre>
     ) : (
-      <CodeEditor data={result} data-testid="tool-result" />
+      <JsonCodeBlock value={result} testId="tool-result" />
     );
 
   let suspendPayloadSlot =
@@ -53,8 +61,10 @@ export const ToolBadge = ({
       <CodeEditor data={suspendPayload} data-testid="tool-suspend-payload" />
     );
 
-  const selectionReason = metadata?.mode === 'network' ? metadata.selectionReason : undefined;
-  const agentNetworkInput = metadata?.mode === 'network' ? metadata.agentInput : undefined;
+  const routingDecision = metadata?.mode === 'network' ? metadata.routingDecision : undefined;
+  const selectionReason =
+    metadata?.mode === 'network' ? (routingDecision?.selectionReason ?? metadata.selectionReason) : undefined;
+  const agentNetworkInput = metadata?.mode === 'network' ? (routingDecision ?? metadata.agentInput) : undefined;
 
   const toolCalled = toolCalledProp ?? (result || toolOutput.length > 0);
 
@@ -75,11 +85,7 @@ export const ToolBadge = ({
             input={agentNetworkInput as string | Record<string, unknown> | undefined}
           />
         ) : bgEntry?.taskId && bgEntry?.startedAt ? (
-          <BackgroundTaskMetadataDialogTrigger
-            backgroundTaskTaskId={bgEntry.taskId}
-            backgroundTaskStartedAt={bgEntry.startedAt}
-            backgroundTaskCompletedAt={bgEntry.completedAt}
-          />
+          <BackgroundTaskMetadataDialogTrigger backgroundTask={bgEntry} />
         ) : null
       }
       initialCollapsed={!!!(toolApprovalMetadata ?? suspendPayload)}

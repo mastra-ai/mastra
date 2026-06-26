@@ -1,0 +1,106 @@
+---
+title: "Reference: BrowserProvider | Editor"
+description: "Reference for BrowserProvider, the interface that registers a browser implementation with MastraEditor."
+packages:
+  - "@mastra/core"
+---
+
+# BrowserProvider
+
+`BrowserProvider` is the interface a package implements to register a browser with [`MastraEditor`](/reference/editor/mastra-editor). The editor calls `createBrowser(config)` at agent hydration time, using the `provider` id from the stored [`StorageBrowserRef`](/reference/editor/storage-browser-ref) as the lookup key.
+
+No built-in browser providers are available. To use the `browser` feature in the Agent Builder, register a provider package (for example, `@mastra/stagehand`).
+
+## Usage example
+
+```typescript title="src/mastra/index.ts"
+import { MastraEditor } from '@mastra/editor'
+import { stagehandBrowserProvider } from '@mastra/stagehand'
+
+new MastraEditor({
+  browsers: {
+    [stagehandBrowserProvider.id]: stagehandBrowserProvider,
+  },
+})
+```
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description:
+      'Unique provider identifier (for example, `"stagehand"`). Must match `StorageBrowserConfig.provider` on every stored agent that uses this provider.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Human-readable name for UI display.',
+  },
+  {
+    name: 'description',
+    type: 'string',
+    description: 'Short description shown in the Agent Builder browser picker.',
+    isOptional: true,
+  },
+  {
+    name: 'configSchema',
+    type: 'Record<string, unknown>',
+    description: 'JSON Schema describing provider-specific configuration. Used by the UI to render config forms.',
+    isOptional: true,
+  },
+  {
+    name: 'createBrowser',
+    type: '(config: TConfig) => MastraBrowser | Promise<MastraBrowser>',
+    description:
+      'Create a runtime `MastraBrowser` instance from the stored config. Called once per agent hydration; the resulting instance is cached alongside the agent.',
+  },
+]}
+/>
+
+## Implementing a provider
+
+```typescript title="src/providers/my-browser.ts"
+import type { BrowserProvider, MastraBrowser } from '@mastra/core/editor'
+
+export const myBrowserProvider: BrowserProvider<{ apiKey: string }> = {
+  id: 'my-browser',
+  name: 'My Browser',
+  description: 'Headless browser for agent use.',
+  configSchema: {
+    type: 'object',
+    properties: {
+      apiKey: { type: 'string' },
+    },
+    required: ['apiKey'],
+  },
+  async createBrowser(config): Promise<MastraBrowser> {
+    // construct and return a MastraBrowser instance
+    return createMastraBrowser({ apiKey: config.apiKey })
+  },
+}
+```
+
+Once registered, admins can pin the provider as a Builder default via [`BuilderAgentDefaults.browser`](/reference/editor/agent-builder/builder-agent-defaults):
+
+```typescript
+new MastraEditor({
+  browsers: { [myBrowserProvider.id]: myBrowserProvider },
+  builder: {
+    enabled: true,
+    configuration: {
+      agent: {
+        browser: { type: 'inline', config: { provider: 'my-browser' } },
+      },
+    },
+  },
+})
+```
+
+## Related
+
+- [Browser](/docs/agent-builder/browser) — concept and worked examples.
+- [StorageBrowserRef](/reference/editor/storage-browser-ref) — stored configuration consumed by `createBrowser`.
+- [MastraEditor class](/reference/editor/mastra-editor) — provider registry.

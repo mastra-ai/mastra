@@ -3,6 +3,7 @@ import { lessComplexWorkflow, myWorkflow } from '../workflows';
 import { Memory } from '@mastra/memory';
 import { ModerationProcessor } from '@mastra/core/processors';
 import { cookingTool } from '../tools';
+import { TaskSignalProvider } from '@mastra/core/signals';
 import {
   advancedModerationWorkflow,
   branchingModerationWorkflow,
@@ -32,8 +33,24 @@ const workspace = new Workspace({
 
 const memory = new Memory({
   options: {
-    workingMemory: {
-      enabled: true,
+    observationalMemory: {
+      model: 'openai/gpt-5.4-mini',
+      observation: {
+        messageTokens: 3000,
+        // Buffer every 5k tokens (runs in background)
+        bufferTokens: 1000,
+        // Activate to retain 30% of threshold
+        bufferActivation: 0.7,
+        // Force synchronous observation at 1.5x threshold
+        blockAfter: 1.5,
+      },
+      reflection: {
+        observationTokens: 6000,
+        // Start background reflection at 50% of threshold
+        bufferActivation: 0.5,
+        // Force synchronous reflection at 1.2x threshold
+        blockAfter: 1.2,
+      },
     },
   },
 });
@@ -72,6 +89,7 @@ export const chefModelV2Agent = new Agent({
       You are Michel, a practical and experienced home chef who helps people cook great meals with whatever
       ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes.
       You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
+      For complex multi-step requests, use the task list tools to plan and track your progress.
       `,
     role: 'system',
   },
@@ -97,6 +115,7 @@ export const chefModelV2Agent = new Agent({
   //   };
   // },
   memory,
+  signals: [new TaskSignalProvider()],
   inputProcessors: [moderationProcessor],
   defaultOptions: {
     autoResumeSuspendedTools: true,
@@ -568,6 +587,9 @@ You can handle both at the same time — start a background research while answe
     },
     waitTimeoutMs: 10000,
   },
+  defaultOptions: {
+    autoResumeSuspendedTools: true,
+  },
 });
 
 export const subscriptionOrchestratorAgent = new Agent({
@@ -598,5 +620,6 @@ export const subscriptionOrchestratorAgent = new Agent({
   memory: new Memory(),
   defaultOptions: {
     maxSteps: 10,
+    autoResumeSuspendedTools: true,
   },
 });

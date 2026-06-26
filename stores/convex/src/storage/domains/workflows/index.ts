@@ -26,7 +26,7 @@ export class WorkflowsConvex extends WorkflowsStorage {
   }
 
   supportsConcurrentUpdates(): boolean {
-    return false;
+    return true;
   }
 
   async init(): Promise<void> {
@@ -37,26 +37,22 @@ export class WorkflowsConvex extends WorkflowsStorage {
     await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
-  async updateWorkflowResults(_args: {
+  async updateWorkflowResults(args: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    throw new Error(
-      'updateWorkflowResults is not implemented for Convex storage. Convex does not support atomic read-modify-write operations needed for concurrent workflow updates.',
-    );
+    return this.#db.mergeWorkflowStepResult(args);
   }
 
-  async updateWorkflowState(_args: {
+  async updateWorkflowState(args: {
     workflowName: string;
     runId: string;
     opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
-    throw new Error(
-      'updateWorkflowState is not implemented for Convex storage. Convex does not support atomic read-modify-write operations needed for concurrent workflow updates.',
-    );
+    return this.#db.mergeWorkflowState(args);
   }
 
   async persistWorkflowSnapshot({
@@ -87,7 +83,11 @@ export class WorkflowsConvex extends WorkflowsStorage {
         workflow_name: workflowName,
         run_id: runId,
         resourceId,
-        snapshot,
+        // Convex rejects any field whose name starts with `$` (reserved prefix).
+        // Workflow snapshots embed tool outputs whose serialized Zod->JSON Schemas
+        // contain $schema/$ref/$defs/$id keys, so we serialize the snapshot here.
+        // loadWorkflowSnapshot / ensureSnapshot already handle the string case.
+        snapshot: JSON.stringify(snapshot),
         createdAt: existing?.createdAt ?? (createdAt ? new Date(createdAt).toISOString() : now.toISOString()),
         updatedAt: updatedAt ? new Date(updatedAt).toISOString() : now.toISOString(),
       },

@@ -137,7 +137,7 @@ export const weatherTool = createTool({
 })
 ```
 
-Mastra forwards `strict: true` to model adapters that support strict tool calling. On adapters that do not support strict tool calling, Mastra ignores this option.
+Mastra forwards `strict: true` to model adapters that support strict tool calling. On adapters that don't support strict tool calling, Mastra ignores this option.
 
 ## Example with `toModelOutput`
 
@@ -184,6 +184,50 @@ The tool still returns the full `execute` result to your application, while the 
 - `type: 'text'`
 - `type: 'json'`
 - `type: 'content'` with parts like `text`, `image-url`, `image-data`, `file-url`, `file-data`, `file-id`, `image-file-id`, or `custom`
+
+## Example with `transform`
+
+Use `transform` when the tool should keep raw inputs or outputs for runtime behavior, but display streams or transcript messages should receive a smaller or safer shape.
+
+```typescript title="src/mastra/tools/customer-tool.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export const customerTool = createTool({
+  id: 'lookup-customer',
+  description: 'Looks up a customer',
+  inputSchema: z.object({
+    customerId: z.string(),
+    internalPath: z.string(),
+  }),
+  outputSchema: z.object({
+    displayName: z.string(),
+    apiKey: z.string(),
+    debugScore: z.number(),
+  }),
+  execute: async () => {
+    return {
+      displayName: 'Acme',
+      apiKey: 'secret-value',
+      debugScore: 0.97,
+    }
+  },
+  transform: {
+    display: {
+      input: ({ input }) => ({ customerId: input?.customerId }),
+      output: ({ output }) => ({ displayName: output?.displayName }),
+      error: () => ({ message: 'Customer lookup failed' }),
+    },
+    transcript: {
+      input: ({ input }) => ({ customerId: input?.customerId }),
+      output: ({ output }) => ({ displayName: output?.displayName }),
+      error: () => ({ message: 'Customer lookup failed' }),
+    },
+  },
+})
+```
+
+The tool still receives the raw `inputSchema` value and returns the raw `execute` result. Mastra applies `display` transforms to streamed UI payloads and `transcript` transforms to user-visible transcript messages.
 
 ## Example with MCP annotations
 
@@ -262,6 +306,13 @@ export const weatherTool = createTool({
     type: '(output: TSchemaOut) => unknown',
     description:
       "Optional function that transforms the tool's `execute` output before it is sent back to the model. Use this to return `text`, `json`, or `content`-shaped outputs (including multimodal parts like images/files) to the model while still keeping the full raw output in your application code.",
+    isOptional: true,
+  },
+  {
+    name: 'transform',
+    type: 'ToolPayloadTransform',
+    description:
+      'Optional target-aware transform for tool payloads before they leave runtime for display streams or user-visible transcript messages. Configure `display` and `transcript` transforms for phases such as `input`, `inputDelta`, `output`, `error`, `approval`, `suspend`, and `resume`.',
     isOptional: true,
   },
   {
@@ -623,5 +674,5 @@ These annotations follow the [MCP specification](https://spec.modelcontextprotoc
 - [MCP Overview](/docs/mcp/overview)
 - [Using Tools with Agents](/docs/agents/using-tools)
 - [Agent Approval](/docs/agents/agent-approval)
-- [Tool Streaming](/docs/streaming/tool-streaming)
+- [Tool Streaming](/docs/agents/using-tools#streaming)
 - [Request Context](/docs/server/request-context#accessing-values-with-tools)

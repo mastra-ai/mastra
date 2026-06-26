@@ -72,10 +72,10 @@
                 "entityId": "child-span",
                 "metadata": {
                   "runId": "<runId-1>",
+                  "environment": "test",
                   "childOperation": "processing",
                   "inputValue": "child-span-test",
-                  "endValue": "pizza",
-                  "environment": "test"
+                  "endValue": "pizza"
                 }
               }
             }

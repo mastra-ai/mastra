@@ -24,10 +24,12 @@ import type {
 } from '@mastra/core/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 
-import { TABLE_METRIC_EVENTS, TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS } from './ddl';
+import { TABLE_METRIC_EVENTS, TABLE_METRIC_EVENTS_DELTA, TABLE_DISCOVERY_VALUES, TABLE_DISCOVERY_PAIRS } from './ddl';
 import { buildMetricsFilterConditions, buildPaginationClause, buildSignalOrderByClause } from './filters';
 import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, metricRecordToRow, rowToMetricRecord } from './helpers';
+import type { ClickHouseDeltaCursorStrategy } from './polling';
+import { assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
 
 // ============================================================================
 // Helpers
@@ -257,13 +259,43 @@ export async function batchCreateMetrics(client: ClickHouseClient, args: BatchCr
 // List
 // ============================================================================
 
-export async function listMetrics(client: ClickHouseClient, args: ListMetricsArgs): Promise<ListMetricsResponse> {
+export async function listMetrics(
+  client: ClickHouseClient,
+  args: ListMetricsArgs,
+  strategy: ClickHouseDeltaCursorStrategy | null,
+): Promise<ListMetricsResponse> {
   const parsed = listMetricsArgsSchema.parse(args);
+  const deltaCursorEnabled = deltaPollingSupported(strategy);
   const filter = buildMetricsFilterConditions(parsed.filters, 'm');
   const pagination = buildPaginationClause(parsed.pagination);
   const orderBy = buildSignalOrderByClause(['timestamp'], parsed.orderBy, 'm');
   const whereClause = filter.conditions.length ? `WHERE ${filter.conditions.join(' AND ')}` : '';
 
+  if (parsed.mode === 'delta') {
+    assertDeltaPollingSupported(strategy);
+
+    const streamHeadCursor = await getStreamHeadCursor(client);
+    if (parsed.after === undefined) {
+      return {
+        metrics: [],
+        delta: { limit: parsed.limit, hasMore: false },
+        deltaCursor: streamHeadCursor,
+      };
+    }
+
+    const afterCursor = validateCursorId(parsed.after);
+    const rows = await queryMetricsAfterCursor(client, whereClause, filter.params, parsed.limit, afterCursor);
+
+    const visibleRows = rows.slice(0, parsed.limit);
+
+    return {
+      metrics: visibleRows.map(rowToMetricRecord),
+      delta: { limit: parsed.limit, hasMore: rows.length > parsed.limit },
+      deltaCursor: visibleRows.length > 0 ? buildMetricsCursor(visibleRows[visibleRows.length - 1]!) : streamHeadCursor,
+    };
+  }
+
+  const currentDeltaCursor = deltaCursorEnabled ? await getDeltaCursor(client, whereClause, filter.params) : undefined;
   const countResult = await queryJson<{ total?: number }>(
     client,
     `SELECT count() AS total FROM ${TABLE_METRIC_EVENTS} AS m ${whereClause}`,
@@ -286,7 +318,91 @@ export async function listMetrics(client: ClickHouseClient, args: ListMetricsArg
       hasMore: (pagination.page + 1) * pagination.perPage < total,
     },
     metrics: rows.map(rowToMetricRecord),
+    ...(deltaCursorEnabled ? { deltaCursor: currentDeltaCursor } : {}),
   };
+}
+
+type MetricDeltaRow = Record<string, any> & {
+  cursorId?: string;
+  name: string;
+  timestamp: string;
+  metricId: string;
+};
+
+async function queryMetricsAfterCursor(
+  client: ClickHouseClient,
+  whereClause: string,
+  params: Record<string, unknown>,
+  limit: number,
+  cursorId: string,
+): Promise<MetricDeltaRow[]> {
+  return await queryJson<MetricDeltaRow>(
+    client,
+    `
+      SELECT
+        m.* EXCEPT(name, timestamp, metricId),
+        m.name AS name,
+        m.timestamp AS timestamp,
+        m.metricId AS metricId,
+        toString(d.cursorId) AS cursorId
+      FROM ${TABLE_METRIC_EVENTS_DELTA} d
+      INNER JOIN ${TABLE_METRIC_EVENTS} m
+        ON m.name = d.name
+       AND m.timestamp = d.timestamp
+       AND m.metricId = d.metricId
+      ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
+      ORDER BY d.cursorId ASC
+      LIMIT {fetchLimit:UInt32}
+    `,
+    { ...params, afterCursor: cursorId, fetchLimit: limit + 1 },
+  );
+}
+
+async function getDeltaCursor(
+  client: ClickHouseClient,
+  whereClause: string,
+  params: Record<string, unknown>,
+): Promise<string> {
+  const rows = await queryJson<{ cursorId?: string | null }>(
+    client,
+    `
+      SELECT toString(max(d.cursorId)) AS cursorId
+      FROM ${TABLE_METRIC_EVENTS_DELTA} d
+      INNER JOIN ${TABLE_METRIC_EVENTS} m
+        ON m.name = d.name
+       AND m.timestamp = d.timestamp
+       AND m.metricId = d.metricId
+      ${whereClause}
+    `,
+    params,
+  );
+
+  const cursorId = rows[0]?.cursorId ?? null;
+  if (cursorId) {
+    return cursorId;
+  }
+
+  const streamRows = await queryJson<{ cursorId?: string | null }>(
+    client,
+    `SELECT toString(max(cursorId)) AS cursorId FROM ${TABLE_METRIC_EVENTS_DELTA}`,
+    {},
+  );
+
+  return streamRows[0]?.cursorId ?? '0';
+}
+
+async function getStreamHeadCursor(client: ClickHouseClient): Promise<string> {
+  const streamRows = await queryJson<{ cursorId?: string | null }>(
+    client,
+    `SELECT toString(max(cursorId)) AS cursorId FROM ${TABLE_METRIC_EVENTS_DELTA}`,
+    {},
+  );
+
+  return streamRows[0]?.cursorId ?? '0';
+}
+
+function buildMetricsCursor(row: MetricDeltaRow): string {
+  return row.cursorId ?? '0';
 }
 
 // ============================================================================
@@ -590,6 +706,9 @@ export async function getMetricPercentiles(
 // ============================================================================
 // Discovery / Metadata — reads from helper tables, not source tables.
 // Per design: returns empty results until helper tables have been refreshed.
+// Queries use SELECT DISTINCT to stay correct between ReplacingMergeTree
+// background merges, where the same value may briefly appear more than once
+// after a refresh cycle.
 // ============================================================================
 
 export async function getMetricNames(
@@ -609,7 +728,7 @@ export async function getMetricNames(
 
   const rows = await queryJson<{ value: string }>(
     client,
-    `SELECT value FROM ${TABLE_DISCOVERY_VALUES} WHERE ${conditions.join(' AND ')} ORDER BY value ${limitClause}`,
+    `SELECT DISTINCT value FROM ${TABLE_DISCOVERY_VALUES} WHERE ${conditions.join(' AND ')} ORDER BY value ${limitClause}`,
     params,
   );
 
@@ -622,7 +741,7 @@ export async function getMetricLabelKeys(
 ): Promise<GetMetricLabelKeysResponse> {
   const rows = await queryJson<{ value: string }>(
     client,
-    `SELECT value FROM ${TABLE_DISCOVERY_VALUES} WHERE kind = 'metricLabelKey' AND key1 = {metricName:String} ORDER BY value`,
+    `SELECT DISTINCT value FROM ${TABLE_DISCOVERY_VALUES} WHERE kind = 'metricLabelKey' AND key1 = {metricName:String} ORDER BY value`,
     { metricName: args.metricName },
   );
   return { keys: rows.map(r => r.value) };
@@ -648,7 +767,7 @@ export async function getMetricLabelValues(
 
   const rows = await queryJson<{ value: string }>(
     client,
-    `SELECT value FROM ${TABLE_DISCOVERY_PAIRS} WHERE ${conditions.join(' AND ')} ORDER BY value ${limitClause}`,
+    `SELECT DISTINCT value FROM ${TABLE_DISCOVERY_PAIRS} WHERE ${conditions.join(' AND ')} ORDER BY value ${limitClause}`,
     params,
   );
 

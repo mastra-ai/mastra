@@ -7,6 +7,8 @@ import {
   mastraBrand,
   mastra,
   applyThemeMode,
+  ensureContrastUnlessNearBlack,
+  ensureTerminalGlyphContrast,
 } from '../theme.js';
 
 describe('luminance', () => {
@@ -101,6 +103,50 @@ describe('getContrastText', () => {
     expect(getContrastText('#ffffff')).toBe('#000000');
     expect(getContrastText('#f0f0f0')).toBe('#000000');
     expect(getContrastText('#cccccc')).toBe('#000000');
+  });
+});
+
+describe('ensureContrastUnlessNearBlack', () => {
+  it('keeps subdued glyph colors unchanged on near-black backgrounds', () => {
+    applyThemeMode('dark', '#0d0d0d');
+
+    expect(ensureContrastUnlessNearBlack('#583c1d')).toBe('#583c1d');
+  });
+
+  it('adapts subdued glyph colors on brighter backgrounds', () => {
+    const bg = '#4a4a5a';
+    const original = '#583c1d';
+    applyThemeMode('dark', bg);
+
+    const adapted = ensureContrastUnlessNearBlack(original);
+
+    expect(adapted).not.toBe(original);
+    expect(contrastRatio(adapted, bg)).toBeGreaterThanOrEqual(5.5);
+  });
+});
+
+describe('ensureTerminalGlyphContrast', () => {
+  it('modestly brightens glyph colors on near-black backgrounds', () => {
+    const bg = '#0d0d0d';
+    const original = '#583c1d';
+    applyThemeMode('dark', bg);
+
+    const adapted = ensureTerminalGlyphContrast(original);
+
+    expect(adapted).not.toBe(original);
+    expect(contrastRatio(adapted, bg)).toBeGreaterThanOrEqual(3);
+    expect(luminance(adapted)).toBeGreaterThan(luminance(original));
+  });
+
+  it('adapts glyph colors to full contrast on brighter backgrounds', () => {
+    const bg = '#4a4a5a';
+    const original = '#583c1d';
+    applyThemeMode('dark', bg);
+
+    const adapted = ensureTerminalGlyphContrast(original);
+
+    expect(adapted).not.toBe(original);
+    expect(contrastRatio(adapted, bg)).toBeGreaterThanOrEqual(5.5);
   });
 });
 

@@ -121,6 +121,22 @@ export const MessageOnlyWithAction: Story = {
   ),
 };
 
+export const MessageOnlyWithActionLong: Story = {
+  render: () => (
+    <Notice
+      variant="destructive"
+      action={
+        <Notice.Button>
+          Retry <RefreshCwIcon />
+        </Notice.Button>
+      }
+    >
+      Failed to load scorers from the remote registry. The request timed out after 30 seconds. Check your network
+      connection and confirm the registry endpoint is reachable, then retry to continue.
+    </Notice>
+  ),
+};
+
 export const CustomIcon: Story = {
   render: () => (
     <Notice variant="success" title="Achievement unlocked" icon={<TrophyIcon />}>

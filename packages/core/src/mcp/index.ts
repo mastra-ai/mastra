@@ -282,7 +282,18 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
         toolType?: MCPToolType;
         _meta?: Record<string, unknown>;
       }
-    | undefined;
+    | undefined
+    | Promise<
+        | {
+            name: string;
+            description?: string;
+            inputSchema: any;
+            outputSchema?: any;
+            toolType?: MCPToolType;
+            _meta?: Record<string, unknown>;
+          }
+        | undefined
+      >;
 
   /**
    * Executes a specific tool provided by this MCP server.
@@ -297,4 +308,27 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
     args: any,
     executionContext?: { messages?: any[]; toolCallId?: string; requestContext?: RequestContext },
   ): Promise<any>;
+
+  /**
+   * Reads the content of a resource by URI.
+   * @param uri The resource URI to read (e.g. `ui://weather/dashboard`).
+   * @returns A promise resolving to the resource content.
+   */
+  public abstract readResource(
+    uri: string,
+  ): Promise<{ contents: Array<{ uri: string; text?: string; blob?: string }> }>;
+
+  /**
+   * Lists all resources available on this MCP server.
+   * @returns A promise resolving to the list of resources.
+   */
+  public abstract listResources(): Promise<{
+    resources: Array<{
+      uri: string;
+      name: string;
+      description?: string;
+      mimeType?: string;
+      _meta?: Record<string, unknown>;
+    }>;
+  }>;
 }

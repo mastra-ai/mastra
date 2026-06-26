@@ -1,0 +1,13 @@
+{
+  "attachment": [
+    "gemma-3-27b-it",
+    "gemma-4-26b-a4b-it",
+    "gpt-oss-120b",
+    "llama-3.3-70b-instruct",
+    "mistral-medium-3.5-128b",
+    "pixtral-12b-2409",
+    "qwen3.5-397b-a17b",
+    "qwen3.6-35b-a3b",
+    "voxtral-small-24b-2507"
+  ]
+}

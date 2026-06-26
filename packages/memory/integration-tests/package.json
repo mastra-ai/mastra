@@ -8,7 +8,7 @@
     "dev": "mastra dev"
   },
   "dependencies": {
-    "@ai-sdk/anthropic-v5": "npm:@ai-sdk/anthropic@^2.0.77",
+    "@ai-sdk/anthropic-v5": "npm:@ai-sdk/anthropic@^2.0.81",
     "@ai-sdk/anthropic-v6": "npm:@ai-sdk/anthropic@latest",
     "@ai-sdk/google": "^1.2.22",
     "@ai-sdk/google-v5": "npm:@ai-sdk/google@^2.0.70",
@@ -38,7 +38,7 @@
     "@testing-library/react": "^16.3.2",
     "@types/jsdom": "^27.0.0",
     "@types/json-schema": "^7.0.15",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.20",
     "ai": "^4.2.2",
     "ai-v5": "npm:ai@^5.0.179",
     "ai-v6": "npm:ai@latest",
@@ -49,21 +49,6 @@
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.0"
-  },
-  "pnpm": {
-    "overrides": {
-      "@mastra/ai-sdk": "link:../../../client-sdks/ai-sdk",
-      "@mastra/client-js": "link:../../../client-sdks/client-js",
-      "@mastra/core": "link:../../core",
-      "@mastra/memory": "link:../../memory",
-      "@mastra/fastembed": "link:../../fastembed",
-      "@mastra/libsql": "link:../../../stores/libsql",
-      "@mastra/pg": "link:../../../stores/pg",
-      "@mastra/upstash": "link:../../../stores/upstash",
-      "mastra": "link:../../cli",
-      "@internal/llm-recorder": "link:../../_llm-recorder",
-      "@internal/test-utils": "link:../../_test-utils"
-    }
+    "vitest": "^4.1.8"
   }
 }

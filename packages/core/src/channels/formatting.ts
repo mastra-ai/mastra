@@ -1,5 +1,5 @@
-import type { PostableMessage } from './agent-channels';
 import { chatModule } from './chat-lazy';
+import type { PostableMessage } from './types';
 
 // ---------------------------------------------------------------------------
 // Lazy accessors for Chat SDK card primitives (loaded after initialize())
@@ -12,7 +12,7 @@ const ui = () => chatModule();
 // ---------------------------------------------------------------------------
 
 const TOOL_PREFIXES = ['mastra_workspace_'];
-const MAX_ARG_SUMMARY_LENGTH = 40;
+const MAX_ARG_SUMMARY_LENGTH = 35;
 const MAX_RESULT_LENGTH = 300;
 
 export function stripToolPrefix(name: string): string {

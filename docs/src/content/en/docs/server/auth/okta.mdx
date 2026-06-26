@@ -34,7 +34,7 @@ OKTA_API_TOKEN=your-api-token
 
 :::note
 
-`OKTA_COOKIE_PASSWORD` encrypts session cookies. If omitted, an auto-generated value is used that does not survive server restarts. Set it explicitly for production.
+`OKTA_COOKIE_PASSWORD` encrypts session cookies. If omitted, an auto-generated value is used that doesn't survive server restarts. Set it explicitly for production.
 
 `OKTA_API_TOKEN` is only required when using `MastraRBACOkta` to map Okta groups to permissions.
 
@@ -144,7 +144,7 @@ const rbac = new MastraRBACOkta({
 })
 ```
 
-The `_default` key assigns permissions to users whose Okta groups do not match any other key.
+The `_default` key assigns permissions to users whose Okta groups don't match any other key.
 
 ## Client-side setup
 

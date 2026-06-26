@@ -1,28 +1,21 @@
-import {
-  Breadcrumb,
-  Button,
-  ButtonWithTooltip,
-  Crumb,
-  ErrorState,
-  PageHeader,
-  PageLayout,
-  PermissionDenied,
-  SessionExpired,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-  toast,
-} from '@mastra/playground-ui';
-import { BookIcon, GaugeIcon, PencilIcon } from 'lucide-react';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { toast } from '@mastra/playground-ui/utils/toast';
+import { PencilIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { NoScoresInfo } from '@/domains/scores/components/no-scores-info';
-import { ScorerCombobox } from '@/domains/scores/components/scorer-combobox';
 import { ScoresList } from '@/domains/scores/components/scores-list';
 import { ScoresTools } from '@/domains/scores/components/scores-tools';
 import type { ScoreEntityOption as EntityOptions } from '@/domains/scores/components/scores-tools';
 import { useScorer, useScoresByScorerId } from '@/domains/scores/hooks/use-scorers';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
+import { RouteHeaderActions } from '@/lib/route-header';
 
 export default function Scorer() {
   const { scorerId } = useParams()! as { scorerId: string };
@@ -35,7 +28,7 @@ export default function Scorer() {
     type: 'ALL' as const,
   });
 
-  const { scorer, isLoading: isScorerLoading, error: scorerError } = useScorer(scorerId!);
+  const { scorer, error: scorerError } = useScorer(scorerId!);
 
   const { data: agents = {}, isLoading: isLoadingAgents, error: agentsError } = useAgents();
   const { isLoading: isLoadingWorkflows, error: workflowsError } = useWorkflows();
@@ -163,45 +156,14 @@ export default function Scorer() {
   const hasNoScores = !isLoadingScores && scores.length === 0;
   const hasFilterApplied = selectedEntityOption?.value !== 'all';
 
-  const scorerTopAreaSharedContent = (
-    <>
-      <Breadcrumb>
-        <Crumb as={Link} to={`/scorers`}>
-          Scorers
-        </Crumb>
-        <ScorerCombobox value={scorerId} variant="link" />
-      </Breadcrumb>
-      <PageLayout.Row>
-        <PageHeader>
-          <PageHeader.Title isLoading={isScorerLoading}>
-            <GaugeIcon /> {scorer?.scorer?.config?.name || scorerId}
-          </PageHeader.Title>
-          {(isScorerLoading || scorer?.scorer?.config?.description) && (
-            <PageHeader.Description isLoading={isScorerLoading}>
-              {scorer?.scorer?.config?.description}
-            </PageHeader.Description>
-          )}
-        </PageHeader>
-        <div className="flex justify-end gap-2">
-          <ButtonWithTooltip
-            as="a"
-            href="https://mastra.ai/en/docs/evals/overview"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Scorers documentation"
-            tooltipContent="Go to Scorers documentation"
-          >
-            <BookIcon />
-          </ButtonWithTooltip>
-          {scorer?.scorer?.source === 'stored' && (
-            <Button variant="default" as={Link} to={`/cms/scorers/${scorerId}/edit`}>
-              <PencilIcon /> Edit
-            </Button>
-          )}
-        </div>
-      </PageLayout.Row>
-    </>
-  );
+  const scorerHeaderActions =
+    scorer?.scorer?.source === 'stored' ? (
+      <RouteHeaderActions owner="scorer-detail">
+        <Button variant="default" as={Link} to={`/cms/scorers/${scorerId}/edit`} size="sm">
+          <PencilIcon /> Edit
+        </Button>
+      </RouteHeaderActions>
+    ) : null;
 
   const showEmptyState = isUnauthorized || isForbidden || hasOtherError || (hasNoScores && !hasFilterApplied);
 
@@ -214,7 +176,7 @@ export default function Scorer() {
 
     return (
       <PageLayout width="wide" height="full">
-        <PageLayout.TopArea>{scorerTopAreaSharedContent}</PageLayout.TopArea>
+        {scorerHeaderActions}
         <PageLayout.MainArea isCentered>
           {isUnauthorized ? (
             <SessionExpired />
@@ -232,8 +194,8 @@ export default function Scorer() {
 
   return (
     <PageLayout width="wide">
+      {scorerHeaderActions}
       <PageLayout.TopArea>
-        {scorerTopAreaSharedContent}
         <ScoresTools
           selectedEntity={selectedEntityOption}
           entityOptions={entityOptions}

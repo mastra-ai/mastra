@@ -1,17 +1,9 @@
-import {
-  ButtonWithTooltip,
-  ErrorState,
-  ListSearch,
-  NoDataPageLayout,
-  PageHeader,
-  PageLayout,
-  PermissionDenied,
-  ProcessorIcon,
-  SessionExpired,
-  is401UnauthorizedError,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
-import { BookIcon } from 'lucide-react';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useState } from 'react';
 import { NoProcessorsInfo } from '@/domains/processors/components/processors-list/no-processors-info';
 import { ProcessorsList } from '@/domains/processors/components/processors-list/processors-list';
@@ -23,7 +15,7 @@ export function Processors() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout title="Processors" icon={<ProcessorIcon />}>
+      <NoDataPageLayout>
         <SessionExpired />
       </NoDataPageLayout>
     );
@@ -31,7 +23,7 @@ export function Processors() {
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout title="Processors" icon={<ProcessorIcon />}>
+      <NoDataPageLayout>
         <PermissionDenied resource="processors" />
       </NoDataPageLayout>
     );
@@ -39,7 +31,7 @@ export function Processors() {
 
   if (error) {
     return (
-      <NoDataPageLayout title="Processors" icon={<ProcessorIcon />}>
+      <NoDataPageLayout>
         <ErrorState title="Failed to load processors" message={error.message} />
       </NoDataPageLayout>
     );
@@ -47,7 +39,7 @@ export function Processors() {
 
   if (Object.keys(processors).length === 0 && !isLoading) {
     return (
-      <NoDataPageLayout title="Processors" icon={<ProcessorIcon />}>
+      <NoDataPageLayout>
         <NoProcessorsInfo />
       </NoDataPageLayout>
     );
@@ -56,26 +48,6 @@ export function Processors() {
   return (
     <PageLayout>
       <PageLayout.TopArea>
-        <PageLayout.Row>
-          <PageLayout.Column>
-            <PageHeader>
-              <PageHeader.Title isLoading={isLoading}>
-                <ProcessorIcon /> Processors
-              </PageHeader.Title>
-            </PageHeader>
-          </PageLayout.Column>
-          <PageLayout.Column className="flex justify-end gap-2">
-            <ButtonWithTooltip
-              as="a"
-              href="https://mastra.ai/en/docs/agents/processors"
-              target="_blank"
-              rel="noopener noreferrer"
-              tooltipContent="Go to Processors documentation"
-            >
-              <BookIcon />
-            </ButtonWithTooltip>
-          </PageLayout.Column>
-        </PageLayout.Row>
         <div className="max-w-120">
           <ListSearch onSearch={setSearch} label="Filter processors" placeholder="Filter by name" />
         </div>

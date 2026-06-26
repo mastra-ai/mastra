@@ -1,4 +1,5 @@
-import { KeyValueList, cn } from '@mastra/playground-ui';
+import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import * as HoverCard from '@radix-ui/react-hover-card';
 import { format } from 'date-fns/format';
 import { ChevronFirstIcon, ChevronLastIcon, ChevronsLeftRightIcon, ChevronsRightIcon, TimerIcon } from 'lucide-react';

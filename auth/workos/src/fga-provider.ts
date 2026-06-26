@@ -19,13 +19,17 @@ import type {
   FGARoleParams,
   FGAListRoleAssignmentsOptions,
   MastraFGAPermissionInput,
-} from '@mastra/core/auth/ee';
-import { FGADeniedError } from '@mastra/core/auth/ee';
+} from '@internal/auth/ee';
+import { FGADeniedError } from '@internal/auth/ee';
 import { WorkOS } from '@workos-inc/node';
 
 import type { MastraFGAWorkosOptions, FGAResourceMappingEntry, WorkOSUser } from './types';
 
 const FILTER_ACCESSIBLE_CHECK_CONCURRENCY = 5;
+
+function isWorkOSResourceNotFoundError(error: any): boolean {
+  return error?.status === 404 || error?.code === 'entity_not_found';
+}
 
 export class WorkOSFGAResourceNotFoundError extends Error {
   readonly status = 404;
@@ -68,7 +72,7 @@ export class WorkOSFGAMembershipResolutionError extends Error {
  * @example Basic usage
  * ```typescript
  * import { MastraFGAWorkos } from '@mastra/auth-workos';
- * import { MastraFGAPermissions } from '@mastra/core/auth/ee';
+ * import { MastraFGAPermissions } from '@internal/auth/ee';
  *
  * const fga = new MastraFGAWorkos({
  *   resourceMapping: {
@@ -103,6 +107,10 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
   private organizationId?: string;
   private resourceMapping: Record<string, FGAResourceMappingEntry>;
   private permissionMapping: Record<string, string>;
+  readonly requireForProtectedRoutes?: boolean;
+  readonly auditProtectedRoutes?: boolean | 'warn' | 'error';
+  readonly resolveRouteFGA?: MastraFGAWorkosOptions['resolveRouteFGA'];
+  readonly validatePermissions?: MastraFGAWorkosOptions['validatePermissions'];
 
   constructor(options: MastraFGAWorkosOptions) {
     const apiKey = options.apiKey ?? process.env.WORKOS_API_KEY;
@@ -119,6 +127,10 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
     this.organizationId = options.organizationId;
     this.resourceMapping = options.resourceMapping ?? {};
     this.permissionMapping = options.permissionMapping ?? {};
+    this.requireForProtectedRoutes = options.requireForProtectedRoutes;
+    this.auditProtectedRoutes = options.auditProtectedRoutes;
+    this.resolveRouteFGA = options.resolveRouteFGA;
+    this.validatePermissions = options.validatePermissions;
   }
 
   // ──────────────────────────────────────────────────────────────
@@ -130,42 +142,61 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
    *
    * Resolves the user's organization membership ID, maps the permission
    * via `permissionMapping`, and delegates to `workos.authorization.check()`.
+   *
+   * When `params.permission` is an array, ANY-of semantics apply: returns true
+   * if any single permission in the array authorizes the user.
    */
   async check(user: WorkOSUser, params: FGACheckParams): Promise<boolean> {
-    const checkOptions = this.buildCheckOptions(user, params);
-    if (!checkOptions) return false;
-    try {
-      const result = await this.workos.authorization.check(checkOptions);
-      return result.authorized;
-    } catch (error: any) {
-      if (error?.status === 404 || error?.code === 'entity_not_found') {
-        throw new WorkOSFGAResourceNotFoundError(params.resource.type, params.resource.id);
+    const permissions = Array.isArray(params.permission) ? params.permission : [params.permission];
+    if (permissions.length === 0) return false;
+
+    for (const permission of permissions) {
+      const checkOptions = this.buildCheckOptions(user, { ...params, permission });
+      if (!checkOptions) continue;
+      try {
+        const result = await this.workos.authorization.check(checkOptions);
+        if (result.authorized) return true;
+      } catch (error: any) {
+        if (isWorkOSResourceNotFoundError(error)) continue;
+        throw error;
       }
-      throw error;
     }
+    return false;
   }
 
   /**
    * Require that a user has permission, throwing FGADeniedError if not.
+   *
+   * When `params.permission` is an array, ANY-of semantics apply: passes if any
+   * single permission authorizes the user; throws if none do.
    */
   async require(user: WorkOSUser, params: FGACheckParams): Promise<void> {
-    const checkOptions = this.buildCheckOptions(user, params, { strictMembershipResolution: true });
-    if (!checkOptions) {
+    const permissions = Array.isArray(params.permission) ? params.permission : [params.permission];
+    if (permissions.length === 0) {
       throw new FGADeniedError(user, params.resource, params.permission);
     }
 
-    try {
-      const result = await this.workos.authorization.check(checkOptions);
-      if (!result.authorized) {
-        throw new FGADeniedError(user, params.resource, params.permission);
+    let lastError: unknown;
+    for (const permission of permissions) {
+      const checkOptions = this.buildCheckOptions(
+        user,
+        { ...params, permission },
+        { strictMembershipResolution: true },
+      );
+      if (!checkOptions) continue;
+
+      try {
+        const result = await this.workos.authorization.check(checkOptions);
+        if (result.authorized) return;
+      } catch (error: any) {
+        if (error instanceof FGADeniedError) throw error;
+        if (isWorkOSResourceNotFoundError(error)) continue;
+        lastError = error;
       }
-    } catch (error: any) {
-      if (error instanceof FGADeniedError) throw error;
-      if (error?.status === 404 || error?.code === 'entity_not_found') {
-        throw new WorkOSFGAResourceNotFoundError(params.resource.type, params.resource.id);
-      }
-      throw error;
     }
+
+    if (lastError) throw lastError;
+    throw new FGADeniedError(user, params.resource, params.permission);
   }
 
   /**
@@ -468,7 +499,7 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
 
   private buildCheckOptions(
     user: WorkOSUser,
-    params: FGACheckParams,
+    params: Omit<FGACheckParams, 'permission'> & { permission: MastraFGAPermissionInput },
     options?: { strictMembershipResolution?: boolean },
   ): any | null {
     const membershipId = this.resolveOrganizationMembershipId(user, options);
