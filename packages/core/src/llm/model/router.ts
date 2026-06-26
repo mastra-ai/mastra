@@ -3,10 +3,12 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import { createOpenAI } from '@ai-sdk/openai-v6';
 import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
+import type { LanguageModelV4 } from '@ai-sdk/provider-v7';
 import { attachModelStreamTransport } from '../../stream/types';
 import type { StreamTransport } from '../../stream/types';
 import { AISDKV5LanguageModel } from './aisdk/v5/model';
 import { AISDKV6LanguageModel } from './aisdk/v6/model';
+import { AISDKV7LanguageModel } from './aisdk/v7/model';
 import { parseModelRouterId } from './gateway-resolver.js';
 import { MASTRA_GATEWAY_STREAM_TRANSPORT } from './gateways/base.js';
 import type {
@@ -26,6 +28,13 @@ import type { ModelRouterModelId } from './provider-registry.js';
 import type { MastraLanguageModelV2, OpenAICompatibleConfig } from './shared.types';
 
 export { defaultGateways, gateways } from './gateways/defaults.js';
+
+/**
+ * Type guard to check if a model is a LanguageModelV4 (AI SDK v7)
+ */
+function isLanguageModelV4(model: GatewayLanguageModel): model is LanguageModelV4 {
+  return model.specificationVersion === 'v4';
+}
 
 /**
  * Type guard to check if a model is a LanguageModelV3 (AI SDK v6)
@@ -380,7 +389,12 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       ...parseModelRouterId(this.config.routerId, gatewayPrefix),
     });
 
-    // Handle both V2 and V3 models
+    // Handle V2, V3, and V4 models
+    if (isLanguageModelV4(model)) {
+      const aiSDKV7Model = new AISDKV7LanguageModel(model);
+      // Cast V4 stream result to V2 format - the stream contents are compatible at runtime
+      return aiSDKV7Model.doGenerate(options as any) as unknown as Promise<StreamResult>;
+    }
     if (isLanguageModelV3(model)) {
       const aiSDKV6Model = new AISDKV6LanguageModel(model);
       // Cast V3 stream result to V2 format - the stream contents are compatible at runtime
@@ -436,8 +450,15 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       ...parsedModelId,
     });
 
-    // Handle both V2 and V3 models
+    // Handle V2, V3, and V4 models
     const streamTransport = this.#lastStreamTransport;
+    if (isLanguageModelV4(model)) {
+      const aiSDKV7Model = new AISDKV7LanguageModel(model);
+      // Cast V4 stream result to V2 format - the stream contents are compatible at runtime
+      const streamResult = (await aiSDKV7Model.doStream(options as any)) as unknown as StreamResult;
+      attachModelStreamTransport(streamResult, streamTransport);
+      return streamResult;
+    }
     if (isLanguageModelV3(model)) {
       const aiSDKV6Model = new AISDKV6LanguageModel(model);
       // Cast V3 stream result to V2 format - the stream contents are compatible at runtime
