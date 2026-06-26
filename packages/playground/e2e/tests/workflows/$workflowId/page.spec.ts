@@ -18,7 +18,7 @@ test.describe('Workflow graph detail page', () => {
       await expect(page).toHaveTitle(/Mastra Studio/);
       await expectRouteDocsLink(page, 'Workflows documentation', 'https://mastra.ai/en/docs/workflows/overview');
       const breadcrumb = page.locator('header>nav');
-      expect(breadcrumb).toMatchAriaSnapshot();
+      await expect(breadcrumb).toMatchAriaSnapshot();
 
       // Information side panel
       await expect(page.getByText('complex-workflow').first()).toBeVisible();

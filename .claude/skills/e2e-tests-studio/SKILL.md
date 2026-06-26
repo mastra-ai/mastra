@@ -32,7 +32,7 @@ model: claude-opus-4-5
 
 ## BDD Structure (REQUIRED)
 
-**Every E2E spec MUST follow the same BDD shape as the MSW tests.** This is lint-enforced for `packages/playground/e2e/tests/**/*.spec.ts` via `no-restricted-syntax` — a flat top-level `test()` will fail lint.
+**Every E2E spec MUST follow the same BDD shape as the MSW tests.** This is lint-enforced for `packages/playground/e2e/tests/**/*.spec.{js,jsx,ts,tsx}` via the custom `e2e-bdd/test-needs-when-describe` rule in `packages/playground/eslint.config.js` — a flat top-level `test()` will fail lint.
 
 The structure has exactly three levels:
 

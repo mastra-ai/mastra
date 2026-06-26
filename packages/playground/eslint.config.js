@@ -798,23 +798,47 @@ const prohibitedMockModulePatterns = [
 ];
 
 // BDD structure enforcement for Playwright E2E specs (e2e/tests/**).
-// Every leaf `test(...)` / `it(...)` MUST be nested inside a
-// `test.describe('when …')` (or `describe('when …')`) precondition block.
+// Every leaf `test(...)`, `it(...)`, or modifier form such as `test.skip(...)`
+// MUST be nested inside a `test.describe('when …')` (or `describe('when …')`)
+// precondition block.
 // A purely structural esquery selector cannot assert "nearest ancestor
 // describe title starts with 'when'", so this is implemented as a small custom
-// rule that walks the ancestor chain of each bare `test()` / `it()` call.
+// rule that walks the ancestor chain of each test declaration.
 const E2E_BDD_MESSAGE =
   "E2E BDD: every test()/it() must live inside a test.describe('when …') precondition block. " +
   "Outer test.describe = the unit, inner test.describe('when …') = ONE precondition, each test = ONE outcome. " +
   'See the e2e-tests-studio skill.';
 
-/** True when a CallExpression node is a bare `test(...)` / `it(...)` call. */
-function isBareTestCall(node) {
+const testFunctionNames = new Set(['test', 'it']);
+const testDeclarationModifiers = new Set(['skip', 'only', 'fixme', 'fail', 'slow']);
+
+function isStaticTestTitle(node) {
   return (
-    node.type === 'CallExpression' &&
-    node.callee.type === 'Identifier' &&
-    (node.callee.name === 'test' || node.callee.name === 'it')
+    (node.type === 'Literal' && typeof node.value === 'string') ||
+    (node.type === 'TemplateLiteral' && node.quasis.length >= 1)
   );
+}
+
+/** True when a CallExpression node declares a `test(...)` / `it(...)` case. */
+function isTestDeclarationCall(node) {
+  if (node.type !== 'CallExpression') return false;
+
+  const callee = node.callee;
+  if (callee.type === 'Identifier' && testFunctionNames.has(callee.name)) return true;
+
+  if (
+    callee.type === 'MemberExpression' &&
+    callee.property.type === 'Identifier' &&
+    testDeclarationModifiers.has(callee.property.name) &&
+    callee.object.type === 'Identifier' &&
+    testFunctionNames.has(callee.object.name)
+  ) {
+    // Ignore suite/test annotations such as `test.skip(true, 'reason')` or
+    // `test.slow()`; only title-bearing modifier calls declare actual tests.
+    return isStaticTestTitle(node.arguments[0]);
+  }
+
+  return false;
 }
 
 /** True when a CallExpression is a `describe(...)`, `test.describe(...)`, or `it.describe(...)` call. */
@@ -858,7 +882,7 @@ const e2eBddPlugin = {
       create(context) {
         return {
           CallExpression(node) {
-            if (!isBareTestCall(node)) return;
+            if (!isTestDeclarationCall(node)) return;
             // Walk ancestors to find the nearest enclosing describe.
             const ancestors = context.sourceCode.getAncestors(node);
             let nearestDescribe = null;
@@ -942,7 +966,7 @@ export default [
     // e2e-tests-studio skill (every test()/it() nested in a describe('when …')).
     // These files are not part of the type-aware tsconfig program, so disable
     // the TypeScript project service here and only run the syntactic BDD rule.
-    files: ['e2e/tests/**/*.spec.ts'],
+    files: ['e2e/tests/**/*.spec.{js,jsx,ts,tsx}'],
     languageOptions: {
       parserOptions: {
         projectService: false,

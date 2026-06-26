@@ -123,7 +123,7 @@ test.describe('CMS create scorer page', () => {
     });
   });
 
-  test.describe('when required fields are left empty', () => {
+  test.describe('when the scorer name is empty', () => {
     test.beforeEach(async ({ page }) => {
       await page.goto('/cms/scorers/create');
     });
@@ -140,6 +140,12 @@ test.describe('CMS create scorer page', () => {
 
       await expect(page.getByText('Name is required')).toBeVisible();
     });
+  });
+
+  test.describe('when the scorer provider is not selected', () => {
+    test.beforeEach(async ({ page }) => {
+      await page.goto('/cms/scorers/create');
+    });
 
     test('shows validation error when provider is not selected', async ({ page }) => {
       await fillScorerFields(page, {
@@ -153,6 +159,12 @@ test.describe('CMS create scorer page', () => {
       await expect(page.getByText(/provider is required/i).or(page.getByText(/fill in all required/i))).toBeVisible({
         timeout: 5000,
       });
+    });
+  });
+
+  test.describe('when the scorer model is not selected', () => {
+    test.beforeEach(async ({ page }) => {
+      await page.goto('/cms/scorers/create');
     });
 
     test('shows validation error when model is not selected', async ({ page }) => {
@@ -168,6 +180,12 @@ test.describe('CMS create scorer page', () => {
       await expect(page.getByText(/model is required/i).or(page.getByText(/fill in all required/i))).toBeVisible({
         timeout: 5000,
       });
+    });
+  });
+
+  test.describe('when the empty scorer form is submitted', () => {
+    test.beforeEach(async ({ page }) => {
+      await page.goto('/cms/scorers/create');
     });
 
     test('shows error toast when submitting empty form', async ({ page }) => {

@@ -15,7 +15,7 @@ test.describe('Agent detail page', () => {
       await expect(page).toHaveTitle(/Mastra Studio/);
       await expectRouteDocsLink(page, 'Agents documentation', 'https://mastra.ai/en/docs/agents/overview');
       const breadcrumb = page.locator('header>nav');
-      expect(breadcrumb).toMatchAriaSnapshot();
+      await expect(breadcrumb).toMatchAriaSnapshot();
 
       // Thread history (with memory)
       const newChatButton = await page.locator('a:has-text("New Chat")');

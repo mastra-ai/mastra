@@ -63,7 +63,8 @@ test.describe('Observability traces page', () => {
 
       await scoreDialog.getByRole('link', { name: 'Response Quality Scorer' }).click();
 
-      const expectedUrl = new RegExp(`/scorers/response-quality\\?entity=.*&scoreId=${scoreId}`);
+      const escapedScoreId = scoreId!.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const expectedUrl = new RegExp(`/scorers/response-quality\\?entity=.*&scoreId=${escapedScoreId}`);
       await expect(page).toHaveURL(expectedUrl);
       await expect(page.getByRole('dialog', { name: 'Scorer Score' })).toBeVisible();
       await expect(page.getByText(scoreId!, { exact: true })).toBeVisible();

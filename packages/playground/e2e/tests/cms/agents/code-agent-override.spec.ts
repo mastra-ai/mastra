@@ -60,7 +60,9 @@ test.describe('code-mode agent override', () => {
       expect(download.suggestedFilename()).toBe('agents_code-override-editable.json');
       await expect(download.failure()).resolves.toBeNull();
     });
+  });
 
+  test.describe('when editable code-mode overrides are exported', () => {
     test('export endpoint returns a deterministic JSON payload for code-mode overrides', async ({ request }) => {
       // The Download JSON button calls /stored/agents/:id/export. Hit the endpoint
       // directly so we can assert on the actual exported payload — that is what
@@ -121,7 +123,9 @@ test.describe('code-mode agent override', () => {
       await expect(page.getByText(/Tools are owned by code/i)).toBeVisible();
       await expect(page.getByRole('button', { name: /Add Tools/i })).toHaveCount(0);
     });
+  });
 
+  test.describe('when locked code-mode overrides are exported', () => {
     test('locked code agent enforces editor: false on the server export endpoint', async ({ request }) => {
       // The server must refuse to bake overrides into an export for a code agent
       // that declared `editor: false`, even if the request body provides fields.
