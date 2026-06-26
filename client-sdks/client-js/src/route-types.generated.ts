@@ -90301,6 +90301,11 @@ export type PostAgentControllerHarnessIdSessions_Body = {
         [key: string]: string;
       }
     | undefined;
+  requestContext?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
 };
 
 export type PostAgentControllerHarnessIdSessions_Response = {
@@ -91597,6 +91602,11 @@ export type PostHarnessHarnessIdSessions_Body = {
   tags?:
     | {
         [key: string]: string;
+      }
+    | undefined;
+  requestContext?:
+    | {
+        [key: string]: unknown;
       }
     | undefined;
 };
