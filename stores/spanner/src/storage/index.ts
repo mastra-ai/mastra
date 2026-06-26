@@ -8,6 +8,10 @@ import type { SpannerInitMode } from './db';
 import { AgentsSpanner } from './domains/agents';
 import { BackgroundTasksSpanner } from './domains/background-tasks';
 import { BlobsSpanner } from './domains/blobs';
+import { ChannelsSpanner } from './domains/channels';
+import { DatasetsSpanner } from './domains/datasets';
+import { ExperimentsSpanner } from './domains/experiments';
+import { FavoritesSpanner } from './domains/favorites';
 import { MCPClientsSpanner } from './domains/mcp-clients';
 import { MCPServersSpanner } from './domains/mcp-servers';
 import { MemorySpanner } from './domains/memory';
@@ -18,12 +22,17 @@ import { ScorerDefinitionsSpanner } from './domains/scorer-definitions';
 import { ScoresSpanner } from './domains/scores';
 import { SkillsSpanner } from './domains/skills';
 import { WorkflowsSpanner } from './domains/workflows';
+import { WorkspacesSpanner } from './domains/workspaces';
 
 // Export domain classes for direct use with MastraStorage composition
 export {
   AgentsSpanner,
   BackgroundTasksSpanner,
   BlobsSpanner,
+  ChannelsSpanner,
+  DatasetsSpanner,
+  ExperimentsSpanner,
+  FavoritesSpanner,
   MCPClientsSpanner,
   MCPServersSpanner,
   MemorySpanner,
@@ -34,6 +43,7 @@ export {
   ScoresSpanner,
   SkillsSpanner,
   WorkflowsSpanner,
+  WorkspacesSpanner,
 };
 export type { SpannerDomainConfig, SpannerInitMode } from './db';
 
@@ -52,6 +62,11 @@ export const SPANNER_DOMAIN_KEYS = [
   'scorerDefinitions',
   'schedules',
   'observability',
+  'channels',
+  'datasets',
+  'experiments',
+  'favorites',
+  'workspaces',
 ] as const satisfies ReadonlyArray<keyof StorageDomains>;
 
 export type SpannerDomainKey = (typeof SPANNER_DOMAIN_KEYS)[number];
@@ -264,6 +279,11 @@ export class SpannerStore extends MastraCompositeStore {
         ...(wants('scorerDefinitions') && { scorerDefinitions: new ScorerDefinitionsSpanner(domainConfig) }),
         ...(wants('schedules') && { schedules: new SchedulesSpanner(domainConfig) }),
         ...(wants('observability') && { observability: new ObservabilitySpanner(domainConfig) }),
+        ...(wants('channels') && { channels: new ChannelsSpanner(domainConfig) }),
+        ...(wants('datasets') && { datasets: new DatasetsSpanner(domainConfig) }),
+        ...(wants('experiments') && { experiments: new ExperimentsSpanner(domainConfig) }),
+        ...(wants('favorites') && { favorites: new FavoritesSpanner(domainConfig) }),
+        ...(wants('workspaces') && { workspaces: new WorkspacesSpanner(domainConfig) }),
       };
     } catch (e) {
       throw new MastraError(
@@ -326,6 +346,11 @@ export class SpannerStore extends MastraCompositeStore {
         'scorerDefinitions',
         'schedules',
         'observability',
+        'channels',
+        'datasets',
+        'experiments',
+        'workspaces',
+        'favorites',
       ];
       for (const key of domainOrder) {
         const store = this.stores?.[key];

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  createBrowserFromSettings,
   getCustomProviderId,
   loadSettings,
   migrateLegacyVariedPack,
@@ -13,7 +14,7 @@ import {
   resolveThreadActiveModelPackId,
   saveSettings,
 } from '../settings.js';
-import type { GlobalSettings, StorageSettings } from '../settings.js';
+import type { BrowserSettings, GlobalSettings, StorageSettings } from '../settings.js';
 
 function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
   const storage: StorageSettings = { backend: 'libsql', libsql: {}, pg: {} };
@@ -66,6 +67,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       stagehand: { env: 'LOCAL' },
     },
     shellPassthrough: { mode: 'default' },
+    signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
     observability: { resources: {}, localTracing: false },
     ...overrides,
   };
@@ -203,6 +205,41 @@ describe('customProviders parsing/persistence', () => {
       });
       expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(2);
       vi.mocked(JSON.parse).mockRestore();
+    });
+  });
+
+  it('persists experimental GitHub signals enable and disable across reloads', () => {
+    withTempSettingsFile(filePath => {
+      const settings = createSettings();
+      settings.signals.experimentalGithubSignals = true;
+      saveSettings(settings, filePath);
+
+      expect(loadSettings(filePath).signals.experimentalGithubSignals).toBe(true);
+      expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.experimentalGithubSignals).toBe(true);
+
+      const reloaded = loadSettings(filePath);
+      reloaded.signals.experimentalGithubSignals = false;
+      saveSettings(reloaded, filePath);
+
+      expect(loadSettings(filePath).signals.experimentalGithubSignals).toBe(false);
+      expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.experimentalGithubSignals).toBe(false);
+    });
+  });
+
+  it('does not clobber experimental GitHub signals from a stale settings object', () => {
+    withTempSettingsFile(filePath => {
+      saveSettings(createSettings(), filePath);
+      const staleSettings = loadSettings(filePath);
+
+      const currentSettings = loadSettings(filePath);
+      currentSettings.signals.experimentalGithubSignals = true;
+      saveSettings(currentSettings, filePath);
+
+      staleSettings.modelUseCounts['openai/gpt-5.5'] = 1;
+      saveSettings(staleSettings, filePath);
+
+      expect(loadSettings(filePath).signals.experimentalGithubSignals).toBe(true);
+      expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.experimentalGithubSignals).toBe(true);
     });
   });
 
@@ -545,5 +582,57 @@ describe('migrateLegacyVariedPack', () => {
       build: 'anthropic/claude-sonnet-4-5',
       fast: 'anthropic/claude-haiku-4-5',
     });
+  });
+});
+
+describe('createBrowserFromSettings — recording tools gating', () => {
+  const RECORDING_TOOL_NAMES = ['browser_record', 'browser_record_caption'] as const;
+
+  function makeBrowserSettings(overrides: Partial<BrowserSettings> = {}): BrowserSettings {
+    return {
+      enabled: true,
+      provider: 'stagehand',
+      headless: true,
+      ...overrides,
+    } as BrowserSettings;
+  }
+
+  it('returns undefined when browser is disabled', async () => {
+    const result = await createBrowserFromSettings({ enabled: false } as BrowserSettings);
+    expect(result).toBeUndefined();
+  });
+
+  it.each([
+    ['stagehand', 'stagehand_navigate'],
+    ['agent-browser', 'browser_goto'],
+  ] as const)(
+    'exposes recording tools on a Mastra Code-constructed %s browser while keeping provider tools intact',
+    async (provider, providerToolName) => {
+      const browser = await createBrowserFromSettings(makeBrowserSettings({ provider }));
+      expect(browser).toBeDefined();
+      const tools = browser!.getTools();
+      for (const name of RECORDING_TOOL_NAMES) {
+        expect(tools[name], `expected tool ${name} to be present`).toBeDefined();
+      }
+      expect(tools[providerToolName], `expected provider tool ${providerToolName} to be present`).toBeDefined();
+    },
+  );
+
+  it('does NOT expose recording tools when StagehandBrowser is constructed directly', async () => {
+    const { StagehandBrowser } = await import('@mastra/stagehand');
+    const browser = new StagehandBrowser({ headless: true });
+    const tools = browser.getTools();
+    for (const name of RECORDING_TOOL_NAMES) {
+      expect(tools[name], `expected tool ${name} to be absent on direct StagehandBrowser`).toBeUndefined();
+    }
+  });
+
+  it('does NOT expose recording tools when AgentBrowser is constructed directly', async () => {
+    const { AgentBrowser } = await import('@mastra/agent-browser');
+    const browser = new AgentBrowser({ headless: true });
+    const tools = browser.getTools();
+    for (const name of RECORDING_TOOL_NAMES) {
+      expect(tools[name], `expected tool ${name} to be absent on direct AgentBrowser`).toBeUndefined();
+    }
   });
 });

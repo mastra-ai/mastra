@@ -1,7 +1,8 @@
 import { z } from 'zod';
-import { createStep } from '../../../../workflows';
+import type { Mastra } from '../../../../mastra';
+import type { ExportedSpan, SpanType } from '../../../../observability';
+import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';
-import type { MastraDBMessage } from '../../../message-list';
 import { DurableStepIds } from '../../constants';
 import type {
   DurableLLMStepOutput,
@@ -58,7 +59,7 @@ export function createDurableLLMMappingStep() {
     id: DurableStepIds.LLM_MAPPING,
     inputSchema: durableLLMMappingInputSchema,
     outputSchema: durableLLMMappingOutputSchema,
-    execute: async ({ inputData }) => {
+    execute: async ({ inputData, mastra, requestContext }) => {
       const {
         llmOutput,
         toolResults,
@@ -84,43 +85,39 @@ export function createDurableLLMMappingStep() {
 
       // 2. Add tool results to message list
       if (toolResults.length > 0) {
-        // Create tool result parts for each tool call
-        const toolResultParts = toolResults.map(toolResult => {
-          // Determine the result content
-          let resultContent: string;
-          if (toolResult.error) {
-            resultContent = `Error: ${toolResult.error.message}`;
-          } else if (toolResult.result !== undefined) {
-            resultContent =
-              typeof toolResult.result === 'string' ? toolResult.result : JSON.stringify(toolResult.result);
-          } else {
-            resultContent = '';
-          }
-
-          return {
+        for (const toolResult of toolResults) {
+          const result = toolResult.error ? toolResult.error.message : toolResult.result;
+          const updated = messageList.updateToolInvocation({
             type: 'tool-invocation' as const,
             toolInvocation: {
               state: 'result' as const,
               toolCallId: toolResult.toolCallId,
               toolName: toolResult.toolName,
               args: toolResult.args,
-              result: resultContent,
+              result,
             },
-          };
-        });
+          });
 
-        // Add as assistant message with tool results
-        const toolResultMessage: MastraDBMessage = {
-          id: crypto.randomUUID(),
-          role: 'assistant' as const,
-          content: {
-            format: 2,
-            parts: toolResultParts,
-          },
-          createdAt: new Date(),
-        };
-
-        messageList.add(toolResultMessage, 'response');
+          if (!updated) {
+            messageList.add(
+              [
+                {
+                  role: 'tool' as const,
+                  content: [
+                    {
+                      type: 'tool-result' as const,
+                      toolCallId: toolResult.toolCallId,
+                      toolName: toolResult.toolName,
+                      result,
+                      isError: toolResult.error !== undefined,
+                    },
+                  ],
+                },
+              ],
+              'response',
+            );
+          }
+        }
       }
 
       // 3. Determine if we should continue
@@ -141,7 +138,7 @@ export function createDurableLLMMappingStep() {
         },
         toolResults,
         output: {
-          text: undefined, // Text is in the LLM output, would be extracted from assistant message
+          text: llmOutput.text,
           toolCalls: llmOutput.toolCalls,
           usage: llmOutput.stepResult.totalUsage ?? {
             inputTokens: 0,
@@ -157,6 +154,32 @@ export function createDurableLLMMappingStep() {
         processorRetryCount: llmOutput.processorRetryCount,
         processorRetryFeedback: llmOutput.processorRetryFeedback,
       };
+
+      // Close the MODEL_STEP span for tool-calling iterations: the LLM step defers it so
+      // tool calls can nest under it, and the tools have now run. No-ops without tool calls.
+      if (llmOutput.stepSpanData) {
+        try {
+          const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({ requestContext });
+          const stepSpan = observability?.rebuildSpan(llmOutput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>);
+          const pendingPayload = llmOutput.stepFinishPayload as any;
+          stepSpan?.end({
+            output: {
+              text: llmOutput.text,
+              toolCalls: llmOutput.toolCalls,
+            },
+            attributes: {
+              usage: pendingPayload?.output?.usage,
+              finishReason: pendingPayload?.stepResult?.reason,
+              isContinued: pendingPayload?.stepResult?.isContinued,
+            },
+          });
+        } catch (error) {
+          // Span bookkeeping must never break the merge step.
+          (mastra as Mastra | undefined)
+            ?.getLogger?.()
+            ?.warn?.(`[DurableAgent] Failed to close model_step span: ${error}`);
+        }
+      }
 
       return output;
     },

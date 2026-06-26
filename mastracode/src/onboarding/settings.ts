@@ -8,6 +8,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { MastraBrowser } from '@mastra/core/browser';
 import type { LSPConfig } from '@mastra/core/workspace';
+import { AuthStorage } from '../auth/storage.js';
+import { buildCodexStagehandFetch, createCodexMiddleware } from '../providers/openai-codex.js';
 import { getAppDataDir } from '../utils/project.js';
 
 /** A saved custom pack — user-defined model selections for each mode. */
@@ -231,6 +233,8 @@ export interface GlobalSettings {
 export interface SignalSettings {
   /** Opt into local Unix socket PubSub for cross-process signal routing. */
   unixSocketPubSub: boolean;
+  /** Experimental: enable GitHub PR subscription signals backed by gitcrawl. */
+  experimentalGithubSignals: boolean;
 }
 
 export interface ObservabilityResourceConfig {
@@ -302,12 +306,29 @@ const DEFAULTS: GlobalSettings = {
     stagehand: { env: 'LOCAL' },
   },
   shellPassthrough: { mode: 'default' },
-  signals: { unixSocketPubSub: false },
+  signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
   observability: { resources: {}, localTracing: false },
 };
 
 const THINKING_LEVEL_VALUES: ThinkingLevelSetting[] = ['off', 'low', 'medium', 'high', 'xhigh'];
 const QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX = 8;
+const loadedSignalSettings = new WeakMap<GlobalSettings, SignalSettings>();
+
+function cloneSignalSettings(signals: SignalSettings): SignalSettings {
+  return { ...signals };
+}
+
+function rememberLoadedSettings(settings: GlobalSettings): GlobalSettings {
+  loadedSignalSettings.set(settings, cloneSignalSettings(settings.signals));
+  return settings;
+}
+
+function signalSettingsEqual(left: SignalSettings, right: SignalSettings): boolean {
+  return (
+    left.unixSocketPubSub === right.unixSocketPubSub &&
+    left.experimentalGithubSignals === right.experimentalGithubSignals
+  );
+}
 
 function parseThinkingLevel(value: unknown): ThinkingLevelSetting {
   return typeof value === 'string' && THINKING_LEVEL_VALUES.includes(value as ThinkingLevelSetting)
@@ -329,6 +350,18 @@ function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'
     ...raw,
     thinkingLevel: parseThinkingLevel(raw.thinkingLevel),
     quietModeMaxToolPreviewLines: parseQuietModeMaxToolPreviewLines(raw.quietModeMaxToolPreviewLines),
+  };
+}
+
+function parseSignalSettings(rawSignals: unknown): SignalSettings {
+  const raw = rawSignals && typeof rawSignals === 'object' ? (rawSignals as Record<string, unknown>) : {};
+  return {
+    unixSocketPubSub:
+      typeof raw.unixSocketPubSub === 'boolean' ? raw.unixSocketPubSub : DEFAULTS.signals.unixSocketPubSub,
+    experimentalGithubSignals:
+      typeof raw.experimentalGithubSignals === 'boolean'
+        ? raw.experimentalGithubSignals
+        : DEFAULTS.signals.experimentalGithubSignals,
   };
 }
 
@@ -555,12 +588,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
         browser: parseBrowserSettings(raw.browser),
         shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
-        signals: {
-          unixSocketPubSub:
-            raw.signals && typeof raw.signals === 'object' && typeof raw.signals.unixSocketPubSub === 'boolean'
-              ? raw.signals.unixSocketPubSub
-              : DEFAULTS.signals.unixSocketPubSub,
-        },
+        signals: parseSignalSettings(raw.signals),
         observability: parseObservabilitySettings(raw.observability),
       };
       applyQuietModePreferenceRollout(settings, raw.onboarding);
@@ -658,7 +686,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
   // One-time migration: move model data from auth.json into settings.json
   migrateFromAuth(filePath);
 
-  if (!existsSync(filePath)) return getNewInstallDefaults();
+  if (!existsSync(filePath)) return rememberLoadedSettings(getNewInstallDefaults());
   try {
     const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
     // Spread raw first to preserve unknown top-level keys (forward-compatibility),
@@ -682,12 +710,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
       browser: parseBrowserSettings(raw.browser),
       shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
-      signals: {
-        unixSocketPubSub:
-          raw.signals && typeof raw.signals === 'object' && typeof raw.signals.unixSocketPubSub === 'boolean'
-            ? raw.signals.unixSocketPubSub
-            : DEFAULTS.signals.unixSocketPubSub,
-      },
+      signals: parseSignalSettings(raw.signals),
       observability: parseObservabilitySettings(raw.observability),
     };
 
@@ -710,9 +733,9 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       saveSettings(settings, filePath);
     }
 
-    return settings;
+    return rememberLoadedSettings(settings);
   } catch {
-    return structuredClone(DEFAULTS);
+    return rememberLoadedSettings(structuredClone(DEFAULTS));
   }
 }
 
@@ -867,11 +890,33 @@ export function resolveOmModel(
   return resolveOmRoleModel(settings, 'observer', builtinOmPacks);
 }
 
+function getSignalSettingsForSave(settings: GlobalSettings, filePath: string): SignalSettings {
+  const loadedSignals = loadedSignalSettings.get(settings);
+  if (!loadedSignals || !signalSettingsEqual(settings.signals, loadedSignals) || !existsSync(filePath)) {
+    return settings.signals;
+  }
+
+  try {
+    const currentRaw = JSON.parse(readFileSync(filePath, 'utf-8')) as Record<string, unknown>;
+    const currentSignals = parseSignalSettings(currentRaw.signals);
+    if (!signalSettingsEqual(currentSignals, loadedSignals)) {
+      return currentSignals;
+    }
+  } catch {
+    // If the current file is unreadable, fall back to the caller's settings.
+  }
+
+  return settings.signals;
+}
+
 export function saveSettings(settings: GlobalSettings, filePath: string = getSettingsPath()): void {
   const dir = dirname(filePath);
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
+  const signals = getSignalSettingsForSave(settings, filePath);
+  settings.signals = signals;
+  loadedSignalSettings.set(settings, cloneSignalSettings(signals));
   writeFileSync(filePath, JSON.stringify(settings, null, 2), 'utf-8');
 }
 
@@ -928,6 +973,10 @@ export function checkProfileProviderMismatch(
   return undefined;
 }
 
+function browserRecordingOptions() {
+  return { outputDir: join(getAppDataDir(), 'browser-recordings') };
+}
+
 /**
  * Create a browser instance from settings.
  * Shared by startup (main.ts) and live reconfiguration (/browser command).
@@ -949,20 +998,56 @@ export async function createBrowserFromSettings(settings: BrowserSettings): Prom
 
   if (provider === 'stagehand') {
     const { StagehandBrowser } = await import('@mastra/stagehand');
-    const stagehandOpts = {
+    const stagehandOpts: Record<string, unknown> = {
       env: stagehand?.env ?? 'LOCAL',
       apiKey: stagehand?.apiKey ?? process.env.BROWSERBASE_API_KEY,
       projectId: stagehand?.projectId ?? process.env.BROWSERBASE_PROJECT_ID,
       preserveUserDataDir: stagehand?.preserveUserDataDir,
+      recording: browserRecordingOptions(),
     };
+
+    // When the user has an active OpenAI Codex (ChatGPT) subscription, route
+    // Stagehand through the Codex endpoint. We use the AI SDK provider's
+    // standard hooks (baseURL, headers, fetch, and middleware) instead of a
+    // URL-rewriting fetch:
+    //   - baseURL: target Codex's Responses API directly (no URL rewriting).
+    //   - headers: static Codex identifiers (originator, UA, account id).
+    //   - fetch: a tiny refresher that injects the live OAuth bearer per call,
+    //     since AI SDK takes `apiKey` as a static string.
+    //   - middleware: createCodexMiddleware() sets `store: false`, which Codex
+    //     requires on every request.
+    // Model is `gpt-5.4-mini`, the current ChatGPT-sign-in Codex whitelist
+    // pick suited to Stagehand's vision + structured-output workload.
+    const authStorage = new AuthStorage();
+    const cred = authStorage.get('openai-codex');
+    if (cred?.type === 'oauth') {
+      const accountId = (cred as any).accountId as string | undefined;
+      stagehandOpts.model = {
+        modelName: 'openai/gpt-5.4-mini',
+        apiKey: 'codex-oauth',
+        baseURL: 'https://chatgpt.com/backend-api/codex',
+        headers: {
+          originator: 'mastracode',
+          'User-Agent': 'mastracode',
+          ...(accountId ? { 'ChatGPT-Account-ID': accountId } : {}),
+        },
+        fetch: buildCodexStagehandFetch(authStorage),
+        middleware: createCodexMiddleware(),
+      } as any;
+    }
+
     return cdpUrl
       ? new StagehandBrowser({ ...launchConfig, cdpUrl, scope: 'shared', ...stagehandOpts })
       : new StagehandBrowser({ ...launchConfig, ...stagehandOpts });
   } else if (provider === 'agent-browser') {
     const { AgentBrowser } = await import('@mastra/agent-browser');
+    const agentBrowserOpts = {
+      storageState: agentBrowser?.storageState,
+      recording: browserRecordingOptions(),
+    };
     return cdpUrl
-      ? new AgentBrowser({ ...launchConfig, cdpUrl, scope: 'shared', storageState: agentBrowser?.storageState })
-      : new AgentBrowser({ ...launchConfig, storageState: agentBrowser?.storageState, scope });
+      ? new AgentBrowser({ ...launchConfig, cdpUrl, scope: 'shared', ...agentBrowserOpts })
+      : new AgentBrowser({ ...launchConfig, ...agentBrowserOpts, scope });
   }
 
   throw new Error(`Unsupported browser provider: ${provider}`);

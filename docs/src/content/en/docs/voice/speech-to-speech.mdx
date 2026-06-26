@@ -170,7 +170,7 @@ const agent = new Agent({
   name: 'Inworld Realtime Agent',
   instructions: 'You are a helpful assistant with real-time voice capabilities.',
   // Model used for text generation; voice provider handles realtime audio
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   voice: new InworldRealtimeVoice({
     apiKey: process.env.INWORLD_API_KEY,
     model: 'inworld/models/gemma-4-26b-a4b-it',

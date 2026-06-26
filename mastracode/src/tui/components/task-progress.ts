@@ -4,11 +4,31 @@
  * Hidden when no tasks exist OR when all tasks are completed.
  * Renders between status and editor.
  */
-import { Container, Text, Spacer, visibleWidth } from '@mariozechner/pi-tui';
+import { Container, Text, Spacer, visibleWidth } from '@earendil-works/pi-tui';
 import type { TaskItemInput } from '@mastra/core/harness';
 import chalk from 'chalk';
 import { getTermWidth, theme } from '../theme.js';
 import { truncateAnsi } from './ansi.js';
+
+export function formatTaskProgressLine(task: TaskItemInput, indent = '    '): string {
+  switch (task.status) {
+    case 'completed': {
+      const icon = theme.fg('success', '\u2713');
+      const text = chalk.hex(theme.getTheme().success).strikethrough(task.content);
+      return `${indent}${icon} ${text}`;
+    }
+    case 'in_progress': {
+      const icon = theme.fg('warning', '\u25B6');
+      const text = theme.bold(theme.fg('warning', task.activeForm));
+      return `${indent}${icon} ${text}`;
+    }
+    case 'pending': {
+      const icon = theme.fg('dim', '\u25CB');
+      const text = theme.fg('dim', task.content);
+      return `${indent}${icon} ${text}`;
+    }
+  }
+}
 
 export class TaskProgressComponent extends Container {
   private tasks: TaskItemInput[] = [];
@@ -68,7 +88,7 @@ export class TaskProgressComponent extends Container {
 
     // Render each task
     for (const task of this.tasks) {
-      this.addChild(new Text(this.formatTaskLine(task), 0, 0));
+      this.addChild(new Text(formatTaskProgressLine(task), 0, 0));
     }
   }
 
@@ -117,28 +137,6 @@ export class TaskProgressComponent extends Container {
         const icon = theme.fg('dim', '○');
         const text = theme.fg('muted', task.content);
         return `${icon} ${text}`;
-      }
-    }
-  }
-
-  private formatTaskLine(task: TaskItemInput): string {
-    const indent = '    ';
-
-    switch (task.status) {
-      case 'completed': {
-        const icon = theme.fg('success', '\u2713');
-        const text = chalk.hex(theme.getTheme().success).strikethrough(task.content);
-        return `${indent}${icon} ${text}`;
-      }
-      case 'in_progress': {
-        const icon = theme.fg('warning', '\u25B6');
-        const text = theme.bold(theme.fg('warning', task.activeForm));
-        return `${indent}${icon} ${text}`;
-      }
-      case 'pending': {
-        const icon = theme.fg('dim', '\u25CB');
-        const text = theme.fg('dim', task.content);
-        return `${indent}${icon} ${text}`;
       }
     }
   }

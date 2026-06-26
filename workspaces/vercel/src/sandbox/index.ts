@@ -22,6 +22,8 @@ import { getExecutorSource } from '../executor';
 
 const LOG_PREFIX = '[VercelSandbox]';
 
+let deprecatedNameWarned = false;
+
 const VERCEL_API_BASE = 'https://api.vercel.com';
 
 /**
@@ -66,6 +68,9 @@ export interface VercelSandboxOptions extends Omit<MastraSandboxOptions, 'proces
 // Implementation
 // =============================================================================
 
+/**
+ * @deprecated Will be renamed to `VercelServerlessSandbox` in a future release.
+ */
 export class VercelSandbox extends MastraSandbox {
   readonly id: string;
   readonly name = 'VercelSandbox';
@@ -90,6 +95,11 @@ export class VercelSandbox extends MastraSandbox {
 
   constructor(options: VercelSandboxOptions = {}) {
     super({ name: 'VercelSandbox' });
+
+    if (!deprecatedNameWarned) {
+      deprecatedNameWarned = true;
+      console.warn('VercelSandbox will be renamed to VercelServerlessSandbox in a future release.');
+    }
 
     this.id = `vercel-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     this._token = options.token || process.env.VERCEL_TOKEN || '';

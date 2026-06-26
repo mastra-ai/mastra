@@ -49,11 +49,13 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/logout', description: 'Logout from OAuth provider' },
     { key: '/setup', description: 'Run the setup wizard' },
     { key: '/browser', description: 'Configure browser automation' },
+    { key: '/api-keys', description: 'Manage provider API keys' },
     { key: '/theme', description: 'Switch color theme (auto/dark/light)' },
     { key: '/update', description: 'Check for and install updates' },
     { key: '/observability', description: 'Configure cloud observability' },
+    { key: '/github', description: 'Subscribe/sync GitHub PR signals' },
     { key: '/goal', description: 'Set/manage persistent goal (Ralph loop)' },
-    { key: '/judge', description: 'Set goal judge defaults' },
+    { key: '/goal judge', description: 'Set the goal judge model and max attempts' },
   ];
 
   if (modes > 1) {

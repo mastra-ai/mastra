@@ -16,8 +16,12 @@ import { getEffectivePermission } from '../src/server/server-adapter/routes/perm
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-/** Path to the generated permissions file in @mastra/core */
-export const OUTPUT_PATH = path.join(__dirname, '../../core/src/auth/ee/interfaces/permissions.generated.ts');
+/**
+ * Path to the generated permissions file. The canonical file lives in
+ * `@internal/auth` (re-exported by `@mastra/core/auth/ee`), so generation and
+ * the staleness check must target that location.
+ */
+export const OUTPUT_PATH = path.join(__dirname, '../../_internals/auth/src/ee/interfaces/permissions.generated.ts');
 
 /** Descriptions for actions (used for TSDoc comments in autocomplete) */
 const ACTION_DESCRIPTIONS: Record<string, string> = {
@@ -40,8 +44,10 @@ const ADDITIONAL_ACTIONS = ['share'];
 const RESOURCE_DESCRIPTIONS: Record<string, string> = {
   a2a: 'agent-to-agent communication',
   'agent-builder': 'agent builder',
+  'agent-controller': 'agent controller sessions',
   agents: 'agents',
   'background-tasks': 'background tasks',
+  harness: 'harness sessions',
   logs: 'logs',
   mcp: 'MCP servers',
   memory: 'memory and threads',

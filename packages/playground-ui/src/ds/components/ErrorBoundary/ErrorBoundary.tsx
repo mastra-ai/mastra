@@ -176,16 +176,16 @@ function DefaultErrorFallback({
           {error.message}
         </p>
         <div className={cn('flex flex-wrap items-center justify-center gap-2', isInline ? 'mt-1' : 'mt-2')}>
-          <Button variant="primary" size={isInline ? 'sm' : 'default'} onClick={reset}>
+          <Button variant="primary" size={isInline ? 'sm' : 'lg'} onClick={reset}>
             Try again
           </Button>
-          <Button variant="default" size={isInline ? 'sm' : 'default'} onClick={() => window.location.reload()}>
+          <Button variant="default" size={isInline ? 'sm' : 'lg'} onClick={() => window.location.reload()}>
             Reload page
           </Button>
           <Button
             as="a"
             variant="default"
-            size={isInline ? 'sm' : 'default'}
+            size={isInline ? 'sm' : 'lg'}
             href="https://github.com/mastra-ai/mastra/issues"
             target="_blank"
             rel="noopener noreferrer"

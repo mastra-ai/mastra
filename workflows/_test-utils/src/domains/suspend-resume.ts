@@ -815,6 +815,96 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: should be able to resume suspended nested workflow step with resumeLabel
+  {
+    const beginAction = vi.fn().mockImplementation(async ({ inputData }) => {
+      return inputData;
+    });
+    const startAction = vi.fn().mockImplementation(async ({ inputData }) => {
+      return { newValue: (inputData.startValue || 0) + 1 };
+    });
+    const otherAction = vi.fn().mockImplementation(async ({ inputData, suspend, resumeData }) => {
+      if (!resumeData) {
+        return await suspend({}, { resumeLabel: 'nested-custom-label' });
+      }
+      return { newValue: inputData.newValue, other: 26 };
+    });
+    const finalAction = vi.fn().mockImplementation(async ({ inputData }) => {
+      return { finalValue: (inputData.newValue || 0) + (inputData.other || 0) };
+    });
+    const lastAction = vi.fn().mockImplementation(async () => {
+      return { success: true };
+    });
+
+    const startStep = createStep({
+      id: 'start',
+      inputSchema: z.object({ startValue: z.number() }),
+      outputSchema: z.object({ newValue: z.number() }),
+      execute: startAction,
+    });
+
+    const otherStep = createStep({
+      id: 'other',
+      inputSchema: z.object({ newValue: z.number() }),
+      outputSchema: z.object({ newValue: z.number(), other: z.number() }),
+      execute: otherAction,
+    });
+
+    const finalStep = createStep({
+      id: 'final',
+      inputSchema: z.object({ newValue: z.number(), other: z.number() }),
+      outputSchema: z.object({ finalValue: z.number() }),
+      execute: finalAction,
+    });
+
+    const beginStep = createStep({
+      id: 'begin-step',
+      inputSchema: z.object({ startValue: z.number() }),
+      outputSchema: z.object({ startValue: z.number() }),
+      execute: beginAction,
+    });
+
+    const lastStep = createStep({
+      id: 'last-step',
+      inputSchema: z.object({ finalValue: z.number() }),
+      outputSchema: z.object({ success: z.boolean() }),
+      execute: lastAction,
+    });
+
+    const nestedWorkflow = createWorkflow({
+      id: 'resume-with-label-nested-wf-a',
+      inputSchema: z.object({ startValue: z.number() }),
+      outputSchema: z.object({ finalValue: z.number() }),
+      options: { validateInputs: false },
+    })
+      .then(startStep)
+      .then(otherStep)
+      .then(finalStep)
+      .commit();
+
+    const mainWorkflow = createWorkflow({
+      id: 'resume-with-label-nested-resume-workflow',
+      inputSchema: z.object({ startValue: z.number() }),
+      outputSchema: z.object({ success: z.boolean() }),
+      options: { validateInputs: false },
+    });
+
+    mainWorkflow.then(beginStep).then(nestedWorkflow).then(lastStep).commit();
+
+    workflows['resume-with-label-nested-resume-workflow'] = {
+      workflow: mainWorkflow,
+      nestedWorkflowId: 'resume-with-label-nested-wf-a',
+      mocks: { beginAction, startAction, otherAction, finalAction, lastAction },
+      resetMocks: () => {
+        beginAction.mockClear();
+        startAction.mockClear();
+        otherAction.mockClear();
+        finalAction.mockClear();
+        lastAction.mockClear();
+      },
+    };
+  }
+
   // Test: should handle basic suspend and resume in a dountil workflow
   {
     let iterationCount = 0;
@@ -3719,6 +3809,51 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
         const resumeResult = await ctx.resume!(workflow, {
           runId,
           step: nestedWorkflowId,
+          resumeData: { newValue: 0 },
+        });
+
+        expect(resumeResult.status).toBe('success');
+        expect(resumeResult.steps[nestedWorkflowId]).toMatchObject({
+          status: 'success',
+          output: { finalValue: 27 }, // 1 (from start) + 26 (from other)
+        });
+
+        // Verify all steps were called correctly
+        expect(mocks.startAction).toHaveBeenCalledTimes(1);
+        expect(mocks.otherAction).toHaveBeenCalledTimes(2); // Called on initial + resume
+        expect(mocks.finalAction).toHaveBeenCalledTimes(1);
+        expect(mocks.lastAction).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it.skipIf(ctx.skipTests.resumeNestedWithLabel || !ctx.resume)(
+      'should be able to resume suspended nested workflow step with label',
+      async () => {
+        const { workflow, nestedWorkflowId, mocks, resetMocks } =
+          registry!['resume-with-label-nested-resume-workflow']!;
+        resetMocks?.();
+
+        const runId = `resume-with-label-nested-resume-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        // Start workflow - should suspend at nested workflow's 'other' step
+        const startResult = await execute(workflow, { startValue: 0 }, { runId });
+
+        expect(startResult.status).toBe('suspended');
+        expect(mocks.beginAction).toHaveBeenCalledTimes(1);
+        expect(mocks.startAction).toHaveBeenCalledTimes(1);
+        expect(mocks.otherAction).toHaveBeenCalledTimes(1);
+        expect(mocks.finalAction).toHaveBeenCalledTimes(0);
+        expect(mocks.lastAction).toHaveBeenCalledTimes(0);
+
+        expect(startResult.steps[nestedWorkflowId]).toMatchObject({
+          status: 'suspended',
+        });
+        expect(startResult.steps['last-step']).toBeUndefined();
+
+        // Resume nested workflow by specifying nested workflow ID
+        const resumeResult = await ctx.resume!(workflow, {
+          runId,
+          label: 'nested-custom-label',
           resumeData: { newValue: 0 },
         });
 

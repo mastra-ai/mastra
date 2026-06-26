@@ -16,6 +16,7 @@ import type {
   AudioConfig,
   GeminiLiveServerMessage,
   GeminiSessionConfig,
+  IncrementalTurn,
   UpdateMessage,
 } from './types';
 import { GeminiLiveError } from './utils/errors';
@@ -130,6 +131,11 @@ export class GeminiLiveVoice extends MastraVoice<
 
   // Store the configuration options
   private options: GeminiLiveVoiceConfig;
+
+  // Accumulates assistant text across `serverContent` frames for the current
+  // turn. Live API streams responses over many frames; we aggregate here and
+  // flush to context history once on `turnComplete`.
+  private pendingAssistantResponse = '';
 
   /**
    * Normalize configuration to ensure proper VoiceConfig format
@@ -482,14 +488,10 @@ export class GeminiLiveVoice extends MastraVoice<
       // Wait for WebSocket connection to open via ConnectionManager
       await this.connectionManager.waitForOpen();
 
-      // Send initial configuration or resume session
-      if (this.isResuming && this.sessionHandle) {
-        await this.sendSessionResumption();
-      } else {
-        this.sendInitialConfig();
-        this.sessionStartTime = Date.now();
-        this.sessionId = randomUUID();
-      }
+      // Send initial configuration (session_resumption handle is embedded in setup frame)
+      this.sendInitialConfig();
+      this.sessionStartTime = Date.now();
+      this.sessionId = randomUUID();
 
       // Wait for session to be created after sending config
       await this.waitForSessionCreated();
@@ -541,13 +543,8 @@ export class GeminiLiveVoice extends MastraVoice<
       this.sessionDurationTimeout = undefined;
     }
 
-    // Save session handle before disconnecting if resumption is enabled
-    if (this.options.sessionConfig?.enableResumption && this.sessionId) {
-      // In a real implementation, the session handle would come from the server
-      // For now, we'll use the session ID as a placeholder
-      this.sessionHandle = this.sessionId;
-      this.log('Session handle saved for resumption', { handle: this.sessionHandle });
-    }
+    // Session handle is set by the server via sessionResumptionUpdate frames.
+    // Do not overwrite it with the client-side sessionId here.
 
     if (this.ws) {
       this.connectionManager.close();
@@ -646,6 +643,61 @@ export class GeminiLiveVoice extends MastraVoice<
     } catch (error) {
       this.log('Failed to send text message', error);
       throw this.createAndEmitError(GeminiLiveErrorCode.AUDIO_PROCESSING_ERROR, 'Failed to send text message', error);
+    }
+  }
+
+  /**
+   * Send conversation history into the live session without triggering a model response.
+   *
+   * Maps to a single Gemini Live `client_content` frame with `turnComplete` defaulting
+   * to `false`, which loads the turns into context silently. The model only responds
+   * once a subsequent turn completes (e.g. via {@link speak} or user audio).
+   *
+   * @param turns Prior conversation turns to seed into the session.
+   * @param options.turnComplete Whether to mark the turn as complete (default `false`).
+   *
+   * @example
+   * ```typescript
+   * await voice.connect();
+   *
+   * // Replay prior conversation without triggering a reply.
+   * await voice.sendContext([
+   *   { role: 'user', content: 'What is the weather?' },
+   *   { role: 'assistant', content: 'It is 72°F in San Francisco.' },
+   * ]);
+   *
+   * // Agent stays silent until the user actually speaks.
+   * await voice.send(micStream);
+   * ```
+   */
+  async sendContext(turns: IncrementalTurn[], options?: { turnComplete?: boolean }): Promise<void> {
+    this.validateConnectionState();
+
+    if (!turns || turns.length === 0) {
+      this.log('sendContext called with empty turns, skipping');
+      return;
+    }
+
+    const message = {
+      client_content: {
+        turns: turns.map(t => ({
+          role: t.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: t.content }],
+        })),
+        turnComplete: options?.turnComplete ?? false,
+      },
+    };
+
+    try {
+      this.sendEvent('client_content', message);
+      this.log('Context seeded', { turnCount: turns.length, turnComplete: options?.turnComplete ?? false });
+
+      for (const turn of turns) {
+        this.addToContext(turn.role, turn.content);
+      }
+    } catch (error) {
+      this.log('Failed to send context', error);
+      throw this.createAndEmitError(GeminiLiveErrorCode.AUDIO_PROCESSING_ERROR, 'Failed to send context', error);
     }
   }
 
@@ -1084,34 +1136,6 @@ export class GeminiLiveVoice extends MastraVoice<
    * Send session resumption message
    * @private
    */
-  private async sendSessionResumption(): Promise<void> {
-    if (!this.sessionHandle) {
-      throw new Error('No session handle available for resumption');
-    }
-
-    const context = this.contextManager.getContextArray();
-    const resumeMessage = {
-      session_resume: {
-        handle: this.sessionHandle,
-        ...(context.length > 0 && {
-          context,
-        }),
-      },
-    };
-
-    try {
-      if (this.ws?.readyState !== WebSocket.OPEN) {
-        throw new Error('WebSocket not ready for session resumption');
-      }
-
-      this.sendEvent('session_resume', resumeMessage);
-      this.log('Session resumption message sent', { handle: this.sessionHandle });
-    } catch (error) {
-      this.log('Failed to send session resumption', error);
-      throw new Error(`Failed to send session resumption: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
   /**
    * Start monitoring session duration
    * @private
@@ -1204,7 +1228,7 @@ export class GeminiLiveVoice extends MastraVoice<
     this.ws.on('close', (code: number, reason: Buffer) => {
       this.log('WebSocket connection closed', { code, reason: reason.toString() });
       this.state = 'disconnected';
-      this.emit('session', { state: 'disconnected' });
+      this.emit('session', { state: 'disconnected', code, reason: reason.toString() });
     });
 
     this.ws.on('error', (error: Error) => {
@@ -1264,6 +1288,19 @@ export class GeminiLiveVoice extends MastraVoice<
     } else if (data.usageMetadata) {
       this.log('Processing usage metadata message');
       this.handleUsageUpdate(data);
+      // sessionResumptionUpdate may arrive in the same frame as usageMetadata
+      // so we handle it here too, not in a separate else-if branch
+    }
+    if (data.sessionResumptionUpdate) {
+      this.log('Processing session resumption update', data.sessionResumptionUpdate);
+      if (data.sessionResumptionUpdate.resumable && data.sessionResumptionUpdate.newHandle) {
+        this.sessionHandle = data.sessionResumptionUpdate.newHandle;
+        this.log('Session handle updated from server', { handle: this.sessionHandle });
+        this.emit('sessionHandle', {
+          handle: this.sessionHandle,
+          expiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2h TTL for AI Studio
+        });
+      }
     } else if (data.sessionEnd) {
       this.log('Processing session end message');
       this.handleSessionEnd(data);
@@ -1365,17 +1402,65 @@ export class GeminiLiveVoice extends MastraVoice<
       return;
     }
 
-    let assistantResponse = '';
+    // Barge-in: the server cancelled the in-flight model response because the
+    // user started speaking. Surface this as the `interrupt` event so consumers
+    // can drop queued TTS audio. Matches the `interrupt` shape emitted by
+    // `@mastra/voice-aws-nova-sonic`.
+    //
+    // The cancelled turn will not necessarily be followed by `turnComplete`, so
+    // end any in-flight speaker streams here. Otherwise stream counters never
+    // decrement and downstream playback hangs on the cancelled audio. Discard
+    // the partial assistant text — it does not represent a completed turn.
+    if (data.interrupted) {
+      this.log('Model response interrupted by user activity');
+      this.audioStreamManager.cleanupSpeakerStreams();
+      this.pendingAssistantResponse = '';
+      this.emit('interrupt', { type: 'user', timestamp: Date.now() });
+    }
+
+    // User-side transcription. Emitted as `writing` with `role: 'user'`,
+    // matching the OpenAI / xAI / Inworld realtime pattern of using a single
+    // `writing` channel with role disambiguation.
+    if (data.inputTranscription?.text) {
+      this.emit('writing', {
+        text: data.inputTranscription.text,
+        role: 'user',
+      });
+    }
+
+    // Model-side transcription. On native-audio models this is the
+    // authoritative source for the spoken response — emit it as `writing` with
+    // `role: 'assistant'`. On non-native-audio models this field is not sent
+    // (the spoken response comes from `modelTurn.parts.text` below).
+    if (data.outputTranscription?.text) {
+      this.pendingAssistantResponse += data.outputTranscription.text;
+      this.emit('writing', {
+        text: data.outputTranscription.text,
+        role: 'assistant',
+      });
+    }
+
+    const nativeAudio = this.isNativeAudioModel();
 
     if (data.modelTurn?.parts) {
       for (const part of data.modelTurn.parts) {
-        // Handle text content
+        // Handle text content. Native-audio models put their internal reasoning
+        // here while the spoken response goes through `outputTranscription`
+        // above — route reasoning to the Gemini-specific `thinking` event so
+        // consumers can render it separately without conflating it with the
+        // assistant's actual reply. Non-native-audio models do not send
+        // `outputTranscription`, so `part.text` IS the spoken response and
+        // continues to flow through `writing`.
         if (part.text) {
-          assistantResponse += part.text;
-          this.emit('writing', {
-            text: part.text,
-            role: 'assistant',
-          });
+          if (nativeAudio) {
+            this.emit('thinking', { text: part.text });
+          } else {
+            this.pendingAssistantResponse += part.text;
+            this.emit('writing', {
+              text: part.text,
+              role: 'assistant',
+            });
+          }
         }
 
         // Handle function calls (tool calls) embedded in parts
@@ -1475,14 +1560,18 @@ export class GeminiLiveVoice extends MastraVoice<
       }
     }
 
-    // Add assistant response to context if there was text content
-    if (assistantResponse.trim()) {
-      this.addToContext('assistant', assistantResponse);
-    }
-
     // Check for turn completion
     if (data.turnComplete) {
       this.log('Turn completed');
+
+      // Flush the assistant text accumulated across this turn's `serverContent`
+      // frames as a single context entry. Doing this once per turn (rather than
+      // once per frame) keeps the conversation history coherent even when the
+      // Live API streams a response over many incremental frames.
+      if (this.pendingAssistantResponse.trim()) {
+        this.addToContext('assistant', this.pendingAssistantResponse);
+      }
+      this.pendingAssistantResponse = '';
 
       // End all active speaker streams for this turn
       this.audioStreamManager.cleanupSpeakerStreams();
@@ -1685,6 +1774,28 @@ export class GeminiLiveVoice extends MastraVoice<
   }
 
   /**
+   * Whether the active model is a Gemini Live "native-audio" variant.
+   *
+   * Native-audio models emit a different `serverContent.modelTurn.parts.text`
+   * stream than their half-cascade siblings: on native-audio, that text is the
+   * model's internal reasoning (chain-of-thought), and the *spoken* response
+   * arrives separately via `serverContent.outputTranscription.text`. On
+   * non-native-audio models there is no `outputTranscription` channel, and
+   * `modelTurn.parts.text` is the spoken response.
+   *
+   * Used to decide whether `modelTurn.parts.text` should be emitted as
+   * `thinking` (native-audio) or `writing` (non-native-audio). All native-audio
+   * model IDs in `GeminiVoiceModel` contain the literal substring
+   * `native-audio`, so a substring check is sufficient and forward-compatible
+   * with new variants that follow the same naming convention.
+   * @private
+   */
+  private isNativeAudioModel(): boolean {
+    const model = this.options.model ?? DEFAULT_MODEL;
+    return model.includes('native-audio');
+  }
+
+  /**
    * Resolve the correct model identifier for Gemini API or Vertex AI
    * @private
    */
@@ -1749,6 +1860,44 @@ export class GeminiLiveVoice extends MastraVoice<
           parameters?: unknown;
         }>;
       }>;
+      /**
+       * Empty-object flag that enables server-side ASR for the user's spoken
+       * input. When set, the server emits `serverContent.inputTranscription.text`
+       * frames alongside audio. Required to surface what the user said.
+       */
+      input_audio_transcription?: Record<string, never>;
+      /**
+       * Empty-object flag that enables server-side transcription of the model's
+       * spoken output. When set, the server emits
+       * `serverContent.outputTranscription.text` frames. Required on
+       * native-audio models — without this, the spoken response text is never
+       * delivered to the client (`modelTurn.parts.text` on native-audio is
+       * reasoning, not spoken content).
+       */
+      output_audio_transcription?: Record<string, never>;
+      /**
+       * Activity handling tells the server how to react to new user activity
+       * while the model is still responding. `START_OF_ACTIVITY_INTERRUPTS`
+       * cancels the in-flight model response on barge-in and sets
+       * `serverContent.interrupted = true`, which is the signal consumers need
+       * to drop queued TTS audio.
+       */
+      realtime_input_config?: {
+        activity_handling?: 'START_OF_ACTIVITY_INTERRUPTS' | 'NO_INTERRUPTION';
+      };
+      /**
+       * Session resumption config. Empty object enables server-issued tokens;
+       * { handle } resumes a previous session.
+       */
+      session_resumption?: { handle?: string };
+      /**
+       * Opts the session into seeding initial conversation history via send_client_content frames.
+       * Must be present in the setup frame for sendContext() to work on gemini-3.1-flash-live-preview
+       * and later 3.x models — without it the server closes the WebSocket with code 1007.
+       */
+      history_config?: {
+        initial_history_in_client_content?: boolean;
+      };
     }
 
     // Native-audio models require `response_modalities: ["AUDIO"]` at setup time. This is a voice
@@ -1775,6 +1924,35 @@ export class GeminiLiveVoice extends MastraVoice<
       setup: {
         model: this.resolveModelIdentifier(),
         generation_config: generationConfig,
+        // Transcription is on by default — matches the pattern in @mastra/voice-openai-realtime,
+        // @mastra/voice-xai-realtime, and @mastra/voice-inworld where realtime sessions
+        // unconditionally enable STT in `connect()`. On native-audio models this is the ONLY way
+        // to receive the spoken response as text (`modelTurn.parts.text` carries reasoning, not
+        // speech), so without these flags the assistant's words are silently dropped client-side.
+        input_audio_transcription: {},
+        output_audio_transcription: {},
+        // Activity-based interrupts surface barge-in as `serverContent.interrupted = true` and
+        // cancel the in-flight model response. This is the only way to wire up the `interrupt`
+        // event declared in `GeminiLiveEventMap`.
+        realtime_input_config: {
+          activity_handling: 'START_OF_ACTIVITY_INTERRUPTS',
+        },
+        // Session resumption: empty object requests server-issued tokens on new sessions;
+        // { handle } resumes a previous session. Only included when enableResumption is set.
+        ...(this.options.sessionConfig?.enableResumption && {
+          session_resumption: this.isResuming && this.sessionHandle ? { handle: this.sessionHandle } : {},
+        }),
+        // history_config opts the session into send_client_content-based history seeding.
+        // Required by gemini-3.1-flash-live-preview (and later 3.x models) for sendContext() to
+        // succeed — without this field in the setup frame the server closes the WebSocket with
+        // code 1007 ("Request contains an invalid argument."). Defaults to true so that
+        // sendContext() works out of the box; set initialHistoryInClientContent: false on
+        // sessionConfig to opt out explicitly.
+        ...(this.options.sessionConfig?.initialHistoryInClientContent !== false && {
+          history_config: {
+            initial_history_in_client_content: true,
+          },
+        }),
       },
     };
 
@@ -2086,3 +2264,5 @@ export class GeminiLiveVoice extends MastraVoice<
     }
   }
 }
+
+export type { IncrementalTurn } from './types';

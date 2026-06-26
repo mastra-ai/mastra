@@ -33,7 +33,16 @@ const docsTabs = [
     href: '/learn',
     basePath: '/learn',
   },
+  {
+    id: 'Platform',
+    label: 'Platform',
+    href: '/docs/mastra-platform/overview',
+    basePath: '/docs/mastra-platform',
+  },
 ]
+
+const matchesBasePath = (pathname: string, basePath: string) =>
+  pathname.startsWith(basePath + '/') || pathname === basePath
 
 export const TabSwitcher = ({ className }: { className?: string }) => {
   const location = useLocation()
@@ -43,15 +52,12 @@ export const TabSwitcher = ({ className }: { className?: string }) => {
       <div className="w-full">
         <div className="tab -ml-3 flex gap-6 overflow-x-auto px-5 py-2" aria-label="Documentation tabs">
           {docsTabs.map(tab => {
-            // Check if current path matches the tab's base path
-            // For "Docs" tab, match any path starting with /docs/ that isn't covered by other tabs
-            const isActive = (() => {
-              // Check if path starts with this tab's base path
-              if (pathname.startsWith(tab.basePath + '/') || pathname === tab.basePath) {
-                return true
-              }
-              return false
-            })()
+            const matchesTabPath = matchesBasePath(pathname, tab.basePath)
+            const isActive =
+              tab.id === 'Docs'
+                ? matchesTabPath &&
+                  !docsTabs.some(otherTab => otherTab.id !== 'Docs' && matchesBasePath(pathname, otherTab.basePath))
+                : matchesTabPath
 
             return (
               <Link

@@ -1,6 +1,5 @@
-import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
-import { Avatar, Txt } from '@mastra/playground-ui';
-import type { MastraUIMessage } from '@mastra/react';
+import { Avatar } from '@mastra/playground-ui/components/Avatar';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { CircleCheckIcon, LightbulbIcon, ListChecksIcon, WrenchIcon } from 'lucide-react';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
@@ -31,6 +30,8 @@ interface AgentChatMeta {
 }
 
 const AgentChatMetaContext = createContext<AgentChatMeta>({ isConversationLoading: false });
+
+const EMPTY_MESSAGES: never[] = [];
 
 const STARTER_PROMPTS = [
   {
@@ -75,11 +76,7 @@ export const AgentChatPanelProvider = ({
     memory: true,
   });
 
-  // Stable empty array per agentId.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const emptyMessages = useMemo(() => [] as never[], [agentId]);
-  const storedMessages = data?.messages ?? emptyMessages;
-  const v5Messages = useMemo(() => toAISdkV5Messages(storedMessages) as MastraUIMessage[], [storedMessages]);
+  const storedMessages = data?.messages ?? EMPTY_MESSAGES;
 
   const meta = useMemo<AgentChatMeta>(
     () => ({ isConversationLoading, agentName, agentDescription, agentAvatarUrl }),
@@ -87,7 +84,7 @@ export const AgentChatPanelProvider = ({
   );
 
   return (
-    <StreamChatProvider agentId={agentId} threadId={threadId} initialMessages={v5Messages}>
+    <StreamChatProvider key={threadId} agentId={agentId} threadId={threadId} initialMessages={storedMessages}>
       <AgentChatMetaContext.Provider value={meta}>{children}</AgentChatMetaContext.Provider>
     </StreamChatProvider>
   );
@@ -96,11 +93,9 @@ export const AgentChatPanelProvider = ({
 interface AgentChatPanelChatProps {
   /** When true, renders the browser thumbnail above the composer */
   hasBrowser?: boolean;
-  /** Hide the sidebar button in the browser thumbnail (no sidebar available in Agent Builder) */
-  hideBrowserSidebar?: boolean;
 }
 
-export const AgentChatPanelChat = ({ hasBrowser = false, hideBrowserSidebar = false }: AgentChatPanelChatProps) => {
+export const AgentChatPanelChat = ({ hasBrowser = false }: AgentChatPanelChatProps) => {
   const isRunning = useStreamRunning();
   const send = useStreamSend();
   const { draft, setDraft, trimmed, handleFormSubmit, handleKeyDown } = useChatDraft({ onSubmit: send });
@@ -108,7 +103,7 @@ export const AgentChatPanelChat = ({ hasBrowser = false, hideBrowserSidebar = fa
   return (
     <div className="flex h-full min-h-0 flex-col">
       <AgentChatMessageList onStarterPromptSelect={setDraft} />
-      {hasBrowser && <BrowserThumbnailSlot hideSidebar={hideBrowserSidebar} />}
+      {hasBrowser && <BrowserThumbnailSlot />}
       <ChatComposer
         draft={draft}
         onDraftChange={setDraft}
@@ -126,13 +121,13 @@ export const AgentChatPanelChat = ({ hasBrowser = false, hideBrowserSidebar = fa
   );
 };
 
-/** Shows the browser thumbnail when a session is active and not in modal/sidebar mode */
-const BrowserThumbnailSlot = ({ hideSidebar = false }: { hideSidebar?: boolean }) => {
+/** Shows the browser thumbnail when a session is active and not in modal mode */
+const BrowserThumbnailSlot = () => {
   const { hasSession, viewMode } = useBrowserSession();
-  if (!hasSession || viewMode === 'modal' || viewMode === 'sidebar') return null;
+  if (!hasSession || viewMode === 'modal') return null;
   return (
     <div className="mx-auto mb-2 w-full max-w-3xl">
-      <BrowserThumbnail hideSidebar={hideSidebar} />
+      <BrowserThumbnail />
     </div>
   );
 };

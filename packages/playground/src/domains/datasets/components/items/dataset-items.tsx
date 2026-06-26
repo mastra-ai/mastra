@@ -1,26 +1,21 @@
 'use client';
 
 import type { DatasetItem } from '@mastra/client-js';
-import { Columns, Column, Notice, toast, cn } from '@mastra/playground-ui';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { ArrowRightToLineIcon } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
+import { useSearchParams } from 'react-router';
+import { useDatasetItemsUrlState } from '../../hooks/use-dataset-items-url-state';
 import type { DatasetVersion } from '../../hooks/use-dataset-versions';
 import { useItemSelection } from '../../hooks/use-item-selection';
 import { exportItemsToCSV } from '../../utils/csv-export';
 import { exportItemsToJSON } from '../../utils/json-export';
 import { DatasetItemPanel } from './dataset-item-panel';
+import { DatasetItemsLayout } from './dataset-items-layout';
 import { DatasetItemsList } from './dataset-items-list';
 import { DatasetItemsToolbar } from './dataset-items-toolbar';
 import { DatasetVersionsPanel } from './dataset-versions-panel';
-
-type SelectionMode =
-  | 'idle'
-  | 'export'
-  | 'export-json'
-  | 'create-dataset'
-  | 'add-to-dataset'
-  | 'delete'
-  | 'compare-items';
 
 export interface DatasetItemsProps {
   datasetId: string;
@@ -43,19 +38,21 @@ export interface DatasetItemsProps {
   isFetchingNextPage?: boolean;
   hasNextPage?: boolean;
   // Search props
+  /** The live value of the search input (controls the toolbar input). */
   searchQuery?: string;
+  /** The debounced search the `items` array reflects (controls the list's empty-state branches). */
+  activeSearchQuery?: string;
   onSearchChange?: (query: string) => void;
   // Version props
-  activeDatasetVersion?: number | null;
   currentDatasetVersion?: number;
-  onVersionSelect?: (version: DatasetVersion) => void;
   onCompareVersionsClick?: (versionNumbers: string[]) => void;
 }
 
 /**
- * Master-detail layout container for dataset items.
- * Shows item list on left, item detail panel on right when an item is selected.
- * Can also show versions panel instead of item detail when versions is toggled.
+ * Container for the dataset items view. Owns the in-memory selection (checkbox)
+ * state, builds the three layout slots, and delegates layout to <DatasetItemsLayout>.
+ * Selection-mode, versions-panel open state, and active dataset version live in the
+ * URL via `useDatasetItemsUrlState` — so refresh and deep links preserve them.
  */
 export function DatasetItems({
   datasetId,
@@ -77,27 +74,35 @@ export function DatasetItems({
   isFetchingNextPage,
   hasNextPage,
   searchQuery,
+  activeSearchQuery,
   onSearchChange,
-  activeDatasetVersion,
   currentDatasetVersion,
-  onVersionSelect,
   onCompareVersionsClick,
 }: DatasetItemsProps) {
-  const [isVersionsPanelOpen, setIsVersionsPanelOpen] = useState(false);
-  const [selectionMode, setSelectionMode] = useState<SelectionMode>('idle');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const {
+    activeVersion: activeDatasetVersion,
+    panel,
+    selectionMode,
+    handleVersionChange,
+    handlePanelChange,
+    handleSelectionModeChange,
+  } = useDatasetItemsUrlState(searchParams, setSearchParams);
+
+  const isVersionsPanelOpen = panel === 'versions';
   const selection = useItemSelection();
   const featuredItem = items.find(i => i.id === featuredItemId) ?? null;
 
-  // Clear selection when parent increments trigger (after dialog closes or action completes)
+  // Parent increments this after a dialog closes or an action completes; the
+  // selection-mode URL param + in-memory checkbox state both need to reset.
   useEffect(() => {
     if (clearSelectionTrigger !== undefined && clearSelectionTrigger > 0) {
       selection.clearSelection();
-      setSelectionMode('idle');
+      handleSelectionModeChange('idle');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clearSelectionTrigger]);
 
-  // Check if viewing an old version
   const isViewingOldVersion =
     activeDatasetVersion != null && currentDatasetVersion != null && activeDatasetVersion !== currentDatasetVersion;
 
@@ -109,16 +114,12 @@ export function DatasetItems({
     }
   };
 
-  const handleVersionsClick = () => {
-    setIsVersionsPanelOpen(true);
-  };
-
-  const handleVersionsPanelClose = () => {
-    setIsVersionsPanelOpen(false);
+  const handleVersionSelect = (version: DatasetVersion) => {
+    handleVersionChange(version.isCurrent ? null : version.version);
   };
 
   const handleCancelSelection = () => {
-    setSelectionMode('idle');
+    handleSelectionModeChange('idle');
     selection.clearSelection();
   };
 
@@ -165,93 +166,90 @@ export function DatasetItems({
     { name: 'date', label: 'Created', size: '10rem' },
   ];
 
+  const listSlot = (
+    <>
+      <DatasetItemsToolbar
+        onAddClick={onAddClick}
+        onImportClick={onImportClick ?? (() => {})}
+        onImportJsonClick={onImportJsonClick ?? (() => {})}
+        onExportClick={() => handleSelectionModeChange('export')}
+        onExportJsonClick={() => handleSelectionModeChange('export-json')}
+        onCreateDatasetClick={() => handleSelectionModeChange('create-dataset')}
+        onAddToDatasetClick={() => handleSelectionModeChange('add-to-dataset')}
+        onDeleteClick={() => handleSelectionModeChange('delete')}
+        onCompareClick={() => handleSelectionModeChange('compare-items')}
+        hasItems={items.length > 0}
+        searchQuery={searchQuery}
+        onSearchChange={onSearchChange}
+        isSelectionActive={isSelectionActive}
+        selectedCount={selection.selectedCount}
+        onExecuteAction={handleExecuteAction}
+        onCancelSelection={handleCancelSelection}
+        selectionMode={selectionMode}
+        onVersionsClick={() => handlePanelChange('versions')}
+        isItemPanelOpen={!!featuredItem}
+        isVersionsPanelOpen={isVersionsPanelOpen}
+        isViewingOldVersion={isViewingOldVersion}
+      />
+
+      {isViewingOldVersion && activeDatasetVersion != null && (
+        <Notice
+          variant="warning"
+          title="Previous version"
+          action={
+            <Notice.Button onClick={() => handleVersionChange(null)}>
+              <ArrowRightToLineIcon /> Return to the latest version
+            </Notice.Button>
+          }
+        >
+          <Notice.Message>Viewing version v{activeDatasetVersion}</Notice.Message>
+        </Notice>
+      )}
+
+      <DatasetItemsList
+        items={items}
+        isLoading={isLoading}
+        onItemClick={handleItemClick}
+        featuredItemId={featuredItemId}
+        columns={itemsListColumns}
+        setEndOfListElement={setEndOfListElement}
+        isFetchingNextPage={isFetchingNextPage}
+        hasNextPage={hasNextPage}
+        isSelectionActive={isSelectionActive}
+        selectedIds={selection.selectedIds}
+        onToggleSelection={selection.toggle}
+        onSelectAll={selection.selectAll}
+        onClearSelection={selection.clearSelection}
+        maxSelection={selectionMode === 'compare-items' ? 2 : undefined}
+        onAddClick={onAddClick}
+        onImportClick={onImportClick}
+        onImportJsonClick={onImportJsonClick}
+        searchQuery={activeSearchQuery ?? searchQuery}
+      />
+    </>
+  );
+
+  const detailPanelSlot = featuredItem ? (
+    <DatasetItemPanel
+      datasetId={datasetId}
+      item={featuredItem}
+      items={items}
+      onItemChange={onItemSelect}
+      onClose={onItemClose}
+    />
+  ) : null;
+
+  const versionsPanelSlot = isVersionsPanelOpen ? (
+    <DatasetVersionsPanel
+      datasetId={datasetId}
+      onClose={() => handlePanelChange(null)}
+      onVersionSelect={handleVersionSelect}
+      onCompareVersionsClick={onCompareVersionsClick}
+      activeVersion={activeDatasetVersion}
+    />
+  ) : null;
+
   return (
-    <Columns
-      className={cn({
-        'grid-cols-[1fr_1fr]': !!featuredItem,
-        'grid-cols-[1fr_auto]': isVersionsPanelOpen && !featuredItem,
-      })}
-    >
-      <Column>
-        <DatasetItemsToolbar
-          onAddClick={onAddClick}
-          onImportClick={onImportClick ?? (() => {})}
-          onImportJsonClick={onImportJsonClick ?? (() => {})}
-          onExportClick={() => setSelectionMode('export')}
-          onExportJsonClick={() => setSelectionMode('export-json')}
-          onCreateDatasetClick={() => setSelectionMode('create-dataset')}
-          onAddToDatasetClick={() => setSelectionMode('add-to-dataset')}
-          onDeleteClick={() => setSelectionMode('delete')}
-          onCompareClick={() => setSelectionMode('compare-items')}
-          hasItems={items.length > 0}
-          searchQuery={searchQuery}
-          onSearchChange={onSearchChange}
-          isSelectionActive={isSelectionActive}
-          selectedCount={selection.selectedCount}
-          onExecuteAction={handleExecuteAction}
-          onCancelSelection={handleCancelSelection}
-          selectionMode={selectionMode}
-          onVersionsClick={handleVersionsClick}
-          isItemPanelOpen={!!featuredItem}
-          isVersionsPanelOpen={isVersionsPanelOpen}
-          isViewingOldVersion={isViewingOldVersion}
-        />
-
-        {isViewingOldVersion && activeDatasetVersion != null && (
-          <Notice
-            variant="warning"
-            title="Previous version"
-            action={
-              <Notice.Button onClick={() => onVersionSelect?.({ version: currentDatasetVersion!, isCurrent: true })}>
-                <ArrowRightToLineIcon /> Return to the latest version
-              </Notice.Button>
-            }
-          >
-            <Notice.Message>Viewing version v{activeDatasetVersion}</Notice.Message>
-          </Notice>
-        )}
-
-        <DatasetItemsList
-          items={items}
-          isLoading={isLoading}
-          onItemClick={handleItemClick}
-          featuredItemId={featuredItemId}
-          columns={itemsListColumns}
-          setEndOfListElement={setEndOfListElement}
-          isFetchingNextPage={isFetchingNextPage}
-          hasNextPage={hasNextPage}
-          isSelectionActive={isSelectionActive}
-          selectedIds={selection.selectedIds}
-          onToggleSelection={selection.toggle}
-          onSelectAll={selection.selectAll}
-          onClearSelection={selection.clearSelection}
-          maxSelection={selectionMode === 'compare-items' ? 2 : undefined}
-          onAddClick={onAddClick}
-          onImportClick={onImportClick}
-          onImportJsonClick={onImportJsonClick}
-          searchQuery={searchQuery}
-        />
-      </Column>
-
-      {!!featuredItem && (
-        <DatasetItemPanel
-          datasetId={datasetId}
-          item={featuredItem}
-          items={items}
-          onItemChange={onItemSelect}
-          onClose={onItemClose}
-        />
-      )}
-
-      {!featuredItem && isVersionsPanelOpen && (
-        <DatasetVersionsPanel
-          datasetId={datasetId}
-          onClose={handleVersionsPanelClose}
-          onVersionSelect={onVersionSelect}
-          onCompareVersionsClick={onCompareVersionsClick}
-          activeVersion={activeDatasetVersion}
-        />
-      )}
-    </Columns>
+    <DatasetItemsLayout listSlot={listSlot} detailPanelSlot={detailPanelSlot} versionsPanelSlot={versionsPanelSlot} />
   );
 }

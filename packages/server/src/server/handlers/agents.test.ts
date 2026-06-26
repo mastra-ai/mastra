@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
@@ -13,11 +14,15 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
 import {
   abortAgentThreadBodySchema,
+  approveToolCallBodySchema,
+  declineToolCallBodySchema,
   queueAgentMessageBodySchema,
   sendAgentMessageBodySchema,
   sendAgentSignalBodySchema,
   subscribeAgentThreadBodySchema,
+  sendToolApprovalBodySchema,
 } from '../schemas/agents';
+import { AGENTS_ROUTES } from '../server-adapter/routes/agents';
 import {
   GET_PROVIDERS_ROUTE,
   GENERATE_AGENT_ROUTE,
@@ -25,6 +30,7 @@ import {
   LIST_AGENTS_ROUTE,
   STREAM_GENERATE_ROUTE,
   RESUME_STREAM_ROUTE,
+  SEND_TOOL_APPROVAL_ROUTE,
   QUEUE_AGENT_MESSAGE_ROUTE,
   SEND_AGENT_MESSAGE_ROUTE,
   SEND_AGENT_SIGNAL_ROUTE,
@@ -243,6 +249,62 @@ describe('getProvidersHandler', () => {
 
     // Cleanup
     delete process.env.CUSTOM_LLM_API_KEY;
+  });
+
+  it('should hide registry and default-gateway providers when AUTO_BLOCK_EXTERNAL_PROVIDERS is set, keeping only custom gateways', async () => {
+    process.env.AUTO_BLOCK_EXTERNAL_PROVIDERS = 'true';
+
+    const mockGateway = {
+      id: 'test-gateway',
+      name: 'Test Gateway',
+      getId: () => 'test-gateway',
+      fetchProviders: vi.fn().mockResolvedValue({
+        'custom-llm': {
+          name: 'Custom LLM',
+          models: ['custom-model-1', 'custom-model-2'],
+          apiKeyEnvVar: 'CUSTOM_LLM_API_KEY',
+          gateway: 'test-gateway',
+        },
+      }),
+      buildUrl: vi.fn(),
+      getApiKey: vi.fn(),
+      resolveLanguageModel: vi.fn(),
+    };
+
+    const mastra = new Mastra({
+      gateways: {
+        'test-gateway': mockGateway,
+      },
+    });
+
+    const requestContext = new RequestContext();
+    const abortSignal = new AbortController().signal;
+
+    const result = await GET_PROVIDERS_ROUTE.handler({ mastra, requestContext, abortSignal });
+
+    // External registry providers should be hidden
+    expect(result.providers.find(p => p.id === 'openai')).toBeUndefined();
+    expect(result.providers.find(p => p.id === 'anthropic')).toBeUndefined();
+
+    // Built-in default gateways (models.dev, netlify, mastra) should be hidden
+    expect(result.providers.some(p => p.id === 'mastra' || p.id.startsWith('netlify/'))).toBe(false);
+
+    // The user-registered custom gateway provider should remain
+    const customProvider = result.providers.find(p => p.id === 'test-gateway/custom-llm');
+    expect(customProvider).toBeDefined();
+    expect(customProvider?.name).toBe('Custom LLM');
+  });
+
+  it('should return no providers when AUTO_BLOCK_EXTERNAL_PROVIDERS is set and no custom gateway is registered', async () => {
+    process.env.AUTO_BLOCK_EXTERNAL_PROVIDERS = '1';
+
+    const mastra = new Mastra({});
+    const requestContext = new RequestContext();
+    const abortSignal = new AbortController().signal;
+
+    const result = await GET_PROVIDERS_ROUTE.handler({ mastra, requestContext, abortSignal });
+
+    expect(result.providers).toEqual([]);
   });
 
   it('should correctly show custom gateway providers as connected', async () => {
@@ -969,6 +1031,7 @@ describe('Agent Routes Authorization', () => {
         runId: 'test-run-id',
         resumeData: { workflowResult: 'approved' },
         toolCallId: 'tool-call-123',
+        approved: true,
       } as any);
 
       expect(capturedResumeData).toEqual({ workflowResult: 'approved' });
@@ -1096,6 +1159,24 @@ describe('Agent Routes Authorization', () => {
   });
 
   describe('SIGNAL_ROUTES', () => {
+    it('should register subscription approval routes with execute permissions', () => {
+      const routeMetadata = AGENTS_ROUTES.map(route => ({
+        path: route.path,
+        method: route.method,
+        requiresPermission: route.requiresPermission,
+      }));
+
+      expect(routeMetadata).toEqual(
+        expect.arrayContaining([
+          {
+            path: '/agents/:agentId/send-tool-approval',
+            method: 'POST',
+            requiresPermission: 'agents:execute',
+          },
+        ]),
+      );
+    });
+
     it('should validate typed user-message signal contents and attributes', () => {
       const body = {
         signal: {
@@ -1308,14 +1389,167 @@ describe('Agent Routes Authorization', () => {
       ).toBe(false);
     });
 
-    it('should accept subscribe and abort thread bodies', () => {
+    it('should accept subscribe, abort, and tool approval bodies', () => {
       const body = {
         resourceId: 'resource-123',
         threadId: 'thread-123',
       };
+      const toolCallBody = {
+        runId: 'run-123',
+        toolCallId: 'tool-call-123',
+      };
+      const subscriptionToolCallBody = {
+        resourceId: 'resource-123',
+        threadId: 'thread-123',
+        toolCallId: 'tool-call-123',
+        approved: true,
+      };
 
       expect(subscribeAgentThreadBodySchema.safeParse(body).success).toBe(true);
       expect(abortAgentThreadBodySchema.safeParse(body).success).toBe(true);
+      expect(approveToolCallBodySchema.safeParse(toolCallBody).success).toBe(true);
+      expect(declineToolCallBodySchema.safeParse(toolCallBody).success).toBe(true);
+      expect(sendToolApprovalBodySchema.safeParse(subscriptionToolCallBody).success).toBe(true);
+      expect(sendToolApprovalBodySchema.safeParse(toolCallBody).success).toBe(false);
+    });
+
+    it('should approve a tool call for thread subscriptions with a JSON ack', async () => {
+      (mockAgent as any).sendToolApproval = vi.fn(async params => ({
+        accepted: true,
+        runId: 'run-123',
+        toolCallId: params.toolCallId,
+      }));
+
+      const result = await SEND_TOOL_APPROVAL_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        abortSignal: new AbortController().signal,
+        resourceId: 'resource-123',
+        threadId: 'thread-123',
+        toolCallId: 'tool-call-123',
+        approved: true,
+      } as any);
+
+      expect(result).toEqual({ accepted: true, runId: 'run-123', toolCallId: 'tool-call-123' });
+      expect((mockAgent as any).sendToolApproval).toHaveBeenCalledWith(
+        expect.objectContaining({
+          resourceId: 'resource-123',
+          threadId: 'thread-123',
+          toolCallId: 'tool-call-123',
+          approved: true,
+        }),
+      );
+    });
+
+    it('should decline a tool call for thread subscriptions with a JSON ack', async () => {
+      (mockAgent as any).sendToolApproval = vi.fn(async params => ({
+        accepted: true,
+        runId: 'run-123',
+        toolCallId: params.toolCallId,
+      }));
+
+      const result = await SEND_TOOL_APPROVAL_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        abortSignal: new AbortController().signal,
+        resourceId: 'resource-123',
+        threadId: 'thread-123',
+        toolCallId: 'tool-call-123',
+        approved: false,
+      } as any);
+
+      expect(result).toEqual({ accepted: true, runId: 'run-123', toolCallId: 'tool-call-123' });
+      expect((mockAgent as any).sendToolApproval).toHaveBeenCalledWith(
+        expect.objectContaining({
+          resourceId: 'resource-123',
+          threadId: 'thread-123',
+          toolCallId: 'tool-call-123',
+          approved: false,
+        }),
+      );
+    });
+
+    it('should reject subscription tool approval for a thread owned by another resource', async () => {
+      await mockMemory.createThread({
+        threadId: 'approval-thread-owned-by-b',
+        resourceId: 'user-b',
+        title: 'Approval Thread B',
+      });
+      (mockAgent as any).sendToolApproval = vi.fn();
+
+      await expect(
+        SEND_TOOL_APPROVAL_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          abortSignal: new AbortController().signal,
+          resourceId: 'user-a',
+          threadId: 'approval-thread-owned-by-b',
+          toolCallId: 'tool-call-123',
+          approved: true,
+        } as any),
+      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+      expect((mockAgent as any).sendToolApproval).not.toHaveBeenCalled();
+    });
+
+    it('should reject subscription tool decline for a thread owned by another resource', async () => {
+      await mockMemory.createThread({
+        threadId: 'decline-thread-owned-by-b',
+        resourceId: 'user-b',
+        title: 'Decline Thread B',
+      });
+      (mockAgent as any).sendToolApproval = vi.fn();
+
+      await expect(
+        SEND_TOOL_APPROVAL_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          abortSignal: new AbortController().signal,
+          resourceId: 'user-a',
+          threadId: 'decline-thread-owned-by-b',
+          toolCallId: 'tool-call-123',
+          approved: true,
+        } as any),
+      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+      expect((mockAgent as any).sendToolApproval).not.toHaveBeenCalled();
+    });
+
+    it('should approve subscription tool calls using context resource and thread values', async () => {
+      await mockMemory.createThread({
+        threadId: 'approval-thread-from-context',
+        resourceId: 'user-a',
+        title: 'Approval Thread A',
+      });
+      (mockAgent as any).sendToolApproval = vi.fn(async params => ({
+        accepted: true,
+        runId: 'run-123',
+        toolCallId: params.toolCallId,
+      }));
+
+      await SEND_TOOL_APPROVAL_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({
+          resourceId: 'user-a',
+          threadId: 'approval-thread-from-context',
+        }),
+        abortSignal: new AbortController().signal,
+        resourceId: 'user-b',
+        threadId: 'client-thread-ignored',
+        toolCallId: 'tool-call-123',
+        approved: true,
+      } as any);
+
+      expect((mockAgent as any).sendToolApproval).toHaveBeenCalledWith(
+        expect.objectContaining({
+          resourceId: 'user-a',
+          threadId: 'approval-thread-from-context',
+          toolCallId: 'tool-call-123',
+        }),
+      );
     });
 
     it('should send a signal using context resource and thread values', async () => {
@@ -1334,7 +1568,9 @@ describe('Agent Routes Authorization', () => {
       (mockAgent as any).sendSignal = vi.fn((signal, target) => {
         capturedSignal = signal;
         capturedTarget = target;
-        return { accepted: true, runId: 'signal-run-id' };
+        return {
+          accepted: Promise.resolve({ action: 'deliver', runId: 'signal-run-id' }),
+        };
       });
 
       const result = await SEND_AGENT_SIGNAL_ROUTE.handler({
@@ -1374,7 +1610,10 @@ describe('Agent Routes Authorization', () => {
       (mockAgent as any).sendMessage = vi.fn((message, target) => {
         capturedMessage = message;
         capturedTarget = target;
-        return { accepted: true, runId: 'message-run-id', signal: { id: 'signal-id' } };
+        return {
+          accepted: Promise.resolve({ action: 'deliver', runId: 'message-run-id' }),
+          signal: { id: 'signal-id' },
+        };
       });
 
       const result = await SEND_AGENT_MESSAGE_ROUTE.handler({
@@ -1409,7 +1648,9 @@ describe('Agent Routes Authorization', () => {
 
       (mockAgent as any).queueMessage = vi.fn((_message, target) => {
         capturedTarget = target;
-        return { accepted: true, runId: 'queued-message-run-id' };
+        return {
+          accepted: Promise.resolve({ action: 'deliver', runId: 'queued-message-run-id' }),
+        };
       });
 
       const result = await QUEUE_AGENT_MESSAGE_ROUTE.handler({
@@ -1461,7 +1702,9 @@ describe('Agent Routes Authorization', () => {
 
       (mockAgent as any).sendSignal = vi.fn((_signal, target) => {
         capturedTarget = target;
-        return { accepted: true, runId: 'signal-run-with-context' };
+        return {
+          accepted: Promise.resolve({ action: 'deliver', runId: 'signal-run-with-context' }),
+        };
       });
 
       const result = await SEND_AGENT_SIGNAL_ROUTE.handler({
@@ -1487,6 +1730,61 @@ describe('Agent Routes Authorization', () => {
       expect(capturedTarget.ifIdle.streamOptions.requestContext).toBe(requestContext);
       expect(capturedTarget.ifIdle.streamOptions.requestContext.get('fixture')).toBe('text-stream');
       expect(capturedTarget.ifIdle.streamOptions.requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('user-a');
+    });
+
+    it('maps a rejected accepted promise (USER MastraError) to a 400', async () => {
+      await mockMemory.createThread({
+        threadId: 'signal-thread-reject-user',
+        resourceId: 'user-a',
+        title: 'Signal Thread Reject User',
+      });
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      (mockAgent as any).sendSignal = vi.fn(() => ({
+        accepted: Promise.reject(
+          new MastraError({
+            category: ErrorCategory.USER,
+            domain: ErrorDomain.MASTRA_SERVER,
+            id: 'NO_MODEL_SELECTED',
+            text: 'No model selected',
+          }),
+        ),
+      }));
+
+      await expect(
+        SEND_AGENT_SIGNAL_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          signal: { type: 'user-message', contents: 'hello' },
+          resourceId: 'user-a',
+          threadId: 'signal-thread-reject-user',
+        } as any),
+      ).rejects.toThrow(new HTTPException(400, { message: 'No model selected' }));
+    });
+
+    it('maps a rejected accepted promise (non-USER error) to a 500', async () => {
+      await mockMemory.createThread({
+        threadId: 'signal-thread-reject-system',
+        resourceId: 'user-a',
+        title: 'Signal Thread Reject System',
+      });
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      (mockAgent as any).sendSignal = vi.fn(() => ({
+        accepted: Promise.reject(new Error('lease backend exploded')),
+      }));
+
+      await expect(
+        SEND_AGENT_SIGNAL_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          signal: { type: 'user-message', contents: 'hello' },
+          resourceId: 'user-a',
+          threadId: 'signal-thread-reject-system',
+        } as any),
+      ).rejects.toMatchObject({ status: 500 });
     });
 
     it('should reject sending a message to a thread owned by a different resource', async () => {

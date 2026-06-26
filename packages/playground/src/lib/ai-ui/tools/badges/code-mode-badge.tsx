@@ -1,9 +1,12 @@
-import { CodeBlock, CodeEditor, ToolCoinIcon, formatTypeScript } from '@mastra/playground-ui';
-import type { MastraUIMessage } from '@mastra/react';
+import { formatTypeScript } from '@mastra/playground-ui';
+import { CodeBlock } from '@mastra/playground-ui/components/CodeBlock';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { ToolCoinIcon } from '@mastra/playground-ui/icons/ToolCoinIcon';
 import { useEffect, useState } from 'react';
 import { BadgeWrapper } from './badge-wrapper';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
+import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 
 export interface CodeModeResult {
   success: boolean;
@@ -16,7 +19,7 @@ export interface CodeModeBadgeProps extends Omit<ToolApprovalButtonsProps, 'tool
   toolName: string;
   code: string;
   result?: CodeModeResult;
-  metadata?: MastraUIMessage['metadata'];
+  metadata?: MessageMetadata;
   toolCalled?: boolean;
 }
 

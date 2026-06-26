@@ -122,6 +122,9 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       // unit tests; the generic harness can't satisfy both prereqs.
       '/stored/agents/:storedAgentId/favorite',
       '/stored/skills/:storedSkillId/favorite',
+      // Change request creation requires a source-control provider that can open
+      // PRs; the generic harness has no provider. Covered by stored-agents tests.
+      '/stored/agents/:storedAgentId/change-request',
       // Builder registry routes that require external API calls + builder config
       '/editor/builder/registries',
       '/editor/builder/registries/:registryId/search',
@@ -153,7 +156,16 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       '/tool-providers/:providerId/connections',
     ];
     // Routes under these prefixes are excluded (e.g. /datasets needs a datasets storage domain)
-    const excludedPrefixes = ['/datasets'];
+    const excludedPrefixes = [
+      '/datasets',
+      // AgentController / Harness routes resolve a registered controller via
+      // mastra.getAgentController(id) (or the legacy mastra.getHarness(id))
+      // and operate on a live session keyed by resourceId. The generic test
+      // context registers no controller, so every route fails closed with 404.
+      // Behavior is covered by packages/server/src/server/handlers/harness.test.ts.
+      '/agent-controller',
+      '/harness',
+    ];
     const isExcluded = (r: ServerRoute) =>
       r.deprecated ||
       r.responseType === 'mcp-http' ||

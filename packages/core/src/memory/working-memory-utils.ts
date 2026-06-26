@@ -4,6 +4,33 @@ export const WORKING_MEMORY_END_TAG = '</working_memory>';
 export const SYSTEM_REMINDER_START_TAG = '<system-reminder>';
 export const SYSTEM_REMINDER_END_TAG = '</system-reminder>';
 
+/**
+ * Tool name used when working memory is delivered via the legacy system-message path.
+ * This is the registry key in `Memory.listTools()` and therefore the `toolName` on the
+ * wire when the LLM calls the tool.
+ */
+export const UPDATE_WORKING_MEMORY_TOOL_NAME = 'updateWorkingMemory';
+
+/**
+ * Tool name used when working memory is delivered via state signals
+ * (`workingMemory.useStateSignals: true`). The rename keeps legacy strip filters
+ * — which look for `updateWorkingMemory` — from incidentally stripping the new
+ * path's tool-call parts, so they persist as a normal audit trail.
+ */
+export const SET_WORKING_MEMORY_TOOL_NAME = 'setWorkingMemory';
+
+/**
+ * All known working-memory tool names. Use this when you want to recognize the
+ * tool regardless of delivery mode (e.g. to skip scoring on WM-only iterations
+ * or detect that working memory was updated). Strip-style filters should NOT
+ * use this — they should keep matching only `UPDATE_WORKING_MEMORY_TOOL_NAME`.
+ */
+export const WORKING_MEMORY_TOOL_NAMES = [UPDATE_WORKING_MEMORY_TOOL_NAME, SET_WORKING_MEMORY_TOOL_NAME] as const;
+
+export function isWorkingMemoryToolName(name: string | undefined | null): boolean {
+  return name === UPDATE_WORKING_MEMORY_TOOL_NAME || name === SET_WORKING_MEMORY_TOOL_NAME;
+}
+
 /*
  * Compatibility note: @mastra/memory intentionally copies the exported helpers
  * in this file into packages/memory/src/index.ts instead of importing them.

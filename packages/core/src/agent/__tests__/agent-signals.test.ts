@@ -6,9 +6,15 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EventEmitterPubSub } from '../../events/event-emitter';
+import { PubSub } from '../../events/pubsub';
+import type { EventCallback } from '../../events/types';
 import { UnixSocketPubSub } from '../../events/unix-socket-pubsub';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
+import { dispatchDueNotifications } from '../../notifications/dispatcher';
+import { InMemoryNotificationsStorage } from '../../notifications/storage';
+import { createNotificationInboxTool } from '../../notifications/tool';
+import { MastraCompositeStore } from '../../storage/base';
 import { Agent } from '../agent';
 import {
   createMessageSignal,
@@ -44,6 +50,47 @@ function createTextStreamModel(responseText: string) {
 
 function nextTick() {
   return new Promise(resolve => setTimeout(resolve, 0));
+}
+
+class AsyncCallbackPubSub extends PubSub {
+  #subscribers = new Map<string, Set<EventCallback>>();
+  #index = 0;
+  #pending = new Set<Promise<void>>();
+
+  async publish(topic: string, event: any, _options?: { localOnly?: boolean }): Promise<void> {
+    const subscribers = [...(this.#subscribers.get(topic) ?? [])];
+    const envelope = {
+      ...event,
+      id: `event-${this.#index}`,
+      createdAt: new Date(),
+      index: this.#index++,
+    };
+    const pending = new Promise<void>(resolve => {
+      setTimeout(() => {
+        try {
+          for (const subscriber of subscribers) subscriber(envelope);
+        } finally {
+          resolve();
+        }
+      }, 0);
+    });
+    this.#pending.add(pending);
+    pending.finally(() => this.#pending.delete(pending));
+  }
+
+  async subscribe(topic: string, cb: EventCallback): Promise<void> {
+    const subscribers = this.#subscribers.get(topic) ?? new Set<EventCallback>();
+    subscribers.add(cb);
+    this.#subscribers.set(topic, subscribers);
+  }
+
+  async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
+    this.#subscribers.get(topic)?.delete(cb);
+  }
+
+  async flush(): Promise<void> {
+    await Promise.all([...this.#pending]);
+  }
 }
 
 async function readNextRun(iterator: AsyncIterator<any>) {
@@ -795,6 +842,227 @@ describe('Agent signals', () => {
     }
   });
 
+  it('delivers resumed runs with the same run id to thread subscribers', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const agent = { id: 'resumed-thread-agent' } as Agent<any, any, any, any>;
+    const threadId = 'resumed-thread';
+    const resourceId = 'resumed-user';
+    const runId = 'resumed-run';
+
+    const createRun = (parts: any[]) => {
+      let finish!: () => void;
+      const finished = new Promise<void>(resolve => {
+        finish = resolve;
+      });
+      const fullStream = new ReadableStream({
+        start(controller) {
+          setTimeout(() => {
+            for (const part of parts) controller.enqueue(part);
+            controller.close();
+            finish();
+          }, 5);
+        },
+      });
+
+      runtime.registerRun(
+        agent,
+        {
+          runId,
+          status: 'running',
+          fullStream,
+          _waitUntilFinished: () => finished,
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+      );
+    };
+
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+
+    try {
+      createRun([
+        { type: 'start', runId },
+        {
+          type: 'tool-call-suspended',
+          runId,
+          payload: { toolCallId: 'tool-call-1', toolName: 'testTool' },
+        },
+      ]);
+
+      await withTimeout(iterator.next(), 'Timed out waiting for initial resumed-run start');
+      const suspended = await withTimeout(iterator.next(), 'Timed out waiting for suspended chunk');
+      expect(suspended.value).toMatchObject({ type: 'tool-call-suspended', runId });
+      await waitForCondition(() => subscription.activeRunId() === null);
+
+      const resumedRun = readNextRun(iterator);
+      createRun([
+        { type: 'start', runId },
+        { type: 'text-start', runId, payload: { id: 'text-1' } },
+        { type: 'text-delta', runId, payload: { id: 'text-1', text: 'approved response' } },
+        { type: 'text-end', runId, payload: { id: 'text-1' } },
+        {
+          type: 'finish',
+          runId,
+          payload: { usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, finishReason: 'stop' },
+        },
+      ]);
+
+      await expect(withTimeout(resumedRun, 'Timed out waiting for resumed run')).resolves.toMatchObject({
+        value: { runId, text: 'approved response' },
+      });
+    } finally {
+      subscription.unsubscribe();
+    }
+  });
+
+  it('keeps subscriber streams open across tool-call finish boundaries until tool results arrive', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const agent = { id: 'tool-call-boundary-agent' } as Agent<any, any, any, any>;
+    const threadId = 'tool-call-boundary-thread';
+    const resourceId = 'tool-call-boundary-user';
+    const runId = 'tool-call-boundary-run';
+    let finish!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finish = resolve;
+    });
+    const fullStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue({ type: 'start', runId });
+        controller.enqueue({ type: 'tool-call', runId, payload: { toolCallId: 'tool-1', toolName: 'testTool' } });
+        controller.enqueue({
+          type: 'finish',
+          runId,
+          payload: { finishReason: 'tool-calls', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+        });
+        controller.enqueue({ type: 'tool-result', runId, payload: { toolCallId: 'tool-1', result: 'tool output' } });
+        controller.enqueue({
+          type: 'finish',
+          runId,
+          payload: { finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+        });
+        controller.close();
+        finish();
+      },
+    });
+
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+
+    try {
+      runtime.registerRun(
+        agent,
+        {
+          runId,
+          status: 'running',
+          fullStream,
+          _waitUntilFinished: () => finished,
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+      );
+
+      await expect(withTimeout(iterator.next(), 'Timed out waiting for boundary start')).resolves.toMatchObject({
+        value: { type: 'start', runId },
+      });
+      await expect(withTimeout(iterator.next(), 'Timed out waiting for boundary tool call')).resolves.toMatchObject({
+        value: { type: 'tool-call', runId },
+      });
+      await expect(withTimeout(iterator.next(), 'Timed out waiting for tool-call finish')).resolves.toMatchObject({
+        value: { type: 'finish', runId, payload: expect.objectContaining({ finishReason: 'tool-calls' }) },
+      });
+      await expect(withTimeout(iterator.next(), 'Timed out waiting for live tool result')).resolves.toMatchObject({
+        value: { type: 'tool-result', runId, payload: expect.objectContaining({ toolCallId: 'tool-1' }) },
+      });
+      await expect(withTimeout(iterator.next(), 'Timed out waiting for final finish')).resolves.toMatchObject({
+        value: { type: 'finish', runId, payload: expect.objectContaining({ finishReason: 'stop' }) },
+      });
+    } finally {
+      subscription.unsubscribe();
+    }
+  });
+
+  it('assigns a new stream identity to same-run registrations without stale cleanup clearing the active stream', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const agent = { id: 'stream-identity-agent' } as Agent<any, any, any, any>;
+    const threadId = 'stream-identity-thread';
+    const resourceId = 'stream-identity-resource';
+    const runId = 'stream-identity-run';
+    const topic = `agent.thread-stream.${encodeURIComponent(`${resourceId}\u0000${threadId}`)}`;
+    const publishedEvents: any[] = [];
+    await pubsub.subscribe(topic, event => publishedEvents.push(event.data));
+
+    const createRun = (text: string, finished: Promise<void>) => {
+      const fullStream = new ReadableStream({
+        start(controller) {
+          controller.enqueue({ type: 'start', runId });
+          controller.enqueue({ type: 'text-delta', runId, payload: { text } });
+          controller.enqueue({ type: 'finish', runId, payload: { finishReason: 'stop' } });
+          controller.close();
+        },
+      });
+
+      return runtime.registerRun(
+        agent,
+        {
+          runId,
+          status: 'running',
+          fullStream,
+          _waitUntilFinished: () => finished,
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+        pubsub,
+      );
+    };
+
+    let finishInitial!: () => void;
+    const initialFinished = new Promise<void>(resolve => {
+      finishInitial = resolve;
+    });
+    let finishResumed!: () => void;
+    const resumedFinished = new Promise<void>(resolve => {
+      finishResumed = resolve;
+    });
+
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+
+    try {
+      const initialRun = readNextRun(iterator);
+      await createRun('initial response', initialFinished);
+      await expect(withTimeout(initialRun, 'Timed out waiting for initial stream identity run')).resolves.toMatchObject(
+        {
+          value: { runId, text: 'initial response' },
+        },
+      );
+      expect(subscription.activeRunId()).toBe(runId);
+
+      const resumedRun = readNextRun(iterator);
+      await createRun('resumed response', resumedFinished);
+      await expect(withTimeout(resumedRun, 'Timed out waiting for resumed stream identity run')).resolves.toMatchObject(
+        {
+          value: { runId, text: 'resumed response' },
+        },
+      );
+
+      const registeredEvents = publishedEvents.filter(event => event?.type === 'run-registered');
+      expect(registeredEvents).toHaveLength(2);
+      expect(registeredEvents.map(event => event.runId)).toEqual([runId, runId]);
+      expect(registeredEvents.map(event => event.streamSeq)).toEqual([1, 2]);
+      expect(registeredEvents[0].streamId).toEqual(expect.any(String));
+      expect(registeredEvents[1].streamId).toEqual(expect.any(String));
+      expect(registeredEvents[1].streamId).not.toBe(registeredEvents[0].streamId);
+
+      finishInitial();
+      await nextTick();
+      expect(subscription.activeRunId()).toBe(runId);
+
+      finishResumed();
+      await waitForCondition(() => subscription.activeRunId() === null);
+    } finally {
+      subscription.unsubscribe();
+    }
+  });
+
   it('keeps multicast thread streams alive when one subscriber unsubscribes mid-run', async () => {
     const runtime = new AgentThreadStreamRuntime();
     const agent = { id: 'subscriber-cancel-agent' } as Agent<any, any, any, any>;
@@ -886,7 +1154,7 @@ describe('Agent signals', () => {
     );
 
     const subscribedRun = await nextRun;
-    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: subscribedRun.value.runId }));
+    await expect(signalResult.accepted).resolves.toMatchObject({ action: 'wake', runId: subscribedRun.value.runId });
     expect(signalResult.signal.id).toBeDefined();
     expect(signalResult.signal.acceptedAt).toBeInstanceOf(Date);
     expect(subscribedRun.value.text).toBe('signal response');
@@ -926,7 +1194,7 @@ describe('Agent signals', () => {
     );
 
     const subscribedRun = await nextRun;
-    expect(result).toEqual(expect.objectContaining({ accepted: true, runId: subscribedRun.value.runId }));
+    await expect(result.accepted).resolves.toMatchObject({ action: 'wake', runId: subscribedRun.value.runId });
     expect(result.signal).toMatchObject({ type: 'user', tagName: 'user', contents: 'Hello from sendMessage' });
     const signalPart = subscribedRun.value.parts.find((part: any) => part.type === 'data-user-message');
     expect(signalPart?.data).toMatchObject({
@@ -939,6 +1207,986 @@ describe('Agent signals', () => {
     expect(subscribedRun.value.text).toBe('message response');
 
     subscription.unsubscribe();
+  });
+
+  it('persists external state signals with cache-key tracking', async () => {
+    const memory = new MockMemory();
+    await memory.createThread({ threadId: 'state-thread', resourceId: 'state-user' });
+    const agent = new Agent({
+      id: 'state-agent',
+      name: 'State Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('state response'),
+      memory,
+    });
+
+    const result = await agent.sendStateSignal(
+      {
+        id: 'browser',
+        cacheKey: 'browser:v1',
+        mode: 'snapshot',
+        contents: 'Browser is open on https://example.com',
+        value: { activeUrl: 'https://example.com' },
+      },
+      { resourceId: 'state-user', threadId: 'state-thread', ifIdle: { behavior: 'persist' } },
+    );
+    if (result.skipped) throw new Error('expected state signal to be persisted, not skipped');
+    await expect(result.accepted).resolves.toMatchObject({ action: 'persist' });
+    expect(result.signal).toBeDefined();
+
+    expect(result.signal).toMatchObject({
+      type: 'state',
+      tagName: 'state',
+      metadata: expect.objectContaining({
+        state: expect.objectContaining({ id: 'browser', cacheKey: 'browser:v1', mode: 'snapshot', version: 1 }),
+        value: { activeUrl: 'https://example.com' },
+      }),
+    });
+    await expect(
+      agent.sendStateSignal(
+        { id: 'browser', cacheKey: 'browser:v1', contents: 'unchanged' },
+        { resourceId: 'state-user', threadId: 'state-thread', ifIdle: { behavior: 'persist' } },
+      ),
+    ).resolves.toEqual({ skipped: true, reason: 'unchanged' });
+    const thread = await memory.getThreadById({ threadId: 'state-thread' });
+    expect(thread?.metadata?.mastra).toEqual(
+      expect.objectContaining({
+        stateSignals: expect.objectContaining({
+          browser: expect.objectContaining({
+            currentCacheKey: 'browser:v1',
+            version: 1,
+            lastSnapshotSignalId: result.signal!.id,
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('delivers medium-priority notification records while idle', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'notification-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'notification-agent',
+      name: 'Notification Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('notification response'),
+    });
+    new Mastra({ agents: { notificationAgent: agent }, storage, logger: false });
+
+    const subscription = await agent.subscribeToThread({
+      threadId: 'notification-thread',
+      resourceId: 'notification-user',
+    });
+    const nextRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+
+    const result = await agent.sendNotificationSignal(
+      {
+        source: 'github',
+        kind: 'ci-status',
+        priority: 'medium',
+        summary: 'CI failed on main',
+        dedupeKey: 'main-ci',
+      },
+      {
+        resourceId: 'notification-user',
+        threadId: 'notification-thread',
+        ifIdle: { streamOptions: { memory: { resource: 'notification-user', thread: 'notification-thread' } } },
+      },
+    );
+
+    const subscribedRun = await nextRun;
+    expect(result).toEqual(expect.objectContaining({ runId: subscribedRun.value.runId }));
+    await expect(result.accepted).resolves.toMatchObject({ action: 'wake', runId: subscribedRun.value.runId });
+    expect(result.decision).toMatchObject({ action: 'deliver' });
+    expect(result.record).toMatchObject({
+      agentId: 'notification-agent',
+      resourceId: 'notification-user',
+      threadId: 'notification-thread',
+      status: 'delivered',
+      deliveredSignalId: result.signal?.id,
+    });
+    const signalPart = subscribedRun.value.parts.find((part: any) => part.type === 'data-signal');
+    expect(signalPart?.data).toMatchObject({
+      id: result.signal?.id,
+      type: 'notification',
+      tagName: 'notification',
+      contents: 'CI failed on main',
+      attributes: { source: 'github', kind: 'ci-status', priority: 'medium', status: 'delivered' },
+    });
+    await expect(
+      notifications.getNotification({ threadId: 'notification-thread', id: result.record.id }),
+    ).resolves.toMatchObject({ status: 'delivered', deliveredSignalId: result.signal?.id });
+
+    subscription.unsubscribe();
+  });
+
+  it('delivers batched idle notifications using one initial thread-state decision', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'notification-batch-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'notification-batch-agent',
+      name: 'Notification Batch Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('notification batch response'),
+    });
+    new Mastra({ agents: { notificationBatchAgent: agent }, storage, logger: false });
+
+    const results = await agent.sendNotificationSignal(
+      [
+        { source: 'github', kind: 'pull-request-ci-failure', priority: 'high', summary: 'CI failed' },
+        { source: 'github', kind: 'pull-request-activity', priority: 'high', summary: 'Devin commented' },
+      ],
+      { resourceId: 'notification-batch-user', threadId: 'notification-batch-thread' },
+    );
+
+    expect(results).toHaveLength(2);
+    expect(results[0]).toMatchObject({ decision: { action: 'deliver', reason: 'idle-high' } });
+    await expect(results[0]?.accepted).resolves.toMatchObject({ action: expect.stringMatching(/wake|deliver/) });
+    expect(results[0]?.signal).toMatchObject({ type: 'notification', tagName: 'notification' });
+    expect(results[0]?.record).toMatchObject({ status: 'delivered', deliveredSignalId: results[0]?.signal?.id });
+    expect(results[1]).toMatchObject({ decision: { action: 'deliver', reason: 'idle-high' } });
+    await expect(results[1]?.accepted).resolves.toMatchObject({ action: expect.stringMatching(/wake|deliver/) });
+    expect(results[1]?.signal).toMatchObject({ type: 'notification', tagName: 'notification' });
+    expect(results[1]?.record).toMatchObject({ status: 'delivered', deliveredSignalId: results[1]?.signal?.id });
+  });
+
+  it('wakes idle threads for immediate medium-priority notification summaries', async () => {
+    let streamCount = 0;
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'medium-summary-wake-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'medium-summary-wake-agent',
+      name: 'Medium Summary Wake Agent',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          streamCount += 1;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            ]),
+          };
+        },
+      }),
+      notifications: {
+        deliveryPolicy: {
+          decide: ({ now }) => ({ action: 'summarize', summaryAt: now, reason: 'test-medium-summary-now' }),
+        },
+      },
+    });
+    new Mastra({ agents: { mediumSummaryWakeAgent: agent }, storage, logger: false });
+    const subscription = await agent.subscribeToThread({
+      threadId: 'medium-summary-wake-thread',
+      resourceId: 'medium-summary-wake-user',
+    });
+    const nextRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+
+    const result = await agent.sendNotificationSignal(
+      { source: 'github', kind: 'pull-request-activity', priority: 'medium', summary: 'Devin commented' },
+      { resourceId: 'medium-summary-wake-user', threadId: 'medium-summary-wake-thread' },
+    );
+    const subscribedRun = await withTimeout(nextRun, 'Timed out waiting for medium notification summary wake');
+    const signalPart = subscribedRun.value.parts.find((part: any) => part.type === 'data-signal');
+
+    expect(result.signal).toMatchObject({ type: 'notification', tagName: 'notification-summary' });
+    expect(result.decision).toMatchObject({ action: 'summarize', reason: 'test-medium-summary-now' });
+    expect(result.record).toMatchObject({
+      status: 'pending',
+      summaryAt: undefined,
+      summarySignalId: result.signal?.id,
+    });
+    expect(signalPart?.data).toMatchObject({
+      id: result.signal?.id,
+      type: 'notification',
+      tagName: 'notification-summary',
+      contents: 'github: 1',
+      attributes: { pending: 1 },
+    });
+    expect(streamCount).toBe(1);
+
+    subscription.unsubscribe();
+  });
+
+  it('keeps immediate notification records pending when runtime rejects delivery', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'rejected-notification-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'rejected-notification-agent',
+      name: 'Rejected Notification Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('unused'),
+    });
+    new Mastra({ agents: { rejectedNotificationAgent: agent }, storage, logger: false });
+    const rejectedAccepted = Promise.reject(new Error('signal rejected'));
+    // Attach a no-op catch so the rejection is considered handled and never surfaces as an
+    // unhandled rejection; the dispatcher attaches its own awaiting handler in try/catch.
+    rejectedAccepted.catch(() => {});
+    const sendSignal = vi.spyOn(agentThreadStreamRuntime, 'sendSignal').mockReturnValue({
+      accepted: rejectedAccepted,
+      signal: createSignal({ type: 'notification', tagName: 'notification', contents: 'Rejected' }),
+    } as any);
+
+    try {
+      const result = await agent.sendNotificationSignal(
+        { source: 'github', kind: 'ci-status', priority: 'medium', summary: 'Rejected notification' },
+        { resourceId: 'notification-user', threadId: 'notification-thread' },
+      );
+
+      expect(result.accepted).toBeUndefined();
+      expect(result.record).toMatchObject({
+        status: 'pending',
+        deliveryAttempts: 1,
+        lastDeliveryError: 'signal rejected',
+      });
+      expect(result.record.deliveredSignalId).toBeUndefined();
+      const stored = await notifications.getNotification({ threadId: 'notification-thread', id: result.record.id });
+      expect(stored).toMatchObject({ status: 'pending', deliveryAttempts: 1 });
+      expect(stored?.deliveredSignalId).toBeUndefined();
+    } finally {
+      sendSignal.mockRestore();
+    }
+  });
+
+  it('batches active high notifications for full delivery and active medium or low notifications for summaries', async () => {
+    let releaseFirst!: () => void;
+    const firstFinished = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    let streamCount = 0;
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({
+      id: 'active-priority-notification-storage',
+      domains: { notifications },
+    });
+    const responseText = 'active response';
+    const model = new MockLanguageModelV2({
+      doStream: async () => {
+        streamCount += 1;
+        const currentStream = streamCount;
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: new ReadableStream({
+            async start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({ type: 'text-start', id: `text-${currentStream}` });
+              controller.enqueue({ type: 'text-delta', id: `text-${currentStream}`, delta: responseText });
+              controller.enqueue({ type: 'text-end', id: `text-${currentStream}` });
+              if (currentStream === 1) await firstFinished;
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'active-priority-notification-agent',
+      name: 'Active Priority Notification Agent',
+      instructions: 'Test',
+      model,
+    });
+    new Mastra({ agents: { activePriorityNotificationAgent: agent }, storage, logger: false });
+    const subscription = await agent.subscribeToThread({
+      threadId: 'active-priority-notification-thread',
+      resourceId: 'active-priority-notification-user',
+    });
+
+    const stream = await agent.stream('Hello', {
+      memory: { thread: 'active-priority-notification-thread', resource: 'active-priority-notification-user' },
+    });
+    await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
+
+    const high = await agent.sendNotificationSignal(
+      { source: 'github', kind: 'ci-status', priority: 'high', summary: 'CI failed' },
+      { resourceId: 'active-priority-notification-user', threadId: 'active-priority-notification-thread' },
+    );
+    const medium = await agent.sendNotificationSignal(
+      { source: 'slack', kind: 'mention', priority: 'medium', summary: 'Jane mentioned you' },
+      { resourceId: 'active-priority-notification-user', threadId: 'active-priority-notification-thread' },
+    );
+    const low = await agent.sendNotificationSignal(
+      { source: 'calendar', kind: 'event-reminder', priority: 'low', summary: 'Standup starts soon' },
+      { resourceId: 'active-priority-notification-user', threadId: 'active-priority-notification-thread' },
+    );
+
+    expect(high.signal).toMatchObject({ type: 'notification', tagName: 'notification-summary' });
+    expect(high.decision).toMatchObject({ action: 'summarize', reason: 'active-high-summary-then-full' });
+    expect(high.record).toMatchObject({
+      status: 'pending',
+      deliveryReason: 'active-high-summary-then-full',
+      summarySignalId: high.signal?.id,
+    });
+    expect(high.record.summaryAt).toBeUndefined();
+    expect(high.record.deliverAt).toBeInstanceOf(Date);
+    expect(medium.signal).toMatchObject({ type: 'notification', tagName: 'notification-summary' });
+    expect(medium.decision).toMatchObject({ action: 'summarize', reason: 'active-batch-summary' });
+    expect(medium.record).toMatchObject({
+      status: 'pending',
+      deliveryReason: 'active-batch-summary',
+      summarySignalId: medium.signal?.id,
+    });
+    expect(medium.record.summaryAt).toBeUndefined();
+    expect(low.signal).toBeUndefined();
+    expect(low.decision).toMatchObject({ action: 'summarize', reason: 'active-batch-summary' });
+    expect(low.record).toMatchObject({ status: 'pending', deliveryReason: 'active-batch-summary' });
+    expect(low.record.summaryAt).toBeInstanceOf(Date);
+
+    releaseFirst();
+    // The high-priority summary signal is delivered to the active run, which the
+    // agentic loop picks up and processes with an additional model iteration.
+    await expect(stream.text).resolves.toBe('active responseactive response');
+    expect(streamCount).toBe(2);
+    subscription.unsubscribe();
+  });
+
+  it('summarizes active high-priority notifications immediately, then delivers full notifications when idle', async () => {
+    let releaseFirst!: () => void;
+    const firstFinished = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    let streamCount = 0;
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'high-active-integration-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'high-active-integration-agent',
+      name: 'High Active Integration Agent',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          streamCount += 1;
+          const responseText = `response ${streamCount}`;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: new ReadableStream({
+              async start(controller) {
+                controller.enqueue({ type: 'stream-start', warnings: [] });
+                controller.enqueue({ type: 'text-start', id: 'text-1' });
+                controller.enqueue({ type: 'text-delta', id: 'text-1', delta: responseText });
+                controller.enqueue({ type: 'text-end', id: 'text-1' });
+                if (streamCount === 1) {
+                  await firstFinished;
+                }
+                controller.enqueue({
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                });
+                controller.close();
+              },
+            }),
+          };
+        },
+      }),
+    });
+    const mastra = new Mastra({ agents: { highActiveIntegrationAgent: agent }, storage, logger: false });
+    const subscription = await agent.subscribeToThread({
+      threadId: 'high-active-thread',
+      resourceId: 'high-active-user',
+    });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+    const firstRun = readNextRunWithParts(iterator);
+
+    const stream = await agent.stream('Hello', {
+      memory: { thread: 'high-active-thread', resource: 'high-active-user' },
+    });
+    const streamText = stream.text;
+    await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
+
+    const result = await agent.sendNotificationSignal(
+      { source: 'github', kind: 'ci-status', priority: 'high', summary: 'CI failed on main' },
+      { resourceId: 'high-active-user', threadId: 'high-active-thread' },
+    );
+
+    expect(result.signal).toMatchObject({ type: 'notification', tagName: 'notification-summary' });
+    expect(result.decision).toMatchObject({ action: 'summarize', reason: 'active-high-summary-then-full' });
+    expect(result.record).toMatchObject({
+      status: 'pending',
+      summarySignalId: result.signal?.id,
+      deliveryReason: 'active-high-summary-then-full',
+    });
+    expect(result.record.summaryAt).toBeUndefined();
+    expect(result.record.deliverAt).toBeInstanceOf(Date);
+
+    releaseFirst();
+    const subscribedSummary = await withTimeout(firstRun, 'Timed out waiting for high-priority summary signal');
+    const summaryPart = subscribedSummary.value.parts.find((part: any) => part.type === 'data-signal');
+    expect(summaryPart?.data).toMatchObject({
+      id: result.signal?.id,
+      type: 'notification',
+      tagName: 'notification-summary',
+      contents: 'github: 1',
+      attributes: { pending: 1 },
+    });
+    // The summary signal is delivered to the active run, triggering an additional model iteration.
+    expect(streamCount).toBe(2);
+    await expect(
+      notifications.getNotification({ threadId: 'high-active-thread', id: result.record.id }),
+    ).resolves.toMatchObject({
+      status: 'pending',
+      summarySignalId: result.signal?.id,
+      summaryAt: undefined,
+      deliverAt: result.record.deliverAt,
+    });
+
+    const deliveryRun = readNextRunWithParts(iterator);
+    const dispatchResult = await dispatchDueNotifications({ mastra, storage: notifications, now: new Date() });
+    const subscribedDelivery = await withTimeout(deliveryRun, 'Timed out waiting for full high-priority delivery');
+    const deliveryPart = subscribedDelivery.value.parts.find((part: any) => part.type === 'data-signal');
+
+    expect(dispatchResult.failed).toEqual([]);
+    expect(dispatchResult.signals[0]).toMatchObject({ type: 'notification', tagName: 'notification' });
+    expect(deliveryPart?.data).toMatchObject({
+      id: dispatchResult.signals[0]?.id,
+      type: 'notification',
+      tagName: 'notification',
+      contents: 'CI failed on main',
+      attributes: { source: 'github', kind: 'ci-status', priority: 'high', status: 'delivered' },
+    });
+    await expect(
+      notifications.getNotification({ threadId: 'high-active-thread', id: result.record.id }),
+    ).resolves.toMatchObject({
+      status: 'delivered',
+      deliveredSignalId: dispatchResult.signals[0]?.id,
+    });
+    await streamText;
+
+    subscription.unsubscribe();
+  });
+
+  it('plans due notifications by thread so medium summaries cannot starve high full delivery', async () => {
+    let releaseRun!: () => void;
+    const runFinished = new Promise<void>(resolve => {
+      releaseRun = resolve;
+    });
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'priority-dispatch-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'priority-dispatch-agent',
+      name: 'Priority Dispatch Agent',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: new ReadableStream({
+            async start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'notification response' });
+              controller.enqueue({ type: 'text-end', id: 'text-1' });
+              await runFinished;
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        }),
+      }),
+    });
+    const mastra = new Mastra({ agents: { priorityDispatchAgent: agent }, storage, logger: false });
+    const dueAt = new Date('2026-06-05T22:56:00Z');
+    await notifications.createNotification({
+      id: 'medium-ci-pending',
+      agentId: 'priority-dispatch-agent',
+      resourceId: 'priority-dispatch-user',
+      threadId: 'priority-dispatch-thread',
+      source: 'github',
+      kind: 'pull-request-ci-pending',
+      priority: 'medium',
+      summary: 'CI is still pending',
+      summaryAt: dueAt,
+      createdAt: new Date('2026-06-05T22:55:00Z'),
+    });
+    const high = await notifications.createNotification({
+      id: 'high-comment',
+      agentId: 'priority-dispatch-agent',
+      resourceId: 'priority-dispatch-user',
+      threadId: 'priority-dispatch-thread',
+      source: 'github',
+      kind: 'pull-request-activity',
+      priority: 'high',
+      summary: 'Devin commented',
+      deliverAt: dueAt,
+      deliveryReason: 'active-high-summary-then-full',
+      createdAt: new Date('2026-06-05T22:55:01Z'),
+    });
+    await notifications.updateNotification({
+      id: high.id,
+      threadId: high.threadId,
+      summarySignalId: 'previous-summary-signal',
+    });
+
+    const dispatchResult = await dispatchDueNotifications({ mastra, storage: notifications, now: dueAt });
+
+    expect(dispatchResult.failed).toEqual([]);
+    expect(dispatchResult.signals.map(signal => signal.contents)).toEqual(['Devin commented', 'github: 1']);
+    await expect(
+      notifications.getNotification({ threadId: 'priority-dispatch-thread', id: 'high-comment' }),
+    ).resolves.toMatchObject({
+      status: 'delivered',
+      deliveredSignalId: dispatchResult.signals[0]?.id,
+    });
+    await expect(
+      notifications.getNotification({ threadId: 'priority-dispatch-thread', id: 'medium-ci-pending' }),
+    ).resolves.toMatchObject({
+      status: 'pending',
+      summaryAt: undefined,
+      summarySignalId: dispatchResult.signals[1]?.id,
+    });
+
+    releaseRun();
+    await nextTick();
+  });
+
+  it('dispatches medium-priority active summaries through agent subscriptions without marking records delivered', async () => {
+    let releaseFirst!: () => void;
+    const firstFinished = new Promise<void>(resolve => {
+      releaseFirst = resolve;
+    });
+    let streamCount = 0;
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'medium-active-dispatch-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'medium-active-dispatch-agent',
+      name: 'Medium Active Dispatch Agent',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          streamCount += 1;
+          const responseText = `medium response ${streamCount}`;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: new ReadableStream({
+              async start(controller) {
+                controller.enqueue({ type: 'stream-start', warnings: [] });
+                controller.enqueue({ type: 'text-start', id: 'text-1' });
+                controller.enqueue({ type: 'text-delta', id: 'text-1', delta: responseText });
+                controller.enqueue({ type: 'text-end', id: 'text-1' });
+                if (streamCount === 1) await firstFinished;
+                controller.enqueue({
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                });
+                controller.close();
+              },
+            }),
+          };
+        },
+      }),
+    });
+    const mastra = new Mastra({ agents: { mediumActiveDispatchAgent: agent }, storage, logger: false });
+    const subscription = await agent.subscribeToThread({
+      threadId: 'medium-active-thread',
+      resourceId: 'medium-active-user',
+    });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+    const firstRun = readNextRunWithParts(iterator);
+
+    await notifications.createNotification({
+      id: 'medium-active-notification',
+      agentId: 'medium-active-dispatch-agent',
+      resourceId: 'medium-active-user',
+      threadId: 'medium-active-thread',
+      source: 'slack',
+      kind: 'mention',
+      priority: 'medium',
+      summary: 'Jane mentioned you',
+      summaryAt: new Date('2026-05-30T12:00:00Z'),
+    });
+    const stream = await agent.stream('Hello', {
+      memory: { thread: 'medium-active-thread', resource: 'medium-active-user' },
+    });
+    const streamText = stream.text;
+    await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
+
+    const dispatchResult = await dispatchDueNotifications({
+      mastra,
+      storage: notifications,
+      now: new Date('2026-05-30T12:00:01Z'),
+    });
+    expect(dispatchResult.failed).toEqual([]);
+    expect(dispatchResult.signals[0]).toMatchObject({ type: 'notification', tagName: 'notification-summary' });
+
+    releaseFirst();
+    const subscribedSummary = await withTimeout(firstRun, 'Timed out waiting for medium active summary signal');
+    const summaryPart = subscribedSummary.value.parts.find((part: any) => part.type === 'data-signal');
+    expect(summaryPart?.data).toMatchObject({
+      id: dispatchResult.signals[0]?.id,
+      type: 'notification',
+      tagName: 'notification-summary',
+      contents: 'slack: 1',
+      attributes: { pending: 1 },
+    });
+    // The summary signal is delivered to the active run, triggering an additional model iteration.
+    expect(streamCount).toBe(2);
+    await expect(
+      notifications.getNotification({ threadId: 'medium-active-thread', id: 'medium-active-notification' }),
+    ).resolves.toMatchObject({
+      status: 'pending',
+      summaryAt: undefined,
+      summarySignalId: dispatchResult.signals[0]?.id,
+    });
+    await streamText;
+
+    subscription.unsubscribe();
+  });
+
+  it('saves and dispatches low-priority idle notification summaries through agent subscriptions without starting a run', async () => {
+    let streamCount = 0;
+    const pubsub = new AsyncCallbackPubSub();
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'low-priority-notification-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'low-priority-notification-agent',
+      name: 'Low Priority Notification Agent',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          streamCount += 1;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([{ type: 'stream-start', warnings: [] }]),
+          };
+        },
+      }),
+    });
+    const mastra = new Mastra({ agents: { lowPriorityNotificationAgent: agent }, storage, logger: false, pubsub });
+    const subscription = await agent.subscribeToThread({
+      threadId: 'notification-thread',
+      resourceId: 'notification-user',
+    });
+
+    const result = await agent.sendNotificationSignal(
+      { source: 'mastracode', kind: 'manual', priority: 'low', summary: 'Read when you have time' },
+      { resourceId: 'notification-user', threadId: 'notification-thread' },
+    );
+
+    await nextTick();
+    expect(streamCount).toBe(0);
+    expect(result.signal).toBeUndefined();
+    expect(result.accepted).toBeUndefined();
+    expect(result).toMatchObject({
+      decision: { action: 'summarize', reason: 'idle-low-summary' },
+      record: { status: 'pending', deliveryReason: 'idle-low-summary' },
+    });
+    expect(result.record.deliverAt).toBeUndefined();
+    expect(result.record.summaryAt).toBeInstanceOf(Date);
+
+    const dispatchNow = new Date((result.record.summaryAt?.getTime() ?? Date.now()) + 1);
+    const nextRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+    const dispatchResult = await dispatchDueNotifications({ mastra, storage: notifications, now: dispatchNow });
+    const subscribedRun = await withTimeout(
+      nextRun,
+      'Timed out waiting for low-priority notification summary broadcast',
+    );
+
+    expect(dispatchResult.failed).toEqual([]);
+    expect(dispatchResult.signals[0]).toMatchObject({ type: 'notification', tagName: 'notification-summary' });
+    expect(streamCount).toBe(0);
+    const signalPart = subscribedRun.value.parts.find((part: any) => part.type === 'data-signal');
+    expect(signalPart?.data).toMatchObject({
+      id: dispatchResult.signals[0]?.id,
+      type: 'notification',
+      tagName: 'notification-summary',
+      contents: 'mastracode: 1',
+      attributes: { pending: 1 },
+    });
+    await expect(
+      notifications.getNotification({ threadId: 'notification-thread', id: result.record.id }),
+    ).resolves.toMatchObject({
+      status: 'pending',
+      summaryAt: undefined,
+      summarySignalId: dispatchResult.signals[0]?.id,
+    });
+
+    subscription.unsubscribe();
+  });
+
+  it('notification inbox read injects a real notification signal through agent subscriptions', async () => {
+    let streamCount = 0;
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'inbox-read-delivery-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'inbox-read-delivery-agent',
+      name: 'Inbox Read Delivery Agent',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          streamCount += 1;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            ]),
+          };
+        },
+      }),
+    });
+    const mastra = new Mastra({ agents: { inboxReadDeliveryAgent: agent }, storage, logger: false });
+    const tool = createNotificationInboxTool({ storage: notifications });
+    await notifications.createNotification({
+      id: 'inbox-read-notification',
+      agentId: 'inbox-read-delivery-agent',
+      resourceId: 'inbox-read-user',
+      threadId: 'inbox-read-thread',
+      source: 'github',
+      kind: 'ci-status',
+      priority: 'medium',
+      summary: 'CI failed on main',
+    });
+    const subscription = await agent.subscribeToThread({
+      threadId: 'inbox-read-thread',
+      resourceId: 'inbox-read-user',
+    });
+    const nextRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+
+    const result = await tool.execute?.({ action: 'read', id: 'inbox-read-notification' }, {
+      agent: { agentId: 'inbox-read-delivery-agent', threadId: 'inbox-read-thread', resourceId: 'inbox-read-user' },
+      mastra,
+    } as any);
+    const subscribedRun = await withTimeout(nextRun, 'Timed out waiting for inbox read notification delivery');
+    const signalPart = subscribedRun.value.parts.find((part: any) => part.type === 'data-signal');
+
+    expect(result).toMatchObject({ message: '1 notification will now be delivered.', delivered: 1 });
+    expect(signalPart?.data).toMatchObject({
+      type: 'notification',
+      tagName: 'notification',
+      contents: 'CI failed on main',
+      attributes: { source: 'github', kind: 'ci-status', priority: 'medium', status: 'delivered' },
+    });
+    expect(streamCount).toBe(1);
+    await expect(
+      notifications.getNotification({ threadId: 'inbox-read-thread', id: 'inbox-read-notification' }),
+    ).resolves.toMatchObject({
+      status: 'seen',
+      deliveredSignalId: signalPart?.data.id,
+    });
+
+    subscription.unsubscribe();
+  });
+
+  it('notification inbox read marks already-delivered notifications seen without injecting another signal', async () => {
+    let streamCount = 0;
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({
+      id: 'inbox-read-already-delivered-storage',
+      domains: { notifications },
+    });
+    const agent = new Agent({
+      id: 'inbox-read-already-delivered-agent',
+      name: 'Inbox Read Already Delivered Agent',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          streamCount += 1;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([{ type: 'stream-start', warnings: [] }]),
+          };
+        },
+      }),
+    });
+    const mastra = new Mastra({ agents: { inboxReadAlreadyDeliveredAgent: agent }, storage, logger: false });
+    const tool = createNotificationInboxTool({ storage: notifications });
+    await notifications.createNotification({
+      id: 'already-delivered-notification',
+      agentId: 'inbox-read-already-delivered-agent',
+      resourceId: 'already-delivered-user',
+      threadId: 'already-delivered-thread',
+      source: 'github',
+      kind: 'ci-status',
+      priority: 'high',
+      summary: 'CI failed earlier',
+    });
+    await notifications.updateNotification({
+      threadId: 'already-delivered-thread',
+      id: 'already-delivered-notification',
+      status: 'delivered',
+      deliveredSignalId: 'existing-signal-id',
+    });
+
+    const result = await tool.execute?.({ action: 'read', id: 'already-delivered-notification' }, {
+      agent: {
+        agentId: 'inbox-read-already-delivered-agent',
+        threadId: 'already-delivered-thread',
+        resourceId: 'already-delivered-user',
+      },
+      mastra,
+    } as any);
+
+    expect(result).toMatchObject({ delivered: 0, markedSeen: 1, message: 'No unread notifications needed delivery.' });
+    expect(streamCount).toBe(0);
+    await expect(
+      notifications.getNotification({ threadId: 'already-delivered-thread', id: 'already-delivered-notification' }),
+    ).resolves.toMatchObject({
+      status: 'seen',
+      deliveredSignalId: 'existing-signal-id',
+    });
+  });
+
+  it('dispatches low-priority idle notification summaries without subscribers', async () => {
+    let streamCount = 0;
+    const pubsub = new AsyncCallbackPubSub();
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'no-subscriber-notification-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'no-subscriber-notification-agent',
+      name: 'No Subscriber Notification Agent',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          streamCount += 1;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([{ type: 'stream-start', warnings: [] }]),
+          };
+        },
+      }),
+    });
+    const mastra = new Mastra({ agents: { noSubscriberNotificationAgent: agent }, storage, logger: false, pubsub });
+
+    const result = await agent.sendNotificationSignal(
+      { source: 'mastracode', kind: 'manual', priority: 'low', summary: 'No one is watching' },
+      { resourceId: 'notification-user', threadId: 'notification-thread' },
+    );
+    const dispatchNow = new Date((result.record.summaryAt?.getTime() ?? Date.now()) + 1);
+    const dispatchResult = await withTimeout(
+      dispatchDueNotifications({ mastra, storage: notifications, now: dispatchNow }),
+      'Timed out dispatching low-priority notification summary without subscribers',
+    );
+
+    expect(dispatchResult.failed).toEqual([]);
+    expect(dispatchResult.signals[0]).toMatchObject({ type: 'notification', tagName: 'notification-summary' });
+    expect(streamCount).toBe(0);
+    await expect(
+      notifications.getNotification({ threadId: 'notification-thread', id: result.record.id }),
+    ).resolves.toMatchObject({
+      status: 'pending',
+      summaryAt: undefined,
+      summarySignalId: dispatchResult.signals[0]?.id,
+    });
+  });
+
+  it('defers notification records without starting an idle run', async () => {
+    let streamCount = 0;
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'deferred-notification-storage', domains: { notifications } });
+    const deliverAt = new Date('2026-05-30T12:00:00Z');
+    const agent = new Agent({
+      id: 'deferred-notification-agent',
+      name: 'Deferred Notification Agent',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          streamCount += 1;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([{ type: 'stream-start', warnings: [] }]),
+          };
+        },
+      }),
+      notifications: {
+        deliveryPolicy: {
+          decide: () => ({ action: 'defer', deliverAt, reason: 'after-hours' }),
+        },
+      },
+    });
+    new Mastra({ agents: { deferredNotificationAgent: agent }, storage, logger: false });
+
+    const result = await agent.sendNotificationSignal(
+      {
+        source: 'calendar',
+        kind: 'event-reminder',
+        summary: 'Planning starts tomorrow',
+      },
+      { resourceId: 'notification-user', threadId: 'notification-thread' },
+    );
+
+    await nextTick();
+    expect(streamCount).toBe(0);
+    expect(result).toMatchObject({
+      decision: { action: 'defer', reason: 'after-hours' },
+      record: { status: 'pending', deliveryReason: 'after-hours' },
+    });
+    expect(result.signal).toBeUndefined();
+    expect(result.accepted).toBeUndefined();
+    expect(result.record.deliverAt?.toISOString()).toBe(deliverAt.toISOString());
+  });
+
+  it('coalesces pending notification records through sendNotificationSignal', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'coalesced-notification-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'coalesced-notification-agent',
+      name: 'Coalesced Notification Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('notification response'),
+      notifications: {
+        deliveryPolicy: {
+          default: { action: 'summarize', summaryAt: new Date('2026-05-30T12:00:00Z') },
+        },
+      },
+    });
+    new Mastra({ agents: { coalescedNotificationAgent: agent }, storage, logger: false });
+
+    const first = await agent.sendNotificationSignal(
+      {
+        source: 'github',
+        kind: 'ci-status',
+        summary: 'CI failed: one test',
+        dedupeKey: 'main-ci',
+      },
+      { resourceId: 'notification-user', threadId: 'notification-thread' },
+    );
+    const second = await agent.sendNotificationSignal(
+      {
+        source: 'github',
+        kind: 'ci-status',
+        summary: 'CI failed: three tests',
+        dedupeKey: 'main-ci',
+      },
+      { resourceId: 'notification-user', threadId: 'notification-thread' },
+    );
+
+    expect(second.record.id).toBe(first.record.id);
+    expect(second.record).toMatchObject({ status: 'pending', summary: 'CI failed: three tests', coalescedCount: 2 });
+    await expect(notifications.listNotifications({ threadId: 'notification-thread' })).resolves.toHaveLength(1);
+  });
+
+  it('throws a clear error when notification storage is missing', async () => {
+    const agent = new Agent({
+      id: 'missing-notification-storage-agent',
+      name: 'Missing Notification Storage Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('notification response'),
+    });
+
+    await expect(
+      agent.sendNotificationSignal(
+        { source: 'github', kind: 'ci-status', summary: 'CI failed' },
+        { resourceId: 'notification-user', threadId: 'notification-thread' },
+      ),
+    ).rejects.toThrow('sendNotificationSignal requires a notifications storage domain');
   });
 
   it('delivers sendMessage into an active same-agent run', async () => {
@@ -997,13 +2245,151 @@ describe('Agent signals', () => {
       threadId: 'active-message-thread',
     });
 
-    expect(result).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+    await expect(result.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
     releaseFirst();
     await expect(stream.text).resolves.toBe('first responsemessage response');
     expect(streamCount).toBe(2);
     expect(JSON.stringify(prompts[1])).toContain('Hello while active');
 
     subscription.unsubscribe();
+  });
+
+  it('queues sendMessage behind a suspended same-agent approval run', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const agent = {
+      id: 'suspended-message-agent',
+      stream: vi.fn(),
+    } as unknown as Agent<any, any, any, any>;
+    const runId = 'suspended-message-run';
+    const threadId = 'suspended-message-thread';
+    const resourceId = 'suspended-message-user';
+    let finishRun!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finishRun = resolve;
+    });
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+
+    try {
+      runtime.registerRun(
+        agent,
+        {
+          runId,
+          status: 'suspended',
+          fullStream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'start', runId });
+              controller.enqueue({
+                type: 'tool-call-approval',
+                runId,
+                payload: { toolCallId: 'tool-call-1', toolName: 'testTool' },
+              });
+            },
+          }),
+          _waitUntilFinished: () => finished,
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+      );
+
+      await withTimeout(iterator.next(), 'Timed out waiting for approval run start');
+      await withTimeout(iterator.next(), 'Timed out waiting for approval chunk');
+      expect(runtime.getThreadState({ resourceId, threadId })).toBe('active');
+
+      const result = runtime.sendMessage(agent, 'Queued behind approval', { resourceId, threadId });
+
+      await expect(result.accepted).resolves.toMatchObject({ action: 'deliver', runId });
+      expect((agent as any).stream).not.toHaveBeenCalled();
+      const [signal] = runtime.drainPendingSignals(runId);
+      expect(signal).toMatchObject({ type: 'user', contents: 'Queued behind approval' });
+    } finally {
+      finishRun();
+      subscription.unsubscribe();
+    }
+  });
+
+  it.each(['request_access', 'ask_user'])('keeps %s suspensions discoverable and blocks idle wake', async toolName => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const agent = {
+      id: `generic-suspended-${toolName}`,
+      stream: vi.fn(),
+    } as unknown as Agent<any, any, any, any>;
+    const idleAgent = {
+      id: `idle-agent-${toolName}`,
+      stream: vi.fn(),
+    } as unknown as Agent<any, any, any, any>;
+    const runId = `generic-suspended-run-${toolName}`;
+    const threadId = `generic-suspended-thread-${toolName}`;
+    const resourceId = `generic-suspended-user-${toolName}`;
+    const topic = `agent.thread-stream.${encodeURIComponent(`${resourceId}\u0000${threadId}`)}`;
+    const events: any[] = [];
+    let finishRun!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finishRun = resolve;
+    });
+    await pubsub.subscribe(topic, event => events.push(event.data));
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+
+    try {
+      runtime.registerRun(
+        agent,
+        {
+          runId,
+          status: 'suspended',
+          fullStream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'start', runId });
+              controller.enqueue({
+                type: 'tool-call-suspended',
+                runId,
+                payload: { toolCallId: `tool-call-${toolName}`, toolName },
+              });
+              controller.close();
+            },
+          }),
+          _waitUntilFinished: () => finished,
+        } as any,
+        { memory: { thread: threadId, resource: resourceId } } as any,
+        pubsub,
+      );
+
+      await withTimeout(iterator.next(), 'Timed out waiting for generic suspended run start');
+      await withTimeout(iterator.next(), 'Timed out waiting for generic suspended chunk');
+      expect(runtime.getThreadState({ resourceId, threadId }, pubsub)).toBe('active');
+      expect(runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub)).toBe(runId);
+
+      const queuedForSuspendedRun = runtime.sendMessage(
+        agent,
+        'Resume-adjacent input',
+        { resourceId, threadId },
+        pubsub,
+      );
+      await expect(queuedForSuspendedRun.accepted).resolves.toMatchObject({ action: 'deliver', runId });
+      expect((agent as any).stream).not.toHaveBeenCalled();
+      expect(runtime.drainPendingSignals(runId, pubsub)[0]).toMatchObject({
+        type: 'user',
+        contents: 'Resume-adjacent input',
+      });
+
+      finishRun();
+      await waitForCondition(() => events.some(event => event?.type === 'run-suspended' && event.runId === runId));
+      expect(runtime.getThreadState({ resourceId, threadId }, pubsub)).toBe('active');
+      expect(runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub)).toBe(runId);
+
+      const idleWake = runtime.sendSignal(
+        idleAgent,
+        createSignal({ type: 'user-message', contents: 'Unrelated idle wake' }),
+        { resourceId, threadId, ifIdle: { streamOptions: { memory: { resource: resourceId, thread: threadId } } } },
+        pubsub,
+      );
+      await expect(idleWake.accepted).resolves.toMatchObject({ action: 'blocked', reason: 'thread-blocked', runId });
+      expect((idleAgent as any).stream).not.toHaveBeenCalled();
+      expect(runtime.getThreadState({ resourceId, threadId }, pubsub)).toBe('active');
+    } finally {
+      finishRun();
+      subscription.unsubscribe();
+    }
   });
 
   it('queues queueMessage until the active run completes', async () => {
@@ -1064,8 +2450,10 @@ describe('Agent signals', () => {
       threadId: 'queue-message-thread',
     });
 
-    expect(result.accepted).toBe(true);
-    expect(result.runId).not.toBe(stream.runId);
+    const settled = await result.accepted;
+    const queuedRunId = 'runId' in settled ? settled.runId : undefined;
+    expect(settled.action).toBe('deliver');
+    expect(queuedRunId).not.toBe(stream.runId);
     await nextTick();
     expect(streamCount).toBe(1);
 
@@ -1073,7 +2461,7 @@ describe('Agent signals', () => {
     await expect(stream.text).resolves.toBe('first response');
     await firstRun;
     const secondRun = await readNextRunWithParts(iterator);
-    expect(secondRun.value.runId).toBe(result.runId);
+    expect(secondRun.value.runId).toBe(queuedRunId);
     expect(secondRun.value.text).toBe('queued response');
     expect(streamCount).toBe(2);
     expect(JSON.stringify(prompts[1])).toContain('Queued follow-up');
@@ -1150,7 +2538,7 @@ describe('Agent signals', () => {
         );
         const [firstRun] = runs;
 
-        expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: firstRun.value.runId }));
+        await expect(signalResult.accepted).resolves.toMatchObject({ action: 'wake', runId: firstRun.value.runId });
         expect(firstRun.value.text).toBe(`signal response ${runIndex}`);
 
         for (const run of runs) {
@@ -1188,7 +2576,7 @@ describe('Agent signals', () => {
       { resourceId: 'idle-user', threadId: 'idle-thread' },
     );
 
-    expect(result).toEqual(expect.objectContaining({ accepted: true }));
+    await expect(result.accepted).resolves.toMatchObject({ action: 'wake' });
   });
 
   it('reports the reserved runId as active before registerRun populates the stream record', async () => {
@@ -1213,8 +2601,10 @@ describe('Agent signals', () => {
       ifIdle: { streamOptions: { memory: { resource: resourceId, thread: threadId } } as any },
     });
 
-    expect(result.accepted).toBe(true);
-    expect(subscription.activeRunId()).toBe(result.runId);
+    // accepted never settles here because agent.stream is pinned; the reserved runId is
+    // observable via the subscription's active run id before registerRun populates the stream.
+    expect(result.accepted).toBeInstanceOf(Promise);
+    expect(subscription.activeRunId()).not.toBeNull();
 
     subscription.unsubscribe();
   });
@@ -1240,20 +2630,40 @@ describe('Agent signals', () => {
       memory,
     });
 
-    const result = agent.sendSignal(
-      { type: 'user-message', contents: 'persist without waking' },
-      { resourceId: 'idle-persist-user', threadId: 'idle-persist-thread', ifIdle: { behavior: 'persist' } },
-    );
-    await expect(result.persisted).resolves.toBeUndefined();
+    const subscription = await agent.subscribeToThread({
+      resourceId: 'idle-persist-user',
+      threadId: 'idle-persist-thread',
+    });
+    const nextRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
 
-    const recalled = await memory.recall({ threadId: 'idle-persist-thread', resourceId: 'idle-persist-user' });
-    expect(streamCount).toBe(0);
-    expect(recalled.messages).toHaveLength(1);
-    // Stash dropped; payload lives in content.parts now.
-    expect(recalled.messages[0]?.content.metadata?.signal).toMatchObject({ type: 'user', tagName: 'user' });
-    expect(recalled.messages[0]?.content.parts).toEqual(
-      expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'persist without waking' })]),
-    );
+    try {
+      const result = agent.sendSignal(
+        { type: 'user-message', contents: 'persist without waking' },
+        { resourceId: 'idle-persist-user', threadId: 'idle-persist-thread', ifIdle: { behavior: 'persist' } },
+      );
+      await expect(result.persisted).resolves.toBeUndefined();
+
+      const subscribedRun = await withTimeout(nextRun, 'Timed out waiting for persisted signal broadcast');
+      expect(subscribedRun.value.parts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'data-user-message',
+            data: expect.objectContaining({ contents: 'persist without waking' }),
+          }),
+        ]),
+      );
+
+      const recalled = await memory.recall({ threadId: 'idle-persist-thread', resourceId: 'idle-persist-user' });
+      expect(streamCount).toBe(0);
+      expect(recalled.messages).toHaveLength(1);
+      // Stash dropped; payload lives in content.parts now.
+      expect(recalled.messages[0]?.content.metadata?.signal).toMatchObject({ type: 'user', tagName: 'user' });
+      expect(recalled.messages[0]?.content.parts).toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'persist without waking' })]),
+      );
+    } finally {
+      subscription.unsubscribe();
+    }
   });
 
   it('discards an active signal when active behavior is discard', async () => {
@@ -1391,13 +2801,76 @@ describe('Agent signals', () => {
       pubsub,
     );
 
-    expect(result.accepted).toBe(true);
+    await expect(result.accepted).resolves.toMatchObject({ action: 'deliver' });
     await waitForCondition(() => ownerRuntime.drainPendingSignals('remote-run-1', pubsub).length === 1);
 
     finishRun();
     await waitForRemoteRun;
     ownerSubscription.unsubscribe();
     senderSubscription.unsubscribe();
+  });
+
+  it('grants the wake output to exactly one runtime when two race to wake an idle thread', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const runtimeA = new AgentThreadStreamRuntime();
+    const runtimeB = new AgentThreadStreamRuntime();
+
+    // Track which agents had their .stream invoked. Only the lease winner
+    // should actually call .stream(); the loser must short-circuit.
+    const streamCallsA: number[] = [];
+    const streamCallsB: number[] = [];
+
+    const makeStubAgent = (id: string, calls: number[]) => {
+      let nextRunId = 0;
+      return {
+        id,
+        stream: async () => {
+          const runId = `${id}-run-${++nextRunId}`;
+          calls.push(nextRunId);
+          return {
+            runId,
+            status: 'running',
+            fullStream: (async function* () {})(),
+            _waitUntilFinished: () => new Promise<void>(() => {}),
+          } as any;
+        },
+      } as any;
+    };
+
+    const agentA = makeStubAgent('race-agent-a', streamCallsA);
+    const agentB = makeStubAgent('race-agent-b', streamCallsB);
+
+    const target = {
+      resourceId: 'race-resource',
+      threadId: 'race-thread',
+      ifIdle: {
+        behavior: 'wake' as const,
+        streamOptions: { memory: { resource: 'race-resource', thread: 'race-thread' } },
+      },
+    };
+
+    // Fire both signals in the same microtask burst so the lease race is real.
+    const resultA = runtimeA.sendSignal(agentA, { type: 'user-message', contents: 'from A' }, target, pubsub);
+    const resultB = runtimeB.sendSignal(agentB, { type: 'user-message', contents: 'from B' }, target, pubsub);
+
+    expect(resultA.accepted).toBeInstanceOf(Promise);
+    expect(resultB.accepted).toBeInstanceOf(Promise);
+
+    const [settledA, settledB] = await Promise.all([resultA.accepted, resultB.accepted]);
+
+    // Exactly one runtime won the lease and ran the stream (`wake` + owned output); the
+    // loser forwarded its signal to the winner and resolves to `deliver`.
+    const ownerA = settledA.action === 'wake' ? settledA.output : undefined;
+    const ownerB = settledB.action === 'wake' ? settledB.output : undefined;
+    const winners = [ownerA, ownerB].filter(s => s !== undefined);
+    expect(winners).toHaveLength(1);
+
+    const actions = [settledA.action, settledB.action].sort();
+    expect(actions).toEqual(['deliver', 'wake']);
+
+    // Only the winner's agent.stream was invoked.
+    const totalStreamCalls = streamCallsA.length + streamCallsB.length;
+    expect(totalStreamCalls).toBe(1);
   });
 
   it.runIf(process.platform !== 'win32')(
@@ -1456,6 +2929,67 @@ describe('Agent signals', () => {
         await expect(followerRun).resolves.toMatchObject({ value: { text: 'hello over uds' }, done: false });
         finishRun();
         ownerSubscription.unsubscribe();
+        followerSubscription.unsubscribe();
+      } finally {
+        await Promise.allSettled([ownerPubSub.close(), followerPubSub.close()]);
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.runIf(process.platform !== 'win32')(
+    'lets a remote subscriber join an already-active UnixSocketPubSub run',
+    async () => {
+      const tempDir = await mkdtemp(join(tmpdir(), 'mastra-agent-late-subscriber-'));
+      const ownerPubSub = new UnixSocketPubSub(join(tempDir, 'signals.sock'));
+      const followerPubSub = new UnixSocketPubSub(join(tempDir, 'signals.sock'));
+      const ownerRuntime = new AgentThreadStreamRuntime();
+      const followerRuntime = new AgentThreadStreamRuntime();
+      const owner = { id: 'late-subscriber-agent' } as Agent<any, any, any, any>;
+      const follower = { id: 'late-subscriber-agent' } as Agent<any, any, any, any>;
+      const runId = 'late-subscriber-run';
+      let firstPartBroadcasted!: () => void;
+      let continueRun!: () => void;
+      let finishRun!: () => void;
+      const firstPart = new Promise<void>(resolve => (firstPartBroadcasted = resolve));
+      const continuePromise = new Promise<void>(resolve => (continueRun = resolve));
+      const finished = new Promise<void>(resolve => (finishRun = resolve));
+      const output = {
+        runId,
+        status: 'running',
+        fullStream: (async function* () {
+          yield { type: 'text-delta', runId, payload: { text: 'before subscriber' } };
+          firstPartBroadcasted();
+          await continuePromise;
+          yield { type: 'text-delta', runId, payload: { text: 'after subscriber' } };
+          yield { type: 'finish', runId, payload: {} };
+          finishRun();
+        })(),
+        _waitUntilFinished: () => finished,
+      } as any;
+
+      try {
+        ownerRuntime.registerRun(
+          owner,
+          output,
+          { runId, memory: { resource: 'late-subscriber-resource', thread: 'late-subscriber-thread' } } as any,
+          ownerPubSub,
+        );
+        await withTimeout(firstPart, 'Timed out waiting for owner run to start');
+
+        const followerSubscription = await followerRuntime.subscribeToThread(
+          follower,
+          { resourceId: 'late-subscriber-resource', threadId: 'late-subscriber-thread' },
+          followerPubSub,
+        );
+        const followerRun = readNextRun(followerSubscription.stream[Symbol.asyncIterator]());
+
+        continueRun();
+
+        await expect(withTimeout(followerRun, 'Timed out waiting for late subscriber')).resolves.toMatchObject({
+          value: { runId, text: 'after subscriber' },
+          done: false,
+        });
         followerSubscription.unsubscribe();
       } finally {
         await Promise.allSettled([ownerPubSub.close(), followerPubSub.close()]);
@@ -1558,7 +3092,7 @@ describe('Agent signals', () => {
       },
     );
     const signalRun = await secondRunPromise;
-    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: signalRun.value.runId }));
+    await expect(signalResult.accepted).resolves.toMatchObject({ action: 'wake', runId: signalRun.value.runId });
     expect(signalResult.signal.id).toBeDefined();
     expect(signalRun.value.text).toBe('standalone shared response');
 
@@ -1654,8 +3188,10 @@ describe('Agent signals', () => {
       model: createTextStreamModel('observer response'),
     });
     new Mastra({ agents: { runner, observer }, logger: false, pubsub });
-    expect(runner.getPubSub()).toBe(pubsub);
-    expect(observer.getPubSub()).toBe(pubsub);
+    // Mastra wraps the raw pubsub in a Proxy (for localOnly tagging), so
+    // reference equality against the raw instance won't hold. Verify both
+    // agents share the *same* (proxy-wrapped) pubsub instead.
+    expect(runner.getPubSub()).toBe(observer.getPubSub());
 
     const subscription = await observer.subscribeToThread({
       threadId: 'shared-thread',
@@ -1682,7 +3218,7 @@ describe('Agent signals', () => {
       },
     );
     const signalRun = await secondRunPromise;
-    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: signalRun.value.runId }));
+    await expect(signalResult.accepted).resolves.toMatchObject({ action: 'wake', runId: signalRun.value.runId });
     expect(signalResult.signal.id).toBeDefined();
     expect(signalRun.value.text).toBe('shared response');
 
@@ -1767,7 +3303,7 @@ describe('Agent signals', () => {
       { type: 'user-message', contents: 'First signal while running' },
       { resourceId: 'active-user', threadId: 'active-thread' },
     );
-    expect(firstSignalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+    await expect(firstSignalResult.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
     expect(firstSignalResult.signal.id).toBeDefined();
 
     releaseFirst();
@@ -1777,7 +3313,7 @@ describe('Agent signals', () => {
       { type: 'user-message', contents: 'Second signal while running' },
       { resourceId: 'active-user', threadId: 'active-thread' },
     );
-    expect(secondSignalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+    await expect(secondSignalResult.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
     expect(secondSignalResult.signal.id).toBeDefined();
     expect(secondSignalResult.signal.id).not.toBe(firstSignalResult.signal.id);
 
@@ -1952,7 +3488,7 @@ describe('Agent signals', () => {
       { type: 'user-message', contents: 'Actually stop and answer this instead' },
       { resourceId: 'tool-interjection-user', threadId: 'tool-interjection-thread' },
     );
-    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+    await expect(signalResult.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
 
     continueToToolCall();
     await waitForCondition(() => callCount === 2);
@@ -2050,7 +3586,7 @@ describe('Agent signals', () => {
       { type: 'user-message', contents: 'Stop reasoning and answer this' },
       { resourceId: 'interleaved-reasoning-user', threadId: 'interleaved-reasoning-thread' },
     );
-    expect(signalResult).toEqual(expect.objectContaining({ accepted: true, runId: stream.runId }));
+    await expect(signalResult.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
 
     releaseReasoningChunk?.();
     await waitForCondition(() => !!finishFirstCall);
@@ -2122,15 +3658,68 @@ describe('Agent signals', () => {
       },
     );
 
-    expect(followUp.runId).toBe(firstSignal.runId);
+    const firstAccepted = await firstSignal.accepted;
+    const followUpAccepted = await followUp.accepted;
+    const firstRunId = 'runId' in firstAccepted ? firstAccepted.runId : undefined;
+    const followUpRunId = 'runId' in followUpAccepted ? followUpAccepted.runId : undefined;
+    expect(firstAccepted.action).toBe('wake');
+    expect(followUpRunId).toBe(firstRunId);
 
     const run = await runPromise;
-    expect(run.value.runId).toBe(firstSignal.runId);
+    expect(run.value.runId).toBe(firstRunId);
     expect(run.value.text).toBe('response');
     expect(prompts).toHaveLength(1);
     expect(JSON.stringify(prompts[0])).toContain('thread targeted follow up');
 
     subscription.unsubscribe();
+  });
+
+  it('completes a signal-started run that no caller subscribes to or consumes', async () => {
+    // Regression: a fire-and-forget wake (e.g. a heartbeat) starts a thread run
+    // but never subscribes to or consumes the returned stream. The runtime must
+    // still drive the stream to completion on its own so the run reaches a
+    // terminal state and its active-run record releases. If it does not, the
+    // thread stays wedged and every later signal coalesces into the stuck run.
+    const agent = new Agent({
+      id: 'unconsumed-wake-agent',
+      name: 'Unconsumed Wake Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('unconsumed response'),
+    });
+
+    const resourceId = 'unconsumed-wake-user';
+    const threadId = 'unconsumed-wake-thread';
+
+    // Wake the thread without subscribing or consuming the resulting stream.
+    const accepted = await agent.sendSignal(
+      { type: 'user-message', contents: 'wake without a consumer' },
+      {
+        resourceId,
+        threadId,
+        ifIdle: { streamOptions: { memory: { resource: resourceId, thread: threadId } } },
+      },
+    ).accepted;
+    expect(accepted.action).toBe('wake');
+    const runId = 'runId' in accepted ? accepted.runId : undefined;
+    expect(runId).toBeTruthy();
+    expect(agent.getActiveThreadRunId({ resourceId, threadId })).toBe(runId);
+
+    // With no consumer, the run must still finish and release the active-run record.
+    await waitForCondition(() => agent.getActiveThreadRunId({ resourceId, threadId }) === undefined, 2000);
+    expect(agent.getActiveThreadRunId({ resourceId, threadId })).toBeUndefined();
+
+    // A follow-up wake now starts a fresh run rather than coalescing into a stuck one.
+    const followUp = await agent.sendSignal(
+      { type: 'user-message', contents: 'second wake after first completed' },
+      {
+        resourceId,
+        threadId,
+        ifIdle: { streamOptions: { memory: { resource: resourceId, thread: threadId } } },
+      },
+    ).accepted;
+    expect(followUp.action).toBe('wake');
+    const followUpRunId = 'runId' in followUp ? followUp.runId : undefined;
+    expect(followUpRunId).not.toBe(runId);
   });
 
   it('preserves active interjections sent immediately after repeated idle signal-started runs', async () => {
@@ -2328,8 +3917,10 @@ describe('Agent signals', () => {
     await expect(firstText).resolves.toBe('first response');
     await expect(firstRunPromise).resolves.toMatchObject({ value: { runId: firstStream.runId }, done: false });
 
+    const signalAccepted = await signalResult.accepted;
+    const signalRunId = 'runId' in signalAccepted ? signalAccepted.runId : undefined;
     const secondRun = await readNextRun(iterator);
-    expect(secondRun.value.runId).toBe(signalResult.runId);
+    expect(secondRun.value.runId).toBe(signalRunId);
     expect(secondRun.value.text).toBe('second response');
     expect(secondStarted).toBe(true);
 
@@ -2553,12 +4144,11 @@ describe('Agent signals', () => {
     });
     await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
 
-    expect(agent.sendSignal({ type: 'user-message', contents: 'Hello by run id' }, { runId: stream.runId })).toEqual(
-      expect.objectContaining({
-        accepted: true,
-        runId: stream.runId,
-      }),
+    const runIdSignalResult = agent.sendSignal(
+      { type: 'user-message', contents: 'Hello by run id' },
+      { runId: stream.runId },
     );
+    await expect(runIdSignalResult.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
 
     releaseFirst();
     await firstRunPromise;
@@ -2622,7 +4212,7 @@ describe('Agent signals', () => {
       },
     );
 
-    expect(stream.accepted).toBe(true);
+    await expect(stream.accepted).resolves.toMatchObject({ action: 'wake' });
     for (let i = 0; i < 10 && !capturedPrompt; i++) {
       await nextTick();
     }

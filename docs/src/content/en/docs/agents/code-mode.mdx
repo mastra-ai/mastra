@@ -1,39 +1,44 @@
 ---
 title: "Code mode | Agents"
-description: "Let an agent write and run a single TypeScript program that orchestrates your tools, instead of calling tools one at a time."
+description: "Let an agent run multi-tool computations in a sandbox and return a single, more accurate response."
 packages:
   - "@mastra/core"
 ---
 
 # Code mode
 
+**Added in:** `@mastra/core@1.38.0`
+
 :::experimental
 
-This feature is experimental. Breaking changes may occur without a major version bump until the API is stable.
+This feature is in beta. Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
-Code mode gives an agent a single tool that runs a short TypeScript program in a sandbox. Instead of calling tools one at a time, the model writes a program that orchestrates your existing tools as `external_*` functions, batching calls with `Promise.all`, aggregating with `reduce`, branching, and doing math in a real runtime, then returns a single result.
+Code mode lets an agent run multi-tool computations in an isolated sandbox and return the result as a single, more accurate response. Instead of calling tools one turn at a time, the model writes a tailored function for the user query that orchestrates your existing tools as `external_*` functions, reduces or aggregates their results, and returns one structured answer.
 
-`createCodeMode` returns this tool with the default id `execute_typescript`. The id is configurable, so an agent can have several code mode tools at once, each scoped to a different set of tools (see [Scoping tools across multiple code tools](#scoping-tools-across-multiple-code-tools)).
+[`createCodeMode()`](/reference/tools/create-code-mode) returns this tool with the default `id` of `execute_typescript`. The `id` is configurable, so an agent can have several code mode tools at once, each scoped to a different set of tools (see [Scoping tools across multiple code tools](#scoping-tools-across-multiple-code-tools)).
 
 ## When to use code mode
 
-Use code mode when a task touches several tools at once or needs real computation between calls:
+Use code mode when an agent touches multiple tools to answer a user query or perform a complex computation:
 
-- Fewer round-trips: a task that touches several tools runs in one tool call instead of one model turn per tool.
-- Correct math: sums, averages, and other arithmetic run as JavaScript, not as token prediction.
-- Planning up front: filtering, aggregation, and branching happen inside the program rather than across separate turns.
+- Fewer round-trips: A multi-tool query runs in one tool call instead of repeating the agentic loop for every tool decision.
+- Smaller context: The function can reduce or aggregate large tool responses before returning them to the agent.
+- Correct math: Sums, averages, and other arithmetic run as JavaScript, not as token prediction.
+- Planning up front: Filtering, aggregation, and branching happen inside the function rather than across separate turns.
 
 ## How it works
 
-Your tools keep running on the host with full validation, request context, and tracing. Only the model's orchestration code runs in the sandbox. Each `external_*` call is bridged back to the real tool on the host, so dangerous tools, approvals, and validation behave exactly as they do for normal tool calls.
+Without code mode, multi-tool queries can run the agentic loop several times: the model chooses a tool, reads the result, chooses again, and repeats. Each turn adds the full tool response to the agent's context window which can lead to poorer reasoning and increased token usage.
 
-The program runs in a [Workspace sandbox](/docs/workspace/overview). A sandbox is required, because code mode runs model-authored code and the execution boundary must be chosen deliberately. Pass one via `sandbox`, or run the agent in a workspace that provides one. To execute on the host machine, pass `new LocalSandbox()` explicitly. This runs the program as a host `node` process with host privileges, so only use it for trusted or local development.
+With code mode, your tools keep running on the host with full validation, request context, and tracing. Only the model's orchestration code runs in the sandbox. Each `external_*` call is bridged back to the real tool on the host, and the function can reduce or aggregate results before returning one response to the agent.
+
+The function runs in a [Workspace sandbox](/docs/workspace/overview). A sandbox is required, because code mode runs model-authored code and the execution boundary must be chosen deliberately. Pass one via `sandbox`, or run the agent in a workspace that provides one. To execute on the host machine, pass `new LocalSandbox()` explicitly. This runs the function as a host `node` process with host privileges, so only use it for trusted or local development.
 
 ## Quickstart
 
-`createCodeMode` returns the tool plus generated instructions. With no `id`, the tool is named `execute_typescript`. Add both to your agent:
+`createCodeMode()` returns the tool plus generated instructions. With no `id`, the tool is named `execute_typescript`. Add both to your agent:
 
 ```typescript
 import { Agent } from '@mastra/core/agent'
@@ -92,52 +97,22 @@ return top.products.map((product, i) => {
 
 All five rating lookups run in parallel, the averages are computed in JavaScript, and the agent receives one structured result.
 
-## Configuration
+For `createCodeMode()` to work well, keep these tips in mind:
 
-```typescript
-const { tool, instructions } = createCodeMode({
-  tools: { getTopProducts, getProductRatings }, // exposed as external_*; only these can be called
-  sandbox, // required WorkspaceSandbox, unless the agent runs in a workspace that provides one
-  timeout: 30_000, // optional execution timeout in ms (default 30000)
-  id: 'execute_typescript', // optional tool id (default "execute_typescript")
-})
-```
+- Keep tools focused, so each does one thing well and the model composes them in code.
+- Code mode helps most when calls can be parallelized with `Promise.all`.
 
-| Option | Type | Description |
-| - | - | - |
-| `tools` | `ToolsInput` | Tools exposed to the program as `external_<id>`. Only these may be called. |
-| `sandbox` | `WorkspaceSandbox` | Sandbox to run the program in. Required unless the agent runs in a workspace that provides one. Pass `new LocalSandbox()` to run on the host. |
-| `timeout` | `number` | Execution timeout in milliseconds. Default `30000`. |
-| `id` | `string` | The generated tool's id. Default `execute_typescript`. |
+:::note
 
-## Result
+Visit the [`createCodeMode()` reference](/reference/tools/create-code-mode) for configuration options, return values, result shape, and instructions inspection.
 
-The tool returns a `CodeModeToolResult`:
-
-```typescript
-type CodeModeToolResult = {
-  success: boolean
-  result?: unknown // value returned by the program
-  logs?: string[] // captured console output
-  error?: { message: string; name?: string; line?: number }
-}
-```
-
-## Inspecting the instructions
-
-The generated `instructions` contain the usage contract and a typed `external_*` declaration for each tool, derived from your tool schemas. Print them to see exactly what the model receives:
-
-```typescript
-import { createCodeModeInstructions } from '@mastra/core/tools'
-
-console.log(createCodeModeInstructions({ tools: { getTopProducts, getProductRatings } }))
-```
+:::
 
 ## Scoping tools across multiple code tools
 
-`createCodeMode` captures its own allow-list. Call it more than once to give an agent several code tools, each scoped to a different subset of tools. A program can only call the `external_*` functions for the tools passed to its own `createCodeMode` call, so the subsets stay isolated.
+`createCodeMode()` captures its own allow-list. Call it more than once to give an agent several code tools, each scoped to a different subset of tools. It can only call the `external_*` functions for the tools passed to its own `createCodeMode()` call, so the subsets stay isolated.
 
-Give each tool a distinct `id` so their ids do not collide, and add each tool's instructions to the agent:
+Give each tool a distinct `id` so their ids don't collide, and add each tool's instructions to the agent:
 
 ```typescript
 const sales = createCodeMode({
@@ -160,15 +135,10 @@ const agent = new Agent({
 })
 ```
 
-A program run by `sales_code` cannot call an inventory tool, and the reverse holds too. Use this for least-privilege scoping and to keep each tool's prompt surface small.
-
-## Tips
-
-- Keep tools focused, so each does one thing well and the model composes them in code.
-- Code mode helps most when calls can be parallelized with `Promise.all`.
-- Use `console.log` for debugging. Logs are captured in the result.
+The generated code for `sales_code` can't call an inventory tool, and the reverse holds too. Use this for least-privilege scoping and to keep each tool's prompt surface small.
 
 ## Related
 
+- [createCodeMode() reference](/reference/tools/create-code-mode)
 - [Tools](/docs/agents/using-tools)
 - [Workspace overview](/docs/workspace/overview)

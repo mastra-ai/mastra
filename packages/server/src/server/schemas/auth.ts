@@ -132,3 +132,15 @@ export const credentialsResponseSchema = z.object({
   user: authenticatedUserSchema,
   token: z.string().optional(),
 });
+
+/**
+ * Response schema for GET /auth/permission-patterns.
+ *
+ * Returns the authoritative list of valid permission-pattern strings (the keys
+ * of the EE `PERMISSION_PATTERNS` table). Studio fetches this to validate the
+ * hardcoded route→permission literals it ships, replacing a compile-time
+ * `@mastra/core/auth/ee` import in the browser bundle.
+ */
+export const permissionPatternsResponseSchema = z.object({
+  patterns: z.array(z.string()),
+});

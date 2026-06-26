@@ -29,14 +29,28 @@ export interface BuildFormSnapshotOptions {
   starterUserMessage?: string;
 }
 
-const INSTRUCTIONS_MAX_CHARS = 1500;
+/**
+ * Hard cap on the generated `instructions` field. Enforced by
+ * `useSetAgentInstructionsTool`, which rejects over-limit
+ * `set-agent-instructions` calls without persisting anything. The directive
+ * focuses on a concise target rather than exposing this hard limit to the model.
+ *
+ * The same cap is reused when echoing already-persisted instructions back in
+ * the snapshot via the `truncate` helper below: this only trims the display
+ * copy, never the stored value. Using a smaller display cap would clip the
+ * "persisted, final text" the directive points to and could trick the model
+ * into re-calling set-agent-instructions to "restore" the missing tail.
+ */
+export const MAX_GENERATED_INSTRUCTIONS_CHARS = 4000;
+const EMPTY_TEXT = '(empty)';
+const NOT_SET_TEXT = '(not set)';
 
 const truncate = (value: string, max: number): string => {
   if (value.length <= max) return value;
   return `${value.slice(0, max)}… [truncated]`;
 };
 
-const isFilled = (value: string | undefined): value is string => typeof value === 'string' && value.length > 0;
+const isFilled = (value: string | undefined): value is string => typeof value === 'string' && value.trim().length > 0;
 
 const collectSelectedIds = (record: Record<string, boolean | undefined> | undefined): string[] => {
   if (!record) return [];
@@ -50,8 +64,18 @@ const collectSelectedIds = (record: Record<string, boolean | undefined> | undefi
 const renderToolEntry = (tool: AgentTool): string => `"${tool.name}" (${tool.id})`;
 const renderSkillEntry = (skill: StoredSkillResponse): string => `"${skill.name}" (${skill.id})`;
 
-const renderField = (label: string, value: string, directive: string): string =>
-  `- ${label}: ${value}\n  → ${directive}`;
+const renderQuoted = (value: string | undefined): string => {
+  if (!isFilled(value)) return EMPTY_TEXT;
+  return `"${value}"`;
+};
+
+const renderInstructions = (value: string | undefined): string => {
+  if (!isFilled(value)) return EMPTY_TEXT;
+  const truncated = truncate(value, MAX_GENERATED_INSTRUCTIONS_CHARS);
+  return `"""\n${truncated}\n"""`;
+};
+
+const renderField = (label: string, value: string, directive: string): string => `- ${label}: ${value}\n  ${directive}`;
 
 /**
  * Renders the form's current state plus a per-field directive telling the
@@ -71,7 +95,7 @@ export function buildFormSnapshotInstructions(
   lines.push('## Current agent configuration (authoritative)');
   lines.push('');
   lines.push(
-    "This snapshot reflects the agent's current form state. Trust these values as ground truth. Call each setter at most once per turn, with the final value. Do not re-call a setter to confirm or re-check a value the snapshot already shows — that is a bug. Skip any setter whose field is not listed below (the feature is disabled for this agent).",
+    'Trust these values as ground truth. Call each setter at most once per turn, with the final value. Do not re-call a setter to confirm a value the snapshot already shows. Skip any field not listed below — its feature is disabled.',
   );
   lines.push('');
 
@@ -84,7 +108,7 @@ export function buildFormSnapshotInstructions(
     lines.push(
       renderField(
         'Name',
-        `"${values.name}"`,
+        renderQuoted(values.name),
         'Already set. Do not call set-agent-name unless the user explicitly asks to rename the agent.',
       ),
     );
@@ -92,13 +116,13 @@ export function buildFormSnapshotInstructions(
     lines.push(
       renderField(
         'Name',
-        `"${values.name}" (auto-generated placeholder from the starter prompt)`,
-        'Call set-agent-name once with a short, memorable name anchored to the outcome. The current value is a placeholder, not a real name.',
+        `${renderQuoted(values.name)} (auto-generated placeholder from the starter prompt)`,
+        'Call set-agent-name once with a real, short, memorable name anchored to the outcome.',
       ),
     );
   } else {
     lines.push(
-      renderField('Name', '(empty)', 'Call set-agent-name once with a short, memorable name anchored to the outcome.'),
+      renderField('Name', EMPTY_TEXT, 'Call set-agent-name once with a short, memorable name anchored to the outcome.'),
     );
   }
 
@@ -107,7 +131,7 @@ export function buildFormSnapshotInstructions(
     lines.push(
       renderField(
         'Description',
-        `"${values.description}"`,
+        renderQuoted(values.description),
         'Already set. Do not call set-agent-description unless the user explicitly asks to change it.',
       ),
     );
@@ -115,28 +139,27 @@ export function buildFormSnapshotInstructions(
     lines.push(
       renderField(
         'Description',
-        '(empty)',
-        'Call set-agent-description once with a single plain-language sentence explaining what the agent helps with.',
+        EMPTY_TEXT,
+        'Call set-agent-description once with one plain-language sentence explaining what the agent helps with.',
       ),
     );
   }
 
   // Instructions
   if (isFilled(values.instructions)) {
-    const truncated = truncate(values.instructions, INSTRUCTIONS_MAX_CHARS);
     lines.push(
       renderField(
         'Instructions',
-        `"""\n${truncated}\n"""`,
-        'Already set. Do not call set-agent-instructions unless the user explicitly asks to rewrite or amend the prompt.',
+        renderInstructions(values.instructions),
+        'Already set (see the """...""" block above — that is the persisted, final text). Do NOT call set-agent-instructions again to refine, tighten, polish, or extend the wording. Re-call only if the user explicitly asks for a change.',
       ),
     );
   } else {
     lines.push(
       renderField(
         'Instructions',
-        '(empty)',
-        'Call set-agent-instructions once with the full system prompt for the produced agent. Follow the quality bar in the main instructions.',
+        EMPTY_TEXT,
+        'Call set-agent-instructions ONCE with your final, complete system prompt. Keep it concise: target 1,200–2,000 characters, usually 2–4 short paragraphs or compact bullet groups. Include the essentials only: trigger, capabilities, source rules, response format, and completion criteria. Avoid worked examples, FAQs, long edge-case lists, or exhaustive policies unless the user explicitly asks for that depth.',
       ),
     );
   }
@@ -158,8 +181,8 @@ export function buildFormSnapshotInstructions(
       lines.push(
         renderField(
           'Model',
-          '(not set)',
-          'Call set-agent-model once with a provider/name pair from the available models list (see the set-agent-model tool description). Prefer the strongest model for coding/reasoning work, or a cheaper/faster model for simple high-volume tasks.',
+          NOT_SET_TEXT,
+          'Call set-agent-model once with a provider/name pair from the available models list. Prefer a strong model for coding/reasoning, a cheaper/faster one for simple high-volume tasks.',
         ),
       );
     }
@@ -172,7 +195,7 @@ export function buildFormSnapshotInstructions(
     lines.push(
       renderField(
         'Workspace',
-        `"${name}" (id: ${values.workspaceId})`,
+        `${renderQuoted(name)} (id: ${values.workspaceId})`,
         'Already set. Do not call set-agent-workspace-id unless the user explicitly asks to change the workspace.',
       ),
     );
@@ -180,16 +203,14 @@ export function buildFormSnapshotInstructions(
     lines.push(
       renderField(
         'Workspace',
-        '(not set)',
-        'Call set-agent-workspace-id only if the requested outcome needs CLI or local-machine actions and an applicable workspace exists. Otherwise skip it.',
+        NOT_SET_TEXT,
+        'Call set-agent-workspace-id only if the agent needs CLI or local-machine actions and a workspace is available.',
       ),
     );
   }
 
-  // Visibility (no setter — just informational; included so the LLM doesn't try to change it via tools).
-  lines.push(
-    `- Visibility: ${values.visibility ?? 'private'}\n  → No setter; managed outside the builder. Do not attempt to change it.`,
-  );
+  // Visibility (no setter — informational only).
+  lines.push(`- Visibility: ${values.visibility ?? 'private'}`);
 
   // Browser
   if (features.browser) {
@@ -206,7 +227,7 @@ export function buildFormSnapshotInstructions(
         renderField(
           'Browser enabled',
           'false',
-          'Call set-agent-browser-enabled(true) only if the requested outcome clearly needs the agent to operate a browser. Otherwise leave it off.',
+          'Call set-agent-browser-enabled(true) only if the agent needs to operate a browser.',
         ),
       );
     }
@@ -225,7 +246,7 @@ export function buildFormSnapshotInstructions(
         renderField(
           'Tools',
           '(none selected)',
-          'Call set-agent-tools once with the minimum set of existing tools/agents/workflows that satisfies the outcome. Skip if nothing in the available catalog is genuinely required — adding irrelevant tools makes the agent worse.',
+          'Call set-agent-tools once with the minimum tools/agents/workflows needed for the outcome. Skip if nothing in the catalog applies.',
         ),
       );
     } else {
@@ -248,7 +269,7 @@ export function buildFormSnapshotInstructions(
         renderField(
           'Skills',
           '(none selected)',
-          'Call set-agent-skills once with any available stored skills the outcome genuinely needs. Use createSkillTool only when no existing skill matches and a reusable operating instruction is genuinely required.',
+          'Call set-agent-skills once with any stored skills the outcome needs. Use createSkillTool only when no existing skill fits.',
         ),
       );
     } else {

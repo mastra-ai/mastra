@@ -28,7 +28,7 @@ vi.mock('../workspace/tools/tools', () => ({
 }));
 
 import { createSubagentTool } from './tools';
-import type { HarnessRequestContext, HarnessSubagent } from './types';
+import type { AgentControllerRequestContext, AgentControllerSubagent } from './types';
 
 /**
  * Helper to create a readable stream that yields the given chunks then closes.
@@ -56,7 +56,7 @@ function createMockStreamResponse(text: string, chunks?: Array<{ type: string; p
   };
 }
 
-const subagents: HarnessSubagent[] = [
+const subagents: AgentControllerSubagent[] = [
   {
     id: 'explore',
     name: 'Explore',
@@ -137,7 +137,7 @@ describe('createSubagentTool requestContext forwarding', () => {
 
     // Build a requestContext with harness data including threadId/resourceId
     const requestContext = new RequestContext();
-    const harnessCtx: Partial<HarnessRequestContext> = {
+    const harnessCtx: Partial<AgentControllerRequestContext> = {
       emitEvent: vi.fn(),
       threadId: 'parent-thread-123',
       resourceId: 'parent-resource-456',
@@ -155,7 +155,7 @@ describe('createSubagentTool requestContext forwarding', () => {
     // Should be a new instance (not the parent's context)
     expect(subagentCtx).not.toBe(requestContext);
     // Harness context should have threadId/resourceId cleared
-    const subagentHarness = subagentCtx.get('harness') as Partial<HarnessRequestContext>;
+    const subagentHarness = subagentCtx.get('harness') as Partial<AgentControllerRequestContext>;
     expect(subagentHarness.threadId).toBeNull();
     expect(subagentHarness.resourceId).toBe('');
     // Other harness fields should be preserved
@@ -202,7 +202,7 @@ describe('createSubagentTool requestContext forwarding', () => {
     });
 
     const requestContext = new RequestContext();
-    const harnessCtx: Partial<HarnessRequestContext> = {
+    const harnessCtx: Partial<AgentControllerRequestContext> = {
       emitEvent: vi.fn(),
       abortSignal: abortController.signal,
     };
@@ -225,11 +225,60 @@ describe('createSubagentTool requestContext forwarding', () => {
     expect(streamOpts.requestContext).toBeInstanceOf(RequestContext);
   });
 
+  it('returns partial subagent output when the parent aborts during streaming', async () => {
+    const abortController = new AbortController();
+    let getFullOutput: ReturnType<typeof vi.fn> | undefined;
+    mockStream.mockImplementation(async (_task, opts) => {
+      getFullOutput = vi.fn().mockResolvedValue({ text: 'final answer should not be used' });
+      return {
+        fullStream: {
+          async *[Symbol.asyncIterator]() {
+            yield { type: 'text-delta', payload: { text: 'partial answer' } };
+            if (opts.abortSignal === abortController.signal) {
+              abortController.abort();
+            }
+          },
+        },
+        getFullOutput,
+      };
+    });
+
+    const emitEvent = vi.fn();
+    const tool = createSubagentTool({
+      subagents,
+      resolveModel,
+      fallbackModelId: 'test-model',
+    });
+
+    const requestContext = new RequestContext();
+    requestContext.set('harness', { emitEvent, abortSignal: abortController.signal });
+
+    const result = await (tool as any).execute(
+      { agentType: 'explore', task: 'Do abortable work' },
+      { requestContext, agent: { toolCallId: 'tc-abort' } },
+    );
+
+    expect(result).toEqual({
+      content: '[Aborted by user]\n\nPartial output:\npartial answer',
+      isError: false,
+    });
+    expect(getFullOutput).not.toHaveBeenCalled();
+    expect(emitEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'subagent_end',
+        toolCallId: 'tc-abort',
+        agentType: 'explore',
+        result: '[Aborted by user]\n\nPartial output:\npartial answer',
+        isError: false,
+      }),
+    );
+  });
+
   it('does not default maxSteps when stopWhen is configured', async () => {
     const stopFn = vi.fn().mockReturnValue({ continue: true });
     mockStream.mockResolvedValue(createMockStreamResponse('done'));
 
-    const subagentsWithStopWhen: HarnessSubagent[] = [
+    const subagentsWithStopWhen: AgentControllerSubagent[] = [
       {
         id: 'custom',
         name: 'Custom',
@@ -405,7 +454,7 @@ describe('createSubagentTool allowedWorkspaceTools filtering', () => {
 
     const fakeWorkspace = { id: 'ws-2' } as any;
 
-    const subagentsWithFilter: HarnessSubagent[] = [
+    const subagentsWithFilter: AgentControllerSubagent[] = [
       {
         id: 'explore',
         name: 'Explore',
@@ -470,7 +519,7 @@ describe('createSubagentTool allowedWorkspaceTools filtering', () => {
   it('does not add prepareStep when there is no workspace', async () => {
     mockStream.mockResolvedValue(createMockStreamResponse('done'));
 
-    const subagentsWithFilter: HarnessSubagent[] = [
+    const subagentsWithFilter: AgentControllerSubagent[] = [
       {
         id: 'explore',
         name: 'Explore',
@@ -503,7 +552,7 @@ describe('createSubagentTool allowedWorkspaceTools filtering', () => {
 
     const fakeWorkspace = { id: 'ws-4' } as any;
 
-    const subagentsWithExplicitTools: HarnessSubagent[] = [
+    const subagentsWithExplicitTools: AgentControllerSubagent[] = [
       {
         id: 'execute',
         name: 'Execute',
@@ -589,7 +638,7 @@ describe('createSubagentTool forked subagent behavior', () => {
     });
 
     const requestContext = new RequestContext();
-    const harnessCtx: Partial<HarnessRequestContext> = {
+    const harnessCtx: Partial<AgentControllerRequestContext> = {
       emitEvent: vi.fn(),
       threadId: 'parent-thread-1',
       resourceId: 'parent-resource-1',
@@ -636,7 +685,7 @@ describe('createSubagentTool forked subagent behavior', () => {
     );
 
     // Subagent request context points at the fork (not null/'' like non-forked).
-    const subagentHarness = streamOpts.requestContext.get('harness') as Partial<HarnessRequestContext>;
+    const subagentHarness = streamOpts.requestContext.get('harness') as Partial<AgentControllerRequestContext>;
     expect(subagentHarness.threadId).toBe('forked-thread-1');
     expect(subagentHarness.resourceId).toBe('parent-resource-1');
   });
@@ -665,7 +714,7 @@ describe('createSubagentTool forked subagent behavior', () => {
     });
 
     const requestContext = new RequestContext();
-    const harnessCtx: Partial<HarnessRequestContext> = {
+    const harnessCtx: Partial<AgentControllerRequestContext> = {
       emitEvent: vi.fn(),
       threadId: 'parent-thread-drained',
       resourceId: 'parent-resource-1',
@@ -704,7 +753,7 @@ describe('createSubagentTool forked subagent behavior', () => {
     });
 
     const requestContext = new RequestContext();
-    const harnessCtx: Partial<HarnessRequestContext> = {
+    const harnessCtx: Partial<AgentControllerRequestContext> = {
       emitEvent: vi.fn(),
       threadId: 'parent-thread-flush-fail',
       resourceId: 'parent-resource-1',
@@ -726,7 +775,7 @@ describe('createSubagentTool forked subagent behavior', () => {
     const { parentAgent, parentStream } = makeParentAgent('default fork');
     const cloneThreadForFork = vi.fn().mockResolvedValue({ id: 'forked-thread-default', resourceId: 'rid' });
 
-    const subagentsWithDefault: HarnessSubagent[] = [
+    const subagentsWithDefault: AgentControllerSubagent[] = [
       {
         id: 'collab',
         name: 'Collab',
@@ -763,7 +812,7 @@ describe('createSubagentTool forked subagent behavior', () => {
     const { parentAgent, parentStream } = makeParentAgent('should not run');
     const cloneThreadForFork = vi.fn();
 
-    const subagentsWithDefault: HarnessSubagent[] = [
+    const subagentsWithDefault: AgentControllerSubagent[] = [
       {
         id: 'collab',
         name: 'Collab',
@@ -1087,7 +1136,7 @@ describe('createSubagentTool forked subagent behavior', () => {
     expect(mockStream).toHaveBeenCalledTimes(1);
 
     const streamOpts = mockStream.mock.calls[0]![1];
-    const harness = streamOpts.requestContext.get('harness') as Partial<HarnessRequestContext>;
+    const harness = streamOpts.requestContext.get('harness') as Partial<AgentControllerRequestContext>;
     expect(harness.threadId).toBeNull();
     expect(harness.resourceId).toBe('');
     // memory option is NOT set for non-forked runs

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/longmemeval",
-  "version": "1.0.45-alpha.5",
+  "version": "1.1.2-alpha.5",
   "description": "LongMemEval benchmark implementation for Mastra Memory",
   "scripts": {
     "test": "vitest",
@@ -55,7 +55,7 @@
     "@types/node": "22.19.13",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "tsx": "^4.21.0",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

@@ -10,6 +10,9 @@ import { createBackgroundTasksTests } from './domains/background-tasks';
 import { createExperimentsTests } from './domains/experiments';
 import { createFavoritesTests } from './domains/favorites';
 import { createSchedulesTests } from './domains/schedules';
+import { createChannelsTests } from './domains/channels';
+import { createToolProviderConnectionsTests } from './domains/tool-provider-connections';
+import { createSkillsTests } from './domains/skills';
 export * from './domains/memory/data';
 export * from './domains/workflows/data';
 export * from './domains/scores/data';
@@ -19,6 +22,8 @@ export * from './domains/datasets/data';
 export * from './domains/experiments/data';
 export * from './domains/background-tasks/data';
 export * from './domains/schedules/data';
+export * from './domains/channels/data';
+export * from './domains/tool-provider-connections/data';
 
 /**
  * Test-specific feature flags for conditionally enabling test scenarios.
@@ -28,6 +33,12 @@ export * from './domains/schedules/data';
 export type TestCapabilities = {
   /** Whether the adapter supports listing scores by span (defaults to true) */
   listScoresBySpan?: boolean;
+  /**
+   * Whether the adapter persists item-level tool mocks and experiment tool mock
+   * reports (defaults to true). Adapters that reject them (e.g. MySQL) set this
+   * to false so the round-trip suite asserts rejection instead of persistence.
+   */
+  toolMocks?: boolean;
 };
 
 export function createTestSuite(storage: MastraStorage, capabilities: TestCapabilities = {}) {
@@ -90,6 +101,16 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
         clearList.push(schedulesStorage.dangerouslyClearAll());
       }
 
+      const channelsStorage = await storage.getStore('channels');
+      if (channelsStorage) {
+        clearList.push(channelsStorage.dangerouslyClearAll());
+      }
+
+      const toolProviderConnectionsStorage = await storage.getStore('toolProviderConnections');
+      if (toolProviderConnectionsStorage) {
+        clearList.push(toolProviderConnectionsStorage.dangerouslyClearAll());
+      }
+
       // Clear all domain data after tests
       await Promise.all(clearList);
     });
@@ -101,10 +122,13 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
     createScoresTest({ storage, capabilities });
     createObservabilityTests({ storage });
     createAgentsTests({ storage });
-    createDatasetsTests({ storage });
-    createExperimentsTests({ storage });
+    createDatasetsTests({ storage, capabilities });
+    createExperimentsTests({ storage, capabilities });
     createBackgroundTasksTests({ storage });
     createFavoritesTests({ storage });
+    createSkillsTests({ storage });
     createSchedulesTests({ storage });
+    createChannelsTests({ storage });
+    createToolProviderConnectionsTests({ storage });
   });
 }

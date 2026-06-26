@@ -21,7 +21,10 @@ import type {
   ChannelsStorage,
   HarnessStorage,
   ToolProviderConnectionsStorage,
+  NotificationsStorage,
+  ThreadStateStorage,
 } from './domains';
+import { InMemoryThreadStateStorage } from './domains/thread-state/inmemory';
 
 /** Map of all storage domain interfaces available in a composite store. */
 export type StorageDomains = {
@@ -29,6 +32,7 @@ export type StorageDomains = {
   scores?: ScoresStorage;
   memory?: MemoryStorage;
   channels?: ChannelsStorage;
+  notifications?: NotificationsStorage;
   observability?: ObservabilityStorage;
   agents?: AgentsStorage;
   datasets?: DatasetsStorage;
@@ -45,6 +49,7 @@ export type StorageDomains = {
   schedules?: SchedulesStorage;
   harness?: HarnessStorage;
   toolProviderConnections?: ToolProviderConnectionsStorage;
+  threadState?: ThreadStateStorage;
 };
 
 /**
@@ -237,6 +242,7 @@ export interface MastraCompositeStoreConfig {
  */
 export interface StorageMastraRef {
   getAgentById?: (id: string) => { source?: string; __getEditorConfig?: () => unknown } | undefined;
+  listAgents?: () => Record<string, { id: string; source?: string; __getEditorConfig?: () => unknown }> | undefined;
   getEditor?: () => { getSource?: () => 'code' | 'db' | undefined } | undefined;
 }
 
@@ -331,6 +337,12 @@ export class MastraCompositeStore extends MastraBase {
         channels: resolve('channels'),
         harness: resolve('harness'),
         toolProviderConnections: resolve('toolProviderConnections'),
+        notifications: resolve('notifications'),
+        // The thread-state domain always has an in-memory store wired by default
+        // so the built-in task tools work out of the box without a configured
+        // backend. Configure a durable backend for state that must survive a
+        // process restart.
+        threadState: resolve('threadState') ?? new InMemoryThreadStateStorage(),
       } as StorageDomains;
     }
     // Otherwise, subclasses set stores themselves
@@ -459,6 +471,8 @@ export class MastraCompositeStore extends MastraBase {
       maybeInit(this.stores.channels);
       maybeInit(this.stores.harness);
       maybeInit(this.stores.toolProviderConnections);
+      maybeInit(this.stores.notifications);
+      maybeInit(this.stores.threadState);
     }
 
     await Promise.all(initTasks);

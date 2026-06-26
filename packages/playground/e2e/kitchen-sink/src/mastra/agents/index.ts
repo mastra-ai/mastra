@@ -1,6 +1,9 @@
 import { Agent } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
+import { createBuilderAgent } from '@mastra/editor/ee';
 import { Memory } from '@mastra/memory';
+
+export { askUserAgent } from './ask-user-agent';
 
 import * as aiTest from 'ai/test';
 import { z } from 'zod';
@@ -151,7 +154,16 @@ const omTriggerTool = createTool({
   },
 });
 
-let count = 0;
+const fixtureCounts = new Map<Fixtures, number>();
+
+function getNextFixtureChunk(fixture: Fixtures, fixtureData: unknown[]) {
+  const count = fixtureCounts.get(fixture) ?? 0;
+  const chunk = fixtureData[count];
+
+  fixtureCounts.set(fixture, count + 1 >= fixtureData.length ? 0 : count + 1);
+
+  return chunk;
+}
 
 // Helper function to create a delayed readable stream
 
@@ -201,6 +213,56 @@ export const codeOverrideLockedAgent = new Agent({
   editor: false,
 });
 
+let builderFixtureCount = 0;
+let builderFixture: Fixtures | undefined;
+
+export const builderAgent = createBuilderAgent({
+  model: ({ requestContext }) => {
+    const fixtureFromRequest = requestContext.get('fixture') as Fixtures | undefined;
+    if (fixtureFromRequest && fixtureFromRequest !== builderFixture) {
+      builderFixture = fixtureFromRequest;
+      builderFixtureCount = 0;
+    }
+
+    const fixtureData = builderFixture ? fixtures[builderFixture] : undefined;
+
+    return new aiTest.MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text', text: 'Mock builder response' }],
+        warnings: [],
+      }),
+      doStream: async () => {
+        if (!fixtureData || fixtureData.length === 0) {
+          return {
+            stream: createDelayedStream(
+              [{ type: 'text-delta', delta: 'Mock builder response' }, { type: 'finish' }],
+              0,
+            ),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        }
+
+        const chunk = fixtureData[builderFixtureCount] as Array<any>;
+
+        builderFixtureCount++;
+        if (builderFixtureCount >= fixtureData.length) {
+          builderFixtureCount = 0;
+        }
+
+        return {
+          stream: createDelayedStream(chunk, 20),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+  },
+});
+
 export const weatherAgent = new Agent({
   id: 'weather-agent',
   name: 'Weather Agent',
@@ -235,13 +297,7 @@ export const weatherAgent = new Agent({
           return defaultResponse;
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const chunk = fixtureData[count] as Array<any>;
-
-        count++;
-        if (count >= fixtureData.length) {
-          count = 0;
-        }
+        const chunk = getNextFixtureChunk(fixture, fixtureData) as Array<any>;
 
         // Extract text from fixture chunks
 
@@ -270,13 +326,7 @@ export const weatherAgent = new Agent({
           };
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const chunk = fixtureData[count] as Array<any>;
-
-        count++;
-        if (count >= fixtureData.length) {
-          count = 0;
-        }
+        const chunk = getNextFixtureChunk(fixture, fixtureData) as Array<any>;
 
         return {
           stream: createDelayedStream(chunk, 20),

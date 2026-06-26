@@ -3,6 +3,8 @@ export { ChatChannelProcessor } from './processor';
 export { MastraStateAdapter } from './state-adapter';
 export { defaultTypingStatus } from './typing-status';
 export type { TypingStatusContext, TypingStatusFn, TypingStatusReturn } from './typing-status';
+export { resolveWaitUntil } from './wait-until';
+export type { WaitUntilFn, WaitUntilResolver } from './wait-until';
 export type {
   ChannelAdapterBaseConfig,
   ChannelAdapterConfig,
@@ -23,6 +25,8 @@ export type {
   ChannelProvider,
   InlineLinkEntry,
   PostableMessage,
+  ResolveResourceId,
+  ResolveResourceIdContext,
   StaticToolDisplay,
   StreamingConfig,
   StreamingOnlyToolDisplay,

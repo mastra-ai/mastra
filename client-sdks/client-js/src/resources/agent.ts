@@ -10,7 +10,7 @@ import type {
 } from '@ai-sdk/ui-utils';
 import { v4 as uuid } from '@lukeed/uuid';
 import type { AgentExecutionOptionsBase, SerializableStructuredOutputOptions } from '@mastra/core/agent';
-import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { AIV5Type, MessageListInput } from '@mastra/core/agent/message-list';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -40,7 +40,9 @@ import type {
   AgentVersionResponse,
   ListAgentVersionsParams,
   ListAgentVersionsResponse,
+  SendAgentMessageParams,
   SendAgentSignalParams,
+  QueueAgentMessageParams,
   SubscribeAgentThreadParams,
   ProcessAgentThreadStreamOptions,
   CreateCodeAgentVersionParams,
@@ -51,6 +53,7 @@ import type {
 } from '../types';
 
 import { parseClientRequestContext, requestContextQueryString, toQueryParams } from '../utils';
+import { getClientToolModelOutput } from '../utils/client-tool-model-output';
 import { processClientTools } from '../utils/process-client-tools';
 import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
 import { zodToJsonSchema } from '../utils/zod-to-json-schema';
@@ -235,6 +238,8 @@ async function executeToolCallAndRespond<OUTPUT>({
           },
         });
 
+        const modelOutput = await getClientToolModelOutput(clientTool, result);
+
         // Build the tool-result content block. If we have observability
         // data (carrier + buffered spans/logs), attach it directly on
         // the result so it travels with the specific tool call it
@@ -244,6 +249,9 @@ async function executeToolCallAndRespond<OUTPUT>({
           toolCallId: toolCall.payload.toolCallId,
           toolName: toolCall.payload.toolName,
           result,
+          // Carry the client-side toModelOutput result so the server uses it
+          // when building the model prompt, while result keeps the raw value.
+          ...(modelOutput != null ? { providerOptions: { mastra: { modelOutput } } } : {}),
         };
 
         if (observability) {
@@ -456,6 +464,65 @@ export class Agent extends BaseResource {
     if (threadKey) deleteSignalRuntimeOptionsEntry(latestSignalRuntimeOptionsByThread, threadKey);
   }
 
+  private prepareSignalRouteBody<
+    Params extends { resourceId?: string; threadId?: string; ifIdle?: { streamOptions?: unknown } },
+  >(params: Params): { body: Params; streamOptions?: SignalRuntimeOptions } {
+    const streamOptions = params.ifIdle?.streamOptions as SignalRuntimeOptions | undefined;
+    if (!streamOptions) return { body: params };
+
+    this.setSignalRuntimeOptions({
+      resourceId: params.resourceId,
+      threadId: params.threadId,
+      streamOptions,
+    });
+
+    return {
+      body: {
+        ...params,
+        ifIdle: {
+          ...params.ifIdle,
+          streamOptions: {
+            ...streamOptions,
+            requestContext: parseClientRequestContext(streamOptions.requestContext),
+            clientTools: processClientTools(streamOptions.clientTools),
+          },
+        },
+      } as Params,
+      streamOptions,
+    };
+  }
+
+  private async requestSignalRoute<
+    Params extends { resourceId?: string; threadId?: string; ifIdle?: { streamOptions?: unknown } },
+    Response extends { runId: string },
+  >(path: string, params: Params): Promise<Response> {
+    const { body, streamOptions } = this.prepareSignalRouteBody(params);
+
+    let response: Response;
+    try {
+      response = await this.request<Response>(path, {
+        method: 'POST',
+        body,
+      });
+    } catch (error) {
+      if (streamOptions) {
+        this.deleteLatestSignalRuntimeOptions({ resourceId: params.resourceId, threadId: params.threadId });
+      }
+      throw error;
+    }
+
+    if (streamOptions) {
+      this.setSignalRuntimeOptions({
+        runId: response.runId,
+        resourceId: params.resourceId,
+        threadId: params.threadId,
+        streamOptions,
+      });
+    }
+
+    return response;
+  }
+
   /**
    * Retrieves details about the agent
    * @param requestContext - Optional request context to pass as query parameter
@@ -503,55 +570,24 @@ export class Agent extends BaseResource {
   }
 
   /**
+   * @experimental Agent message APIs are experimental and may change in a future release.
+   */
+  sendMessage(params: SendAgentMessageParams): Promise<{ accepted: true; runId: string; signal?: unknown }> {
+    return this.requestSignalRoute(`/agents/${this.agentId}/send-message`, params);
+  }
+
+  /**
+   * @experimental Agent message APIs are experimental and may change in a future release.
+   */
+  queueMessage(params: QueueAgentMessageParams): Promise<{ accepted: true; runId: string; signal?: unknown }> {
+    return this.requestSignalRoute(`/agents/${this.agentId}/queue-message`, params);
+  }
+
+  /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
-  async sendSignal(params: SendAgentSignalParams): Promise<{ accepted: true; runId: string }> {
-    const streamOptions = params.ifIdle?.streamOptions as SignalRuntimeOptions | undefined;
-    if (streamOptions) {
-      this.setSignalRuntimeOptions({
-        resourceId: params.resourceId,
-        threadId: params.threadId,
-        streamOptions,
-      });
-    }
-
-    const body = params.ifIdle?.streamOptions
-      ? {
-          ...params,
-          ifIdle: {
-            ...params.ifIdle,
-            streamOptions: {
-              ...params.ifIdle.streamOptions,
-              requestContext: parseClientRequestContext(params.ifIdle.streamOptions.requestContext),
-              clientTools: processClientTools(params.ifIdle.streamOptions.clientTools),
-            },
-          },
-        }
-      : params;
-
-    let response: { accepted: true; runId: string };
-    try {
-      response = await this.request<{ accepted: true; runId: string }>(`/agents/${this.agentId}/signals`, {
-        method: 'POST',
-        body,
-      });
-    } catch (error) {
-      if (streamOptions) {
-        this.deleteLatestSignalRuntimeOptions({ resourceId: params.resourceId, threadId: params.threadId });
-      }
-      throw error;
-    }
-
-    if (streamOptions) {
-      this.setSignalRuntimeOptions({
-        runId: response.runId,
-        resourceId: params.resourceId,
-        threadId: params.threadId,
-        streamOptions,
-      });
-    }
-
-    return response;
+  sendSignal(params: SendAgentSignalParams): Promise<{ accepted: true; runId: string }> {
+    return this.requestSignalRoute(`/agents/${this.agentId}/signals`, params);
   }
 
   /**
@@ -679,12 +715,13 @@ export class Agent extends BaseResource {
           const processedClientTools = processClientTools(activeClientTools);
           const processedRequestContext = parseClientRequestContext(activeRequestContext);
 
-          const toolResultMessages: CoreMessage[] = [];
+          const toolResultMessages: AIV5Type.ModelMessage[] = [];
           for (const toolCall of pendingToolCalls) {
             const clientTool = activeClientTools[toolCall.toolName] as Tool | undefined;
             if (!clientTool || typeof clientTool.execute !== 'function') continue;
 
             let result: unknown;
+            let modelOutput: unknown;
             let observability: ClientToolObservabilityEnvelope | undefined;
             try {
               const execution = await executeClientToolWithObservability({
@@ -707,20 +744,29 @@ export class Agent extends BaseResource {
               });
               result = execution.result;
               observability = execution.observability;
+              try {
+                modelOutput = await getClientToolModelOutput(clientTool, result);
+              } catch {
+                // A failing toModelOutput shouldn't discard a successful tool
+                // execution; continue with the raw result only.
+                modelOutput = undefined;
+              }
             } catch (error) {
               result = { error: String(error) };
+              modelOutput = undefined;
             }
 
-            const toolResultContent: Record<string, unknown> = {
+            const toolResultContent = {
               type: 'tool-result',
               toolCallId: toolCall.toolCallId,
               toolName: toolCall.toolName,
+              args: toolCall.args,
               result,
+              ...(observability ? { __mastraObservability: observability } : {}),
+            } satisfies Extract<CoreMessage, { role: 'tool' }>['content'][number] & {
+              args?: unknown;
+              __mastraObservability?: ClientToolObservabilityEnvelope;
             };
-
-            if (observability) {
-              toolResultContent.__mastraObservability = observability;
-            }
 
             await onChunk({
               type: 'tool-result',
@@ -728,10 +774,29 @@ export class Agent extends BaseResource {
               payload: toolResultContent,
             } as never);
 
+            const continuationToolCall = {
+              type: 'tool-call',
+              toolCallId: toolCall.toolCallId,
+              toolName: toolCall.toolName,
+              input: toolCall.args,
+            } satisfies AIV5Type.ToolCallPart;
+            const continuationToolResult = {
+              type: 'tool-result',
+              toolCallId: toolCall.toolCallId,
+              toolName: toolCall.toolName,
+              output: { type: 'json', value: result as JSONValue },
+              // Carry the client-side toModelOutput result so the server uses it
+              // when building the model prompt, while output keeps the raw result.
+              ...(modelOutput != null
+                ? { providerOptions: { mastra: { modelOutput: modelOutput as JSONValue } } }
+                : {}),
+              ...(observability ? { __mastraObservability: observability } : {}),
+            } satisfies AIV5Type.ToolResultPart & { __mastraObservability?: ClientToolObservabilityEnvelope };
+
             toolResultMessages.push({
-              role: 'tool',
-              content: [toolResultContent],
-            } as unknown as CoreMessage);
+              role: 'assistant',
+              content: [continuationToolCall, continuationToolResult],
+            });
           }
 
           if (toolResultMessages.length === 0) {
@@ -739,23 +804,35 @@ export class Agent extends BaseResource {
             return;
           }
 
+          const continuationStreamOptions = {
+            ...activeRuntimeOptions,
+            requestContext: processedRequestContext,
+            memory: threadId ? { thread: threadId, resource: resourceId } : undefined,
+            clientTools: processedClientTools,
+          } as StreamParamsBaseWithoutMessages<any>;
+
+          agent.setSignalRuntimeOptions({
+            resourceId,
+            threadId,
+            streamOptions: continuationStreamOptions,
+          });
+
+          const continuationMessages = (
+            threadId ? toolResultMessages : [...(finishPayload.payload?.messages?.nonUser ?? []), ...toolResultMessages]
+          ) as MessageListInput;
+
           try {
-            const continuation = await agent.streamUntilIdle(
-              [...(finishPayload.payload?.messages?.nonUser ?? []), ...toolResultMessages] as MessageListInput,
-              {
-                ...activeRuntimeOptions,
-                runId: uuid(),
-                requestContext: processedRequestContext,
-                memory: threadId ? { thread: threadId, resource: resourceId } : undefined,
-                clientTools: processedClientTools,
-              } as never,
-            );
-            try {
-              void continuation.body?.cancel?.();
-            } catch {
-              // ignore
-            }
+            await agent.sendToolApproval({
+              resourceId: resourceId || agent.agentId,
+              threadId,
+              toolCallId: pendingToolCalls[0]!.toolCallId,
+              approved: true,
+              requestContext: processedRequestContext,
+              messages: continuationMessages,
+              streamOptions: continuationStreamOptions,
+            });
           } catch (error) {
+            agent.deleteLatestSignalRuntimeOptions({ resourceId, threadId });
             console.error('Error running client-tool continuation:', error);
           } finally {
             agent.deleteSignalRuntimeOptions(runId);
@@ -1974,7 +2051,6 @@ export class Agent extends BaseResource {
     }
 
     try {
-      let toolCalls: ToolInvocation[] = [];
       let messages: UIMessage[] = [];
       let streamRunId: string | undefined = processedParams.runId;
 
@@ -2027,63 +2103,79 @@ export class Agent extends BaseResource {
         },
         onFinish: async ({ finishReason, message }) => {
           if (finishReason === 'tool-calls') {
-            const toolCall = [...(message?.parts ?? [])]
-              .reverse()
-              .find(part => part.type === 'tool-invocation')?.toolInvocation;
-            if (toolCall) {
+            const toolInvocationsById = new Map<string, ToolInvocation>();
+
+            for (const part of message?.parts ?? []) {
+              if (part.type !== 'tool-invocation' || !part.toolInvocation?.toolCallId) {
+                continue;
+              }
+
               const toolInvocationWithMetadata = message?.toolInvocations?.find(
-                invocation => invocation.toolCallId === toolCall.toolCallId,
+                invocation => invocation.toolCallId === part.toolInvocation.toolCallId,
               );
-              toolCalls.push({
+
+              toolInvocationsById.set(part.toolInvocation.toolCallId, {
                 ...toolInvocationWithMetadata,
-                ...toolCall,
-                ...(!getClientToolObservabilityContext(toolCall) && toolInvocationWithMetadata
+                ...part.toolInvocation,
+                ...(!getClientToolObservabilityContext(part.toolInvocation) && toolInvocationWithMetadata
                   ? { observability: getClientToolObservabilityContext(toolInvocationWithMetadata) }
                   : {}),
               });
             }
 
-            let shouldExecuteClientTool = false;
-            // Handle tool calls if needed
-            for (const toolCall of toolCalls) {
-              const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
-              if (clientTool && clientTool.execute) {
-                shouldExecuteClientTool = true;
+            for (const toolInvocation of message?.toolInvocations ?? []) {
+              if (!toolInvocation.toolCallId) {
+                continue;
+              }
 
-                // Synthesize a Mastra-shaped terminal chunk so React's toUIMessage
-                // reducer flips the matching `dynamic-tool` part from
-                // `input-available` to `output-available` / `output-error`.
-                // Without this, the React-side `dynamic-tool` part is stuck in
-                // `input-available` forever because the server stream never emits
-                // a terminal chunk for client-executed tools.
+              toolInvocationsById.set(toolInvocation.toolCallId, {
+                ...toolInvocationsById.get(toolInvocation.toolCallId),
+                ...toolInvocation,
+              });
+            }
+
+            const executableToolCalls = [...toolInvocationsById.values()].filter(toolCall => {
+              const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
+              return Boolean(clientTool?.execute);
+            });
+
+            if (executableToolCalls.length > 0) {
+              const syntheticChunks: Array<
+                | {
+                    type: 'tool-result';
+                    runId: string;
+                    from: 'AGENT';
+                    payload: {
+                      toolCallId: string;
+                      toolName: string;
+                      result: unknown;
+                      isError: boolean;
+                      providerExecuted: false;
+                    };
+                  }
+                | {
+                    type: 'tool-error';
+                    runId: string;
+                    from: 'AGENT';
+                    payload: {
+                      toolCallId: string;
+                      toolName: string;
+                      error: unknown;
+                      args?: unknown;
+                      providerExecuted: false;
+                    };
+                  }
+              > = [];
+              const toolResultContents: Array<Record<string, unknown>> = [];
+
+              for (const toolCall of executableToolCalls) {
+                const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
+
                 const runId: string = streamRunId ?? toolCall.toolCallId;
                 let result: unknown;
+                let modelOutput: unknown;
                 let observability: ClientToolObservabilityEnvelope | undefined;
-                let synthetic:
-                  | {
-                      type: 'tool-result';
-                      runId: string;
-                      from: 'AGENT';
-                      payload: {
-                        toolCallId: string;
-                        toolName: string;
-                        result: unknown;
-                        isError: boolean;
-                        providerExecuted: false;
-                      };
-                    }
-                  | {
-                      type: 'tool-error';
-                      runId: string;
-                      from: 'AGENT';
-                      payload: {
-                        toolCallId: string;
-                        toolName: string;
-                        error: unknown;
-                        args?: unknown;
-                        providerExecuted: false;
-                      };
-                    };
+                let synthetic: (typeof syntheticChunks)[number];
 
                 try {
                   ({ result, observability } = await executeClientToolWithObservability({
@@ -2104,6 +2196,8 @@ export class Agent extends BaseResource {
                       },
                     },
                   }));
+
+                  modelOutput = await getClientToolModelOutput(clientTool, result);
 
                   synthetic = {
                     type: 'tool-result',
@@ -2137,15 +2231,30 @@ export class Agent extends BaseResource {
                   result = { error: error instanceof Error ? error.message : String(error) };
                 }
 
-                // Wait for the server-side stream pipe to finish before
-                // enqueueing the synthetic chunk so the React reducer observes
-                // the server `finish` chunk first, then our terminal tool chunk.
-                try {
-                  await pipePromise;
-                } catch {
-                  // pipePromise already has its own .catch; ignore here.
-                }
+                syntheticChunks.push(synthetic);
+                toolResultContents.push({
+                  type: 'tool-result' as const,
+                  toolCallId: toolCall.toolCallId,
+                  toolName: toolCall.toolName,
+                  input: toolCall.args,
+                  result,
+                  ...(modelOutput != null
+                    ? { providerOptions: { mastra: { modelOutput: modelOutput as JSONValue } } }
+                    : {}),
+                  ...(observability ? { __mastraObservability: observability } : {}),
+                });
+              }
 
+              // Wait for the server-side stream pipe to finish before
+              // enqueueing synthetic chunks so the React reducer observes
+              // the server `finish` chunk first, then terminal tool chunks.
+              try {
+                await pipePromise;
+              } catch {
+                // pipePromise already has its own .catch; ignore here.
+              }
+
+              for (const synthetic of syntheticChunks) {
                 try {
                   const errorForSerialization = synthetic.type === 'tool-error' ? synthetic.payload.error : undefined;
                   const serializedError =
@@ -2165,83 +2274,51 @@ export class Agent extends BaseResource {
                 } catch (enqueueErr) {
                   console.error('Failed to enqueue synthetic tool-result chunk:', enqueueErr);
                 }
-
-                const lastMessageRaw = messages[messages.length - 1];
-                const lastMessage: UIMessage | undefined =
-                  lastMessageRaw != null ? JSON.parse(JSON.stringify(lastMessageRaw)) : undefined;
-
-                const toolInvocationPart = lastMessage?.parts?.find(
-                  part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCall.toolCallId,
-                ) as ToolInvocationUIPart | undefined;
-
-                if (toolInvocationPart) {
-                  toolInvocationPart.toolInvocation = {
-                    ...toolInvocationPart.toolInvocation,
-                    state: 'result',
-                    result,
-                    ...(observability ? { __mastraObservability: observability } : {}),
-                  };
-                }
-
-                const toolInvocation = lastMessage?.toolInvocations?.find(
-                  toolInvocation => toolInvocation.toolCallId === toolCall.toolCallId,
-                ) as ToolInvocation | undefined;
-
-                if (toolInvocation) {
-                  toolInvocation.state = 'result';
-                  // @ts-expect-error - result property exists when state is 'result'
-                  toolInvocation.result = result;
-                  if (observability) {
-                    (
-                      toolInvocation as unknown as { __mastraObservability?: ClientToolObservabilityEnvelope }
-                    ).__mastraObservability = observability;
-                  }
-                }
-
-                // Build updated messages for the recursive call
-                // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
-                // When no threadId (stateless), include full conversation history for context
-                const newMessages =
-                  lastMessage != null ? [...messages.filter(m => m.id !== lastMessage.id), lastMessage] : [...messages];
-
-                const updatedMessages = threadId
-                  ? newMessages
-                  : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
-
-                // Recursively call stream with updated messages
-                // This will wait for the recursive stream to complete before continuing.
-                // Resume routes are one-shot (they consume server-side resumeData),
-                // so client-tool continuations must fall back to the corresponding
-                // non-resume stream endpoint. Other routes (e.g. stream-until-idle)
-                // are idempotent continuations and stay on the same endpoint.
-                const recursionRoute =
-                  route === 'resume-stream'
-                    ? 'stream'
-                    : route === 'resume-stream-until-idle'
-                      ? 'stream-until-idle'
-                      : route;
-                try {
-                  await this.processStreamResponse(
-                    {
-                      ...processedParams,
-                      messages: updatedMessages,
-                    },
-                    controller,
-                    recursionRoute,
-                  );
-                } catch (error) {
-                  console.error('Error processing recursive stream response:', error);
-                }
               }
-            }
 
-            // Close the controller after all processing is complete
-            // Wait for current pipe to finish before closing
-            if (!shouldExecuteClientTool) {
+              const toolResultMessage = {
+                role: 'tool' as const,
+                content: toolResultContents,
+              };
+
+              const updatedMessages = threadId
+                ? [toolResultMessage]
+                : [
+                    ...(Array.isArray(processedParams.messages) ? processedParams.messages : []),
+                    ...messages,
+                    toolResultMessage,
+                  ];
+
+              // Recursively call stream with updated messages
+              // This will wait for the recursive stream to complete before continuing.
+              // Resume routes are one-shot (they consume server-side resumeData),
+              // so client-tool continuations must fall back to the corresponding
+              // non-resume stream endpoint. Other routes (e.g. stream-until-idle)
+              // are idempotent continuations and stay on the same endpoint.
+              const recursionRoute =
+                route === 'resume-stream'
+                  ? 'stream'
+                  : route === 'resume-stream-until-idle'
+                    ? 'stream-until-idle'
+                    : route;
+              try {
+                await this.processStreamResponse(
+                  {
+                    ...processedParams,
+                    messages: updatedMessages,
+                  },
+                  controller,
+                  recursionRoute,
+                );
+              } catch (error) {
+                console.error('Error processing recursive stream response:', error);
+              }
+            } else {
+              // Close the controller after all processing is complete
+              // Wait for current pipe to finish before closing
               await pipePromise;
               controller.close();
             }
-            // If client tool was executed, the recursive call will handle closing the stream
           } else {
             // No tool calls - wait for pipe to complete then close the stream
             await pipePromise;
@@ -2543,6 +2620,9 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
+  /**
+   * @deprecated Use `stream(messages, { untilIdle: true })` instead.
+   */
   async streamUntilIdle<OUTPUT extends {}>(
     messages: MessageListInput,
     streamOptions: StreamParamsBaseWithoutMessages<OUTPUT> & {
@@ -2715,6 +2795,26 @@ export class Agent extends BaseResource {
     };
 
     return streamResponse;
+  }
+
+  async sendToolApproval(params: {
+    resourceId: string;
+    threadId: string;
+    toolCallId: string;
+    approved: boolean;
+    resumeData?: unknown;
+    requestContext?: RequestContext | Record<string, any>;
+    messages?: MessageListInput;
+    streamOptions?: StreamParamsBaseWithoutMessages<any>;
+  }): Promise<{ accepted: true; runId: string; toolCallId?: string }> {
+    const { requestContext, ...rest } = params;
+    return this.request<{ accepted: true; runId: string; toolCallId?: string }>(
+      `/agents/${this.agentId}/send-tool-approval`,
+      {
+        method: 'POST',
+        body: { ...rest, requestContext: parseClientRequestContext(requestContext) },
+      },
+    );
   }
 
   async declineToolCall(params: {
@@ -2903,6 +3003,8 @@ export class Agent extends BaseResource {
   }
 
   /**
+   * @deprecated Use `resumeStream(resumeData, { untilIdle: true, ... })` instead.
+   *
    * Resumes a suspended agent stream until idle with custom resume data.
    * Used to continue execution after a suspension point (e.g., workflow suspend within an agent).
    */
@@ -3091,36 +3193,6 @@ export class Agent extends BaseResource {
                   },
                 });
 
-                const lastMessage: UIMessage = JSON.parse(JSON.stringify(messages[messages.length - 1]));
-
-                const toolInvocationPart = lastMessage?.parts?.find(
-                  part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCall.toolCallId,
-                ) as ToolInvocationUIPart | undefined;
-
-                if (toolInvocationPart) {
-                  toolInvocationPart.toolInvocation = {
-                    ...toolInvocationPart.toolInvocation,
-                    state: 'result',
-                    result,
-                    ...(observability ? { __mastraObservability: observability } : {}),
-                  };
-                }
-
-                const toolInvocation = lastMessage?.toolInvocations?.find(
-                  toolInvocation => toolInvocation.toolCallId === toolCall.toolCallId,
-                ) as ToolInvocation | undefined;
-
-                if (toolInvocation) {
-                  toolInvocation.state = 'result';
-                  // @ts-expect-error - result property exists when state is 'result'
-                  toolInvocation.result = result;
-                  if (observability) {
-                    (
-                      toolInvocation as unknown as { __mastraObservability?: ClientToolObservabilityEnvelope }
-                    ).__mastraObservability = observability;
-                  }
-                }
-
                 // write the tool result part to the stream
                 const writer = writable.getWriter();
 
@@ -3139,13 +3211,27 @@ export class Agent extends BaseResource {
                   writer.releaseLock();
                 }
 
-                // Build updated messages for the recursive call
-                // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
-                // When no threadId (stateless), include full conversation history for context
-                const newMessages = [...messages.filter(m => m.id !== lastMessage.id), lastMessage];
+                const toolResultMessage = {
+                  role: 'tool' as const,
+                  content: [
+                    {
+                      type: 'tool-result' as const,
+                      toolCallId: toolCall.toolCallId,
+                      toolName: toolCall.toolName,
+                      input: toolCall.args,
+                      result,
+                      ...(observability ? { __mastraObservability: observability } : {}),
+                    },
+                  ],
+                };
+
                 const updatedMessages = threadId
-                  ? newMessages
-                  : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
+                  ? [toolResultMessage]
+                  : [
+                      ...(Array.isArray(processedParams.messages) ? processedParams.messages : []),
+                      ...messages,
+                      toolResultMessage,
+                    ];
 
                 // Recursively call stream with updated messages
                 this.processStreamResponseLegacy(

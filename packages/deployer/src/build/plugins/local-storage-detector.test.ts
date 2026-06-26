@@ -64,6 +64,42 @@ describe('localStorageDetector', () => {
     expect(detections).toHaveLength(0);
   });
 
+  it('ignores deployer .mastra/.build shim files for @mastra/* packages', () => {
+    // Reproduces the false positive triggered when a user sets a `bundler:` field
+    // in `new Mastra({...})`, which causes the optimizer to pre-bundle
+    // `@mastra/core` into `.mastra/.build/@mastra__core__*.mjs` shims. These
+    // shims preserve JSDoc examples like `url: 'file:./data.db'`.
+    const plugin = getPlugin();
+    plugin.transform(
+      `const example = "storage: new LibSQLStore({ url: 'file:./data.db' })";`,
+      '/project/.mastra/.build/@mastra__core__mastra.mjs',
+    );
+    plugin.transform(`const example = "url: 'file:./data.db'";`, '/project/.mastra/.build/@mastra__core.mjs');
+
+    const emitted: Array<{ fileName: string; source: string }> = [];
+    const ctx = {
+      emitFile(file: { fileName: string; source: string }) {
+        emitted.push(file);
+      },
+    };
+    plugin.generateBundle.call(
+      ctx,
+      {},
+      {
+        'index.mjs': {
+          type: 'chunk',
+          modules: {
+            '/project/.mastra/.build/@mastra__core__mastra.mjs': { renderedLength: 5000 },
+            '/project/.mastra/.build/@mastra__core.mjs': { renderedLength: 5000 },
+          },
+        },
+      },
+    );
+
+    const detections = JSON.parse(emitted[0]!.source);
+    expect(detections).toHaveLength(0);
+  });
+
   it('excludes tree-shaken modules (renderedLength === 0)', () => {
     const plugin = getPlugin();
     plugin.transform(`const url = 'file:./mastra.db';`, '/project/src/unused.ts');

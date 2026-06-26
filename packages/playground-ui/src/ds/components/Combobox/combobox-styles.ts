@@ -1,42 +1,88 @@
+import { cva } from 'class-variance-authority';
+import { buttonVariants } from '../Button/Button';
+import type { TextButtonSize } from '../Button/Button';
+import { controlTriggerOpenState } from '@/ds/primitives/control-size';
+import type { ControlTriggerVisualVariant } from '@/ds/primitives/control-size';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
+
+/**
+ * A combobox is a form field, so it reuses the same button looks as everywhere,
+ * mirroring `SelectTrigger`: `default` (the Button's filled default surface —
+ * the default here too), `outline` (bordered, transparent) and `ghost`
+ * (borderless, for breadcrumbs/inline pickers). Only the high-emphasis `primary`
+ * look is intentionally NOT offered (a field is not a call-to-action).
+ */
+export type ComboboxVisualVariant = ControlTriggerVisualVariant;
+export type ComboboxLegacyVariant = 'link';
+export type ComboboxVariant = ComboboxVisualVariant | ComboboxLegacyVariant;
+
+function normalizeComboboxVariant(variant: ComboboxVariant): ComboboxVisualVariant {
+  return variant === 'link' ? 'ghost' : variant;
+}
+
+/**
+ * Single source of truth for both the single- and multi-select combobox
+ * triggers. A combobox = a button + a trailing chevron, so it reuses the Button
+ * recipe (variant colors, size = height/text/padding/radius, unified border
+ * focus, disabled) and layers only the combobox-specific extras — exactly like
+ * `SelectTrigger`.
+ */
+export function comboboxTriggerClass({
+  variant,
+  size,
+  error,
+  className,
+}: {
+  variant: ComboboxVariant;
+  size: TextButtonSize;
+  error?: boolean;
+  className?: string;
+}): string {
+  const visualVariant = normalizeComboboxVariant(variant);
+
+  return cn(
+    buttonVariants({ variant: visualVariant, size }),
+    // Fill the field and push the value left / chevron right (Button's base
+    // centers its content with `justify-center`).
+    'w-full min-w-32 justify-between',
+    // Read as "active" while the popup is open, per variant (see map above).
+    controlTriggerOpenState[visualVariant],
+    'data-[placeholder]:text-neutral3',
+    error && 'border-error hover:border-error focus-visible:border-error',
+    className,
+  );
+}
+
+export const comboboxItemClass = cva(
+  cn(
+    'relative flex cursor-pointer select-none items-center rounded-md',
+    'py-1.5 min-h-8',
+    'text-ui-smd leading-ui-sm text-neutral4',
+    'outline-none focus:outline-none focus-visible:outline-none',
+    transitions.colors,
+    'data-highlighted:bg-surface4 data-highlighted:text-neutral6',
+    'data-selected:text-neutral6',
+  ),
+  {
+    variants: {
+      multiple: {
+        false: 'gap-2 pl-2.5 pr-2',
+        true: 'gap-2 pl-2.5 pr-2',
+      },
+    },
+    defaultVariants: {
+      multiple: false,
+    },
+  },
+);
 
 export const comboboxStyles = {
   /** Root wrapper */
   root: 'flex flex-col gap-1.5',
 
-  /** Trigger base — shared layout/typography for all variants. */
-  trigger: cn(
-    'inline-flex w-full min-w-32 select-none items-center justify-between gap-1.5 whitespace-nowrap cursor-pointer',
-    'rounded-lg border bg-transparent px-2.5 text-ui-smd leading-ui-sm text-neutral4',
-    'outline-none transition-colors duration-normal ease-out-custom',
-    'focus:outline-none focus-visible:outline-none',
-    'disabled:cursor-not-allowed disabled:opacity-50',
-  ),
-
-  /** Variant: default — bordered form input look. */
-  triggerDefault: cn(
-    'border-border1',
-    'hover:bg-surface2 hover:text-neutral6 hover:border-border2 active:bg-surface3',
-    'focus-visible:border-border2',
-    'data-[popup-open]:bg-surface3 data-[popup-open]:text-neutral6 data-[popup-open]:border-border2',
-  ),
-
-  /** Variant: ghost — borderless, hover-only surface. */
-  triggerGhost: cn(
-    'border-transparent',
-    'hover:bg-surface2 hover:text-neutral6 active:bg-surface3',
-    'data-[popup-open]:bg-surface3 data-[popup-open]:text-neutral6',
-  ),
-
-  /** Variant: link — text-only trigger. */
-  triggerLink: cn('border-transparent px-0', 'hover:text-neutral6', 'data-[popup-open]:text-neutral6'),
-
-  /** Trigger with error state */
-  triggerError: 'border-accent2 hover:border-accent2 focus-visible:border-accent2',
-
-  /** Chevron icon in trigger */
-  chevron: 'ml-2 h-4 w-4 shrink-0 text-neutral3 opacity-70',
+  /** Chevron icon in trigger — inherits the variant's text color via currentColor. */
+  chevron: 'ml-2 h-4 w-4 shrink-0 opacity-60',
 
   /** Placeholder text color */
   placeholder: 'text-neutral3',
@@ -75,50 +121,19 @@ export const comboboxStyles = {
   list: 'max-h-dropdown-max-height overflow-y-auto overflow-x-hidden p-1',
 
   /** Option item base — rounded-md sits concentrically inside rounded-xl + p-1. */
-  item: cn(
-    'group/item relative flex cursor-pointer select-none items-center gap-2 rounded-md',
-    'pl-2.5 pr-2 py-1.5 min-h-8',
-    'text-ui-smd leading-ui-sm text-neutral4',
-    'outline-none focus:outline-none focus-visible:outline-none',
-    transitions.colors,
-    'data-highlighted:bg-surface4 data-highlighted:text-neutral6',
-    'data-selected:text-neutral6',
-  ),
+  item: comboboxItemClass({ multiple: false }),
 
-  /** Multi-select item — keeps the left checkbox slot, no right indicator. */
-  itemMulti: cn(
-    'relative flex cursor-pointer select-none items-center gap-2.5 rounded-md',
-    'pl-2 pr-2.5 py-1.5 min-h-8',
-    'text-ui-smd leading-ui-sm text-neutral4',
-    'outline-none focus:outline-none focus-visible:outline-none',
-    transitions.colors,
-    'data-highlighted:bg-surface4 data-highlighted:text-neutral6',
-    'data-selected:text-neutral6',
-  ),
+  /** Multi-select item — same item rhythm with a right-aligned selected check. */
+  itemMulti: comboboxItemClass({ multiple: true }),
 
   /** Right-aligned slot grouping end content + selection check. */
   itemRightSlot: 'ml-auto flex items-center gap-2 shrink-0',
 
   /** Check indicator container — inline, fixed 16x16, shown only when item is selected. */
-  checkContainer: 'flex h-4 w-4 shrink-0 items-center justify-center text-accent1',
+  checkContainer: 'flex h-4 w-4 shrink-0 items-center justify-center text-neutral6',
 
   /** Check icon (single select) */
   checkIcon: 'h-3.5 w-3.5',
-
-  /** Checkbox container (multi select) */
-  checkbox: 'flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border',
-
-  /** Checkbox selected state */
-  checkboxSelected: 'bg-accent1 border-accent1',
-
-  /** Checkbox unselected state */
-  checkboxUnselected: 'border-border2',
-
-  /** Check icon for checkbox (multi select) */
-  checkboxIcon: 'h-3 w-3 text-surface1',
-
-  /** Option content wrapper */
-  optionContent: 'flex items-center gap-2 w-full min-w-0',
 
   /** Option label/description wrapper */
   optionText: 'flex flex-col gap-0.5 min-w-0',

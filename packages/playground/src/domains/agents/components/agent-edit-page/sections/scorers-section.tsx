@@ -1,17 +1,12 @@
-import {
-  Collapsible,
-  CollapsibleTrigger,
-  CollapsibleContent,
-  MultiCombobox,
-  Button,
-  Input,
-  Label,
-  RadioGroup,
-  RadioGroupItem,
-  Textarea,
-  JudgeIcon,
-  Icon,
-} from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { JudgeIcon } from '@mastra/playground-ui/icons/JudgeIcon';
 import { Trash2, ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { Control } from 'react-hook-form';
@@ -102,7 +97,8 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
                 <CollapsibleContent>
                   <div className="p-3 border-t border-border1">
                     <div className="flex flex-col gap-2">
-                      <MultiCombobox
+                      <Combobox
+                        multiple
                         options={options}
                         value={selectedIds}
                         onValueChange={handleValueChange}
@@ -111,7 +107,6 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
                         emptyText="No scorers available"
                         disabled={isLoading || readOnly}
                         error={error}
-                        variant="default"
                       />
 
                       {selectedOptions.length > 0 && (

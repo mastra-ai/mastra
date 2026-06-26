@@ -1,14 +1,18 @@
-import { Button, Spinner, Textarea, toast } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { ArrowUpIcon } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { DEFAULT_BUILDER_REQUEST_CONTEXT_SCHEMA } from '../../constants/default-request-context-schema';
 import { useAgentBuilderAllowedModels } from '../../hooks/use-agent-builder-allowed-models';
-import { useBuilderModelPolicy } from '../../hooks/use-builder-settings';
+import { useBuilderModelPolicy, useBuilderSettings } from '../../hooks/use-builder-settings';
 import { ExampleList } from './example-list';
 import { resolveStarterModel, truncateName } from './utils';
 import { useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
+import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
 
 export const AgentBuilderStarter = () => {
@@ -17,15 +21,21 @@ export const AgentBuilderStarter = () => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { createStoredAgent } = useStoredAgentMutations(undefined);
   const defaultVisibility = useDefaultVisibility();
+  const { data: authCapabilities } = useAuthCapabilities();
   const { models: allowedModels } = useAgentBuilderAllowedModels();
   const modelPolicy = useBuilderModelPolicy();
+  // While builder settings are still loading, useBuilderModelPolicy falls back
+  // to an inactive policy — submitting in that window would skip the admin
+  // default model. Block submit until the settings query has resolved.
+  const { isLoading: isBuilderSettingsLoading } = useBuilderSettings();
 
   const trimmed = message.trim();
   const isCreating = createStoredAgent.isPending;
+  const isSubmitBlocked = trimmed.length === 0 || isCreating || isBuilderSettingsLoading;
 
   const handleSubmit = async (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (trimmed.length === 0 || isCreating) return;
+    if (isSubmitBlocked) return;
 
     const id = nanoid();
 
@@ -40,7 +50,7 @@ export const AgentBuilderStarter = () => {
         skills: {},
         visibility: defaultVisibility,
         model: resolveStarterModel(allowedModels, modelPolicy),
-        requestContextSchema: DEFAULT_BUILDER_REQUEST_CONTEXT_SCHEMA,
+        ...(authCapabilities?.enabled ? { requestContextSchema: DEFAULT_BUILDER_REQUEST_CONTEXT_SCHEMA } : {}),
       });
 
       void navigate(`/agent-builder/agents/${id}/edit`, {
@@ -102,7 +112,7 @@ export const AgentBuilderStarter = () => {
               variant="default"
               size="icon-md"
               tooltip="Start building"
-              disabled={trimmed.length === 0 || isCreating}
+              disabled={isSubmitBlocked}
               data-testid="agent-builder-starter-submit"
               className="rounded-full"
             >

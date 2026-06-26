@@ -48,6 +48,15 @@ export const TABLE_CHANNEL_CONFIG = 'mastra_channel_config';
 // Tool provider connections
 export const TABLE_TOOL_PROVIDER_CONNECTIONS = 'mastra_tool_provider_connections';
 
+// Notifications
+export const TABLE_NOTIFICATIONS = 'mastra_notifications';
+
+// Harness sessions
+export const TABLE_HARNESS_SESSIONS = 'mastra_harness_sessions';
+
+// Thread state (per-thread, per-type durable state; e.g. the task list)
+export const TABLE_THREAD_STATE = 'mastra_thread_state';
+
 /** Union of all core table name constants. */
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -83,7 +92,10 @@ export type TABLE_NAMES =
   | typeof TABLE_SCHEDULE_TRIGGERS
   | typeof TABLE_CHANNEL_INSTALLATIONS
   | typeof TABLE_CHANNEL_CONFIG
-  | typeof TABLE_TOOL_PROVIDER_CONNECTIONS;
+  | typeof TABLE_TOOL_PROVIDER_CONNECTIONS
+  | typeof TABLE_NOTIFICATIONS
+  | typeof TABLE_HARNESS_SESSIONS
+  | typeof TABLE_THREAD_STATE;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -362,6 +374,72 @@ export const TOOL_PROVIDER_CONNECTIONS_SCHEMA: Record<string, StorageColumn> = {
   updatedAt: { type: 'timestamp', nullable: false },
 };
 
+export const NOTIFICATIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false },
+  threadId: { type: 'text', nullable: false },
+  source: { type: 'text', nullable: false },
+  kind: { type: 'text', nullable: false },
+  priority: { type: 'text', nullable: false },
+  status: { type: 'text', nullable: false },
+  summary: { type: 'text', nullable: false },
+  payload: { type: 'jsonb', nullable: true },
+  resourceId: { type: 'text', nullable: true },
+  agentId: { type: 'text', nullable: true },
+  sourceId: { type: 'text', nullable: true },
+  dedupeKey: { type: 'text', nullable: true },
+  coalesceKey: { type: 'text', nullable: true },
+  coalescedCount: { type: 'integer', nullable: false },
+  attributes: { type: 'jsonb', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+  deliveredAt: { type: 'timestamp', nullable: true },
+  seenAt: { type: 'timestamp', nullable: true },
+  dismissedAt: { type: 'timestamp', nullable: true },
+  archivedAt: { type: 'timestamp', nullable: true },
+  discardedAt: { type: 'timestamp', nullable: true },
+  deliverAt: { type: 'timestamp', nullable: true },
+  summaryAt: { type: 'timestamp', nullable: true },
+  deliveryReason: { type: 'text', nullable: true },
+  deliveryAttempts: { type: 'integer', nullable: false },
+  lastDeliveryAttemptAt: { type: 'timestamp', nullable: true },
+  lastDeliveryError: { type: 'text', nullable: true },
+  deliveredSignalId: { type: 'text', nullable: true },
+  summarySignalId: { type: 'text', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
+};
+
+export const HARNESS_SESSIONS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  ownerId: { type: 'text', nullable: false },
+  resourceId: { type: 'text', nullable: false },
+  threadId: { type: 'text', nullable: false },
+  parentSessionId: { type: 'text', nullable: true },
+  subagentDepth: { type: 'integer', nullable: true },
+  source: { type: 'jsonb', nullable: true },
+  origin: { type: 'text', nullable: false },
+  runtimeCompatibilityGeneration: { type: 'text', nullable: true },
+  modeId: { type: 'text', nullable: false },
+  modelId: { type: 'text', nullable: false },
+  title: { type: 'text', nullable: true },
+  metadata: { type: 'jsonb', nullable: true },
+  state: { type: 'jsonb', nullable: true },
+  pending: { type: 'jsonb', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  lastActivityAt: { type: 'timestamp', nullable: false },
+  closingAt: { type: 'timestamp', nullable: true },
+  closeDeadlineAt: { type: 'timestamp', nullable: true },
+  closedAt: { type: 'timestamp', nullable: true },
+  deletedAt: { type: 'timestamp', nullable: true },
+};
+
+export const THREAD_STATE_SCHEMA: Record<string, StorageColumn> = {
+  threadId: { type: 'text', nullable: false },
+  type: { type: 'text', nullable: false },
+  value: { type: 'jsonb', nullable: false },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
 export const SKILL_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
   skillId: { type: 'text', nullable: false },
@@ -442,6 +520,10 @@ export const DATASETS_SCHEMA: Record<string, StorageColumn> = {
   targetType: { type: 'text', nullable: true },
   targetIds: { type: 'jsonb', nullable: true },
   scorerIds: { type: 'jsonb', nullable: true },
+  organizationId: { type: 'text', nullable: true },
+  projectId: { type: 'text', nullable: true },
+  candidateKey: { type: 'text', nullable: true },
+  candidateId: { type: 'text', nullable: true },
   version: { type: 'integer', nullable: false },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
@@ -451,6 +533,8 @@ export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false },
   datasetId: { type: 'text', nullable: false, references: { table: 'mastra_datasets', column: 'id' } },
   datasetVersion: { type: 'integer', nullable: false },
+  organizationId: { type: 'text', nullable: true },
+  projectId: { type: 'text', nullable: true },
   validTo: { type: 'integer', nullable: true },
   isDeleted: { type: 'boolean', nullable: false },
   input: { type: 'jsonb', nullable: false },
@@ -459,6 +543,7 @@ export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
   metadata: { type: 'jsonb', nullable: true },
   source: { type: 'jsonb', nullable: true },
   expectedTrajectory: { type: 'jsonb', nullable: true },
+  toolMocks: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
@@ -488,6 +573,8 @@ export const EXPERIMENTS_SCHEMA: Record<string, StorageColumn> = {
   startedAt: { type: 'timestamp', nullable: true },
   completedAt: { type: 'timestamp', nullable: true },
   agentVersion: { type: 'text', nullable: true },
+  organizationId: { type: 'text', nullable: true },
+  projectId: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
@@ -507,6 +594,9 @@ export const EXPERIMENT_RESULTS_SCHEMA: Record<string, StorageColumn> = {
   traceId: { type: 'text', nullable: true },
   status: { type: 'text', nullable: true },
   tags: { type: 'jsonb', nullable: true },
+  toolMockReport: { type: 'jsonb', nullable: true },
+  organizationId: { type: 'text', nullable: true },
+  projectId: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
 };
 
@@ -661,6 +751,9 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     updatedAt: { type: 'timestamp', nullable: false },
   },
   [TABLE_TOOL_PROVIDER_CONNECTIONS]: TOOL_PROVIDER_CONNECTIONS_SCHEMA,
+  [TABLE_NOTIFICATIONS]: NOTIFICATIONS_SCHEMA,
+  [TABLE_HARNESS_SESSIONS]: HARNESS_SESSIONS_SCHEMA,
+  [TABLE_THREAD_STATE]: THREAD_STATE_SCHEMA,
 };
 
 /**
@@ -674,6 +767,8 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
     columns: TOOL_PROVIDER_CONNECTIONS_SCHEMA,
     compositePrimaryKey: ['authorId', 'providerId', 'connectionId'],
   },
+  [TABLE_NOTIFICATIONS]: { columns: NOTIFICATIONS_SCHEMA, compositePrimaryKey: ['threadId', 'id'] },
+  [TABLE_THREAD_STATE]: { columns: THREAD_STATE_SCHEMA, compositePrimaryKey: ['threadId', 'type'] },
 };
 
 /**

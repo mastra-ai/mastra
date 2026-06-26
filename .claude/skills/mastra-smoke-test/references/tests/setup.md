@@ -177,6 +177,32 @@ export const mastra = new Mastra({
 <pm> exec playwright install chromium
 ```
 
+### 5. Runtime requirement: pass thread + resource on every call
+
+Passing `browser: new StagehandBrowser(...)` to `Agent` auto-attaches the
+`BrowserContextProcessor` input processor. That processor reads/writes
+browser state via Mastra memory, so **every call to the browser agent must
+provide both a thread and a resource id**, or the processor throws:
+
+```
+[Processor:browser-context] computeStateSignal requires Mastra memory with an active resourceId and threadId
+```
+
+Use the `memory: { thread, resource }` payload shape:
+
+```bash
+curl -s -X POST 'http://localhost:4111/api/agents/browser-agent/generate' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "messages":[{"role":"user","content":"Navigate to https://example.com and tell me the page title."}],
+    "memory":{"thread":"<tid>","resource":"<rid>"}
+  }'
+```
+
+Top-level `threadId` / `resourceId` are silently discarded (same as other
+agents). The Studio chat works without explicit IDs because the chat UI
+allocates them for you.
+
 ## Custom API Routes
 
 To add custom API routes:
