@@ -160,7 +160,8 @@
     "@mastra/s3": "0.6.0",
     "@mastra/vercel": "1.1.1",
     "@internal/auth": "0.0.0",
-    "@internal/ai-v7": "0.0.55"
+    "@internal/ai-v7": "0.0.55",
+    "@mastra/auth-google": "0.0.1"
   },
   "changesets": [
     "agent-channels-serverless",
@@ -171,6 +172,7 @@
     "blue-buckets-enjoy",
     "brave-runs-persist",
     "bright-heads-carry",
+    "bright-keys-sign",
     "cuddly-oranges-worry",
     "cuddly-teams-stay",
     "dark-plums-study",
@@ -180,6 +182,7 @@
     "durable-agent-options-parity",
     "e2b-per-mount-credential-files",
     "eager-dolls-grow",
+    "eleven-jobs-poke",
     "empty-hoops-cross",
     "empty-trains-burn",
     "fair-pg-workflows",

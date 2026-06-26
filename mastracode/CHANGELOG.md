@@ -1,5 +1,11 @@
 # mastracode
 
+## 0.26.0-alpha.7
+
+### Patch Changes
+
+- Fixed MastraCode queued follow-up E2E tests to wait for stable terminal output. ([#18507](https://github.com/mastra-ai/mastra/pull/18507))
+
 ## 0.26.0-alpha.6
 
 ### Minor Changes
