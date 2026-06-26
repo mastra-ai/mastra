@@ -1,7 +1,7 @@
 import { describe, it } from 'vitest';
 
-import type { WebScenario } from './harness';
-import { runScenario } from './harness';
+import type { WebScenario } from './scenario-runner';
+import { runScenario } from './scenario-runner';
 
 /**
  * Exercises the exact path the Settings → Behavior → Tool permissions UI drives:

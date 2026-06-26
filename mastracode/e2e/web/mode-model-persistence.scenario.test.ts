@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { runScenario } from './harness';
+import { runScenario } from './scenario-runner';
 
 /**
  * Switch mode and model, then re-fetch session state to verify the switches

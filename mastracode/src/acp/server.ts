@@ -9,7 +9,7 @@ import { MastraCodeAcpAgent } from './agent.js';
  * This sets up the JSON-RPC stream and keeps the process alive until the client disconnects.
  */
 export async function runAcpServer(
-  harness: AgentController,
+  controller: AgentController,
   modes: AgentControllerMode[],
   cleanup?: () => Promise<void>,
 ): Promise<void> {
@@ -22,7 +22,7 @@ export async function runAcpServer(
 
   // Handle cleanup on disconnect (success or error)
   try {
-    session = await harness.createSession({
+    session = await controller.createSession({
       id: `acp-${randomUUID()}`,
       ownerId: `acp-owner-${randomUUID()}`,
     });
@@ -30,7 +30,7 @@ export async function runAcpServer(
 
     // Create the agent-side connection
     const connection = new AgentSideConnection(conn => {
-      agent = new MastraCodeAcpAgent(conn, harness, activeSession, modes);
+      agent = new MastraCodeAcpAgent(conn, controller, activeSession, modes);
       return agent;
     }, stream);
 

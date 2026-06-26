@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { runScenario } from './harness';
+import { runScenario } from './scenario-runner';
 
 /**
  * Verify the OM record API is accessible. Without OM configured, it should

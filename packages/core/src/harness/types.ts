@@ -1061,8 +1061,14 @@ export interface AgentControllerRequestSession<TState = unknown> {
 }
 
 export interface AgentControllerRequestContext<TState = unknown> {
-  /** The harness instance ID */
-  harnessId: string;
+  /** The agent controller instance ID */
+  controllerId: string;
+
+  /**
+   * The agent controller instance ID.
+   * @deprecated Renamed to `controllerId`. Kept for backwards compatibility.
+   */
+  harnessId?: string;
 
   /**
    * Current harness state (read-only snapshot captured when the request context is built).

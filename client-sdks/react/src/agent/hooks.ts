@@ -2,10 +2,10 @@ import { v4 as uuid } from '@lukeed/uuid';
 import { MastraClient } from '@mastra/client-js';
 import type { AIV5Type, MastraDBMessage, MastraToolInvocationPart } from '@mastra/core/agent/message-list';
 import { AIV5Adapter } from '@mastra/core/agent/message-list';
-import type { TaskItem } from '@mastra/core/harness';
 import type { CoreUserMessage } from '@mastra/core/llm';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { TaskItem } from '@mastra/core/signals';
 import type { ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/stream';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {

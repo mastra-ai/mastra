@@ -46,7 +46,7 @@ export async function handleFeedbackCommand(ctx: SlashCommandContext, args: stri
 
   // Get observability from the Mastra instance so feedback flows through the
   // event bus to all exporters (cloud, DuckDB, etc.).
-  const mastra = ctx.harness.getMastra();
+  const mastra = ctx.controller.getMastra();
   const observability = mastra?.observability;
   if (!observability?.addFeedback) {
     ctx.showError('Observability not configured — cannot save feedback.');

@@ -129,7 +129,7 @@ function detectPackageRunner(projectPath: string): string | undefined {
 }
 
 export function getDynamicWorkspace({ requestContext, mastra }: { requestContext: RequestContext; mastra?: Mastra }) {
-  const ctx = requestContext.get('harness') as AgentControllerRequestContext<MastraCodeState> | undefined;
+  const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = ctx?.getState();
   const rawProjectPath = state?.projectPath;
 
@@ -146,7 +146,7 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
 
   // All modes share the same workspace tool configuration.  Per-mode tool
   // visibility is enforced at LLM-call time via `availableTools` /
-  // `activeTools` on the Harness, not by mutating workspace capabilities.
+  // `activeTools` on the AgentController, not by mutating workspace capabilities.
   const workspaceTools = MASTRACODE_WORKSPACE_TOOLS;
 
   // Reuse existing workspace if already registered (preserves ProcessManager state)

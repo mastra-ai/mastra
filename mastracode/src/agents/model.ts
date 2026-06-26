@@ -25,11 +25,11 @@ export type { MastraCodeCustomProvider, MastraCodeGatewayOptions } from './mastr
 type ResolvedModel = GatewayLanguageModel;
 type ModelRequestHeaders = Record<string, string>;
 
-function getHarnessHeaders(requestContext?: RequestContext): ModelRequestHeaders | undefined {
-  const harnessContext = requestContext?.get('harness') as AgentControllerRequestContext<any> | undefined;
+function getAgentControllerHeaders(requestContext?: RequestContext): ModelRequestHeaders | undefined {
+  const agentControllerContext = requestContext?.get('controller') as AgentControllerRequestContext<any> | undefined;
   const headers = {
-    ...(harnessContext?.threadId ? { 'x-thread-id': harnessContext.threadId } : {}),
-    ...(harnessContext?.resourceId ? { 'x-resource-id': harnessContext.resourceId } : {}),
+    ...(agentControllerContext?.threadId ? { 'x-thread-id': agentControllerContext.threadId } : {}),
+    ...(agentControllerContext?.resourceId ? { 'x-resource-id': agentControllerContext.resourceId } : {}),
   };
 
   return Object.keys(headers).length > 0 ? headers : undefined;
@@ -59,7 +59,7 @@ export function resolveModel(
   options?: { thinkingLevel?: ThinkingLevel; remapForCodexOAuth?: boolean; requestContext?: RequestContext },
 ): GatewayLanguageModel {
   reloadAuthStorage();
-  const headers = getHarnessHeaders(options?.requestContext);
+  const headers = getAgentControllerHeaders(options?.requestContext);
   const settings = loadSettings();
   const isMastraGatewayModel = modelId.startsWith(MASTRA_GATEWAY_PREFIX);
   const normalizedModelId = stripMastraGatewayPrefix(modelId);
@@ -97,18 +97,18 @@ export function resolveModel(
 }
 
 /**
- * Dynamic model function that reads the current model from harness state.
+ * Dynamic model function that reads the current model from controller state.
  * This allows runtime model switching via the /models picker.
  */
 export function getDynamicModel({ requestContext }: { requestContext: RequestContext }): ResolvedModel {
-  const harnessContext = requestContext.get('harness') as AgentControllerRequestContext<any> | undefined;
+  const agentControllerContext = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
 
-  const modelId = harnessContext?.session?.modelId;
+  const modelId = agentControllerContext?.session?.modelId;
   if (!modelId) {
     throw new Error('No model selected. Use /models to select a model first.');
   }
 
-  const thinkingLevel = harnessContext?.state?.thinkingLevel as ThinkingLevel | undefined;
+  const thinkingLevel = agentControllerContext?.state?.thinkingLevel as ThinkingLevel | undefined;
 
   return resolveModel(modelId, { thinkingLevel, remapForCodexOAuth: true, requestContext });
 }

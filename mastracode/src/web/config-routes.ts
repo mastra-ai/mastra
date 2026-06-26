@@ -83,7 +83,7 @@ export interface OMSession extends PackSession {
   om: { observer: OMRole; reflector: OMRole };
 }
 
-/** Minimal harness surface this module needs (model catalog + modes + sessions). */
+/** Minimal controller surface this module needs (model catalog + modes + sessions). */
 interface ModelCatalog {
   listAvailableModels: () => Promise<Array<{ provider: string; hasApiKey: boolean; apiKeyEnvVar?: string }>>;
   listModes?: () => Array<{ id: string; defaultModelId?: string }>;
@@ -95,8 +95,8 @@ interface ModelCatalog {
  * annotated with where each provider's credential currently comes from.
  * Mirrors the TUI's `/api-keys` provider list.
  */
-export async function listProviders(harness: ModelCatalog, authStorage?: AuthStorage): Promise<ProviderInfo[]> {
-  const models = await harness.listAvailableModels();
+export async function listProviders(controller: ModelCatalog, authStorage?: AuthStorage): Promise<ProviderInfo[]> {
+  const models = await controller.listAvailableModels();
   const seen = new Map<string, ProviderInfo>();
 
   for (const model of models) {
@@ -176,8 +176,11 @@ export interface ModelPackInfo extends ModePack {
  * `/models-pack` access derivation: OAuth/api-key from the credential store for
  * the named providers, plus any other provider that has a usable key.
  */
-export async function buildProviderAccess(harness: ModelCatalog, authStorage?: AuthStorage): Promise<ProviderAccess> {
-  const models = await harness.listAvailableModels();
+export async function buildProviderAccess(
+  controller: ModelCatalog,
+  authStorage?: AuthStorage,
+): Promise<ProviderAccess> {
+  const models = await controller.listAvailableModels();
   const hasEnv = (provider: string) => models.some(m => m.provider === provider && m.hasApiKey);
   const accessLevel = (storageProviderId: string): ProviderAccessLevel => {
     const cred = authStorage?.get(storageProviderId);
@@ -210,11 +213,11 @@ export async function buildProviderAccess(harness: ModelCatalog, authStorage?: A
  * a resourceId is supplied.
  */
 export async function listModelPacks(
-  harness: ModelCatalog,
+  controller: ModelCatalog,
   authStorage?: AuthStorage,
   activePackId?: string | null,
 ): Promise<ModelPackInfo[]> {
-  const access = await buildProviderAccess(harness, authStorage);
+  const access = await buildProviderAccess(controller, authStorage);
   const settings = loadSettings();
   return getAvailableModePacks(access, settings.customModelPacks)
     .filter(p => p.id !== 'custom') // synthetic "choose each model" placeholder
@@ -240,8 +243,8 @@ async function resolveActivePackId(session: PackSession | undefined): Promise<st
  * mode's model, set per-subagent models, and tag the thread with the active
  * pack id. Mirrors the TUI `applyPack` orchestration.
  */
-async function applyPackToSession(harness: ModelCatalog, session: PackSession, pack: ModePack): Promise<void> {
-  const modes = harness.listModes?.() ?? [];
+async function applyPackToSession(controller: ModelCatalog, session: PackSession, pack: ModePack): Promise<void> {
+  const modes = controller.listModes?.() ?? [];
   const packModels = pack.models as Record<string, string>;
 
   for (const mode of modes) {
@@ -332,12 +335,15 @@ function persistOmRoleOverride(
  *   - `PUT    /api/web/config/om/thresholds`           — set observation/reflection thresholds
  *   - `PUT    /api/web/config/om/observe-attachments`  — set observe-attachments (auto/on/off)
  */
-export function mountConfigRoutes(app: Hono<any>, options: { harness: ModelCatalog; authStorage?: AuthStorage }): void {
-  const { harness, authStorage } = options;
+export function mountConfigRoutes(
+  app: Hono<any>,
+  options: { controller: ModelCatalog; authStorage?: AuthStorage },
+): void {
+  const { controller, authStorage } = options;
 
   app.get('/api/web/config/providers', async c => {
     try {
-      return c.json({ providers: await listProviders(harness, authStorage) });
+      return c.json({ providers: await listProviders(controller, authStorage) });
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
     }
@@ -357,7 +363,7 @@ export function mountConfigRoutes(app: Hono<any>, options: { harness: ModelCatal
     const envVar = typeof body.envVar === 'string' ? body.envVar : undefined;
     try {
       authStorage.setStoredApiKey(provider, key, envVar);
-      const providers = await listProviders(harness, authStorage);
+      const providers = await listProviders(controller, authStorage);
       return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
@@ -369,7 +375,7 @@ export function mountConfigRoutes(app: Hono<any>, options: { harness: ModelCatal
     const provider = c.req.param('provider');
     try {
       authStorage.remove(`apikey:${provider}`);
-      const providers = await listProviders(harness, authStorage);
+      const providers = await listProviders(controller, authStorage);
       return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
@@ -428,14 +434,14 @@ export function mountConfigRoutes(app: Hono<any>, options: { harness: ModelCatal
   // ── Model packs ─────────────────────────────────────────────────────────
   // Mirrors the TUI's /models-pack command. Listing + custom-pack CRUD are
   // global-settings state; activation is session-scoped and resolves the
-  // session from the harness registry by resourceId.
+  // session from the controller registry by resourceId.
 
   app.get('/api/web/config/model-packs', async c => {
     const resourceId = c.req.query('resourceId');
     try {
-      const session = resourceId ? await harness.getSessionByResource?.(resourceId) : undefined;
+      const session = resourceId ? await controller.getSessionByResource?.(resourceId) : undefined;
       const activePackId = await resolveActivePackId(session);
-      return c.json({ packs: await listModelPacks(harness, authStorage, activePackId), activePackId });
+      return c.json({ packs: await listModelPacks(controller, authStorage, activePackId), activePackId });
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
     }
@@ -493,12 +499,12 @@ export function mountConfigRoutes(app: Hono<any>, options: { harness: ModelCatal
     const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
     if (!resourceId) return c.json({ error: 'Missing required field: resourceId' }, 400);
     try {
-      const session = await harness.getSessionByResource?.(resourceId);
+      const session = await controller.getSessionByResource?.(resourceId);
       if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
-      const packs = await listModelPacks(harness, authStorage);
+      const packs = await listModelPacks(controller, authStorage);
       const pack = packs.find(p => p.id === id);
       if (!pack) return c.json({ error: `Unknown pack "${id}"` }, 404);
-      await applyPackToSession(harness, session, pack);
+      await applyPackToSession(controller, session, pack);
       return c.json({ ok: true, activePackId: pack.id });
     } catch (error) {
       return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
@@ -514,7 +520,7 @@ export function mountConfigRoutes(app: Hono<any>, options: { harness: ModelCatal
     const resourceId = c.req.query('resourceId');
     if (!resourceId) return c.json({ error: 'Missing required query param: resourceId' }, 400);
     try {
-      const session = await harness.getSessionByResource?.(resourceId);
+      const session = await controller.getSessionByResource?.(resourceId);
       if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
       return c.json({ config: readOMConfig(session) });
     } catch (error) {
@@ -538,7 +544,7 @@ export function mountConfigRoutes(app: Hono<any>, options: { harness: ModelCatal
     if (!resourceId) return c.json({ error: 'Missing required field: resourceId' }, 400);
     if (!modelId) return c.json({ error: 'Missing required field: modelId' }, 400);
     try {
-      const session = await harness.getSessionByResource?.(resourceId);
+      const session = await controller.getSessionByResource?.(resourceId);
       if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
       const otherRole = role === 'observer' ? session.om.reflector : session.om.observer;
       const otherRoleCurrentModelId = otherRole.modelId() ?? null;
@@ -571,7 +577,7 @@ export function mountConfigRoutes(app: Hono<any>, options: { harness: ModelCatal
       return c.json({ error: 'Provide observationThreshold and/or reflectionThreshold (positive numbers)' }, 400);
     }
     try {
-      const session = await harness.getSessionByResource?.(resourceId);
+      const session = await controller.getSessionByResource?.(resourceId);
       if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
       if (observation !== undefined) {
         await session.state.set({ observationThreshold: observation });
@@ -604,7 +610,7 @@ export function mountConfigRoutes(app: Hono<any>, options: { harness: ModelCatal
       return c.json({ error: "value must be 'auto', true, or false" }, 400);
     }
     try {
-      const session = await harness.getSessionByResource?.(resourceId);
+      const session = await controller.getSessionByResource?.(resourceId);
       if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
       await session.state.set({ observeAttachments: value });
       await session.thread.setSetting({ key: 'observeAttachments', value });

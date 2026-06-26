@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { runScenario } from './harness';
+import { runScenario } from './scenario-runner';
 
 /**
  * Storage inheritance: the Harness is built with NO storage of its own, and

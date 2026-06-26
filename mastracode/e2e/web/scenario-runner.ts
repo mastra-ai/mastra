@@ -1,8 +1,8 @@
+import { startAgentControllerServer } from './agent-controller-server';
+import type { ScenarioServerOptions } from './agent-controller-server';
 import { startAimock } from './aimock';
 import { createDriver } from './driver';
 import type { ScenarioDriver } from './driver';
-import { startHarnessServer } from './harness-server';
-import type { ScenarioServerOptions } from './harness-server';
 
 /**
  * Scenario harness — mirrors how MastraCode's TUI scenarios run: start AIMock
@@ -35,7 +35,7 @@ export interface WebScenario {
 
 export async function runScenario(scenario: WebScenario): Promise<void> {
   const aimock = await startAimock(scenario.aimockFixture);
-  const server = await startHarnessServer(aimock.baseUrl, scenario.server);
+  const server = await startAgentControllerServer(aimock.baseUrl, scenario.server);
   const driver = await createDriver({
     baseUrl: server.baseUrl,
     fetch: server.fetch,

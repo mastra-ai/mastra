@@ -376,13 +376,13 @@ async function resolveThread<TState extends Record<string, unknown>>(
 }
 
 /**
- * Run headless mode: subscribe to harness events with auto-approval,
+ * Run headless mode: subscribe to controller events with auto-approval,
  * optionally resume a thread, send the prompt, and wait for completion.
  *
  * Returns the exit code (0 = success, 1 = error/aborted, 2 = timeout).
  */
 export async function runHeadless<TState extends Record<string, unknown>>(
-  harness: AgentController<TState>,
+  controller: AgentController<TState>,
   session: Session<TState>,
   args: HeadlessArgs & { prompt: string },
   effectiveDefaults?: Record<string, string>,
@@ -429,7 +429,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
 
   if (args.model) {
     // Highest priority: explicit --model flag
-    const available = await harness.listAvailableModels();
+    const available = await controller.listAvailableModels();
     const match = available.find(m => m.id === args.model);
     if (!match) {
       return failEarly(`Unknown model: "${args.model}"`);
@@ -444,7 +444,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
     // --mode flag: look up model from effectiveDefaults (resolved from settings at startup)
     const modelId = effectiveDefaults?.[args.mode];
     if (modelId) {
-      const available = await harness.listAvailableModels();
+      const available = await controller.listAvailableModels();
       const match = available.find(m => m.id === modelId);
       if (!match) {
         return failEarly(`Unknown model "${modelId}" configured for mode "${args.mode}"`);
@@ -515,7 +515,7 @@ export async function runHeadless<TState extends Record<string, unknown>>(
 
   // --- Resource ID ---
   if (args.resourceId) {
-    await harness.setResourceId(session, { resourceId: args.resourceId });
+    await controller.setResourceId(session, { resourceId: args.resourceId });
     if (!emit) process.stderr.write(`[resource] ${args.resourceId}\n`);
   }
 
@@ -629,7 +629,7 @@ export async function headlessMain(predrainedInput?: string | null): Promise<nev
   }
 
   const result = await createMastraCode({ settingsPath: args.settings });
-  const { harness, session, mcpManager, effectiveDefaults } = result;
+  const { controller, session, mcpManager, effectiveDefaults } = result;
 
   if (mcpManager?.hasServers()) {
     try {
@@ -641,15 +641,15 @@ export async function headlessMain(predrainedInput?: string | null): Promise<nev
 
   setupDebugLogging();
 
-  const exitCode = await runHeadless(harness, session, { ...args, prompt }, effectiveDefaults);
+  const exitCode = await runHeadless(controller, session, { ...args, prompt }, effectiveDefaults);
 
   // Cleanup
   releaseAllThreadLocks();
   const closeSignalsPubSub = (result.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
   await Promise.allSettled([
     mcpManager?.disconnect(),
-    harness.getMastra()?.stopWorkers(),
-    harness?.stopHeartbeats(),
+    controller.getMastra()?.stopWorkers(),
+    controller?.stopHeartbeats(),
     closeSignalsPubSub?.(),
   ]);
 

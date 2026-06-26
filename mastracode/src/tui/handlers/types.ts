@@ -3,7 +3,8 @@
  * Keeps handlers decoupled from the MastraTUI class.
  */
 import type { Component } from '@earendil-works/pi-tui';
-import type { AgentControllerMessage, TaskItemSnapshot } from '@mastra/core/agent-controller';
+import type { AgentControllerMessage } from '@mastra/core/agent-controller';
+import type { TaskItemSnapshot } from '@mastra/core/signals';
 
 import type { MastraCodeAnalytics } from '../../analytics.js';
 import type { StartGoalOptions } from '../commands/goal.js';

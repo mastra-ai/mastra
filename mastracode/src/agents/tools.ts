@@ -95,7 +95,7 @@ export function createDynamicTools(
   storage?: MastraCompositeStore,
 ) {
   return function getDynamicTools({ requestContext }: { requestContext: RequestContext }) {
-    const ctx = requestContext.get('harness') as AgentControllerRequestContext<MastraCodeComposedState> | undefined;
+    const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeComposedState> | undefined;
     const state = ctx?.getState();
 
     const modelId = ctx?.session?.modelId;

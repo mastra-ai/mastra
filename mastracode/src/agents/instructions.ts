@@ -6,11 +6,11 @@ import type { PromptContext } from './prompts/index.js';
 import { buildFullPrompt } from './prompts/index.js';
 
 export async function getDynamicInstructions({ requestContext }: { requestContext: { get(key: string): unknown } }) {
-  const harnessContext = requestContext.get('harness') as
+  const agentControllerContext = requestContext.get('controller') as
     | AgentControllerRequestContext<MastraCodeComposedState>
     | undefined;
-  const state = harnessContext?.getState();
-  const modeId = harnessContext?.session?.modeId ?? 'build';
+  const state = agentControllerContext?.getState();
+  const modeId = agentControllerContext?.session?.modeId ?? 'build';
   const projectPath = state?.projectPath ?? process.cwd();
 
   const promptCtx: PromptContext = {
@@ -21,7 +21,7 @@ export async function getDynamicInstructions({ requestContext }: { requestContex
     commonBinaries: await detectCommonBinariesAsync(),
     date: new Date().toISOString().split('T')[0]!,
     mode: modeId,
-    modelId: harnessContext?.session?.modelId || undefined,
+    modelId: agentControllerContext?.session?.modelId || undefined,
     activePlan: state?.activePlan ?? null,
     modeId: modeId,
     currentDate: new Date().toISOString().split('T')[0]!,

@@ -114,14 +114,14 @@ describe('ACP Agent - Prompt concurrency', () => {
       model: { get: vi.fn(() => 'test-model') },
       sendMessage,
     } as unknown as Session;
-    const harness = {
+    const controller = {
       listAvailableModels: vi.fn().mockResolvedValue([]),
     } as unknown as AgentController;
     const connection = {
       sessionUpdate: vi.fn().mockResolvedValue(undefined),
     } as unknown as AgentSideConnection;
 
-    const agent = new MastraCodeAcpAgent(connection, harness, session, [] satisfies AgentControllerMode[]);
+    const agent = new MastraCodeAcpAgent(connection, controller, session, [] satisfies AgentControllerMode[]);
     const { sessionId: firstSessionId } = await agent.newSession({ cwd: '/tmp', mcpServers: [] });
     const { sessionId: secondSessionId } = await agent.newSession({ cwd: '/tmp', mcpServers: [] });
     switchThread.mockClear();

@@ -58,7 +58,7 @@ export default function App() {
   const sessionEnabled = !!activeProject?.resourceId;
 
   const session = useAgentControllerSession({
-    harnessId: 'code',
+    agentControllerId: 'code',
     resourceId,
     projectPath: activeProject?.path,
     enabled: sessionEnabled,

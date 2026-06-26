@@ -3,11 +3,11 @@ import { join } from 'node:path';
 import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
-const CONFIG_DIR = '.harness-api-e2e';
-const WRONG_CONFIG_DIR = '.wrong-harness-api-e2e';
+const CONFIG_DIR = '.controller-api-e2e';
+const WRONG_CONFIG_DIR = '.wrong-controller-api-e2e';
 
-export const harnessApiConfigScenario: McE2eScenario = {
-  name: 'harness-api-config',
+export const controllerApiConfigScenario: McE2eScenario = {
+  name: 'controller-api-config',
   description: 'Launch a custom createMastraCode entrypoint and verify public config reaches the real TUI.',
   testName: 'honors createMastraCode configDir and initialState in the TUI',
   projectFixture: 'long-branch',
@@ -18,11 +18,11 @@ export const harnessApiConfigScenario: McE2eScenario = {
     mkdirSync(join(wrongConfigRoot, 'commands'), { recursive: true });
 
     writeFileSync(
-      join(configRoot, 'commands', 'harness-api.md'),
-      `---\ndescription: Harness API configDir command\n---\nCommand loaded from configured harness API config dir\n`,
+      join(configRoot, 'commands', 'controller-api.md'),
+      `---\ndescription: Controller API configDir command\n---\nCommand loaded from configured controller API config dir\n`,
     );
     writeFileSync(
-      join(wrongConfigRoot, 'commands', 'wrong-harness-api.md'),
+      join(wrongConfigRoot, 'commands', 'wrong-controller-api.md'),
       `---\ndescription: Wrong initialState configDir command\n---\nThis command should not load\n`,
     );
   },
@@ -40,7 +40,7 @@ export const harnessApiConfigScenario: McE2eScenario = {
         unixSocketPubSub: false,
       },
       tui: {
-        appName: 'Harness API Code',
+        appName: 'Controller API Code',
       },
     });
   },
@@ -49,16 +49,16 @@ export const harnessApiConfigScenario: McE2eScenario = {
     runtime.printScreen('spawned', terminal);
 
     await expect(
-      terminal.getByText(/Harness API Code|Project:|Resource ID:/gi, { full: true, strict: false }),
+      terminal.getByText(/Controller API Code|Project:|Resource ID:/gi, { full: true, strict: false }),
     ).toBeVisible();
     runtime.printScreen('after startup', terminal);
 
     terminal.submit('/help');
     await runtime.waitForScreenText(/Custom Commands/i, terminal);
-    await runtime.waitForScreenText(/\/\/harness-api/i, terminal);
-    await runtime.waitForScreenText(/Harness API configDir command/i, terminal);
+    await runtime.waitForScreenText(/\/\/controller-api/i, terminal);
+    await runtime.waitForScreenText(/Controller API configDir command/i, terminal);
     const helpScreen = terminal.serialize().view;
-    expect(helpScreen).not.toMatch(/wrong-harness-api/i);
+    expect(helpScreen).not.toMatch(/wrong-controller-api/i);
     expect(helpScreen).not.toMatch(/Wrong initialState configDir command/i);
     runtime.printScreen('after /help', terminal);
 

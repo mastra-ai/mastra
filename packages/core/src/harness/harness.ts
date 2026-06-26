@@ -407,6 +407,7 @@ export class AgentController<TState = {}> {
     }
     const defaultMode = this.#defaultMode;
     requestContext.set('harness', {
+      controllerId: this.id,
       harnessId: this.id,
       state: initialState,
       getState: () => initialState,
@@ -2070,6 +2071,7 @@ export class AgentController<TState = {}> {
   ): Promise<RequestContext> {
     requestContext ??= new RequestContext();
     const harnessContext: AgentControllerRequestContext<TState> = {
+      controllerId: this.id,
       harnessId: this.id,
       state: session.state.get(),
       getState: () => session.state.get(),

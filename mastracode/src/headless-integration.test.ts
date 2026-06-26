@@ -152,7 +152,7 @@ async function captureProcessOutput<T>(fn: () => Promise<T>) {
   }
 }
 
-function createHarnessWithAgent(opts: {
+function createControllerWithAgent(opts: {
   doStream: () => Promise<{ stream: ReadableStream }>;
   tools?: Record<string, any>;
   inputProcessors?: any[];
@@ -185,8 +185,8 @@ function createHarnessWithAgent(opts: {
   const mastra = new Mastra({ agents: { 'test-agent': agent }, logger: false, storage });
   const registeredAgent = mastra.getAgent('test-agent');
 
-  const harness = new AgentController({
-    id: 'test-harness',
+  const controller = new AgentController({
+    id: 'test-controller',
     storage,
     workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
     modes: [
@@ -201,19 +201,19 @@ function createHarnessWithAgent(opts: {
     ],
     initialState: { yolo: true } as any,
   });
-  (harness as any).getAgentForMode = () => registeredAgent;
+  (controller as any).getAgentForMode = () => registeredAgent;
 
-  return harness;
+  return controller;
 }
 
 describe('headless mode — event-driven auto-resolution', () => {
   it('emits agent_start and agent_end for a simple text response', async () => {
-    const harness = createHarnessWithAgent({
+    const controller = createControllerWithAgent({
       doStream: async () => ({ stream: createTextStream('Hello from the agent!') }),
     });
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
@@ -240,7 +240,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     });
 
     let callCount = 0;
-    const harness = createHarnessWithAgent({
+    const controller = createControllerWithAgent({
       doStream: async () => {
         callCount++;
         return {
@@ -253,8 +253,8 @@ describe('headless mode — event-driven auto-resolution', () => {
       tools: { readFile: readFileTool },
     });
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
@@ -288,7 +288,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     });
 
     let callCount = 0;
-    const harness = createHarnessWithAgent({
+    const controller = createControllerWithAgent({
       doStream: async () => {
         callCount++;
         return {
@@ -301,8 +301,8 @@ describe('headless mode — event-driven auto-resolution', () => {
       tools: { confirmAction: confirmTool },
     });
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
@@ -341,12 +341,12 @@ describe('headless mode — event-driven auto-resolution', () => {
   });
 
   it('streams message_update events with text content', async () => {
-    const harness = createHarnessWithAgent({
+    const controller = createControllerWithAgent({
       doStream: async () => ({ stream: createTextStream('Here is the result.') }),
     });
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
@@ -383,12 +383,12 @@ describe('headless mode — event-driven auto-resolution', () => {
       },
     });
 
-    const harness = createHarnessWithAgent({
+    const controller = createControllerWithAgent({
       doStream: async () => ({ stream: neverEndingStream }),
     });
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
@@ -443,7 +443,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     });
 
     let callCount = 0;
-    const harness = createHarnessWithAgent({
+    const controller = createControllerWithAgent({
       doStream: async () => {
         callCount++;
         return {
@@ -457,8 +457,8 @@ describe('headless mode — event-driven auto-resolution', () => {
       inputProcessors: [reminderProcessor],
     });
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
@@ -539,7 +539,7 @@ function createFakeGatewayFromModels(
   };
 }
 
-function createHarnessWithModels(opts: {
+function createControllerWithModels(opts: {
   doStream: () => Promise<{ stream: ReadableStream }>;
   customModels?: { id: string; provider: string; modelName: string; hasApiKey: boolean; apiKeyEnvVar?: string }[];
 }) {
@@ -567,8 +567,8 @@ function createHarnessWithModels(opts: {
   const mastra = new Mastra({ agents: { 'test-agent': agent }, logger: false, storage });
   const registeredAgent = mastra.getAgent('test-agent');
 
-  const harness = new AgentController({
-    id: 'test-harness',
+  const controller = new AgentController({
+    id: 'test-controller',
     storage,
     workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
     modes: [
@@ -584,26 +584,26 @@ function createHarnessWithModels(opts: {
     initialState: { yolo: true } as any,
     gateways: [createFakeGatewayFromModels(opts.customModels ?? [])],
   });
-  (harness as any).getAgentForMode = () => registeredAgent;
+  (controller as any).getAgentForMode = () => registeredAgent;
 
-  return harness;
+  return controller;
 }
 
 describe('headless mode — --output-format contracts', () => {
   it('prints only final assistant text to stdout for text output', async () => {
-    const harness = createHarnessWithAgent({
+    const controller = createControllerWithAgent({
       doStream: async () => ({ stream: createTextStream('Plain text response') }),
     });
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const {
       result: exitCode,
       stdout,
       stderr,
     } = await captureProcessOutput(() =>
-      runHeadless(harness, session, {
+      runHeadless(controller, session, {
         prompt: 'Hello',
         format: 'default',
         outputFormat: 'text',
@@ -618,12 +618,12 @@ describe('headless mode — --output-format contracts', () => {
   });
 
   it('prints one final summary object to stdout for json output', async () => {
-    const harness = createHarnessWithAgent({
+    const controller = createControllerWithAgent({
       doStream: async () => ({ stream: createTextStream('JSON summary response') }),
     });
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const {
       result: exitCode,
@@ -631,7 +631,7 @@ describe('headless mode — --output-format contracts', () => {
       stderr,
       stdoutChunks,
     } = await captureProcessOutput(() =>
-      runHeadless(harness, session, {
+      runHeadless(controller, session, {
         prompt: 'Hello',
         format: 'default',
         outputFormat: 'json',
@@ -656,19 +656,19 @@ describe('headless mode — --output-format contracts', () => {
   });
 
   it('prints newline-delimited runtime events to stdout for stream-json output', async () => {
-    const harness = createHarnessWithAgent({
+    const controller = createControllerWithAgent({
       doStream: async () => ({ stream: createTextStream('Streamed JSON response') }),
     });
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const {
       result: exitCode,
       stdout,
       stderr,
     } = await captureProcessOutput(() =>
-      runHeadless(harness, session, {
+      runHeadless(controller, session, {
         prompt: 'Hello',
         format: 'default',
         outputFormat: 'stream-json',
@@ -707,7 +707,7 @@ describe('headless mode — --output-format contracts', () => {
       version: 2,
       message: 'Browser state changed',
     };
-    const harness = {
+    const controller = {
       session: {
         sendMessage: vi.fn(async () => {
           listener?.({ type: 'agent_start', runId: 'run-state' } as AgentControllerEvent);
@@ -735,13 +735,17 @@ describe('headless mode — --output-format contracts', () => {
       stdout,
       stderr,
     } = await captureProcessOutput(() =>
-      runHeadless(harness as unknown as AgentController<Record<string, unknown>>, (harness as any).session as any, {
-        prompt: 'Describe the browser state',
-        format: 'default',
-        outputFormat: 'stream-json',
-        continue_: false,
-        cloneThread: false,
-      }),
+      runHeadless(
+        controller as unknown as AgentController<Record<string, unknown>>,
+        (controller as any).session as any,
+        {
+          prompt: 'Describe the browser state',
+          format: 'default',
+          outputFormat: 'stream-json',
+          continue_: false,
+          cloneThread: false,
+        },
+      ),
     );
 
     expect(exitCode).toBe(0);
@@ -772,20 +776,20 @@ describe('headless mode — --output-format contracts', () => {
 
 describe('headless mode — --model flag', () => {
   it('switches model when a valid --model is provided', async () => {
-    const harness = createHarnessWithModels({
+    const controller = createControllerWithModels({
       doStream: async () => ({ stream: createTextStream('Response text') }),
       customModels: [
         { id: 'anthropic/claude-haiku-4-5', provider: 'anthropic', modelName: 'claude-haiku-4-5', hasApiKey: true },
       ],
     });
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: AgentControllerEvent[] = [];
     session.subscribe(event => events.push(event));
 
-    const exitCode = await runHeadless(harness, session, {
+    const exitCode = await runHeadless(controller, session, {
       prompt: 'Hello',
       format: 'default',
       continue_: false,
@@ -798,20 +802,20 @@ describe('headless mode — --model flag', () => {
     expect(modelChanged).toBeDefined();
     expect(modelChanged.modelId).toBe('anthropic/claude-haiku-4-5');
 
-    // Verify the harness state was updated
+    // Verify the controller state was updated
     expect(session.model.get()).toBe('anthropic/claude-haiku-4-5');
   });
 
   it('returns exit code 1 for an unknown model', async () => {
-    const harness = createHarnessWithModels({
+    const controller = createControllerWithModels({
       doStream: async () => ({ stream: createTextStream('Should not reach here') }),
       customModels: [
         { id: 'anthropic/claude-haiku-4-5', provider: 'anthropic', modelName: 'claude-haiku-4-5', hasApiKey: true },
       ],
     });
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -823,7 +827,7 @@ describe('headless mode — --model flag', () => {
     const events: AgentControllerEvent[] = [];
     session.subscribe(event => events.push(event));
 
-    const exitCode = await runHeadless(harness, session, {
+    const exitCode = await runHeadless(controller, session, {
       prompt: 'Hello',
       format: 'default',
       continue_: false,
@@ -839,7 +843,7 @@ describe('headless mode — --model flag', () => {
   });
 
   it('returns exit code 1 when model has no API key', async () => {
-    const harness = createHarnessWithModels({
+    const controller = createControllerWithModels({
       doStream: async () => ({ stream: createTextStream('Should not reach here') }),
       customModels: [
         {
@@ -852,8 +856,8 @@ describe('headless mode — --model flag', () => {
       ],
     });
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -865,7 +869,7 @@ describe('headless mode — --model flag', () => {
     const events: AgentControllerEvent[] = [];
     session.subscribe(event => events.push(event));
 
-    const exitCode = await runHeadless(harness, session, {
+    const exitCode = await runHeadless(controller, session, {
       prompt: 'Hello',
       format: 'default',
       continue_: false,
@@ -881,17 +885,17 @@ describe('headless mode — --model flag', () => {
   });
 
   it('emits JSON error for unknown model in json format', async () => {
-    const harness = createHarnessWithModels({
+    const controller = createControllerWithModels({
       doStream: async () => ({ stream: createTextStream('Should not reach here') }),
       customModels: [],
     });
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const writeSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
 
-    const exitCode = await runHeadless(harness, session, {
+    const exitCode = await runHeadless(controller, session, {
       prompt: 'Hello',
       format: 'json',
       continue_: false,
@@ -912,7 +916,7 @@ describe('headless mode — --model flag', () => {
   });
 
   it('emits JSON error for model without API key in json format', async () => {
-    const harness = createHarnessWithModels({
+    const controller = createControllerWithModels({
       doStream: async () => ({ stream: createTextStream('Should not reach here') }),
       customModels: [
         {
@@ -925,12 +929,12 @@ describe('headless mode — --model flag', () => {
       ],
     });
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const writeSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
 
-    const exitCode = await runHeadless(harness, session, {
+    const exitCode = await runHeadless(controller, session, {
       prompt: 'Hello',
       format: 'json',
       continue_: false,
@@ -951,15 +955,15 @@ describe('headless mode — --model flag', () => {
   });
 
   it('emits warning when --model and --mode are both provided', async () => {
-    const harness = createHarnessWithModels({
+    const controller = createControllerWithModels({
       doStream: async () => ({ stream: createTextStream('Response text') }),
       customModels: [
         { id: 'anthropic/claude-haiku-4-5', provider: 'anthropic', modelName: 'claude-haiku-4-5', hasApiKey: true },
       ],
     });
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -968,7 +972,7 @@ describe('headless mode — --model flag', () => {
       return origWrite(...(args as Parameters<typeof origWrite>));
     });
 
-    const exitCode = await runHeadless(harness, session, {
+    const exitCode = await runHeadless(controller, session, {
       prompt: 'Hello',
       format: 'default',
       continue_: false,
@@ -984,19 +988,19 @@ describe('headless mode — --model flag', () => {
   });
 
   it('emits structured warning in JSON mode when --model and --mode are both provided', async () => {
-    const harness = createHarnessWithModels({
+    const controller = createControllerWithModels({
       doStream: async () => ({ stream: createTextStream('Response text') }),
       customModels: [
         { id: 'anthropic/claude-haiku-4-5', provider: 'anthropic', modelName: 'claude-haiku-4-5', hasApiKey: true },
       ],
     });
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const writeSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
 
-    const exitCode = await runHeadless(harness, session, {
+    const exitCode = await runHeadless(controller, session, {
       prompt: 'Hello',
       format: 'json',
       continue_: false,
@@ -1015,17 +1019,17 @@ describe('headless mode — --model flag', () => {
   });
 
   it('does not switch model when --model is not provided', async () => {
-    const harness = createHarnessWithModels({
+    const controller = createControllerWithModels({
       doStream: async () => ({ stream: createTextStream('Response text') }),
     });
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: AgentControllerEvent[] = [];
     session.subscribe(event => events.push(event));
 
-    const exitCode = await runHeadless(harness, session, {
+    const exitCode = await runHeadless(controller, session, {
       prompt: 'Hello',
       format: 'default',
       continue_: false,
@@ -1040,19 +1044,19 @@ describe('headless mode — --model flag', () => {
 
 describe('headless mode — --mode with effectiveDefaults', () => {
   it('--mode fast switches to effectiveDefaults.fast', async () => {
-    const harness = createHarnessWithModels({
+    const controller = createControllerWithModels({
       doStream: async () => ({ stream: createTextStream('Response') }),
       customModels: [{ id: 'cerebras/zai-glm-4.7', provider: 'cerebras', modelName: 'zai-glm-4.7', hasApiKey: true }],
     });
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: AgentControllerEvent[] = [];
     session.subscribe(event => events.push(event));
 
     const exitCode = await runHeadless(
-      harness,
+      controller,
       session,
       {
         prompt: 'Hello',
@@ -1068,7 +1072,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
   });
 
   it('--model still overrides effectiveDefaults', async () => {
-    const harness = createHarnessWithModels({
+    const controller = createControllerWithModels({
       doStream: async () => ({ stream: createTextStream('Response') }),
       customModels: [
         { id: 'anthropic/claude-haiku-4-5', provider: 'anthropic', modelName: 'claude-haiku-4-5', hasApiKey: true },
@@ -1076,11 +1080,11 @@ describe('headless mode — --mode with effectiveDefaults', () => {
       ],
     });
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const exitCode = await runHeadless(
-      harness,
+      controller,
       session,
       {
         prompt: 'Hello',
@@ -1098,13 +1102,13 @@ describe('headless mode — --mode with effectiveDefaults', () => {
   });
 
   it('--mode returns exit code 1 when resolved model is not available', async () => {
-    const harness = createHarnessWithModels({
+    const controller = createControllerWithModels({
       doStream: async () => ({ stream: createTextStream('Should not reach here') }),
       customModels: [], // No models available
     });
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -1114,7 +1118,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     });
 
     const exitCode = await runHeadless(
-      harness,
+      controller,
       session,
       {
         prompt: 'Hello',
@@ -1134,7 +1138,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
   });
 
   it('--mode returns exit code 1 when resolved model has no API key', async () => {
-    const harness = createHarnessWithModels({
+    const controller = createControllerWithModels({
       doStream: async () => ({ stream: createTextStream('Should not reach here') }),
       customModels: [
         {
@@ -1147,8 +1151,8 @@ describe('headless mode — --mode with effectiveDefaults', () => {
       ],
     });
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -1158,7 +1162,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     });
 
     const exitCode = await runHeadless(
-      harness,
+      controller,
       session,
       {
         prompt: 'Hello',
@@ -1177,13 +1181,13 @@ describe('headless mode — --mode with effectiveDefaults', () => {
   });
 
   it('no effectiveDefaults warns and falls back to default', async () => {
-    const harness = createHarnessWithModels({
+    const controller = createControllerWithModels({
       doStream: async () => ({ stream: createTextStream('Response') }),
       customModels: [],
     });
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const stderrCalls: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
@@ -1196,7 +1200,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     session.subscribe(event => events.push(event));
 
     // No effectiveDefaults passed — should warn, not error
-    const exitCode = await runHeadless(harness, session, {
+    const exitCode = await runHeadless(controller, session, {
       prompt: 'Hello',
       format: 'default',
       continue_: false,
@@ -1214,18 +1218,18 @@ describe('headless mode — --mode with effectiveDefaults', () => {
 
 describe('headless mode — thread control', () => {
   it('resumes a thread by ID with --thread', async () => {
-    const harness = createHarnessWithAgent({
+    const controller = createControllerWithAgent({
       doStream: async () => ({ stream: createTextStream('Resumed!') }),
     });
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const thread = await session.thread.create({ title: 'target-thread' });
     const updatedAtBefore = thread.updatedAt.getTime();
 
     await new Promise(resolve => setTimeout(resolve, 300));
 
-    const exitCode = await runHeadless(harness, session, {
+    const exitCode = await runHeadless(controller, session, {
       prompt: 'Hello',
       format: 'default',
       continue_: false,
@@ -1246,18 +1250,18 @@ describe('headless mode — thread control', () => {
   });
 
   it('resumes a thread by title with --thread', async () => {
-    const harness = createHarnessWithAgent({
+    const controller = createControllerWithAgent({
       doStream: async () => ({ stream: createTextStream('Found by title!') }),
     });
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const thread = await session.thread.create({ title: 'my-feature' });
     const updatedAtBefore = thread.updatedAt.getTime();
 
     await new Promise(resolve => setTimeout(resolve, 300));
 
-    const exitCode = await runHeadless(harness, session, {
+    const exitCode = await runHeadless(controller, session, {
       prompt: 'Hello',
       format: 'default',
       continue_: false,
@@ -1278,14 +1282,14 @@ describe('headless mode — thread control', () => {
   });
 
   it('returns exit code 1 for unknown thread', async () => {
-    const harness = createHarnessWithAgent({
+    const controller = createControllerWithAgent({
       doStream: async () => ({ stream: createTextStream('Should not reach') }),
     });
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
-    const exitCode = await runHeadless(harness, session, {
+    const exitCode = await runHeadless(controller, session, {
       prompt: 'Hello',
       format: 'default',
       continue_: false,
@@ -1297,15 +1301,15 @@ describe('headless mode — thread control', () => {
   });
 
   it('renames thread with --title', async () => {
-    const harness = createHarnessWithAgent({
+    const controller = createControllerWithAgent({
       doStream: async () => ({ stream: createTextStream('Titled!') }),
     });
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
     await session.thread.create({ title: 'original-title' });
 
-    const exitCode = await runHeadless(harness, session, {
+    const exitCode = await runHeadless(controller, session, {
       prompt: 'Hello',
       format: 'default',
       continue_: true,
@@ -1321,21 +1325,21 @@ describe('headless mode — thread control', () => {
   });
 
   it('scopes --thread and --continue to the requested resource ID', async () => {
-    const harness = createHarnessWithAgent({
+    const controller = createControllerWithAgent({
       doStream: async () => ({ stream: createTextStream('Scoped resource response') }),
     });
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
-    harness.setResourceId(session, { resourceId: 'resource-a' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    controller.setResourceId(session, { resourceId: 'resource-a' });
     const alphaOlderThread = await session.thread.create({ title: 'older-alpha' });
-    harness.setResourceId(session, { resourceId: 'resource-b' });
+    controller.setResourceId(session, { resourceId: 'resource-b' });
     const betaThread = await session.thread.create({ title: 'shared-title' });
     await new Promise(resolve => setTimeout(resolve, 5));
-    harness.setResourceId(session, { resourceId: 'resource-a' });
+    controller.setResourceId(session, { resourceId: 'resource-a' });
     const alphaThread = await session.thread.create({ title: 'shared-title' });
 
-    let exitCode = await runHeadless(harness, session, {
+    let exitCode = await runHeadless(controller, session, {
       prompt: 'Hello beta',
       format: 'default',
       continue_: false,
@@ -1348,7 +1352,7 @@ describe('headless mode — thread control', () => {
     expect(session.identity.getResourceId()).toBe('resource-b');
     expect(session.thread.getId()).toBe(betaThread.id);
 
-    exitCode = await runHeadless(harness, session, {
+    exitCode = await runHeadless(controller, session, {
       prompt: 'Hello alpha',
       format: 'default',
       continue_: true,
@@ -1385,8 +1389,8 @@ describe('headless mode — thread control', () => {
     const mastra = new Mastra({ agents: { 'test-agent': agent }, logger: false, storage });
     const registeredAgent = mastra.getAgent('test-agent');
 
-    const harness = new AgentController({
-      id: 'test-harness',
+    const controller = new AgentController({
+      id: 'test-controller',
       storage,
       memory,
       workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
@@ -1402,10 +1406,10 @@ describe('headless mode — thread control', () => {
       ],
       initialState: { yolo: true } as any,
     });
-    (harness as any).getAgentForMode = () => registeredAgent;
+    (controller as any).getAgentForMode = () => registeredAgent;
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const sourceThread = await session.thread.create({ title: 'source-thread' });
 
     const events: any[] = [];
@@ -1420,10 +1424,11 @@ describe('headless mode — thread control', () => {
     }) as any;
 
     try {
-      const exitCode = await runHeadless(harness, session, {
+      const exitCode = await runHeadless(controller, session, {
         prompt: 'Hello',
         format: 'json',
         continue_: false,
+        model: 'anthropic/claude-haiku-4-5',
         cloneThread: true,
         thread: 'source-thread',
       });

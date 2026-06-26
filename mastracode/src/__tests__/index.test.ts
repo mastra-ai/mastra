@@ -29,11 +29,11 @@ vi.mock('@mastra/core/agent', () => ({
 
 const agentConstructorMock = vi.fn();
 
-const harnessConstructorMock = vi.fn();
+const controllerConstructorMock = vi.fn();
 const loadSettingsMock = vi.fn();
 const getAvailableModePacksMock = vi.fn(() => []);
 const getAvailableOmPacksMock = vi.fn(() => []);
-const harnessSubscribeMock = vi.fn();
+const controllerSubscribeMock = vi.fn();
 const detectProjectMock = vi.fn(() => ({
   mode: 'none',
   rootPath: process.cwd(),
@@ -42,16 +42,16 @@ const detectProjectMock = vi.fn(() => ({
   hasGit: false,
   contextFiles: [],
 }));
-const harnessGetCurrentThreadIdMock = vi.fn();
-const harnessListThreadsMock = vi.fn();
-const harnessSetStateMock = vi.fn();
-const harnessSetThreadSettingMock = vi.fn();
+const controllerGetCurrentThreadIdMock = vi.fn();
+const controllerListThreadsMock = vi.fn();
+const controllerSetStateMock = vi.fn();
+const controllerSetThreadSettingMock = vi.fn();
 const createMcpManagerMock = vi.fn();
 const hookManagerConstructorMock = vi.fn();
 const getStorageConfigMock = vi.fn(() => ({ type: 'memory' }));
 const getResourceIdOverrideMock = vi.fn(() => undefined);
 const getDynamicWorkspaceMock = vi.fn();
-let harnessStateMock: Record<string, unknown> = { cavemanObservations: false };
+let controllerStateMock: Record<string, unknown> = { cavemanObservations: false };
 
 function createMockSettings() {
   return {
@@ -107,7 +107,7 @@ function createMockSettings() {
 vi.mock('@mastra/core/agent-controller', () => ({
   AgentController: class {
     constructor(config: unknown) {
-      harnessConstructorMock(config);
+      controllerConstructorMock(config);
     }
     async init() {}
     getMastra() {
@@ -115,33 +115,33 @@ vi.mock('@mastra/core/agent-controller', () => ({
     }
     async createSession() {
       return {
-        subscribe: (eventHandler: unknown) => harnessSubscribeMock(eventHandler),
+        subscribe: (eventHandler: unknown) => controllerSubscribeMock(eventHandler),
         identity: {
           getResourceId: () => 'project-resource',
         },
         thread: {
-          getId: () => harnessGetCurrentThreadIdMock(),
-          list: (options: unknown) => harnessListThreadsMock(options),
-          setSetting: (setting: unknown) => harnessSetThreadSettingMock(setting),
+          getId: () => controllerGetCurrentThreadIdMock(),
+          list: (options: unknown) => controllerListThreadsMock(options),
+          setSetting: (setting: unknown) => controllerSetThreadSettingMock(setting),
         },
         mode: { get: () => 'build' },
         model: { get: () => 'anthropic/claude-opus-4-6' },
         state: {
-          get: () => harnessStateMock,
-          set: (state: unknown) => harnessSetStateMock(state),
+          get: () => controllerStateMock,
+          set: (state: unknown) => controllerSetStateMock(state),
           update: async (updater: any) => {
-            const result = await updater(harnessStateMock);
-            if (result?.updates) harnessSetStateMock(result.updates);
+            const result = await updater(controllerStateMock);
+            if (result?.updates) controllerSetStateMock(result.updates);
             return result?.result;
           },
         },
       };
     }
     getState() {
-      return harnessStateMock;
+      return controllerStateMock;
     }
     setState(state: unknown) {
-      return harnessSetStateMock(state);
+      return controllerSetStateMock(state);
     }
   },
   taskWriteTool: {},
@@ -330,15 +330,15 @@ describe('createMastraCode', () => {
     createVectorStoreMock.mockReturnValue({});
     getDynamicMemoryMock.mockReset();
     getDynamicMemoryMock.mockReturnValue(() => undefined);
-    harnessSubscribeMock.mockReset();
-    harnessGetCurrentThreadIdMock.mockReset();
-    harnessGetCurrentThreadIdMock.mockReturnValue(undefined);
-    harnessListThreadsMock.mockReset();
-    harnessListThreadsMock.mockResolvedValue([]);
-    harnessSetStateMock.mockReset();
-    harnessSetStateMock.mockResolvedValue(undefined);
-    harnessSetThreadSettingMock.mockReset();
-    harnessSetThreadSettingMock.mockResolvedValue(undefined);
+    agentControllerSubscribeMock.mockReset();
+    agentControllerGetCurrentThreadIdMock.mockReset();
+    agentControllerGetCurrentThreadIdMock.mockReturnValue(undefined);
+    agentControllerListThreadsMock.mockReset();
+    agentControllerListThreadsMock.mockResolvedValue([]);
+    agentControllerSetStateMock.mockReset();
+    agentControllerSetStateMock.mockResolvedValue(undefined);
+    agentControllerSetThreadSettingMock.mockReset();
+    agentControllerSetThreadSettingMock.mockResolvedValue(undefined);
     createMcpManagerMock.mockReset();
     hookManagerConstructorMock.mockReset();
     getStorageConfigMock.mockReset();
@@ -355,11 +355,11 @@ describe('createMastraCode', () => {
       hasGit: false,
       contextFiles: [],
     });
-    harnessStateMock = { cavemanObservations: false };
+    agentControllerStateMock = { cavemanObservations: false };
     loadSettingsMock.mockReset();
     loadSettingsMock.mockReturnValue(createMockSettings());
     agentConstructorMock.mockReset();
-    harnessConstructorMock.mockReset();
+    agentControllerConstructorMock.mockReset();
     streamErrorRetryProcessorConstructorMock.mockReset();
     getAvailableModePacksMock.mockClear();
     getAvailableOmPacksMock.mockClear();
@@ -384,14 +384,14 @@ describe('createMastraCode', () => {
       settingsPath: undefined,
     });
 
-    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
+    const agentControllerConfig = agentControllerConstructorMock.mock.calls[0]?.[0] as
       | {
           gateways?: unknown[];
           subagents?: unknown[];
         }
       | undefined;
-    expect(harnessConfig?.gateways).toEqual([mastraCodeGatewayMock]);
-    expect(harnessConfig?.subagents).toEqual([subagent]);
+    expect(agentControllerConfig?.gateways).toEqual([mastraCodeGatewayMock]);
+    expect(agentControllerConfig?.subagents).toEqual([subagent]);
   }, 10_000);
 
   it('uses configured memory gateway settings when creating the MastraCode gateway', async () => {
@@ -428,9 +428,9 @@ describe('createMastraCode', () => {
 
     await createMastraCode();
 
-    expect(harnessConstructorMock).toHaveBeenCalled();
-    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as { memory?: unknown } | undefined;
-    expect(typeof harnessConfig?.memory).toBe('function');
+    expect(agentControllerConstructorMock).toHaveBeenCalled();
+    const agentControllerConfig = agentControllerConstructorMock.mock.calls[0]?.[0] as { memory?: unknown } | undefined;
+    expect(typeof agentControllerConfig?.memory).toBe('function');
   });
 
   it('uses caller memory while applying configDir to startup services and state', async () => {
@@ -453,11 +453,11 @@ describe('createMastraCode', () => {
       initialState: { configDir: '.wrong-code' },
     });
 
-    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
+    const agentControllerConfig = agentControllerConstructorMock.mock.calls[0]?.[0] as
       | { memory?: unknown; initialState?: Record<string, unknown> }
       | undefined;
-    expect(harnessConfig?.memory).toBe(customMemory);
-    expect(harnessConfig?.initialState?.configDir).toBe('.acme-code');
+    expect(agentControllerConfig?.memory).toBe(customMemory);
+    expect(agentControllerConfig?.initialState?.configDir).toBe('.acme-code');
     expect(getDynamicMemoryMock).not.toHaveBeenCalled();
     expect(getStorageConfigMock).toHaveBeenCalledWith(projectPath, expect.anything(), '.acme-code');
     expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined);
@@ -470,8 +470,10 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ workspace: customWorkspace as any });
 
-    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as { workspace?: unknown } | undefined;
-    expect(harnessConfig?.workspace).toBe(customWorkspace);
+    const agentControllerConfig = agentControllerConstructorMock.mock.calls[0]?.[0] as
+      | { workspace?: unknown }
+      | undefined;
+    expect(agentControllerConfig?.workspace).toBe(customWorkspace);
     expect(getDynamicWorkspaceMock).not.toHaveBeenCalled();
   });
 
@@ -480,9 +482,11 @@ describe('createMastraCode', () => {
 
     await createMastraCode();
 
-    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as { workspace?: unknown } | undefined;
-    expect(typeof harnessConfig?.workspace).toBe('function');
-    expect(harnessConfig?.workspace).not.toEqual({ id: 'custom-workspace' });
+    const agentControllerConfig = agentControllerConstructorMock.mock.calls[0]?.[0] as
+      | { workspace?: unknown }
+      | undefined;
+    expect(typeof agentControllerConfig?.workspace).toBe('function');
+    expect(agentControllerConfig?.workspace).not.toEqual({ id: 'custom-workspace' });
   });
 
   it('registers the TaskSignalProvider on the code agent so task tools persist via state signals', async () => {
@@ -521,10 +525,10 @@ describe('createMastraCode', () => {
       ],
     });
 
-    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
+    const agentControllerConfig = agentControllerConstructorMock.mock.calls[0]?.[0] as
       | { modes?: { id: string; default?: boolean; defaultModelId: string }[] }
       | undefined;
-    expect(harnessConfig?.modes).toEqual(
+    expect(agentControllerConfig?.modes).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: 'review', default: true, defaultModelId: '__GATEWAY_OPENAI_MODEL__' }),
         expect.objectContaining({ id: 'ship', defaultModelId: '__GATEWAY_ANTHROPIC_MODEL_OPUS__' }),
@@ -546,10 +550,10 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ cwd: projectPath });
 
-    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
+    const agentControllerConfig = agentControllerConstructorMock.mock.calls[0]?.[0] as
       | { initialState?: Record<string, unknown> }
       | undefined;
-    expect(harnessConfig?.initialState?.projectPath).toBe(projectPath);
+    expect(agentControllerConfig?.initialState?.projectPath).toBe(projectPath);
   });
 
   it('uses configured configDir consistently for startup services and runtime state', async () => {
@@ -574,10 +578,10 @@ describe('createMastraCode', () => {
     expect(getStorageConfigMock).toHaveBeenCalledWith(projectPath, expect.anything(), '.acme-code');
     expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined);
     expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code', undefined);
-    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
+    const agentControllerConfig = agentControllerConstructorMock.mock.calls[0]?.[0] as
       | { initialState?: Record<string, unknown> }
       | undefined;
-    expect(harnessConfig?.initialState?.configDir).toBe('.acme-code');
+    expect(agentControllerConfig?.initialState?.configDir).toBe('.acme-code');
   });
 
   it('passes programmatic MCP servers into the startup manager with project and configDir', async () => {
@@ -622,11 +626,11 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ pubsub, unixSocketPubSub: true });
 
-    const harnessConfig = harnessConstructorMock.mock.calls.at(-1)?.[0] as
+    const agentControllerConfig = agentControllerConstructorMock.mock.calls.at(-1)?.[0] as
       | { pubsub?: unknown; threadLock?: unknown }
       | undefined;
-    expect(harnessConfig?.pubsub).toBe(pubsub);
-    expect(harnessConfig?.threadLock).toBeDefined();
+    expect(agentControllerConfig?.pubsub).toBe(pubsub);
+    expect(agentControllerConfig?.threadLock).toBeDefined();
   });
 
   it('skips thread locks for configured PubSub when cross-process mode is explicit', async () => {
@@ -635,36 +639,36 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ pubsub, crossProcessPubSub: true });
 
-    const harnessConfig = harnessConstructorMock.mock.calls.at(-1)?.[0] as
+    const agentControllerConfig = agentControllerConstructorMock.mock.calls.at(-1)?.[0] as
       | { pubsub?: unknown; threadLock?: unknown }
       | undefined;
-    expect(harnessConfig?.pubsub).toBe(pubsub);
-    expect(harnessConfig?.threadLock).toBeUndefined();
+    expect(agentControllerConfig?.pubsub).toBe(pubsub);
+    expect(agentControllerConfig?.threadLock).toBeUndefined();
   });
 
   it('restores the current thread caveman observation setting at startup', async () => {
-    harnessGetCurrentThreadIdMock.mockReturnValue('thread-1');
-    harnessListThreadsMock.mockResolvedValue([{ id: 'thread-1', metadata: { cavemanObservations: true } }]);
+    agentControllerGetCurrentThreadIdMock.mockReturnValue('thread-1');
+    agentControllerListThreadsMock.mockResolvedValue([{ id: 'thread-1', metadata: { cavemanObservations: true } }]);
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
 
-    expect(harnessSubscribeMock).toHaveBeenCalled();
-    expect(harnessListThreadsMock).toHaveBeenCalledWith({ allResources: true });
-    expect(harnessSetStateMock).toHaveBeenCalledWith({ cavemanObservations: true });
+    expect(agentControllerSubscribeMock).toHaveBeenCalled();
+    expect(agentControllerListThreadsMock).toHaveBeenCalledWith({ allResources: true });
+    expect(agentControllerSetStateMock).toHaveBeenCalledWith({ cavemanObservations: true });
   });
 
   it('restores an explicit false caveman observation setting at startup', async () => {
-    harnessStateMock = { cavemanObservations: true };
-    harnessGetCurrentThreadIdMock.mockReturnValue('thread-1');
-    harnessListThreadsMock.mockResolvedValue([{ id: 'thread-1', metadata: { cavemanObservations: false } }]);
+    agentControllerStateMock = { cavemanObservations: true };
+    agentControllerGetCurrentThreadIdMock.mockReturnValue('thread-1');
+    agentControllerListThreadsMock.mockResolvedValue([{ id: 'thread-1', metadata: { cavemanObservations: false } }]);
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
 
-    expect(harnessSubscribeMock).toHaveBeenCalled();
-    expect(harnessListThreadsMock).toHaveBeenCalledWith({ allResources: true });
-    expect(harnessSetStateMock).toHaveBeenCalledWith({ cavemanObservations: false });
+    expect(agentControllerSubscribeMock).toHaveBeenCalled();
+    expect(agentControllerListThreadsMock).toHaveBeenCalledWith({ allResources: true });
+    expect(agentControllerSetStateMock).toHaveBeenCalledWith({ cavemanObservations: false });
   });
 
   it('seeds observeAttachments from persisted global setting at startup', async () => {
@@ -675,10 +679,10 @@ describe('createMastraCode', () => {
 
     await createMastraCode();
 
-    const harnessCall = harnessConstructorMock.mock.calls[0]?.[0] as
+    const agentControllerCall = agentControllerConstructorMock.mock.calls[0]?.[0] as
       | { initialState?: Record<string, unknown> }
       | undefined;
-    expect(harnessCall?.initialState?.observeAttachments).toBe(false);
+    expect(agentControllerCall?.initialState?.observeAttachments).toBe(false);
   });
 
   it('defaults observeAttachments to auto when global setting is null', async () => {
@@ -686,23 +690,23 @@ describe('createMastraCode', () => {
 
     await createMastraCode();
 
-    const harnessCall = harnessConstructorMock.mock.calls[0]?.[0] as
+    const agentControllerCall = agentControllerConstructorMock.mock.calls[0]?.[0] as
       | { initialState?: Record<string, unknown> }
       | undefined;
-    expect(harnessCall?.initialState?.observeAttachments).toBe('auto');
+    expect(agentControllerCall?.initialState?.observeAttachments).toBe('auto');
   });
 
   it('restores observeAttachments metadata for the current thread at startup', async () => {
-    harnessStateMock = { observeAttachments: true };
-    harnessGetCurrentThreadIdMock.mockReturnValue('thread-1');
-    harnessListThreadsMock.mockResolvedValue([{ id: 'thread-1', metadata: { observeAttachments: 'auto' } }]);
+    agentControllerStateMock = { observeAttachments: true };
+    agentControllerGetCurrentThreadIdMock.mockReturnValue('thread-1');
+    agentControllerListThreadsMock.mockResolvedValue([{ id: 'thread-1', metadata: { observeAttachments: 'auto' } }]);
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
 
-    expect(harnessSubscribeMock).toHaveBeenCalled();
-    expect(harnessListThreadsMock).toHaveBeenCalledWith({ allResources: true });
-    expect(harnessSetStateMock).toHaveBeenCalledWith({ observeAttachments: 'auto' });
+    expect(agentControllerSubscribeMock).toHaveBeenCalled();
+    expect(agentControllerListThreadsMock).toHaveBeenCalledWith({ allResources: true });
+    expect(agentControllerSetStateMock).toHaveBeenCalledWith({ observeAttachments: 'auto' });
   });
 
   it('runs stream error retries before provider-specific error recovery processors', async () => {
@@ -772,8 +776,8 @@ describe('createMastraCode', () => {
       ...createMockSettings(),
       signals: { unixSocketPubSub: false, experimentalGithubSignals: true },
     });
-    harnessGetCurrentThreadIdMock.mockReturnValue('thread-1');
-    harnessListThreadsMock.mockResolvedValue([{ id: 'thread-1', resourceId: 'thread-resource', metadata: {} }]);
+    agentControllerGetCurrentThreadIdMock.mockReturnValue('thread-1');
+    agentControllerListThreadsMock.mockResolvedValue([{ id: 'thread-1', resourceId: 'thread-resource', metadata: {} }]);
     const { GithubSignals } = await import('@mastra/github-signals');
     const startPollingForThread = vi.spyOn(GithubSignals.prototype, 'startPollingForThread').mockResolvedValue(true);
     const { createMastraCode } = await import('../index.js');

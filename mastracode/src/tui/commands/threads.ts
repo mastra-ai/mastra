@@ -117,7 +117,7 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
         }
 
         if (thread.resourceId !== currentResourceId) {
-          await state.harness.setResourceId(state.session, { resourceId: thread.resourceId });
+          await state.controller.setResourceId(state.session, { resourceId: thread.resourceId });
         }
         try {
           await state.session.thread.switch({ threadId: thread.id });

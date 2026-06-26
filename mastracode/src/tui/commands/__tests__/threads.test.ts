@@ -80,7 +80,7 @@ function createContext(threads: AgentControllerThread[]) {
       },
       mode: { get: vi.fn(() => 'build') },
     },
-    harness: {
+    controller: {
       setResourceId: vi.fn(),
       switchThread: vi.fn(),
       cloneThread: vi.fn(),
@@ -149,7 +149,7 @@ describe('handleThreadsCommand thread listing', () => {
     await commandPromise;
   });
 
-  it('returns only cached previews and never requests uncached ones from the harness', async () => {
+  it('returns only cached previews and never requests uncached ones from the controller', async () => {
     const threads = [createThread('thread-1', '2026-03-17T15:10:00.000Z')];
     const { ctx, state, showOverlay } = createContext(threads);
     state.threadPreviewCache.set('thread-1', {

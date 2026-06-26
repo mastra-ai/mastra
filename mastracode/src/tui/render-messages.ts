@@ -5,13 +5,10 @@
  */
 import { Container, Text } from '@earendil-works/pi-tui';
 import type { Component } from '@earendil-works/pi-tui';
-import type {
-  AgentControllerMessage,
-  AgentControllerMessageContent,
-  TaskItemInput,
-  TaskItemSnapshot,
-} from '@mastra/core/agent-controller';
-import { assignTaskIds, parseSubagentMeta } from '@mastra/core/agent-controller';
+import type { AgentControllerMessage, AgentControllerMessageContent } from '@mastra/core/agent-controller';
+import { parseSubagentMeta } from '@mastra/core/agent-controller';
+import type { TaskItemInput, TaskItemSnapshot } from '@mastra/core/signals';
+import { assignTaskIds } from '@mastra/core/signals';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { TASKS_STATE_ID } from '@mastra/core/tools';
 import { getPlanFilename } from '../utils/plans.js';
@@ -727,7 +724,7 @@ function getLatestMessageTimestamp(messages: AgentControllerMessage[]): number |
 }
 
 /**
- * Re-render all existing messages from the harness thread into the chat container.
+ * Re-render all existing messages from the controller thread into the chat container.
  * Called on thread switch and initial load.
  */
 export async function renderExistingMessages(state: TUIState): Promise<void> {
@@ -1025,7 +1022,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
       try {
         await state.session.state.set({ tasks: previousTasksAcc });
       } catch {
-        // Custom harness state schemas may not accept TUI replayed task state.
+        // Custom controller state schemas may not accept TUI replayed task state.
         // Keep the reconstructed task list local to display state in that case.
       }
     }

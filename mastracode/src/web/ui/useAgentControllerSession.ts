@@ -1,9 +1,9 @@
 import { MastraClient } from '@mastra/client-js';
 import type {
-  HarnessAvailableModel,
-  HarnessModeInfo,
-  HarnessThreadInfo,
-  HarnessSessionSettings,
+  AgentControllerAvailableModel,
+  AgentControllerModeInfo,
+  AgentControllerThreadInfo,
+  AgentControllerSessionSettings,
   PlanResume,
   PermissionRules,
   PermissionPolicy,
@@ -25,8 +25,8 @@ function errorText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-interface UseHarnessSessionArgs {
-  harnessId: string;
+interface UseAgentControllerSessionArgs {
+  agentControllerId: string;
   resourceId: string;
   /**
    * Absolute path of the active project. Used to scope the thread list to this
@@ -43,12 +43,12 @@ interface UseHarnessSessionArgs {
   enabled?: boolean;
 }
 
-export interface HarnessSessionApi {
+export interface AgentControllerSessionApi {
   transcript: TranscriptState;
   status: ConnectionStatus;
-  modes: HarnessModeInfo[];
-  models: HarnessAvailableModel[];
-  threads: HarnessThreadInfo[];
+  modes: AgentControllerModeInfo[];
+  models: AgentControllerAvailableModel[];
+  threads: AgentControllerThreadInfo[];
   send: (text: string) => Promise<void>;
   steer: (text: string) => Promise<void>;
   abort: () => Promise<void>;
@@ -75,7 +75,7 @@ export interface HarnessSessionApi {
   setPermissionForCategory: (category: ToolCategory, policy: PermissionPolicy) => Promise<void>;
   setPermissionForTool: (toolName: string, policy: PermissionPolicy) => Promise<void>;
   /** Current agent behavior settings (yolo, thinking, notifications, smart editing). */
-  settings: HarnessSessionSettings | null;
+  settings: AgentControllerSessionSettings | null;
   /** Re-fetch behavior settings from the server (after a setState write). */
   refreshSettings: () => Promise<void>;
   /** Merge key-value pairs into the server-side session state. */
@@ -90,21 +90,21 @@ export interface HarnessSessionApi {
  * run-control + mode/model/thread surface the UI needs.
  */
 export function useAgentControllerSession({
-  harnessId,
+  agentControllerId,
   resourceId,
   projectPath,
   baseUrl = '',
   enabled = true,
-}: UseHarnessSessionArgs): HarnessSessionApi {
+}: UseAgentControllerSessionArgs): AgentControllerSessionApi {
   const [transcript, dispatch] = useReducer(transcriptReducer, initialTranscript);
   const [status, setStatus] = useState<ConnectionStatus>('connecting');
-  const [modes, setModes] = useState<HarnessModeInfo[]>([]);
-  const [threads, setThreads] = useState<HarnessThreadInfo[]>([]);
+  const [modes, setModes] = useState<AgentControllerModeInfo[]>([]);
+  const [threads, setThreads] = useState<AgentControllerThreadInfo[]>([]);
 
   const sessionRef = useRef<Session | null>(null);
-  const harnessRef = useRef<ReturnType<MastraClient['getAgentController']> | null>(null);
-  const [models, setModels] = useState<HarnessAvailableModel[]>([]);
-  const [settings, setSettings] = useState<HarnessSessionSettings | null>(null);
+  const agentControllerRef = useRef<ReturnType<MastraClient['getAgentController']> | null>(null);
+  const [models, setModels] = useState<AgentControllerAvailableModel[]>([]);
+  const [settings, setSettings] = useState<AgentControllerSessionSettings | null>(null);
 
   const refreshSettings = useCallback(async () => {
     try {
@@ -221,25 +221,25 @@ export function useAgentControllerSession({
 
     (async () => {
       const client = new MastraClient({ baseUrl });
-      const harness = client.getAgentController(harnessId);
-      const session = harness.session(resourceId);
+      const controller = client.getAgentController(agentControllerId);
+      const session = controller.session(resourceId);
       sessionRef.current = session;
-      harnessRef.current = harness;
+      agentControllerRef.current = controller;
 
       try {
-        const [created, harnessModes] = await Promise.all([
+        const [created, agentControllerModes] = await Promise.all([
           // Scope initial thread selection to the active project so worktrees
           // sharing a resourceId each resume their own thread.
           session.create({ tags: projectPath ? { projectPath } : undefined }),
-          harness.listModes(),
+          controller.listModes(),
         ]);
         if (disposed) return;
-        setModes(harnessModes);
+        setModes(agentControllerModes);
 
         // Load available models for the settings picker (non-fatal if it fails).
         // The catalog can be huge (thousands of entries), so keep only models
         // that have an API key configured — the ones the user can actually use.
-        harness
+        controller
           .listModels()
           .then(list => {
             if (disposed) return;
@@ -291,7 +291,7 @@ export function useAgentControllerSession({
       unsubscribe?.();
       sessionRef.current = null;
     };
-  }, [harnessId, resourceId, baseUrl, refreshThreads, enabled]);
+  }, [agentControllerId, resourceId, baseUrl, refreshThreads, enabled]);
 
   const send = useCallback(async (text: string) => {
     const session = sessionRef.current;

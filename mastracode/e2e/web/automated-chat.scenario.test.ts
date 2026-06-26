@@ -1,6 +1,6 @@
 import { describe, it } from 'vitest';
 
-import { runScenario } from './harness';
+import { runScenario } from './scenario-runner';
 
 /**
  * Web equivalent of MastraCode's `automated-chat` scenario: submit one prompt

@@ -25,7 +25,7 @@ export const stateSignalRenderingScenario: McE2eScenario = {
             if (sent || !threadId || !result.session.stream.isActive()) return;
             sent = true;
             if (timer) clearInterval(timer);
-            const agent = result.harness.getMastra()?.getAgentById('code-agent');
+            const agent = result.controller.getMastra()?.getAgentById('code-agent');
             await agent?.sendStateSignal(
               {
                 id: 'browser',

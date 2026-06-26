@@ -1,7 +1,8 @@
 /**
- * Event dispatcher: maps HarnessEvent types to extracted handler functions.
+ * Event dispatcher: maps AgentControllerEvent types to extracted handler functions.
  */
-import type { AgentControllerEvent, AgentControllerThread, TaskItemSnapshot } from '@mastra/core/agent-controller';
+import type { AgentControllerEvent, AgentControllerThread } from '@mastra/core/agent-controller';
+import type { TaskItemSnapshot } from '@mastra/core/signals';
 import type { AskUserSelectionMode } from '@mastra/core/tools';
 
 import { getCurrentGitBranchAsync } from '../utils/project.js';
@@ -45,7 +46,7 @@ import type { TUIState } from './state.js';
 import { getGithubPrSubscriptionsFromMetadata } from './state.js';
 
 /**
- * Dispatch a HarnessEvent to the appropriate handler.
+ * Dispatch a AgentControllerEvent to the appropriate handler.
  */
 function trackInteractivePrompt(
   ectx: EventHandlerContext,
@@ -173,7 +174,7 @@ export async function dispatchEvent(
       }
       state.taskToolInsertIndex = -1;
       await ectx.renderExistingMessages();
-      await state.harness.loadOMProgress(state.session);
+      await state.controller.loadOMProgress(state.session);
       // Refresh git branch async so TUI status line reflects the current branch
       getCurrentGitBranchAsync(state.projectInfo.rootPath).then(freshBranch => {
         if (freshBranch) {
@@ -234,7 +235,7 @@ export async function dispatchEvent(
     }
 
     case 'usage_update': {
-      // Token accumulation handled by Harness display state.
+      // Token accumulation handled by AgentController display state.
       // usage_update fires at step-finish and carries the completion (and any
       // reasoning) tokens generated during this step. Measure tokens/sec over the
       // decode window only — from this step's first content delta
@@ -260,7 +261,7 @@ export async function dispatchEvent(
 
     // Observational Memory events
     case 'om_status':
-      // All state updates handled by Harness applyDisplayStateUpdate
+      // All state updates handled by AgentController applyDisplayStateUpdate
       break;
 
     case 'om_observation_start':
@@ -423,7 +424,7 @@ export async function dispatchEvent(
     case 'tool_suspended': {
       // Interactive built-in tools pause via the native tool-suspension primitive.
       // Route the suspension to the matching prompt UI using the suspend payload;
-      // the UI resumes the tool by calling harness.session.respondToToolSuspension({ toolCallId }).
+      // the UI resumes the tool by calling controller.session.respondToToolSuspension({ toolCallId }).
       const payload = (event.suspendPayload ?? {}) as Record<string, unknown>;
       if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
         await handleSandboxAccessRequest(
@@ -447,10 +448,10 @@ export async function dispatchEvent(
     }
 
     case 'display_state_changed':
-      // The Harness emits this after every event with the updated display state.
+      // The AgentController emits this after every event with the updated display state.
       // Use it as the single trigger for status-line re-renders since all the
       // fields it reads (isRunning, omProgress, buffering flags) are now
-      // maintained by the Harness.
+      // maintained by the AgentController.
       ectx.updateStatusLine();
       break;
   }

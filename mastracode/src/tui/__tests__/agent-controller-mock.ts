@@ -2,17 +2,17 @@ import type { AgentController } from '@mastra/core/agent-controller';
 import { vi } from 'vitest';
 
 /**
- * Shared mock harness/session factory for TUI tests.
+ * Shared mock controller/session factory for TUI tests.
  *
  * The production wiring (see `tui/state.ts`) makes `state.session` the *same*
- * object as `harness.session`. Per-session behavior (thread lifecycle,
+ * object as `controller.session`. Per-session behavior (thread lifecycle,
  * run-control, mode/model/state/suspensions, the event bus) lives on the
  * Session; only genuinely host-level operations (model catalog, workspace,
- * mode catalog) live on the Harness. This factory mirrors that split so tests
+ * mode catalog) live on the AgentController. This factory mirrors that split so tests
  * don't hand-roll divergent shapes that drift from the real API.
  *
  * Every method is a `vi.fn()` so tests can assert on calls or override return
- * values. Pass `overrides` to deep-merge custom session/harness behavior.
+ * values. Pass `overrides` to deep-merge custom session/controller behavior.
  */
 
 type AnyRecord = Record<string, any>;
@@ -39,14 +39,14 @@ function deepMerge<T extends AnyRecord>(base: T, overrides?: AnyRecord): T {
   return result as T;
 }
 
-export interface MockHarnessOptions {
+export interface MockAgentControllerOptions {
   id?: string;
   resourceId?: string;
   threadId?: string | null;
   /** Deep-merged onto the default `session` mock. */
   session?: AnyRecord;
-  /** Deep-merged onto the default `harness` mock (excluding `session`). */
-  harness?: AnyRecord;
+  /** Deep-merged onto the default `controller` mock (excluding `session`). */
+  controller?: AnyRecord;
 }
 
 /**
@@ -55,8 +55,8 @@ export interface MockHarnessOptions {
  * suspensions, model, mode, state, displayState, the event bus, and the
  * run-control methods (sendSignal, sendMessage, respondToToolSuspension, …).
  */
-export function createMockSession(opts: MockHarnessOptions = {}) {
-  const resourceId = opts.resourceId ?? opts.id ?? 'test-harness';
+export function createMockSession(opts: MockAgentControllerOptions = {}) {
+  const resourceId = opts.resourceId ?? opts.id ?? 'test-controller';
   let currentThreadId: string | null = opts.threadId ?? null;
 
   const base = {
@@ -122,7 +122,7 @@ export function createMockSession(opts: MockHarnessOptions = {}) {
     subscribe: vi.fn(() => () => {}),
     emit: vi.fn(),
 
-    // Run-control surface (moved off Harness onto Session).
+    // Run-control surface (moved off AgentController onto Session).
     sendMessage: vi.fn(async () => {}),
     sendSignal: vi.fn(() => ({
       id: 'signal-1',
@@ -141,12 +141,12 @@ export function createMockSession(opts: MockHarnessOptions = {}) {
 }
 
 /**
- * Build a mock Harness whose `session` is a {@link createMockSession}. Includes
+ * Build a mock AgentController whose `session` is a {@link createMockSession}. Includes
  * the host-level surface the TUI reaches (model catalog, workspace, mode
- * catalog, resource ids). Returns the harness; read `harness.session` for the
+ * catalog, resource ids). Returns the controller; read `controller.session` for the
  * shared session instance.
  */
-export function createMockHarness(opts: MockHarnessOptions = {}) {
+export function createMockAgentController(opts: MockAgentControllerOptions = {}) {
   const session = createMockSession(opts);
 
   const base = {
@@ -166,22 +166,22 @@ export function createMockHarness(opts: MockHarnessOptions = {}) {
     getObservationalMemoryRecord: vi.fn(async () => null),
   };
 
-  return deepMerge(base, opts.harness) as unknown as AgentController<Record<string, unknown>> & {
+  return deepMerge(base, opts.controller) as unknown as AgentController<Record<string, unknown>> & {
     session: ReturnType<typeof createMockSession>;
   };
 }
 
 /**
  * Build a partial TUI `state` whose `session` is the *same* object as
- * `harness.session` — matching production wiring. Spread extra fields via
+ * `controller.session` — matching production wiring. Spread extra fields via
  * `extra`. Cast the result to your context type at the call site.
  */
-export function createMockState(opts: MockHarnessOptions & { extra?: AnyRecord } = {}) {
-  const { extra, ...harnessOpts } = opts;
-  const harness = createMockHarness(harnessOpts);
+export function createMockState(opts: MockAgentControllerOptions & { extra?: AnyRecord } = {}) {
+  const { extra, ...agentControllerOpts } = opts;
+  const controller = createMockAgentController(agentControllerOpts);
   return {
-    harness,
-    session: harness.session,
+    controller,
+    session: controller.session,
     ...extra,
   };
 }

@@ -52,7 +52,7 @@ describe('handleMessageUpdate system reminders', () => {
       toolOutputExpanded: false,
       pendingSignalMessageComponentsById: new Map(),
       session: { displayState: { get: () => ({ isRunning: true }) } },
-      harness: { session: { displayState: { get: () => ({ isRunning: true }) } } },
+      controller: { session: { displayState: { get: () => ({ isRunning: true }) } } },
     } as unknown as TUIState;
 
     ctx = {

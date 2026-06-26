@@ -13,7 +13,7 @@ import type { TUIState } from '../state.js';
 
 export interface SlashCommandContext {
   state: TUIState;
-  harness: AgentController<any>;
+  controller: AgentController<any>;
   session: Session<any>;
   hookManager?: HookManager;
   mcpManager?: McpManager;

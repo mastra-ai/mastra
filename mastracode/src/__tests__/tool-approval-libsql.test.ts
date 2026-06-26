@@ -99,8 +99,8 @@ describe('tool approval with LibSQLStore via AgentController', () => {
     });
     const registeredAgent = mastra.getAgent('test-agent');
 
-    const harness = new AgentController({
-      id: 'test-harness',
+    const controller = new AgentController({
+      id: 'test-controller',
       storage,
       workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
       modes: [
@@ -117,10 +117,10 @@ describe('tool approval with LibSQLStore via AgentController', () => {
       ],
       initialState: { yolo: false },
     });
-    (harness as any).getAgentForMode = () => registeredAgent;
+    (controller as any).getAgentForMode = () => registeredAgent;
 
-    await harness.init();
-    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     // Collect events
     const events: any[] = [];

@@ -139,7 +139,7 @@ export function setupKeyboardShortcuts(
     state.ui.requestRender();
   });
 
-  // Shift+Tab - cycle harness modes
+  // Shift+Tab - cycle controller modes
   state.editor.onAction('cycleMode', async () => {
     // Block mode switching while the agent is active or plan approval is pending
     if (state.session.run.isRunning()) {
@@ -151,7 +151,7 @@ export function setupKeyboardShortcuts(
       return;
     }
 
-    const modes = state.harness.listModes();
+    const modes = state.controller.listModes();
     if (modes.length <= 1) return;
     const currentId = state.session.mode.get();
     const currentIndex = modes.findIndex(m => m.id === currentId);
@@ -217,7 +217,7 @@ function abortActiveGoalJudge(state: TUIState): boolean {
   activeGoalJudge.abortController.abort();
   activeGoalJudge.component.setInterrupted();
   // Esc during an in-loop goal evaluation pauses the goal so it does not
-  // continue on the next iteration. Abort the active harness run too: the core
+  // continue on the next iteration. Abort the active controller run too: the core
   // scorer owns the judge stream, so the TUI-local controller alone only changes
   // the visual component and lets the judge continue in the background.
   state.session.abort();
@@ -257,7 +257,7 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
 
   const sep = theme.fg('dim', ' · ');
   const hintParts: string[] = [];
-  if (state.harness.listModes().length > 1) {
+  if (state.controller.listModes().length > 1) {
     hintParts.push(`${theme.fg('accent', '⇧+Tab')} ${theme.fg('muted', 'cycle modes')}`);
   }
   hintParts.push(`${theme.fg('accent', '/help')} ${theme.fg('muted', 'info & shortcuts')}`);
@@ -394,7 +394,7 @@ export function setupAutocomplete(state: TUIState): void {
   ];
 
   // Only show /mode if there's more than one mode
-  const modes = state.harness.listModes();
+  const modes = state.controller.listModes();
   if (modes.length > 1) {
     slashCommands.push({ name: 'mode', description: 'Switch agent mode' });
   }
@@ -471,9 +471,9 @@ export async function loadCustomSlashCommands(state: TUIState): Promise<void> {
  */
 export async function loadSkillCommands(state: TUIState): Promise<void> {
   try {
-    let workspace = state.harness.getWorkspace() ?? state.workspace;
-    if (!workspace && state.harness.hasWorkspace()) {
-      workspace = await state.harness.resolveWorkspace({ session: state.session });
+    let workspace = state.controller.getWorkspace() ?? state.workspace;
+    if (!workspace && state.controller.hasWorkspace()) {
+      workspace = await state.controller.resolveWorkspace({ session: state.session });
     }
     if (!workspace?.skills) {
       state.skillCommands = [];
@@ -541,10 +541,10 @@ export function setupKeyHandlers(
 }
 
 // =============================================================================
-// Harness Subscription
+// AgentController Subscription
 // =============================================================================
 
-export function subscribeToHarness(state: TUIState, handleEvent: (event: any) => Promise<void>): void {
+export function subscribeToAgentController(state: TUIState, handleEvent: (event: any) => Promise<void>): void {
   let eventQueue = Promise.resolve();
   const listener: AgentControllerEventListener = event => {
     eventQueue = eventQueue.then(async () => {

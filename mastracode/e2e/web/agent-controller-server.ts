@@ -93,7 +93,7 @@ function createScenarioBrowser(provider: 'stagehand' | 'agent-browser'): MastraB
   } as unknown as MastraBrowser;
 }
 
-export async function startHarnessServer(
+export async function startAgentControllerServer(
   aimockBaseUrl: string,
   options: ScenarioServerOptions = {},
 ): Promise<ScenarioServer> {

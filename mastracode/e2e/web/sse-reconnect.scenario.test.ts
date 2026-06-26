@@ -3,8 +3,8 @@ import type { AgentControllerEvent } from '@mastra/client-js';
 import { describe, it, expect } from 'vitest';
 
 import { initialTranscript, transcriptReducer } from '../../src/web/ui/transcript';
+import { startAgentControllerServer } from './agent-controller-server';
 import { startAimock } from './aimock';
-import { startHarnessServer } from './harness-server';
 
 /**
  * SSE reconnect scenario — validates the reconnection contract:
@@ -20,7 +20,7 @@ import { startHarnessServer } from './harness-server';
 describe('web scenario: sse-reconnect', () => {
   it('resumes event delivery after disconnect and reconnect', async () => {
     const aimock = await startAimock('sse-reconnect.json');
-    const server = await startHarnessServer(aimock.baseUrl);
+    const server = await startAgentControllerServer(aimock.baseUrl);
     const RESOURCE_ID = 'web-scenario-sse-reconnect';
 
     try {

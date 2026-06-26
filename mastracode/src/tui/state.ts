@@ -89,10 +89,10 @@ export function getGithubPrSubscriptionsFromMetadata(
 // =============================================================================
 
 export interface MastraTUIOptions {
-  /** The harness instance to control */
-  harness: AgentController<any>;
+  /** The controller instance */
+  controller: AgentController<any>;
 
-  /** The session created from the harness that all work runs through */
+  /** The session created from the controller that all work runs through */
   session: Session<any>;
 
   /** Hook manager for session lifecycle hooks */
@@ -108,8 +108,8 @@ export interface MastraTUIOptions {
   mcpManager?: McpManager;
 
   /**
-   * @deprecated Workspace is now obtained from the Harness.
-   * Configure workspace via HarnessConfig.workspace instead.
+   * @deprecated Workspace is now obtained from the AgentController.
+   * Configure workspace via AgentControllerConfig.workspace instead.
    * Kept as fallback for backward compatibility.
    */
   workspace?: Workspace;
@@ -142,7 +142,7 @@ export interface MastraTUIOptions {
 
 export interface TUIState {
   // ── Core dependencies (set once) ──────────────────────────────────────
-  harness: AgentController<any>;
+  controller: AgentController<any>;
   session: Session<any>;
   options: MastraTUIOptions;
   hookManager?: HookManager;
@@ -323,7 +323,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
   const editor = new CustomEditor(ui, getEditorTheme());
   const result: TUIState = {
     // Core dependencies
-    harness: options.harness,
+    controller: options.controller,
     session: options.session,
     options,
     hookManager: options.hookManager,

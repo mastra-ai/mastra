@@ -18,7 +18,6 @@ export {
   taskUpdateTool,
   taskWriteTool,
 } from '../harness/tools';
-export type { TaskCheckResult, TaskCheckSummary, TaskItem, TaskItemInput, TaskItemSnapshot } from '../harness/tools';
 export { defaultDisplayState, defaultOMProgressState } from '../harness/types';
 export type {
   ActiveSubagentState,

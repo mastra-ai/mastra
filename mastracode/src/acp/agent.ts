@@ -16,12 +16,12 @@ import { handleAgentControllerEvent } from './event-mapper.js';
 import type { PromptState } from './event-mapper.js';
 
 /**
- * ACP Agent implementation that wraps a mastracode Harness.
+ * ACP Agent implementation that wraps a mastracode Controller.
  * Each instance represents one ACP connection from a client.
  */
 export class MastraCodeAcpAgent implements Agent {
   private readonly connection: AgentSideConnection;
-  private readonly harness: AgentController;
+  private readonly controller: AgentController;
   private readonly session: Session;
   private readonly modes: AgentControllerMode[];
   private readonly unsubscribeSessionEvents: () => void;
@@ -39,12 +39,12 @@ export class MastraCodeAcpAgent implements Agent {
 
   constructor(
     connection: AgentSideConnection,
-    harness: AgentController,
+    controller: AgentController,
     session: Session,
     modes: AgentControllerMode[],
   ) {
     this.connection = connection;
-    this.harness = harness;
+    this.controller = controller;
     this.session = session;
     this.modes = modes;
 
@@ -95,7 +95,7 @@ export class MastraCodeAcpAgent implements Agent {
     // Build models list (best-effort)
     let models: NewSessionResponse['models'];
     try {
-      const availableModels = await this.harness.listAvailableModels();
+      const availableModels = await this.controller.listAvailableModels();
       const currentModelId = this.session.model.get();
       models = {
         currentModelId: currentModelId ?? '',

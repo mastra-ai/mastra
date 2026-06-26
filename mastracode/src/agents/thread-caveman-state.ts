@@ -31,7 +31,7 @@ async function findThread(
 
 /**
  * Restores MastraCode-owned per-thread OM settings for the given thread:
- * - If the thread already has a valid value in metadata, mirror it into harness state.
+ * - If the thread already has a valid value in metadata, mirror it into controller state.
  * - Otherwise, persist the current session.state value to the thread so future
  *   sessions see the user's last-selected setting.
  */
@@ -70,7 +70,7 @@ async function restoreSettingsForThread(session: Session<Record<string, unknown>
 }
 
 /**
- * Wires MastraCode-owned OM settings into harness thread events so they persist
+ * Wires MastraCode-owned OM settings into controller thread events so they persist
  * per-thread and new threads inherit the most recent value.
  *
  * This is intentionally implemented in mastracode rather than core: these

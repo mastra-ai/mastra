@@ -600,11 +600,11 @@ describe('renderExistingMessages signals', () => {
           ]),
       },
     } as unknown as TUIState['session'];
-    state.harness = {
+    state.controller = {
       session: {
         displayState: { get: () => ({ isRunning: false }) },
       },
-    } as unknown as TUIState['harness'];
+    } as unknown as TUIState['controller'];
 
     await renderExistingMessages(state);
 
@@ -765,9 +765,9 @@ describe('renderExistingMessages subagents', () => {
       thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
       model: { get: () => 'openai/gpt-5.5' },
     } as unknown as TUIState['session'];
-    state.harness = {
+    state.controller = {
       session: state.session,
-    } as unknown as TUIState['harness'];
+    } as unknown as TUIState['controller'];
 
     await renderExistingMessages(state);
 
