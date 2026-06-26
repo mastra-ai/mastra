@@ -31,9 +31,7 @@ const config: Config = {
 	},
 	url: 'https://mastra.ai',
 	baseUrl: '/',
-	// hint: do NOT set trailingSlash to any value to avoid rendering issues on vercel
-	// see: https://github.com/slorber/trailing-slash-guide
-	// trailingSlash: false,
+	trailingSlash: false,
 	onBrokenLinks: 'throw',
 	markdown: {
 		hooks: {
@@ -87,8 +85,6 @@ const config: Config = {
 			{
 				siteUrl: 'https://mastra.ai',
 				siteTitle: 'Mastra',
-				siteDescription:
-					'Mastra is a framework for building AI-powered applications and agents with a modern TypeScript stack. It includes everything you need to go from early prototypes to production-ready applications. Mastra integrates with frontend and backend frameworks like React, Next.js, and Node, or you can deploy it anywhere as a standalone server.',
 				root: {
 					prefixText: `# Mastra
 
