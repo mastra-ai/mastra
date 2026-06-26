@@ -1,4 +1,10 @@
-import { Badge, ButtonWithTooltip, Textarea, TooltipProvider, Txt, Icon, cn } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ThumbsUp, ThumbsDown, Trash2, CheckCircle } from 'lucide-react';
 import { useState } from 'react';
 import { TagPicker } from './tag-picker';
@@ -101,8 +107,8 @@ export function ReviewItemCard({
         <div className="flex items-center gap-2 mt-2">
           {/* Rating: thumbs up / down */}
           <div className="flex items-center gap-0.5 mr-1">
-            <ButtonWithTooltip
-              tooltipContent="Good — this result is acceptable"
+            <Button
+              tooltip="Good — this result is acceptable"
               variant={item.rating === 'positive' ? 'default' : 'ghost'}
               size="sm"
               onClick={() => onRate(item.rating === 'positive' ? undefined : 'positive')}
@@ -111,9 +117,9 @@ export function ReviewItemCard({
               <Icon size="sm" className={item.rating === 'positive' ? 'text-positive1' : ''}>
                 <ThumbsUp />
               </Icon>
-            </ButtonWithTooltip>
-            <ButtonWithTooltip
-              tooltipContent="Bad — this result is wrong"
+            </Button>
+            <Button
+              tooltip="Bad — this result is wrong"
               variant={item.rating === 'negative' ? 'default' : 'ghost'}
               size="sm"
               onClick={() => onRate(item.rating === 'negative' ? undefined : 'negative')}
@@ -122,7 +128,7 @@ export function ReviewItemCard({
               <Icon size="sm" className={item.rating === 'negative' ? 'text-negative1' : ''}>
                 <ThumbsDown />
               </Icon>
-            </ButtonWithTooltip>
+            </Button>
           </div>
 
           {/* Tags */}
@@ -144,8 +150,8 @@ export function ReviewItemCard({
 
           {!isCompleted && (
             <>
-              <ButtonWithTooltip
-                tooltipContent={
+              <Button
+                tooltip={
                   item.tags.length > 0 || item.comment ? 'Mark as complete' : 'Add a tag or comment before completing'
                 }
                 variant="ghost"
@@ -156,13 +162,13 @@ export function ReviewItemCard({
                 <Icon size="sm" className={item.tags.length > 0 || item.comment ? 'text-positive1' : 'text-neutral3'}>
                   <CheckCircle />
                 </Icon>
-              </ButtonWithTooltip>
+              </Button>
 
-              <ButtonWithTooltip tooltipContent="Delete from review queue" variant="ghost" size="sm" onClick={onRemove}>
+              <Button tooltip="Delete from review queue" variant="ghost" size="sm" onClick={onRemove}>
                 <Icon size="sm" className="text-neutral3">
                   <Trash2 />
                 </Icon>
-              </ButtonWithTooltip>
+              </Button>
             </>
           )}
         </div>

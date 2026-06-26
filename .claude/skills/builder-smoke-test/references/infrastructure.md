@@ -66,8 +66,10 @@ curl -s -H "$SESSION" "$BASE/editor/builder/infrastructure" | jq '.workspace'
 
 - [ ] `type` is `"id"` (matches `workspace: { type: 'id', workspaceId: 'builder-workspace' }`)
 - [ ] `workspaceId` is `"builder-workspace"`
-- [ ] `filesystemProvider` and `sandboxProvider` populated
-- [ ] `config` is an array of `{key, value}` pairs
+- [ ] `name` is present (e.g. `"Builder Workspace"`) and `source` reflects builder metadata
+- [ ] `registered` is `true`; `hasFilesystem` is `true`; `hasSandbox` reflects scaffold config
+- [ ] `filesystemProvider` populated (e.g. `"local"`); `sandboxProvider` may be `null` when no sandbox is configured
+- [ ] `config` is an array of `{key, value}` pairs — may be empty `[]` when the workspace block doesn't expose tunables
 
 If you change the inline workspace block in the scaffolded project's `src/mastra/index.ts` and restart:
 

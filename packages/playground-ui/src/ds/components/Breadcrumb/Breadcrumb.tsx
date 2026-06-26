@@ -28,6 +28,7 @@ export interface CrumbProps {
   prefetch?: boolean | null;
   children: React.ReactNode;
   action?: React.ReactNode;
+  'data-testid'?: string;
 }
 
 export const Crumb = ({ className, as, isCurrent, action, ...props }: CrumbProps) => {

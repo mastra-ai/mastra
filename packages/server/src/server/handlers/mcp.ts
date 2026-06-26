@@ -1,5 +1,4 @@
 import type { MCPServerBase as MastraMCPServerImplementation, ServerInfo } from '@mastra/core/mcp';
-import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import {
   mcpServerDetailPathParams,
@@ -24,9 +23,6 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 // ============================================================================
 // Route Definitions (createRoute pattern for server adapters)
 // ============================================================================
-
-const createMCPToolResourceId = ({ serverId, toolId }: Record<string, unknown>) =>
-  JSON.stringify([String(serverId), String(toolId)]);
 
 export const LIST_MCP_SERVERS_ROUTE = createRoute({
   method: 'GET',
@@ -181,11 +177,6 @@ export const GET_MCP_SERVER_TOOL_DETAIL_ROUTE = createRoute({
   description: 'Returns detailed information about a specific tool on the MCP server',
   tags: ['MCP'],
   requiresAuth: true,
-  fga: {
-    resourceType: 'tool',
-    resourceId: createMCPToolResourceId,
-    permission: MastraFGAPermissions.TOOLS_READ,
-  },
   handler: async ({ mastra, serverId, toolId }: ServerContext & { serverId: string; toolId: string }) => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
@@ -221,11 +212,6 @@ export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
   description: 'Executes a tool on the specified MCP server with the provided arguments',
   tags: ['MCP'],
   requiresAuth: true,
-  fga: {
-    resourceType: 'tool',
-    resourceId: createMCPToolResourceId,
-    permission: MastraFGAPermissions.TOOLS_EXECUTE,
-  },
   handler: async ({
     mastra,
     serverId,

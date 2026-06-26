@@ -1,5 +1,5 @@
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
-import { redactStreamChunk } from '@mastra/server/server-adapter';
+import { redactStreamChunk, serializeStreamChunk } from '@mastra/server/server-adapter';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { CallHandler, ExecutionContext, NestInterceptor } from '@nestjs/common';
 import type { Request, Response } from 'express';
@@ -128,6 +128,10 @@ export class StreamingInterceptor implements NestInterceptor {
       response.setHeader('X-Accel-Buffering', 'no');
     }
 
+    if (streamFormat === 'sse' && result.sseFlushOnConnect) {
+      response.write(': connected\n\n');
+    }
+
     const data = result.data;
     const hasFullStream = data !== null && typeof data === 'object' && 'fullStream' in data;
     const stream = hasFullStream ? (data as { fullStream: ReadableStream }).fullStream : (data as ReadableStream);
@@ -152,14 +156,28 @@ export class StreamingInterceptor implements NestInterceptor {
         }
 
         if (value) {
+          if (streamFormat === 'sse' && typeof value === 'string' && value.startsWith(':')) {
+            response.write(value);
+            continue;
+          }
+
           // Optionally redact sensitive data
           const outputValue = shouldRedact ? redactStreamChunk(value) : value;
 
+          // A chunk that can't be serialized must not kill the stream — skip it and keep streaming
+          const serialized = serializeStreamChunk(outputValue);
+          if (!serialized.ok) {
+            this.logger.error(
+              `Failed to serialize stream chunk, skipping (path: ${response.req?.path}, type: ${(outputValue as { type?: string })?.type}, error: ${serialized.error.message})`,
+            );
+            continue;
+          }
+
           if (streamFormat === 'sse') {
-            response.write(`data: ${JSON.stringify(outputValue)}\n\n`);
+            response.write(`data: ${serialized.json}\n\n`);
           } else {
             // Use record separator (\x1E) for stream format
-            response.write(JSON.stringify(outputValue) + '\x1E');
+            response.write(serialized.json + '\x1E');
           }
         }
       }

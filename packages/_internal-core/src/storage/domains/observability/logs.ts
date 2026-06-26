@@ -2,9 +2,15 @@ import { z } from 'zod/v4';
 import {
   commonFilterFields,
   contextFields,
+  deltaLimitSchema,
+  deltaInfoSchema,
+  listModeSchema,
+  deltaCursorSchema,
   metadataField,
+  normalizeObservabilityListArgs,
   paginationArgsSchema,
   paginationInfoSchema,
+  refineObservabilityListMode,
   sortDirectionSchema,
   spanIdField,
   tagsField,
@@ -137,22 +143,34 @@ export const logsOrderBySchema = z
 /** Schema for listLogs operation arguments */
 export const listLogsArgsSchema = z
   .object({
+    mode: listModeSchema.optional(),
     filters: logsFilterSchema.optional().describe('Optional filters to apply'),
-    pagination: paginationArgsSchema.default({ page: 0, perPage: 10 }).describe('Pagination settings'),
-    orderBy: logsOrderBySchema
-      .default({ field: 'timestamp', direction: 'DESC' })
-      .describe('Ordering configuration (defaults to timestamp desc)'),
+    pagination: paginationArgsSchema.optional(),
+    orderBy: logsOrderBySchema.optional(),
+    after: deltaCursorSchema.optional(),
+    limit: deltaLimitSchema,
   })
+  .strict()
+  .superRefine(refineObservabilityListMode)
+  .transform(value =>
+    normalizeObservabilityListArgs<LogsFilter, z.output<typeof logsOrderBySchema>>(value, {
+      orderBy: { field: 'timestamp', direction: 'DESC' } as const,
+    }),
+  )
   .describe('Arguments for listing logs');
 
 /** Arguments for listing logs */
 export type ListLogsArgs = z.input<typeof listLogsArgsSchema>;
 
 /** Schema for listLogs operation response */
-export const listLogsResponseSchema = z.object({
-  pagination: paginationInfoSchema,
-  logs: z.array(logRecordSchema),
-});
+export const listLogsResponseSchema = z
+  .object({
+    pagination: paginationInfoSchema.optional(),
+    delta: deltaInfoSchema.optional(),
+    deltaCursor: deltaCursorSchema.optional(),
+    logs: z.array(logRecordSchema),
+  })
+  .describe('Response from listing logs');
 
 /** Response containing paginated logs */
 export type ListLogsResponse = z.infer<typeof listLogsResponseSchema>;

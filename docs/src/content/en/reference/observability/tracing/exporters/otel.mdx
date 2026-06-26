@@ -340,7 +340,7 @@ const exporter = new OtelExporter({
 
 ## Protocol requirements
 
-Different providers require different OTEL exporter packages. Trace and log export are independent: install only the trace package if you only need traces, or install both the trace and log packages for the chosen protocol if you also want log export. Zipkin does not support OTLP logs.
+Different providers require different OTEL exporter packages. Trace and log export are independent: install only the trace package if you only need traces, or install both the trace and log packages for the chosen protocol if you also want log export. Zipkin doesn't support OTLP logs.
 
 | Protocol | Trace package | Log package |
 | - | - | - |
@@ -379,6 +379,6 @@ While the OpenTelemetry specification supports native array attributes, many bac
 
 ## Related
 
-- [OtelExporter Guide](/docs/observability/tracing/exporters/otel): Setup guide with provider configurations
-- [OtelBridge](/docs/observability/tracing/bridges/otel): For bidirectional OTEL context integration
+- [OtelExporter Guide](/docs/observability/integrations/exporters/otel): Setup guide with provider configurations
+- [OtelBridge](/docs/observability/integrations/bridges/otel): For bidirectional OTEL context integration
 - [Tracing Overview](/docs/observability/tracing/overview): General tracing concepts

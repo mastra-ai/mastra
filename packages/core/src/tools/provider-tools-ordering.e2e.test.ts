@@ -9,7 +9,7 @@ import { createTool } from '../tools';
 
 setupDummyApiKeys(getLLMTestMode(), ['anthropic']);
 
-const mock = createGatewayMock({ mode: 'replay' });
+const mock = createGatewayMock();
 beforeAll(() => mock.start());
 afterAll(() => mock.saveAndStop());
 

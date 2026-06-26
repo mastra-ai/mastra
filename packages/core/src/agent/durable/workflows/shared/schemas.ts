@@ -17,6 +17,7 @@ export const modelConfigSchema = z.object({
   modelId: z.string(),
   specificationVersion: z.string().optional(),
   settings: z.record(z.string(), z.any()).optional(),
+  providerOptions: z.record(z.string(), z.any()).optional(),
 });
 
 /**
@@ -29,6 +30,7 @@ export const modelListEntrySchema = z.object({
     modelId: z.string(),
     specificationVersion: z.string().optional(),
     originalConfig: z.union([z.string(), z.record(z.string(), z.any())]).optional(),
+    providerOptions: z.record(z.string(), z.any()).optional(),
   }),
   maxRetries: z.number(),
   enabled: z.boolean(),
@@ -97,6 +99,9 @@ export const baseIterationStateSchema = z.object({
   lastStepResult: z.any().optional(),
   // Background task tracking
   backgroundTaskPending: z.boolean().optional(),
+  // Span data, carried unchanged so every iteration shares one trace
+  agentSpanData: z.any().optional(),
+  modelSpanData: z.any().optional(),
 });
 
 /**

@@ -94,7 +94,7 @@ Visit [MCPServer reference](/reference/tools/mcp-server#mcp-apps-appresources) f
 
 ## Connecting MCP Apps to agents
 
-Agents consume tools — they do not need to know about MCP servers. Pass tools to the agent's `tools` config, and register the MCP server at the Mastra level so Studio can resolve app resources.
+Agents consume tools — they don't need to know about MCP servers. Pass tools to the agent's `tools` config, and register the MCP server at the Mastra level so Studio can resolve app resources.
 
 ```typescript title="src/mastra/agents/index.ts"
 import { Agent } from '@mastra/core/agent'
@@ -104,7 +104,7 @@ export const myAgent = new Agent({
   id: 'my-agent',
   name: 'My Agent',
   instructions: 'You have access to interactive UI tools.',
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
   tools: { calculatorTool },
 })
 ```
@@ -136,7 +136,7 @@ const mcpClient = new MCPClient({
 const myAgent = new Agent({
   id: 'my-agent',
   name: 'My Agent',
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
   tools: await mcpClient.listTools(),
 })
 
@@ -169,8 +169,8 @@ Agent calls tool → Tool returns brief content + structuredContent
 
 Tools with app resources should return two fields:
 
-- `content`: A brief text summary for the model. Keep this short so the agent does not parrot the full result.
-- `structuredContent`: The data payload that hydrates the UI. The model does not see this field.
+- `content`: A brief text summary for the model. Keep this short so the agent doesn't parrot the full result.
+- `structuredContent`: The data payload that hydrates the UI. The model doesn't see this field.
 
 ```typescript
 execute: async ({ num1, num2, operation }) => {
@@ -289,7 +289,7 @@ const mcpClient = new MCPClient({
 const myAgent = new Agent({
   id: 'my-agent',
   name: 'My Agent',
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
   tools: await mcpClient.listTools(),
 })
 
@@ -317,7 +317,7 @@ App iframes are sandboxed with the following permissions:
 - `allow-forms`: Allows form submission
 - `allow-popups`: Permits `window.open()` and link targets
 
-The iframe does not have access to the parent page's DOM, cookies, or storage. All communication happens through the JSON-RPC postMessage protocol managed by `@mcp-ui/client`'s `AppRenderer` on the host side and `@modelcontextprotocol/ext-apps`'s `App` class on the guest side.
+The iframe doesn't have access to the parent page's DOM, cookies, or storage. All communication happens through the JSON-RPC postMessage protocol managed by `@mcp-ui/client`'s `AppRenderer` on the host side and `@modelcontextprotocol/ext-apps`'s `App` class on the guest side.
 
 ## Related
 

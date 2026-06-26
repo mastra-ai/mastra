@@ -67,11 +67,16 @@ export abstract class MastraModelInput extends MastraBase {
           const stream = await createStream();
           attachModelStreamTransport(outputStream, readModelStreamTransport(stream));
 
-          onResult({
+          const initialChunks = onResult({
             warnings: stream.warnings,
             request: stream.request,
             rawResponse: stream.rawResponse || stream.response || {},
           });
+          if (initialChunks) {
+            for (const chunk of Array.isArray(initialChunks) ? initialChunks : [initialChunks]) {
+              controller.enqueue(chunk);
+            }
+          }
 
           await self.transform({
             runId,

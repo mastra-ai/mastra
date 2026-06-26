@@ -11,7 +11,7 @@ packages:
 
 The Aurora DSQL storage implementation provides storage using Amazon Aurora DSQL with IAM authentication.
 
-Aurora DSQL does not support PostgreSQL extensions (`CREATE EXTENSION`), including `pgvector`. For vector storage, use a separate vector store such as `@mastra/s3vectors`.
+Aurora DSQL doesn't support PostgreSQL extensions (`CREATE EXTENSION`), including `pgvector`. For vector storage, use a separate vector store such as `@mastra/s3vectors`.
 
 ## Installation
 
@@ -252,7 +252,7 @@ const thread = await memoryStore?.getThreadById({ threadId: '...' })
 ```
 
 :::warning
-If `init()` is not called, tables won't be created and storage operations will fail silently or throw errors.
+If `init()` isn't called, tables won't be created and storage operations will fail silently or throw errors.
 :::
 
 ### Direct Database and Pool Access
@@ -276,7 +276,7 @@ This approach is intended for advanced scenarios where low-level access is requi
 
 #### IAM-only authentication
 
-Connections are authenticated with IAM. There are no database passwords. `@mastra/dsql` uses `@aws/aurora-dsql-node-postgres-connector` to generate short-lived auth tokens. You can provide a custom credentials provider via `customCredentialsProvider`.
+Connections are authenticated with IAM. No database passwords are required. `@mastra/dsql` uses `@aws/aurora-dsql-node-postgres-connector` to generate short-lived auth tokens. You can provide a custom credentials provider via `customCredentialsProvider`.
 
 #### Single database, schema-based isolation
 
@@ -284,7 +284,7 @@ Each cluster exposes a single database named `postgres`. Logical separation is d
 
 #### No PostgreSQL extensions
 
-`CREATE EXTENSION` is not supported. This includes `pgvector`, `PostGIS`, and others. For vector storage, use a separate store such as `@mastra/s3vectors` alongside `DSQLStore`.
+`CREATE EXTENSION` isn't supported. This includes `pgvector`, `PostGIS`, and others. For vector storage, use a separate store such as `@mastra/s3vectors` alongside `DSQLStore`.
 
 #### JSON stored as text
 
@@ -292,7 +292,7 @@ JSON/JSONB are available as query types but not as column types. `@mastra/dsql` 
 
 #### Schema and DDL constraints
 
-Some PostgreSQL features are not available:
+Some PostgreSQL features aren't available:
 
 - Foreign key constraints
 - `TRUNCATE`
@@ -302,7 +302,7 @@ Indexes are created asynchronously using `CREATE INDEX ASYNC`. The store's `init
 
 #### Transactions and optimistic concurrency
 
-Aurora DSQL uses optimistic concurrency control (OCC) and may return retriable OCC errors under contention. There are limits on transaction duration and size. Large bulk operations should be split into smaller batches at the application level.
+Aurora DSQL uses optimistic concurrency control (OCC) and may return retriable OCC errors under contention. Limits exist on transaction duration and size. Large bulk operations should be split into smaller batches at the application level.
 
 #### Connection lifetime
 
@@ -324,7 +324,7 @@ export const dsqlAgent = new Agent({
   name: 'DSQL Agent',
   instructions:
     'You are an AI agent with the ability to automatically recall memories from previous interactions.',
-  model: 'openai/gpt-5.1',
+  model: '__GATEWAY_OPENAI_MODEL__',
   memory: new Memory({
     storage: new DSQLStore({
       id: 'dsql-agent-storage',
@@ -415,7 +415,7 @@ await storage.createIndex({
 })
 ```
 
-Aurora DSQL does not allow `ASC`/`DESC` in `CREATE INDEX ASYNC`. If you include them, they will be automatically stripped.
+Aurora DSQL doesn't allow `ASC`/`DESC` in `CREATE INDEX ASYNC`. If you include them, they will be automatically stripped.
 
 ### Index Options
 

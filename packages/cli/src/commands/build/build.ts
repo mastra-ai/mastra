@@ -4,6 +4,7 @@ import { FileService } from '../../services/service.file';
 import { checkMastraPeerDeps, logPeerDepWarnings } from '../../utils/check-peer-deps';
 import { createLogger } from '../../utils/logger';
 import { getMastraPackages } from '../../utils/mastra-packages';
+import { computeSourceHash, writeBuildManifest } from '../../utils/source-hash';
 import { BuildBundler } from './BuildBundler';
 
 export async function build({
@@ -48,6 +49,10 @@ export async function build({
         projectRoot: rootDir,
       });
 
+      // Write build manifest with source hash for staleness detection
+      const sourceHash = await computeSourceHash(rootDir, mastraDir);
+      await writeBuildManifest(outputDirectory, sourceHash);
+
       logger.info('Build successful, you can now deploy the .mastra/output directory to your target platform.');
       if (studio) {
         logger.info(
@@ -70,6 +75,10 @@ export async function build({
       toolsPaths: discoveredTools,
       projectRoot: rootDir,
     });
+
+    // Write build manifest with source hash for staleness detection
+    const sourceHash = await computeSourceHash(rootDir, mastraDir);
+    await writeBuildManifest(outputDirectory, sourceHash);
 
     logger.info('You can now deploy the .mastra/output directory to your target platform.');
   } catch (error) {

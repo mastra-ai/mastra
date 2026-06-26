@@ -1,6 +1,12 @@
 import type { RequestContext } from '@mastra/core/request-context';
 
-import type { ClientOptions, StoredSkillResponse, UpdateStoredSkillParams, DeleteStoredSkillResponse } from '../types';
+import type {
+  ClientOptions,
+  StoredSkillResponse,
+  UpdateStoredSkillParams,
+  DeleteStoredSkillResponse,
+  FavoriteToggleResponse,
+} from '../types';
 import { requestContextQueryString } from '../utils';
 
 import { BaseResource } from './base';
@@ -54,6 +60,32 @@ export class StoredSkill extends BaseResource {
   delete(requestContext?: RequestContext | Record<string, any>): Promise<DeleteStoredSkillResponse> {
     return this.request(
       `/stored/skills/${encodeURIComponent(this.storedSkillId)}${requestContextQueryString(requestContext)}`,
+      {
+        method: 'DELETE',
+      },
+    );
+  }
+
+  /**
+   * Favorites this skill for the calling user. Idempotent.
+   * Requires the `skill.favorites` builder feature flag to be enabled on the server.
+   */
+  favorite(requestContext?: RequestContext | Record<string, any>): Promise<FavoriteToggleResponse> {
+    return this.request(
+      `/stored/skills/${encodeURIComponent(this.storedSkillId)}/favorite${requestContextQueryString(requestContext)}`,
+      {
+        method: 'PUT',
+      },
+    );
+  }
+
+  /**
+   * Unfavorites this skill for the calling user. Idempotent.
+   * Requires the `skill.favorites` builder feature flag to be enabled on the server.
+   */
+  unfavorite(requestContext?: RequestContext | Record<string, any>): Promise<FavoriteToggleResponse> {
+    return this.request(
+      `/stored/skills/${encodeURIComponent(this.storedSkillId)}/favorite${requestContextQueryString(requestContext)}`,
       {
         method: 'DELETE',
       },

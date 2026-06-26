@@ -1,7 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- pure re-export barrel */
 export * from './components/agent-chat';
 export * from './context';
-export * from './components/agent-settings';
 export * from './components/request-context';
 export * from './components/provider-map-icon';
 export * from './components/agent-metadata';
@@ -16,9 +15,8 @@ export * from './hooks/use-execute-agent-tool';
 export * from './hooks/use-stored-agents';
 export * from './hooks/use-agent-versions';
 export * from './components/AgentToolPanel';
-export * from './components/agent-information/agent-information';
 export * from './components/agent-entity-header';
-export * from './components/agent-information/agent-memory';
+export * from './components/memory-sidebar/agent-memory';
 export * from './components/agent-layout';
 
 export * from './components/browser-view';
@@ -40,6 +38,5 @@ export * from './components/agent-playground';
 export * from './components/agent-page-tabs';
 export * from './components/agent-top-bar-controls';
 export * from './hooks/use-agent-experiments';
-export * from './hooks/use-can-create-agent';
 export * from './components/agent-list/agents-list';
 export * from './components/agent-list/no-agents-info';

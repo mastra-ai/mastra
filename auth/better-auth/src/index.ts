@@ -1,10 +1,25 @@
-import type { IUserProvider, ICredentialsProvider, CredentialsResult } from '@mastra/core/auth';
-import type { EEUser } from '@mastra/core/auth/ee';
-import type { MastraAuthProviderOptions } from '@mastra/core/server';
-import { MastraAuthProvider } from '@mastra/core/server';
+import type { IUserProvider, ICredentialsProvider, CredentialsResult } from '@internal/auth';
+import type { EEUser } from '@internal/auth/ee';
+import type { MastraAuthProviderOptions } from '@internal/auth/provider';
+import { MastraAuthProvider } from '@internal/auth/provider';
 
 import type { Auth, Session, User } from 'better-auth';
-import type { HonoRequest } from 'hono';
+
+type HonoRequestLike = {
+  raw?: Request;
+  headers?: Headers;
+  header(name: string): string | undefined;
+};
+
+type MastraAuthRequest = Request | HonoRequestLike;
+
+function getRequestHeader(request: MastraAuthRequest, name: string): string | null {
+  if (request instanceof Request) {
+    return request.headers.get(name);
+  }
+
+  return request.raw?.headers.get(name) ?? request.headers?.get(name) ?? request.header(name) ?? null;
+}
 
 /**
  * User type returned by Better Auth session verification.
@@ -182,19 +197,15 @@ export class MastraAuthBetterAuth
    * Better Auth's `api.getSession()` endpoint.
    *
    * @param token - The bearer token (session token) to authenticate
-   * @param request - The Hono request object containing headers
+   * @param request - The request containing headers
    * @returns The authenticated user and session, or null if authentication fails
    */
-  async authenticateToken(token: string, request: HonoRequest): Promise<BetterAuthUser | null> {
+  async authenticateToken(token: string, request: MastraAuthRequest): Promise<BetterAuthUser | null> {
     try {
       // Better Auth's api.getSession() reads session tokens from the Cookie header
       const headers = new Headers();
 
-      // The auth middleware may pass a raw Request (c.req.raw) instead of HonoRequest,
-      // so unwrap via 'raw' property detection and use the standard Web API.
-      const rawRequest: Request = 'raw' in request ? (request as any).raw : (request as unknown as Request);
-
-      const cookieHeader = rawRequest.headers.get('Cookie');
+      const cookieHeader = getRequestHeader(request, 'Cookie');
       if (cookieHeader) {
         headers.set('Cookie', cookieHeader);
       }

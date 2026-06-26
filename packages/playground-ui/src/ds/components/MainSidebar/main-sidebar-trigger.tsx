@@ -14,36 +14,36 @@ export function MainSidebarTrigger({ className, onClick, ...props }: MainSidebar
 
   return (
     <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          aria-label="Toggle sidebar"
-          aria-expanded={!isCollapsed}
-          {...props}
-          onClick={event => {
-            onClick?.(event);
-            if (!event.defaultPrevented) toggleSidebar();
-          }}
-          className={cn(
-            'flex items-center justify-center text-neutral3 rounded-md',
-            // Both states share size-9 (36px) — matches NavLink height,
-            // so toggling collapse never shifts surrounding rows.
-            'size-9',
-            isCollapsed ? 'mx-auto' : 'ml-auto',
-            'hover:bg-sidebar-nav-hover hover:text-neutral6',
-            'transition-all duration-normal ease-out-custom',
-            'focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:shadow-focus-ring',
-            '[&_svg]:w-4 [&_svg]:h-4 [&_svg]:text-neutral3 [&:hover_svg]:text-neutral5 [&_svg]:transition-transform [&_svg]:duration-normal',
-            className,
-          )}
-        >
-          <PanelRightIcon
-            className={cn({
-              'rotate-180': isCollapsed,
-            })}
-          />
-        </button>
-      </TooltipTrigger>
+      <TooltipTrigger
+        render={
+          <button
+            type="button"
+            aria-label="Toggle sidebar"
+            aria-expanded={!isCollapsed}
+            {...props}
+            onClick={event => {
+              onClick?.(event);
+              if (!event.defaultPrevented) toggleSidebar();
+            }}
+            className={cn(
+              'flex items-center justify-center text-neutral3 rounded-md',
+              'size-9',
+              isCollapsed ? 'mx-auto' : 'ml-auto',
+              'hover:bg-sidebar-nav-hover hover:text-neutral6',
+              'transition-all duration-normal ease-out-custom',
+              'focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:shadow-focus-ring',
+              '[&_svg]:w-4 [&_svg]:h-4 [&_svg]:text-neutral3 [&:hover_svg]:text-neutral5 [&_svg]:transition-transform [&_svg]:duration-normal',
+              className,
+            )}
+          >
+            <PanelRightIcon
+              className={cn({
+                'rotate-180': isCollapsed,
+              })}
+            />
+          </button>
+        }
+      />
 
       <TooltipContent>
         Toggle Sidebar

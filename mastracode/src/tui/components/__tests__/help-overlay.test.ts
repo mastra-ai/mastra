@@ -10,6 +10,7 @@ describe('buildHelpText', () => {
     expect(text).toContain('/threads');
     expect(text).toContain('/settings');
     expect(text).toContain('/models');
+    expect(text).toContain('/skill/<name>');
     expect(text).not.toContain('/models:pack');
     expect(text).not.toContain('/memory-gateway');
     expect(text).toContain('/help');

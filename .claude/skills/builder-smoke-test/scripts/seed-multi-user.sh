@@ -119,7 +119,7 @@ VALUES
    '["name","description","instructions"]', 'Initial version (seeded)', '${now}');
 
 INSERT INTO mastra_skills
-  (id, status, activeVersionId, authorId, visibility, starCount, createdAt, updatedAt)
+  (id, status, activeVersionId, authorId, visibility, favoriteCount, createdAt, updatedAt)
 VALUES
   ('${public_id}',  'published', '${public_version}',  '${other_user}', 'public',  0, '${now}', '${now}'),
   ('${private_id}', 'published', '${private_version}', '${other_user}', 'private', 0, '${now}', '${now}');

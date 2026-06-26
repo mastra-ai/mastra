@@ -53,10 +53,10 @@ The number of cached input tokens.
   cachedInputTokens?: number | undefined;
 };
 
-type StepResult = {
+export type StepResult = {
   name: string;
   status: WorkflowStepStatus;
-  input: Record<string, unknown> | null;
+  input: unknown | null;
   output: unknown | null;
   suspendPayload: Record<string, unknown> | null;
   resumePayload: Record<string, unknown> | null;
@@ -136,7 +136,7 @@ function serializeWorkflowSteps(
   return Object.fromEntries(Object.entries(steps).map(([id, step]) => [id, cloneWorkflowStep(step, includeOutputs)]));
 }
 
-function createWorkflowDataPart(args: {
+export function createWorkflowDataPart(args: {
   current: BufferedWorkflowState;
   isNested?: boolean;
   runId: string;
@@ -158,7 +158,7 @@ function createWorkflowDataPart(args: {
   };
 }
 
-function createWorkflowStepDataPart(args: {
+export function createWorkflowStepDataPart(args: {
   current: BufferedWorkflowState;
   isNested?: boolean;
   runId: string;
@@ -515,6 +515,7 @@ function ensureAgentRunState(bufferedSteps: Map<string, any>, runId: string) {
       sources: [],
       files: [],
       toolCalls: [],
+      pendingToolCalls: [],
       toolResults: [],
       request: {},
       response: {
@@ -532,6 +533,74 @@ function ensureAgentRunState(bufferedSteps: Map<string, any>, runId: string) {
   return bufferedSteps.get(runId)!;
 }
 
+type PendingAgentToolCall = {
+  toolCallId: string;
+  toolName: string;
+  argsText: string;
+  state: 'input-streaming' | 'input-available';
+  providerExecuted?: boolean;
+  providerMetadata?: unknown;
+  dynamic?: boolean;
+};
+
+type PendingToolCallUpdate = Partial<
+  Pick<PendingAgentToolCall, 'toolName' | 'argsText' | 'state' | 'providerExecuted' | 'providerMetadata' | 'dynamic'>
+>;
+
+function upsertPendingToolCall(
+  pendingToolCalls: PendingAgentToolCall[] = [],
+  toolCallId: string,
+  updates: PendingToolCallUpdate,
+) {
+  const existingIndex = pendingToolCalls.findIndex(call => call.toolCallId === toolCallId);
+  if (existingIndex === -1) {
+    return [
+      ...pendingToolCalls,
+      {
+        toolCallId,
+        toolName: updates.toolName || '',
+        argsText: updates.argsText || '',
+        state: updates.state || 'input-streaming',
+        ...(updates.providerExecuted != null ? { providerExecuted: updates.providerExecuted } : {}),
+        ...(updates.providerMetadata != null ? { providerMetadata: updates.providerMetadata } : {}),
+        ...(updates.dynamic != null ? { dynamic: updates.dynamic } : {}),
+      },
+    ];
+  }
+
+  return pendingToolCalls.map((call, index) => {
+    if (index !== existingIndex) return call;
+    return {
+      ...call,
+      ...updates,
+      toolName: updates.toolName || call.toolName,
+      argsText: updates.argsText ?? call.argsText,
+    };
+  });
+}
+
+function appendPendingToolCallArgs(
+  pendingToolCalls: PendingAgentToolCall[] = [],
+  payload: {
+    toolCallId: string;
+    argsTextDelta?: string;
+    toolName?: string;
+    providerMetadata?: PendingAgentToolCall['providerMetadata'];
+  },
+) {
+  const existing = pendingToolCalls.find(call => call.toolCallId === payload.toolCallId);
+  return upsertPendingToolCall(pendingToolCalls, payload.toolCallId, {
+    toolName: payload.toolName || existing?.toolName || '',
+    argsText: `${existing?.argsText || ''}${payload.argsTextDelta || ''}`,
+    state: 'input-streaming',
+    providerMetadata: payload.providerMetadata ?? existing?.providerMetadata,
+  });
+}
+
+function removePendingToolCall(pendingToolCalls: PendingAgentToolCall[] = [], toolCallId: string) {
+  return pendingToolCalls.filter(call => call.toolCallId !== toolCallId);
+}
+
 export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps: Map<string, any>) {
   let hasChanged = false;
   switch (payload.type) {
@@ -547,6 +616,7 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
         sources: [],
         files: [],
         toolCalls: [],
+        pendingToolCalls: [],
         toolResults: [],
         request: {},
         response: {
@@ -561,6 +631,50 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
       });
       hasChanged = true;
       break;
+    case 'tool-call-input-streaming-start': {
+      const toolInputStartRun = ensureAgentRunState(bufferedSteps, payload.runId!);
+      const existing = toolInputStartRun.pendingToolCalls?.find(
+        (call: PendingAgentToolCall) => call.toolCallId === payload.payload.toolCallId,
+      );
+      bufferedSteps.set(payload.runId!, {
+        ...toolInputStartRun,
+        pendingToolCalls: upsertPendingToolCall(toolInputStartRun.pendingToolCalls, payload.payload.toolCallId, {
+          toolName: payload.payload.toolName,
+          argsText: existing?.argsText ?? '',
+          state: 'input-streaming',
+          providerExecuted: payload.payload.providerExecuted,
+          providerMetadata: payload.payload.providerMetadata,
+          dynamic: payload.payload.dynamic,
+        }),
+      });
+      hasChanged = true;
+      break;
+    }
+    case 'tool-call-delta': {
+      const toolCallDeltaRun = ensureAgentRunState(bufferedSteps, payload.runId!);
+      bufferedSteps.set(payload.runId!, {
+        ...toolCallDeltaRun,
+        pendingToolCalls: appendPendingToolCallArgs(toolCallDeltaRun.pendingToolCalls, payload.payload),
+      });
+      hasChanged = true;
+      break;
+    }
+    case 'tool-call-input-streaming-end': {
+      const toolInputEndRun = ensureAgentRunState(bufferedSteps, payload.runId!);
+      const existing = toolInputEndRun.pendingToolCalls?.find(
+        (call: PendingAgentToolCall) => call.toolCallId === payload.payload.toolCallId,
+      );
+      bufferedSteps.set(payload.runId!, {
+        ...toolInputEndRun,
+        pendingToolCalls: upsertPendingToolCall(toolInputEndRun.pendingToolCalls, payload.payload.toolCallId, {
+          toolName: existing?.toolName || '',
+          state: 'input-available',
+          providerMetadata: payload.payload.providerMetadata ?? existing?.providerMetadata,
+        }),
+      });
+      hasChanged = true;
+      break;
+    }
     case 'finish':
       bufferedSteps.set(payload.runId!, {
         ...bufferedSteps.get(payload.runId!),
@@ -609,6 +723,10 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
     case 'tool-call':
       bufferedSteps.set(payload.runId!, {
         ...bufferedSteps.get(payload.runId!),
+        pendingToolCalls: removePendingToolCall(
+          bufferedSteps.get(payload.runId)!.pendingToolCalls,
+          payload.payload.toolCallId,
+        ),
         toolCalls: [...bufferedSteps.get(payload.runId)!.toolCalls, payload.payload],
       });
       hasChanged = true;
@@ -617,6 +735,7 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
       const toolResultRun = ensureAgentRunState(bufferedSteps, payload.runId!);
       bufferedSteps.set(payload.runId!, {
         ...toolResultRun,
+        pendingToolCalls: removePendingToolCall(toolResultRun.pendingToolCalls, payload.payload.toolCallId),
         toolResults: [...toolResultRun.toolResults, payload.payload],
       });
       hasChanged = true;
@@ -654,6 +773,7 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
         ...stepRunWithoutSteps,
         text: stepText,
         reasoning: stepReasoning,
+        pendingToolCalls: [],
         stepType: stepRun.steps.length === 0 ? 'initial' : 'tool-result',
         reasoningText: stepReasoning.join(''),
         staticToolCalls: stepRun.toolCalls.filter(
@@ -695,6 +815,7 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
         sources: [],
         files: [],
         toolCalls: [],
+        pendingToolCalls: [],
         toolResults: [],
         usage: payload.payload.output.usage,
         warnings: payload.payload.stepResult.warnings || [],

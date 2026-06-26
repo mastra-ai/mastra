@@ -6,9 +6,10 @@ export type UseMastraInstanceStatusResponse = {
 
 const getMastraInstanceStatus = async (
   endpoint: string = 'http://localhost:4111',
+  headers?: Record<string, string>,
 ): Promise<UseMastraInstanceStatusResponse> => {
   try {
-    const response = await fetch(endpoint);
+    const response = await fetch(endpoint, { headers });
 
     return { status: response.ok ? 'active' : 'inactive' };
   } catch {
@@ -16,10 +17,13 @@ const getMastraInstanceStatus = async (
   }
 };
 
-export const useMastraInstanceStatus = (endpoint: string = 'http://localhost:4111') => {
+export const useMastraInstanceStatus = (
+  endpoint: string = 'http://localhost:4111',
+  headers?: Record<string, string>,
+) => {
   return useQuery({
-    queryKey: ['mastra-instance-status', endpoint],
-    queryFn: () => getMastraInstanceStatus(endpoint),
+    queryKey: ['mastra-instance-status', endpoint, headers],
+    queryFn: () => getMastraInstanceStatus(endpoint, headers),
     retry: false,
   });
 };

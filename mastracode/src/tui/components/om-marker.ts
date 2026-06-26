@@ -3,8 +3,9 @@
  * Supports updating in-place (start → end/failed).
  */
 
-import { Container, Text, Spacer } from '@mariozechner/pi-tui';
+import { Container, Text } from '@earendil-works/pi-tui';
 import { BOX_INDENT, theme } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 
 /**
  * Format token count for display (e.g., 7234 -> "7.2k", 234 -> "0.2k", 0 -> "0")
@@ -70,11 +71,8 @@ export type OMMarkerData =
       operationType: 'observation' | 'reflection';
       tokensActivated: number;
       observationTokens: number;
-    }
-  | {
-      type: 'om_activation_ttl';
-      activateAfterIdle: number;
-      ttlExpiredMs: number;
+      activationCount?: number;
+      activateAfterIdle?: number;
     }
   | {
       type: 'om_activation_provider_change';
@@ -98,7 +96,6 @@ export class OMMarkerComponent extends Container {
     super();
     this.textChild = new Text(formatMarker(data), BOX_INDENT, 0);
     this.addChild(this.textChild);
-    this.addChild(new Spacer(1));
   }
 
   /**
@@ -106,6 +103,10 @@ export class OMMarkerComponent extends Container {
    */
   update(data: OMMarkerData): void {
     this.textChild.setText(formatMarker(data));
+  }
+
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'other';
   }
 }
 function formatMarker(data: OMMarkerData): string {
@@ -165,12 +166,13 @@ function formatMarker(data: OMMarkerData): string {
       }
       const msgTokens = formatTokens(data.tokensActivated);
       const obsTokens = formatTokens(data.observationTokens);
-      return theme.fg('success', `  ✓ Activated observations: -${msgTokens} msg tokens, +${obsTokens} obs tokens`);
-    }
-    case 'om_activation_ttl': {
+      const label =
+        data.activationCount && data.activationCount > 1 ? `${data.activationCount} observations` : 'observations';
+      const idleSuffix =
+        data.activateAfterIdle !== undefined ? ` (${formatDuration(data.activateAfterIdle)} idle timeout)` : '';
       return theme.fg(
-        'muted',
-        `  Idle timeout (${formatDuration(data.activateAfterIdle)}) exceeded by ${formatDuration(data.ttlExpiredMs)}, activating observations`,
+        'success',
+        `  ✓ Activated ${label}: -${msgTokens} msg tokens, +${obsTokens} obs tokens${idleSuffix}`,
       );
     }
     case 'om_activation_provider_change': {

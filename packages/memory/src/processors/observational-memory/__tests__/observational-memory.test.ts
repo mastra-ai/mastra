@@ -1,6 +1,7 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { coreFeatures } from '@mastra/core/features';
+import { MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
@@ -2172,6 +2173,227 @@ describe('Observer Agent Helpers', () => {
       expect(joinedText).toContain('[truncated ~');
       expect(joinedText).not.toContain('y'.repeat(200));
     });
+
+    describe('attachmentFilter', () => {
+      const buildMessageWithAttachments = (): MastraDBMessage => {
+        const msg = createTestMessage('ignored', 'user');
+        msg.content = {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Mixed attachments.' },
+            { type: 'image', image: 'https://example.com/diagram.png', mimeType: 'image/png' } as any,
+            {
+              type: 'file',
+              data: 'https://example.com/floorplan.pdf',
+              mimeType: 'application/pdf',
+              filename: 'floorplan.pdf',
+            } as any,
+          ],
+        };
+        return msg;
+      };
+
+      it('forwards all attachment parts when attachmentFilter is true', () => {
+        const historyMessage = buildObserverHistoryMessage([buildMessageWithAttachments()], {
+          attachmentFilter: true,
+        });
+        const content = historyMessage.content as any[];
+
+        expect(content.some(part => part.type === 'image' && part.image === 'https://example.com/diagram.png')).toBe(
+          true,
+        );
+        expect(content.some(part => part.type === 'file' && part.data === 'https://example.com/floorplan.pdf')).toBe(
+          true,
+        );
+        const joined = content
+          .filter(part => part.type === 'text')
+          .map(part => part.text)
+          .join('\n');
+        expect(joined).toContain('[Image #1: diagram.png]');
+        expect(joined).toContain('[File #1: floorplan.pdf]');
+      });
+
+      it('drops every attachment part when attachmentFilter is false but keeps placeholders', () => {
+        const historyMessage = buildObserverHistoryMessage([buildMessageWithAttachments()], {
+          attachmentFilter: false,
+        });
+        const content = historyMessage.content as any[];
+
+        expect(content.some(part => part.type === 'image')).toBe(false);
+        expect(content.some(part => part.type === 'file')).toBe(false);
+
+        const joined = content
+          .filter(part => part.type === 'text')
+          .map(part => part.text)
+          .join('\n');
+        expect(joined).toContain('[Image #1: diagram.png]');
+        expect(joined).toContain('[File #1: floorplan.pdf]');
+      });
+
+      it('honors a mimeType allowlist with glob patterns', () => {
+        const historyMessage = buildObserverHistoryMessage([buildMessageWithAttachments()], {
+          attachmentFilter: ['image/*'],
+        });
+        const content = historyMessage.content as any[];
+
+        expect(content.some(part => part.type === 'image' && part.image === 'https://example.com/diagram.png')).toBe(
+          true,
+        );
+        expect(content.some(part => part.type === 'file' && part.data === 'https://example.com/floorplan.pdf')).toBe(
+          false,
+        );
+
+        const joined = content
+          .filter(part => part.type === 'text')
+          .map(part => part.text)
+          .join('\n');
+        expect(joined).toContain('[Image #1: diagram.png]');
+        expect(joined).toContain('[File #1: floorplan.pdf]');
+      });
+
+      it('treats an empty allowlist like attachmentFilter: false', () => {
+        const historyMessage = buildObserverHistoryMessage([buildMessageWithAttachments()], {
+          attachmentFilter: [],
+        });
+        const content = historyMessage.content as any[];
+
+        expect(content.some(part => part.type === 'image' || part.type === 'file')).toBe(false);
+
+        const joined = content
+          .filter(part => part.type === 'text')
+          .map(part => part.text)
+          .join('\n');
+        expect(joined).toContain('[Image #1: diagram.png]');
+        expect(joined).toContain('[File #1: floorplan.pdf]');
+      });
+
+      it('treats a bare "*" allowlist as allow-all', () => {
+        const historyMessage = buildObserverHistoryMessage([buildMessageWithAttachments()], {
+          attachmentFilter: ['*'],
+        });
+        const content = historyMessage.content as any[];
+
+        expect(content.some(part => part.type === 'image' && part.image === 'https://example.com/diagram.png')).toBe(
+          true,
+        );
+        expect(content.some(part => part.type === 'file' && part.data === 'https://example.com/floorplan.pdf')).toBe(
+          true,
+        );
+
+        const joined = content
+          .filter(part => part.type === 'text')
+          .map(part => part.text)
+          .join('\n');
+        expect(joined).toContain('[Image #1: diagram.png]');
+        expect(joined).toContain('[File #1: floorplan.pdf]');
+      });
+
+      it('matches exact mimeTypes case-insensitively', () => {
+        const historyMessage = buildObserverHistoryMessage([buildMessageWithAttachments()], {
+          attachmentFilter: ['APPLICATION/PDF'],
+        });
+        const content = historyMessage.content as any[];
+
+        expect(content.some(part => part.type === 'image')).toBe(false);
+        expect(content.some(part => part.type === 'file' && part.data === 'https://example.com/floorplan.pdf')).toBe(
+          true,
+        );
+      });
+
+      it('also filters hoisted tool-result attachments', () => {
+        const base64 = 'B'.repeat(1500);
+        const msg = createTestMessage('ignored', 'assistant');
+        msg.content = {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tool-1',
+                toolName: 'captureAssets',
+                args: {},
+                result: {},
+              },
+              providerMetadata: {
+                mastra: {
+                  modelOutput: {
+                    type: 'content',
+                    value: [
+                      { type: 'image-data', data: base64, mediaType: 'image/png' },
+                      {
+                        type: 'file-url',
+                        url: 'https://example.com/report.pdf',
+                        mediaType: 'application/pdf',
+                        filename: 'report.pdf',
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          ],
+        } as any;
+
+        const historyMessage = buildObserverHistoryMessage([msg], {
+          attachmentFilter: ['image/*'],
+        });
+        const content = historyMessage.content as any[];
+
+        expect(content.some(part => part.type === 'image')).toBe(true);
+        expect(content.some(part => part.type === 'file')).toBe(false);
+
+        const joined = content
+          .filter(part => part.type === 'text')
+          .map(part => part.text)
+          .join('\n');
+        expect(joined).toContain('[Image #1: image/png]');
+        expect(joined).toContain('[File #1: report.pdf]');
+        expect(joined).not.toContain(base64);
+      });
+
+      it('replaces tool-result attachments with placeholders even when attachmentFilter is false', () => {
+        const base64 = 'C'.repeat(1500);
+        const msg = createTestMessage('ignored', 'assistant');
+        msg.content = {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tool-1',
+                toolName: 'captureAssets',
+                args: {},
+                result: {},
+              },
+              providerMetadata: {
+                mastra: {
+                  modelOutput: {
+                    type: 'content',
+                    value: [{ type: 'image-data', data: base64, mediaType: 'image/png' }],
+                  },
+                },
+              },
+            },
+          ],
+        } as any;
+
+        const historyMessage = buildObserverHistoryMessage([msg], {
+          attachmentFilter: false,
+        });
+        const content = historyMessage.content as any[];
+
+        expect(content.some(part => part.type === 'image' || part.type === 'file')).toBe(false);
+
+        const joined = content
+          .filter(part => part.type === 'text')
+          .map(part => part.text)
+          .join('\n');
+        expect(joined).toContain('[Image #1: image/png]');
+        expect(joined).not.toContain(base64);
+      });
+    });
   });
 
   describe('buildObserverPrompt', () => {
@@ -2314,6 +2536,185 @@ describe('Observer Agent Helpers', () => {
           filename: 'floorplan.pdf',
         }),
       );
+    });
+
+    it('auto mode resolves function-based observer model and drops attachments for text-only models', async () => {
+      let capturedPrompt: any;
+
+      // Simulate a function-based model that returns a text-only model string
+      const textOnlyModelFn = ({ requestContext: _rc }: { requestContext: any }) => 'deepseek/deepseek-v4-flash';
+
+      const observer = new ObserverRunner({
+        observationConfig: {
+          model: textOnlyModelFn,
+          messageTokens: 1000,
+          bufferTokens: false,
+          previousObserverTokens: 1000,
+          observeAttachments: 'auto',
+        } as any,
+        observedMessageIds: new Set(),
+        resolveModel: () => ({ model: textOnlyModelFn as any }),
+        tokenCounter: {
+          countMessages: () => 1,
+        } as any,
+      });
+
+      vi.spyOn(observer as any, 'createAgent').mockReturnValue({
+        stream: async (prompt: any) => {
+          capturedPrompt = prompt;
+          return {
+            getFullOutput: async () => ({
+              text: '<observations>\n- test\n</observations>',
+              usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+            }),
+          };
+        },
+      });
+
+      // Mock modelSupportsAttachments to return false for our text-only model
+      const llmModule = await import('@mastra/core/llm');
+      const spy = vi.spyOn(llmModule, 'modelSupportsAttachments').mockReturnValue(false);
+
+      try {
+        const message = createTestMessage('ignored', 'user');
+        message.content = {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Please check this image.' },
+            { type: 'image', image: 'https://example.com/photo.png', mimeType: 'image/png' } as any,
+          ],
+        };
+
+        const requestContext = new RequestContext();
+        requestContext.set(MASTRA_THREAD_ID_KEY, 'test-thread');
+
+        await observer.call(undefined, [message], undefined, {
+          requestContext,
+        });
+
+        // The function model should be resolved with requestContext, looked up,
+        // found to not support attachments, and attachments should be dropped
+        expect(spy).toHaveBeenCalledWith('deepseek/deepseek-v4-flash');
+        const content = capturedPrompt[1].content as any[];
+        expect(content.some((part: any) => part.type === 'image')).toBe(false);
+        const joined = content
+          .filter((part: any) => part.type === 'text')
+          .map((part: any) => part.text)
+          .join('\n');
+        expect(joined).toContain('[Image #1: photo.png]');
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('auto mode drops attachments for OpenRouter text-only models using provider capabilities', async () => {
+      let capturedPrompt: any;
+
+      const observer = new ObserverRunner({
+        observationConfig: {
+          model: 'openrouter/deepseek/deepseek-v4-flash',
+          messageTokens: 1000,
+          bufferTokens: false,
+          previousObserverTokens: 1000,
+          observeAttachments: 'auto',
+        } as any,
+        observedMessageIds: new Set(),
+        resolveModel: () => ({ model: 'openrouter/deepseek/deepseek-v4-flash' as any }),
+        tokenCounter: {
+          countMessages: () => 1,
+        } as any,
+      });
+
+      vi.spyOn(observer as any, 'createAgent').mockReturnValue({
+        stream: async (prompt: any) => {
+          capturedPrompt = prompt;
+          return {
+            getFullOutput: async () => ({
+              text: '<observations>\n- test\n</observations>',
+              usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+            }),
+          };
+        },
+      });
+
+      const message = createTestMessage('ignored', 'user');
+      message.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Please check this image.' },
+          { type: 'image', image: 'https://example.com/photo.png', mimeType: 'image/png' } as any,
+        ],
+      };
+
+      await observer.call(undefined, [message]);
+
+      const content = capturedPrompt[1].content as any[];
+      expect(content.some((part: any) => part.type === 'image')).toBe(false);
+      const joined = content
+        .filter((part: any) => part.type === 'text')
+        .map((part: any) => part.text)
+        .join('\n');
+      expect(joined).toContain('[Image #1: photo.png]');
+    });
+
+    it('auto mode forwards attachments for multimodal function-based observer model', async () => {
+      let capturedPrompt: any;
+
+      const multimodalModelFn = ({ requestContext: _rc }: { requestContext: any }) => 'openai/gpt-4o';
+
+      const observer = new ObserverRunner({
+        observationConfig: {
+          model: multimodalModelFn,
+          messageTokens: 1000,
+          bufferTokens: false,
+          previousObserverTokens: 1000,
+          observeAttachments: 'auto',
+        } as any,
+        observedMessageIds: new Set(),
+        resolveModel: () => ({ model: multimodalModelFn as any }),
+        tokenCounter: {
+          countMessages: () => 1,
+        } as any,
+      });
+
+      vi.spyOn(observer as any, 'createAgent').mockReturnValue({
+        stream: async (prompt: any) => {
+          capturedPrompt = prompt;
+          return {
+            getFullOutput: async () => ({
+              text: '<observations>\n- test\n</observations>',
+              usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+            }),
+          };
+        },
+      });
+
+      const llmModule = await import('@mastra/core/llm');
+      const spy = vi.spyOn(llmModule, 'modelSupportsAttachments').mockReturnValue(true);
+
+      try {
+        const message = createTestMessage('ignored', 'user');
+        message.content = {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Please check this image.' },
+            { type: 'image', image: 'https://example.com/photo.png', mimeType: 'image/png' } as any,
+          ],
+        };
+
+        const requestContext = new RequestContext();
+        requestContext.set(MASTRA_THREAD_ID_KEY, 'test-thread');
+
+        await observer.call(undefined, [message], undefined, {
+          requestContext,
+        });
+
+        expect(spy).toHaveBeenCalledWith('openai/gpt-4o');
+        const content = capturedPrompt[1].content as any[];
+        expect(content.some((part: any) => part.type === 'image')).toBe(true);
+      } finally {
+        spy.mockRestore();
+      }
     });
 
     it('should inject thread title instructions into the observer request when enabled', async () => {
@@ -2904,7 +3305,13 @@ describe('didProviderChange', () => {
 
   it('returns true when both sides are fully-formatted but differ', () => {
     expect(didProviderChange('openai/gpt-4o', 'anthropic/claude-opus-4-7')).toBe(true);
-    expect(didProviderChange('openai.responses/gpt-5.4', 'openai/gpt-5.4')).toBe(true);
+    expect(didProviderChange('openai/gpt-4o', 'openai/gpt-5.4')).toBe(true);
+    expect(didProviderChange('openai.responses/gpt-4o', 'openai/gpt-5.4')).toBe(true);
+  });
+
+  it('returns false when provider subnamespaces differ but base provider and modelId match', () => {
+    expect(didProviderChange('openai.responses/gpt-5.4', 'openai/gpt-5.4')).toBe(false);
+    expect(didProviderChange('openai/gpt-5.4', 'openai.responses/gpt-5.4')).toBe(false);
   });
 
   it('returns false when persisted history has bare modelId that matches actor modelId', () => {
@@ -13236,6 +13643,68 @@ describe('Single-thread replay red tests', () => {
     expect(remainingText).toContain('new-after-boundary');
   });
 
+  it('T1-C: historical response messages after an inflated watermark should not replay', async () => {
+    const { messageList, threadId, resourceId } = await createReplayFixture();
+
+    const observedUserAt = new Date('2025-01-01T10:00:00.000Z');
+    const observedResponseAt = new Date('2025-01-01T10:00:01.000Z');
+    const lastObservedAt = new Date('2025-01-01T10:00:02.000Z');
+    const futurePartTimestamp = new Date('2025-01-02T10:00:00.000Z').getTime();
+
+    messageList.add(
+      {
+        id: 'observed-user',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'already-observed-user' }] },
+        createdAt: observedUserAt,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'watermark-advancer',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: {
+          format: 2,
+          content: 'already-observed-watermark',
+          parts: [{ type: 'text', text: 'already-observed-watermark', createdAt: futurePartTimestamp }],
+        },
+        createdAt: lastObservedAt,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'observed-response',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          content: 'already-observed-response',
+          parts: [{ type: 'text', text: 'already-observed-response' }],
+        },
+        createdAt: observedResponseAt,
+      } as any,
+      'response',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: { observedMessageIds: ['watermark-advancer'], lastObservedAt } as any,
+      fallbackCursor: { createdAt: lastObservedAt.toISOString(), id: 'observed-response' },
+    });
+
+    expect(messageList.get.all.db().map((m: any) => m.id)).toEqual([]);
+    expect(getModelVisibleText(messageList)).not.toContain('already-observed-response');
+  });
+
   it('T2-B: marker-bearing mixed message should be trimmed to post-marker parts only', async () => {
     const { messageList, threadId, resourceId } = await createReplayFixture();
 
@@ -13958,6 +14427,40 @@ describe('Single-thread replay red tests', () => {
 
     releaseSave();
     await savePromise;
+  });
+
+  it('T4-D: preserves current step messages during observed-message filtering', async () => {
+    const { messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const observed = {
+      id: 'already-observed',
+      threadId,
+      resourceId,
+      role: 'assistant',
+      content: { format: 2, parts: [{ type: 'text', text: 'already seen' }] },
+      createdAt: t0,
+    } as any;
+    const currentInput = {
+      id: 'current-input',
+      threadId,
+      resourceId,
+      role: 'user',
+      content: { format: 2, parts: [{ type: 'text', text: 'current turn input' }] },
+      createdAt: t0,
+    } as any;
+
+    messageList.add(observed, 'memory');
+    messageList.add(currentInput, 'input');
+
+    filterObservedMessages({
+      messageList,
+      record: { observedMessageIds: ['already-observed'], lastObservedAt: t0 } as any,
+      preserveMessageIds: new Set(['current-input']),
+    });
+
+    const remainingIds = messageList.get.all.db().map((m: any) => m.id);
+    expect(remainingIds).toEqual(['current-input']);
   });
 
   it('T5-A: part excluded by getUnobservedMessages should not survive step-0 filter', async () => {

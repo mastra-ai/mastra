@@ -1,0 +1,225 @@
+---
+title: "Reference: FilesSDKFilesystem | Workspace"
+description: "Documentation for the FilesSDKFilesystem provider, a unified adapter for S3, R2, GCS, Azure Blob, Vercel Blob, and other FilesSDK backends."
+packages:
+  - "@mastra/files-sdk"
+---
+
+# FilesSDKFilesystem
+
+Stores files in any storage backend supported by [FilesSDK](https://files-sdk.dev) — a unified abstraction over S3, Cloudflare R2, Google Cloud Storage, Azure Blob, Vercel Blob, MinIO, the local filesystem, and more.
+
+:::info
+
+For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/filesystem).
+
+:::
+
+Use `FilesSDKFilesystem` when you want a single adapter that can target multiple storage backends with the same code. Swap the underlying driver without changing the workspace setup. If you only target one backend and want first-class options for that backend, prefer the dedicated provider (for example [`S3Filesystem`](/reference/workspace/s3-filesystem) or [`GCSFilesystem`](/reference/workspace/gcs-filesystem)).
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/files-sdk files-sdk
+```
+
+`files-sdk` is a peer dependency you configure with the adapter you want to use.
+
+## Usage
+
+Create a `Files` instance from FilesSDK with the adapter of your choice, then pass it to `FilesSDKFilesystem`:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { FilesSDKFilesystem } from '@mastra/files-sdk'
+import { Files } from 'files-sdk'
+import { s3 } from 'files-sdk/s3'
+
+const files = new Files({
+  adapter: s3({
+    bucket: 'my-bucket',
+    region: 'us-east-1',
+  }),
+})
+
+const workspace = new Workspace({
+  filesystem: new FilesSDKFilesystem({ files }),
+})
+
+const agent = new Agent({
+  name: 'file-agent',
+  model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
+  workspace,
+})
+```
+
+### Swapping adapters
+
+The same `FilesSDKFilesystem` works with any FilesSDK adapter. Replace the driver factory to switch backends:
+
+```typescript
+import { Files } from 'files-sdk'
+import { r2 } from 'files-sdk/r2'
+import { gcs } from 'files-sdk/gcs'
+import { azure } from 'files-sdk/azure'
+import { fs } from 'files-sdk/fs'
+
+// Cloudflare R2
+const r2Files = new Files({ adapter: r2({ accountId, bucket, accessKeyId, secretAccessKey }) })
+
+// Google Cloud Storage
+const gcsFiles = new Files({ adapter: gcs({ bucket, projectId }) })
+
+// Azure Blob
+const azureFiles = new Files({ adapter: azure({ container, connectionString }) })
+
+// Local filesystem (useful for tests and development)
+const localFiles = new Files({ adapter: fs({ root: './workspace' }) })
+```
+
+See the [FilesSDK documentation](https://files-sdk.dev) for the full adapter catalog and configuration options.
+
+### Read-only mounts
+
+```typescript
+const filesystem = new FilesSDKFilesystem({
+  files,
+  readOnly: true,
+})
+```
+
+All write operations (`writeFile`, `appendFile`, `deleteFile`, `copyFile`, `moveFile`, `mkdir`, `rmdir`) throw `WorkspaceReadOnlyError` while reads succeed.
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'files',
+    type: 'Files',
+    description: 'A pre-configured FilesSDK `Files` instance bound to the adapter and credentials you want to use.',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this filesystem instance.',
+    isOptional: true,
+    defaultValue: 'Auto-generated',
+  },
+  {
+    name: 'displayName',
+    type: 'string',
+    description: 'Human-friendly display name for the UI.',
+    isOptional: true,
+  },
+  {
+    name: 'icon',
+    type: 'FilesystemIcon',
+    description: 'Icon identifier for the UI.',
+    isOptional: true,
+  },
+  {
+    name: 'description',
+    type: 'string',
+    description: 'Short description of this filesystem for the UI.',
+    isOptional: true,
+  },
+  {
+    name: 'readOnly',
+    type: 'boolean',
+    description: 'When true, all write operations are blocked.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Filesystem instance identifier.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: "Provider name ('FilesSDKFilesystem').",
+  },
+  {
+    name: 'provider',
+    type: 'string',
+    description: "Provider identifier ('files-sdk').",
+  },
+  {
+    name: 'readOnly',
+    type: 'boolean | undefined',
+    description: 'Whether the filesystem is in read-only mode.',
+  },
+]}
+/>
+
+## Methods
+
+`FilesSDKFilesystem` implements the [WorkspaceFilesystem interface](/reference/workspace/filesystem), providing all standard filesystem methods:
+
+- `readFile(path, options?)` - Read file contents
+- `writeFile(path, content, options?)` - Write content to a file
+- `appendFile(path, content)` - Append content to a file
+- `deleteFile(path, options?)` - Delete a file
+- `copyFile(src, dest, options?)` - Copy a file
+- `moveFile(src, dest, options?)` - Move or rename a file
+- `mkdir(path, options?)` - Create a directory (no-op for object stores)
+- `rmdir(path, options?)` - Remove a directory
+- `readdir(path, options?)` - List directory contents
+- `exists(path)` - Check if a path exists
+- `stat(path)` - Get file or directory metadata
+
+### `init()`
+
+Initialize the filesystem. Verifies that the configured adapter can list keys with the supplied credentials.
+
+```typescript
+await filesystem.init()
+```
+
+### `getInfo()`
+
+Returns metadata about this filesystem instance.
+
+```typescript
+const info = filesystem.getInfo()
+// { id: '...', name: 'FilesSDKFilesystem', provider: 'files-sdk', status: 'ready' }
+```
+
+### `files`
+
+The underlying FilesSDK `Files` instance is exposed as a public property if you need to call adapter-specific APIs directly.
+
+```typescript
+const url = await filesystem.files.url('reports/q3.pdf')
+```
+
+## Object-store semantics
+
+`FilesSDKFilesystem` treats the configured backend as an object store, even when the underlying adapter is hierarchical (such as `fs`). This keeps behavior consistent across adapters:
+
+- **`mkdir`** is a no-op. Directories exist implicitly when keys with that prefix exist.
+- **`exists`** returns `true` only when an exact key is present as a file, or when the path is a prefix that contains at least one child key. Empty leftover directories on hierarchical adapters don't count.
+- **`deleteFile`** throws `FileNotFoundError` when the key doesn't exist, unless `{ force: true }` is passed.
+- **`deleteFile`** on a directory delegates to `rmdir({ recursive: true })`, matching the [`S3Filesystem`](/reference/workspace/s3-filesystem) and [`GCSFilesystem`](/reference/workspace/gcs-filesystem) behavior.
+- **`moveFile`** is implemented as `copyFile` followed by `deleteFile`. it's **not atomic** — if the source delete fails after a successful copy, the destination remains and the source isn't removed.
+- **`appendFile`** is a read-modify-write operation. Concurrent appends to the same key may overwrite each other; this is inherent to object storage and not specific to FilesSDK.
+- **`readdir({ recursive: true })`** emits intermediate directory entries (for example, `a/b` is emitted alongside `a/b/c.txt`).
+
+## Related
+
+- [WorkspaceFilesystem interface](/reference/workspace/filesystem)
+- [S3Filesystem reference](/reference/workspace/s3-filesystem)
+- [GCSFilesystem reference](/reference/workspace/gcs-filesystem)
+- [AzureBlobFilesystem reference](/reference/workspace/azure-blob-filesystem)
+- [Workspace overview](/docs/workspace/overview)
+- [FilesSDK documentation](https://files-sdk.dev)

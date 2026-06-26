@@ -1,15 +1,10 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import {
-  Button,
-  EmptyState,
-  Entity,
-  EntityContent,
-  EntityName,
-  EntityDescription,
-  ScrollArea,
-  Searchbar,
-  Switch,
-} from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Entity, EntityContent, EntityName, EntityDescription } from '@mastra/playground-ui/components/Entity';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Searchbar } from '@mastra/playground-ui/components/Searchbar';
+import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Plus, Drill } from 'lucide-react';
 import { useState } from 'react';
 import { useWatch } from 'react-hook-form';
@@ -123,12 +118,7 @@ export function SkillsPage() {
         )}
       </div>
 
-      <SkillEditDialog
-        isOpen={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        onSkillCreated={handleSkillCreated}
-        readOnly={readOnly}
-      />
+      <SkillEditDialog isOpen={dialogOpen} onClose={() => setDialogOpen(false)} onSkillCreated={handleSkillCreated} />
     </ScrollArea>
   );
 }

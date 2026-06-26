@@ -1,19 +1,21 @@
 /**
- * GoalManager — persistent cross-turn goals (Ralph loop).
+ * GoalManager — persistent cross-turn goals, backed by the Agent's native goal
+ * mechanism.
  *
- * When a goal is active, after each completed agent turn the manager calls
- * a lightweight judge to check whether the objective has been satisfied.
- * If not, a continuation prompt is fed back as a user message automatically.
- *
- * Inspired by Hermes /goal and Codex /goal (Ralph loop pattern).
+ * The objective lives in the durable `threadState` `'goal'` slot (via
+ * `agent.setObjective`/`getObjective`/`clearObjective`/`updateObjectiveOptions`)
+ * and is judged in-loop by the core goal step. This manager is a thin adapter:
+ * it keeps a synchronous in-memory view of the current objective for the TUI
+ * (status line, modal, keyboard shortcuts) and delegates persistence to the
+ * agent. There is no standalone judge agent and no between-turn re-invocation —
+ * the core goal step drives continuation and surfaces progress via `goal` stream
+ * chunks.
  */
 import { randomUUID } from 'node:crypto';
-import { Agent } from '@mastra/core/agent';
-import type { MastraMemory } from '@mastra/core/memory';
-import { PrefillErrorHandler, ProviderHistoryCompat, StreamErrorRetryProcessor } from '@mastra/core/processors';
-import { z } from 'zod';
+import type { Agent } from '@mastra/core/agent';
+import type { GoalObjectiveRecord } from '@mastra/core/storage';
 
-import { resolveModel } from '../agents/model.js';
+import { loadSettings } from '../onboarding/settings.js';
 
 import type { TUIState } from './state.js';
 
@@ -23,6 +25,11 @@ import type { TUIState } from './state.js';
 
 export type GoalStatus = 'active' | 'paused' | 'done';
 
+/**
+ * TUI-facing view of a goal. Derived from the durable {@link GoalObjectiveRecord}
+ * plus the effective judge/max-runs settings, with display-only timer fields and
+ * a stable `id` used to match plan-started goals.
+ */
 export interface GoalState {
   id: string;
   objective: string;
@@ -30,16 +37,9 @@ export interface GoalState {
   turnsUsed: number;
   maxTurns: number;
   judgeModelId: string;
-}
-
-export interface GoalJudgeResult {
-  decision: 'done' | 'continue' | 'waiting' | 'paused';
-  reason: string;
-}
-
-export interface GoalEvaluationResult {
-  continuation: string | null;
-  judgeResult: GoalJudgeResult | null;
+  startedAt: string;
+  activeStartedAt?: string;
+  activeDurationMs?: number;
 }
 
 // =============================================================================
@@ -49,41 +49,40 @@ export interface GoalEvaluationResult {
 export const DEFAULT_MAX_TURNS = 50;
 const THREAD_GOAL_KEY = 'goal';
 
-const JUDGE_SYSTEM_PROMPT = `You are the goal judge. Your decision directly controls whether the assistant continues working toward the goal.
-
-Given a goal and the assistant's latest response, reason about whether the goal's requirements have been satisfied. Compare what the goal asks for against what the assistant has actually produced. Focus on substance, not phrasing.
-
-Use "done" when the goal is fully achieved.
-Use "waiting" only when the goal explicitly requires a user checkpoint, user feedback, human verification, human confirmation, or another external event outside the goal-judge loop before the assistant should continue, and the assistant has correctly stopped at that checkpoint. Do not use "waiting" merely because the assistant asked a question or could benefit from user input.
-Use "continue" when the goal is not done and the assistant should keep working autonomously, including when it asked for input that the goal did not explicitly require.
-If your previous decision was "waiting" for an explicit user checkpoint, keep choosing "waiting" when the user's latest response asks a question, requests clarification, or otherwise does not satisfy the checkpoint. Do not continue until the required user feedback/confirmation/verification has actually been provided.
-If the goal says to wait for the goal judge, judge, evaluator, or you to respond, approve, verify, validate, tell the assistant to continue, or otherwise provide the next signal, treat your own decision as that judge response. Verification can be performed by you unless the goal explicitly says it needs human/user verification. Choose "continue" when the assistant should proceed to the next step. Do not choose "waiting" for judge-controlled checkpoints, because that would mean waiting for yourself.
-
-Your "reason" field is sent back to the assistant as guidance when the goal is not yet done — be specific about what still needs to be accomplished. When choosing "continue", write the reason as an instruction for what the assistant should do next. When choosing "waiting", explain what specific user checkpoint is still outstanding.`;
-
-const judgeSchema = z.object({
-  decision: z
-    .enum(['done', 'continue', 'waiting'])
-    .describe(
-      'Whether the goal is done, should continue autonomously, or is at an explicit user checkpoint required by the goal',
-    ),
-  reason: z.string().describe('Brief explanation of what was accomplished or what remains to be done'),
-});
-
 // =============================================================================
 // GoalManager
 // =============================================================================
 
 export class GoalManager {
-  private goal: GoalState | null = null;
+  /** Synchronous in-memory view of the active objective record (source of truth is ThreadState). */
+  private record: (GoalObjectiveRecord & { id: string }) | null = null;
+  /** Display-only active-timer accounting (not persisted to the objective record). */
+  private activeStartedAt: string | null = null;
+  private activeDurationMs = 0;
   private persistGoalOnNextThreadCreate = false;
 
+  // ---------------------------------------------------------------------------
+  // Synchronous TUI surface
+  // ---------------------------------------------------------------------------
+
   getGoal(): GoalState | null {
-    return this.goal;
+    if (!this.record) return null;
+    const { judgeModelId, maxTurns } = this.effectiveSettings(this.record);
+    return {
+      id: this.record.id,
+      objective: this.record.objective,
+      status: this.record.status,
+      turnsUsed: this.record.runsUsed,
+      maxTurns,
+      judgeModelId,
+      startedAt: new Date(this.record.startedAt).toISOString(),
+      activeStartedAt: this.activeStartedAt ?? undefined,
+      activeDurationMs: this.activeDurationMs,
+    };
   }
 
   isActive(): boolean {
-    return this.goal?.status === 'active';
+    return this.record?.status === 'active';
   }
 
   persistOnNextThreadCreate(): void {
@@ -96,293 +95,278 @@ export class GoalManager {
     return true;
   }
 
-  /**
-   * Set a new goal objective. Resets turn counter.
-   */
-  setGoal(objective: string, judgeModelId: string, maxTurns: number = DEFAULT_MAX_TURNS): GoalState {
-    this.goal = {
-      id: randomUUID(),
-      objective,
-      status: 'active',
-      turnsUsed: 0,
-      maxTurns,
-      judgeModelId,
-    };
-    return this.goal;
+  startActiveTimer(): void {
+    if (this.record?.status === 'active' && !this.activeStartedAt) {
+      this.activeStartedAt = new Date().toISOString();
+    }
   }
 
+  stopActiveTimer(): void {
+    if (!this.activeStartedAt) return;
+    const startedMs = Date.parse(this.activeStartedAt);
+    if (Number.isFinite(startedMs)) {
+      this.activeDurationMs += Math.max(0, Date.now() - startedMs);
+    }
+    this.activeStartedAt = null;
+  }
+
+  /** Reset active-timer accounting to zero (e.g. for an untriggered plan goal). */
+  resetActiveTimer(): void {
+    this.activeStartedAt = null;
+    this.activeDurationMs = 0;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Objective lifecycle (ThreadState-backed via the agent)
+  // ---------------------------------------------------------------------------
+
   /**
-   * Load goal state from thread metadata (called on thread switch).
+   * Set a new objective. Persists to ThreadState via `agent.setObjective` and
+   * updates the in-memory view. Only the provided settings are persisted into
+   * the record; unset ones fall back to the agent's `goal` config at read time.
    */
-  loadFromThreadMetadata(metadata: Record<string, unknown> | undefined): void {
-    const saved = metadata?.[THREAD_GOAL_KEY] as GoalState | undefined;
-    if (saved && saved.objective && saved.status) {
-      this.goal = { ...saved, id: saved.id ?? randomUUID() };
+  async setGoal(
+    state: TUIState,
+    objective: string,
+    judgeModelId: string,
+    maxTurns: number = DEFAULT_MAX_TURNS,
+  ): Promise<GoalState | null> {
+    const threadId = state.session.thread.getId();
+    const agent = this.getAgent(state);
+    const now = Date.now();
+    const id = randomUUID();
+
+    if (agent && threadId) {
+      const persisted = await agent.setObjective(objective, {
+        id,
+        threadId,
+        resourceId: state.session.identity.getResourceId(),
+        ...(judgeModelId ? { judgeModelId } : {}),
+        maxRuns: maxTurns,
+      });
+      this.record = persisted
+        ? { ...persisted, id: persisted.id ?? id }
+        : this.localRecord(objective, judgeModelId, maxTurns, now, id);
     } else {
-      this.goal = null;
+      this.record = this.localRecord(objective, judgeModelId, maxTurns, now, id);
     }
-    this.persistGoalOnNextThreadCreate = false;
+
+    this.activeStartedAt = new Date(now).toISOString();
+    this.activeDurationMs = 0;
+    return this.getGoal();
   }
 
   /**
-   * Persist goal state to thread metadata.
+   * Update the judge model / max-runs defaults. Persists into the active record
+   * (so the override is remembered in thread state) when a goal is set.
    */
-  async saveToThread(state: TUIState): Promise<void> {
-    try {
-      if (this.goal) {
-        await state.harness.setThreadSetting({ key: THREAD_GOAL_KEY, value: this.goal });
-      } else {
-        await state.harness.setThreadSetting({ key: THREAD_GOAL_KEY, value: undefined });
-      }
-    } catch {
-      // Persistence is not critical
+  async updateJudgeDefaults(state: TUIState, judgeModelId: string, maxTurns: number): Promise<GoalState | null> {
+    if (!this.record) return null;
+    const threadId = state.session.thread.getId();
+    const agent = this.getAgent(state);
+    if (agent && threadId) {
+      const updated = await agent.updateObjectiveOptions({
+        threadId,
+        ...(judgeModelId ? { judgeModelId } : {}),
+        maxRuns: maxTurns,
+      });
+      if (updated) this.record = { ...updated, id: this.record.id };
+    } else {
+      this.record = {
+        ...this.record,
+        ...(judgeModelId ? { judgeModelId } : {}),
+        maxRuns: maxTurns,
+        updatedAt: Date.now(),
+      };
     }
+    return this.getGoal();
   }
 
-  pause(): GoalState | null {
-    if (this.goal && this.goal.status === 'active') {
-      this.goal.status = 'paused';
+  pause(reason?: string): GoalState | null {
+    if (this.record && this.record.status === 'active') {
+      this.stopActiveTimer();
+      this.record = { ...this.record, status: 'paused', pausedReason: reason, updatedAt: Date.now() };
     }
-    return this.goal;
+    return this.getGoal();
   }
 
   resume(): GoalState | null {
-    if (this.goal && this.goal.status === 'paused') {
-      this.goal.status = 'active';
+    if (this.record && this.record.status === 'paused') {
+      this.record = { ...this.record, status: 'active', pausedReason: undefined, updatedAt: Date.now() };
+      this.startActiveTimer();
     }
-    return this.goal;
-  }
-
-  updateJudgeDefaults(judgeModelId: string, maxTurns: number): GoalState | null {
-    if (this.goal) {
-      this.goal.judgeModelId = judgeModelId;
-      this.goal.maxTurns = maxTurns;
-    }
-    return this.goal;
-  }
-
-  clear(): void {
-    this.goal = null;
-    this.persistGoalOnNextThreadCreate = false;
+    return this.getGoal();
   }
 
   markDone(): void {
-    if (this.goal) {
-      this.goal.status = 'done';
+    if (this.record) {
+      this.stopActiveTimer();
+      this.record = { ...this.record, status: 'done', updatedAt: Date.now() };
+    }
+  }
+
+  clear(): void {
+    this.record = null;
+    this.activeStartedAt = null;
+    this.activeDurationMs = 0;
+    this.persistGoalOnNextThreadCreate = false;
+  }
+
+  /**
+   * Sync the latest objective record from ThreadState into the in-memory view.
+   * Called from the `goal` stream-chunk handler after each evaluation.
+   */
+  applyEvaluation(update: { runsUsed: number; status: GoalStatus }): GoalState | null {
+    if (!this.record) return null;
+    this.record = { ...this.record, runsUsed: update.runsUsed, status: update.status, updatedAt: Date.now() };
+    if (update.status !== 'active') this.stopActiveTimer();
+    return this.getGoal();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Persistence
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Persist the active objective to ThreadState via the agent. The objective
+   * record is the source of truth; the legacy thread-metadata key is cleared so
+   * stale state from older sessions does not resurface.
+   */
+  async saveToThread(state: TUIState): Promise<void> {
+    const threadId = state.session.thread.getId();
+    const agent = this.getAgent(state);
+    try {
+      if (agent && threadId) {
+        if (this.record) {
+          // Push the current status/options into the existing record. If no
+          // record is persisted yet (e.g. first save), create one.
+          const updated = await agent.updateObjectiveOptions({
+            threadId,
+            status: this.record.status,
+            ...(this.record.pausedReason ? { pausedReason: this.record.pausedReason } : {}),
+            ...(this.record.judgeModelId ? { judgeModelId: this.record.judgeModelId } : {}),
+            ...(this.record.maxRuns !== undefined ? { maxRuns: this.record.maxRuns } : {}),
+          });
+          if (!updated) {
+            // No persisted record yet: create one. `setObjective` always writes
+            // `status: 'active'`, so re-apply the in-memory status afterwards if
+            // the local goal was already paused/done — otherwise the resumed
+            // thread state would no longer match the in-memory state.
+            const desiredStatus = this.record.status;
+            await agent.setObjective(this.record.objective, {
+              id: this.record.id,
+              threadId,
+              resourceId: state.session.identity.getResourceId(),
+              ...(this.record.judgeModelId ? { judgeModelId: this.record.judgeModelId } : {}),
+              ...(this.record.maxRuns !== undefined ? { maxRuns: this.record.maxRuns } : {}),
+            });
+            if (desiredStatus !== 'active') {
+              await agent.updateObjectiveOptions({
+                threadId,
+                status: desiredStatus,
+                ...(this.record.pausedReason ? { pausedReason: this.record.pausedReason } : {}),
+              });
+            }
+          }
+        } else {
+          await agent.clearObjective({ threadId });
+        }
+      }
+      // Clear any legacy thread-metadata goal so it can't shadow the record.
+      await state.session.thread.setSetting({ key: THREAD_GOAL_KEY, value: undefined });
+    } catch {
+      // Persistence is not critical.
     }
   }
 
   /**
-   * Called after each agent turn completes. Evaluates whether to continue.
-   * Returns a GoalEvaluationResult with continuation prompt and judge result.
+   * Load the objective from ThreadState (called on thread switch). Falls back to
+   * the legacy thread-metadata goal for threads created before this migration.
    */
-  async evaluateAfterTurn(state: TUIState): Promise<GoalEvaluationResult> {
-    if (!this.goal || this.goal.status !== 'active') {
-      return { continuation: null, judgeResult: null };
-    }
+  async loadFromThread(state: TUIState): Promise<void> {
+    this.persistGoalOnNextThreadCreate = false;
+    this.activeStartedAt = null;
+    this.activeDurationMs = 0;
 
-    const evaluatedGoalId = this.goal.id;
-
-    // Get recent context, including the latest user message when available.
-    const context = await this.getRecentConversationContext(state);
-    if (!this.goal || this.goal.id !== evaluatedGoalId || this.goal.status !== 'active') {
-      return { continuation: null, judgeResult: null };
-    }
-    if (!context.lastAssistantContent) {
-      // No assistant message to judge — continue anyway (but check budget)
-      if (this.goal.turnsUsed >= this.goal.maxTurns) {
-        this.goal.status = 'paused';
-        await this.saveToThread(state);
-        return { continuation: null, judgeResult: null };
+    const threadId = state.session.thread.getId();
+    const agent = this.getAgent(state);
+    if (agent && threadId) {
+      try {
+        const record = await agent.getObjective({ threadId });
+        if (record) {
+          this.record = { ...record, id: record.id ?? randomUUID() };
+          return;
+        }
+      } catch {
+        // fall through to legacy metadata
       }
-      await this.saveToThread(state);
-      return { continuation: this.buildContinuationPrompt('No response yet, keep working.'), judgeResult: null };
     }
-
-    // Call judge — always judge the current turn's response before enforcing budget
-    const result = await this.callJudge(state, {
-      lastUserContent: context.lastUserContent,
-      assistantStepsSinceLastUser: context.assistantStepsSinceLastUser,
-      lastAssistantContent: context.lastAssistantContent,
-    });
-    if (!this.goal || this.goal.id !== evaluatedGoalId || this.goal.status !== 'active') {
-      return { continuation: null, judgeResult: null };
-    }
-    if (result.decision === 'continue' || result.decision === 'done') {
-      this.goal.turnsUsed++;
-    }
-    if (result.decision === 'paused') {
-      this.goal.status = 'paused';
-      await this.saveToThread(state);
-      return { continuation: null, judgeResult: result };
-    }
-
-    if (result.decision === 'done') {
-      this.goal.status = 'done';
-      await this.saveToThread(state);
-      return { continuation: null, judgeResult: result };
-    }
-
-    if (result.decision === 'waiting') {
-      await this.saveToThread(state);
-      return { continuation: null, judgeResult: result };
-    }
-
-    // Budget exhaustion (checked after judging so the last turn can still be marked done)
-    if (this.goal.turnsUsed >= this.goal.maxTurns) {
-      this.goal.status = 'paused';
-      await this.saveToThread(state);
-      return { continuation: null, judgeResult: result };
-    }
-
-    await this.saveToThread(state);
-    return { continuation: this.buildContinuationPrompt(result.reason), judgeResult: result };
+    this.record = null;
   }
 
-  // ===========================================================================
+  /**
+   * Legacy entry point retained for thread-switch call sites that only have the
+   * thread metadata available. Hydrates from a previously-persisted GoalState.
+   */
+  loadFromThreadMetadata(metadata: Record<string, unknown> | undefined): void {
+    const saved = metadata?.[THREAD_GOAL_KEY] as Partial<GoalState> | undefined;
+    this.persistGoalOnNextThreadCreate = false;
+    this.activeStartedAt = null;
+    this.activeDurationMs = 0;
+    if (saved && saved.objective && saved.status) {
+      this.record = {
+        objective: saved.objective,
+        status: saved.status,
+        runsUsed: saved.turnsUsed ?? 0,
+        maxRuns: saved.maxTurns ?? DEFAULT_MAX_TURNS,
+        judgeModelId: saved.judgeModelId ?? '',
+        startedAt: saved.startedAt ? Date.parse(saved.startedAt) || Date.now() : Date.now(),
+        updatedAt: Date.now(),
+        id: saved.id ?? randomUUID(),
+      };
+      this.activeDurationMs = saved.activeDurationMs ?? 0;
+    } else {
+      this.record = null;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // Private
-  // ===========================================================================
+  // ---------------------------------------------------------------------------
 
-  private async getRecentConversationContext(state: TUIState): Promise<{
-    lastUserContent: string | null;
-    assistantStepsSinceLastUser: number;
-    lastAssistantContent: string | null;
-  }> {
+  private getAgent(state: TUIState): Agent | undefined {
     try {
-      const messages = await state.harness.listMessages();
-      let lastUserIndex = -1;
-      let lastAssistantContent: string | null = null;
-
-      for (let i = messages.length - 1; i >= 0; i--) {
-        const msg = messages[i]!;
-        if (!lastAssistantContent && msg.role === 'assistant') {
-          lastAssistantContent = this.extractTextContent(msg.content);
-        }
-        if (msg.role === 'user') {
-          lastUserIndex = i;
-          break;
-        }
-      }
-
-      const lastUserContent = lastUserIndex >= 0 ? this.extractTextContent(messages[lastUserIndex]!.content) : null;
-      const assistantStepsSinceLastUser =
-        lastUserIndex >= 0 ? messages.slice(lastUserIndex + 1).filter(msg => msg.role === 'assistant').length : 0;
-
-      return { lastUserContent, assistantStepsSinceLastUser, lastAssistantContent };
+      return state.harness.getCurrentAgent(state.session);
     } catch {
-      return { lastUserContent: null, assistantStepsSinceLastUser: 0, lastAssistantContent: null };
+      return undefined;
     }
   }
 
-  private extractTextContent(content: unknown): string {
-    if (typeof content === 'string') return content;
-    if (Array.isArray(content)) {
-      return content
-        .filter((part: any) => part.type === 'text')
-        .map((part: any) => part.text)
-        .join('\n');
-    }
-    return String(content ?? '');
-  }
-
-  private async callJudge(
-    state: TUIState,
-    context: { lastUserContent: string | null; assistantStepsSinceLastUser: number; lastAssistantContent: string },
-  ): Promise<GoalJudgeResult> {
-    try {
-      const memory = await this.getJudgeMemory(state);
-      const judgeAgent = this.createJudgeAgent(memory);
-      if (!judgeAgent) {
-        return { decision: 'paused', reason: 'Judge model could not be initialized.' };
-      }
-
-      // Truncate very long messages to keep judge calls fast
-      const truncatedAssistant = truncateForJudge(context.lastAssistantContent);
-      const recentUser = context.lastUserContent
-        ? `\n\nLatest user message:\n${truncateForJudge(context.lastUserContent)}\n\nAssistant steps since that user message: ${context.assistantStepsSinceLastUser}`
-        : '';
-
-      const stream = await judgeAgent.stream(
-        `Goal: ${this.goal!.objective}${recentUser}\n\nLatest assistant message:\n${truncatedAssistant}`,
-        {
-          ...(memory
-            ? { memory: { thread: this.getJudgeThreadId(state), resource: state.harness.getResourceId() } }
-            : {}),
-          structuredOutput: {
-            schema: judgeSchema,
-          },
-        },
-      );
-
-      await stream.consumeStream();
-      const output = (await stream.getFullOutput()).object as z.infer<typeof judgeSchema> | undefined;
-      if (!output) {
-        return { decision: 'paused', reason: 'Judge returned no structured decision.' };
-      }
-      return { decision: output.decision, reason: output.reason };
-    } catch (error) {
-      return { decision: 'paused', reason: `Judge could not evaluate this turn: ${formatError(error)}` };
-    }
-  }
-
-  private async getJudgeMemory(state: TUIState): Promise<MastraMemory | null> {
-    const harness = state.harness as typeof state.harness & {
-      getResolvedMemory?: () => Promise<MastraMemory | null>;
+  /** Resolve effective judge model + max runs (record value → settings default). */
+  private effectiveSettings(record: GoalObjectiveRecord): { judgeModelId: string; maxTurns: number } {
+    const settings = loadSettings();
+    return {
+      judgeModelId: record.judgeModelId ?? settings.models.goalJudgeModel ?? '',
+      maxTurns: record.maxRuns ?? settings.models.goalMaxTurns ?? DEFAULT_MAX_TURNS,
     };
-    const memory = (await harness.getResolvedMemory?.()) ?? null;
-    if (!memory || !this.goal) return memory;
-
-    const threadId = this.getJudgeThreadId(state);
-    const existing = await memory.getThreadById({ threadId });
-    if (!existing) {
-      await memory.createThread({
-        threadId,
-        resourceId: state.harness.getResourceId(),
-        title: `Goal judge: ${this.goal.objective.slice(0, 80)}`,
-        metadata: {
-          forkedSubagent: true,
-          goalJudge: true,
-          parentThreadId: state.harness.getCurrentThreadId(),
-          goalId: this.goal.id,
-        },
-      });
-    }
-    return memory;
   }
 
-  private getJudgeThreadId(state: TUIState): string {
-    return `${state.harness.getCurrentThreadId() ?? 'no-thread'}-${this.goal!.id}`;
+  private localRecord(
+    objective: string,
+    judgeModelId: string,
+    maxTurns: number,
+    now: number,
+    id: string,
+  ): GoalObjectiveRecord & { id: string } {
+    return {
+      objective,
+      status: 'active',
+      runsUsed: 0,
+      maxRuns: maxTurns,
+      ...(judgeModelId ? { judgeModelId } : {}),
+      startedAt: now,
+      updatedAt: now,
+      id,
+    };
   }
-
-  private createJudgeAgent(memory: MastraMemory | null): Agent | null {
-    if (!this.goal?.judgeModelId) return null;
-    try {
-      const model = resolveModel(this.goal.judgeModelId);
-      return new Agent({
-        id: 'goal-judge',
-        name: 'Goal Judge',
-        instructions: JUDGE_SYSTEM_PROMPT,
-        model,
-        ...(memory ? { memory } : {}),
-        inputProcessors: [new ProviderHistoryCompat()],
-        errorProcessors: [new StreamErrorRetryProcessor(), new PrefillErrorHandler(), new ProviderHistoryCompat()],
-      });
-    } catch {
-      return null;
-    }
-  }
-
-  private buildContinuationPrompt(judgeReason: string): string {
-    const turn = this.goal!.turnsUsed;
-    const max = this.goal!.maxTurns;
-    return `[Goal attempt ${turn}/${max}] The goal is not yet complete. Judge feedback: ${judgeReason}\n\nContinue working toward the goal: ${this.goal!.objective}`;
-  }
-}
-
-function truncateForJudge(value: string): string {
-  return value.length > 4000 ? value.slice(0, 4000) + '\n...[truncated]' : value;
-}
-
-function formatError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

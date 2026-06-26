@@ -30,7 +30,7 @@ export const TRACE_STATUS_OPTIONS = [
 /** Field ids for "synthetic" filter entries — they live in dedicated URL params
  *  rather than the generic `filter*` set, but appear as rows in the Filter
  *  popover so users can manage all filters from one place. */
-export const TRACE_SYNTHETIC_FILTER_FIELD_IDS = ['rootEntityType', 'status', 'mode'] as const;
+export const TRACE_SYNTHETIC_FILTER_FIELD_IDS = ['rootEntityType', 'status'] as const;
 
 export const TRACE_ROOT_ENTITY_TYPE_PARAM = 'rootEntityType';
 export const TRACE_STATUS_PARAM = 'status';
@@ -176,17 +176,6 @@ export function createTracePropertyFilterFields({
       emptyText: 'No entity types.',
     },
     {
-      id: 'mode',
-      label: 'List mode',
-      kind: 'pick-multi',
-      searchable: false,
-      options: TRACE_LIST_MODE_OPTIONS.map(o => ({ label: o.label, value: o.value })),
-      placeholder: 'Choose list mode',
-      emptyText: 'No list modes.',
-      omitAnyOption: true,
-      defaultValue: 'traces',
-    },
-    {
       id: 'entityName',
       label: 'Primitive Name',
       kind: 'pick-multi',
@@ -244,10 +233,9 @@ export function createTracePropertyFilterFields({
     { id: 'experimentId', label: 'Experiment ID', kind: 'text' },
   ];
   const byLabel = (a: PropertyFilterField, b: PropertyFilterField) => a.label.localeCompare(b.label);
-  const mode = fields.filter(f => f.id === 'mode');
-  const pickMulti = fields.filter(f => f.kind === 'pick-multi' && f.id !== 'mode').sort(byLabel);
+  const pickMulti = fields.filter(f => f.kind === 'pick-multi').sort(byLabel);
   const text = fields.filter(f => f.kind === 'text').sort(byLabel);
-  return [...mode, ...pickMulti, ...text];
+  return [...pickMulti, ...text];
 }
 
 /**
@@ -264,7 +252,6 @@ export function getTracePropertyFilterTokens(searchParams: URLSearchParams): Pro
   const paramToFieldId = new Map<string, string>([
     [TRACE_ROOT_ENTITY_TYPE_PARAM, 'rootEntityType'],
     [TRACE_STATUS_PARAM, 'status'],
-    [TRACE_LIST_MODE_PARAM, 'mode'],
   ]);
   for (const fieldId of TRACE_PROPERTY_FILTER_FIELD_IDS) {
     paramToFieldId.set(TRACE_PROPERTY_FILTER_PARAM_BY_FIELD[fieldId], fieldId);
@@ -334,7 +321,6 @@ export function getPreservedTraceFilterParams(searchParams: URLSearchParams) {
 export function applyTracePropertyFilterTokens(params: URLSearchParams, tokens: PropertyFilterToken[]) {
   params.delete(TRACE_ROOT_ENTITY_TYPE_PARAM);
   params.delete(TRACE_STATUS_PARAM);
-  params.delete(TRACE_LIST_MODE_PARAM);
   for (const fieldId of TRACE_PROPERTY_FILTER_FIELD_IDS) {
     params.delete(TRACE_PROPERTY_FILTER_PARAM_BY_FIELD[fieldId]);
   }
@@ -346,10 +332,6 @@ export function applyTracePropertyFilterTokens(params: URLSearchParams, tokens: 
     }
     if (token.fieldId === 'status' && typeof token.value === 'string') {
       params.set(TRACE_STATUS_PARAM, token.value);
-      continue;
-    }
-    if (token.fieldId === 'mode' && typeof token.value === 'string') {
-      params.set(TRACE_LIST_MODE_PARAM, token.value);
       continue;
     }
 

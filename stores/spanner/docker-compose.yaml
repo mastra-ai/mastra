@@ -1,0 +1,12 @@
+services:
+  spanner-emulator:
+    image: gcr.io/cloud-spanner-emulator/emulator:latest
+    ports:
+      - '9010:9010'
+      - '9020:9020'
+    healthcheck:
+      test: ['CMD-SHELL', 'nc -z localhost 9010']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s

@@ -1,21 +1,15 @@
-import {
-  Button,
-  Chip,
-  Combobox,
-  CopyButton,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogBody,
-  ScrollArea,
-  Spinner,
-  Textarea,
-  Txt,
-  Icon,
-  toast,
-  cn,
-} from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Chip } from '@mastra/playground-ui/components/Chip';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useQueryClient } from '@tanstack/react-query';
 import { Play, Sparkles, Clock, ChevronRight, ChevronDown, Pencil, Save, X, Trash2 } from 'lucide-react';
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
@@ -215,6 +209,7 @@ export function DatasetDetailView({
     triggerExperiment,
     mergedRequestContext,
     queryClient,
+    refetchExperiments,
     selectedDatasetVersion,
     selectedAgentVersion,
   ]);
@@ -250,7 +245,12 @@ export function DatasetDetailView({
               </Icon>
               Generate
             </Button>
-            <Button variant="cta" size="sm" onClick={handleRunExperiment} disabled={items.length === 0 || isRunning}>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleRunExperiment}
+              disabled={items.length === 0 || isRunning}
+            >
               {isRunning ? (
                 <>
                   <Spinner className="h-3 w-3" /> Running...
@@ -693,7 +693,7 @@ function ExpandedItemEditor({
           />
         </div>
         <div className="flex items-center gap-2 pt-1">
-          <Button variant="cta" size="sm" onClick={handleSave} disabled={updateItem.isPending}>
+          <Button variant="primary" size="sm" onClick={handleSave} disabled={updateItem.isPending}>
             {updateItem.isPending ? (
               <Spinner className="h-3 w-3" />
             ) : (

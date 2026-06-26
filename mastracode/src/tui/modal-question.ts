@@ -1,4 +1,4 @@
-import type { OverlayOptions, TUI } from '@mariozechner/pi-tui';
+import type { OverlayOptions, TUI } from '@earendil-works/pi-tui';
 
 import { AskQuestionDialogComponent } from './components/ask-question-dialog.js';
 import { showModalOverlay } from './overlay.js';
@@ -10,6 +10,8 @@ export type ModalQuestionOptions = {
   options?: ModalQuestionOption[];
   defaultValue?: string;
   allowEmptyInput?: boolean;
+  allowCustomResponse?: boolean;
+  selectedOptionLabel?: string;
   multiline?: boolean;
   overlay?: {
     widthPercent?: number;
@@ -25,6 +27,8 @@ export function askModalQuestion(tui: TUI, options: ModalQuestionOptions): Promi
       multiline: options.multiline,
       tui,
       allowEmptyInput: options.allowEmptyInput,
+      allowCustomResponse: options.allowCustomResponse,
+      selectedOptionLabel: options.selectedOptionLabel,
       defaultValue: options.defaultValue,
       onSubmit: answer => {
         tui.hideOverlay();

@@ -1,0 +1,686 @@
+{
+  "meta": {
+    "name": "test-2642b65b",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
+    "testName": "Gemini Model Compatibility Tests > Tool suspension and resumption > should call findUserTool with suspend and resume via stream when autoResumeSuspendedTools is true",
+    "createdAt": "2026-05-18T10:51:32.284Z",
+    "updatedAt": "2026-05-28T17:34:36.918Z"
+  },
+  "recordings": [
+    {
+      "hash": "333ec2154a674e33",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Find the name, age and profession of the user - Dero Israel"
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "You are an agent that can get list of users using findUserTool."
+              }
+            ]
+          },
+          "tools": [
+            {
+              "functionDeclarations": [
+                {
+                  "name": "findUserTool",
+                  "description": "This is a test tool that returns the name, email and age",
+                  "parameters": {
+                    "required": ["name"],
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "suspendedToolRunId": {
+                        "description": "The runId of the suspended tool",
+                        "type": "string"
+                      },
+                      "resumeData": {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "object"
+                          }
+                        ],
+                        "nullable": true
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "findUserProfessionTool",
+                  "description": "This is a test tool that returns the profession of the user",
+                  "parameters": {
+                    "required": ["name"],
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "suspendedToolRunId": {
+                        "description": "The runId of the suspended tool",
+                        "type": "string"
+                      },
+                      "resumeData": {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "object"
+                          }
+                        ],
+                        "nullable": true
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "toolConfig": {
+            "functionCallingConfig": {
+              "mode": "AUTO"
+            }
+          }
+        },
+        "timestamp": 1779989672965
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-disposition": "attachment",
+          "content-type": "text/event-stream",
+          "date": "Thu, 28 May 2026 17:34:33 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=785",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-xss-protection": "0"
+        },
+        "chunks": [
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"findUserTool\",\"args\": {\"name\": \"Dero Israel\"}}},{\"functionCall\": {\"name\": \"findUserProfessionTool\",\"args\": {\"name\": \"Dero Israel\"}}}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 133,\"candidatesTokenCount\": 15,\"totalTokenCount\": 148,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 133}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 15}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"qXwYau-eFsWqjMoP49-ywAI\"}\r\n\r\n"
+        ],
+        "chunkTimings": [0],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "71c70c535a3416b3",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Find the name, age and profession of the user - Dero Israel"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "He is 25 years old"
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "You are an agent that can get list of users using findUserTool.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"qUqZdvTeKW3vMAIf\",\"toolName\":\"findUserTool\",\"args\":{\"name\":\"Dero Israel\"},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-000000000001\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"age\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"age\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. \n                      "
+              }
+            ]
+          },
+          "tools": [
+            {
+              "functionDeclarations": [
+                {
+                  "name": "findUserTool",
+                  "description": "This is a test tool that returns the name, email and age",
+                  "parameters": {
+                    "required": ["name"],
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "suspendedToolRunId": {
+                        "description": "The runId of the suspended tool",
+                        "type": "string"
+                      },
+                      "resumeData": {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "object"
+                          }
+                        ],
+                        "nullable": true
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "findUserProfessionTool",
+                  "description": "This is a test tool that returns the profession of the user",
+                  "parameters": {
+                    "required": ["name"],
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "suspendedToolRunId": {
+                        "description": "The runId of the suspended tool",
+                        "type": "string"
+                      },
+                      "resumeData": {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "object"
+                          }
+                        ],
+                        "nullable": true
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "toolConfig": {
+            "functionCallingConfig": {
+              "mode": "AUTO"
+            }
+          }
+        },
+        "timestamp": 1779989673864
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-disposition": "attachment",
+          "content-type": "text/event-stream",
+          "date": "Thu, 28 May 2026 17:34:34 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=907",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-xss-protection": "0"
+        },
+        "chunks": [
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"findUserTool\",\"args\": {\"name\": \"Dero Israel\",\"age\": 25,\"resumeData\": {\"age\": 25},\"suspendedToolRunId\": \"00000000-0000-4000-8000-000000000001\"}}}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 514,\"candidatesTokenCount\": 53,\"totalTokenCount\": 567,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 514}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 53}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"qnwYasWED5KdjMoP6emx2Aw\"}\r\n\r\n"
+        ],
+        "chunkTimings": [1],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "3660df92bc8a7745",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Find the name, age and profession of the user - Dero Israel"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "He is 25 years old"
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "functionCall": {
+                    "name": "findUserTool",
+                    "args": {
+                      "name": "Dero Israel",
+                      "age": 25,
+                      "resumeData": {
+                        "age": 25
+                      },
+                      "suspendedToolRunId": "00000000-0000-4000-8000-000000000001"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "functionResponse": {
+                    "name": "findUserTool",
+                    "response": {
+                      "name": "findUserTool",
+                      "content": {
+                        "name": "Dero Israel",
+                        "age": 25,
+                        "email": "test@test.com"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "You are an agent that can get list of users using findUserTool."
+              }
+            ]
+          },
+          "tools": [
+            {
+              "functionDeclarations": [
+                {
+                  "name": "findUserTool",
+                  "description": "This is a test tool that returns the name, email and age",
+                  "parameters": {
+                    "required": ["name"],
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "suspendedToolRunId": {
+                        "description": "The runId of the suspended tool",
+                        "type": "string"
+                      },
+                      "resumeData": {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "object"
+                          }
+                        ],
+                        "nullable": true
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "findUserProfessionTool",
+                  "description": "This is a test tool that returns the profession of the user",
+                  "parameters": {
+                    "required": ["name"],
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "suspendedToolRunId": {
+                        "description": "The runId of the suspended tool",
+                        "type": "string"
+                      },
+                      "resumeData": {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "object"
+                          }
+                        ],
+                        "nullable": true
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "toolConfig": {
+            "functionCallingConfig": {
+              "mode": "AUTO"
+            }
+          }
+        },
+        "timestamp": 1779989674900
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-disposition": "attachment",
+          "content-type": "text/event-stream",
+          "date": "Thu, 28 May 2026 17:34:35 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=841",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-xss-protection": "0"
+        },
+        "chunks": [
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"findUserProfessionTool\",\"args\": {\"name\": \"Dero Israel\",\"suspendedToolRunId\": \"00000000-0000-4000-8000-000000000001\",\"resumeData\": {\"age\": 25}}}}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 213,\"candidatesTokenCount\": 52,\"totalTokenCount\": 265,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 213}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 52}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"q3wYao28Erij6MEP-6KIkAM\"}\r\n\r\n"
+        ],
+        "chunkTimings": [1],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "c033decf98cb6fd8",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Find the name, age and profession of the user - Dero Israel"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "He is 25 years old"
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "functionCall": {
+                    "name": "findUserTool",
+                    "args": {
+                      "name": "Dero Israel",
+                      "age": 25,
+                      "resumeData": {
+                        "age": 25
+                      },
+                      "suspendedToolRunId": "00000000-0000-4000-8000-000000000001"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "functionResponse": {
+                    "name": "findUserTool",
+                    "response": {
+                      "name": "findUserTool",
+                      "content": {
+                        "name": "Dero Israel",
+                        "age": 25,
+                        "email": "test@test.com"
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "functionCall": {
+                    "name": "findUserProfessionTool",
+                    "args": {
+                      "name": "Dero Israel",
+                      "suspendedToolRunId": "00000000-0000-4000-8000-000000000001",
+                      "resumeData": {
+                        "age": 25
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "functionResponse": {
+                    "name": "findUserProfessionTool",
+                    "response": {
+                      "name": "findUserProfessionTool",
+                      "content": {
+                        "profession": "Software Engineer"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "You are an agent that can get list of users using findUserTool."
+              }
+            ]
+          },
+          "tools": [
+            {
+              "functionDeclarations": [
+                {
+                  "name": "findUserTool",
+                  "description": "This is a test tool that returns the name, email and age",
+                  "parameters": {
+                    "required": ["name"],
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "suspendedToolRunId": {
+                        "description": "The runId of the suspended tool",
+                        "type": "string"
+                      },
+                      "resumeData": {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "object"
+                          }
+                        ],
+                        "nullable": true
+                      }
+                    }
+                  }
+                },
+                {
+                  "name": "findUserProfessionTool",
+                  "description": "This is a test tool that returns the profession of the user",
+                  "parameters": {
+                    "required": ["name"],
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "suspendedToolRunId": {
+                        "description": "The runId of the suspended tool",
+                        "type": "string"
+                      },
+                      "resumeData": {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "integer"
+                          },
+                          {
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "object"
+                          }
+                        ],
+                        "nullable": true
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "toolConfig": {
+            "functionCallingConfig": {
+              "mode": "AUTO"
+            }
+          }
+        },
+        "timestamp": 1779989675858
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-disposition": "attachment",
+          "content-type": "text/event-stream",
+          "date": "Thu, 28 May 2026 17:34:36 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=671",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-xss-protection": "0"
+        },
+        "chunks": [
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"The\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 475,\"totalTokenCount\": 475,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 475}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"rHwYatfIDrG36MEP_-ahqAo\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" user's name is Dero Israel, their age is 25, and their\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 475,\"totalTokenCount\": 475,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 475}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"rHwYatfIDrG36MEP_-ahqAo\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" profession is Software Engineer.\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 278,\"candidatesTokenCount\": 24,\"totalTokenCount\": 302,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 278}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 24}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"rHwYatfIDrG36MEP_-ahqAo\"}\r\n\r\n"
+        ],
+        "chunkTimings": [1, 86, 34],
+        "isStreaming": true
+      }
+    }
+  ]
+}

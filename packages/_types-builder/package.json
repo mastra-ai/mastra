@@ -1,6 +1,6 @@
 {
   "name": "@internal/types-builder",
-  "version": "0.0.69",
+  "version": "0.0.83",
   "description": "",
   "type": "module",
   "main": "src/index.js",
@@ -15,6 +15,12 @@
       "import": {
         "default": "./src/embed-types.js"
       }
+    },
+    "./compile-zod": {
+      "import": {
+        "types": "./src/compile-zod.d.ts",
+        "default": "./src/compile-zod.js"
+      }
     }
   },
   "scripts": {},
@@ -23,7 +29,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@microsoft/api-extractor": "^7.57.7",
-    "tinyglobby": "^0.2.16",
+    "tinyglobby": "^0.2.17",
     "local-pkg": "^1.1.2",
     "resolve.exports": "^2.0.3",
     "ts-morph": "^27.0.2",
@@ -31,6 +37,7 @@
   },
   "devDependencies": {
     "@vitest/coverage-v8": "catalog:",
-    "@vitest/ui": "catalog:"
+    "@vitest/ui": "catalog:",
+    "zod": "catalog:"
   }
 }

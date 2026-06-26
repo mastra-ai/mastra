@@ -8,6 +8,7 @@ import type {
 
 import type { FilesystemDB } from './filesystem-db';
 import { GitHistory } from './git-history';
+import { getSourceControlEntityFilePath } from './source-control';
 import type { StorageOrderBy } from './types';
 
 /**
@@ -15,6 +16,26 @@ import type { StorageOrderBy } from './types';
  * These versions are read-only and cannot be deleted.
  */
 const GIT_VERSION_PREFIX = 'git-';
+
+/**
+ * Recursively sort object keys alphabetically so the on-disk JSON is stable
+ * across saves. Arrays preserve order; object entries are emitted in a
+ * deterministic order so git diffs only reflect real content changes.
+ */
+function stableSortKeys(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(stableSortKeys);
+  }
+  if (value && typeof value === 'object' && !(value instanceof Date)) {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, entry]) => entry !== undefined)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, stableSortKeys(entry)]),
+    );
+  }
+  return value;
+}
 
 /**
  * Configuration for a filesystem-backed versioned storage domain.
@@ -36,6 +57,17 @@ export interface FilesystemVersionedConfig {
   versionMetadataFields: string[];
   /** Maximum number of git commits to load per file (default: 50) */
   gitHistoryLimit?: number;
+  /** Directory for published entities that should be persisted as one JSON file per entity. */
+  perEntityFilesDir?: string;
+  /** Return true when an entity should persist as one JSON file instead of inside entitiesFile. */
+  shouldPersistToPerEntityFile?: (entity: VersionedEntityBase) => boolean;
+  /**
+   * Optional snapshot filter applied to per-entity files only.
+   * Lets per-entity files (e.g. code-mode JSON) exclude fields that are not
+   * user-editable from Studio (such as `model`) while keeping the shared
+   * `entitiesFile` snapshot unchanged.
+   */
+  perEntitySnapshotFilter?: (snapshot: Record<string, unknown>, entity: VersionedEntityBase) => Record<string, unknown>;
 }
 
 /**
@@ -72,6 +104,12 @@ export class FilesystemVersionedHelpers<
   readonly name: string;
   readonly versionMetadataFields: string[];
   private readonly gitHistoryLimit: number;
+  private readonly perEntityFilesDir?: string;
+  private readonly shouldPersistToPerEntityFile?: (entity: VersionedEntityBase) => boolean;
+  private readonly perEntitySnapshotFilter?: (
+    snapshot: Record<string, unknown>,
+    entity: VersionedEntityBase,
+  ) => Record<string, unknown>;
 
   /**
    * In-memory entity records (thin metadata), keyed by entity ID.
@@ -114,6 +152,21 @@ export class FilesystemVersionedHelpers<
     this.name = config.name;
     this.versionMetadataFields = config.versionMetadataFields;
     this.gitHistoryLimit = config.gitHistoryLimit ?? 50;
+    this.perEntityFilesDir = config.perEntityFilesDir;
+    this.shouldPersistToPerEntityFile = config.shouldPersistToPerEntityFile;
+    this.perEntitySnapshotFilter = config.perEntitySnapshotFilter;
+  }
+
+  private perEntityFilename(entityId: string): string {
+    if (!this.perEntityFilesDir) {
+      throw new Error(`${this.name}: per-entity files directory is not configured`);
+    }
+    return getSourceControlEntityFilePath(this.perEntityFilesDir, entityId);
+  }
+
+  private entityIdFromPerEntityFilename(filename: string): string {
+    const basename = filename.split('/').pop() ?? filename;
+    return decodeURIComponent(basename.replace(/\.json$/, ''));
   }
 
   /**
@@ -136,11 +189,7 @@ export class FilesystemVersionedHelpers<
     if (this.hydrated) return;
     this.hydrated = true;
 
-    const diskData = this.db.readDomain<Record<string, unknown>>(this.entitiesFile);
-
-    for (const [entityId, snapshotConfig] of Object.entries(diskData)) {
-      if (!snapshotConfig || typeof snapshotConfig !== 'object') continue;
-
+    const hydrateSnapshot = (entityId: string, snapshotConfig: Record<string, unknown>) => {
       const versionId = `hydrated-${entityId}-v1`;
       const now = new Date();
 
@@ -151,7 +200,7 @@ export class FilesystemVersionedHelpers<
         activeVersionId: versionId,
         createdAt: now,
         updatedAt: now,
-      } as TEntity;
+      } as unknown as TEntity;
 
       this.entities.set(entityId, entity);
 
@@ -166,6 +215,22 @@ export class FilesystemVersionedHelpers<
       } as TVersion;
 
       this.versions.set(versionId, version);
+    };
+
+    const diskData = this.db.readDomain<Record<string, unknown>>(this.entitiesFile);
+
+    for (const [entityId, snapshotConfig] of Object.entries(diskData)) {
+      if (!snapshotConfig || typeof snapshotConfig !== 'object') continue;
+      hydrateSnapshot(entityId, snapshotConfig);
+    }
+
+    if (this.perEntityFilesDir) {
+      for (const filename of this.db.listDomainFiles(this.perEntityFilesDir)) {
+        const entityId = this.entityIdFromPerEntityFilename(filename);
+        const snapshotConfig = this.db.readDomain(filename);
+        if (!snapshotConfig || typeof snapshotConfig !== 'object') continue;
+        hydrateSnapshot(entityId, snapshotConfig);
+      }
     }
 
     // Kick off async git history loading (fire and forget)
@@ -199,7 +264,6 @@ export class FilesystemVersionedHelpers<
 
     // Get commit history for this domain's file
     const commits = await git.getFileHistory(dir, this.entitiesFile, this.gitHistoryLimit);
-    if (commits.length === 0) return;
 
     // Process commits from oldest to newest so version numbers are sequential
     const orderedCommits = [...commits].reverse();
@@ -250,6 +314,27 @@ export class FilesystemVersionedHelpers<
       }
     }
 
+    // Walk git history for per-entity files (code mode). Each per-entity file
+    // is a standalone snapshot, not an entityId → snapshot map, so each commit
+    // touching the file becomes one version for that entity.
+    if (this.perEntityFilesDir) {
+      const perEntityIds = new Set<string>();
+      // Known entities currently on disk
+      for (const filename of this.db.listDomainFiles(this.perEntityFilesDir)) {
+        perEntityIds.add(this.entityIdFromPerEntityFilename(filename));
+      }
+      // Entities only present in git history (deleted on disk but still in commits)
+      // are discovered lazily by scanning entities map, which is already hydrated.
+      for (const entityId of this.entities.keys()) {
+        perEntityIds.add(entityId);
+      }
+
+      for (const entityId of perEntityIds) {
+        const count = await this.loadPerEntityGitHistory(entityId, entityVersionCount.get(entityId) ?? 0);
+        entityVersionCount.set(entityId, count);
+      }
+    }
+
     // Save the max git version count per entity
     this.gitVersionCounts = entityVersionCount;
 
@@ -264,6 +349,60 @@ export class FilesystemVersionedHelpers<
     }
   }
 
+  /**
+   * Load git-backed versions for a single per-entity file. Each commit that
+   * changes the file becomes one version. Returns the running version count
+   * for the entity (starting from `startCount`). Used both by the bulk
+   * git-history pass and by `listVersions` to lazily discover entities that
+   * were deleted on disk but still exist in git history.
+   */
+  private async loadPerEntityGitHistory(entityId: string, startCount: number): Promise<number> {
+    const git = FilesystemVersionedHelpers.gitHistory;
+    const dir = this.db.dir;
+    const filename = this.perEntityFilename(entityId);
+    const perEntityCommits = await git.getFileHistory(dir, filename, this.gitHistoryLimit);
+    if (perEntityCommits.length === 0) return startCount;
+
+    const orderedPerEntity = [...perEntityCommits].reverse();
+    let previousSnapshotForEntity: string | undefined;
+    let count = startCount;
+
+    for (const commit of orderedPerEntity) {
+      const snapshotConfig = await git.getFileAtCommit<Record<string, unknown>>(dir, commit.hash, filename);
+      if (!snapshotConfig || typeof snapshotConfig !== 'object') {
+        // The file did not exist at this commit (e.g. it was deleted). Reset the
+        // dedupe baseline so a later restore with identical content is still
+        // recorded as a distinct version rather than skipped.
+        previousSnapshotForEntity = undefined;
+        continue;
+      }
+
+      // The per-entity file IS the snapshot, so flatten one level
+      // compared to the shared-file branch.
+      const serialized = JSON.stringify(snapshotConfig);
+      if (previousSnapshotForEntity === serialized) continue;
+      previousSnapshotForEntity = serialized;
+
+      count += 1;
+
+      const versionId = `${GIT_VERSION_PREFIX}${commit.hash}-${entityId}`;
+      if (this.versions.has(versionId)) continue;
+
+      const version = {
+        id: versionId,
+        [this.parentIdField]: entityId,
+        versionNumber: count,
+        changeMessage: commit.message,
+        ...snapshotConfig,
+        createdAt: commit.date,
+      } as TVersion;
+
+      this.versions.set(versionId, version);
+    }
+
+    return count;
+  }
+
   // ==========================================================================
   // Disk persistence — only published snapshot configs
   // ==========================================================================
@@ -275,6 +414,7 @@ export class FilesystemVersionedHelpers<
    */
   private persistToDisk(): void {
     const diskData: Record<string, Record<string, unknown>> = {};
+    const perEntityData = new Map<string, Record<string, unknown>>();
 
     for (const [entityId, entity] of this.entities) {
       if (entity.status !== 'published' || !entity.activeVersionId) continue;
@@ -283,10 +423,42 @@ export class FilesystemVersionedHelpers<
       if (!version) continue;
 
       const snapshotConfig = this.extractSnapshotConfig(version);
-      diskData[entityId] = snapshotConfig;
+      if (this.perEntityFilesDir && this.shouldPersistToPerEntityFile?.(entity)) {
+        const filtered = this.perEntitySnapshotFilter
+          ? this.perEntitySnapshotFilter(snapshotConfig, entity)
+          : snapshotConfig;
+        perEntityData.set(entityId, stableSortKeys(filtered) as Record<string, unknown>);
+      } else {
+        // Sort keys here too so shared-file domains get deterministic ordering.
+        // The shared git-history path dedupes with JSON.stringify, so without
+        // stable ordering a reorder-only write could surface as a fake version.
+        diskData[entityId] = stableSortKeys(snapshotConfig) as Record<string, unknown>;
+      }
     }
 
-    this.db.writeDomain(this.entitiesFile, diskData);
+    // When every published entity is persisted to per-entity files (code mode)
+    // and the shared file would otherwise be an empty `{}` stub, skip writing
+    // it so projects that only use code mode don't end up tracking an empty
+    // `agents.json` in git. Existing shared files keep being updated so
+    // db-mode and mixed setups behave the same as before.
+    const hasSharedEntries = Object.keys(diskData).length > 0;
+    const sharedFileExists = this.db.domainFileExists(this.entitiesFile);
+    if (hasSharedEntries || !this.perEntityFilesDir || sharedFileExists) {
+      this.db.writeDomain(this.entitiesFile, diskData);
+    }
+
+    if (this.perEntityFilesDir) {
+      for (const filename of this.db.listDomainFiles(this.perEntityFilesDir)) {
+        const entityId = this.entityIdFromPerEntityFilename(filename);
+        if (!perEntityData.has(entityId)) {
+          this.db.removeDomainFile(filename);
+        }
+      }
+
+      for (const [entityId, snapshotConfig] of perEntityData) {
+        this.db.writeDomain(this.perEntityFilename(entityId), snapshotConfig);
+      }
+    }
   }
 
   /**
@@ -486,7 +658,13 @@ export class FilesystemVersionedHelpers<
     const perPage = normalizePerPage(perPageInput, 20);
     if (page < 0) throw new Error('page must be >= 0');
 
-    let versions = Array.from(this.versions.values()).filter(
+    // Lazily discover per-entity files that were deleted on disk but still
+    // exist in git history. The bulk git-history pass only walks entities that
+    // are currently on disk or in memory, so a deleted-then-requested entity
+    // would otherwise surface no versions.
+    await this.ensurePerEntityGitHistory(entityId);
+
+    const versions = Array.from(this.versions.values()).filter(
       v => (v as Record<string, unknown>)[this.parentIdField] === entityId,
     );
 
@@ -539,8 +717,30 @@ export class FilesystemVersionedHelpers<
     return count;
   }
 
+  /**
+   * Lazily discover per-entity git history for an entity that was deleted on
+   * disk but still exists in git commits. The bulk git-history pass only walks
+   * entities currently on disk or in memory, so without this an entity that has
+   * no in-memory versions would surface no git versions (and `gitVersionCounts`
+   * would stay 0, letting a recreated entity collide with git version numbers).
+   */
+  private async ensurePerEntityGitHistory(entityId: string): Promise<void> {
+    if (!this.perEntityFilesDir || !entityId) return;
+    const hasVersions = Array.from(this.versions.values()).some(
+      v => (v as Record<string, unknown>)[this.parentIdField] === entityId,
+    );
+    if (hasVersions) return;
+
+    const startCount = this.gitVersionCounts.get(entityId) ?? 0;
+    const newCount = await this.loadPerEntityGitHistory(entityId, startCount);
+    if (newCount > startCount) {
+      this.gitVersionCounts.set(entityId, newCount);
+    }
+  }
+
   async getNextVersionNumber(entityId: string): Promise<number> {
     await this.ensureGitHistory();
+    await this.ensurePerEntityGitHistory(entityId);
     return this._getNextVersionNumber(entityId);
   }
 
@@ -562,5 +762,13 @@ export class FilesystemVersionedHelpers<
     this.gitHistoryPromise = null;
     this.hydrated = false;
     this.db.clearDomain(this.entitiesFile);
+
+    // Per-entity files are real on-disk snapshots; clearing only the shared
+    // file leaves them behind and they get re-imported on the next hydrate.
+    if (this.perEntityFilesDir) {
+      for (const filename of this.db.listDomainFiles(this.perEntityFilesDir)) {
+        this.db.removeDomainFile(filename);
+      }
+    }
   }
 }

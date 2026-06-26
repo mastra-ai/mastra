@@ -197,10 +197,13 @@ describe('PrefillErrorHandler Recovery', () => {
           message.content.parts.some(part => part.type === 'text' && part.text === 'continue'),
       );
       expect(retryReminderMessage).toBeDefined();
+      expect(retryReminderMessage?.content.parts).toEqual(
+        expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'continue' })]),
+      );
       expect(retryReminderMessage?.content.metadata).toEqual({
         signal: expect.objectContaining({
-          type: 'system-reminder',
-          contents: 'continue',
+          type: 'reactive',
+          tagName: 'system-reminder',
           attributes: {
             type: ANTHROPIC_PREFILL_RETRY_SIGNAL_TYPE,
           },
@@ -209,6 +212,7 @@ describe('PrefillErrorHandler Recovery', () => {
           },
         }),
       });
+      expect((retryReminderMessage?.content.metadata as any)?.signal).not.toHaveProperty('contents');
     });
 
     it('should still run processAPIError after the retry cap is reached without retrying again', async () => {

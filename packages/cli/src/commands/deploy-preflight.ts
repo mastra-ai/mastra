@@ -67,23 +67,18 @@ const ENV_VAR_ALLOWLIST_PREFIXES = [
 ];
 
 /**
- * Connection-string-shaped patterns that resolve to the build host and will
- * never work inside the deploy container.
+ * Metadata emitted by the `mastra-local-storage-detector` Rollup plugin
+ * during bundling.  Each entry represents a host-local URL found in a
+ * *user* module (node_modules are excluded) that survived tree-shaking.
  */
-const LOCAL_HOST_PATTERNS: Array<{ pattern: RegExp; hint: string }> = [
-  {
-    pattern: /\bfile:\.{1,2}\/[^\s'"`]+\.(?:db|sqlite)\b/i,
-    hint: 'LibSQL/SQLite file path relative to the build host',
-  },
-  {
-    pattern: /\b(?:postgres(?:ql)?|mysql|mongodb|redis|libsql):\/\/[^/\s'"`]*localhost\b/i,
-    hint: 'localhost in a connection string',
-  },
-  {
-    pattern: /\b(?:postgres(?:ql)?|mysql|mongodb|redis|libsql):\/\/[^/\s'"`]*127\.0\.0\.1\b/,
-    hint: '127.0.0.1 in a connection string',
-  },
-];
+interface LocalStorageDetection {
+  value: string;
+  hint: string;
+  module: string;
+}
+
+/** Name of the metadata file the Rollup plugin emits into the output dir. */
+const LOCAL_PATHS_METADATA_FILE = 'preflight-local-paths.json';
 
 /* ------------------------------------------------------------------ */
 /*  Public API                                                        */
@@ -118,7 +113,12 @@ export async function preflightBuildOutput(
   const issues: PreflightIssue[] = [];
 
   issues.push(...checkMissingEnvVars(combinedSource, envVars));
-  issues.push(...checkLocalStoragePaths(combinedSource));
+
+  // LOCAL_STORAGE_PATH — read from bundler-generated metadata.  The Rollup
+  // plugin `mastra-local-storage-detector` runs during bundling and only
+  // reports paths from user modules (not node_modules) that survived
+  // tree-shaking, so library examples are structurally excluded.
+  issues.push(...(await checkLocalStoragePaths(outputDir)));
 
   return issues;
 }
@@ -198,7 +198,6 @@ async function collectMjsFiles(dir: string): Promise<string[]> {
     return out;
   }
   for (const entry of entries) {
-    // Tests sometimes mock readdir with plain string arrays — fall back to stat
     const name = typeof entry === 'string' ? entry : entry.name;
     if (name === 'node_modules') continue;
     const full = join(dir, name);
@@ -253,31 +252,33 @@ function checkMissingEnvVars(source: string, envVars: Record<string, string>): P
 }
 
 /* ------------------------------------------------------------------ */
-/*  Check 2 — local storage paths                                     */
+/*  Check 2 — local storage paths (bundler-generated metadata)        */
 /* ------------------------------------------------------------------ */
 
-function checkLocalStoragePaths(source: string): PreflightIssue[] {
-  const issues: PreflightIssue[] = [];
-  const seen = new Set<string>();
+/**
+ * Read detections written by the `mastra-local-storage-detector` Rollup
+ * plugin.  If the metadata file is absent (e.g. older build, or the plugin
+ * wasn't active) the check is silently skipped — no false positives.
+ */
+async function checkLocalStoragePaths(outputDir: string): Promise<PreflightIssue[]> {
+  const metadataPath = join(outputDir, LOCAL_PATHS_METADATA_FILE);
 
-  for (const { pattern, hint } of LOCAL_HOST_PATTERNS) {
-    const globalPattern = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g');
-    for (const match of source.matchAll(globalPattern)) {
-      const value = match[0];
-      const key = `${hint}::${value}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-
-      issues.push({
-        code: 'LOCAL_STORAGE_PATH',
-        severity: 'error',
-        message: `Build contains a host-local storage URL: ${truncate(value, 80)} (${hint})`,
-        fix: `Replace it with a hosted URL (e.g. a Turso \`libsql://...\` URL or a public Postgres connection string) and store it in your env file.`,
-      });
-    }
+  let detections: LocalStorageDetection[];
+  try {
+    const raw = await readFile(metadataPath, 'utf-8');
+    detections = JSON.parse(raw) as LocalStorageDetection[];
+  } catch {
+    return [];
   }
 
-  return issues;
+  if (!Array.isArray(detections) || detections.length === 0) return [];
+
+  return detections.map(d => ({
+    code: 'LOCAL_STORAGE_PATH' as const,
+    severity: 'error' as const,
+    message: `Build contains a host-local storage URL: ${truncate(d.value, 80)} (${d.hint})`,
+    fix: `Replace it with a hosted URL (e.g. a Turso \`libsql://...\` URL or a public Postgres connection string) and store it in your env file.`,
+  }));
 }
 
 /* ------------------------------------------------------------------ */

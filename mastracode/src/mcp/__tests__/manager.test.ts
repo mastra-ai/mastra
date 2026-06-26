@@ -252,7 +252,7 @@ describe('createMcpManager', () => {
         this.disconnect = vi.fn();
       } as any);
 
-      const manager = createMcpManager('/tmp/test', {
+      const manager = createMcpManager('/tmp/test', undefined, {
         remote: { url: 'https://mcp.example.com/sse' },
       });
       await manager.init();
@@ -270,7 +270,7 @@ describe('createMcpManager', () => {
         this.disconnect = vi.fn();
       } as any);
 
-      const manager = createMcpManager('/tmp/test', {
+      const manager = createMcpManager('/tmp/test', undefined, {
         myserver: { command: 'new-cmd', args: ['--flag'] },
       });
       await manager.init();
@@ -282,7 +282,7 @@ describe('createMcpManager', () => {
 
     it('hasServers returns true when only extraServers provided and config is empty', () => {
       setupConfig({});
-      const manager = createMcpManager('/tmp/test', {
+      const manager = createMcpManager('/tmp/test', undefined, {
         extra: { url: 'https://example.com/mcp' },
       });
       expect(manager.hasServers()).toBe(true);
@@ -298,7 +298,7 @@ describe('createMcpManager', () => {
         this.disconnect = vi.fn();
       } as any);
 
-      const manager = createMcpManager('/tmp/test', {
+      const manager = createMcpManager('/tmp/test', undefined, {
         extra: { url: 'https://example.com/mcp' },
       });
       await manager.init();

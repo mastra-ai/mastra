@@ -44,7 +44,7 @@ Notes (don't assert under `--auth off`):
 
 - `visibility` will be `"public"` regardless of request (see auth-on path).
 - `authorId` will be `null` (no caller).
-- `starCount` will be `0` (no caller-scoped star rows).
+- `favoriteCount` will be `0` and `isFavorited` will be `false` (no caller-scoped favorite rows).
 
 ### 2. Get the agent
 
@@ -179,7 +179,7 @@ curl -s -X PATCH "$BASE/stored/agents/$AGENT_ID" \
 - [ ] Owner: 200, response `metadata.avatarUrl` is the data URL you sent (or a server-rewritten URL)
 - [ ] Non-owner authenticated user: 403 (ownership check inside `assertWriteAccess`)
 - [ ] Auth off: behaves as owner (no caller → bypass)
-- [ ] Oversized blob (>512 KB) is rejected with a structured 400 from `validateMetadataAvatarUrl`
+- [ ] Oversized blob (>512 KB) is rejected with **`413 Payload Too Large`** from `validateMetadataAvatarUrl` (not `400`)
 
 ## Builder defaults at create
 

@@ -1,5 +1,8 @@
-import { ContentBlocks, DropdownMenu, Icon, cn } from '@mastra/playground-ui';
-import type { JsonSchema } from '@mastra/playground-ui';
+import { ContentBlocks } from '@mastra/playground-ui/components/ContentBlocks';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import { FileText, PenLine, PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { InstructionBlock } from '../agent-edit-page/utils/form-validation';
@@ -13,6 +16,7 @@ export interface AgentCMSBlocksProps {
   className?: string;
   placeholder?: string;
   schema?: JsonSchema;
+  readOnly?: boolean;
 }
 
 interface AddBlockButtonProps {
@@ -56,7 +60,14 @@ const AddBlockButton = ({ onAddInline, onPickRef, className }: AddBlockButtonPro
   );
 };
 
-export const AgentCMSBlocks = ({ items, onChange, className, placeholder, schema }: AgentCMSBlocksProps) => {
+export const AgentCMSBlocks = ({
+  items,
+  onChange,
+  className,
+  placeholder,
+  schema,
+  readOnly = false,
+}: AgentCMSBlocksProps) => {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [insertIndex, setInsertIndex] = useState<number | null>(null);
 
@@ -113,7 +124,7 @@ export const AgentCMSBlocks = ({ items, onChange, className, placeholder, schema
             {items.map((block, index) => (
               <div key={block.id}>
                 {/* Add-block handle between blocks */}
-                {index > 0 && (
+                {!readOnly && index > 0 && (
                   <AddBlockButton
                     onAddInline={() => handleAddInlineAt(index)}
                     onPickRef={() => handlePickRefAt(index)}
@@ -123,11 +134,12 @@ export const AgentCMSBlocks = ({ items, onChange, className, placeholder, schema
                   index={index}
                   block={block}
                   onBlockChange={updatedBlock => handleBlockChange(index, updatedBlock)}
-                  onDelete={handleDelete}
-                  onDereference={handleDereference}
-                  onConvertToRef={handleConvertToRef}
+                  onDelete={readOnly ? undefined : handleDelete}
+                  onDereference={readOnly ? undefined : handleDereference}
+                  onConvertToRef={readOnly ? undefined : handleConvertToRef}
                   placeholder={placeholder}
                   schema={schema}
+                  readOnly={readOnly}
                 />
               </div>
             ))}
@@ -135,15 +147,16 @@ export const AgentCMSBlocks = ({ items, onChange, className, placeholder, schema
         </div>
       )}
 
-      {/* Add block at end */}
-      <div className="pl-10 pr-2">
-        <AddBlockButton
-          onAddInline={() => handleAddInlineAt(items.length)}
-          onPickRef={() => handlePickRefAt(items.length)}
-        />
-      </div>
+      {!readOnly && (
+        <div className="pl-10 pr-2">
+          <AddBlockButton
+            onAddInline={() => handleAddInlineAt(items.length)}
+            onPickRef={() => handlePickRefAt(items.length)}
+          />
+        </div>
+      )}
 
-      <PromptBlockPickerDialog open={pickerOpen} onOpenChange={setPickerOpen} onSelect={handleAddRef} />
+      {!readOnly && <PromptBlockPickerDialog open={pickerOpen} onOpenChange={setPickerOpen} onSelect={handleAddRef} />}
     </div>
   );
 };

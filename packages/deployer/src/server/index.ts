@@ -6,17 +6,20 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { swaggerUI } from '@hono/swagger-ui';
 import type { Mastra } from '@mastra/core/mastra';
+import type { ApiRoute, CorsOptions } from '@mastra/core/server';
 import { Tool } from '@mastra/core/tools';
 import { MastraServer, setupBrowserStream } from '@mastra/hono';
 import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import type { Context } from 'hono';
+import { findMatchingCustomRoute } from '@mastra/server/auth';
+import type { Context, MiddlewareHandler as HonoMiddlewareHandler } from 'hono';
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { timeout } from 'hono/timeout';
 import { describeRoute } from 'hono-openapi';
+import type { DescribeRouteOptions } from 'hono-openapi';
 import { injectStudioHtmlConfig, normalizeStudioBase } from '../build/utils';
 import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled } from './handlers/client';
 import { errorHandler } from './handlers/error';
@@ -48,6 +51,38 @@ type Bindings = HonoBindings;
 type Variables = HonoVariables & {
   clients: Set<{ controller: ReadableStreamDefaultController }>;
 };
+
+type ApiRouteMiddleware = Extract<Exclude<ApiRoute['middleware'], undefined>, Function>;
+
+const DEFAULT_CORS_ALLOW_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'];
+const DEFAULT_CORS_ALLOW_HEADERS = ['Content-Type', 'Authorization', 'x-mastra-client-type', 'x-mastra-dev-playground'];
+const DEFAULT_CORS_EXPOSE_HEADERS = ['Content-Length', 'X-Requested-With'];
+
+function getCorsConfig(serverCors: CorsOptions | false | undefined, credentialsDefault: boolean) {
+  const userCors = serverCors && typeof serverCors === 'object' ? serverCors : undefined;
+  const origin =
+    userCors && 'origin' in userCors && userCors.origin
+      ? userCors.origin
+      : credentialsDefault
+        ? (requestOrigin: string) => requestOrigin || undefined
+        : '*';
+  const credentials = userCors && 'credentials' in userCors ? userCors.credentials : credentialsDefault;
+
+  return {
+    origin,
+    allowMethods: DEFAULT_CORS_ALLOW_METHODS,
+    credentials,
+    maxAge: 3600,
+    ...userCors,
+    allowHeaders: [...DEFAULT_CORS_ALLOW_HEADERS, ...(userCors?.allowHeaders ?? [])],
+    exposeHeaders: [...DEFAULT_CORS_EXPOSE_HEADERS, ...(userCors?.exposeHeaders ?? [])],
+  };
+}
+
+function getRouteCorsConfig(apiRoutes: ApiRoute[] | undefined, pathname: string, method: string) {
+  const route = findMatchingCustomRoute(pathname, method, apiRoutes)?.route;
+  return route?.cors;
+}
 
 export function getToolExports(tools: Record<string, Function>[]) {
   try {
@@ -97,14 +132,20 @@ export async function createHonoServer(
 
   // Pre-process routes: bake hono-openapi describeRoute into route middleware
   // so the adapter handles it as normal middleware without needing to know about hono-openapi
-  const processedRoutes = routes?.map(route => {
+  const processedRoutes: ApiRoute[] | undefined = routes?.map(route => {
     if ('openapi' in route && route.openapi) {
       const existingMiddleware = route.middleware
         ? Array.isArray(route.middleware)
           ? route.middleware
           : [route.middleware]
         : [];
-      return { ...route, middleware: [describeRoute(route.openapi), ...existingMiddleware] };
+      return {
+        ...route,
+        middleware: [
+          describeRoute(route.openapi as unknown as DescribeRouteOptions) as unknown as ApiRouteMiddleware,
+          ...existingMiddleware,
+        ],
+      };
     }
     return route;
   });
@@ -125,7 +166,7 @@ export async function createHonoServer(
   const customOnError = server?.onError;
   app.onError((err, c) => {
     if (customOnError) {
-      return customOnError(err, c);
+      return customOnError(err, c as unknown as Parameters<typeof customOnError>[1]);
     }
     return errorHandler(err, c, options.isDev);
   });
@@ -168,50 +209,52 @@ export async function createHonoServer(
   // This is async because it dynamically imports @hono/node-ws to avoid
   // bundling ws into user code. Returns null if ws is not available.
   const browserStreamSetup = await setupBrowserStream(app, {
-    getToolset: (agentId: string) => {
-      // Look up agent and return its browser toolset if configured
-      const agent = mastra.getAgentById(agentId);
-      return agent?.browser;
+    getToolset: async (agentId: string) => {
+      // Look up agent and return its browser if configured.
+      // First try the runtime registry (code-defined + previously hydrated agents),
+      // then fall back to the editor for stored agents (hydrates on first access).
+      try {
+        const runtimeAgent = mastra.getAgentById(agentId);
+        if (runtimeAgent) {
+          return runtimeAgent.browser;
+        }
+      } catch {
+        // Agent not in runtime registry — try stored agents via editor
+      }
+
+      try {
+        const storedAgent = await mastra.getEditor?.()?.agent.getById(agentId);
+        return storedAgent?.browser;
+      } catch {
+        return undefined;
+      }
     },
+    apiPrefix,
   });
 
-  //Global cors config
+  // Fallback session probe when browser streaming isn't available
+  // (ws / @hono/node-ws not installed, or serverless environment).
+  // Lets the client decide not to open a WS instead of failing the upgrade.
+  if (!browserStreamSetup) {
+    app.get(`${apiPrefix}/agents/:agentId/browser/session`, c =>
+      c.json({ hasSession: false, screencastAvailable: false }),
+    );
+  }
+
+  // Global CORS config
   if (server?.cors === false) {
     app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000));
   } else {
-    // Check if auth is configured - if so, we need credentials for cookie-based sessions
     const hasAuth = !!server?.auth;
+    app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000), async (c, next) => {
+      const pathname = new URL(c.req.url).pathname;
+      const method =
+        c.req.method === 'OPTIONS' ? (c.req.header('Access-Control-Request-Method') ?? c.req.method) : c.req.method;
+      const routeCors = getRouteCorsConfig(processedRoutes, pathname, method);
 
-    // When auth + credentials are enabled, origin cannot be '*'.
-    // Use user-configured cors.origin if provided; otherwise fall back to
-    // reflecting the request origin (required for dev/Studio but users should
-    // set an explicit origin in production).
-    let corsOrigin: string | string[] | ((origin: string) => string | undefined | null);
-    if (server?.cors && typeof server.cors === 'object' && 'origin' in server.cors && server.cors.origin) {
-      corsOrigin = server.cors.origin as string | string[] | ((origin: string) => string | undefined | null);
-    } else if (hasAuth) {
-      corsOrigin = (origin: string) => origin || undefined;
-    } else {
-      corsOrigin = '*';
-    }
-
-    const corsConfig = {
-      origin: corsOrigin,
-      allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      // Enable credentials for cookie-based auth (e.g., Better Auth sessions)
-      credentials: hasAuth ? true : false,
-      maxAge: 3600,
-      ...server?.cors,
-      allowHeaders: [
-        'Content-Type',
-        'Authorization',
-        'x-mastra-client-type',
-        'x-mastra-dev-playground',
-        ...(server?.cors?.allowHeaders ?? []),
-      ],
-      exposeHeaders: ['Content-Length', 'X-Requested-With', ...(server?.cors?.exposeHeaders ?? [])],
-    };
-    app.use('*', timeout(server?.timeout ?? 3 * 60 * 1000), cors(corsConfig));
+      const corsOptions = routeCors ? getCorsConfig(routeCors, false) : getCorsConfig(server?.cors, hasAuth);
+      return cors(corsOptions as unknown as Parameters<typeof cors>[0])(c, next);
+    });
   }
 
   // Health check endpoint (before auth middleware so it's publicly accessible)
@@ -266,7 +309,7 @@ export async function createHonoServer(
     });
 
     for (const middleware of middlewares) {
-      app.use(middleware.path, middleware.handler);
+      app.use(middleware.path, middleware.handler as unknown as HonoMiddlewareHandler);
     }
   }
 
@@ -426,7 +469,8 @@ export async function createHonoServer(
       const experimentalFeatures = process.env.EXPERIMENTAL_FEATURES === 'true' ? 'true' : 'false';
       const experimentalUI = process.env.MASTRA_EXPERIMENTAL_UI === 'true' ? 'true' : 'false';
       const templatesEnabled = process.env.MASTRA_TEMPLATES === 'true' ? 'true' : 'false';
-      const agentSignals = process.env.MASTRA_AGENT_SIGNALS === 'true' ? 'true' : 'false';
+      const agentSignals = process.env.MASTRA_AGENT_SIGNALS === 'false' ? 'false' : 'true';
+      const signalsUI = process.env.MASTRA_SIGNALS_UI === 'true' ? 'true' : 'false';
       const requestContextPresets = process.env.MASTRA_REQUEST_CONTEXT_PRESETS || '';
 
       // Helper function to escape JSON for embedding in HTML/JavaScript
@@ -454,10 +498,11 @@ export async function createHonoServer(
         cloudApiEndpoint: `'${cloudApiEndpoint}'`,
         experimentalFeatures: `'${experimentalFeatures}'`,
         templates: `'${templatesEnabled}'`,
-        telemetryDisabled: `''`,
+        telemetryDisabled: `'${process.env.MASTRA_TELEMETRY_DISABLED ?? ''}'`,
         requestContextPresets: `'${escapeForHtml(requestContextPresets)}'`,
         experimentalUI: `'${experimentalUI}'`,
         agentSignals: `'${agentSignals}'`,
+        signalsUI: `'${signalsUI}'`,
         autoDetectUrl: `'${autoDetectUrl}'`,
       });
 
@@ -564,6 +609,50 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
   } else {
     await workerLifecycle.startEventEngine();
   }
+
+  // Fire-and-forget anonymous token usage telemetry (respects MASTRA_TELEMETRY_DISABLED).
+  // Dynamic import keeps compatibility with older @mastra/core versions without the
+  // `@mastra/core/telemetry` entry point.
+  void import('@mastra/core/telemetry').then(({ syncUsageTelemetry }) => syncUsageTelemetry(mastra)).catch(() => {});
+
+  // Graceful shutdown so storage backends release resources (e.g. DuckDB's
+  // native file lock) before the process exits. On `mastra dev` hot reloads
+  // the old process is sent SIGINT; without this the lock can linger and the
+  // restarted process fails with "Conflicting lock is held".
+  const SHUTDOWN_TIMEOUT_MS = 5000;
+  let shuttingDown = false;
+  const shutdown = async (signal: NodeJS.Signals) => {
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
+    const logger = mastra.getLogger();
+    logger.info('Shutting down Mastra server', { signal });
+    server.close();
+    // Feature-detect for older @mastra/core versions without shutdown().
+    const lifecycle = mastra as unknown as { shutdown?: () => Promise<void> };
+    if (typeof lifecycle.shutdown === 'function') {
+      // Bound the wait so a hanging shutdown can't block process exit.
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      const timedOut = Symbol('shutdown-timeout');
+      const timeoutPromise = new Promise<typeof timedOut>(resolve => {
+        timeout = setTimeout(() => resolve(timedOut), SHUTDOWN_TIMEOUT_MS);
+      });
+      try {
+        const result = await Promise.race([lifecycle.shutdown(), timeoutPromise]);
+        if (result === timedOut) {
+          logger.warn('Mastra shutdown timed out; forcing exit', { timeoutMs: SHUTDOWN_TIMEOUT_MS });
+        }
+      } catch (error) {
+        logger.error('Error during Mastra shutdown', { error });
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+    process.exit(0);
+  };
+  process.once('SIGINT', () => void shutdown('SIGINT'));
+  process.once('SIGTERM', () => void shutdown('SIGTERM'));
 
   return server;
 }

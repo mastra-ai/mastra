@@ -1,0 +1,19 @@
+packages:
+  - '.'
+
+overrides:
+  '@mastra/core': link:../../core
+  '@mastra/agent-builder': link:../../agent-builder
+  '@mastra/agent': link:../../agent
+  '@mastra/libsql': link:../../../stores/libsql
+  '@mastra/mcp': link:../../mcp
+  '@mastra/memory': link:../../memory
+  '@mastra/tools': link:../../tools
+  '@mastra/rag': link:../../rag
+  '@mastra/voice': link:../../voice
+  mastra: link:../../cli
+  '@internal/test-utils': link:../../_test-utils
+  '@internal/llm-recorder': link:../../_llm-recorder
+
+allowBuilds:
+  esbuild: set this to true or false

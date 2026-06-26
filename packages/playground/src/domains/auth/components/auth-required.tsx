@@ -1,4 +1,4 @@
-import { LogoWithoutText } from '@mastra/playground-ui';
+import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Lock } from 'lucide-react';
 import { useAuthCapabilities } from '../hooks/use-auth-capabilities';
 import { isAuthenticated } from '../types';
