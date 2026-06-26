@@ -230,7 +230,7 @@ export class CachingPubSub extends PubSub {
         return;
       }
 
-      if (typeof event.index === 'number') {
+      if (typeof event.index === 'number' && event.index > lastDelivered) {
         lastDelivered = event.index;
       }
       cb(event, ack, nack);
