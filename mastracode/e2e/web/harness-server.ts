@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 import { createOpenAI } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
+import type { MastraBrowser } from '@mastra/core/browser';
 import { Harness } from '@mastra/core/harness';
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryNotificationsStorage } from '@mastra/core/notifications';
@@ -38,6 +39,8 @@ export interface ScenarioServerOptions {
   yolo?: boolean;
   /** Attach a real sandboxed workspace + file/shell tools to the agent. */
   workspace?: boolean;
+  /** Attach lightweight browser tools to the agent, matching provider tool names. */
+  browser?: 'stagehand' | 'agent-browser' | false;
   /**
    * Build the Harness with no storage of its own and configure storage on the
    * parent Mastra instead, exercising Harness#resolveStorage inheritance (the
@@ -55,11 +58,51 @@ export interface ScenarioServer {
   stop: () => Promise<void>;
 }
 
+function createScenarioBrowser(provider: 'stagehand' | 'agent-browser'): MastraBrowser {
+  const currentUrl = 'https://openclaw.ai';
+  const toolName = provider === 'stagehand' ? 'stagehand_navigate' : 'browser_goto';
+  const tools = {
+    [toolName]: createTool({
+      id: toolName,
+      description: `Scenario ${provider} navigation tool.`,
+      inputSchema: z.object({ url: z.string().min(1) }),
+      outputSchema: z.object({ success: z.boolean(), url: z.string() }),
+      execute: async ({ url }: { url: string }) => ({ success: true, url }),
+    }),
+  };
+
+  return {
+    id: `scenario-${provider}-browser`,
+    provider,
+    providerType: 'sdk' as const,
+    headless: true,
+    getTools: () => tools,
+    getInputProcessors: () => [],
+    isBrowserRunning: () => true,
+    hasThreadSession: () => true,
+    getSessionId: (threadId?: string) => (threadId ? `scenario-browser:${threadId}` : 'scenario-browser'),
+    getCurrentUrl: async () => currentUrl,
+    getBrowserState: async () => ({
+      tabs: [{ url: currentUrl, title: 'OpenClaw' }],
+      activeTabIndex: 0,
+    }),
+    startScreencast: async () => ({ on: () => undefined, stop: () => undefined }),
+    startScreencastIfBrowserActive: async () => null,
+    injectMouseEvent: async () => undefined,
+    injectKeyboardEvent: async () => undefined,
+  } as unknown as MastraBrowser;
+}
+
 export async function startHarnessServer(
   aimockBaseUrl: string,
   options: ScenarioServerOptions = {},
 ): Promise<ScenarioServer> {
-  const { yolo = true, workspace: withWorkspace = false, inheritStorageFromMastra = false } = options;
+  const {
+    yolo = true,
+    workspace: withWorkspace = false,
+    browser: browserProvider = false,
+    inheritStorageFromMastra = false,
+  } = options;
   const openai = createOpenAI({ apiKey: 'scenario-key', baseURL: aimockBaseUrl });
 
   let workspace: Workspace | undefined;
@@ -108,12 +151,14 @@ export async function startHarnessServer(
     },
   } as any);
 
+  const browser = browserProvider ? createScenarioBrowser(browserProvider) : undefined;
   const agent = new Agent({
     id: 'code-agent',
     name: 'code-agent',
     instructions: 'You are a coding assistant for scenario tests.',
     model: openai('gpt-5.4-mini'),
     tools: { ...(tools ?? {}), request_access: requestAccessTool } as any,
+    ...(browser ? { browser } : {}),
   });
 
   // A registered Harness always reads storage through its parent Mastra
