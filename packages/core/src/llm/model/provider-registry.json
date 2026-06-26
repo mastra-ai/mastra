@@ -3949,7 +3949,8 @@
         "openai/gpt-oss-20b",
         "pearl-ai/gemma-4-31b-it",
         "zai-org/GLM-5",
-        "zai-org/GLM-5.1"
+        "zai-org/GLM-5.1",
+        "zai-org/GLM-5.2"
       ],
       "docUrl": "https://docs.together.ai/docs/serverless-models",
       "gateway": "models.dev",
@@ -8896,7 +8897,8 @@
       "openai/gpt-oss-20b",
       "pearl-ai/gemma-4-31b-it",
       "zai-org/GLM-5",
-      "zai-org/GLM-5.1"
+      "zai-org/GLM-5.1",
+      "zai-org/GLM-5.2"
     ],
     "frogbot": [
       "claude-haiku-4-5",
