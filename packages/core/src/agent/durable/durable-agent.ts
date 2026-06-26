@@ -1054,13 +1054,133 @@ export class DurableAgent<
     messages: MessageListInput,
     options?: DurableAgentStreamOptions<TOutput>,
   ): Promise<FullOutput<TOutput>> {
-    const result = await this.stream(messages, {
-      ...(options ?? {}),
-      [CLOSE_ON_SUSPEND]: true,
-    } as DurableAgentStreamOptions<TOutput>);
+    // 1. Prepare for durable execution (non-durable phase)
+    const preparation = await prepareForDurableExecution<TOutput>({
+      agent: this.#wrappedAgent as Agent<string, any, TOutput>,
+      messages,
+      options: options as AgentExecutionOptions<TOutput>,
+      runId: options?.runId,
+      requestContext: options?.requestContext,
+      mastra: this.#mastra,
+      methodType: 'generate',
+    });
+
+    const { runId, messageId, workflowInput, registryEntry, messageList, threadId, resourceId } = preparation;
+
+    // 1a. Install the abort controller for this run. The controller is owned
+    // by this DurableAgent instance; the result's abort() method flips it,
+    // and the durable LLM-execution step reads `abortSignal` off the registry
+    // to thread it into the model call + abort short-circuits. If the caller
+    // also supplied an external signal, forward its abort to the internal
+    // controller so either source can cancel the run.
+    const abortController = new AbortController();
+    if (options?.abortSignal) {
+      if (options.abortSignal.aborted) {
+        abortController.abort((options.abortSignal as AbortSignal & { reason?: unknown }).reason);
+      } else {
+        options.abortSignal.addEventListener(
+          'abort',
+          () => abortController.abort((options.abortSignal as AbortSignal & { reason?: unknown }).reason),
+          { once: true },
+        );
+      }
+    }
+    registryEntry.abortController = abortController;
+    registryEntry.abortSignal = abortController.signal;
+
+    // 2. Register non-serializable state (both local and global registries)
+    this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
+    globalRunRegistry.set(runId, { ...registryEntry, messageList });
+
+    // Track cleanup state to avoid double cleanup
+    let cleanedUp = false;
+    let autoCleanupTimer: ReturnType<typeof setTimeout> | null = null;
+
+    // Schedule automatic registry cleanup after stream ends
+    const scheduleAutoCleanup = () => {
+      if (autoCleanupTimer || cleanedUp || this.#cleanupTimeoutMs === 0) return;
+      autoCleanupTimer = setTimeout(() => {
+        if (!cleanedUp) {
+          this.#runRegistry.cleanup(runId);
+          globalRunRegistry.delete(runId);
+          this.#clearPubsubTopic(runId);
+          cleanedUp = true;
+        }
+      }, this.#cleanupTimeoutMs);
+    };
+
+    // 3. Create the durable agent stream (subscribes to pubsub)
+    const {
+      output,
+      cleanup: streamCleanup,
+      ready,
+    } = createDurableAgentStream<TOutput>({
+      pubsub: this.pubsub,
+      runId,
+      messageId,
+      model: {
+        modelId: workflowInput.modelConfig.modelId,
+        provider: workflowInput.modelConfig.provider,
+        version: 'v3',
+      },
+      threadId,
+      resourceId,
+      onChunk: options?.onChunk,
+      onStepFinish: options?.onStepFinish,
+      onFinish: async result => {
+        await options?.onFinish?.(result);
+        scheduleAutoCleanup();
+      },
+      onError: async error => {
+        await options?.onError?.(error);
+        scheduleAutoCleanup();
+      },
+      onSuspended: options?.onSuspended,
+      onAbort: async data => {
+        try {
+          await (options?.onAbort as ((event: any) => void | Promise<void>) | undefined)?.(data);
+        } finally {
+          scheduleAutoCleanup();
+        }
+      },
+      onIterationComplete: options?.onIterationComplete
+        ? async data => {
+            await (options.onIterationComplete as (ctx: any) => void | Promise<void>)?.(data);
+          }
+        : undefined,
+      closeOnSuspend: true,
+    });
+
+    // 4. Wait for subscription to be ready, then execute workflow
+    // This prevents race conditions where events are published before subscription
+    const workflowExecution = ready
+      .then(() => this.executeWorkflow(runId, workflowInput))
+      .catch(error => {
+        void this.emitError(runId, error);
+      });
+    const trackedEntry = globalRunRegistry.get(runId);
+    if (trackedEntry) {
+      trackedEntry.workflowExecution = workflowExecution;
+    }
+
+    // 5. Create cleanup function (cancels auto-cleanup timer if called)
+    const cleanup = () => {
+      if (autoCleanupTimer) {
+        clearTimeout(autoCleanupTimer);
+        autoCleanupTimer = null;
+      }
+      if (!cleanedUp) {
+        streamCleanup();
+        this.#runRegistry.cleanup(runId);
+        globalRunRegistry.delete(runId);
+        this.#clearPubsubTopic(runId);
+        cleanedUp = true;
+      }
+    };
+
     let suspended = false;
     try {
-      const fullOutput = (await result.output.getFullOutput()) as FullOutput<TOutput>;
+      const fullOutput = (await output.getFullOutput()) as FullOutput<TOutput>;
       if (fullOutput.error) {
         throw fullOutput.error;
       }
@@ -1069,19 +1189,19 @@ export class DurableAgent<
       // has persisted the snapshot. Await the workflow execution so a later
       // `resumeGenerate()` can find a snapshot to resume from.
       if (suspended) {
-        await globalRunRegistry.get(result.runId)?.workflowExecution;
+        await globalRunRegistry.get(runId)?.workflowExecution;
       }
       // Fall back to the stream-level runId if MastraModelOutput.runId wasn't
       // populated (no chunk surfaced before suspend).
       if (!fullOutput.runId) {
-        (fullOutput as { runId?: string }).runId = result.runId;
+        (fullOutput as { runId?: string }).runId = runId;
       }
       return fullOutput;
     } finally {
       // Keep the registry entry alive on suspend so `resumeGenerate()` can
       // pick it up. Auto-cleanup is scheduled by FINISH/ERROR/ABORT paths.
       if (!suspended) {
-        result.cleanup();
+        cleanup();
       }
     }
   }

@@ -5563,6 +5563,7 @@ export class Agent<
     autoResumeSuspendedTools?: boolean;
     hooks?: ToolHooks;
     delegation?: DelegationConfig;
+    methodType?: AgentMethodType;
   }): Promise<Record<string, CoreTool>> {
     const requestContext = options.requestContext ?? new RequestContext();
     const defaultOptions = await this.getDefaultOptions({ requestContext });
@@ -5594,7 +5595,7 @@ export class Agent<
       memoryConfig: options.memoryConfig ?? mergedMemory?.options,
       autoResumeSuspendedTools: mergedOptions.autoResumeSuspendedTools,
       delegation: options.delegation ?? mergedOptions.delegation,
-      methodType: 'stream',
+      methodType: options.methodType ?? 'stream',
     });
   }
 

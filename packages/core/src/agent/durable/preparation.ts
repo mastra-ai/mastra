@@ -18,7 +18,7 @@ import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
-import type { AgentInstructions, AgentModelManagerConfig, ToolsetsInput, ToolsInput } from '../types';
+import type { AgentInstructions, AgentMethodType, AgentModelManagerConfig, ToolsetsInput, ToolsInput } from '../types';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
 import { createWorkflowInput } from './utils/serialize-state';
 
@@ -66,6 +66,7 @@ interface DurablePreparationAgent {
     autoResumeSuspendedTools?: boolean;
     hooks?: ToolHooks;
     delegation?: DelegationConfig;
+    methodType?: AgentMethodType;
   }): Promise<Record<string, CoreTool>>;
   listInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
   listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
@@ -112,6 +113,8 @@ export interface PreparationOptions<OUTPUT = undefined> {
   logger?: IMastraLogger;
   /** Mastra instance (for version overrides, background tasks, etc.) */
   mastra?: Mastra;
+  /** Method type */
+  methodType?: AgentMethodType;
 }
 
 /**
@@ -140,6 +143,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     requestContext: providedRequestContext,
     logger,
     mastra,
+    methodType = 'stream',
   } = options;
 
   const typedAgent = agent as unknown as DurablePreparationAgent;
@@ -371,6 +375,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
       hooks: execOptions?.hooks,
       delegation: execOptions?.delegation,
+      methodType,
     });
   } catch (error) {
     logger?.warn?.(`[DurableAgent] Error converting tools: ${error}`);
