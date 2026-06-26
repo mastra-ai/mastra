@@ -1,7 +1,8 @@
 /**
- * Event dispatcher: maps HarnessEvent types to extracted handler functions.
+ * Event dispatcher: maps AgentControllerEvent types to extracted handler functions.
  */
-import type { HarnessEvent, HarnessThread, TaskItemSnapshot } from '@mastra/core/harness';
+import type { AgentControllerEvent, AgentControllerThread } from '@mastra/core/agent-controller';
+import type { TaskItemSnapshot } from '@mastra/core/signals';
 import type { AskUserSelectionMode } from '@mastra/core/tools';
 
 import { getCurrentGitBranchAsync } from '../utils/project.js';
@@ -45,7 +46,7 @@ import type { TUIState } from './state.js';
 import { getGithubPrSubscriptionsFromMetadata } from './state.js';
 
 /**
- * Dispatch a HarnessEvent to the appropriate handler.
+ * Dispatch a AgentControllerEvent to the appropriate handler.
  */
 function trackInteractivePrompt(
   ectx: EventHandlerContext,
@@ -55,7 +56,11 @@ function trackInteractivePrompt(
   ectx.analytics?.trackInteractivePrompt(promptType, properties);
 }
 
-export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerContext, state: TUIState): Promise<void> {
+export async function dispatchEvent(
+  event: AgentControllerEvent,
+  ectx: EventHandlerContext,
+  state: TUIState,
+): Promise<void> {
   switch (event.type) {
     case 'agent_start':
       // Reset tokens/sec at the start of a new turn (not at the end) so the
@@ -169,7 +174,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       }
       state.taskToolInsertIndex = -1;
       await ectx.renderExistingMessages();
-      await state.harness.loadOMProgress(state.session);
+      await state.controller.loadOMProgress(state.session);
       // Refresh git branch async so TUI status line reflects the current branch
       getCurrentGitBranchAsync(state.projectInfo.rootPath).then(freshBranch => {
         if (freshBranch) {
@@ -179,7 +184,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       });
       // Update current thread title for status line display
       const threads = await state.session.thread.list();
-      const currentThread = threads.find((t: HarnessThread) => t.id === event.threadId);
+      const currentThread = threads.find((t: AgentControllerThread) => t.id === event.threadId);
       if (currentThread) {
         state.currentThreadTitle = currentThread.title;
         const metadata = currentThread.metadata as Record<string, unknown> | undefined;
@@ -230,7 +235,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
     }
 
     case 'usage_update': {
-      // Token accumulation handled by Harness display state.
+      // Token accumulation handled by AgentController display state.
       // usage_update fires at step-finish and carries the completion (and any
       // reasoning) tokens generated during this step. Measure tokens/sec over the
       // decode window only — from this step's first content delta
@@ -256,7 +261,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
 
     // Observational Memory events
     case 'om_status':
-      // All state updates handled by Harness applyDisplayStateUpdate
+      // All state updates handled by AgentController applyDisplayStateUpdate
       break;
 
     case 'om_observation_start':
@@ -305,7 +310,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       break;
 
     case 'om_activation': {
-      const activationEvent = event as Extract<HarnessEvent, { type: 'om_activation' }> & {
+      const activationEvent = event as Extract<AgentControllerEvent, { type: 'om_activation' }> & {
         triggeredBy?: 'threshold' | 'ttl' | 'provider_change';
         lastActivityAt?: number;
         ttlExpiredMs?: number;
@@ -419,7 +424,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
     case 'tool_suspended': {
       // Interactive built-in tools pause via the native tool-suspension primitive.
       // Route the suspension to the matching prompt UI using the suspend payload;
-      // the UI resumes the tool by calling harness.session.respondToToolSuspension({ toolCallId }).
+      // the UI resumes the tool by calling controller.session.respondToToolSuspension({ toolCallId }).
       const payload = (event.suspendPayload ?? {}) as Record<string, unknown>;
       if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
         await handleSandboxAccessRequest(
@@ -443,10 +448,10 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
     }
 
     case 'display_state_changed':
-      // The Harness emits this after every event with the updated display state.
+      // The AgentController emits this after every event with the updated display state.
       // Use it as the single trigger for status-line re-renders since all the
       // fields it reads (isRunning, omProgress, buffering flags) are now
-      // maintained by the Harness.
+      // maintained by the AgentController.
       ectx.updateStatusLine();
       break;
   }

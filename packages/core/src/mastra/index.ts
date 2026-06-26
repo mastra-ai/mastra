@@ -3,6 +3,7 @@ import type { Agent } from '../agent';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
+import type { AgentController } from '../agent-controller';
 import { BackgroundTaskManager } from '../background-tasks';
 import type { BackgroundTaskManagerConfig } from '../background-tasks/types';
 import type { BundlerConfig } from '../bundler/types';
@@ -18,7 +19,7 @@ import type { MastraScorer } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event, EventCallback } from '../events/types';
-import type { AgentController, Harness } from '../harness';
+import type { Harness } from '../harness';
 import { AvailableHooks, registerHook } from '../hooks';
 import { LicenseClient } from '../license';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
@@ -2071,6 +2072,19 @@ export class Mastra<
       for (const workflow of durableWorkflows) {
         this.addWorkflow(workflow, workflow.id);
       }
+
+      // Register scorers from the underlying agent so durable runs can resolve
+      // them via mastra.getScorer()/getScorerById() at workflow time.
+      underlyingAgent
+        .listScorers()
+        .then(scorers => {
+          for (const [, entry] of Object.entries(scorers || {})) {
+            this.addScorer(entry.scorer, undefined, { source: 'code' });
+          }
+        })
+        .catch(err => {
+          this.#logger?.debug(`Failed to register scorers from durable agent ${agentKey}:`, err);
+        });
 
       return;
     }

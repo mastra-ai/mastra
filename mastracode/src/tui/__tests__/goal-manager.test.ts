@@ -38,7 +38,7 @@ function createState(agent?: FakeAgent, threadId: string | undefined = 'parent-t
       identity: { getResourceId: vi.fn(() => 'resource-1') },
       thread: { getId: vi.fn(() => threadId), setSetting: vi.fn().mockResolvedValue(undefined) },
     },
-    harness: {
+    controller: {
       getCurrentAgent: vi.fn(() => agent),
     },
   } as unknown as TUIState;

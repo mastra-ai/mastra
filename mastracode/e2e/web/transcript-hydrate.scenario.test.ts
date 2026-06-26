@@ -1,4 +1,4 @@
-import type { HarnessMessage } from '@mastra/client-js';
+import type { AgentControllerMessage } from '@mastra/client-js';
 import { describe, it, expect } from 'vitest';
 
 import { initialTranscript, transcriptReducer } from '../../src/web/ui/transcript.js';
@@ -16,14 +16,14 @@ function assistantText(entry: TimelineEntry): string {
  * load them via listMessages and dispatch a `hydrate` action. This guards the
  * regression where selecting a thread showed an empty transcript.
  */
-function userMsg(id: string, text: string): HarnessMessage {
-  return { id, role: 'user', content: [{ type: 'text', text }] } as unknown as HarnessMessage;
+function userMsg(id: string, text: string): AgentControllerMessage {
+  return { id, role: 'user', content: [{ type: 'text', text }] } as unknown as AgentControllerMessage;
 }
-function assistantMsg(id: string, text: string): HarnessMessage {
-  return { id, role: 'assistant', content: [{ type: 'text', text }] } as unknown as HarnessMessage;
+function assistantMsg(id: string, text: string): AgentControllerMessage {
+  return { id, role: 'assistant', content: [{ type: 'text', text }] } as unknown as AgentControllerMessage;
 }
-function systemMsg(id: string, text: string): HarnessMessage {
-  return { id, role: 'system', content: [{ type: 'text', text }] } as unknown as HarnessMessage;
+function systemMsg(id: string, text: string): AgentControllerMessage {
+  return { id, role: 'system', content: [{ type: 'text', text }] } as unknown as AgentControllerMessage;
 }
 
 describe('transcript hydrate (thread history rendering)', () => {
@@ -75,7 +75,7 @@ describe('transcript hydrate (thread history rendering)', () => {
   });
 
   it('reconstructs tool calls (name, args, result) on the assistant entry', () => {
-    const assistantWithTool: HarnessMessage = {
+    const assistantWithTool: AgentControllerMessage = {
       id: 'a1',
       role: 'assistant',
       content: [
@@ -83,7 +83,7 @@ describe('transcript hydrate (thread history rendering)', () => {
         { type: 'tool_call', id: 'tc-1', name: 'read_file', args: { path: 'README.md' } },
         { type: 'tool_result', id: 'tc-1', result: 'file contents here', isError: false },
       ],
-    } as unknown as HarnessMessage;
+    } as unknown as AgentControllerMessage;
 
     const state = transcriptReducer(initialTranscript, {
       type: 'hydrate',
@@ -107,7 +107,7 @@ describe('transcript hydrate (thread history rendering)', () => {
   });
 
   it('preserves execution order: text → tool → text interleaved, not grouped', () => {
-    const msg: HarnessMessage = {
+    const msg: AgentControllerMessage = {
       id: 'a1',
       role: 'assistant',
       content: [
@@ -119,7 +119,7 @@ describe('transcript hydrate (thread history rendering)', () => {
         { type: 'tool_result', id: 'tc-2', result: 'ok', isError: false },
         { type: 'text', text: 'Done.' },
       ],
-    } as unknown as HarnessMessage;
+    } as unknown as AgentControllerMessage;
     const state = transcriptReducer(initialTranscript, { type: 'hydrate', messages: [msg], threadId: 't' });
     const assistant = state.entries[0];
     if (assistant.kind !== 'assistant') throw new Error('expected assistant entry');
@@ -134,14 +134,14 @@ describe('transcript hydrate (thread history rendering)', () => {
   });
 
   it('marks a tool as errored when its result is an error', () => {
-    const msg: HarnessMessage = {
+    const msg: AgentControllerMessage = {
       id: 'a1',
       role: 'assistant',
       content: [
         { type: 'tool_call', id: 'tc-9', name: 'shell', args: { cmd: 'nope' } },
         { type: 'tool_result', id: 'tc-9', result: 'command not found', isError: true },
       ],
-    } as unknown as HarnessMessage;
+    } as unknown as AgentControllerMessage;
     const state = transcriptReducer(initialTranscript, { type: 'hydrate', messages: [msg], threadId: 't' });
     const assistant = state.entries[0];
     if (assistant.kind !== 'assistant') throw new Error('expected assistant entry');

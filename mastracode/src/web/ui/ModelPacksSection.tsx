@@ -1,4 +1,4 @@
-import type { HarnessAvailableModel } from '@mastra/client-js';
+import type { AgentControllerAvailableModel } from '@mastra/client-js';
 import { useEffect, useState } from 'react';
 
 import { CheckIcon, PlusIcon } from './icons';
@@ -34,7 +34,7 @@ export function ModelPacksSection({
 }: {
   baseUrl?: string;
   resourceId?: string;
-  models: HarnessAvailableModel[];
+  models: AgentControllerAvailableModel[];
 }) {
   const [packs, setPacks] = useState<ModelPackInfo[]>([]);
   const [loading, setLoading] = useState(true);

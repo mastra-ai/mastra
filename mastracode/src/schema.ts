@@ -65,10 +65,10 @@ export interface MastraCodeState {
 }
 
 export const stateSchema = z.object({
-  // Session-scoped selection. The legacy Harness stores these in its state and
+  // Session-scoped selection.
   // validates state against this schema, so they MUST be declared here — Zod
   // strips unknown keys on parse, which would otherwise silently discard the
-  // seeded model and leave the harness with no model selected.
+  // seeded model and leave the controller with no model selected.
   currentModelId: z.string().optional(),
   modeId: z.string().optional(),
   subagentModelId: z.string().optional(),

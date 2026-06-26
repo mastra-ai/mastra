@@ -1,4 +1,4 @@
-import type { HarnessAvailableModel } from '@mastra/client-js';
+import type { AgentControllerAvailableModel } from '@mastra/client-js';
 import { useEffect, useState } from 'react';
 
 interface OMConfig {
@@ -36,7 +36,7 @@ export function OMSection({
 }: {
   baseUrl?: string;
   resourceId?: string;
-  models: HarnessAvailableModel[];
+  models: AgentControllerAvailableModel[];
 }) {
   const [config, setConfig] = useState<OMConfig | null>(null);
   const [loading, setLoading] = useState(true);

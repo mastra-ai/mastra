@@ -62,7 +62,7 @@ VALUES
     await runtime.waitForScreenText(/Worktree of:/i, terminal);
     runtime.printScreen('after startup', terminal);
 
-    // With the fix, the harness filters by projectPath, finds 0 matches for
+    // With the fix, the controller filters by projectPath, finds 0 matches for
     // this worktree, and creates a fresh (untitled) thread. Without the fix,
     // the untagged thread passes through and gets selected by updatedAt.
     terminal.submit('/thread');

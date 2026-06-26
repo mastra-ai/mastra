@@ -34,7 +34,7 @@ describe('getAllowedPathsFromContext', () => {
     const toolContext = {
       requestContext: {
         get: (key: string) => {
-          if (key === 'harness') {
+          if (key === 'controller') {
             return {
               session: {
                 state: {
@@ -61,11 +61,11 @@ describe('getAllowedPathsFromContext', () => {
     ]);
   });
 
-  it('merges skill paths with sandbox paths from harness state (static state)', () => {
+  it('merges skill paths with sandbox paths from controller state (static state)', () => {
     const toolContext = {
       requestContext: {
         get: (key: string) => {
-          if (key === 'harness') {
+          if (key === 'controller') {
             return {
               session: {
                 state: {
@@ -89,7 +89,7 @@ describe('getAllowedPathsFromContext', () => {
     const toolContext = {
       requestContext: {
         get: (key: string) => {
-          if (key === 'harness') {
+          if (key === 'controller') {
             return {
               session: {
                 state: {
@@ -108,7 +108,7 @@ describe('getAllowedPathsFromContext', () => {
     expect(result).toEqual(['/mock/skills/dir-a', '/mock/skills/dir-b']);
   });
 
-  it('returns only skill paths when harness context is not set', () => {
+  it('returns only skill paths when controller context is not set', () => {
     const toolContext = {
       requestContext: {
         get: () => undefined,
@@ -122,7 +122,7 @@ describe('getAllowedPathsFromContext', () => {
     const toolContext = {
       requestContext: {
         get: (key: string) => {
-          if (key === 'harness') {
+          if (key === 'controller') {
             return {
               session: {
                 state: {
