@@ -797,13 +797,7 @@ const prohibitedMockModulePatterns = [
   '^@mastra\\/react$',
 ];
 
-// BDD structure enforcement for Playwright E2E specs (e2e/tests/**).
-// Every leaf `test(...)`, `it(...)`, or modifier form such as `test.skip(...)`
-// MUST be nested inside a `test.describe('when …')` (or `describe('when …')`)
-// precondition block.
-// A purely structural esquery selector cannot assert "nearest ancestor
-// describe title starts with 'when'", so this is implemented as a small custom
-// rule that walks the ancestor chain of each test declaration.
+// Enforce the Playwright E2E BDD shape, including modifier forms like `test.skip('...')`.
 const E2E_BDD_MESSAGE =
   "E2E BDD: every test()/it() must live inside a test.describe('when …') precondition block. " +
   "Outer test.describe = the unit, inner test.describe('when …') = ONE precondition, each test = ONE outcome. " +
@@ -819,7 +813,6 @@ function isStaticTestTitle(node) {
   );
 }
 
-/** True when a CallExpression node declares a `test(...)` / `it(...)` case. */
 function isTestDeclarationCall(node) {
   if (node.type !== 'CallExpression') return false;
 
@@ -833,8 +826,7 @@ function isTestDeclarationCall(node) {
     callee.object.type === 'Identifier' &&
     testFunctionNames.has(callee.object.name)
   ) {
-    // Ignore suite/test annotations such as `test.skip(true, 'reason')` or
-    // `test.slow()`; only title-bearing modifier calls declare actual tests.
+    // Guard-style annotations like `test.skip(true, 'reason')` do not declare test cases.
     return isStaticTestTitle(node.arguments[0]);
   }
 
