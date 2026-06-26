@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../handlers/index.js', () => ({
   handleAgentStart: vi.fn(),
@@ -99,6 +99,10 @@ async function decodeStep(
 describe('tokens/sec decode-window calculation', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('computes rate over decode time, excluding pre-decode (TTFT) time', async () => {
