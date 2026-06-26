@@ -67,7 +67,10 @@ input {
 .launcher-row,
 .manual-row,
 .section-heading button,
-.inline-config button {
+.inline-config button,
+.provider-tabs button,
+.setup-actions button,
+.model-choice {
   -webkit-app-region: no-drag;
 }
 
@@ -214,6 +217,7 @@ input {
   display: grid;
   place-items: center;
   padding: 32px;
+  overflow: auto;
 }
 
 .launcher[hidden],
@@ -222,7 +226,7 @@ input {
 }
 
 .launcher-panel {
-  width: min(700px, calc(100vw - 48px));
+  width: min(760px, calc(100vw - 48px));
 }
 
 .launcher-list {
@@ -305,7 +309,10 @@ input {
 .section-heading button,
 .inline-config button,
 .manual-row button,
-.error-actions button {
+.error-actions button,
+.provider-tabs button,
+.setup-actions button,
+.model-choice {
   border: 1px solid var(--line-strong);
   border-radius: 999px;
   background: #252525;
@@ -313,6 +320,73 @@ input {
   padding: 4px 9px;
   font-size: 11px;
   white-space: nowrap;
+}
+
+.local-setup {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.035);
+}
+
+.provider-tabs,
+.setup-actions,
+.model-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.provider-tabs button.active,
+.model-choice.active {
+  border-color: rgba(158, 240, 111, 0.38);
+  background: rgba(158, 240, 111, 0.12);
+  color: var(--text);
+}
+
+.setup-guidance {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.setup-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(96px, 0.65fr);
+  gap: 8px;
+}
+
+.setup-grid label {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.setup-grid input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #101010;
+  color: var(--text);
+  outline: none;
+  padding: 7px 9px;
+}
+
+.setup-grid input:focus {
+  border-color: rgba(158, 240, 111, 0.5);
+}
+
+.section-status {
+  color: var(--faint);
+  font-weight: 500;
+}
+
+.model-list {
+  max-height: 76px;
+  overflow: auto;
 }
 
 .error-actions {
@@ -411,5 +485,19 @@ input {
   .tab-close,
   .icon-button {
     transition: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .setup-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .studio-error {
+    grid-template-columns: 20px minmax(0, 1fr);
+  }
+
+  .error-actions {
+    grid-column: 2;
   }
 }

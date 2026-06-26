@@ -120,6 +120,7 @@ export interface MastraDesktopApi {
   logoutPlatform: () => Promise<DesktopState>;
   refreshPlatform: () => Promise<DesktopState>;
   probeLmStudioModels: (modelUrl?: string) => Promise<ProbeModelsResult>;
+  probeOpenAICompatibleModels: (modelUrl?: string, providerName?: string) => Promise<ProbeModelsResult>;
   restartRuntime: () => Promise<DesktopState>;
   getLogs: () => Promise<string[]>;
   openStudioExternal: () => Promise<void>;

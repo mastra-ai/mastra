@@ -15,8 +15,10 @@ const api: MastraDesktopApi = {
     ipcRenderer.invoke('desktop:update-settings', settings) as Promise<UpdateSettingsResult>,
   createLauncherTab: () => ipcRenderer.invoke('desktop:create-launcher-tab') as Promise<DesktopState>,
   createManagedTab: () => ipcRenderer.invoke('desktop:create-managed-tab') as Promise<DesktopState>,
-  createDevTab: (input: CreateDevTabInput) => ipcRenderer.invoke('desktop:create-dev-tab', input) as Promise<DesktopState>,
-  createPlatformTab: (projectId: string) => ipcRenderer.invoke('desktop:create-platform-tab', projectId) as Promise<DesktopState>,
+  createDevTab: (input: CreateDevTabInput) =>
+    ipcRenderer.invoke('desktop:create-dev-tab', input) as Promise<DesktopState>,
+  createPlatformTab: (projectId: string) =>
+    ipcRenderer.invoke('desktop:create-platform-tab', projectId) as Promise<DesktopState>,
   activateTab: (tabId: string) => ipcRenderer.invoke('desktop:activate-tab', tabId) as Promise<DesktopState>,
   closeTab: (tabId: string) => ipcRenderer.invoke('desktop:close-tab', tabId) as Promise<DesktopState>,
   reloadTab: (tabId: string) => ipcRenderer.invoke('desktop:reload-tab', tabId) as Promise<DesktopState>,
@@ -26,6 +28,8 @@ const api: MastraDesktopApi = {
   refreshPlatform: () => ipcRenderer.invoke('desktop:refresh-platform') as Promise<DesktopState>,
   probeLmStudioModels: (modelUrl?: string) =>
     ipcRenderer.invoke('desktop:probe-lmstudio-models', modelUrl) as Promise<ProbeModelsResult>,
+  probeOpenAICompatibleModels: (modelUrl?: string, providerName?: string) =>
+    ipcRenderer.invoke('desktop:probe-openai-compatible-models', modelUrl, providerName) as Promise<ProbeModelsResult>,
   restartRuntime: () => ipcRenderer.invoke('desktop:restart-runtime') as Promise<DesktopState>,
   getLogs: () => ipcRenderer.invoke('desktop:get-logs') as Promise<string[]>,
   openStudioExternal: () => ipcRenderer.invoke('desktop:open-studio-external') as Promise<void>,

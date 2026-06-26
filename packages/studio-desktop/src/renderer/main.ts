@@ -1,4 +1,6 @@
-import type { DesktopState, DesktopTab, MastraDesktopApi, PlatformProject } from '../shared/types';
+import { LOCAL_MODEL_PRESETS } from '../shared/model-presets';
+import type { LocalModelProviderId } from '../shared/model-presets';
+import type { DesktopState, DesktopTab, MastraDesktopApi, PlatformProject, ProbeModelsResult } from '../shared/types';
 
 declare global {
   interface Window {
@@ -19,6 +21,12 @@ if (!tabStrip || !newTabButton || !launcher || !webviews) {
 let state: DesktopState | undefined;
 let manualServerUrl = '4111';
 let platformBaseUrl = '';
+let localProviderId: LocalModelProviderId = 'lmstudio';
+let localModelUrl = '';
+let localModelId = '';
+let localModelApiKey = '';
+let localModelFieldsDirty = false;
+let localModelProbe: ProbeModelsResult | undefined;
 let busyAction: string | undefined;
 let lastError: string | undefined;
 
@@ -28,6 +36,46 @@ function escapeHtml(value: string | undefined) {
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;');
+}
+
+function providerForModelUrl(modelUrl: string): LocalModelProviderId {
+  const normalized = modelUrl.replace(/\/$/, '');
+  if (normalized === LOCAL_MODEL_PRESETS.ollama.modelUrl) return 'ollama';
+  if (normalized === LOCAL_MODEL_PRESETS.lmstudio.modelUrl) return 'lmstudio';
+  return 'custom';
+}
+
+function selectedLocalProvider() {
+  return LOCAL_MODEL_PRESETS[localProviderId] ?? LOCAL_MODEL_PRESETS.custom;
+}
+
+function syncLocalModelFields(current: DesktopState, force = false) {
+  if (!force && localModelFieldsDirty) return;
+
+  localModelUrl = current.settings.modelUrl;
+  localModelId = current.settings.modelId;
+  localModelApiKey = current.settings.modelApiKey;
+  localProviderId = providerForModelUrl(current.settings.modelUrl);
+}
+
+function setLocalProvider(providerId: LocalModelProviderId) {
+  const preset = LOCAL_MODEL_PRESETS[providerId];
+  localProviderId = preset.id;
+  if (providerId !== 'custom') {
+    localModelUrl = preset.modelUrl;
+    localModelId = preset.modelId;
+    localModelApiKey = preset.modelApiKey;
+  }
+  localModelFieldsDirty = true;
+  localModelProbe = undefined;
+}
+
+function currentModelMatchesSettings(current: DesktopState) {
+  return (
+    localModelUrl.trim() === current.settings.modelUrl &&
+    localModelId.trim() === current.settings.modelId &&
+    localModelApiKey.trim() === current.settings.modelApiKey
+  );
 }
 
 function canOpenHostedStudio(project: PlatformProject) {
@@ -157,6 +205,81 @@ function renderPlatformRows(current: DesktopState) {
   `;
 }
 
+function renderDetectedModels() {
+  if (!localModelProbe) return '';
+
+  if (!localModelProbe.ok) {
+    return `<div class="error-banner">${escapeHtml(localModelProbe.error ?? 'Unable to reach the model server.')}</div>`;
+  }
+
+  if (localModelProbe.models.length === 0) {
+    return `<div class="info-banner">Server reachable, but no loaded models were reported.</div>`;
+  }
+
+  return `
+    <div class="model-list">
+      ${localModelProbe.models
+        .map(
+          model => `
+            <button class="model-choice ${model === localModelId ? 'active' : ''}" type="button" data-model-id="${escapeHtml(model)}">
+              ${escapeHtml(model)}
+            </button>
+          `,
+        )
+        .join('')}
+    </div>
+  `;
+}
+
+function renderLocalSetup(current: DesktopState) {
+  const selectedProvider = selectedLocalProvider();
+  const isApplied = currentModelMatchesSettings(current);
+  const runtimeLabel =
+    current.runtime.state === 'running'
+      ? `Runtime running on ${current.runtime.url ?? 'local port'}`
+      : `Runtime ${current.runtime.state}`;
+
+  return `
+    <div class="section-heading">
+      <span>Local Model Setup</span>
+      <span class="section-status">${escapeHtml(runtimeLabel)}</span>
+    </div>
+    <div class="local-setup">
+      <div class="provider-tabs" role="group" aria-label="Local model provider">
+        ${Object.values(LOCAL_MODEL_PRESETS)
+          .map(
+            provider => `
+              <button class="${provider.id === localProviderId ? 'active' : ''}" type="button" data-provider-id="${provider.id}">
+                ${escapeHtml(provider.name)}
+              </button>
+            `,
+          )
+          .join('')}
+      </div>
+      <div class="setup-guidance">${escapeHtml(selectedProvider.guidance)}</div>
+      <div class="setup-grid">
+        <label>
+          <span>Base URL</span>
+          <input id="local-model-url" value="${escapeHtml(localModelUrl)}" placeholder="http://localhost:1234/v1" />
+        </label>
+        <label>
+          <span>Model ID</span>
+          <input id="local-model-id" value="${escapeHtml(localModelId)}" placeholder="Loaded model ID" />
+        </label>
+        <label>
+          <span>API key</span>
+          <input id="local-model-api-key" value="${escapeHtml(localModelApiKey)}" placeholder="not-needed" />
+        </label>
+      </div>
+      ${renderDetectedModels()}
+      <div class="setup-actions">
+        <button type="button" data-action="probe-local-models">${busyAction === 'probe-local-models' ? 'Probing...' : 'Probe models'}</button>
+        <button type="button" data-action="apply-local-model">${busyAction === 'apply-local-model' ? 'Applying...' : isApplied ? 'Restart runtime' : 'Apply & restart'}</button>
+      </div>
+    </div>
+  `;
+}
+
 function renderLauncher() {
   const current = state;
   const active = activeTab();
@@ -205,6 +328,8 @@ function renderLauncher() {
           <span class="row-action">Open</span>
         </button>
 
+        ${renderLocalSetup(current)}
+
         <button class="launcher-row" type="button" data-action="open-default-local">
           <span class="row-icon">L</span>
           <span class="row-main">
@@ -235,6 +360,20 @@ function renderLauncher() {
   });
   launcher.querySelector<HTMLInputElement>('#platform-base-url')?.addEventListener('input', event => {
     platformBaseUrl = (event.target as HTMLInputElement).value;
+  });
+  launcher.querySelector<HTMLInputElement>('#local-model-url')?.addEventListener('input', event => {
+    localModelUrl = (event.target as HTMLInputElement).value;
+    localProviderId = providerForModelUrl(localModelUrl);
+    localModelFieldsDirty = true;
+    localModelProbe = undefined;
+  });
+  launcher.querySelector<HTMLInputElement>('#local-model-id')?.addEventListener('input', event => {
+    localModelId = (event.target as HTMLInputElement).value;
+    localModelFieldsDirty = true;
+  });
+  launcher.querySelector<HTMLInputElement>('#local-model-api-key')?.addEventListener('input', event => {
+    localModelApiKey = (event.target as HTMLInputElement).value;
+    localModelFieldsDirty = true;
   });
 }
 
@@ -267,11 +406,27 @@ launcher.addEventListener('click', event => {
   const target = event.target as HTMLElement;
   const actionButton = target.closest<HTMLButtonElement>('[data-action]');
   const projectButton = target.closest<HTMLButtonElement>('[data-platform-project-id]');
+  const providerButton = target.closest<HTMLButtonElement>('[data-provider-id]');
+  const modelButton = target.closest<HTMLButtonElement>('[data-model-id]');
 
   if (projectButton?.dataset.platformProjectId) {
     void runAction(`platform-${projectButton.dataset.platformProjectId}`, () =>
       api.createPlatformTab(projectButton.dataset.platformProjectId!),
     );
+    return;
+  }
+
+  const providerId = providerButton?.dataset.providerId as LocalModelProviderId | undefined;
+  if (providerId && providerId in LOCAL_MODEL_PRESETS) {
+    setLocalProvider(providerId);
+    render();
+    return;
+  }
+
+  if (modelButton?.dataset.modelId) {
+    localModelId = modelButton.dataset.modelId;
+    localModelFieldsDirty = true;
+    render();
     return;
   }
 
@@ -296,6 +451,27 @@ launcher.addEventListener('click', event => {
     void runAction(action, () => api.reloadTab(state.activeTabId!));
   } else if (action === 'open-active-external' && state?.activeTabId) {
     void runAction(action, () => api.openTabExternal(state.activeTabId!));
+  } else if (action === 'probe-local-models') {
+    void runAction(action, async () => {
+      const provider = selectedLocalProvider();
+      localModelProbe = await api.probeOpenAICompatibleModels(localModelUrl, provider.name);
+      if (localModelProbe.ok && localModelProbe.models[0]) {
+        localModelId = localModelProbe.models[0]!;
+        localModelFieldsDirty = true;
+      }
+    });
+  } else if (action === 'apply-local-model') {
+    void runAction(action, async () => {
+      if (!localModelUrl.trim()) throw new Error('Enter a model server base URL.');
+      if (!localModelId.trim()) throw new Error('Enter or select a model ID.');
+      await api.updateSettings({
+        modelUrl: localModelUrl.trim(),
+        modelId: localModelId.trim(),
+        modelApiKey: localModelApiKey.trim() || 'not-needed',
+      });
+      localModelFieldsDirty = false;
+      return api.restartRuntime();
+    });
   }
 });
 
@@ -303,10 +479,12 @@ void api.getState().then(initialState => {
   state = initialState;
   manualServerUrl = initialState.settings.devServerUrl;
   platformBaseUrl = initialState.settings.platformBaseUrl;
+  syncLocalModelFields(initialState, true);
   render();
 });
 
 api.onStateChanged(nextState => {
   state = nextState;
+  syncLocalModelFields(nextState);
   render();
 });

@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, dialog, ipcMain, Menu, safeStorage, shell, WebContentsView } from 'electron';
 import type { CreateDevTabInput, DesktopSettings, DesktopState, DesktopTab, PlatformState } from '../shared/types';
 import { DEFAULT_RUNTIME_PORT, DEFAULT_STUDIO_PORT, LOCALHOST } from './defaults';
-import { probeLmStudioModels } from './lmstudio';
+import { probeLmStudioModels, probeOpenAICompatibleModels } from './lmstudio';
 import { probeMastraServer } from './local-dev';
 import { LogBuffer } from './log-buffer';
 import { resolveAppIconPath, resolveStarterOutputPath, resolveStudioDistPath } from './paths';
@@ -22,7 +22,14 @@ import {
 import type { PlatformSession } from './platform';
 import { deletePlatformSession, readPlatformSession, writePlatformSession } from './platform-session';
 import { findAvailablePort } from './ports';
-import { buildLmStudioPresetSettings, LM_STUDIO_PRESET, selectLmStudioModelId } from './presets';
+import {
+  buildLmStudioPresetSettings,
+  buildModelPresetSettings,
+  LM_STUDIO_PRESET,
+  OLLAMA_PRESET,
+  selectDetectedModelId,
+  selectLmStudioModelId,
+} from './presets';
 import { ManagedMastraRuntime } from './runtime';
 import { readSettings, updateSettings, writeSettings } from './settings';
 import { startStudioShellServer } from './studio-server';
@@ -661,6 +668,37 @@ async function checkLmStudioServer() {
   return result;
 }
 
+async function checkCurrentModelServer() {
+  const result = await probeOpenAICompatibleModels(currentSettings.modelUrl || LM_STUDIO_PRESET.modelUrl);
+  if (!result.ok) {
+    logs.add(`Model server probe failed: ${result.error ?? 'unknown error'}`);
+    emitState();
+    await showMessage({
+      type: 'warning',
+      title: 'Model server unavailable',
+      message: 'The configured model server is not reachable.',
+      detail: `${result.error ?? 'Start the local model server and try again.'}\n\nChecked: ${result.modelUrl}/models`,
+    });
+    return result;
+  }
+
+  logs.add(`Model server probe succeeded with ${result.models.length} model(s).`);
+  emitState();
+  await showMessage({
+    type: result.models.length > 0 ? 'info' : 'warning',
+    title: 'Model server models',
+    message:
+      result.models.length > 0
+        ? 'The configured model server is reachable.'
+        : 'The model server is running without loaded models.',
+    detail:
+      result.models.length > 0
+        ? result.models.map(model => `- ${model}`).join('\n')
+        : 'The server responded, but it did not report any loaded models.',
+  });
+  return result;
+}
+
 async function applyLmStudioPreset() {
   const result = await probeLmStudioModels(LM_STUDIO_PRESET.modelUrl);
   const modelId = selectLmStudioModelId(result);
@@ -677,6 +715,32 @@ async function applyLmStudioPreset() {
     type: result.ok && result.models.length > 0 ? 'info' : 'warning',
     title: 'LM Studio preset',
     message: 'LM Studio preset applied.',
+    detail,
+  });
+}
+
+async function applyOllamaPreset() {
+  const result = await probeOpenAICompatibleModels(OLLAMA_PRESET.modelUrl, OLLAMA_PRESET.name);
+  const modelId = selectDetectedModelId(result, OLLAMA_PRESET.modelId);
+  currentSettings = await writeSettings(
+    settingsPath,
+    buildModelPresetSettings(currentSettings, {
+      ...OLLAMA_PRESET,
+      modelId,
+    }),
+  );
+  await restartManagedRuntime();
+
+  const detail = result.ok
+    ? result.models.length > 0
+      ? `Selected detected model: ${modelId}`
+      : `No loaded models were reported. The default model remains: ${modelId}`
+    : `${result.error ?? 'Start Ollama and try again.'}\n\nThe preset was applied with the default model: ${modelId}`;
+
+  await showMessage({
+    type: result.ok && result.models.length > 0 ? 'info' : 'warning',
+    title: 'Ollama preset',
+    message: 'Ollama preset applied.',
     detail,
   });
 }
@@ -784,9 +848,21 @@ function installMenu() {
           },
         },
         {
+          label: 'Use Ollama Preset',
+          click: () => {
+            void applyOllamaPreset();
+          },
+        },
+        {
           label: 'Check LM Studio Server',
           click: () => {
             void checkLmStudioServer();
+          },
+        },
+        {
+          label: 'Check Current Model Server',
+          click: () => {
+            void checkCurrentModelServer();
           },
         },
         { type: 'separator' },
@@ -871,6 +947,15 @@ function installIpc() {
     const result = await probeLmStudioModels(modelUrl ?? currentSettings.modelUrl);
     if (!result.ok) {
       logs.add(`LM Studio probe failed: ${result.error ?? 'unknown error'}`);
+    }
+    emitState();
+    return result;
+  });
+
+  ipcMain.handle('desktop:probe-openai-compatible-models', async (_event, modelUrl?: string, providerName?: string) => {
+    const result = await probeOpenAICompatibleModels(modelUrl ?? currentSettings.modelUrl, providerName);
+    if (!result.ok) {
+      logs.add(`Model server probe failed: ${result.error ?? 'unknown error'}`);
     }
     emitState();
     return result;

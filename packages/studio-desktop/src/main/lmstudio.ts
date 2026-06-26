@@ -10,7 +10,16 @@ export async function probeLmStudioModels(
   modelUrl = DEFAULT_MODEL_URL,
   fetchImpl: typeof fetch = fetch,
 ): Promise<ProbeModelsResult> {
+  return probeOpenAICompatibleModels(modelUrl, 'LM Studio', fetchImpl);
+}
+
+export async function probeOpenAICompatibleModels(
+  modelUrl = DEFAULT_MODEL_URL,
+  providerName = 'OpenAI-compatible server',
+  fetchImpl: typeof fetch = fetch,
+): Promise<ProbeModelsResult> {
   const targetUrl = modelUrl.trim() || DEFAULT_MODEL_URL;
+  const label = providerName.trim() || 'OpenAI-compatible server';
 
   try {
     const response = await fetchImpl(toModelsEndpoint(targetUrl), {
@@ -23,7 +32,7 @@ export async function probeLmStudioModels(
         ok: false,
         modelUrl: targetUrl,
         models: [],
-        error: `LM Studio returned HTTP ${response.status}`,
+        error: `${label} returned HTTP ${response.status}`,
       };
     }
 
@@ -33,7 +42,7 @@ export async function probeLmStudioModels(
         ok: false,
         modelUrl: targetUrl,
         models: [],
-        error: 'LM Studio returned an invalid model list',
+        error: `${label} returned an invalid model list`,
       };
     }
 
@@ -42,14 +51,14 @@ export async function probeLmStudioModels(
       ok: true,
       modelUrl: targetUrl,
       models,
-      error: models.length === 0 ? 'LM Studio did not report any loaded models' : undefined,
+      error: models.length === 0 ? `${label} did not report any loaded models` : undefined,
     };
   } catch (error) {
     return {
       ok: false,
       modelUrl: targetUrl,
       models: [],
-      error: error instanceof Error ? error.message : 'Unable to reach LM Studio',
+      error: error instanceof Error ? error.message : `Unable to reach ${label}`,
     };
   }
 }

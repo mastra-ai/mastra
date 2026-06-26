@@ -1,6 +1,27 @@
 import { createServer } from 'node:net';
 import { LOCALHOST } from './defaults';
 
+function closeServer(server: ReturnType<typeof createServer>) {
+  return new Promise<boolean>(resolve => {
+    server.close(error => resolve(!error));
+  });
+}
+
+function canListenOn(port: number, host?: string) {
+  return new Promise<boolean>(resolve => {
+    const server = createServer();
+    server.once('error', () => resolve(false));
+
+    const onListening = async () => resolve(await closeServer(server));
+    if (host) {
+      server.listen(port, host, onListening);
+      return;
+    }
+
+    server.listen(port, onListening);
+  });
+}
+
 export async function assertPortAcceptsConnections(port: number) {
   await new Promise<void>((resolve, reject) => {
     const server = createServer();
@@ -15,20 +36,14 @@ export async function assertPortAcceptsConnections(port: number) {
 }
 
 async function canListen(port: number) {
-  return new Promise<boolean>(resolve => {
-    const server = createServer();
-    server.once('error', () => resolve(false));
-    server.listen(port, LOCALHOST, () => {
-      server.close(error => resolve(!error));
-    });
-  });
+  return (await canListenOn(port, LOCALHOST)) && (await canListenOn(port));
 }
 
-async function getEphemeralPort() {
+async function reserveEphemeralPort() {
   return new Promise<number>((resolve, reject) => {
     const server = createServer();
     server.once('error', reject);
-    server.listen(0, LOCALHOST, () => {
+    server.listen(0, () => {
       const address = server.address();
       server.close(error => {
         if (error) {
@@ -45,6 +60,15 @@ async function getEphemeralPort() {
       });
     });
   });
+}
+
+async function getEphemeralPort() {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const port = await reserveEphemeralPort();
+    if (await canListen(port)) return port;
+  }
+
+  throw new Error('Unable to find an available local port');
 }
 
 export async function findAvailablePort(preferredPort: number) {
