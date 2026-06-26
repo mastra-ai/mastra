@@ -81,8 +81,16 @@ export async function tryStreamWithJsonFallback<OUTPUT extends {}>(
 
   const { onStream, ...streamOptions } = options;
 
+  // Track whether onStream was already invoked on a successfully-started
+  // stream so the fallback path does not call it a second time.  Without
+  // this guard the consumer (e.g. the goal-judge TUI) receives two full
+  // sets of tool-call activities: one from the initial stream and one from
+  // the retry, causing every tool call to render twice.
+  let onStreamFired = false;
+
   try {
     const result = await agent.stream(prompt, streamOptions);
+    onStreamFired = true;
     void onStream?.(result as unknown as Awaited<ReturnType<Agent['stream']>>);
     const object = await result.object;
     if (!object) {
@@ -100,7 +108,9 @@ export async function tryStreamWithJsonFallback<OUTPUT extends {}>(
       ...streamOptions,
       structuredOutput: { ...streamOptions.structuredOutput, jsonPromptInjection: true },
     });
-    void onStream?.(result as unknown as Awaited<ReturnType<Agent['stream']>>);
+    if (!onStreamFired) {
+      void onStream?.(result as unknown as Awaited<ReturnType<Agent['stream']>>);
+    }
     return result;
   }
 }
