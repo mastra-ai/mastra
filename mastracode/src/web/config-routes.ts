@@ -31,7 +31,15 @@ export interface ProviderInfo {
   /** Env var the provider's key is read from, if any. */
   envVar?: string;
   /** Where the active credential comes from. */
-  source: 'stored' | 'env' | 'none';
+  source: 'oauth' | 'stored' | 'env' | 'none';
+}
+
+/**
+ * OAuth credentials are stored under the auth provider id, which differs from
+ * the catalog provider id for OpenAI (stored as `openai-codex`).
+ */
+function getAuthProviderId(provider: string): string {
+  return provider === 'openai' ? 'openai-codex' : provider;
 }
 
 /** Minimal session surface a pack activation touches. */
@@ -95,7 +103,9 @@ export async function listProviders(harness: ModelCatalog, authStorage?: AuthSto
     if (seen.has(model.provider)) continue;
 
     let source: ProviderInfo['source'] = 'none';
-    if (authStorage?.hasStoredApiKey(model.provider)) {
+    if (authStorage?.isLoggedIn(getAuthProviderId(model.provider))) {
+      source = 'oauth';
+    } else if (authStorage?.hasStoredApiKey(model.provider)) {
       source = 'stored';
     } else if (model.apiKeyEnvVar && process.env[model.apiKeyEnvVar]) {
       source = 'env';

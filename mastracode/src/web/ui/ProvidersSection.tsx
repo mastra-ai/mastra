@@ -5,10 +5,11 @@ import { CheckIcon, SearchIcon } from './icons';
 interface ProviderInfo {
   provider: string;
   envVar?: string;
-  source: 'stored' | 'env' | 'none';
+  source: 'oauth' | 'stored' | 'env' | 'none';
 }
 
 const SOURCE_LABEL: Record<ProviderInfo['source'], string> = {
+  oauth: 'Signed in',
   stored: 'Key saved',
   env: 'From env',
   none: 'Not set',
