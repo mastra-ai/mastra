@@ -111,56 +111,62 @@ Usage:
       // Collect files to search
       let filePaths: string[];
 
-      // Check if searchPath is a file or directory
-      try {
-        const stat = await filesystem.stat(searchPath);
-        if (stat.type === 'file') {
-          // Single file — search it directly
-          filePaths = isTextFile(searchPath) ? [searchPath] : [];
-        } else {
-          // Directory — walk recursively
-          const collectFiles = async (dir: string): Promise<string[]> => {
-            const files: string[] = [];
-            let entries;
-            try {
-              entries = await filesystem.readdir(dir);
-            } catch {
-              return files;
-            }
-
-            for (const entry of entries) {
-              // Always skip .git directory — its internals are never useful and waste tokens
-              if (entry.type === 'directory' && entry.name === '.git') continue;
-
-              // Skip hidden files/dirs unless includeHidden is set
-              if (!includeHidden && entry.name.startsWith('.')) continue;
-
-              const fullPath = dir.endsWith('/') ? `${dir}${entry.name}` : `${dir}/${entry.name}`;
-
-              // Skip gitignored paths
-              if (ignoreFilter) {
-                const relativePath = fullPath.replace(/^\.\//, '');
-                const checkPath = entry.type === 'directory' ? `${relativePath}/` : relativePath;
-                if (ignoreFilter(checkPath)) continue;
-              }
-
-              if (entry.type === 'file') {
-                // Skip non-text files
-                if (!isTextFile(entry.name)) continue;
-                // Apply glob filter (createGlobMatcher normalizes leading slashes)
-                if (globMatcher && !globMatcher(fullPath)) continue;
-                files.push(fullPath);
-              } else if (entry.type === 'directory' && !entry.isSymlink) {
-                files.push(...(await collectFiles(fullPath)));
-              }
-            }
-            return files;
-          };
-          filePaths = await collectFiles(searchPath);
-        }
-      } catch {
-        // Path doesn't exist
+      // Never search inside .git even when explicitly targeted
+      const normalizedSearch = searchPath.replace(/\/$/, '');
+      if (normalizedSearch === '.git' || normalizedSearch.endsWith('/.git')) {
         filePaths = [];
+      } else {
+        // Check if searchPath is a file or directory
+        try {
+          const stat = await filesystem.stat(searchPath);
+          if (stat.type === 'file') {
+            // Single file — search it directly
+            filePaths = isTextFile(searchPath) ? [searchPath] : [];
+          } else {
+            // Directory — walk recursively
+            const collectFiles = async (dir: string): Promise<string[]> => {
+              const files: string[] = [];
+              let entries;
+              try {
+                entries = await filesystem.readdir(dir);
+              } catch {
+                return files;
+              }
+
+              for (const entry of entries) {
+                // Always skip .git directory — its internals are never useful and waste tokens
+                if (entry.type === 'directory' && entry.name === '.git') continue;
+
+                // Skip hidden files/dirs unless includeHidden is set
+                if (!includeHidden && entry.name.startsWith('.')) continue;
+
+                const fullPath = dir.endsWith('/') ? `${dir}${entry.name}` : `${dir}/${entry.name}`;
+
+                // Skip gitignored paths
+                if (ignoreFilter) {
+                  const relativePath = fullPath.replace(/^\.\//, '');
+                  const checkPath = entry.type === 'directory' ? `${relativePath}/` : relativePath;
+                  if (ignoreFilter(checkPath)) continue;
+                }
+
+                if (entry.type === 'file') {
+                  // Skip non-text files
+                  if (!isTextFile(entry.name)) continue;
+                  // Apply glob filter (createGlobMatcher normalizes leading slashes)
+                  if (globMatcher && !globMatcher(fullPath)) continue;
+                  files.push(fullPath);
+                } else if (entry.type === 'directory' && !entry.isSymlink) {
+                  files.push(...(await collectFiles(fullPath)));
+                }
+              }
+              return files;
+            };
+            filePaths = await collectFiles(searchPath);
+          }
+        } catch {
+          // Path doesn't exist
+          filePaths = [];
+        }
       }
 
       const outputLines: string[] = [];

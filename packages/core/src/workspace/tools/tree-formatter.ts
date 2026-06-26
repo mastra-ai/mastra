@@ -116,6 +116,12 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
    * Build tree recursively using tab indentation
    */
   async function buildTree(currentPath: string, depth: number): Promise<void> {
+    // Never descend into .git even when explicitly targeted as root
+    const normalizedCurrentPath = currentPath.replace(/\/$/, '');
+    if (normalizedCurrentPath === '.git' || normalizedCurrentPath.endsWith('/.git')) {
+      return;
+    }
+
     if (depth >= maxDepth) {
       truncated = true;
       return;
