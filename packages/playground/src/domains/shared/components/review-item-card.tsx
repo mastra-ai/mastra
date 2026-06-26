@@ -1,4 +1,10 @@
-import { Badge, Button, Textarea, TooltipProvider, Txt, Icon, cn } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ThumbsUp, ThumbsDown, Trash2, CheckCircle } from 'lucide-react';
 import { useState } from 'react';
 import { TagPicker } from './tag-picker';

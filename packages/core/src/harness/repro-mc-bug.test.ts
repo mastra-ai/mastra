@@ -21,7 +21,8 @@ import type { PubSubDeliveryMode } from '../events/pubsub';
 import type { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
-import type { HarnessEvent } from './types';
+import { createMockWorkspace } from './test-utils';
+import type { AgentControllerEvent } from './types';
 
 /** Push-only wrapper around EventEmitterPubSub — mimics mc's SignalsPubSub. */
 class PushOnlyPubSub extends EventEmitterPubSub {
@@ -57,7 +58,7 @@ describe('mc send-message reproduction', () => {
 
     function getDynamicModel({ requestContext }: { requestContext: RequestContext }) {
       const harnessContext = requestContext.get('harness') as any;
-      const modelId = harnessContext?.state?.currentModelId;
+      const modelId = harnessContext?.session?.modelId;
       if (!modelId) {
         throw new Error('No model selected');
       }
@@ -77,6 +78,7 @@ describe('mc send-message reproduction', () => {
     });
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test-harness',
       storage,
       resourceId: 'test-resource',
@@ -86,20 +88,21 @@ describe('mc send-message reproduction', () => {
     });
 
     await harness.init();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     await harness.getMastra()?.startWorkers();
-    await harness.createThread();
+    await session.thread.create();
 
-    const events: HarnessEvent[] = [];
-    harness.subscribe((event: HarnessEvent) => {
+    const events: AgentControllerEvent[] = [];
+    session.subscribe((event: AgentControllerEvent) => {
       events.push(event);
     });
 
-    expect((harness.getState() as any).currentModelId).toBe('anthropic/claude-opus-4-7');
+    expect(session.model.get()).toBe('anthropic/claude-opus-4-7');
 
-    await harness.sendMessage({ content: 'Hello!' });
+    await session.sendMessage({ content: 'Hello!' });
 
     const assistantEnd = events.find(
-      (e): e is Extract<HarnessEvent, { type: 'message_end' }> =>
+      (e): e is Extract<AgentControllerEvent, { type: 'message_end' }> =>
         e.type === 'message_end' && e.message.role === 'assistant',
     );
     expect(assistantEnd).toBeDefined();
@@ -121,6 +124,7 @@ describe('mc send-message reproduction', () => {
     });
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test-harness',
       storage,
       resourceId: 'test-resource',
@@ -129,19 +133,20 @@ describe('mc send-message reproduction', () => {
     });
 
     await harness.init();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     await harness.getMastra()?.startWorkers();
-    await harness.createThread();
+    await session.thread.create();
 
-    const events: HarnessEvent[] = [];
-    harness.subscribe((event: HarnessEvent) => {
+    const events: AgentControllerEvent[] = [];
+    session.subscribe((event: AgentControllerEvent) => {
       events.push(event);
     });
 
-    await harness.sendMessage({ content: 'Hello!' });
+    await session.sendMessage({ content: 'Hello!' });
 
     // With the fix, the error should propagate through the subscription stream
     // and the harness should emit an error event instead of silently completing
-    const errorEvent = events.find((e): e is Extract<HarnessEvent, { type: 'error' }> => e.type === 'error');
+    const errorEvent = events.find((e): e is Extract<AgentControllerEvent, { type: 'error' }> => e.type === 'error');
     expect(errorEvent).toBeDefined();
     expect(errorEvent!.error.message).toContain('No model selected');
   }, 30000);
@@ -152,7 +157,7 @@ describe('mc send-message reproduction', () => {
 
     function getDynamicModel({ requestContext }: { requestContext: RequestContext }) {
       const harnessContext = requestContext.get('harness') as any;
-      const modelId = harnessContext?.state?.currentModelId;
+      const modelId = harnessContext?.session?.modelId;
       if (!modelId) {
         throw new Error('No model selected');
       }
@@ -172,6 +177,7 @@ describe('mc send-message reproduction', () => {
     });
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test-harness',
       storage,
       pubsub: pushOnlyPubSub,
@@ -182,20 +188,21 @@ describe('mc send-message reproduction', () => {
     });
 
     await harness.init();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
     await harness.getMastra()?.startWorkers();
-    await harness.createThread();
+    await session.thread.create();
 
-    const events: HarnessEvent[] = [];
-    harness.subscribe((event: HarnessEvent) => {
+    const events: AgentControllerEvent[] = [];
+    session.subscribe((event: AgentControllerEvent) => {
       events.push(event);
     });
 
-    expect((harness.getState() as any).currentModelId).toBe('anthropic/claude-opus-4-7');
+    expect(session.model.get()).toBe('anthropic/claude-opus-4-7');
 
-    await harness.sendMessage({ content: 'Hello!' });
+    await session.sendMessage({ content: 'Hello!' });
 
     const assistantEnd = events.find(
-      (e): e is Extract<HarnessEvent, { type: 'message_end' }> =>
+      (e): e is Extract<AgentControllerEvent, { type: 'message_end' }> =>
         e.type === 'message_end' && e.message.role === 'assistant',
     );
     expect(assistantEnd).toBeDefined();

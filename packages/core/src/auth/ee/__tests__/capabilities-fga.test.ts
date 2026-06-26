@@ -103,7 +103,7 @@ describe('FGA Capability Detection', () => {
 
     expect('capabilities' in result && result.capabilities.fga).toBe(true);
     expect(warn).toHaveBeenCalledWith(
-      '[mastra/auth-ee] Mastra Enterprise features are enabled for local development, but no valid MASTRA_EE_LICENSE is configured. These features will be disabled in production without a valid license. Contact us to get a production license: https://mastra.ai/contact',
+      '[mastra/auth-ee] Mastra Enterprise features are enabled for local development, but no valid MASTRA_LICENSE_KEY is configured. These features will be disabled in production without a valid license. Contact us to get a production license: https://mastra.ai/contact',
     );
   });
 });

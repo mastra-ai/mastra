@@ -40,7 +40,15 @@ export function handleHooksCommand(ctx: SlashCommandContext, args: string[]): vo
   lines.push(`  Global:  ${paths.global}`);
   lines.push('');
 
-  const eventNames = ['PreToolUse', 'PostToolUse', 'Stop', 'UserPromptSubmit', 'SessionStart', 'SessionEnd'] as const;
+  const eventNames = [
+    'PreToolUse',
+    'PostToolUse',
+    'Stop',
+    'UserPromptSubmit',
+    'SessionStart',
+    'SessionEnd',
+    'Notification',
+  ] as const;
 
   for (const event of eventNames) {
     const hooks = hookConfig[event];

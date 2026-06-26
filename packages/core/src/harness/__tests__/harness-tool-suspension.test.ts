@@ -5,7 +5,7 @@
  *   1. Emit a 'tool_suspended' event to subscribers
  *   2. Report agent_end with reason 'suspended'
  *   3. Allow the caller to resume via respondToToolSuspension()
- *   4. Call agent.resumeStream() and continue processing
+ *   4. Call agent.sendStreamResume() and continue processing through the subscription
  */
 import { describe, it, expect, vi } from 'vitest';
 import z from 'zod';
@@ -16,6 +16,7 @@ import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 
 import { Harness } from '../harness';
+import { createMockWorkspace } from '../test-utils';
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -70,6 +71,44 @@ function createTextStream() {
 }
 
 describe('Harness: tool suspension and resumption', () => {
+  it('should not inject default model settings when sending a message', async () => {
+    const agent = new Agent({
+      id: 'test-agent-default-model-settings',
+      name: 'Test Agent Default Model Settings',
+      instructions: 'You answer directly.',
+      model: new MastraLanguageModelV2Mock({
+        doStream: async () => ({ stream: createTextStream() }),
+      }),
+    });
+
+    const storage = new InMemoryStore();
+    const mastra = new Mastra({
+      agents: { 'test-agent-default-model-settings': agent },
+      logger: false,
+      storage,
+    });
+
+    const registeredAgent = mastra.getAgent('test-agent-default-model-settings');
+    const streamSpy = vi.spyOn(registeredAgent, 'stream');
+
+    const harness = new Harness({
+      workspace: createMockWorkspace(),
+      id: 'test-harness-default-model-settings',
+      storage,
+      modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
+    });
+
+    await harness.init();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await session.thread.create();
+
+    await session.sendMessage({ content: 'Hello' });
+
+    expect(streamSpy).toHaveBeenCalled();
+    const [, streamOptions] = streamSpy.mock.calls[0] as [any, any];
+    expect(streamOptions.modelSettings).toBeUndefined();
+  });
+
   it('should emit a suspension-related event when a tool calls suspend(), not silently complete', async () => {
     // Tool that suspends mid-execution waiting for external input
     const confirmTool = createTool({
@@ -112,6 +151,7 @@ describe('Harness: tool suspension and resumption', () => {
     const registeredAgent = mastra.getAgent('test-agent');
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test-harness',
       storage,
       modes: [
@@ -127,17 +167,18 @@ describe('Harness: tool suspension and resumption', () => {
     });
 
     await harness.init();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     // Collect all events
     const events: any[] = [];
-    harness.subscribe(event => {
+    session.subscribe(event => {
       events.push(event);
     });
 
-    await harness.createThread();
+    await session.thread.create();
 
     // Send a message — the tool should execute and call suspend()
-    await harness.sendMessage({ content: 'Deploy to production' });
+    await session.sendMessage({ content: 'Deploy to production' });
 
     // agent_end should fire with reason 'suspended', not 'complete'
     const agentEndEvent = events.find((e: any) => e.type === 'agent_end');
@@ -154,7 +195,7 @@ describe('Harness: tool suspension and resumption', () => {
     });
   });
 
-  it('should set pendingSuspension display state when tool suspends', async () => {
+  it('should set pendingSuspensions display state when tool suspends', async () => {
     const confirmTool = createTool({
       id: 'confirm-action',
       description: 'Confirms an action with the user',
@@ -187,6 +228,7 @@ describe('Harness: tool suspension and resumption', () => {
     const registeredAgent = mastra.getAgent('test-agent-ds');
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test-harness-ds',
       storage,
       modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
@@ -194,13 +236,15 @@ describe('Harness: tool suspension and resumption', () => {
     });
 
     await harness.init();
-    await harness.createThread();
-    await harness.sendMessage({ content: 'Do it' });
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await session.thread.create();
+    await session.sendMessage({ content: 'Do it' });
 
-    const ds = harness.getDisplayState();
-    expect(ds.pendingSuspension).not.toBeNull();
-    expect(ds.pendingSuspension!.toolName).toBe('confirmAction');
-    expect(ds.pendingSuspension!.suspendPayload).toEqual({ action: 'deploy' });
+    const ds = session.displayState.get();
+    expect(ds.pendingSuspensions.size).toBe(1);
+    const suspension = Array.from(ds.pendingSuspensions.values())[0];
+    expect(suspension!.toolName).toBe('confirmAction');
+    expect(suspension!.suspendPayload).toEqual({ action: 'deploy' });
   });
 
   it('should resume execution via respondToToolSuspension()', async () => {
@@ -248,6 +292,7 @@ describe('Harness: tool suspension and resumption', () => {
     const registeredAgent = mastra.getAgent('test-agent-resume');
 
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test-harness-resume',
       storage,
       modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
@@ -255,16 +300,17 @@ describe('Harness: tool suspension and resumption', () => {
     });
 
     await harness.init();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     const events: any[] = [];
-    harness.subscribe(event => {
+    session.subscribe(event => {
       events.push(event);
     });
 
-    await harness.createThread();
+    await session.thread.create();
 
     // First message triggers suspension
-    await harness.sendMessage({ content: 'Deploy to production' });
+    await session.sendMessage({ content: 'Deploy to production' });
 
     const suspendEnd = events.find((e: any) => e.type === 'agent_end');
     expect(suspendEnd?.reason).toBe('suspended');
@@ -273,7 +319,7 @@ describe('Harness: tool suspension and resumption', () => {
     events.length = 0;
 
     // Resume with data
-    await harness.respondToToolSuspension({ resumeData: { confirmed: true } });
+    await session.respondToToolSuspension({ resumeData: { confirmed: true } });
 
     // Should emit agent_start + agent_end(complete) for the resumed run
     const resumeStart = events.find((e: any) => e.type === 'agent_start');
@@ -284,17 +330,21 @@ describe('Harness: tool suspension and resumption', () => {
     expect(resumeEnd.reason).toBe('complete');
     expect(events.some((e: any) => e.type === 'error')).toBe(false);
 
-    // pendingSuspension should be cleared after resume
-    const ds = harness.getDisplayState();
-    expect(ds.pendingSuspension).toBeNull();
+    // pending suspensions should be cleared after resume
+    const ds = session.displayState.get();
+    expect(ds.pendingSuspensions.size).toBe(0);
   });
 
-  it('should forward requireToolApproval=false to resumeStream when harness is in yolo mode', async () => {
+  it('should forward requireToolApproval=false to sendStreamResume when harness is in yolo mode', async () => {
     const confirmTool = createTool({
       id: 'confirm-action',
       description: 'Confirms an action with the user',
       inputSchema: z.object({ action: z.string() }),
       execute: async (input: { action: string }, context?: any) => {
+        const resumeData = context?.agent?.resumeData ?? context?.workflow?.resumeData ?? context?.resumeData;
+        if (resumeData) {
+          return { result: `Action "${input.action}" confirmed`, resumed: resumeData };
+        }
         const suspend = context?.suspend ?? context?.agent?.suspend;
         if (!suspend) throw new Error('suspend not available in context');
         await suspend({ action: input.action });
@@ -327,9 +377,8 @@ describe('Harness: tool suspension and resumption', () => {
 
     const registeredAgent = mastra.getAgent('test-agent-yolo-resume');
 
-    const resumeStreamSpy = vi.spyOn(registeredAgent, 'resumeStream');
-
     const harness = new Harness({
+      workspace: createMockWorkspace(),
       id: 'test-harness-yolo-resume',
       storage,
       modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
@@ -337,14 +386,96 @@ describe('Harness: tool suspension and resumption', () => {
     });
 
     await harness.init();
-    await harness.createThread();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const events: any[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+    await session.thread.create();
 
-    await harness.sendMessage({ content: 'Deploy to production' });
-    await harness.respondToToolSuspension({ resumeData: { confirmed: true } });
+    await session.sendMessage({ content: 'Deploy to production' });
 
-    expect(resumeStreamSpy).toHaveBeenCalled();
-    const [, resumeOptions] = resumeStreamSpy.mock.calls[0] as [any, any];
+    const originalSendStreamResume = registeredAgent.sendStreamResume.bind(registeredAgent);
+    const sendStreamResumeSpy = vi
+      .spyOn(registeredAgent, 'sendStreamResume')
+      .mockImplementation(options => originalSendStreamResume(options));
+
+    await session.respondToToolSuspension({ resumeData: { confirmed: true } });
+
+    expect(sendStreamResumeSpy).toHaveBeenCalled();
+    const [resumeOptions] = sendStreamResumeSpy.mock.calls[0] as [any];
     // Yolo mode should disable tool approval gating on resume, matching sendMessage's behavior
-    expect(resumeOptions.requireToolApproval).toBe(false);
+    expect(resumeOptions.streamOptions.requireToolApproval).toBe(false);
+  });
+
+  it('should forward the full run budget (maxSteps) to sendStreamResume so the resumed run does not stop mid-task', async () => {
+    // Regression: resumed streams previously omitted maxSteps, so the resumed run
+    // merged over the agent's small default budget and ended with reason
+    // "complete" after a few steps — the agent stopped mid-task after ask_user.
+    const confirmTool = createTool({
+      id: 'confirm-action',
+      description: 'Confirms an action with the user',
+      inputSchema: z.object({ action: z.string() }),
+      execute: async (input: { action: string }, context?: any) => {
+        // Resume-aware: continue instead of re-suspending once resumeData arrives,
+        // so the resumed run can actually complete.
+        const resumeData = context?.agent?.resumeData ?? context?.workflow?.resumeData ?? context?.resumeData;
+        if (resumeData) {
+          return { result: `Action "${input.action}" confirmed`, resumed: resumeData };
+        }
+        const suspend = context?.suspend ?? context?.agent?.suspend;
+        if (!suspend) throw new Error('suspend not available in context');
+        await suspend({ action: input.action });
+        return { result: `Action "${input.action}" confirmed` };
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-agent-budget-resume',
+      name: 'Test Agent Budget Resume',
+      instructions: 'You confirm actions.',
+      model: new MastraLanguageModelV2Mock({
+        doStream: (() => {
+          let callCount = 0;
+          return async () => {
+            callCount++;
+            return { stream: callCount === 1 ? createToolCallStream() : createTextStream() };
+          };
+        })(),
+      }),
+      tools: { confirmAction: confirmTool },
+    });
+
+    const storage = new InMemoryStore();
+    const mastra = new Mastra({
+      agents: { 'test-agent-budget-resume': agent },
+      logger: false,
+      storage,
+    });
+
+    const registeredAgent = mastra.getAgent('test-agent-budget-resume');
+    const sendStreamResumeSpy = vi.spyOn(registeredAgent, 'sendStreamResume');
+
+    const harness = new Harness({
+      workspace: createMockWorkspace(),
+      id: 'test-harness-budget-resume',
+      storage,
+      modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
+      initialState: { yolo: true } as any,
+    });
+
+    await harness.init();
+    const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    await session.thread.create();
+
+    await session.sendMessage({ content: 'Deploy to production' });
+    await session.respondToToolSuspension({ resumeData: { confirmed: true } });
+
+    expect(sendStreamResumeSpy).toHaveBeenCalled();
+    const [resumeOptions] = sendStreamResumeSpy.mock.calls[0] as [any];
+    // Must match the budget used for the initial stream, not the agent default.
+    expect(resumeOptions.streamOptions.maxSteps).toBe(1000);
+    expect(resumeOptions.streamOptions.savePerStep).toBe(false);
+    expect(resumeOptions.streamOptions.modelSettings).toBeUndefined();
   });
 });

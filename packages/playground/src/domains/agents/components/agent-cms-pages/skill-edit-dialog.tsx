@@ -1,17 +1,10 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
-import {
-  Button,
-  Icon,
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { AlertTriangle, ChevronDown, ChevronRight, CopyIcon, Globe, LockIcon, Pencil, Settings2 } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
@@ -25,7 +18,7 @@ import {
   extractSkillInstructions,
   updateNodeContent,
   updateRootFolderName,
-} from './skill-file-tree';
+} from './skill-file-tree-utils';
 import { SkillFolder } from './skill-folder';
 import { SkillSimpleForm } from './skill-simple-form';
 import { AgentColorProvider } from '@/domains/agent-builder/contexts/agent-color-context';
@@ -200,23 +193,35 @@ export function SkillEditDialog({
     }
 
     if (isExistingSkill && skill) {
-      const result = await updateSkill.mutateAsync({
-        id: skill.id,
-        name,
-        description,
-        visibility,
-        instructions,
-      });
+      let result: StoredSkillResponse;
+      try {
+        result = await updateSkill.mutateAsync({
+          id: skill.id,
+          name,
+          description,
+          visibility,
+          instructions,
+        });
+      } catch (error) {
+        toast.error(`Failed to update skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        return;
+      }
       onSkillUpdated?.(result);
       onClose();
     } else {
-      const result = await createSkill.mutateAsync({
-        name,
-        description,
-        visibility,
-        workspaceId,
-        files: filesToSave,
-      });
+      let result: StoredSkillResponse;
+      try {
+        result = await createSkill.mutateAsync({
+          name,
+          description,
+          visibility,
+          workspaceId,
+          files: filesToSave,
+        });
+      } catch (error) {
+        toast.error(`Failed to create skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        return;
+      }
       onSkillCreated?.(result, workspaceId);
       onClose();
     }

@@ -1,14 +1,14 @@
+import { Button } from '@mastra/playground-ui/components/Button';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import {
-  Button,
-  CodeEditor,
-  Txt,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogBody,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Dialog';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Share2 } from 'lucide-react';
 import { useState } from 'react';
 

@@ -101,14 +101,16 @@ vi.mock('@clack/prompts', () => ({
 }));
 
 vi.mock('archiver', () => ({
-  default: vi.fn(() => ({
-    on: vi.fn(),
-    pipe: vi.fn(),
-    glob: vi.fn(),
-    finalize: vi.fn(async () => {
-      closeHandler?.();
-    }),
-  })),
+  ZipArchive: vi.fn(function () {
+    return {
+      on: vi.fn(),
+      pipe: vi.fn(),
+      glob: vi.fn(),
+      finalize: vi.fn(async () => {
+        closeHandler?.();
+      }),
+    };
+  }),
 }));
 
 vi.mock('node:fs/promises', async importOriginal => {

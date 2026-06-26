@@ -18,7 +18,14 @@ describe('ContextMenu', () => {
       render(
         <ContextMenu defaultOpen>
           <ContextMenu.Trigger>Right click here</ContextMenu.Trigger>
-          <ContextMenu.Content>
+          <ContextMenu.Content
+            alignOffset={4}
+            collisionAvoidance={{ side: 'shift', align: 'shift', fallbackAxisSide: 'none' }}
+            collisionBoundary={document.body}
+            collisionPadding={8}
+            positionMethod="fixed"
+            sticky
+          >
             <ContextMenu.Label>Top-level label</ContextMenu.Label>
             <ContextMenu.Separator />
             <ContextMenu.Group>
@@ -36,7 +43,13 @@ describe('ContextMenu', () => {
             <ContextMenu.Separator />
             <ContextMenu.Sub>
               <ContextMenu.SubTrigger>Submenu</ContextMenu.SubTrigger>
-              <ContextMenu.SubContent>
+              <ContextMenu.SubContent
+                alignOffset={-2}
+                arrowPadding={6}
+                collisionBoundary={document.body}
+                disableAnchorTracking
+                positionMethod="fixed"
+              >
                 <ContextMenu.Item>Sub item</ContextMenu.Item>
               </ContextMenu.SubContent>
             </ContextMenu.Sub>
@@ -48,6 +61,27 @@ describe('ContextMenu', () => {
         </ContextMenu>,
       ),
     ).not.toThrow();
+  });
+
+  it('accepts Base UI positioning props on menu content', () => {
+    render(
+      <ContextMenu defaultOpen>
+        <ContextMenu.Trigger>Right click here</ContextMenu.Trigger>
+        <ContextMenu.Content
+          anchor={document.body}
+          arrowPadding={6}
+          collisionAvoidance={{ side: 'shift', align: 'shift', fallbackAxisSide: 'none' }}
+          collisionBoundary={document.body}
+          collisionPadding={8}
+          positionMethod="fixed"
+          sticky
+        >
+          <ContextMenu.Item>Positioned action</ContextMenu.Item>
+        </ContextMenu.Content>
+      </ContextMenu>,
+    );
+
+    expect(screen.getByRole('menuitem', { name: 'Positioned action' })).toBeTruthy();
   });
 
   it('fires the onSelect handler when an item is clicked', () => {

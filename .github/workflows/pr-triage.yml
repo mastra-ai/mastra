@@ -13,8 +13,6 @@ on:
 
 permissions:
   contents: read
-  issues: write
-  pull-requests: write
 
 concurrency:
   group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number || github.run_id }}
@@ -23,14 +21,14 @@ concurrency:
 jobs:
   issue-link-nudge:
     if: ${{ github.repository == 'mastra-ai/mastra' && github.event_name == 'pull_request_target' && github.event.pull_request.draft == false }}
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     timeout-minutes: 10
     outputs:
       needs_issue: ${{ steps.issue_link.outputs.needs_issue }}
       summary: ${{ steps.issue_link.outputs.summary }}
     steps:
       - name: Checkout automation scripts
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
           sparse-checkout: |
@@ -44,6 +42,10 @@ jobs:
         with:
           client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-issues: write
+          permission-pull-requests: write
+          permission-members: read
 
       - name: Setup pnpm and node
         uses: ./.github/actions/setup-pnpm-node
@@ -71,13 +73,13 @@ jobs:
   complexity:
     needs: issue-link-nudge
     if: ${{ needs['issue-link-nudge'].outputs.needs_issue == 'false' }}
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     timeout-minutes: 10
     outputs:
       summary: ${{ steps.complexity.outputs.summary }}
     steps:
       - name: Checkout automation scripts
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
           sparse-checkout: |
@@ -91,6 +93,9 @@ jobs:
         with:
           client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-issues: write
+          permission-pull-requests: write
 
       - name: Setup pnpm and node
         uses: ./.github/actions/setup-pnpm-node
@@ -119,11 +124,11 @@ jobs:
       - issue-link-nudge
       - complexity
     if: ${{ always() && github.repository == 'mastra-ai/mastra' && github.event_name == 'pull_request_target' && github.event.pull_request.draft == false }}
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout automation scripts
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
           sparse-checkout: |
@@ -137,6 +142,9 @@ jobs:
         with:
           client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-issues: write
+          permission-pull-requests: write
 
       - name: Setup pnpm and node
         uses: ./.github/actions/setup-pnpm-node
@@ -162,11 +170,11 @@ jobs:
 
   close-stale-unlinked:
     if: ${{ github.repository == 'mastra-ai/mastra' && github.event_name == 'schedule' }}
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout automation scripts
-        uses: actions/checkout@v5
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
           sparse-checkout: |
@@ -180,6 +188,10 @@ jobs:
         with:
           client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-issues: write
+          permission-pull-requests: write
+          permission-members: read
 
       - name: Setup pnpm and node
         uses: ./.github/actions/setup-pnpm-node

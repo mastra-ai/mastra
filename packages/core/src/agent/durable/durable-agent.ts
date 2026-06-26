@@ -4,6 +4,7 @@ import { CachingPubSub } from '../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
 import type { Mastra } from '../../mastra';
+import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { ChunkType } from '../../stream/types';
 import { Agent } from '../agent';
@@ -14,7 +15,7 @@ import type { ToolsInput } from '../types';
 import { AGENT_STREAM_TOPIC } from './constants';
 import { runDurableStreamUntilIdle } from './durable-stream-until-idle';
 import { prepareForDurableExecution } from './preparation';
-import { ExtendedRunRegistry, globalRunRegistry } from './run-registry';
+import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './run-registry';
 import { createDurableAgentStream, emitErrorEvent } from './stream-adapter';
 import type {
   AgentFinishEventData,
@@ -40,6 +41,15 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   requestContext?: AgentExecutionOptions<OUTPUT>['requestContext'];
   /** Maximum number of steps to run */
   maxSteps?: number;
+  /**
+   * Conditions for stopping execution (e.g., step count, token limit).
+   *
+   * The predicate is non-serializable, so it's parked on the in-process run
+   * registry and evaluated by the durable loop on every iteration. Cross-process
+   * durable engines (e.g. Inngest after a worker restart) cannot recover the
+   * closure and degrade to `maxSteps` only.
+   */
+  stopWhen?: AgentExecutionOptions<OUTPUT>['stopWhen'];
   /** Additional tool sets that can be used for this execution */
   toolsets?: AgentExecutionOptions<OUTPUT>['toolsets'];
   /** Client-side tools available during execution */
@@ -50,8 +60,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   activeTools?: AgentExecutionOptions<OUTPUT>['activeTools'];
   /** Model-specific settings like temperature */
   modelSettings?: AgentExecutionOptions<OUTPUT>['modelSettings'];
-  /** Require approval for all tool calls */
-  requireToolApproval?: boolean;
+  /** Require approval for tool calls. Boolean (gate all / none) or a per-call function policy. */
+  requireToolApproval?: AgentExecutionOptions<OUTPUT>['requireToolApproval'];
   /** Automatically resume suspended tools */
   autoResumeSuspendedTools?: boolean;
   /** Maximum number of tool calls to execute concurrently */
@@ -74,6 +84,54 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   onError?: (error: Error) => void | Promise<void>;
   /** Callback when workflow suspends (e.g., for tool approval) */
   onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
+  /** Callback when execution is aborted via abortSignal */
+  onAbort?: AgentExecutionOptions<OUTPUT>['onAbort'];
+  /** Callback fired after each agentic-loop iteration */
+  onIterationComplete?: AgentExecutionOptions<OUTPUT>['onIterationComplete'];
+  /** Additional system message appended after context but before user messages. */
+  system?: AgentExecutionOptions<OUTPUT>['system'];
+  /** When true, background tasks are disabled for this run. */
+  disableBackgroundTasks?: AgentExecutionOptions<OUTPUT>['disableBackgroundTasks'];
+  /** Tracing options forwarded to the agent/model spans. */
+  tracingOptions?: AgentExecutionOptions<OUTPUT>['tracingOptions'];
+  /** Per-call actor signal forwarded to FGA checks and tool execution. */
+  actor?: AgentExecutionOptions<OUTPUT>['actor'];
+  /**
+   * Per-invocation tool payload transform policy. The closure rides on the
+   * in-process run registry; only the JSON-safe `targets` shadow is serialized
+   * for cross-process engines.
+   */
+  transform?: AgentExecutionOptions<OUTPUT>['transform'];
+  /**
+   * Per-step preparation hook. Closure-only: stored on the in-process run
+   * registry and invoked as a `PrepareStepProcessor` at the start of every
+   * iteration. Cross-process resumes lose the hook.
+   */
+  prepareStep?: AgentExecutionOptions<OUTPUT>['prepareStep'];
+  /**
+   * Per-call `isTaskComplete` policy. Scorer instances and `onComplete` are
+   * closure-only and live on the in-process run registry; the JSON-safe
+   * primitives (`strategy`, `timeout`, `parallel`, `suppressFeedback`,
+   * `scorerNames`) are serialized for cross-process observability.
+   */
+  isTaskComplete?: AgentExecutionOptions<OUTPUT>['isTaskComplete'];
+  /**
+   * When set, `stream()` delegates to the idle-loop wrapper that keeps the
+   * outer stream open across background-task continuations — the same
+   * behaviour as the now-deprecated `streamUntilIdle()`.
+   *
+   * Pass `true` for default idle timeout (5 min), or `{ maxIdleMs }` to
+   * customise.
+   *
+   * @example
+   * ```typescript
+   * const { output, cleanup } = await durableAgent.stream('Research topic', {
+   *   untilIdle: true,
+   *   memory: { thread: 't1', resource: 'u1' },
+   * });
+   * ```
+   */
+  untilIdle?: boolean | { maxIdleMs?: number };
   /** When true, the in-loop background task check step skips waiting (streamUntilIdle sets this) */
   _skipBgTaskWait?: boolean;
 }
@@ -289,6 +347,16 @@ export class DurableAgent<
       // Caching explicitly disabled
       this.#cachingPubsub = this.#innerPubsub;
       this.#resolvedCache = null;
+    } else if (this.#innerPubsub instanceof CachingPubSub) {
+      // The inner pubsub already provides caching/replay. This happens when the
+      // user passes a CachingPubSub to `new Mastra({ pubsub })`: on registration
+      // the agent adopts mastra.pubsub as its inner transport. Wrapping it again
+      // in a second CachingPubSub that shares the same cache would store every
+      // event twice (once per layer, with consecutive indices), so observe()/
+      // replay would deliver the buffered prefix doubled (issue #18148). Reuse
+      // the existing instance instead of double-wrapping.
+      this.#cachingPubsub = this.#innerPubsub;
+      this.#resolvedCache = this.#cacheConfig ?? this.#mastra?.serverCache ?? null;
     } else {
       // Resolve cache: user-provided > mastra's cache > default InMemoryServerCache
       const resolvedCache = this.#cacheConfig ?? this.#mastra?.serverCache ?? new InMemoryServerCache();
@@ -339,6 +407,10 @@ export class DurableAgent<
     return this.#wrappedAgent.getInstructions(options);
   }
 
+  override getDefaultOptions(options?: any) {
+    return this.#wrappedAgent.getDefaultOptions(options);
+  }
+
   override listTools(options?: any) {
     return this.#wrappedAgent.listTools(options);
   }
@@ -349,6 +421,90 @@ export class DurableAgent<
 
   override getVoice() {
     return this.#wrappedAgent.getVoice();
+  }
+
+  // ===========================================================================
+  // Editor / fork delegation
+  //
+  // The base Agent serves tools/instructions/model from its own private fields,
+  // but a DurableAgent serves all of them from the wrapped agent (see the
+  // delegating getters above). The editor applies stored overrides per request
+  // by calling `__fork()` and then mutating the fork via `__updateInstructions`
+  // / `__updateModel` / `__setTools`, and inspecting it via `__getEditorConfig`
+  // / `__getOverridableFields`. If those operated on the DurableAgent's own
+  // (unused) base fields the served agent would silently lose its tools and
+  // ignore overrides, so forward them to the wrapped agent — it stays the single
+  // source of truth.
+  // ===========================================================================
+
+  override __getEditorConfig() {
+    return this.#wrappedAgent.__getEditorConfig();
+  }
+
+  override __getOverridableFields() {
+    return this.#wrappedAgent.__getOverridableFields();
+  }
+
+  override __updateInstructions(instructions: Parameters<Agent<TAgentId, TTools, TOutput>['__updateInstructions']>[0]) {
+    this.#wrappedAgent.__updateInstructions(instructions);
+  }
+
+  override __updateModel(config: Parameters<Agent<TAgentId, TTools, TOutput>['__updateModel']>[0]) {
+    this.#wrappedAgent.__updateModel(config);
+  }
+
+  override __setTools(tools: Parameters<Agent<TAgentId, TTools, TOutput>['__setTools']>[0]) {
+    this.#wrappedAgent.__setTools(tools);
+  }
+
+  /**
+   * Create a per-request clone for applying stored editor overrides.
+   *
+   * The base `Agent.__fork()` builds a bare `new Agent(...)`, which for a
+   * DurableAgent would drop the wrapped agent and every delegating override
+   * (tools, model, memory, voice, durable streaming) — the served fork ends up a
+   * plain `Agent` with no tools. Instead, fork the wrapped agent (so overrides
+   * applied to this fork don't mutate the singleton) and re-wrap it in the same
+   * durable subclass, preserving pubsub/cache/run configuration.
+   *
+   * @internal
+   */
+  override __fork(): Agent<TAgentId, TTools, TOutput> {
+    const innerFork = this.#wrappedAgent.__fork();
+
+    const Ctor = this.constructor as new (
+      config: DurableAgentConfig<TAgentId, TTools, TOutput>,
+    ) => DurableAgent<TAgentId, TTools, TOutput>;
+
+    const fork = new Ctor({
+      agent: innerFork,
+      id: this.id,
+      name: this.name,
+      pubsub: this.#hasCustomPubsub ? this.#innerPubsub : undefined,
+      cache: this.#cacheConfig,
+      maxSteps: this.#maxSteps,
+      cleanupTimeoutMs: this.#cleanupTimeoutMs,
+    });
+
+    // Preserve runtime state set after construction (mastra registration and the
+    // wired inner pubsub, e.g. mastra.pubsub) without re-triggering registration
+    // side effects — mirrors Agent.__fork().
+    if (this.#mastra) {
+      fork.#mastra = this.#mastra;
+    }
+    fork.#innerPubsub = this.#innerPubsub;
+    fork.source = this.source;
+    // `_agentNetworkAppend` is a private base-class flag; copy it via an indexed
+    // cast (the same idiom the base uses in `toRawConfig()`) so the fork mirrors
+    // `Agent.__fork()` without widening the field's visibility.
+    (fork as unknown as { _agentNetworkAppend: unknown })._agentNetworkAppend = (
+      this as unknown as { _agentNetworkAppend: unknown }
+    )._agentNetworkAppend;
+
+    // DurableAgent intentionally diverges from Agent's `stream` signature, so the
+    // re-wrapped fork is bridged to the base `Agent` return type here. The editor's
+    // fork-then-mutate contract only relies on the base Agent surface.
+    return fork as unknown as Agent<TAgentId, TTools, TOutput>;
   }
 
   // ===========================================================================
@@ -385,10 +541,16 @@ export class DurableAgent<
    */
   protected async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
     const workflow = this.getWorkflow();
-    const requestContext = globalRunRegistry.get(runId)?.requestContext;
+    const entry = globalRunRegistry.get(runId);
+    const requestContext = entry?.requestContext;
 
     const run = await workflow.createRun({ runId, pubsub: this.pubsub });
-    const result = await run.start({ inputData: workflowInput, requestContext });
+    // Parent the workflow run under the AGENT_RUN span so the trace exports under it.
+    const result = await run.start({
+      inputData: workflowInput,
+      requestContext,
+      ...createObservabilityContext({ currentSpan: entry?.agentSpan }),
+    });
 
     if (result?.status === 'failed') {
       const error = new Error((result as any).error?.message || 'Workflow execution failed');
@@ -419,6 +581,8 @@ export class DurableAgent<
    * @internal
    */
   protected async emitError(runId: string, error: Error): Promise<void> {
+    // End the root spans on error so the trace exports (mirrors the non-durable map-results-step).
+    endRunSpansWithError(runId, error);
     await emitErrorEvent(this.pubsub, runId, error);
   }
 
@@ -434,6 +598,23 @@ export class DurableAgent<
     messages: MessageListInput,
     options?: DurableAgentStreamOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
+    // Delegate to the idle-loop wrapper when `untilIdle` is set.
+    // Strip `untilIdle` before passing to the wrapper so its internal
+    // agent.stream() call doesn't recurse.
+    if (options?.untilIdle) {
+      const { untilIdle, ...rest } = options;
+      const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
+      return runDurableStreamUntilIdle<TOutput>(
+        this as unknown as DurableAgent<any, any, TOutput>,
+        messages,
+        { ...rest, maxIdleMs },
+        {
+          activeStreams: this.#activeStreamUntilIdle,
+          bgManager: this.#mastra?.backgroundTaskManager,
+        },
+      );
+    }
+
     // 1. Prepare for durable execution (non-durable phase)
     const preparation = await prepareForDurableExecution<TOutput>({
       agent: this.#wrappedAgent as Agent<string, any, TOutput>,
@@ -494,6 +675,18 @@ export class DurableAgent<
         scheduleAutoCleanup();
       },
       onSuspended: options?.onSuspended,
+      onAbort: async data => {
+        try {
+          await (options?.onAbort as ((event: any) => void | Promise<void>) | undefined)?.(data);
+        } finally {
+          scheduleAutoCleanup();
+        }
+      },
+      onIterationComplete: options?.onIterationComplete
+        ? async data => {
+            await (options.onIterationComplete as (ctx: any) => void | Promise<void>)?.(data);
+          }
+        : undefined,
     });
 
     // 4. Wait for subscription to be ready, then execute workflow
@@ -602,10 +795,53 @@ export class DurableAgent<
     // Wait for subscription to be ready, then resume workflow
     const workflow = this.getWorkflow();
     const requestContext = globalRunRegistry.get(runId)?.requestContext;
+
+    // Open a fresh AGENT_RUN + MODEL_GENERATION for the resumed segment on the same
+    // traceId — the originals were ended as `suspended` and can't be reopened. Post-resume
+    // steps + terminal end() target these via the registry override. (Linking = follow-up.)
+    const origTraceId = entry.agentSpan?.traceId;
+    if (origTraceId && this.#mastra?.observability) {
+      try {
+        const ag = this.#wrappedAgent as Agent<string, any, any>;
+        const resumeAgentSpan = getOrCreateSpan({
+          type: SpanType.AGENT_RUN,
+          name: `agent run (resumed): '${ag.id}'`,
+          entityType: EntityType.AGENT,
+          entityId: ag.id,
+          entityName: ag.name,
+          metadata: { runId, resumed: true },
+          tracingOptions: { traceId: origTraceId },
+          requestContext,
+          mastra: this.#mastra,
+        });
+        const resumeModelSpan = resumeAgentSpan?.createChildSpan({
+          type: SpanType.MODEL_GENERATION,
+          name: `llm: '${resumeModel?.modelId ?? ''}'`,
+          attributes: { model: resumeModel?.modelId, provider: resumeModel?.provider, streaming: true },
+          metadata: { runId, resumed: true },
+          requestContext,
+        });
+        for (const reg of [entry, globalRunRegistry.get(runId)]) {
+          if (!reg) continue;
+          reg.resumeAgentSpan = resumeAgentSpan;
+          reg.resumeModelSpan = resumeModelSpan;
+          reg.resumeAgentSpanData = resumeAgentSpan?.exportSpan();
+          reg.resumeModelSpanData = resumeModelSpan?.exportSpan();
+        }
+      } catch (error) {
+        // Span bookkeeping must never block resume.
+        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to open resume spans: ${error}`);
+      }
+    }
+
     ready
       .then(async () => {
         const run = await workflow.createRun({ runId, pubsub: this.pubsub });
-        const result = await run.resume({ resumeData, requestContext });
+        const result = await run.resume({
+          resumeData,
+          requestContext,
+          ...createObservabilityContext({ currentSpan: entry.resumeAgentSpan ?? entry.agentSpan }),
+        });
         if (result?.status === 'failed') {
           const error = new Error((result as any).error?.message || 'Workflow resume failed');
           void this.emitError(runId, error);
@@ -773,6 +1009,8 @@ export class DurableAgent<
   }
 
   /**
+   * @deprecated Use `stream(messages, { untilIdle: true })` instead.
+   *
    * Stream until all background tasks complete and the agent is idle.
    * Mirrors the regular Agent's streamUntilIdle but adapted for durable execution.
    */
@@ -800,6 +1038,12 @@ export class DurableAgent<
       agent: this.#wrappedAgent as Agent<string, any, TOutput>,
       messages,
       options,
+      // Forward the caller-provided runId (mirrors stream()). Without this,
+      // prepareForDurableExecution mints a fresh id, so prepare() registers a
+      // different run than requested and a follow-up resume(runId) — e.g. when
+      // rehydrating a persisted, suspended run in a fresh process — can't find
+      // its registry entry.
+      runId: options?.runId,
       requestContext: options?.requestContext,
       mastra: this.#mastra,
     });

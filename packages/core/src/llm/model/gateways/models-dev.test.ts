@@ -1,6 +1,56 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { ModelsDevGateway } from './models-dev.js';
 
+const {
+  callableModelMock,
+  chatModelMock,
+  createAnthropicMock,
+  createCerebrasMock,
+  createDeepInfraMock,
+  createDeepSeekMock,
+  createGatewayMock,
+  createGoogleGenerativeAIMock,
+  createGroqMock,
+  createMistralMock,
+  createOpenAIMock,
+  createOpenRouterMock,
+  createPerplexityMock,
+  createTogetherAIMock,
+  createXaiMock,
+  openAIResponsesMock,
+} = vi.hoisted(() => ({
+  callableModelMock: vi.fn(),
+  chatModelMock: vi.fn(),
+  createAnthropicMock: vi.fn(),
+  createCerebrasMock: vi.fn(),
+  createDeepInfraMock: vi.fn(),
+  createDeepSeekMock: vi.fn(),
+  createGatewayMock: vi.fn(),
+  createGoogleGenerativeAIMock: vi.fn(),
+  createGroqMock: vi.fn(),
+  createMistralMock: vi.fn(),
+  createOpenAIMock: vi.fn(),
+  createOpenRouterMock: vi.fn(),
+  createPerplexityMock: vi.fn(),
+  createTogetherAIMock: vi.fn(),
+  createXaiMock: vi.fn(),
+  openAIResponsesMock: vi.fn(),
+}));
+
+vi.mock('@ai-sdk/anthropic-v6', () => ({ createAnthropic: createAnthropicMock }));
+vi.mock('@ai-sdk/cerebras-v5', () => ({ createCerebras: createCerebrasMock }));
+vi.mock('@ai-sdk/deepinfra-v5', () => ({ createDeepInfra: createDeepInfraMock }));
+vi.mock('@ai-sdk/deepseek-v5', () => ({ createDeepSeek: createDeepSeekMock }));
+vi.mock('@ai-sdk/google-v6', () => ({ createGoogleGenerativeAI: createGoogleGenerativeAIMock }));
+vi.mock('@ai-sdk/groq-v6', () => ({ createGroq: createGroqMock }));
+vi.mock('@ai-sdk/mistral-v6', () => ({ createMistral: createMistralMock }));
+vi.mock('@ai-sdk/openai-v6', () => ({ createOpenAI: createOpenAIMock }));
+vi.mock('@ai-sdk/perplexity-v5', () => ({ createPerplexity: createPerplexityMock }));
+vi.mock('@ai-sdk/togetherai-v5', () => ({ createTogetherAI: createTogetherAIMock }));
+vi.mock('@ai-sdk/xai-v6', () => ({ createXai: createXaiMock }));
+vi.mock('@internal/ai-v6', () => ({ createGateway: createGatewayMock }));
+vi.mock('@openrouter/ai-sdk-provider-v5', () => ({ createOpenRouter: createOpenRouterMock }));
+
 // Mock fetch globally
 const mockFetch = vi.fn();
 global.fetch = mockFetch as any;
@@ -11,6 +61,22 @@ describe('ModelsDevGateway', () => {
   beforeEach(() => {
     gateway = new ModelsDevGateway();
     mockFetch.mockClear();
+    callableModelMock.mockReturnValue({ provider: 'callable' });
+    chatModelMock.mockReturnValue({ provider: 'chat' });
+    createAnthropicMock.mockReturnValue(callableModelMock);
+    createCerebrasMock.mockReturnValue(callableModelMock);
+    createDeepInfraMock.mockReturnValue(callableModelMock);
+    createDeepSeekMock.mockReturnValue(callableModelMock);
+    createGatewayMock.mockReturnValue(callableModelMock);
+    createGoogleGenerativeAIMock.mockReturnValue({ chat: chatModelMock });
+    createGroqMock.mockReturnValue(callableModelMock);
+    createMistralMock.mockReturnValue(callableModelMock);
+    createOpenAIMock.mockReturnValue({ responses: openAIResponsesMock });
+    createOpenRouterMock.mockReturnValue(callableModelMock);
+    createPerplexityMock.mockReturnValue(callableModelMock);
+    createTogetherAIMock.mockReturnValue(callableModelMock);
+    createXaiMock.mockReturnValue(callableModelMock);
+    openAIResponsesMock.mockReturnValue({ provider: 'openai' });
   });
 
   afterEach(() => {
@@ -368,6 +434,117 @@ describe('ModelsDevGateway', () => {
     it('should return false for invalid model ID format', () => {
       expect(() => gateway.buildUrl('invalid-format', { OPENAI_API_KEY: 'sk-test' })).toThrow();
     });
+  });
+
+  describe('resolveLanguageModel', () => {
+    it.each([
+      {
+        providerId: 'openai',
+        factory: createOpenAIMock,
+        modelInvoker: openAIResponsesMock,
+        model: { provider: 'openai' },
+      },
+      {
+        providerId: 'google',
+        factory: createGoogleGenerativeAIMock,
+        modelInvoker: chatModelMock,
+        model: { provider: 'chat' },
+      },
+      {
+        providerId: 'gemini',
+        factory: createGoogleGenerativeAIMock,
+        modelInvoker: chatModelMock,
+        model: { provider: 'chat' },
+      },
+      {
+        providerId: 'anthropic',
+        factory: createAnthropicMock,
+        modelInvoker: callableModelMock,
+        model: { provider: 'callable' },
+      },
+      {
+        providerId: 'mistral',
+        factory: createMistralMock,
+        modelInvoker: callableModelMock,
+        model: { provider: 'callable' },
+      },
+      { providerId: 'groq', factory: createGroqMock, modelInvoker: callableModelMock, model: { provider: 'callable' } },
+      {
+        providerId: 'openrouter',
+        factory: createOpenRouterMock,
+        modelInvoker: callableModelMock,
+        model: { provider: 'callable' },
+      },
+      { providerId: 'xai', factory: createXaiMock, modelInvoker: callableModelMock, model: { provider: 'callable' } },
+      {
+        providerId: 'deepseek',
+        factory: createDeepSeekMock,
+        modelInvoker: callableModelMock,
+        model: { provider: 'callable' },
+      },
+      {
+        providerId: 'perplexity',
+        factory: createPerplexityMock,
+        modelInvoker: callableModelMock,
+        model: { provider: 'callable' },
+      },
+      {
+        providerId: 'cerebras',
+        factory: createCerebrasMock,
+        modelInvoker: callableModelMock,
+        model: { provider: 'callable' },
+      },
+      {
+        providerId: 'togetherai',
+        factory: createTogetherAIMock,
+        modelInvoker: callableModelMock,
+        model: { provider: 'callable' },
+      },
+      {
+        providerId: 'deepinfra',
+        factory: createDeepInfraMock,
+        modelInvoker: callableModelMock,
+        model: { provider: 'callable' },
+      },
+      {
+        providerId: 'vercel',
+        factory: createGatewayMock,
+        modelInvoker: callableModelMock,
+        model: { provider: 'callable' },
+      },
+    ])(
+      'passes provider base URL env overrides to the $providerId provider',
+      async ({ providerId, factory, modelInvoker, model }) => {
+        gateway = new ModelsDevGateway({
+          [providerId]: {
+            apiKeyEnvVar: `${providerId.toUpperCase()}_API_KEY`,
+            name: providerId,
+            models: ['test-model'],
+            gateway: 'models.dev',
+            url: `https://api.${providerId}.example/v1`,
+          },
+        });
+
+        vi.stubEnv(`${providerId.toUpperCase()}_BASE_URL`, `https://custom.${providerId}.proxy/v1`);
+
+        const result = await gateway.resolveLanguageModel({
+          providerId,
+          modelId: 'test-model',
+          apiKey: 'sk-test',
+          headers: { 'x-test': 'true' },
+        });
+
+        expect(result).toEqual(model);
+        expect(factory).toHaveBeenCalledWith({
+          apiKey: 'sk-test',
+          baseURL: `https://custom.${providerId}.proxy/v1`,
+          headers: expect.objectContaining({
+            'x-test': 'true',
+          }),
+        });
+        expect(modelInvoker).toHaveBeenCalledWith('test-model');
+      },
+    );
   });
 
   describe('integration', () => {

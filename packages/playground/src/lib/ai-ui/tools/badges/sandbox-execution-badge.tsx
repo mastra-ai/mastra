@@ -1,8 +1,11 @@
-import { useAuiState } from '@assistant-ui/react';
-import { Badge, Button, Icon, cn } from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { CheckIcon, ChevronUpIcon, CopyIcon, TerminalSquare } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useCopyToClipboard } from '../../hooks/use-copy-to-clipboard';
+import type { DataMessagePart } from '../tool-card';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
 import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
@@ -54,6 +57,7 @@ export interface SandboxExecutionBadgeProps extends Omit<ToolApprovalButtonsProp
   result: any;
   metadata?: MessageMetadata;
   toolCalled?: boolean;
+  dataParts?: ReadonlyArray<DataMessagePart>;
 }
 
 // Hook for live elapsed time while running
@@ -147,16 +151,15 @@ export const SandboxExecutionBadge = ({
   toolApprovalMetadata,
   isNetwork,
   toolCalled: toolCalledProp,
+  dataParts: dataPartsProp,
 }: SandboxExecutionBadgeProps) => {
   // Get sandbox streaming data parts from the message
-  const message = useAuiState(s => s.message);
   const dataParts = useMemo(() => {
-    const content = message.content as ReadonlyArray<{ type: string; name?: string; data?: any }>;
-    return content.filter(part => part.type === 'data');
-  }, [message.content]);
+    return (dataPartsProp ?? []).filter(part => part.type === 'data');
+  }, [dataPartsProp]);
 
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const { isCopied, copyToClipboard } = useCopyToClipboard();
+  const { isCopied, copyToClipboard } = useCopyToClipboard({ copiedDuration: 1500, showToast: false });
   const { Link } = useLinkComponent();
 
   // Command info emitted by get_process_output (so we can show the original command)

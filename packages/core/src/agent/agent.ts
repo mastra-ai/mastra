@@ -7,6 +7,7 @@ import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod/v4';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraFGAPermissions } from '../auth/ee';
+import type { ActorSignal } from '../auth/ee';
 import type { AgentBackgroundConfig, ToolBackgroundConfig } from '../background-tasks';
 import { MastraBase } from '../base';
 import type { MastraBrowser } from '../browser/browser';
@@ -79,7 +80,10 @@ import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, MASTRA_VE
 import type { InferStandardSchemaOutput } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
 import type { SignalProvider } from '../signals/signal-provider';
+import { resolveAgentSkills, mergeWorkspaceSkills } from '../skills/agent-skills-resolver';
+import type { AgentSkillsInput, SkillInput } from '../skills/types';
 import { InMemoryStore } from '../storage';
+import type { GoalObjectiveRecord } from '../storage/domains/thread-state/base';
 import { ChunkFrom } from '../stream';
 import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
@@ -109,6 +113,7 @@ import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
 import { createSkillTools } from '../workspace/skills';
 import type { SkillFormat } from '../workspace/skills';
+import type { Skill, SkillMetadata, WorkspaceSkills } from '../workspace/skills/types';
 import { AgentLegacyHandler } from './agent-legacy';
 import type {
   AgentExecutionOptions,
@@ -120,6 +125,7 @@ import type {
   DelegationStartContext,
   DelegationCompleteContext,
 } from './agent.types';
+import { GoalSignalProvider, resolveGoalStore, readObjective, writeObjective, clearObjective } from './goal';
 import { buildMcpServerGuidance } from './mcp-guidance';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
@@ -132,6 +138,7 @@ import type {
   AgentConfig,
   AgentGenerateOptions,
   AgentNotificationConfig,
+  GoalConfig,
   AgentStreamOptions,
   ToolsetsInput,
   ToolsInput,
@@ -153,10 +160,13 @@ import type {
   SendAgentMessageResult,
   SendAgentNotificationSignalOptions,
   SendAgentNotificationSignalResult,
+  SendAgentSignalAccepted,
   SendAgentSignalOptions,
   SendAgentSignalResult,
   SendAgentStateSignalOptions,
   SendAgentStateSignalResult,
+  SendAgentStreamResumeOptions,
+  SendAgentStreamResumeResult,
   StructuredOutputOptions,
   ModelFallbackSettings,
   ModelWithRetries,
@@ -190,6 +200,10 @@ type AgentSnapshotMemoryInfo = {
   threadId?: string;
   resourceId?: string;
 };
+
+function getInvocationActor(context: unknown): ActorSignal | undefined {
+  return (context as { actor?: ActorSignal } | undefined)?.actor;
+}
 
 type ProcessorWorkflowChildrenContainer = {
   steps?: Record<string, unknown> | unknown[];
@@ -361,6 +375,7 @@ export class Agent<
   #pubsub?: PubSub;
   #inheritedPubSub?: PubSub;
   #memory?: DynamicArgument<MastraMemory, TRequestContext>;
+  #skills?: AgentSkillsInput;
   #skillsFormat?: SkillFormat;
   #workflows?: DynamicArgument<Record<string, AnyWorkflow>, TRequestContext>;
   #defaultGenerateOptionsLegacy: DynamicArgument<AgentGenerateOptions, TRequestContext>;
@@ -384,6 +399,7 @@ export class Agent<
   #backgroundTasks?: AgentBackgroundConfig;
   #notifications?: AgentNotificationConfig;
   #signals?: SignalProvider[];
+  #goal?: GoalConfig;
   #toolPayloadTransform?: ToolPayloadTransformPolicy;
   #editorConfig?: AgentEditorConfig;
   /**
@@ -506,6 +522,10 @@ export class Agent<
       this.#memory = config.memory;
     }
 
+    if (config.skills) {
+      this.#skills = config.skills;
+    }
+
     if (config.skillsFormat) {
       this.#skillsFormat = config.skillsFormat;
     }
@@ -598,15 +618,33 @@ export class Agent<
       this.#notifications = config.notifications;
     }
 
-    if (config.signals && config.signals.length > 0) {
-      this.#signals = config.signals;
+    if (config.goal) {
+      this.#goal = config.goal;
+    }
+
+    // Auto-wire the goal state-signal projection when a goal is configured but no
+    // goal provider was supplied, so configuring `goal` alone keeps the model
+    // aware of its current objective (mirrors the task-signal-provider footgun
+    // note). Callers who activate goals purely through the persisted objective
+    // APIs (`setObjective`/`updateObjectiveOptions`) without static `goal` config
+    // should register `GoalSignalProvider` explicitly — we can't auto-wire on
+    // `memory` alone because the goal state processor requires an active
+    // memory-backed thread and would throw for memory agents that never use
+    // goals.
+    const configuredSignals = config.signals ?? [];
+    const hasGoalProvider = configuredSignals.some(p => p.id === 'goal-signals');
+    const effectiveSignals: SignalProvider[] =
+      config.goal && !hasGoalProvider ? [...configuredSignals, new GoalSignalProvider()] : configuredSignals;
+
+    if (effectiveSignals.length > 0) {
+      this.#signals = effectiveSignals;
 
       // Collect processors and tools from signal providers that opt in
       const signalInputProcessors: InputProcessorOrWorkflow[] = [];
       const signalOutputProcessors: OutputProcessorOrWorkflow[] = [];
       let signalTools: Record<string, unknown> = {};
 
-      for (const provider of config.signals) {
+      for (const provider of effectiveSignals) {
         // Propagate Mastra instance before lifecycle so providers have storage access
         if (this.#mastra) {
           provider.__registerMastra(this.#mastra);
@@ -691,6 +729,111 @@ export class Agent<
    */
   getBackgroundTasksConfig(): AgentBackgroundConfig | undefined {
     return this.#backgroundTasks;
+  }
+
+  /**
+   * Returns the agent-level tool payload transform policy, if any.
+   * Used by durable execution to mirror the non-durable layer's
+   * per-call → agent → mastra merge order.
+   */
+  getToolPayloadTransform(): ToolPayloadTransformPolicy | undefined {
+    return this.#toolPayloadTransform;
+  }
+
+  /**
+   * Returns the agent's native goal configuration, if any. Read by the loop's
+   * goal step to resolve effective settings (judge model, max runs, prompt).
+   * @internal
+   */
+  __getGoalConfig(): GoalConfig | undefined {
+    return this.#goal;
+  }
+
+  /**
+   * Set the durable objective for a thread. The objective is judged in the
+   * execution loop until complete or the run budget is exhausted. Requires a
+   * memory-backed thread and a Mastra storage instance; no-ops otherwise.
+   *
+   * Only the optional fields explicitly provided are persisted into the
+   * objective record; unset fields fall back to the agent's `goal` config at
+   * evaluation time. A judge model (here or in `goal.judge`) is required for the
+   * goal to do anything.
+   *
+   * @experimental Agent goals are experimental and may change in a future release.
+   */
+  async setObjective(
+    objective: string,
+    options: {
+      threadId: string;
+      resourceId?: string;
+      judgeModelId?: string;
+      maxRuns?: number;
+      prompt?: string;
+      id?: string;
+    },
+  ): Promise<GoalObjectiveRecord | undefined> {
+    const store = await resolveGoalStore(this.#mastra as MastraUnion | undefined);
+    if (!store || !options.threadId) return undefined;
+
+    const now = Date.now();
+    const record: GoalObjectiveRecord = {
+      id: options.id ?? randomUUID(),
+      objective,
+      status: 'active',
+      runsUsed: 0,
+      startedAt: now,
+      updatedAt: now,
+      ...(options.maxRuns !== undefined && options.maxRuns > 0 ? { maxRuns: options.maxRuns } : {}),
+      ...(options.judgeModelId !== undefined ? { judgeModelId: options.judgeModelId } : {}),
+      ...(options.prompt !== undefined ? { prompt: options.prompt } : {}),
+    };
+    await writeObjective(store, options.threadId, record);
+    return record;
+  }
+
+  /**
+   * Read the current objective record for a thread, or `undefined` when none is
+   * set (or the agent has no storage).
+   */
+  async getObjective(options: { threadId: string }): Promise<GoalObjectiveRecord | undefined> {
+    const store = await resolveGoalStore(this.#mastra as MastraUnion | undefined);
+    return readObjective(store, options.threadId);
+  }
+
+  /**
+   * Drop the objective for a thread.
+   */
+  async clearObjective(options: { threadId: string }): Promise<void> {
+    const store = await resolveGoalStore(this.#mastra as MastraUnion | undefined);
+    await clearObjective(store, options.threadId);
+  }
+
+  /**
+   * Partially update the options of the active objective. Only provided fields
+   * are persisted into the record (so the precedence over agent config is
+   * remembered in thread state). No-ops when no objective is set.
+   */
+  async updateObjectiveOptions(options: {
+    threadId: string;
+    judgeModelId?: string;
+    maxRuns?: number;
+    prompt?: string;
+    status?: GoalObjectiveRecord['status'];
+  }): Promise<GoalObjectiveRecord | undefined> {
+    const store = await resolveGoalStore(this.#mastra as MastraUnion | undefined);
+    const existing = await readObjective(store, options.threadId);
+    if (!store || !existing) return undefined;
+
+    const updated: GoalObjectiveRecord = {
+      ...existing,
+      updatedAt: Date.now(),
+      ...(options.judgeModelId !== undefined ? { judgeModelId: options.judgeModelId } : {}),
+      ...(options.maxRuns !== undefined && options.maxRuns > 0 ? { maxRuns: options.maxRuns } : {}),
+      ...(options.prompt !== undefined ? { prompt: options.prompt } : {}),
+      ...(options.status !== undefined ? { status: options.status } : {}),
+    };
+    await writeObjective(store, options.threadId, updated);
+    return updated;
   }
 
   /**
@@ -847,19 +990,52 @@ export class Agent<
   }
 
   /**
-   * Gets the skills processors to add to input processors when workspace has skills.
+   * Resolves the combined WorkspaceSkills from agent-level skills and/or workspace skills.
+   * Agent-level skills win on name conflicts when both are present.
+   * @internal
+   */
+  private async resolveSkills(
+    requestContext?: RequestContext,
+    workspaceOverride?: AnyWorkspace,
+  ): Promise<WorkspaceSkills | undefined> {
+    const rc = requestContext || new RequestContext();
+
+    // Resolve agent-level skills (if configured)
+    let agentSkills: WorkspaceSkills | undefined;
+    if (this.#skills) {
+      let resolvedInputs: SkillInput[];
+      if (typeof this.#skills === 'function') {
+        resolvedInputs = await this.#skills({ requestContext: rc });
+      } else {
+        resolvedInputs = this.#skills;
+      }
+      if (resolvedInputs.length > 0) {
+        agentSkills = resolveAgentSkills(resolvedInputs);
+      }
+    }
+
+    // Resolve workspace-level skills (if configured)
+    const workspace = workspaceOverride ?? (await this.getWorkspace({ requestContext: rc }));
+    const workspaceSkills = workspace?.skills;
+
+    // Merge if both exist (agent skills win on name conflicts)
+    if (agentSkills && workspaceSkills) {
+      const { merged } = await mergeWorkspaceSkills(agentSkills, workspaceSkills);
+      return merged;
+    }
+
+    return agentSkills || workspaceSkills;
+  }
+
+  /**
+   * Gets the skills processors to add to input processors when skills are configured.
+   * Supports both agent-level skills and workspace skills.
    * @internal
    */
   private async getSkillsProcessors(
     configuredProcessors: InputProcessorOrWorkflow[],
     requestContext?: RequestContext,
   ): Promise<InputProcessorOrWorkflow[]> {
-    // Check if workspace has skills configured
-    const workspace = await this.getWorkspace({ requestContext: requestContext || new RequestContext() });
-    if (!workspace?.skills) {
-      return [];
-    }
-
     // Check for existing SkillsProcessor in configured processors to avoid duplicates
     const hasSkillsProcessor = hasEagerSkillsProcessor(configuredProcessors);
     const hasOnDemandProcessor = hasOnDemandSkillDiscoveryProcessor(configuredProcessors);
@@ -867,8 +1043,16 @@ export class Agent<
       return [];
     }
 
-    // Create new SkillsProcessor using workspace
-    return [new SkillsProcessor({ workspace, format: this.#skillsFormat })];
+    const rc = requestContext || new RequestContext();
+    const workspace = await this.getWorkspace({ requestContext: rc });
+
+    // Resolve combined skills from agent-level and/or workspace
+    const skills = await this.resolveSkills(rc, workspace ?? undefined);
+    if (!skills) {
+      return [];
+    }
+
+    return [new SkillsProcessor({ skills, format: this.#skillsFormat })];
   }
 
   /**
@@ -1263,9 +1447,16 @@ export class Agent<
 
     const memoryProcessors = memory ? await memory.getOutputProcessors(configuredProcessors, requestContext) : [];
 
+    // Get channel output processors (with deduplication) — mirrors the input
+    // processor hookup. Channels render the agent's stream to the originating
+    // chat platform via this processor; without it, replies never reach Slack.
+    const channelProcessors = this.#agentChannels ? this.#agentChannels.getOutputProcessors(configuredProcessors) : [];
+
     // Combine all processors into a single workflow
-    // Memory processors should run last (to persist messages after other processing)
-    const allProcessors = [...configuredProcessors, ...memoryProcessors];
+    // User-configured processors run first so they can transform chunks
+    // (e.g. PII redaction, translation) before the channel renders them.
+    // Memory processors run last to persist the final form.
+    const allProcessors = [...configuredProcessors, ...channelProcessors, ...memoryProcessors];
     return this.combineProcessorsIntoWorkflow(allProcessors, `${this.id}-output-processor`);
   }
 
@@ -1703,6 +1894,53 @@ export class Agent<
   }
 
   /**
+   * Programmatically invoke a skill by name.
+   *
+   * Loads the full skill instructions and returns them, or returns the skill
+   * object directly. This is the programmatic equivalent of the `skill` tool
+   * that the LLM calls — useful in workflows and custom pipelines.
+   *
+   * @param skillName - Name or path of the skill to invoke
+   * @param options - Optional request context for dynamic skill resolution
+   * @returns The full Skill object with instructions, or null if not found
+   *
+   * @example
+   * ```typescript
+   * // In a workflow step
+   * const skill = await agent.getSkill('code-review');
+   * if (skill) {
+   *   console.log(skill.instructions); // Full skill instructions
+   *   console.log(skill.references);   // Available reference files
+   * }
+   * ```
+   */
+  public async getSkill(skillName: string, options?: { requestContext?: RequestContext }): Promise<Skill | null> {
+    const skills = await this.resolveSkills(options?.requestContext);
+    if (!skills) return null;
+    return skills.get(skillName);
+  }
+
+  /**
+   * List all skills available to this agent (from both agent-level and workspace).
+   *
+   * @param options - Optional request context for dynamic skill resolution
+   * @returns Array of skill metadata (name, description, path)
+   *
+   * @example
+   * ```typescript
+   * const skills = await agent.listSkills();
+   * for (const skill of skills) {
+   *   console.log(`${skill.name}: ${skill.description}`);
+   * }
+   * ```
+   */
+  public async listSkills(options?: { requestContext?: RequestContext }): Promise<SkillMetadata[]> {
+    const skills = await this.resolveSkills(options?.requestContext);
+    if (!skills) return [];
+    return skills.list();
+  }
+
+  /**
    * Sets the agent's browser from workspace if:
    * 1. Agent doesn't already have a browser configured (SDK approach)
    * 2. Workspace has a browser configured (CLI approach)
@@ -1852,8 +2090,35 @@ export class Agent<
     }
 
     const voice = this.#voice;
-    voice?.addTools(await this.listTools({ requestContext }));
-    const instructions = await this.getInstructions({ requestContext });
+
+    const resolvedRequestContext = requestContext ?? new RequestContext();
+    const rawTools = await this.listTools({ requestContext: resolvedRequestContext });
+    const toolEntries = Object.entries(rawTools || {});
+    const model = toolEntries.length ? await this.getModel({ requestContext: resolvedRequestContext }) : undefined;
+    const mastraProxy = this.#mastra ? createMastraProxy({ mastra: this.#mastra, logger: this.logger }) : undefined;
+    const wrappedTools = Object.fromEntries(
+      await Promise.all(
+        toolEntries.map(async ([k, tool]) => {
+          if (!tool) return [k, tool];
+          const options: ToolOptions = {
+            name: k,
+            logger: this.logger,
+            mastra: mastraProxy as MastraUnion | undefined,
+            agentName: this.name,
+            agentId: this.id,
+            requestContext: resolvedRequestContext,
+            tracingPolicy: this.#options?.tracingPolicy,
+            requireApproval: (tool as any).requireApproval,
+            backgroundConfig: (tool as any).background,
+            model,
+          };
+          return [k, makeCoreTool(tool, options)];
+        }),
+      ),
+    );
+    voice?.addTools(wrappedTools as TTools);
+
+    const instructions = await this.getInstructions({ requestContext: resolvedRequestContext });
     voice?.addInstructions(this.#convertInstructionsToString(instructions));
     return voice;
   }
@@ -3259,11 +3524,14 @@ export class Agent<
     }
 
     const workspace = await this.getWorkspace({ requestContext });
-    if (!workspace?.skills) {
+
+    // Resolve skills from agent-level config and/or workspace (pass workspace to avoid double resolution)
+    const skills = await this.resolveSkills(requestContext, workspace ?? undefined);
+    if (!skills) {
       return convertedSkillTools;
     }
 
-    const skillTools = createSkillTools(workspace.skills);
+    const skillTools = createSkillTools(skills);
 
     if (Object.keys(skillTools).length > 0) {
       this.logger.debug('Adding skill tools', { agent: this.name, tools: Object.keys(skillTools), runId });
@@ -3499,6 +3767,7 @@ export class Agent<
       inputProcessorOverrides?.length ||
       this.#inputProcessors ||
       this.#memory ||
+      this.#skills ||
       this.#workspace ||
       this.#mastra?.getWorkspace() ||
       this.#browser ||
@@ -3598,7 +3867,7 @@ export class Agent<
     let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
     let nextTools = tools;
 
-    if (inputProcessorOverrides?.length || this.#inputProcessors || this.#memory) {
+    if (inputProcessorOverrides?.length || this.#inputProcessors || this.#memory || this.#skills) {
       const runner = await this.getProcessorRunner({
         requestContext,
         inputProcessorOverrides,
@@ -4130,6 +4399,7 @@ export class Agent<
           // manually wrap agent tools with tracing, so that we can pass the
           // current tool span onto the agent to maintain continuity of the trace
           execute: async (inputData: z.infer<typeof agentInputSchema>, context) => {
+            const invocationActor = getInvocationActor(context);
             const startTime = Date.now();
             const toolCallId = context?.agent?.toolCallId || randomUUID();
 
@@ -4436,6 +4706,12 @@ export class Agent<
 
               const subAgentPromptCreatedAt = new Date();
 
+              // Forward the parent's abortSignal so aborting the supervisor stream/generate cancels
+              // in-flight sub-agents. The signal reaches this delegation tool via the tool-execution
+              // context; without forwarding it the sub-agent would run with a detached, never-aborted
+              // signal and keep looping after the parent is cancelled. See issue #14820.
+              const subAgentAbortOptions = context?.abortSignal ? { abortSignal: context.abortSignal } : {};
+
               if (
                 (methodType === 'generate' || methodType === 'generateLegacy') &&
                 supportedLanguageModelSpecifications.includes(resolvedModelVersion)
@@ -4444,6 +4720,7 @@ export class Agent<
                   ? await resolvedAgent.resumeGenerate(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext,
+                      actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
@@ -4457,10 +4734,12 @@ export class Agent<
                             },
                           }
                         : {}),
+                      ...subAgentAbortOptions,
                       disableBackgroundTasks: true,
                     })
                   : await resolvedAgent.generate(messagesForSubAgent, {
                       requestContext,
+                      actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
@@ -4474,6 +4753,7 @@ export class Agent<
                             },
                           }
                         : {}),
+                      ...subAgentAbortOptions,
                       disableBackgroundTasks: true,
                     });
 
@@ -4556,8 +4836,10 @@ export class Agent<
                 }
                 const generateResult = await resolvedAgent.generateLegacy(messagesForSubAgent, {
                   requestContext,
+                  actor: invocationActor,
                   ...resolveObservabilityContext(context ?? {}),
                   context: filteredContextMessages as unknown as CoreMessage[],
+                  ...subAgentAbortOptions,
                 });
                 result = {
                   text: generateResult.text,
@@ -4571,6 +4853,7 @@ export class Agent<
                   ? await resolvedAgent.resumeStream(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext,
+                      actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
@@ -4586,10 +4869,12 @@ export class Agent<
                             },
                           }
                         : {}),
+                      ...subAgentAbortOptions,
                       disableBackgroundTasks: true,
                     })
                   : await resolvedAgent.stream(messagesForSubAgent, {
                       requestContext,
+                      actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
@@ -4605,6 +4890,7 @@ export class Agent<
                             },
                           }
                         : {}),
+                      ...subAgentAbortOptions,
                       disableBackgroundTasks: true,
                     });
 
@@ -4722,7 +5008,9 @@ export class Agent<
                 }
                 const streamResult = await resolvedAgent.streamLegacy(effectivePrompt, {
                   requestContext,
+                  actor: invocationActor,
                   ...resolveObservabilityContext(context ?? {}),
+                  ...subAgentAbortOptions,
                 });
 
                 let fullText = '';
@@ -5051,6 +5339,7 @@ export class Agent<
           // manually wrap workflow tools with tracing, so that we can pass the
           // current tool span onto the workflow to maintain continuity of the trace
           execute: async (inputData, context) => {
+            const invocationActor = getInvocationActor(context);
             const savedMastraMemory = requestContext.get('MastraMemory');
             try {
               const { initialState, inputData: workflowInputData, suspendedToolRunId } = inputData as any;
@@ -5080,12 +5369,14 @@ export class Agent<
                   result = await run.resume({
                     resumeData,
                     requestContext,
+                    actor: invocationActor,
                     ...resolveObservabilityContext(context ?? {}),
                   });
                 } else {
                   result = await run.start({
                     inputData: workflowInputData,
                     requestContext,
+                    actor: invocationActor,
                     ...resolveObservabilityContext(context ?? {}),
                     ...(initialState && { initialState }),
                   });
@@ -5094,6 +5385,7 @@ export class Agent<
                 const streamResult = run.streamLegacy({
                   inputData: workflowInputData,
                   requestContext,
+                  actor: invocationActor,
                   ...resolveObservabilityContext(context ?? {}),
                 });
 
@@ -5111,11 +5403,13 @@ export class Agent<
                   ? run.resumeStream({
                       resumeData,
                       requestContext,
+                      actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
                     })
                   : run.stream({
                       inputData: workflowInputData,
                       requestContext,
+                      actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(initialState && { initialState }),
                     });
@@ -5259,9 +5553,34 @@ export class Agent<
     hooks?: ToolHooks;
   }): Promise<Record<string, CoreTool>> {
     const requestContext = options.requestContext ?? new RequestContext();
+    const defaultOptions = await this.getDefaultOptions({ requestContext });
+    const mergedOptions = deepMerge(
+      defaultOptions as Record<string, unknown>,
+      { ...options, requestContext } as Record<string, unknown>,
+    ) as AgentExecutionOptions & typeof options;
+    const optionMemory = (options as { memory?: AgentExecutionOptionsBase<any>['memory'] }).memory;
+    const mergedMemory = mergedOptions.memory;
+    const threadIdFromContext = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+    const explicitThreadFromArgs = resolveThreadIdFromArgs({
+      memory: optionMemory,
+      threadId: options.threadId,
+      overrideId: threadIdFromContext,
+    });
+    const defaultThreadFromArgs = resolveThreadIdFromArgs({
+      memory: mergedMemory,
+      overrideId: threadIdFromContext,
+    });
+    const resourceIdFromContext = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+
     return this.convertTools({
-      ...options,
+      toolsets: mergedOptions.toolsets,
+      clientTools: mergedOptions.clientTools,
+      threadId: explicitThreadFromArgs?.id ?? defaultThreadFromArgs?.id,
+      resourceId: resourceIdFromContext || options.resourceId || optionMemory?.resource || mergedMemory?.resource,
+      runId: mergedOptions.runId,
       requestContext,
+      memoryConfig: options.memoryConfig ?? mergedMemory?.options,
+      autoResumeSuspendedTools: mergedOptions.autoResumeSuspendedTools,
       methodType: 'stream',
     });
   }
@@ -5456,6 +5775,18 @@ export class Agent<
 
     const formattedTools = this.formatTools(allTools);
     return this.wrapToolsWithHooks(formattedTools, this.resolveToolHooks(hooks));
+  }
+
+  /**
+   * Returns the agent's statically-configured tool hooks, if any.
+   *
+   * @internal Used by dataset experiments to compose item-level tool mocks with
+   * the user's configured `beforeToolCall`/`afterToolCall` hooks. Run-level hooks
+   * override these via {@link resolveToolHooks}, so callers that need to preserve
+   * the configured hooks must read and compose them explicitly.
+   */
+  getConfiguredToolHooks(): ToolHooks | undefined {
+    return this.#hooks;
   }
 
   private resolveToolHooks(runHooks?: ToolHooks): ToolHooks | undefined {
@@ -5881,11 +6212,13 @@ export class Agent<
     memory,
     runId,
     snapshotMemoryInfo,
+    actor,
   }: {
     requestContext?: RequestContext;
     memory?: AgentExecutionOptionsBase<any>['memory'];
     runId?: string;
     snapshotMemoryInfo?: AgentSnapshotMemoryInfo;
+    actor?: ActorSignal;
   }): Promise<void> {
     const fgaProvider = this.#mastra?.getServer()?.fga;
     if (!fgaProvider) {
@@ -5901,6 +6234,7 @@ export class Agent<
       resource: { type: 'agent', id: getAgentFGAResourceId(this.id) },
       permission: MastraFGAPermissions.AGENTS_EXECUTE,
       requestContext,
+      actor,
       context: {
         resourceId: executionResourceId,
       },
@@ -6316,7 +6650,7 @@ export class Agent<
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
     try {
       const run = await executionWorkflow.createRun({ runId: executionRunId });
-      const result = await run.start({ ...observabilityContext });
+      const result = await run.start({ requestContext, actor: options.actor, ...observabilityContext });
       return result;
     } finally {
       if (useEventedExecution) {
@@ -6783,8 +7117,16 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (options ?? {}) as Record<string, unknown>,
     ) as AgentExecutionOptions<any> & { model?: DynamicArgument<MastraModelConfig> };
+    const loopOptions = { ...mergedOptions };
+    const actor = mergedOptions.actor;
+    delete loopOptions.actor;
 
-    await this.#requireAgentExecutionFGA(mergedOptions);
+    await this.#requireAgentExecutionFGA({
+      requestContext: mergedOptions.requestContext,
+      memory: mergedOptions.memory,
+      runId: mergedOptions.runId,
+      actor,
+    });
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
@@ -6816,7 +7158,8 @@ export class Agent<
     }
 
     const executeOptions = {
-      ...mergedOptions,
+      ...loopOptions,
+      actor,
       structuredOutput: mergedOptions.structuredOutput
         ? {
             ...mergedOptions.structuredOutput,
@@ -6904,8 +7247,13 @@ export class Agent<
   sendMessage<OUTPUT = TOutput>(
     message: AgentMessageInput,
     target: SendAgentMessageOptions<OUTPUT>,
-  ): SendAgentMessageResult {
-    return agentThreadStreamRuntime.sendMessage(this as Agent<any, any, any, any>, message, target, this.getPubSub());
+  ): SendAgentMessageResult<OUTPUT> {
+    return agentThreadStreamRuntime.sendMessage<OUTPUT>(
+      this as Agent<any, any, any, any>,
+      message,
+      target,
+      this.getPubSub(),
+    );
   }
 
   /**
@@ -6914,8 +7262,13 @@ export class Agent<
   queueMessage<OUTPUT = TOutput>(
     message: AgentMessageInput,
     target: QueueAgentMessageOptions<OUTPUT>,
-  ): QueueAgentMessageResult {
-    return agentThreadStreamRuntime.queueMessage(this as Agent<any, any, any, any>, message, target, this.getPubSub());
+  ): QueueAgentMessageResult<OUTPUT> {
+    return agentThreadStreamRuntime.queueMessage<OUTPUT>(
+      this as Agent<any, any, any, any>,
+      message,
+      target,
+      this.getPubSub(),
+    );
   }
 
   /**
@@ -6924,8 +7277,13 @@ export class Agent<
   sendStateSignal<OUTPUT = TOutput>(
     state: AgentStateSignalInput,
     target: SendAgentStateSignalOptions<OUTPUT>,
-  ): Promise<SendAgentStateSignalResult> {
-    return agentThreadStreamRuntime.sendStateSignal(this as Agent<any, any, any, any>, state, target, this.getPubSub());
+  ): Promise<SendAgentStateSignalResult<OUTPUT>> {
+    return agentThreadStreamRuntime.sendStateSignal<OUTPUT>(
+      this as Agent<any, any, any, any>,
+      state,
+      target,
+      this.getPubSub(),
+    );
   }
 
   /**
@@ -6934,25 +7292,25 @@ export class Agent<
   async sendNotificationSignal<OUTPUT = TOutput>(
     notification: SendNotificationSignalInput,
     target: SendAgentNotificationSignalOptions<OUTPUT>,
-  ): Promise<SendAgentNotificationSignalResult>;
+  ): Promise<SendAgentNotificationSignalResult<OUTPUT>>;
   async sendNotificationSignal<OUTPUT = TOutput>(
     notification: SendNotificationSignalInput[],
     target: SendAgentNotificationSignalOptions<OUTPUT>,
-  ): Promise<SendAgentNotificationSignalResult[]>;
+  ): Promise<SendAgentNotificationSignalResult<OUTPUT>[]>;
   async sendNotificationSignal<OUTPUT = TOutput>(
     notification: SendNotificationSignalInput | SendNotificationSignalInput[],
     target: SendAgentNotificationSignalOptions<OUTPUT>,
-  ): Promise<SendAgentNotificationSignalResult | SendAgentNotificationSignalResult[]> {
+  ): Promise<SendAgentNotificationSignalResult<OUTPUT> | SendAgentNotificationSignalResult<OUTPUT>[]> {
     const isBatch = Array.isArray(notification);
     const inputs = isBatch ? notification : [notification];
-    const results = await this.#sendNotificationSignalBatch(inputs, target);
+    const results = await this.#sendNotificationSignalBatch<OUTPUT>(inputs, target);
     return isBatch ? results : results[0]!;
   }
 
   async #sendNotificationSignalBatch<OUTPUT = TOutput>(
     inputs: SendNotificationSignalInput[],
     target: SendAgentNotificationSignalOptions<OUTPUT>,
-  ): Promise<SendAgentNotificationSignalResult[]> {
+  ): Promise<SendAgentNotificationSignalResult<OUTPUT>[]> {
     const notifications = await this.#mastra?.getStorage()?.getStore('notifications');
     if (!notifications) {
       throw new Error('sendNotificationSignal requires a notifications storage domain');
@@ -6988,7 +7346,7 @@ export class Agent<
       });
     }
 
-    const results: SendAgentNotificationSignalResult[] = [];
+    const results: SendAgentNotificationSignalResult<OUTPUT>[] = [];
     for (const { record, decision } of planned) {
       if (decision.action === 'discard') {
         const updated = await notifications.updateNotification({
@@ -6997,7 +7355,7 @@ export class Agent<
           status: 'discarded',
           deliveryReason: decision.reason,
         });
-        results.push({ accepted: true, record: updated, decision });
+        results.push({ record: updated, decision });
         continue;
       }
 
@@ -7007,7 +7365,7 @@ export class Agent<
           threadId: record.threadId,
           deliveryReason: decision.reason,
         });
-        results.push({ accepted: true, record: updated, decision });
+        results.push({ record: updated, decision });
         continue;
       }
 
@@ -7032,21 +7390,37 @@ export class Agent<
 
         if (shouldEmitSummaryNow) {
           const signal = createNotificationSummarySignal(summarizeNotifications([updated]));
-          const result = agentThreadStreamRuntime.sendSignal(
+          const result = agentThreadStreamRuntime.sendSignal<OUTPUT>(
             this as Agent<any, any, any, any>,
             signal,
             { ...target, ifIdle: { ...target.ifIdle, behavior: record.priority === 'high' ? 'persist' : 'wake' } },
             this.getPubSub(),
           );
-          if (!result.accepted) {
+          let summaryAccepted: SendAgentSignalAccepted<OUTPUT>;
+          try {
+            summaryAccepted = await result.accepted;
+          } catch (error) {
             const failed = await notifications.updateNotification({
               id: updated.id,
               threadId: updated.threadId,
               deliveryAttempts: (updated.deliveryAttempts ?? 0) + 1,
               lastDeliveryAttemptAt: new Date(),
-              lastDeliveryError: 'Notification summary signal was rejected',
+              lastDeliveryError: error instanceof Error ? error.message : 'Notification summary signal was rejected',
             });
-            results.push({ ...result, record: failed, decision });
+            results.push({ record: failed, decision });
+            continue;
+          }
+          // The routing policy can resolve to `persist`/`discard` (no run, no
+          // delivery). Only stamp `summarySignalId` when a run actually picked
+          // the signal up (`wake`/`deliver`).
+          if (summaryAccepted.action === 'persist' || summaryAccepted.action === 'discard') {
+            results.push({
+              record: updated,
+              decision,
+              signal: result.signal,
+              persisted: result.persisted,
+              accepted: result.accepted,
+            });
             continue;
           }
           const summarized = await notifications.updateNotification({
@@ -7054,31 +7428,55 @@ export class Agent<
             threadId: updated.threadId,
             summarySignalId: result.signal.id,
           });
-          results.push({ ...result, record: summarized, decision });
+          results.push({
+            record: summarized,
+            decision,
+            runId: 'runId' in summaryAccepted ? summaryAccepted.runId : undefined,
+            signal: result.signal,
+            persisted: result.persisted,
+            accepted: result.accepted,
+          });
           continue;
         }
 
-        results.push({ accepted: true, record: updated, decision });
+        results.push({ record: updated, decision });
         continue;
       }
 
       const signal = createNotificationSignal({ ...record, status: 'delivered' });
-      const result = agentThreadStreamRuntime.sendSignal(
+      const result = agentThreadStreamRuntime.sendSignal<OUTPUT>(
         this as Agent<any, any, any, any>,
         signal,
         target,
         this.getPubSub(),
       );
-      if (!result.accepted) {
+      let delivered: SendAgentSignalAccepted<OUTPUT>;
+      try {
+        delivered = await result.accepted;
+      } catch (error) {
         const failed = await notifications.updateNotification({
           id: record.id,
           threadId: record.threadId,
           deliveryAttempts: (record.deliveryAttempts ?? 0) + 1,
           lastDeliveryAttemptAt: new Date(),
-          lastDeliveryError: 'Notification signal was rejected',
+          lastDeliveryError: error instanceof Error ? error.message : 'Notification signal was rejected',
           deliveryReason: decision.reason,
         });
-        results.push({ ...result, record: failed, decision });
+        results.push({ record: failed, decision });
+        continue;
+      }
+
+      // The routing policy can resolve to `persist`/`discard` (no run picked the
+      // signal up). Don't mark the notification `delivered` in that case — the
+      // record stays in its current state with the emitted signal attached.
+      if (delivered.action === 'persist' || delivered.action === 'discard') {
+        results.push({
+          record,
+          decision,
+          signal: result.signal,
+          persisted: result.persisted,
+          accepted: result.accepted,
+        });
         continue;
       }
 
@@ -7090,7 +7488,14 @@ export class Agent<
         deliveryReason: decision.reason,
       });
 
-      results.push({ ...result, record: updated, decision });
+      results.push({
+        record: updated,
+        decision,
+        runId: 'runId' in delivered ? delivered.runId : undefined,
+        signal: result.signal,
+        persisted: result.persisted,
+        accepted: result.accepted,
+      });
     }
 
     return results;
@@ -7099,8 +7504,16 @@ export class Agent<
   /**
    * @experimental Agent signals are experimental and may change in a future release.
    */
-  sendSignal<OUTPUT = TOutput>(signal: AgentSignal, target: SendAgentSignalOptions<OUTPUT>): SendAgentSignalResult {
-    return agentThreadStreamRuntime.sendSignal(this as Agent<any, any, any, any>, signal, target, this.getPubSub());
+  sendSignal<OUTPUT = TOutput>(
+    signal: AgentSignal,
+    target: SendAgentSignalOptions<OUTPUT>,
+  ): SendAgentSignalResult<OUTPUT> {
+    return agentThreadStreamRuntime.sendSignal<OUTPUT>(
+      this as Agent<any, any, any, any>,
+      signal,
+      target,
+      this.getPubSub(),
+    );
   }
 
   async stream<
@@ -7145,6 +7558,9 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (streamOptions ?? {}) as Record<string, unknown>,
     ) as AgentExecutionOptions<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> };
+    const loopOptions = { ...mergedOptions };
+    const actor = mergedOptions.actor;
+    delete loopOptions.actor;
 
     // Delegate to the idle-loop wrapper when `untilIdle` is set (from
     // per-call options OR defaultOptions). Strip `untilIdle` before passing
@@ -7163,7 +7579,12 @@ export class Agent<
       );
     }
 
-    await this.#requireAgentExecutionFGA(mergedOptions);
+    await this.#requireAgentExecutionFGA({
+      requestContext: mergedOptions.requestContext,
+      memory: mergedOptions.memory,
+      runId: mergedOptions.runId,
+      actor,
+    });
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
@@ -7197,7 +7618,7 @@ export class Agent<
     const threadStreamPubSub = this.getPubSub();
     await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
       this as Agent<any, any, any, any>,
-      mergedOptions,
+      loopOptions as AgentExecutionOptions<OUTPUT>,
       threadStreamPubSub,
     );
 
@@ -7207,10 +7628,14 @@ export class Agent<
         source: 'agent',
         entityId: this.id,
       }) ?? randomUUID();
-    const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(mergedOptions, threadStreamPubSub);
+    const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
+      { ...loopOptions, runId: mergedOptions.runId, actor } as AgentExecutionOptions<OUTPUT>,
+      threadStreamPubSub,
+    );
 
     const executeOptions = {
       ...preparedOptions,
+      actor,
       structuredOutput: mergedOptions.structuredOutput
         ? {
             ...mergedOptions.structuredOutput,
@@ -7248,7 +7673,7 @@ export class Agent<
       });
     }
 
-    agentThreadStreamRuntime.registerRun(
+    await agentThreadStreamRuntime.registerRun(
       this as Agent<any, any, any, any>,
       result.result,
       preparedOptions as AgentExecutionOptions<OUTPUT>,
@@ -7456,6 +7881,9 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (streamOptions ?? {}) as Record<string, unknown>,
     ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
+    const loopStreamOptions = { ...mergedStreamOptions };
+    const actor = mergedStreamOptions.actor;
+    delete loopStreamOptions.actor;
 
     // Delegate to the idle-loop wrapper when `untilIdle` is set (from
     // per-call options OR defaultOptions). Strip `untilIdle` before passing
@@ -7484,6 +7912,7 @@ export class Agent<
         thread: mergedStreamOptions.memory?.thread ?? snapshotMemoryInfo.threadId,
         resource: mergedStreamOptions.memory?.resource ?? snapshotMemoryInfo.resourceId,
       };
+      loopStreamOptions.memory = mergedStreamOptions.memory;
     }
 
     await this.#requireAgentExecutionFGA({
@@ -7491,6 +7920,7 @@ export class Agent<
       memory: mergedStreamOptions.memory,
       runId: mergedStreamOptions.runId,
       snapshotMemoryInfo,
+      actor,
     });
 
     const llm = await this.getLLM({
@@ -7520,16 +7950,17 @@ export class Agent<
     const threadStreamPubSub = this.getPubSub();
     await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
       this as Agent<any, any, any, any>,
-      mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
+      loopStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
       threadStreamPubSub,
     );
     const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
-      mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
+      { ...loopStreamOptions, actor } as unknown as AgentExecutionOptions<OUTPUT>,
       threadStreamPubSub,
     );
 
     const result = await this.#execute({
       ...preparedOptions,
+      actor,
       structuredOutput: mergedStreamOptions.structuredOutput
         ? {
             ...mergedStreamOptions.structuredOutput,
@@ -7567,7 +7998,7 @@ export class Agent<
       });
     }
 
-    agentThreadStreamRuntime.registerRun(
+    await agentThreadStreamRuntime.registerRun(
       this as Agent<any, any, any, any>,
       result.result as unknown as MastraModelOutput<OUTPUT>,
       preparedOptions as AgentExecutionOptions<OUTPUT>,
@@ -7629,6 +8060,9 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (options ?? {}) as Record<string, unknown>,
     ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
+    const loopOptions = { ...mergedOptions };
+    const actor = mergedOptions.actor;
+    delete loopOptions.actor;
 
     const runId = options?.runId ?? '';
     const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeGenerate' });
@@ -7637,6 +8071,7 @@ export class Agent<
       memory: mergedOptions.memory,
       runId: mergedOptions.runId,
       snapshotMemoryInfo: this.#getSnapshotMemoryInfo(existingSnapshot),
+      actor,
     });
 
     const llm = await this.getLLM({
@@ -7668,7 +8103,8 @@ export class Agent<
     }
 
     const result = await this.#execute({
-      ...mergedOptions,
+      ...loopOptions,
+      actor,
       structuredOutput: mergedOptions.structuredOutput
         ? {
             ...mergedOptions.structuredOutput,
@@ -7749,17 +8185,78 @@ export class Agent<
     return this.resumeStream({ approved: true }, options);
   }
 
+  async sendStreamResume<OUTPUT = undefined>(
+    options: SendAgentStreamResumeOptions<OUTPUT>,
+  ): Promise<SendAgentStreamResumeResult> {
+    const { threadId, resourceId, runId, toolCallId, resumeData, streamOptions } = options;
+
+    if (!threadId || !resourceId || !runId) {
+      throw new MastraError({
+        id: 'AGENT_SEND_STREAM_RESUME_MISSING_TARGET',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'sendStreamResume() requires threadId, resourceId, and runId.',
+        details: { threadId, resourceId, runId, agentName: this.name },
+      });
+    }
+
+    const resumableRun = agentThreadStreamRuntime.getResumableThreadRun(
+      { threadId, resourceId, runId, toolCallId },
+      this.getPubSub(),
+    );
+    if (!resumableRun) {
+      throw new MastraError({
+        id: 'AGENT_SEND_STREAM_RESUME_NO_SUSPENDED_THREAD_RUN',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" sendStreamResume() could not find a suspended run "${runId}" for thread "${threadId}".`,
+        details: {
+          threadId,
+          resourceId,
+          runId,
+          agentName: this.name,
+        },
+      });
+    }
+
+    const resumeOptions = (streamOptions ?? {}) as AgentExecutionOptionsBase<unknown> & { toolCallId?: string };
+
+    await this.resumeStream(resumeData, {
+      ...resumeOptions,
+      runId,
+      ...(resumableRun.toolCallId ? { toolCallId: resumableRun.toolCallId } : {}),
+      memory: {
+        ...(resumeOptions.memory ?? {}),
+        thread: threadId,
+        resource: resourceId,
+      },
+    });
+
+    return { accepted: true, runId, toolCallId: resumableRun.toolCallId };
+  }
+
   async sendToolApproval<OUTPUT = undefined>(
     options: AgentExecutionOptions<OUTPUT> & {
       threadId: string;
       resourceId: string;
       toolCallId?: string;
       approved: boolean;
+      resumeData?: unknown;
+      declineContext?: { reason?: string; message?: string };
       messages?: MessageListInput;
       streamOptions?: AgentExecutionOptions<OUTPUT>;
     },
   ): Promise<{ accepted: true; runId: string; toolCallId?: string }> {
-    const { threadId, resourceId, approved, messages, streamOptions, ...executionOptions } = options;
+    const {
+      threadId,
+      resourceId,
+      approved,
+      resumeData: customResumeData,
+      declineContext,
+      messages,
+      streamOptions,
+      ...executionOptions
+    } = options;
 
     if (messages && approved) {
       const continuation = agentThreadStreamRuntime.continueWithMessages(
@@ -7794,22 +8291,33 @@ export class Agent<
       });
     }
 
-    const approvalOptions = {
-      ...executionOptions,
-      runId,
-      memory: {
-        ...(executionOptions.memory ?? {}),
-        thread: executionOptions.memory?.thread ?? threadId,
-        resource: executionOptions.memory?.resource ?? resourceId,
-      },
-    } as unknown as AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string };
+    const resumeOptions = deepMerge(
+      (streamOptions ?? {}) as Record<string, unknown>,
+      executionOptions as Record<string, unknown>,
+    ) as unknown as AgentExecutionOptions<OUTPUT>;
 
-    if (approved) {
-      await this.approveToolCall(approvalOptions);
-    } else {
-      await this.declineToolCall(approvalOptions);
-    }
-    return { accepted: true, runId, toolCallId: options.toolCallId };
+    return this.sendStreamResume({
+      threadId,
+      resourceId,
+      runId,
+      toolCallId: options.toolCallId,
+      resumeData:
+        customResumeData !== undefined
+          ? customResumeData
+          : approved
+            ? { approved }
+            : declineContext
+              ? { approved, ...declineContext }
+              : { approved },
+      streamOptions: {
+        ...resumeOptions,
+        memory: {
+          ...(resumeOptions.memory ?? {}),
+          thread: resumeOptions.memory?.thread ?? threadId,
+          resource: resumeOptions.memory?.resource ?? resourceId,
+        },
+      },
+    });
   }
 
   /**

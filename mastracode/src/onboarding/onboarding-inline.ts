@@ -12,8 +12,8 @@
  * `onComplete` with the collected choices.
  */
 
-import { Box, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
-import type { Focusable, SelectItem, TUI } from '@mariozechner/pi-tui';
+import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
+import type { Focusable, SelectItem, TUI } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { AskQuestionInlineComponent } from '../tui/components/ask-question-inline.js';
 import { BOX_INDENT, theme, getSelectListTheme, mastra } from '../tui/theme.js';

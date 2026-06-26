@@ -1407,11 +1407,23 @@ export type ExportStoredAgentParams = Partial<
   Omit<CreateStoredAgentParams, 'id' | 'authorId' | 'visibility' | 'metadata'>
 >;
 
+export type OpenStoredAgentChangeRequestParams = ExportStoredAgentParams & {
+  changeMessage?: string;
+  userName?: string;
+  inspectOnly?: boolean;
+};
+
 export interface ExportStoredAgentResponse {
   agentId: string;
   fileName: string;
   content: string;
   config: Record<string, unknown>;
+}
+
+export interface OpenStoredAgentChangeRequestResponse {
+  id?: string | number;
+  url: string;
+  ref?: string;
 }
 
 export interface UpdateStoredAgentParams {
@@ -2567,8 +2579,28 @@ export class MastraClientError extends Error {
 // ============================================
 
 export interface DatasetItemSource {
-  type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+  type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
   referenceId?: string;
+}
+
+/** A single item-level static tool mock (agent targets only). */
+export interface DatasetItemToolMock {
+  /** Name of the tool this mock applies to. */
+  toolName: string;
+  /** Arguments to match against the tool call (deep equality when matchArgs is 'strict'). */
+  args: Record<string, unknown>;
+  /** Output served to the agent when this mock is matched and consumed. */
+  output: unknown;
+  /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only. */
+  matchArgs?: 'strict' | 'ignore';
+}
+
+/** Diagnostic receipt for item-level tool mocks, returned on experiment results. */
+export interface ToolMockReport {
+  served: Array<{ mockIndex: number; toolName: string; args: unknown }>;
+  unconsumed: Array<{ mockIndex: number; toolName: string; args: unknown }>;
+  liveCalls: Array<{ toolName: string; args: unknown }>;
+  failure?: { code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED'; toolName: string; args: unknown };
 }
 
 export interface DatasetItem {
@@ -2578,6 +2610,7 @@ export interface DatasetItem {
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
+  toolMocks?: DatasetItemToolMock[];
   requestContext?: Record<string, unknown>;
   metadata?: unknown;
   source?: DatasetItemSource;
@@ -2634,6 +2667,7 @@ export interface DatasetExperimentResult {
   traceId: string | null;
   status: 'needs-review' | 'reviewed' | 'complete' | null;
   tags: string[] | null;
+  toolMockReport?: ToolMockReport | null;
   scores: Array<{
     scorerId: string;
     scorerName: string;
@@ -2683,6 +2717,7 @@ export interface AddDatasetItemParams {
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
+  toolMocks?: DatasetItemToolMock[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2694,6 +2729,7 @@ export interface UpdateDatasetItemParams {
   input?: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
+  toolMocks?: DatasetItemToolMock[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2705,6 +2741,7 @@ export interface BatchInsertDatasetItemsParams {
     input: unknown;
     groundTruth?: unknown;
     expectedTrajectory?: unknown;
+    toolMocks?: DatasetItemToolMock[];
     requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
     source?: DatasetItemSource;
@@ -2764,6 +2801,7 @@ export interface DatasetItemVersionResponse {
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
+  toolMocks?: DatasetItemToolMock[];
   metadata?: Record<string, unknown>;
   validTo: number | null;
   isDeleted: boolean;

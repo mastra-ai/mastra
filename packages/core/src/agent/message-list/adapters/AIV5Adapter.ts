@@ -11,6 +11,7 @@ import type {
   MessageSource,
 } from '../state/types';
 import type { AIV5Type } from '../types';
+import { findToolCallArgs } from '../utils/provider-compat';
 import { sanitizeToolName } from '../utils/tool-name';
 
 /**
@@ -796,7 +797,11 @@ export class AIV5Adapter {
   /**
    * Direct conversion from AIV5 ModelMessage to MastraDBMessage
    */
-  static fromModelMessage(modelMsg: AIV5Type.ModelMessage, _messageSource?: MessageSource): MastraDBMessage {
+  static fromModelMessage(
+    modelMsg: AIV5Type.ModelMessage,
+    _messageSource?: MessageSource,
+    context: { dbMessages?: MastraDBMessage[] } = {},
+  ): MastraDBMessage {
     const content = Array.isArray(modelMsg.content)
       ? modelMsg.content
       : [{ type: 'text', text: modelMsg.content } satisfies AIV5.TextPart];
@@ -858,6 +863,19 @@ export class AIV5Adapter {
               : toolResultPart.output;
         };
 
+        // When the matching tool-call isn't in this same model message (e.g. the
+        // server resume path or an AG-UI host replaying a tool-result on its own),
+        // recover the original args from prior persisted messages before falling
+        // back to the tool-result's own `input` field, then finally to `{}`.
+        // Persisting `args: {}` poisons the LLM via in-context learning (issue #16017).
+        const recoveredArgs = context.dbMessages
+          ? findToolCallArgs(context.dbMessages, toolResultPart.toolCallId)
+          : undefined;
+        const fallbackArgs =
+          recoveredArgs && Object.keys(recoveredArgs).length > 0
+            ? recoveredArgs
+            : ((toolResultPart as AIV5Type.ToolResultPart & { input?: Record<string, unknown> }).input ?? {});
+
         if (matchingCall) {
           updateMatchingCallInvocationResult(toolResultPart, matchingCall);
         } else {
@@ -865,7 +883,7 @@ export class AIV5Adapter {
             state: 'call',
             toolCallId: toolResultPart.toolCallId,
             toolName: sanitizeToolName(toolResultPart.toolName),
-            args: {},
+            args: fallbackArgs,
           };
           updateMatchingCallInvocationResult(toolResultPart, call);
           toolInvocations.push(call);
@@ -883,7 +901,7 @@ export class AIV5Adapter {
             toolInvocation: {
               toolCallId: toolResultPart.toolCallId,
               toolName: sanitizeToolName(toolResultPart.toolName),
-              args: {},
+              args: fallbackArgs,
               state: 'call',
             },
           };
