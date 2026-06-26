@@ -149,13 +149,25 @@ export type StepPaused<P, R, S, T> = {
   metadata?: StepMetadata;
 };
 
+export type StepSkipped<P, R, S, T> = {
+  status: 'skipped';
+  payload: P;
+  resumePayload?: R;
+  suspendPayload?: S;
+  suspendOutput?: T;
+  startedAt: number;
+  endedAt: number;
+  metadata?: StepMetadata;
+};
+
 export type StepResult<P, R, S, T> =
   | StepSuccess<P, R, S, T>
   | StepFailure<P, R, S, T>
   | StepSuspended<P, S, T>
   | StepRunning<P, R, S, T>
   | StepWaiting<P, R, S, T>
-  | StepPaused<P, R, S, T>;
+  | StepPaused<P, R, S, T>
+  | StepSkipped<P, R, S, T>;
 
 /**
  * Serialized version of StepFailure where error is a SerializedError
@@ -175,7 +187,8 @@ export type SerializedStepResult<P, R, S, T> =
   | StepSuspended<P, S, T>
   | StepRunning<P, R, S, T>
   | StepWaiting<P, R, S, T>
-  | StepPaused<P, R, S, T>;
+  | StepPaused<P, R, S, T>
+  | StepSkipped<P, R, S, T>;
 
 export type TimeTravelContext<P, R, S, T> = Record<
   string,
@@ -273,7 +286,8 @@ export type WorkflowRunStatus =
   | 'pending'
   | 'canceled'
   | 'bailed'
-  | 'paused';
+  | 'paused'
+  | 'skipped';
 
 export type WorkflowResumeLabel = {
   stepId: string;

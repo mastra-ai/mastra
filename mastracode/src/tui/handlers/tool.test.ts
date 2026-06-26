@@ -34,7 +34,7 @@ function createToolHandlerContext(): EventHandlerContext {
     hideThinkingBlock: false,
     taskToolInsertIndex: -1,
     session,
-    harness: { session },
+    controller: { session },
   } as unknown as TUIState;
 
   return {

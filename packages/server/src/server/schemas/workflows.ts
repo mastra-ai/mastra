@@ -12,6 +12,7 @@ export const workflowRunStatusSchema = z.enum([
   'bailed',
   'tripwire',
   'paused',
+  'skipped',
 ]);
 
 // Path parameter schemas

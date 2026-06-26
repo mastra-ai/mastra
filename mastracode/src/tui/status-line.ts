@@ -80,7 +80,7 @@ export function updateStatusLine(state: TUIState): void {
   // --- Mode badge ---
   let modeBadge = '';
   let modeBadgeWidth = 0;
-  const modes = state.harness.listModes();
+  const modes = state.controller.listModes();
   const currentMode = modes.length > 1 ? state.session.mode.resolve() : undefined;
   const judgeModeColor = mastra.blue;
   // Use judge color for goal judge activity, OM color for OM activity, otherwise mode color
@@ -319,6 +319,13 @@ export function updateStatusLine(state: TUIState): void {
     }
     if (ref) {
       parts.push({ plain: ref, styled: ref });
+    }
+    if (state.tokensPerSec > 0) {
+      const tpsLabel = `${state.tokensPerSec} tok/s`;
+      parts.push({
+        plain: tpsLabel,
+        styled: theme.fg('dim', tpsLabel),
+      });
     }
     if (opts.showQueue && queuedLabel) {
       parts.push({

@@ -1,5 +1,5 @@
 import type { UpdateModelParams } from '@mastra/client-js';
-import { Button } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Lock, RotateCcw } from 'lucide-react';

@@ -1,5 +1,7 @@
-import { Icon, Txt, cn } from '@mastra/playground-ui';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronDown } from 'lucide-react';
 import { Fragment } from 'react';
 
@@ -73,12 +75,12 @@ export const WorkflowConditionCardView = ({
 
               return isCodeCondition(condition) ? (
                 <WorkflowConditionCode
-                  key={`${condition.fnString}-${index}`}
+                  key={`condition-code-${index}-${condition.fnString}`}
                   condition={condition}
                   onOpen={() => onConditionClick(condition)}
                 />
               ) : (
-                <Fragment key={`${condition.ref?.path}-${index}`}>
+                <Fragment key={`condition-ref-${index}-${condition.ref?.path ?? 'unknown'}`}>
                   {condition.ref?.step ? (
                     <div className="flex items-center gap-1">
                       <WorkflowCardBadges indicators={conjIndicators} />

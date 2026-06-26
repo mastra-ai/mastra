@@ -8,6 +8,7 @@ import type { InMemoryTaskStore } from '../../a2a/store';
 import type { OpenAPIRoute } from '../openapi-utils';
 import { A2A_ROUTES } from './a2a';
 import { AGENT_BUILDER_ROUTES } from './agent-builder';
+import { AGENT_CONTROLLER_ROUTES } from './agent-controller';
 import { AGENTS_ROUTES } from './agents';
 import type { AgentRoutes } from './agents';
 import { AUTH_ROUTES } from './auth';
@@ -16,7 +17,6 @@ import { CHANNELS_ROUTES } from './channels';
 import { CONVERSATIONS_ROUTES } from './conversations';
 import { DATASETS_ROUTES } from './datasets';
 import { EDITOR_BUILDER_ROUTES } from './editor-builder';
-import { HARNESS_ROUTES } from './harness';
 import { LEGACY_ROUTES } from './legacy';
 import { LOGS_ROUTES } from './logs';
 import { MCP_ROUTES } from './mcp';
@@ -193,7 +193,7 @@ export const SERVER_ROUTES: readonly ServerRoute[] = [
   ...AGENT_BUILDER_ROUTES,
   ...SCHEDULES_ROUTES,
   ...CHANNELS_ROUTES,
-  ...HARNESS_ROUTES,
+  ...AGENT_CONTROLLER_ROUTES,
 ];
 
 /**

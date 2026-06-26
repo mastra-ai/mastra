@@ -193,7 +193,7 @@ async function buildScenarioAgent({
  * the prompt through the agentic loop, fully consumes the stream, and returns
  * both the emitted loop output and the per-turn requests AIMock captured.
  *
- * This mirrors how mastracode's e2e harness routes the real provider at AIMock
+ * This mirrors how mastracode's e2e controller routes the real provider at AIMock
  * through `OPENAI_BASE_URL`, but stays in `packages/core` and asserts on loop
  * output instead of TUI screen text.
  */

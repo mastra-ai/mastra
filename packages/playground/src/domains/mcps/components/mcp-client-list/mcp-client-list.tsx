@@ -1,9 +1,12 @@
 import type { StoredMCPServerConfig } from '@mastra/client-js';
-import { Button, Icon, McpServerIcon, stringToColor } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Entity, EntityContent, EntityDescription, EntityName } from '@mastra/playground-ui/components/Entity';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
+import { stringToColor } from '@mastra/playground-ui/utils/colors';
 import { LaptopMinimal, PlusIcon, XIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';

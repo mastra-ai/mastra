@@ -1,6 +1,5 @@
 import { EntityType } from '@mastra/core/observability';
 import {
-  Button,
   NoTracesInfo,
   SpanDataPanelView,
   TraceDataPanelView,
@@ -10,7 +9,6 @@ import {
   TracesToolbar,
   buildTraceListFilters,
   createTracePropertyFilterFields,
-  isBranchesNotSupportedError,
   neutralizeFilterTokens,
   useEntityNames,
   useEnvironments,
@@ -25,12 +23,14 @@ import {
   useTraces,
 } from '@mastra/playground-ui';
 import type { SpanTab } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
 import { Switch } from '@mastra/playground-ui/components/Switch';
+import { isBranchesNotSupportedError } from '@mastra/playground-ui/utils/errors';
 import { CircleSlash2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';

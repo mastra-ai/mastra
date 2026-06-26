@@ -1,19 +1,19 @@
 import type { ScoreRowData } from '@mastra/core/evals';
 import { EntityType } from '@mastra/core/observability';
 import {
-  Button,
   SpanDataPanelView,
   TraceDataPanelView,
   TraceKeysAndValues,
   TracesErrorContent,
-  cn,
   useSpanDetail,
   useTraceLightSpans,
   useTraceSpanNavigation,
 } from '@mastra/playground-ui';
 import type { SpanTab } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { CircleGaugeIcon, SaveIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';

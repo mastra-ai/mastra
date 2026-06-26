@@ -1,8 +1,8 @@
 import type { DatasetItem } from '@mastra/client-js';
-import { toast } from '@mastra/playground-ui';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Chip } from '@mastra/playground-ui/components/Chip';
 import { Tabs, Tab, TabList, TabContent } from '@mastra/playground-ui/components/Tabs';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useDebounce } from 'use-debounce';

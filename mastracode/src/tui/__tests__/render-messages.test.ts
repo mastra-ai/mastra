@@ -1,5 +1,5 @@
 import { Container } from '@earendil-works/pi-tui';
-import type { HarnessMessage } from '@mastra/core/harness';
+import type { AgentControllerMessage } from '@mastra/core/agent-controller';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessageComponent } from '../components/assistant-message.js';
@@ -47,24 +47,24 @@ function createUserMessage(
   text: string,
   id = 'user-1',
   attributes?: Record<string, string | number | boolean | null | undefined>,
-): HarnessMessage {
+): AgentControllerMessage {
   return {
     id,
     role: 'user',
     content: [{ type: 'text', text }],
     attributes,
-  } as unknown as HarnessMessage;
+  } as unknown as AgentControllerMessage;
 }
 
 function createReminderMessage(
-  reminder: Extract<HarnessMessage['content'][number], { type: 'system_reminder' }>,
+  reminder: Extract<AgentControllerMessage['content'][number], { type: 'system_reminder' }>,
   id = '__temporal_1',
-): HarnessMessage {
+): AgentControllerMessage {
   return {
     id,
     role: 'user',
     content: [reminder],
-  } as HarnessMessage;
+  } as AgentControllerMessage;
 }
 
 describe('addUserMessage', () => {
@@ -98,7 +98,7 @@ describe('addUserMessage', () => {
         },
       ],
       createdAt: new Date('2026-05-04T00:00:00.000Z'),
-    } as unknown as HarnessMessage);
+    } as unknown as AgentControllerMessage);
 
     expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(true);
     expect(state.messageComponentsById.get('state-signal-1')).toBeInstanceOf(StateSignalComponent);
@@ -120,7 +120,7 @@ describe('addUserMessage', () => {
         },
       ],
       createdAt: new Date('2026-05-04T00:00:00.000Z'),
-    } as unknown as HarnessMessage);
+    } as unknown as AgentControllerMessage);
 
     expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(false);
     expect(state.messageComponentsById.has('tasks-state-signal-1')).toBe(false);
@@ -142,7 +142,7 @@ describe('addUserMessage', () => {
         },
       ],
       createdAt: new Date('2026-05-04T00:00:00.000Z'),
-    } as unknown as HarnessMessage);
+    } as unknown as AgentControllerMessage);
 
     expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(false);
     expect(state.messageComponentsById.has('goal-state-signal-1')).toBe(false);
@@ -162,7 +162,7 @@ describe('addUserMessage', () => {
         },
       ],
       createdAt: new Date('2026-05-04T00:00:00.000Z'),
-    } as unknown as HarnessMessage);
+    } as unknown as AgentControllerMessage);
 
     expect(state.chatContainer.children.some(child => child instanceof ReactiveSignalComponent)).toBe(true);
     expect(state.messageComponentsById.get('reactive-signal-1')).toBeInstanceOf(ReactiveSignalComponent);
@@ -182,7 +182,7 @@ describe('addUserMessage', () => {
         },
       ],
       createdAt: new Date('2026-05-04T00:00:00.000Z'),
-    } as unknown as HarnessMessage);
+    } as unknown as AgentControllerMessage);
 
     expect(state.chatContainer.children.some(child => child instanceof ReactiveSignalComponent)).toBe(false);
     expect(state.messageComponentsById.has('github-subscribe-signal-1')).toBe(false);
@@ -205,7 +205,7 @@ describe('addUserMessage', () => {
         },
       ],
       createdAt: new Date('2026-05-04T00:00:00.000Z'),
-    } as unknown as HarnessMessage);
+    } as unknown as AgentControllerMessage);
 
     expect(state.chatContainer.children.some(child => child instanceof NotificationSummaryComponent)).toBe(true);
     expect(state.messageComponentsById.get('notification-summary-1')).toBeInstanceOf(NotificationSummaryComponent);
@@ -228,7 +228,7 @@ describe('addUserMessage', () => {
         },
       ],
       createdAt: new Date('2026-05-04T00:00:00.000Z'),
-    } as unknown as HarnessMessage);
+    } as unknown as AgentControllerMessage);
 
     expect(state.chatContainer.children.some(child => child instanceof NotificationComponent)).toBe(true);
     expect(state.messageComponentsById.get('notification-1')).toBeInstanceOf(NotificationComponent);
@@ -419,7 +419,7 @@ describe('addUserMessage', () => {
             maxRunsReached: false,
             suppressFeedback: false,
           },
-        } as Extract<HarnessMessage['content'][number], { type: 'system_reminder' }>,
+        } as Extract<AgentControllerMessage['content'][number], { type: 'system_reminder' }>,
         'goal-judge-1',
       ),
     );
@@ -448,7 +448,7 @@ describe('addUserMessage', () => {
         message: 'Finish the implementation.',
         goalMaxTurns: 20,
         judgeModelId: 'openai/gpt-5.5',
-      } as Extract<HarnessMessage['content'][number], { type: 'system_reminder' }>),
+      } as Extract<AgentControllerMessage['content'][number], { type: 'system_reminder' }>),
     );
 
     expect(state.chatContainer.children).toHaveLength(1);
@@ -475,7 +475,7 @@ describe('addUserMessage', () => {
         message: 'Finish the implementation.',
         goalMaxTurns: 20,
         judgeModelId: 'openai/gpt-5.5',
-      } as Extract<HarnessMessage['content'][number], { type: 'system_reminder' }>),
+      } as Extract<AgentControllerMessage['content'][number], { type: 'system_reminder' }>),
     );
 
     expect(state.chatContainer.children).toHaveLength(2);
@@ -600,11 +600,11 @@ describe('renderExistingMessages signals', () => {
           ]),
       },
     } as unknown as TUIState['session'];
-    state.harness = {
+    state.controller = {
       session: {
         displayState: { get: () => ({ isRunning: false }) },
       },
-    } as unknown as TUIState['harness'];
+    } as unknown as TUIState['controller'];
 
     await renderExistingMessages(state);
 
@@ -648,7 +648,7 @@ describe('renderExistingMessages tasks', () => {
         activeForm: 'Loading history task three',
       },
     ];
-    const message: HarnessMessage = {
+    const message: AgentControllerMessage = {
       id: 'assistant-task-delta-history',
       role: 'assistant',
       createdAt: new Date(),
@@ -670,7 +670,7 @@ describe('renderExistingMessages tasks', () => {
           isError: false,
         },
       ],
-    } as unknown as HarnessMessage;
+    } as unknown as AgentControllerMessage;
     const state = createState();
     state.session = {
       ...state.session,
@@ -705,7 +705,7 @@ describe('renderExistingMessages tasks', () => {
         activeForm: 'Loading history task two',
       },
     ];
-    const message: HarnessMessage = {
+    const message: AgentControllerMessage = {
       id: 'assistant-task-history',
       role: 'assistant',
       createdAt: new Date(),
@@ -713,7 +713,7 @@ describe('renderExistingMessages tasks', () => {
         { type: 'tool_call', id: 'task-write-1', name: 'task_write', args: { tasks } },
         { type: 'tool_result', id: 'task-write-1', name: 'task_write', result: { tasks }, isError: false },
       ],
-    } as unknown as HarnessMessage;
+    } as unknown as AgentControllerMessage;
     const state = createState();
     state.session = {
       ...state.session,
@@ -734,7 +734,7 @@ describe('renderExistingMessages tasks', () => {
 
 describe('renderExistingMessages subagents', () => {
   it('uses the current model id for persisted forked subagents when no metadata tag is present', async () => {
-    const message: HarnessMessage = {
+    const message: AgentControllerMessage = {
       id: 'assistant-1',
       role: 'assistant',
       createdAt: new Date(),
@@ -765,9 +765,9 @@ describe('renderExistingMessages subagents', () => {
       thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
       model: { get: () => 'openai/gpt-5.5' },
     } as unknown as TUIState['session'];
-    state.harness = {
+    state.controller = {
       session: state.session,
-    } as unknown as TUIState['harness'];
+    } as unknown as TUIState['controller'];
 
     await renderExistingMessages(state);
 

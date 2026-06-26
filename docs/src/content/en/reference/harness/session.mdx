@@ -97,6 +97,12 @@ The session is organized into sub-objects, each owning one domain of per-convers
     type: 'SessionState<TState>',
     description: 'The schema-validated, session-owned Harness state. See state methods below.',
   },
+  {
+    name: 'browser',
+    type: 'MastraBrowser | undefined',
+    description:
+      'The browser automation instance for this session. Set at creation via createSession, or from the Harness config default. Undefined when no browser is configured.',
+  },
 ]}
 />
 
@@ -610,6 +616,19 @@ const added = await harness.session.state.update(current => ({
   updates: { count: (current.count ?? 0) + 1 },
   result: (current.count ?? 0) + 1,
 }))
+```
+
+## Scoping tags
+
+Sessions carry scoping tags (e.g. `{ projectPath }`) seeded at creation and stamped onto every thread the session creates. Thread listings can be filtered back to the session's scope using these tags.
+
+### `getTags()`
+
+Return a copy of the session's scoping tags. Empty object when the session is unscoped.
+
+```typescript
+const tags = harness.session.getTags()
+// { projectPath: '/my/project' }
 ```
 
 ## Related
