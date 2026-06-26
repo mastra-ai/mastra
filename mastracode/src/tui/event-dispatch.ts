@@ -237,7 +237,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       // (state.decodeStartedAt) to now — which excludes TTFT and inter-step
       // tool/scheduling time. Smooth with an exponential moving average (α=0.3).
       const now = Date.now();
-      const stepTokens = event.usage.completionTokens + (event.usage.reasoningTokens ?? 0);
+      const stepTokens = (event.usage.completionTokens ?? 0) + (event.usage.reasoningTokens ?? 0);
       if (state.decodeStartedAt > 0 && stepTokens > 0) {
         const decodeSec = (now - state.decodeStartedAt) / 1000;
         if (decodeSec > 0) {
