@@ -58,10 +58,18 @@ function trackInteractivePrompt(
 export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerContext, state: TUIState): Promise<void> {
   switch (event.type) {
     case 'agent_start':
+      // Reset tokens/sec at the start of a new turn (not at the end) so the
+      // last turn's reading stays visible while idle — short single-step turns
+      // would otherwise zero it before it could be read.
+      state.tokensPerSec = 0;
+      state.decodeStartedAt = 0;
       handleAgentStart(ectx);
       break;
 
     case 'agent_end':
+      // Keep tokensPerSec as the last turn's reading; only clear the in-flight
+      // decode window so a stale start can't bleed into the next turn.
+      state.decodeStartedAt = 0;
       if (event.reason === 'aborted') {
         handleAgentAborted(ectx);
       } else if (event.reason === 'error') {
@@ -69,9 +77,6 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       } else {
         handleAgentEnd(ectx);
       }
-      // Reset tokens/sec when agent finishes
-      state.tokensPerSec = 0;
-      state.prevTokenTimestamp = 0;
       break;
 
     case 'message_start':
@@ -79,6 +84,12 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       break;
 
     case 'message_update':
+      // Mark when decoding began for the current step (first streamed content
+      // delta). tokens/sec is then measured over decode time only — excluding
+      // TTFT before this point and tool/scheduling gaps between steps.
+      if (state.decodeStartedAt === 0) {
+        state.decodeStartedAt = Date.now();
+      }
       handleMessageUpdate(ectx, event.message);
       break;
 
@@ -220,21 +231,26 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
 
     case 'usage_update': {
       // Token accumulation handled by Harness display state.
-      // Compute tokens/sec using exponential moving average (α=0.3) for smooth display.
+      // usage_update fires at step-finish and carries the completion (and any
+      // reasoning) tokens generated during this step. Measure tokens/sec over the
+      // decode window only — from this step's first content delta
+      // (state.decodeStartedAt) to now — which excludes TTFT and inter-step
+      // tool/scheduling time. Smooth with an exponential moving average (α=0.3).
       const now = Date.now();
-      const currentTokens = event.usage.completionTokens;
-      if (state.prevTokenTimestamp > 0 && currentTokens > state.prevCompletionTokens) {
-        const elapsedSec = (now - state.prevTokenTimestamp) / 1000;
-        if (elapsedSec > 0) {
-          const delta = currentTokens - state.prevCompletionTokens;
-          const instantaneous = delta / elapsedSec;
+      const stepTokens = event.usage.completionTokens + (event.usage.reasoningTokens ?? 0);
+      if (state.decodeStartedAt > 0 && stepTokens > 0) {
+        const decodeSec = (now - state.decodeStartedAt) / 1000;
+        if (decodeSec > 0) {
+          const instantaneous = stepTokens / decodeSec;
           const alpha = 0.3;
           const ema = state.tokensPerSec > 0 ? alpha * instantaneous + (1 - alpha) * state.tokensPerSec : instantaneous;
           state.tokensPerSec = Math.round(ema);
         }
       }
-      state.prevCompletionTokens = currentTokens;
-      state.prevTokenTimestamp = now;
+      // Re-arm: the next step's decode window opens on its first content delta.
+      state.decodeStartedAt = 0;
+      ectx.updateStatusLine();
+      state.ui.requestRender();
       break;
     }
 

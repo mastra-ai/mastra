@@ -1,12 +1,44 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { transcriptReducer, initialTranscript } from '../../src/web/ui/transcript';
+import type { TranscriptState } from '../../src/web/ui/transcript';
 
 /**
- * Tokens/sec EMA computation — tested by driving the transcript reducer
- * directly with usage_update events, the same way the real SSE stream does.
- * No server round-trip needed.
+ * Tokens/sec computation — tested by driving the transcript reducer directly
+ * with the same event order the real SSE stream produces: content deltas
+ * (message_update) stream while the model decodes, then a step-finish reports
+ * token usage (usage_update). The rate is measured over the decode window only,
+ * so TTFT and inter-step tool gaps do not deflate it. No server round-trip.
  */
+
+/**
+ * Drives one decode step: message_update opens the decode window at `startMs`,
+ * usage_update closes it at `endMs` carrying the step's tokens.
+ */
+function decodeStep(
+  state: TranscriptState,
+  opts: { startMs: number; endMs: number; completionTokens: number; reasoningTokens?: number },
+): TranscriptState {
+  vi.setSystemTime(opts.startMs);
+  let next = transcriptReducer(state, {
+    type: 'event',
+    event: { type: 'message_update', message: { role: 'assistant', content: [{ type: 'text', text: 'x' }] } } as any,
+  });
+  vi.setSystemTime(opts.endMs);
+  next = transcriptReducer(next, {
+    type: 'event',
+    event: {
+      type: 'usage_update',
+      usage: {
+        completionTokens: opts.completionTokens,
+        reasoningTokens: opts.reasoningTokens,
+        promptTokens: 0,
+        totalTokens: opts.completionTokens,
+      },
+    } as any,
+  });
+  return next;
+}
 
 describe('tokens/sec (reducer-level)', () => {
   beforeEach(() => {
@@ -17,100 +49,89 @@ describe('tokens/sec (reducer-level)', () => {
     vi.useRealTimers();
   });
 
-  it('computes instantaneous rate on first pair of usage_update events', () => {
-    // First event: sets baseline timestamp/tokens, no rate yet
-    vi.setSystemTime(1000);
-    let state = transcriptReducer(initialTranscript, {
-      type: 'event',
-      event: { type: 'usage_update', usage: { completionTokens: 10, promptTokens: 50, totalTokens: 60 } } as any,
-    });
-    expect(state.tokensPerSec).toBe(0);
-    expect(state._prevCompletionTokens).toBe(10);
-
-    // Second event 1s later: 20 new completion tokens in 1s = 10 tok/s
-    vi.setSystemTime(2000);
-    state = transcriptReducer(state, {
-      type: 'event',
-      event: { type: 'usage_update', usage: { completionTokens: 20, promptTokens: 50, totalTokens: 70 } } as any,
-    });
-    expect(state.tokensPerSec).toBe(10);
+  it('computes rate over the decode window of a step', () => {
+    // Decode opens at t=1000, step-finish at t=2000 → 20 tokens / 1s = 20 tok/s.
+    const state = decodeStep(initialTranscript, { startMs: 1000, endMs: 2000, completionTokens: 20 });
+    expect(state.tokensPerSec).toBe(20);
+    // Window re-arms after step-finish.
+    expect(state._decodeStartedAt).toBe(0);
   });
 
-  it('applies EMA smoothing (α=0.3) across multiple usage_update events', () => {
-    vi.setSystemTime(1000);
+  it('ignores TTFT/tool time before the first content delta', () => {
+    // usage arrives at t=5000 but decoding only began at t=4000, so the rate is
+    // 20 tokens / 1s = 20 tok/s, not 20 / 4s.
+    vi.setSystemTime(4000);
     let state = transcriptReducer(initialTranscript, {
       type: 'event',
-      event: { type: 'usage_update', usage: { completionTokens: 10, promptTokens: 0, totalTokens: 10 } } as any,
+      event: { type: 'message_update', message: { role: 'assistant', content: [{ type: 'text', text: 'x' }] } } as any,
     });
-
-    // Event 2: instantaneous = 10 tok/s (first EMA value)
-    vi.setSystemTime(2000);
+    vi.setSystemTime(5000);
     state = transcriptReducer(state, {
       type: 'event',
       event: { type: 'usage_update', usage: { completionTokens: 20, promptTokens: 0, totalTokens: 20 } } as any,
     });
+    expect(state.tokensPerSec).toBe(20);
+  });
+
+  it('includes reasoning tokens in the decode rate', () => {
+    // 10 completion + 10 reasoning = 20 tokens / 1s = 20 tok/s.
+    const state = decodeStep(initialTranscript, {
+      startMs: 1000,
+      endMs: 2000,
+      completionTokens: 10,
+      reasoningTokens: 10,
+    });
+    expect(state.tokensPerSec).toBe(20);
+  });
+
+  it('applies EMA smoothing (α=0.3) across decode steps', () => {
+    // Step 1: 10 tokens / 1s = 10 tok/s (first EMA value).
+    let state = decodeStep(initialTranscript, { startMs: 1000, endMs: 2000, completionTokens: 10 });
     expect(state.tokensPerSec).toBe(10);
 
-    // Event 3: 20 tokens in 1s → instantaneous = 20
-    // EMA = 0.3 * 20 + 0.7 * 10 = 13
-    vi.setSystemTime(3000);
-    state = transcriptReducer(state, {
-      type: 'event',
-      event: { type: 'usage_update', usage: { completionTokens: 40, promptTokens: 0, totalTokens: 40 } } as any,
-    });
+    // Step 2: 20 tokens / 1s = 20 instantaneous. EMA = 0.3*20 + 0.7*10 = 13.
+    state = decodeStep(state, { startMs: 3000, endMs: 4000, completionTokens: 20 });
     expect(state.tokensPerSec).toBe(13);
 
-    // Event 4: 30 tokens in 1s → instantaneous = 30
-    // EMA = 0.3 * 30 + 0.7 * 13 = 9 + 9.1 = 18.1 → 18
-    vi.setSystemTime(4000);
-    state = transcriptReducer(state, {
-      type: 'event',
-      event: { type: 'usage_update', usage: { completionTokens: 70, promptTokens: 0, totalTokens: 70 } } as any,
-    });
+    // Step 3: 30 tokens / 1s = 30 instantaneous. EMA = 0.3*30 + 0.7*13 = 18.1 → 18.
+    state = decodeStep(state, { startMs: 5000, endMs: 6000, completionTokens: 30 });
     expect(state.tokensPerSec).toBe(18);
   });
 
-  it('resets tokensPerSec to 0 on agent_end', () => {
-    // Get state with a non-zero tokensPerSec
-    vi.setSystemTime(1000);
-    let state = transcriptReducer(initialTranscript, {
-      type: 'event',
-      event: { type: 'usage_update', usage: { completionTokens: 10, promptTokens: 0, totalTokens: 10 } } as any,
-    });
-    vi.setSystemTime(2000);
-    state = transcriptReducer(state, {
-      type: 'event',
-      event: { type: 'usage_update', usage: { completionTokens: 30, promptTokens: 0, totalTokens: 30 } } as any,
-    });
-    expect(state.tokensPerSec).toBe(20); // 20 tokens / 1 second
+  it('keeps the last rate visible after agent_end, clearing only on the next agent_start', () => {
+    let state = decodeStep(initialTranscript, { startMs: 1000, endMs: 2000, completionTokens: 30 });
+    expect(state.tokensPerSec).toBe(30); // 30 tokens / 1 second
 
-    // agent_end resets
+    // agent_end persists the reading (so short turns stay readable) but clears
+    // the in-flight decode window.
     state = transcriptReducer(state, {
       type: 'event',
       event: { type: 'agent_end', reason: 'done' } as any,
     });
-    expect(state.tokensPerSec).toBe(0);
-    expect(state._prevTokenTimestamp).toBe(0);
-  });
+    expect(state.tokensPerSec).toBe(30);
+    expect(state._decodeStartedAt).toBe(0);
 
-  it('does not change rate when completionTokens has not increased', () => {
-    vi.setSystemTime(1000);
-    let state = transcriptReducer(initialTranscript, {
-      type: 'event',
-      event: { type: 'usage_update', usage: { completionTokens: 10, promptTokens: 0, totalTokens: 10 } } as any,
-    });
-
-    // Same completion count, different prompt tokens — no rate change
-    vi.setSystemTime(2000);
+    // The next turn's agent_start clears it for a fresh measurement.
     state = transcriptReducer(state, {
       type: 'event',
-      event: { type: 'usage_update', usage: { completionTokens: 10, promptTokens: 50, totalTokens: 60 } } as any,
+      event: { type: 'agent_start' } as any,
+    });
+    expect(state.tokensPerSec).toBe(0);
+    expect(state._decodeStartedAt).toBe(0);
+  });
+
+  it('does not compute a rate for a tool-only step with no streamed content', () => {
+    // No message_update means the decode window never opened; a usage_update with
+    // 0 completion tokens (pure tool call) must not produce a rate.
+    vi.setSystemTime(2000);
+    const state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'usage_update', usage: { completionTokens: 0, promptTokens: 50, totalTokens: 50 } } as any,
     });
     expect(state.tokensPerSec).toBe(0);
   });
 
-  it('shows full streaming lifecycle: start → rate builds → end resets', () => {
-    // agent_start
+  it('shows full streaming lifecycle: start → rate builds → end persists → next start clears', () => {
     let state = transcriptReducer(initialTranscript, {
       type: 'event',
       event: { type: 'agent_start' } as any,
@@ -118,36 +139,28 @@ describe('tokens/sec (reducer-level)', () => {
     expect(state.running).toBe(true);
     expect(state.tokensPerSec).toBe(0);
 
-    // Streaming: multiple usage_update events building EMA
-    vi.setSystemTime(1000);
-    state = transcriptReducer(state, {
-      type: 'event',
-      event: { type: 'usage_update', usage: { completionTokens: 5, promptTokens: 100, totalTokens: 105 } } as any,
-    });
-
-    vi.setSystemTime(1500);
-    state = transcriptReducer(state, {
-      type: 'event',
-      event: { type: 'usage_update', usage: { completionTokens: 15, promptTokens: 100, totalTokens: 115 } } as any,
-    });
-    // 10 tokens in 0.5s = 20 tok/s (first EMA)
+    // Step 1: 10 tokens over 0.5s decode = 20 tok/s (first EMA).
+    state = decodeStep(state, { startMs: 1000, endMs: 1500, completionTokens: 10 });
     expect(state.tokensPerSec).toBe(20);
 
-    vi.setSystemTime(2000);
-    state = transcriptReducer(state, {
-      type: 'event',
-      event: { type: 'usage_update', usage: { completionTokens: 30, promptTokens: 100, totalTokens: 130 } } as any,
-    });
-    // 15 tokens in 0.5s = 30 tok/s instantaneous
-    // EMA = 0.3 * 30 + 0.7 * 20 = 9 + 14 = 23
+    // Step 2: 15 tokens over 0.5s decode = 30 instantaneous.
+    // EMA = 0.3*30 + 0.7*20 = 9 + 14 = 23.
+    state = decodeStep(state, { startMs: 2000, endMs: 2500, completionTokens: 15 });
     expect(state.tokensPerSec).toBe(23);
 
-    // agent_end resets everything
+    // Turn ends: stop running but keep the last reading visible while idle.
     state = transcriptReducer(state, {
       type: 'event',
       event: { type: 'agent_end', reason: 'done' } as any,
     });
     expect(state.running).toBe(false);
+    expect(state.tokensPerSec).toBe(23);
+
+    // The next turn clears it on agent_start.
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'agent_start' } as any,
+    });
     expect(state.tokensPerSec).toBe(0);
   });
 });

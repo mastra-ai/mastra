@@ -49,11 +49,11 @@ import type { TUIState } from '../state.js';
 
 function createMinimalState(overrides: Partial<TUIState> = {}): TUIState {
   return {
-    prevCompletionTokens: 0,
-    prevTokenTimestamp: 0,
+    decodeStartedAt: 0,
     tokensPerSec: 0,
     taskToolInsertIndex: -1,
     activeGithubPrSubscriptions: [],
+    ui: { requestRender: vi.fn() },
     ...overrides,
   } as unknown as TUIState;
 }
@@ -63,106 +63,131 @@ function createEctx() {
     state: {},
     session: { displayState: { get: vi.fn(() => ({})) } },
     analytics: { trackInteractivePrompt: vi.fn() },
+    updateStatusLine: vi.fn(),
   } as any;
 }
 
-describe('tokens/sec EMA calculation', () => {
+/**
+ * Drives one decode step: a message_update opens the decode window at `startMs`,
+ * then a usage_update closes it at `endMs` carrying the step's tokens. This
+ * mirrors the real event order (deltas stream, then step-finish reports usage)
+ * so tokens/sec is measured over decode time only.
+ */
+async function decodeStep(
+  state: TUIState,
+  ectx: ReturnType<typeof createEctx>,
+  opts: { startMs: number; endMs: number; completionTokens: number; reasoningTokens?: number },
+): Promise<void> {
+  vi.setSystemTime(opts.startMs);
+  await dispatchEvent({ type: 'message_update', message: { content: [] } } as any, ectx, state);
+  vi.setSystemTime(opts.endMs);
+  await dispatchEvent(
+    {
+      type: 'usage_update',
+      usage: {
+        completionTokens: opts.completionTokens,
+        reasoningTokens: opts.reasoningTokens,
+        promptTokens: 0,
+        totalTokens: opts.completionTokens,
+      },
+    } as any,
+    ectx,
+    state,
+  );
+}
+
+describe('tokens/sec decode-window calculation', () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
 
-  it('computes instantaneous rate on first usage_update pair', async () => {
+  it('computes rate over decode time, excluding pre-decode (TTFT) time', async () => {
     const state = createMinimalState();
     const ectx = createEctx();
 
-    // First event: sets baseline (no rate yet since prevTokenTimestamp is 0)
-    vi.setSystemTime(1000);
-    await dispatchEvent(
-      { type: 'usage_update', usage: { completionTokens: 10, promptTokens: 50, totalTokens: 60 } } as any,
-      ectx,
-      state,
-    );
-    expect(state.tokensPerSec).toBe(0);
-    expect(state.prevCompletionTokens).toBe(10);
-    expect(state.prevTokenTimestamp).toBe(1000);
+    // Decode opened at t=1000, step-finish at t=2000 → 1s of decode for 20 tokens.
+    await decodeStep(state, ectx, { startMs: 1000, endMs: 2000, completionTokens: 20 });
 
-    // Second event 1 second later: 20 tokens generated in 1s = 10 tok/s (instantaneous, first EMA)
-    vi.setSystemTime(2000);
-    await dispatchEvent(
-      { type: 'usage_update', usage: { completionTokens: 20, promptTokens: 50, totalTokens: 70 } } as any,
-      ectx,
-      state,
-    );
-    expect(state.tokensPerSec).toBe(10); // 10 tokens / 1 second
+    expect(state.tokensPerSec).toBe(20); // 20 tokens / 1 second decode
+    // Window re-arms after step-finish so the next step measures fresh.
+    expect(state.decodeStartedAt).toBe(0);
+    // Status line repaints and a coordinated render is requested so the prior
+    // frame is cleared (otherwise stale "tok/s" text ghosts on screen).
+    expect(ectx.updateStatusLine).toHaveBeenCalled();
+    expect(state.ui.requestRender).toHaveBeenCalled();
   });
 
-  it('applies EMA smoothing on subsequent updates', async () => {
+  it('ignores TTFT/tool gap before the first delta', async () => {
     const state = createMinimalState();
     const ectx = createEctx();
 
-    // Seed initial state
-    vi.setSystemTime(1000);
-    await dispatchEvent(
-      { type: 'usage_update', usage: { completionTokens: 10, promptTokens: 0, totalTokens: 10 } } as any,
-      ectx,
-      state,
-    );
-
-    // Second event: 10 tok/s instantaneous (first EMA value)
-    vi.setSystemTime(2000);
+    // Even though usage arrives at t=5000, decoding only began at t=4000, so
+    // 20 tokens over 1s = 20 tok/s — not 20 / 4s.
+    vi.setSystemTime(1000); // request issued; nothing streamed yet
+    vi.setSystemTime(4000);
+    await dispatchEvent({ type: 'message_update', message: { content: [] } } as any, ectx, state);
+    vi.setSystemTime(5000);
     await dispatchEvent(
       { type: 'usage_update', usage: { completionTokens: 20, promptTokens: 0, totalTokens: 20 } } as any,
       ectx,
       state,
     );
-    expect(state.tokensPerSec).toBe(10);
 
-    // Third event: 20 tokens in 1s = 20 tok/s instantaneous
-    // EMA = 0.3 * 20 + 0.7 * 10 = 6 + 7 = 13
-    vi.setSystemTime(3000);
-    await dispatchEvent(
-      { type: 'usage_update', usage: { completionTokens: 40, promptTokens: 0, totalTokens: 40 } } as any,
-      ectx,
-      state,
-    );
-    expect(state.tokensPerSec).toBe(13);
-
-    // Fourth event: 30 tokens in 1s = 30 tok/s instantaneous
-    // EMA = 0.3 * 30 + 0.7 * 13 = 9 + 9.1 = 18.1 → rounds to 18
-    vi.setSystemTime(4000);
-    await dispatchEvent(
-      { type: 'usage_update', usage: { completionTokens: 70, promptTokens: 0, totalTokens: 70 } } as any,
-      ectx,
-      state,
-    );
-    expect(state.tokensPerSec).toBe(18);
+    expect(state.tokensPerSec).toBe(20);
   });
 
-  it('resets tokensPerSec to 0 on agent_end', async () => {
-    const state = createMinimalState({ tokensPerSec: 42, prevTokenTimestamp: 1000 });
-    const ectx = createEctx();
-
-    await dispatchEvent({ type: 'agent_end', reason: 'done' } as any, ectx, state);
-
-    expect(state.tokensPerSec).toBe(0);
-    expect(state.prevTokenTimestamp).toBe(0);
-  });
-
-  it('does not compute rate when completionTokens has not increased', async () => {
+  it('includes reasoning tokens in the decode rate', async () => {
     const state = createMinimalState();
     const ectx = createEctx();
 
-    vi.setSystemTime(1000);
-    await dispatchEvent(
-      { type: 'usage_update', usage: { completionTokens: 10, promptTokens: 0, totalTokens: 10 } } as any,
-      ectx,
-      state,
-    );
+    // 10 completion + 10 reasoning = 20 tokens over 1s decode = 20 tok/s.
+    await decodeStep(state, ectx, { startMs: 1000, endMs: 2000, completionTokens: 10, reasoningTokens: 10 });
 
-    // Same token count — no rate change
+    expect(state.tokensPerSec).toBe(20);
+  });
+
+  it('applies EMA smoothing across decode steps', async () => {
+    const state = createMinimalState();
+    const ectx = createEctx();
+
+    // Step 1: 10 tokens / 1s = 10 tok/s (first EMA value).
+    await decodeStep(state, ectx, { startMs: 1000, endMs: 2000, completionTokens: 10 });
+    expect(state.tokensPerSec).toBe(10);
+
+    // Step 2: 20 tokens / 1s = 20 instantaneous. EMA = 0.3*20 + 0.7*10 = 13.
+    await decodeStep(state, ectx, { startMs: 3000, endMs: 4000, completionTokens: 20 });
+    expect(state.tokensPerSec).toBe(13);
+
+    // Step 3: 30 tokens / 1s = 30 instantaneous. EMA = 0.3*30 + 0.7*13 = 18.1 → 18.
+    await decodeStep(state, ectx, { startMs: 5000, endMs: 6000, completionTokens: 30 });
+    expect(state.tokensPerSec).toBe(18);
+  });
+
+  it('keeps the last rate after agent_end and clears it on the next agent_start', async () => {
+    const state = createMinimalState({ tokensPerSec: 42, decodeStartedAt: 1000 });
+    const ectx = createEctx();
+
+    // agent_end keeps the reading visible (so short turns stay readable) but
+    // clears the in-flight decode window.
+    await dispatchEvent({ type: 'agent_end', reason: 'done' } as any, ectx, state);
+    expect(state.tokensPerSec).toBe(42);
+    expect(state.decodeStartedAt).toBe(0);
+
+    // The next turn's agent_start clears it for a fresh measurement.
+    await dispatchEvent({ type: 'agent_start' } as any, ectx, state);
+    expect(state.tokensPerSec).toBe(0);
+    expect(state.decodeStartedAt).toBe(0);
+  });
+
+  it('does not compute a rate for a tool-only step with no streamed content', async () => {
+    const state = createMinimalState();
+    const ectx = createEctx();
+
+    // No message_update means decoding never opened a window for this step; a
+    // usage_update with 0 completion tokens (pure tool call) must not produce a rate.
     vi.setSystemTime(2000);
     await dispatchEvent(
-      { type: 'usage_update', usage: { completionTokens: 10, promptTokens: 20, totalTokens: 30 } } as any,
+      { type: 'usage_update', usage: { completionTokens: 0, promptTokens: 20, totalTokens: 20 } } as any,
       ectx,
       state,
     );

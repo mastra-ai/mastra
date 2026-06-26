@@ -249,10 +249,12 @@ export interface TUIState {
   githubPrPollingActive: boolean;
 
   // ── Tokens/sec tracking ────────────────────────────────────────────────
-  /** Previous completion token count for rate calculation */
-  prevCompletionTokens: number;
-  /** Timestamp of previous token snapshot (ms) */
-  prevTokenTimestamp: number;
+  /**
+   * Timestamp (ms) of the first streamed content delta of the current step —
+   * i.e. when decoding began. tokens/sec is measured over decode time only
+   * (excludes TTFT and inter-step tool gaps). 0 means decode not yet started.
+   */
+  decodeStartedAt: number;
   /** Current computed tokens/sec rate (0 when idle) */
   tokensPerSec: number;
 
@@ -383,8 +385,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     githubPrPollingActive: false,
 
     // Tokens/sec tracking
-    prevCompletionTokens: 0,
-    prevTokenTimestamp: 0,
+    decodeStartedAt: 0,
     tokensPerSec: 0,
 
     // Goal loop
