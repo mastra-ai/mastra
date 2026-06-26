@@ -4,10 +4,12 @@
  * and other modules can operate on the state without coupling to the
  * MastraTUI class.
  */
-import { Container, TUI, ProcessTerminal } from '@mariozechner/pi-tui';
-import type { CombinedAutocompleteProvider, Component, Text } from '@mariozechner/pi-tui';
-import type { Harness, HarnessMessage } from '@mastra/core/harness';
+import { Container, TUI, ProcessTerminal } from '@earendil-works/pi-tui';
+import type { CombinedAutocompleteProvider, Component, Terminal, Text } from '@earendil-works/pi-tui';
+import type { Harness, HarnessMessage, Session } from '@mastra/core/harness';
 import type { SkillMetadata, Workspace } from '@mastra/core/workspace';
+import type { GithubSignals } from '@mastra/github-signals';
+import type { MastraCodeAnalytics } from '../analytics.js';
 import type { AuthStorage } from '../auth/storage.js';
 import type { HookManager } from '../hooks/index.js';
 import type { McpManager } from '../mcp/manager.js';
@@ -18,9 +20,10 @@ import type { SlashCommandMetadata } from '../utils/slash-command-loader.js';
 import type { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import type { AssistantMessageComponent } from './components/assistant-message.js';
 import { CustomEditor } from './components/custom-editor.js';
+import type { IdleCounterComponent } from './components/idle-counter.js';
 import type { JudgeDisplayComponent } from './components/judge-display.js';
 import type { GradientAnimator } from './components/obi-loader.js';
-import type { OMMarkerComponent } from './components/om-marker.js';
+import type { OMMarkerComponent, OMMarkerData } from './components/om-marker.js';
 import type { OMProgressComponent } from './components/om-progress.js';
 import type { PlanApprovalInlineComponent } from './components/plan-approval-inline.js';
 import type { ShellStreamComponent } from './components/shell-output.js';
@@ -38,6 +41,48 @@ import { getEditorTheme, mastra, TERM_WIDTH_BUFFER } from './theme.js';
 export interface PendingSignalMessage {
   component: Component;
   text: string;
+  images?: Array<{ data: string; mimeType: string }>;
+  isInterjection?: boolean;
+}
+
+export interface GithubPrSubscriptionBadge {
+  owner?: string;
+  repo?: string;
+  prNumber: number;
+  lastSyncStatus?: string;
+  lastNotificationKind?: string;
+  lastNotificationPriority?: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+export function getGithubPrSubscriptionsFromMetadata(
+  metadata: Record<string, unknown> | undefined,
+): GithubPrSubscriptionBadge[] {
+  const mastraMetadata = isRecord(metadata?.mastra) ? metadata.mastra : undefined;
+  const githubSignals = isRecord(mastraMetadata?.githubSignals) ? mastraMetadata.githubSignals : undefined;
+  const subscriptions = Array.isArray(githubSignals?.subscriptions) ? githubSignals.subscriptions : [];
+  const result: GithubPrSubscriptionBadge[] = [];
+  for (const subscription of subscriptions) {
+    if (!isRecord(subscription)) continue;
+    const prNumber = typeof subscription.number === 'number' ? subscription.number : undefined;
+    if (!prNumber) continue;
+    result.push({
+      prNumber,
+      ...(typeof subscription.owner === 'string' ? { owner: subscription.owner } : {}),
+      ...(typeof subscription.repo === 'string' ? { repo: subscription.repo } : {}),
+      ...(typeof subscription.lastSyncStatus === 'string' ? { lastSyncStatus: subscription.lastSyncStatus } : {}),
+      ...(typeof subscription.lastNotificationKind === 'string'
+        ? { lastNotificationKind: subscription.lastNotificationKind }
+        : {}),
+      ...(typeof subscription.lastNotificationPriority === 'string'
+        ? { lastNotificationPriority: subscription.lastNotificationPriority }
+        : {}),
+    });
+  }
+  return result.sort((a, b) => a.prNumber - b.prNumber);
 }
 // =============================================================================
 // MastraTUIOptions
@@ -47,8 +92,14 @@ export interface MastraTUIOptions {
   /** The harness instance to control */
   harness: Harness<any>;
 
+  /** The session created from the harness that all work runs through */
+  session: Session<any>;
+
   /** Hook manager for session lifecycle hooks */
   hookManager?: HookManager;
+
+  /** Analytics client for product telemetry */
+  analytics?: MastraCodeAnalytics;
 
   /** Auth storage for OAuth login/logout */
   authStorage?: AuthStorage;
@@ -77,6 +128,12 @@ export interface MastraTUIOptions {
 
   /** Use inline questions instead of dialog overlays */
   inlineQuestions?: boolean;
+
+  /** GitHub PR signal processor used for status-line polling state. */
+  githubSignals?: GithubSignals;
+
+  /** Optional terminal injection for in-process tests. Defaults to ProcessTerminal. */
+  terminal?: Terminal;
 }
 
 // =============================================================================
@@ -86,8 +143,10 @@ export interface MastraTUIOptions {
 export interface TUIState {
   // ── Core dependencies (set once) ──────────────────────────────────────
   harness: Harness<any>;
+  session: Session<any>;
   options: MastraTUIOptions;
   hookManager?: HookManager;
+  analytics?: MastraCodeAnalytics;
   authStorage?: AuthStorage;
   mcpManager?: McpManager;
   workspace?: Workspace;
@@ -96,9 +155,12 @@ export interface TUIState {
   ui: TUI;
   chatContainer: Container;
   editorContainer: Container;
+  idleCounter?: IdleCounterComponent;
+  idleStartedAt?: number;
+  lastRenderedMessageAt?: number;
   editor: CustomEditor;
   footer: Container;
-  terminal: ProcessTerminal;
+  terminal: Terminal;
 
   // ── Agent / streaming ─────────────────────────────────────────────────
   isInitialized: boolean;
@@ -131,6 +193,7 @@ export interface TUIState {
   toolOutputExpanded: boolean;
   hideThinkingBlock: boolean;
   quietMode: boolean;
+  quietModeMaxToolPreviewLines: number;
   /** Active goal judge status-line override while evaluating the last turn. */
   activeGoalJudge?: { modelId: string; abortController: AbortController; component: JudgeDisplayComponent };
 
@@ -139,6 +202,8 @@ export interface TUIState {
   pendingNewThread: boolean;
   /** Current thread title (for display in status line) */
   currentThreadTitle?: string;
+  /** GitHub PR subscriptions for the current thread. */
+  activeGithubPrSubscriptions: GithubPrSubscriptionBadge[];
   /** Cached thread previews for the current TUI session */
   threadPreviewCache: Map<string, { preview: string; updatedAt: number }>;
   /** Threads whose preview lookup already returned empty during this session */
@@ -158,6 +223,8 @@ export interface TUIState {
   activeOnboarding?: OnboardingInlineComponent;
   lastSubmitPlanComponent?: Component;
   pendingSubmitPlanComponents: Map<string, PlanApprovalInlineComponent>;
+  /** Previous plan snapshot for diff display on resubmission */
+  previousPlanSnapshot?: { title: string; plan: string };
   /** User-message follow-ups queued while the agent is running */
   pendingFollowUpMessages: Array<{ content: string; images?: Array<{ data: string; mimeType: string }> }>;
   /** FIFO ordering across queued follow-up messages and slash commands */
@@ -168,21 +235,35 @@ export interface TUIState {
   pendingSignalMessageComponentsById: Map<string, PendingSignalMessage>;
   /** Slash commands queued while the agent is running */
   pendingSlashCommands: string[];
-  /** Active approval dialog dismiss callback — called on Ctrl+C to unblock the dialog */
-  pendingApprovalDismiss: (() => void) | null;
+  /** Pending user-message component ids for queued slash commands */
+  pendingSlashCommandMessageIds: string[];
+  /** Active approval dialog dismiss callback — called on Ctrl+C or user interruption to unblock the dialog */
+  pendingApprovalDismiss: ((context?: { reason?: string; message?: string }) => void) | null;
 
   // ── Status line ───────────────────────────────────────────────────────
   projectInfo: ProjectInfo;
   statusLine?: Text;
   memoryStatusLine?: Text;
   modelAuthStatus: { hasAuth: boolean; apiKeyEnvVar?: string };
+  githubPrGradientAnimator?: GradientAnimator;
+  githubPrPollingActive: boolean;
+
+  // ── Tokens/sec tracking ────────────────────────────────────────────────
+  /**
+   * Timestamp (ms) of the first streamed content delta of the current step —
+   * i.e. when decoding began. tokens/sec is measured over decode time only
+   * (excludes TTFT and inter-step tool gaps). 0 means decode not yet started.
+   */
+  decodeStartedAt: number;
+  /** Current computed tokens/sec rate (0 when idle) */
+  tokensPerSec: number;
 
   // ── Observational Memory ──────────────────────────────────────────────
   omProgressComponent?: OMProgressComponent;
   activeOMMarker?: OMMarkerComponent;
   activeBufferingMarker?: OMMarkerComponent;
   activeActivationMarker?: OMMarkerComponent;
-  activeActivationTTLMarker?: OMMarkerComponent;
+  activeActivationData?: OMMarkerData;
   activeActivationProviderChangeMarker?: OMMarkerComponent;
 
   // ── Tasks ─────────────────────────────────────────────────────────────
@@ -190,6 +271,8 @@ export interface TUIState {
 
   // ── Goal loop ─────────────────────────────────────────────────────────
   goalManager: GoalManager;
+  /** Track a goal started from plan approval — return to plan mode when it completes */
+  planStartedGoalId?: string;
 
   // ── Input ─────────────────────────────────────────────────────────────
   autocompleteProvider?: CombinedAutocompleteProvider;
@@ -198,6 +281,11 @@ export interface TUIState {
   goalSkillCommands: SkillMetadata[];
   /** Pending images from clipboard paste */
   pendingImages: Array<{ data: string; mimeType: string }>;
+
+  // ── Dedup ────────────────────────────────────────────────────────────
+  /** Texts of queued messages that were locally rendered and fired — used to
+   *  suppress the subscription echo that would otherwise create a duplicate. */
+  firedQueuedMessageTexts?: Map<string, number>;
 
   // ── Abort tracking ────────────────────────────────────────────────────
   lastCtrlCTime: number;
@@ -218,11 +306,13 @@ export interface TUIState {
  * and sets all mutable fields to their defaults.
  */
 export function createTUIState(options: MastraTUIOptions): TUIState {
-  const terminal = new ProcessTerminal();
+  const terminal = options.terminal ?? new ProcessTerminal();
   // Override columns getter to prevent line wrapping in nested terminal emulators
-  Object.defineProperty(terminal, 'columns', {
-    get: () => (process.stdout.columns || 80) - TERM_WIDTH_BUFFER,
-  });
+  if (!options.terminal) {
+    Object.defineProperty(terminal, 'columns', {
+      get: () => (process.stdout.columns || 80) - TERM_WIDTH_BUFFER,
+    });
+  }
   const ui = new TUI(terminal);
 
   // Perf profiling removed
@@ -234,8 +324,10 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
   const result: TUIState = {
     // Core dependencies
     harness: options.harness,
+    session: options.session,
     options,
     hookManager: options.hookManager,
+    analytics: options.analytics,
     authStorage: options.authStorage,
     mcpManager: options.mcpManager,
     workspace: options.workspace,
@@ -265,10 +357,12 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     toolOutputExpanded: false,
     hideThinkingBlock: true,
     quietMode: false,
+    quietModeMaxToolPreviewLines: 2,
 
     // Thread / conversation
     pendingNewThread: false,
     currentThreadTitle: undefined,
+    activeGithubPrSubscriptions: [],
     threadPreviewCache: new Map(),
     attemptedThreadPreviewIds: new Set(),
 
@@ -282,14 +376,21 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     followUpComponents: [],
     pendingSignalMessageComponentsById: new Map(),
     pendingSlashCommands: [],
+    pendingSlashCommandMessageIds: [],
     pendingApprovalDismiss: null,
 
     // Status line
     projectInfo: detectProject(process.cwd()),
     modelAuthStatus: { hasAuth: true },
+    githubPrPollingActive: false,
+
+    // Tokens/sec tracking
+    decodeStartedAt: 0,
+    tokensPerSec: 0,
 
     // Goal loop
     goalManager: new GoalManager(),
+    planStartedGoalId: undefined,
 
     // Input
     customSlashCommands: [],
@@ -305,7 +406,8 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     if (result.activeGoalJudge) {
       return mastra.blue;
     }
-    return options.harness.getCurrentMode()?.color;
+    const color = result.session.mode.resolve()?.metadata?.color;
+    return typeof color === 'string' ? color : undefined;
   };
   return result;
 }

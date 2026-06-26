@@ -1,8 +1,10 @@
-import { CopyButton, Txt } from '@mastra/playground-ui';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { useMemo } from 'react';
 import { parse } from 'superjson';
 import { useSchemaRequestContext } from '../context/schema-request-context';
+import { RequestContextLabel } from './request-context-label';
 import { DynamicForm } from '@/lib/form';
 import { resolveSerializedZodOutput } from '@/lib/form/utils';
 
@@ -12,6 +14,7 @@ export interface RequestContextSchemaFormProps {
    * This component should only be rendered when a schema is provided.
    */
   requestContextSchema: string;
+  labelTooltip?: string;
 }
 
 /**
@@ -22,7 +25,7 @@ export interface RequestContextSchemaFormProps {
  * allowing the agent chat to use these values (which override global context).
  * Empty strings in form fields will override global values intentionally.
  */
-export const RequestContextSchemaForm = ({ requestContextSchema }: RequestContextSchemaFormProps) => {
+export const RequestContextSchemaForm = ({ labelTooltip, requestContextSchema }: RequestContextSchemaFormProps) => {
   const { setSchemaValues, schemaValues } = useSchemaRequestContext();
   // Local state for schema-driven form (does NOT update global store)
 
@@ -50,9 +53,7 @@ export const RequestContextSchemaForm = ({ requestContextSchema }: RequestContex
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <Txt as="span" variant="ui-md" className="text-neutral3">
-          Request Context
-        </Txt>
+        <RequestContextLabel tooltip={labelTooltip}>Request Context</RequestContextLabel>
         <CopyButton content={localFormValuesStr} />
       </div>
 

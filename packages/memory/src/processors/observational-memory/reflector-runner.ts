@@ -6,8 +6,10 @@ import type { ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
 
+import { resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
 import { omDebug, omError } from './debug';
+import { withOmInternalThreadId } from './internal-request-context';
 import {
   createActivationMarker,
   createBufferingEndMarker,
@@ -258,6 +260,7 @@ export class ReflectorRunner {
     const originalTokens = this.tokenCounter.countObservations(observations);
     const resolvedModel = model ? { model } : this.resolveModel(originalTokens);
     const agent = this.createAgent(resolvedModel.model);
+    const internalRequestContext = withOmInternalThreadId(requestContext, agent.id);
     const targetThreshold = observationTokensThreshold ?? getMaxThreshold(this.reflectionConfig.observationTokens);
 
     let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -309,7 +312,7 @@ export class ReflectorRunner {
                   },
                   providerOptions: this.reflectionConfig.providerOptions as any,
                   ...(abortSignal ? { abortSignal } : {}),
-                  ...(requestContext ? { requestContext } : {}),
+                  ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                   ...childObservabilityContext,
                   ...(attemptNumber === 1
                     ? {
@@ -614,6 +617,7 @@ export class ReflectorRunner {
     activationMetadata?: {
       triggeredBy: 'threshold' | 'ttl' | 'provider_change';
       lastActivityAt?: number;
+      activateAfterIdle?: number;
       ttlExpiredMs?: number;
       previousModel?: string;
       currentModel?: string;
@@ -748,7 +752,10 @@ export class ReflectorRunner {
         ttlExpiredMs: activationMetadata?.ttlExpiredMs,
         previousModel: activationMetadata?.previousModel,
         currentModel: activationMetadata?.currentModel,
-        config: this.getObservationMarkerConfig(freshRecord),
+        config: {
+          ...this.getObservationMarkerConfig(freshRecord),
+          activateAfterIdle: activationMetadata?.activateAfterIdle ?? this.reflectionConfig.activateAfterIdle,
+        },
       });
       // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
       void writer.custom({ ...activationMarker, transient: true }).catch(() => {});
@@ -830,7 +837,7 @@ export class ReflectorRunner {
       }
     }
 
-    const activateAfterIdle = this.reflectionConfig.activateAfterIdle;
+    const activateAfterIdle = resolveActivationTTL(this.reflectionConfig.activateAfterIdle, currentModel);
     const ttlExpiredMs =
       activateAfterIdle !== undefined && lastActivityAt !== undefined ? Date.now() - lastActivityAt : undefined;
     const ttlExpired =
@@ -853,6 +860,7 @@ export class ReflectorRunner {
     const activationMetadata = {
       triggeredBy: activationTriggeredBy,
       lastActivityAt: activationTriggeredBy === 'ttl' ? lastActivityAt : undefined,
+      activateAfterIdle: activationTriggeredBy === 'ttl' ? activateAfterIdle : undefined,
       ttlExpiredMs: activationTriggeredBy === 'ttl' ? ttlExpiredMs : undefined,
       previousModel: activationTriggeredBy === 'provider_change' ? lastModel : undefined,
       currentModel: activationTriggeredBy === 'provider_change' ? actorModel : undefined,

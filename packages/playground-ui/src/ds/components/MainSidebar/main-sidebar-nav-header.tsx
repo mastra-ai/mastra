@@ -1,7 +1,7 @@
-import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import type { ComponentPropsWithoutRef } from 'react';
 import type { SidebarState } from './main-sidebar-context';
 import { useMaybeSidebar } from './main-sidebar-context';
+import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
@@ -25,7 +25,7 @@ export function MainSidebarNavHeader({
   const ctx = useMaybeSidebar();
   const state: SidebarState = stateProp ?? ctx?.state ?? 'default';
   const isMobile = ctx?.isMobile ?? false;
-  const Link: LinkComponent | 'a' = LinkProp ?? ctx?.LinkComponent ?? 'a';
+  const Link: LinkComponent = LinkProp ?? ctx?.LinkComponent ?? 'a';
   const showTitle = state === 'default' && !isMobile;
 
   return (

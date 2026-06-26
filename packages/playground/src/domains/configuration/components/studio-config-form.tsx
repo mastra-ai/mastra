@@ -1,7 +1,10 @@
-import { Button, TextFieldBlock, TooltipProvider, toast } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { SaveIcon } from 'lucide-react';
 import { useState } from 'react';
-import { useStudioConfig } from '../context/studio-config-context';
+import { useStudioConfig } from '../context/studio-config-state';
 import type { StudioConfig } from '../types';
 import type { HeaderListFormItem } from './header-list-form';
 import { HeaderListForm } from './header-list-form';

@@ -203,10 +203,11 @@ const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse
   });
 });
 
+const HOST = process.env.WEATHER_SERVER_HOST || '127.0.0.1';
 const PORT = process.env.WEATHER_SERVER_PORT || 60808;
-console.info(`[${serverId}] Starting HTTP server on port ${PORT}`);
-httpServer.listen(PORT, () => {
-  console.info(`[${serverId}] Weather server is running on SSE at http://localhost:${PORT}`);
+console.info(`[${serverId}] Starting HTTP server on ${HOST}:${PORT}`);
+httpServer.listen(Number(PORT), HOST, () => {
+  console.info(`[${serverId}] Weather server is running on SSE at http://${HOST}:${PORT}`);
 });
 
 // --- Interval-based Notifications ---

@@ -1,7 +1,9 @@
+import { createHash } from 'node:crypto';
+import { join } from 'node:path';
 import { openai } from '@ai-sdk/openai-v5';
-import { getLLMTestMode } from '@internal/llm-recorder';
+import { defaultNameGenerator, getLLMRecordingsDir, getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
-import { afterAll, beforeAll, describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod/v4';
 import type { ChunkType } from '../../stream';
 import { createTool } from '../../tools/tool';
@@ -9,9 +11,41 @@ import { Agent } from '../agent';
 
 setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
-const mock = createGatewayMock();
-beforeAll(() => mock.start());
-afterAll(() => mock.saveAndStop());
+let mockGateway: any;
+beforeEach(async c => {
+  mockGateway = createGatewayMock({
+    maxChunkDelay: 1000,
+    replayWithTiming: true,
+    name: `test-${Buffer.from(
+      // use stable 8-char hash from c.task.name
+      createHash('sha256').update(c.task.name).digest('hex').slice(0, 8),
+    )}`,
+    exactMatch: true,
+    recordingsDir: join(getLLMRecordingsDir(c.task.file.filepath), defaultNameGenerator(c.task.file.filepath)),
+    transformRequest: ({ url, body }) => {
+      let serialized = JSON.stringify(body);
+      // Normalize UUIDs (runId, suspendedToolRunId)
+      // serialized = serialized.replace(
+      //   /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
+      //   '00000000-0000-0000-0000-000000000000',
+      // );
+      // Normalize toolCallId (AI SDK generated, alphanumeric ~16 chars).
+      serialized = serialized.replace(/"toolCallId":"[a-zA-Z0-9]+"/g, '"toolCallId":"NORMALIZED"');
+      serialized = serialized.replace(/\\"toolCallId\\":\\"[a-zA-Z0-9]+\\"/g, '\\"toolCallId\\":\\"NORMALIZED\\"');
+      // Normalize workflow timestamps embedded in multi-level stringified results.
+      // They can appear at various escape depths (\"startedAt\", \\\"startedAt\\\", etc.)
+      // serialized = serialized.replace(/(\\*"startedAt\\*":\s*)\d{10,}/g, '$10');
+      // serialized = serialized.replace(/(\\*"completedAt\\*":\s*)\d{10,}/g, '$10');
+      // serialized = serialized.replace(/(\\*"endedAt\\*":\s*)\d{10,}/g, '$10');
+
+      const parsed = JSON.parse(serialized);
+
+      return { url, body: parsed };
+    },
+  });
+  await mockGateway.start();
+});
+afterEach(() => mockGateway.saveAndStop());
 
 describe('agent.stopWhen', () => {
   const weatherTool = createTool({

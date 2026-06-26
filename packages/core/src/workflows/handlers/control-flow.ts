@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import fastq from 'fastq';
 import type { done as DoneCallback } from 'fastq';
+import type { ActorSignal } from '../../auth/ee';
 import type { RequestContext } from '../../di';
 import { MastraError, ErrorDomain, ErrorCategory, getErrorFromUnknown } from '../../error';
 import type { PubSub } from '../../events/pubsub';
@@ -53,6 +54,7 @@ export interface ExecuteParallelParams extends ObservabilityContext {
   pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
+  actor?: ActorSignal;
   outputWriter?: OutputWriter;
   disableScorers?: boolean;
   perStep?: boolean;
@@ -77,6 +79,7 @@ export async function executeParallel(
     pubsub,
     abortController,
     requestContext,
+    actor,
     outputWriter,
     disableScorers,
     perStep,
@@ -169,6 +172,7 @@ export async function executeParallel(
         pubsub,
         abortController,
         requestContext,
+        actor,
         outputWriter,
         disableScorers,
         perStep,
@@ -251,6 +255,7 @@ export interface ExecuteConditionalParams extends ObservabilityContext {
   pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
+  actor?: ActorSignal;
   outputWriter?: OutputWriter;
   disableScorers?: boolean;
   perStep?: boolean;
@@ -275,6 +280,7 @@ export async function executeConditional(
     pubsub,
     abortController,
     requestContext,
+    actor,
     outputWriter,
     disableScorers,
     perStep,
@@ -324,6 +330,7 @@ export async function executeConditional(
             workflowId,
             mastra: engine.mastra!,
             requestContext,
+            actor,
             inputData: prevOutput,
             state: executionContext.state,
             retryCount: -1,
@@ -414,6 +421,28 @@ export async function executeConditional(
     stepsToRun = possibleStepToRun ? [possibleStepToRun] : stepsToRun;
   }
 
+  // Arms whose condition did not evaluate truthy must never be reported as running. When time
+  // travelling into a conditional, the reconstructed stepResults pre-mark the targeted arm as
+  // 'running', but the condition can select a different arm. Reconcile here so the non-truthy
+  // targeted arm is recorded as 'skipped' instead of leaving a stale 'running' status that
+  // would persist and render the wrong branch as active on a rehydrated run. Scoped to
+  // time-travel so normal start/resume flows are untouched.
+  if (timeTravel && timeTravel.executionPath.length > 0) {
+    entry.steps.forEach((armEntry, index) => {
+      if (armEntry.type !== 'step') return;
+      if (truthyIndexes.includes(index)) return;
+      const armId = armEntry.step.id;
+      const existing = stepResults[armId];
+      if (existing?.status !== 'running') return;
+      stepResults[armId] = {
+        status: 'skipped',
+        payload: existing.payload ?? {},
+        startedAt: existing.startedAt ?? Date.now(),
+        endedAt: Date.now(),
+      };
+    });
+  }
+
   // Update conditional span with evaluation results
   conditionalSpan?.update({
     attributes: {
@@ -464,6 +493,7 @@ export async function executeConditional(
         pubsub,
         abortController,
         requestContext,
+        actor,
         outputWriter,
         disableScorers,
         perStep,
@@ -550,6 +580,7 @@ export interface ExecuteLoopParams extends ObservabilityContext {
   pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
+  actor?: ActorSignal;
   outputWriter?: OutputWriter;
   disableScorers?: boolean;
   serializedStepGraph: SerializedStepFlowEntry[];
@@ -574,6 +605,7 @@ export async function executeLoop(
     pubsub,
     abortController,
     requestContext,
+    actor,
     outputWriter,
     disableScorers,
     serializedStepGraph,
@@ -644,6 +676,7 @@ export async function executeLoop(
       pubsub,
       abortController,
       requestContext,
+      actor,
       outputWriter,
       disableScorers,
       serializedStepGraph,
@@ -716,6 +749,7 @@ export async function executeLoop(
           runId,
           mastra: engine.mastra!,
           requestContext,
+          actor,
           inputData: result.output,
           state: executionContext.state,
           retryCount: -1,
@@ -817,6 +851,7 @@ export interface ExecuteForeachParams extends ObservabilityContext {
   pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
+  actor?: ActorSignal;
   outputWriter?: OutputWriter;
   disableScorers?: boolean;
   serializedStepGraph: SerializedStepFlowEntry[];
@@ -841,6 +876,7 @@ export async function executeForeach(
     pubsub,
     abortController,
     requestContext,
+    actor,
     outputWriter,
     disableScorers,
     serializedStepGraph,
@@ -972,6 +1008,7 @@ export async function executeForeach(
       pubsub,
       abortController,
       requestContext,
+      actor,
       skipEmits: true,
       outputWriter,
       disableScorers,

@@ -43,14 +43,21 @@ function replaceArguments(template: string, args: string[]): { result: string; s
   // Replace $ARGUMENTS with all args joined
   result = result.replace(/\$ARGUMENTS/g, args.join(' '));
 
+  // Replace range arguments $1+, $2+, etc. before single positional arguments.
+  args.forEach((_, index) => {
+    const argNumber = index + 1;
+    const pattern = new RegExp(`\\\$${argNumber}\\+`, 'g');
+    result = result.replace(pattern, args.slice(index).join(' '));
+  });
+
   // Replace positional arguments $1, $2, etc.
   args.forEach((arg, index) => {
     const pattern = new RegExp(`\\\$${index + 1}`, 'g');
     result = result.replace(pattern, arg);
   });
 
-  // Clear unused positional arguments
-  result = result.replace(/\$[1-9]\d*/g, '');
+  // Clear unused positional and range arguments
+  result = result.replace(/\$[1-9]\d*\+?/g, '');
 
   return {
     result,
@@ -101,9 +108,8 @@ async function replaceFileReferences(template: string, workingDir: string): Prom
       const fullPath = path.resolve(workingDir, filePath!);
       const content = await fs.readFile(fullPath, 'utf-8');
       result = result.replace(fullMatch, content);
-    } catch (error) {
-      console.error(`Error reading file "${filePath}":`, error);
-      result = result.replace(fullMatch, `[Error: Could not read "${filePath}"]`);
+    } catch {
+      // Leave literal @mentions/search qualifiers such as @me intact when they do not resolve to files.
     }
   }
 

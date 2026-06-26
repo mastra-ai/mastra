@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
-import { MessageList } from '@mastra/core/agent';
+import type { AgentSignalInput, MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { createSignal, MessageList } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import { InMemoryDB, InMemoryMemory } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
@@ -86,6 +86,15 @@ function createMemoryProvider(messages: MastraDBMessage[]): MemoryContextProvide
       otherThreadsContext: undefined,
     }),
     persistMessages: async () => {},
+  };
+}
+
+function createTestSendSignal(messageList: MessageList, capturedParts: unknown[] = []) {
+  return async (signalInput: AgentSignalInput) => {
+    const signal = createSignal(signalInput);
+    messageList.add(signal.toDBMessage(), 'input');
+    capturedParts.push(signal.toDataPart());
+    return signal;
   };
 }
 
@@ -216,12 +225,8 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
     const requestContext = new RequestContext();
     requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
 
-    const capturedParts: any[] = [];
-    const writer = {
-      custom: async (part: any) => {
-        capturedParts.push(part);
-      },
-    };
+    const capturedParts: unknown[] = [];
+    const sendSignal = createTestSendSignal(messageList, capturedParts);
 
     await processor.processInputStep({
       messageList,
@@ -233,7 +238,7 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
       systemMessages: [],
       model: model as any,
       retryCount: 0,
-      writer: writer as any,
+      sendSignal,
       abort: (() => {
         throw new Error('aborted');
       }) as any,
@@ -242,44 +247,62 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
     const allMessages = messageList.get.all.db();
     const markers = allMessages.filter(message => message.id.startsWith('__temporal_gap_'));
     const check = messageList.makeMessageSourceChecker();
+    const expectedTimestamp = formatTemporalTimestamp(new Date('2025-01-01T08:50:00Z'));
+    const expectedTimestampMs = new Date('2025-01-01T08:50:00Z').getTime();
 
     expect(markers).toHaveLength(1);
+    expect(markers[0]!.role).toBe('signal');
     expect(markers.map(marker => check.getSource(marker))).toEqual(['input']);
     expect(allMessages.map(message => message.id)).toEqual(['history-1', 'history-2', markers[0]!.id, 'input-1']);
     expect(markers[0]!.content.parts[0]).toMatchObject({
       type: 'text',
-      text: expect.stringContaining(
-        '<system-reminder type="temporal-gap" precedesMessageId="input-1">30 minutes later —',
-      ),
+      text: `30 minutes later — ${expectedTimestamp}`,
     });
-    expect(markers[0]!.content.metadata).toEqual({
-      reminderType: 'temporal-gap',
-      gapText: '30 minutes later',
-      gapMs: 30 * 60 * 1000,
-      timestamp: formatTemporalTimestamp(new Date('2025-01-01T08:50:00Z')),
-      timestampMs: new Date('2025-01-01T08:50:00Z').getTime(),
-      precedesMessageId: 'input-1',
-      systemReminder: {
+    expect(markers[0]!.content.metadata?.signal).toMatchObject({
+      id: markers[0]!.id,
+      type: 'reactive',
+      tagName: 'system-reminder',
+      attributes: {
         type: 'temporal-gap',
-        message: `30 minutes later — ${formatTemporalTimestamp(new Date('2025-01-01T08:50:00Z'))}`,
         gapText: '30 minutes later',
         gapMs: 30 * 60 * 1000,
-        timestamp: formatTemporalTimestamp(new Date('2025-01-01T08:50:00Z')),
-        timestampMs: new Date('2025-01-01T08:50:00Z').getTime(),
+        timestamp: expectedTimestamp,
+        timestampMs: expectedTimestampMs,
         precedesMessageId: 'input-1',
       },
-    });
-    expect(capturedParts.filter(part => part.type === 'data-system-reminder')).toEqual([
-      expect.objectContaining({
-        type: 'data-system-reminder',
-        transient: true,
-        data: expect.objectContaining({
-          reminderType: 'temporal-gap',
+      metadata: {
+        reminderType: 'temporal-gap',
+        gapText: '30 minutes later',
+        gapMs: 30 * 60 * 1000,
+        timestamp: expectedTimestamp,
+        timestampMs: expectedTimestampMs,
+        precedesMessageId: 'input-1',
+        systemReminder: {
+          type: 'temporal-gap',
+          message: `30 minutes later — ${expectedTimestamp}`,
           gapText: '30 minutes later',
-          precedesMessageId: 'input-1',
           gapMs: 30 * 60 * 1000,
-          timestamp: formatTemporalTimestamp(new Date('2025-01-01T08:50:00Z')),
-          timestampMs: new Date('2025-01-01T08:50:00Z').getTime(),
+          timestamp: expectedTimestamp,
+          timestampMs: expectedTimestampMs,
+          precedesMessageId: 'input-1',
+        },
+      },
+    });
+    expect(capturedParts.filter((part: any) => part.type === 'data-signal')).toEqual([
+      expect.objectContaining({
+        type: 'data-signal',
+        data: expect.objectContaining({
+          type: 'reactive',
+          tagName: 'system-reminder',
+          contents: `30 minutes later — ${expectedTimestamp}`,
+          attributes: expect.objectContaining({
+            type: 'temporal-gap',
+            gapText: '30 minutes later',
+            precedesMessageId: 'input-1',
+            gapMs: 30 * 60 * 1000,
+            timestamp: expectedTimestamp,
+            timestampMs: expectedTimestampMs,
+          }),
         }),
       }),
     ]);
@@ -346,12 +369,8 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
     const requestContext = new RequestContext();
     requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
 
-    const capturedParts: any[] = [];
-    const writer = {
-      custom: async (part: any) => {
-        capturedParts.push(part);
-      },
-    };
+    const capturedParts: unknown[] = [];
+    const sendSignal = createTestSendSignal(messageList, capturedParts);
 
     const args = {
       messageList,
@@ -363,7 +382,7 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
       systemMessages: [],
       model: model as any,
       retryCount: 0,
-      writer: writer as any,
+      sendSignal,
       abort: (() => {
         throw new Error('aborted');
       }) as any,
@@ -373,7 +392,7 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
     await processor.processInputStep(args);
 
     expect(messageList.get.all.db().filter(message => message.id.startsWith('__temporal_gap_'))).toHaveLength(1);
-    expect(capturedParts.filter(part => part.type === 'data-system-reminder')).toHaveLength(1);
+    expect(capturedParts.filter((part: any) => part.type === 'data-signal')).toHaveLength(1);
   });
 
   it('does not reinsert temporal markers on later steps', async () => {
@@ -438,12 +457,8 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
     requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
 
     const sharedState: Record<string, unknown> = {};
-    const capturedParts: any[] = [];
-    const writer = {
-      custom: async (part: any) => {
-        capturedParts.push(part);
-      },
-    };
+    const capturedParts: unknown[] = [];
+    const sendSignal = createTestSendSignal(messageList, capturedParts);
 
     const abort = (() => {
       throw new Error('aborted');
@@ -459,14 +474,14 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
       systemMessages: [],
       model: model as any,
       retryCount: 0,
-      writer: writer as any,
+      sendSignal,
       abort,
     });
 
     const markerCountAfterStep0 = messageList.get.all
       .db()
       .filter(message => message.id.startsWith('__temporal_gap_')).length;
-    const reminderCountAfterStep0 = capturedParts.filter(part => part.type === 'data-system-reminder').length;
+    const reminderCountAfterStep0 = capturedParts.filter((part: any) => part.type === 'data-signal').length;
 
     messageList.add(
       createMessage({
@@ -490,13 +505,13 @@ describe('ObservationalMemoryProcessor temporal markers', () => {
       systemMessages: [],
       model: model as any,
       retryCount: 0,
-      writer: writer as any,
+      sendSignal,
       abort,
     });
 
     expect(messageList.get.all.db().filter(message => message.id.startsWith('__temporal_gap_'))).toHaveLength(
       markerCountAfterStep0,
     );
-    expect(capturedParts.filter(part => part.type === 'data-system-reminder')).toHaveLength(reminderCountAfterStep0);
+    expect(capturedParts.filter((part: any) => part.type === 'data-signal')).toHaveLength(reminderCountAfterStep0);
   });
 });

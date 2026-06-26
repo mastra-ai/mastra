@@ -4,10 +4,11 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { Container, Markdown, Spacer, Text } from '@mariozechner/pi-tui';
-import type { MarkdownTheme } from '@mariozechner/pi-tui';
+import { Container, Markdown, Spacer, Text } from '@earendil-works/pi-tui';
+import type { MarkdownTheme } from '@earendil-works/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
 import { CHAT_INDENT, getMarkdownTheme, theme } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 
 let _compId = 0;
 function asmDebugLog(...args: unknown[]) {
@@ -37,7 +38,6 @@ export class AssistantMessageComponent extends Container {
     // Container for text/thinking content
     this.contentContainer = new Container();
     this.addChild(this.contentContainer);
-    this.addChild(new Spacer(1));
 
     asmDebugLog(`COMP#${this._id} CREATED`);
 
@@ -59,6 +59,10 @@ export class AssistantMessageComponent extends Container {
 
   setHideThinkingBlock(hide: boolean): void {
     this.hideThinkingBlock = hide;
+  }
+
+  getChatSpacingKind(): ChatSpacingKind | undefined {
+    return this.contentContainer.children.length > 0 ? 'assistant-message' : undefined;
   }
 
   updateContent(message: HarnessMessage): void {

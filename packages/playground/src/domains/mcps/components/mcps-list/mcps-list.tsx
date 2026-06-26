@@ -1,12 +1,12 @@
 import type { McpServerListResponse } from '@mastra/client-js';
 import {
-  EntityList,
-  EntityListSkeleton,
-  ToolsIcon,
-  WorkflowIcon,
-  AgentIcon,
-  truncateString,
-} from '@mastra/playground-ui';
+  DataList as EntityList,
+  DataListSkeleton as EntityListSkeleton,
+} from '@mastra/playground-ui/components/DataList';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
+import { truncateString } from '@mastra/playground-ui/utils/truncate-string';
 import { useMastraClient } from '@mastra/react';
 import { useMemo } from 'react';
 import { useMCPServerTools } from '../../hooks/useMCPServerTools';
@@ -58,7 +58,7 @@ export function McpServersList({ mcpServers, isLoading, search = '' }: McpServer
   }
 
   return (
-    <EntityList columns="auto 1fr auto auto auto">
+    <EntityList columns="auto 1fr auto auto auto" variant="striped">
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>URL</EntityList.TopCell>

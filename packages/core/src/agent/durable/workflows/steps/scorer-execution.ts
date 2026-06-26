@@ -4,7 +4,7 @@ import { runScorer } from '../../../../evals/hooks';
 import type { Mastra } from '../../../../mastra';
 import { createObservabilityContext } from '../../../../observability';
 import { RequestContext } from '../../../../request-context';
-import { createStep } from '../../../../workflows';
+import { createStep } from '../../../../workflows/workflow';
 import { DurableStepIds } from '../../constants';
 import type { SerializableScorersConfig, SerializableDurableState } from '../../types';
 

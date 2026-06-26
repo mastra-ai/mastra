@@ -1,7 +1,7 @@
 import pMap from 'p-map';
 import { z } from 'zod/v4';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
-import { getEntityTypeForSpan } from '../../observability';
+import { getEntityTypeForSpan, InternalSpans } from '../../observability';
 import type { SpanRecord, TraceRecord, MastraStorage } from '../../storage';
 import { createStep, createWorkflow } from '../../workflows/evented';
 import type { MastraScorer, ScorerRun } from '../base';
@@ -256,6 +256,12 @@ export const scoreTracesWorkflow = createWorkflow({
   steps: [getTraceStep],
   options: {
     validateInputs: false,
+    // Internal batch-scoring plumbing — hide its workflow spans from exported
+    // traces. Any user-facing work invoked from steps (e.g. the scorer's own
+    // SCORER_RUN span) keeps its own policy and remains visible.
+    tracingPolicy: {
+      internal: InternalSpans.WORKFLOW,
+    },
   },
 });
 

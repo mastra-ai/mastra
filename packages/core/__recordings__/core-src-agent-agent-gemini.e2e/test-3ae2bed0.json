@@ -1,0 +1,336 @@
+{
+  "meta": {
+    "name": "test-3ae2bed0",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
+    "testName": "Gemini Model Compatibility Tests > Agent network() method > should return structured output from network",
+    "createdAt": "2026-05-18T10:51:01.659Z",
+    "updatedAt": "2026-05-28T17:34:01.799Z"
+  },
+  "recordings": [
+    {
+      "hash": "8bce1a2d79bb7efa",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": {
+              "required": ["primitiveId", "primitiveType", "prompt", "selectionReason"],
+              "type": "object",
+              "properties": {
+                "primitiveId": {
+                  "description": "The id of the primitive to be called",
+                  "type": "string"
+                },
+                "primitiveType": {
+                  "description": "The type of the primitive to be called",
+                  "type": "string",
+                  "enum": ["agent", "workflow", "none", "tool"]
+                },
+                "prompt": {
+                  "description": "The json string or text value to be sent to the primitive",
+                  "type": "string"
+                },
+                "selectionReason": {
+                  "description": "The reason you picked the primitive",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Research AI briefly"
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "text": "You will be calling just *one* primitive at a time to accomplish the user task, every call to you is one decision in the process of accomplishing the user task. Make sure to pick primitives that are the best suited to accomplish the whole task. Completeness is the highest priority.\n\n                    The user has given you the following task:\n                    Research AI briefly\n\n                    # Rules:\n\n                    ## Agent:\n                    - prompt should be a text value, like you would call an LLM in a chat interface.\n                    - If you are calling the same agent again, make sure to adjust the prompt to be more specific.\n\n                    ## Workflow/Tool:\n                    - prompt should be a JSON value that corresponds to the input schema of the workflow or tool. The JSON value is stringified.\n                    - Make sure to use inputs corresponding to the input schema when calling a workflow or tool.\n\n                    DO NOT CALL THE PRIMITIVE YOURSELF. Make sure to not call the same primitive twice, unless you call it with different arguments and believe it adds something to the task completion criteria. Take into account previous decision making history and results in your decision making and final result. These are messages whose text is a JSON structure with \"isNetwork\" true.\n\n                    Please select the most appropriate primitive to handle this task and the prompt to be sent to the primitive. If no primitive is appropriate, return \"none\" for the primitiveId and \"none\" for the primitiveType.\n\n                    {\n                        \"primitiveId\": string,\n                        \"primitiveType\": \"agent\" | \"workflow\" | \"tool\",\n                        \"prompt\": string,\n                        \"selectionReason\": string\n                    }\n\n                    The 'selectionReason' property should explain why you picked the primitive, as well as why the other primitives were not picked."
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "\n          You are a router in a network of specialized AI agents.\n          Your job is to decide which agent should handle each step of a task.\n          If asking for completion of a task, make sure to follow system instructions closely.\n\n          Every step will result in a prompt message. It will be a JSON object with a \"selectionReason\" and \"finalResult\" property. Make your decision based on previous decision history, as well as the overall task criteria. If you already called a primitive, you shouldn't need to call it again, unless you strongly believe it adds something to the task completion criteria. Make sure to call enough primitives to complete the task.\n\n          ## System Instructions\n          You coordinate research tasks. Delegate to researchHelper for research.\n          You can only pick agents and workflows that are available in the lists below. Never call any agents or workflows that are not available in the lists below.\n          ## Available Agents in Network\n           - **helperAgent**: \n          ## Available Workflows in Network (make sure to use inputs corresponding to the input schema when calling a workflow)\n          \n          ## Available Tools in Network (make sure to use inputs corresponding to the input schema when calling a tool)\n          \n          If you have multiple entries that need to be called with a workflow or agent, call them separately with each input.\n          When calling a workflow, the prompt should be a JSON value that corresponds to the input schema of the workflow. The JSON value is stringified.\n          When calling a tool, the prompt should be a JSON value that corresponds to the input schema of the tool. The JSON value is stringified.\n          When calling an agent, the prompt should be a text value, like you would call an LLM in a chat interface.\n          Keep in mind that the user only sees the final result of the task. When reviewing completion, you should know that the user will not see the intermediate results.\n          \n        "
+              }
+            ]
+          }
+        },
+        "timestamp": 1779989627592
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Thu, 28 May 2026 17:33:49 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=1286",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "{\n  \"primitiveId\": \"helperAgent\",\n  \"primitiveType\": \"agent\",\n  \"prompt\": \"Provide a brief overview of Artificial Intelligence (AI), including its definition, key concepts, applications, and current trends.\",\n  \"selectionReason\": \"The user is asking for a brief overview of AI, which aligns perfectly with the capabilities of the helperAgent. The other options are not suitable, as there are no available workflows or tools for directly researching AI. Therefore, the helperAgent is the most appropriate choice to fulfill the user's request.\"\n}"
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "avgLogprobs": -0.34011446419408764
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 838,
+            "candidatesTokenCount": 118,
+            "totalTokenCount": 956,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 838
+              }
+            ],
+            "candidatesTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 118
+              }
+            ],
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-2.0-flash",
+          "responseId": "e3wYapKuN5-V_uMPusjK-QI"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "e1d2ab6337dbd97d",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Research AI briefly"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Provide a brief overview of Artificial Intelligence (AI), including its definition, key concepts, applications, and current trends."
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "You provide brief research summaries when asked."
+              }
+            ]
+          }
+        },
+        "timestamp": 1779989628991
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-disposition": "attachment",
+          "content-type": "text/event-stream",
+          "date": "Thu, 28 May 2026 17:33:49 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=403",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-xss-protection": "0"
+        },
+        "chunks": [
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"Okay\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 36,\"totalTokenCount\": 36,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 36}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"fXwYarGCFKq6gLUPs8GAqAU\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \", here's a brief overview of Artificial Intelligence (AI):\\n\\n**Definition\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 36,\"totalTokenCount\": 36,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 36}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"fXwYarGCFKq6gLUPs8GAqAU\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \":** Artificial Intelligence (AI) is the broad concept of enabling machines to perform tasks that typically require\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 36,\"totalTokenCount\": 36,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 36}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"fXwYarGCFKq6gLUPs8GAqAU\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" human intelligence. These tasks include learning, problem-solving, decision-making, and perception.\\n\\n**Key Concepts:**\\n\\n*   **Machine Learning (ML):**\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 36,\"totalTokenCount\": 36,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 36}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"fXwYarGCFKq6gLUPs8GAqAU\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" A subset of AI that allows systems to learn from data without explicit programming. Algorithms are trained on data to identify patterns and make predictions.\\n*   **Deep\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 36,\"totalTokenCount\": 36,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 36}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"fXwYarGCFKq6gLUPs8GAqAU\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" Learning (DL):** A subfield of ML that uses artificial neural networks with multiple layers (deep neural networks) to analyze data with complex structures.\\n*   **Natural Language Processing (NLP):** Focuses on enabling computers to understand, interpret\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 36,\"totalTokenCount\": 36,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 36}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"fXwYarGCFKq6gLUPs8GAqAU\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \", and generate human language.\\n*   **Computer Vision:** Enables computers to \\\"see\\\" and interpret images and videos.\\n*   **Robotics:** Deals with the design, construction, operation, and application of robots, often incorporating AI for\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 36,\"totalTokenCount\": 36,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 36}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"fXwYarGCFKq6gLUPs8GAqAU\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" autonomous behavior.\\n\\n**Applications:**\\n\\n*   **Healthcare:** Diagnosis, drug discovery, personalized medicine.\\n*   **Finance:** Fraud detection, algorithmic trading, risk assessment.\\n*   **Transportation:** Self-driving cars, traffic optimization.\\n*   **Manufacturing:** Automation, quality control, predictive maintenance.\\n\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 36,\"totalTokenCount\": 36,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 36}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"fXwYarGCFKq6gLUPs8GAqAU\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"*   **Customer Service:** Chatbots, virtual assistants.\\n*   **Entertainment:** Recommendation systems, content generation.\\n\\n**Current Trends:**\\n\\n*   **Generative AI:** AI models that can generate new content, such as text, images, and code (e.g., GPT-3, DALL-\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 36,\"totalTokenCount\": 36,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 36}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"fXwYarGCFKq6gLUPs8GAqAU\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"E 2).\\n*   **Explainable AI (XAI):** Efforts to make AI decision-making processes more transparent and understandable.\\n*   **AI Ethics and Governance:** Growing focus on addressing ethical concerns related to AI, such as bias, fairness, and accountability.\\n*   **Edge AI:** Processing\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 36,\"totalTokenCount\": 36,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 36}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"fXwYarGCFKq6gLUPs8GAqAU\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" AI algorithms locally on hardware devices (e.g., smartphones, IoT devices) rather than relying on cloud servers.\\n*   **AI-as-a-Service (AIaaS):** Cloud-based platforms that provide AI tools and services to businesses, making AI more accessible.\\n\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 34,\"candidatesTokenCount\": 455,\"totalTokenCount\": 489,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 34}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 455}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"fXwYarGCFKq6gLUPs8GAqAU\"}\r\n\r\n"
+        ],
+        "chunkTimings": [1, 81, 173, 288, 312, 396, 354, 428, 472, 485, 452],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "6c3fc1c25bd3ffa6",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
+        "method": "POST",
+        "body": {
+          "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": {
+              "required": ["isComplete", "completionReason"],
+              "type": "object",
+              "properties": {
+                "isComplete": {
+                  "description": "Whether the task is complete",
+                  "type": "boolean"
+                },
+                "completionReason": {
+                  "description": "Explanation of why the task is or is not complete",
+                  "type": "string"
+                },
+                "finalResult": {
+                  "description": "The final result text to return to the user. omit if primitive result is sufficient",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "\n    The agent helperAgent has contributed to the task.\n    This is the result: \"Okay, here's a brief overview of Artificial Intelligence (AI):\\n\\n**Definition:** Artificial Intelligence (AI) is the broad concept of enabling machines to perform tasks that typically require human intelligence. These tasks include learning, problem-solving, decision-making, and perception.\\n\\n**Key Concepts:**\\n\\n*   **Machine Learning (ML):** A subset of AI that allows systems to learn from data without explicit programming. Algorithms are trained on data to identify patterns and make predictions.\\n*   **Deep Learning (DL):** A subfield of ML that uses artificial neural networks with multiple layers (deep neural networks) to analyze data with complex structures.\\n*   **Natural Language Processing (NLP):** Focuses on enabling computers to understand, interpret, and generate human language.\\n*   **Computer Vision:** Enables computers to \\\"see\\\" and interpret images and videos.\\n*   **Robotics:** Deals with the design, construction, operation, and application of robots, often incorporating AI for autonomous behavior.\\n\\n**Applications:**\\n\\n*   **Healthcare:** Diagnosis, drug discovery, personalized medicine.\\n*   **Finance:** Fraud detection, algorithmic trading, risk assessment.\\n*   **Transportation:** Self-driving cars, traffic optimization.\\n*   **Manufacturing:** Automation, quality control, predictive maintenance.\\n*   **Customer Service:** Chatbots, virtual assistants.\\n*   **Entertainment:** Recommendation systems, content generation.\\n\\n**Current Trends:**\\n\\n*   **Generative AI:** AI models that can generate new content, such as text, images, and code (e.g., GPT-3, DALL-E 2).\\n*   **Explainable AI (XAI):** Efforts to make AI decision-making processes more transparent and understandable.\\n*   **AI Ethics and Governance:** Growing focus on addressing ethical concerns related to AI, such as bias, fairness, and accountability.\\n*   **Edge AI:** Processing AI algorithms locally on hardware devices (e.g., smartphones, IoT devices) rather than relying on cloud servers.\\n*   **AI-as-a-Service (AIaaS):** Cloud-based platforms that provide AI tools and services to businesses, making AI more accessible.\\n\"\n    \n    \n\nPrimitives already executed: agent \"helperAgent\"\n\n    You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. \n    Only return true if the task is complete according to the system instructions.\n    Original task: Research AI briefly\n\n    If no primitive (type = 'none'), the task is complete because we can't run any primitive to further task completion.\n\n    Also, if the agent helperAgent has declined the tool call in its response, then the task is complete as the primitive tool-call was declined by the user.\n\n    IMPORTANT: If the above result is from an AGENT PRIMITIVE and it is a suitable final result itself considering the original task, then finalResult should be an empty string or undefined.\n    \n    If the task is complete and the result is not from an AGENT PRIMITIVE, always generate a finalResult.\n    IF the task is complete and the result is from an AGENT PRIMITIVE, but the AGENT PRIMITIVE response is not comprehensive enough to accomplish the user's original task, then generate a finalResult.\n\n    IMPORTANT: The generated finalResult should not be the exact primitive result. You should craft a comprehensive response based on the message history.\n    The finalResult field should be written in natural language.\n\n    You must return this JSON shape:\n    {\n      \"isComplete\": boolean,\n      \"completionReason\": string,\n      \"finalResult\": string,\n    }\n  "
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "\n          You are a router in a network of specialized AI agents.\n          Your job is to decide which agent should handle each step of a task.\n          If asking for completion of a task, make sure to follow system instructions closely.\n\n          Every step will result in a prompt message. It will be a JSON object with a \"selectionReason\" and \"finalResult\" property. Make your decision based on previous decision history, as well as the overall task criteria. If you already called a primitive, you shouldn't need to call it again, unless you strongly believe it adds something to the task completion criteria. Make sure to call enough primitives to complete the task.\n\n          ## System Instructions\n          You coordinate research tasks. Delegate to researchHelper for research.\n          You can only pick agents and workflows that are available in the lists below. Never call any agents or workflows that are not available in the lists below.\n          ## Available Agents in Network\n           - **helperAgent**: \n          ## Available Workflows in Network (make sure to use inputs corresponding to the input schema when calling a workflow)\n          \n          ## Available Tools in Network (make sure to use inputs corresponding to the input schema when calling a tool)\n          \n          If you have multiple entries that need to be called with a workflow or agent, call them separately with each input.\n          When calling a workflow, the prompt should be a JSON value that corresponds to the input schema of the workflow. The JSON value is stringified.\n          When calling a tool, the prompt should be a JSON value that corresponds to the input schema of the tool. The JSON value is stringified.\n          When calling an agent, the prompt should be a text value, like you would call an LLM in a chat interface.\n          Keep in mind that the user only sees the final result of the task. When reviewing completion, you should know that the user will not see the intermediate results.\n          \n        "
+              }
+            ]
+          }
+        },
+        "timestamp": 1779989636460
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-disposition": "attachment",
+          "content-type": "text/event-stream",
+          "date": "Thu, 28 May 2026 17:33:58 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=832",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-xss-protection": "0"
+        },
+        "chunks": [
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 1223,\"totalTokenCount\": 1223,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 1223}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"hXwYav3aI6iV6dgPoqmH0AM\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n  \\\"\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 1223,\"totalTokenCount\": 1223,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 1223}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"hXwYav3aI6iV6dgPoqmH0AM\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"isComplete\\\": true,\\n  \\\"completionReason\\\": \\\"The helperAgent has\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 1223,\"totalTokenCount\": 1223,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 1223}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"hXwYav3aI6iV6dgPoqmH0AM\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" provided a suitable overview of AI, completing the task.\\\",\\n  \\\"finalResult\\\": \\\"Artificial\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 1223,\"totalTokenCount\": 1223,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 1223}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"hXwYav3aI6iV6dgPoqmH0AM\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" Intelligence (AI) is a broad field focused on enabling machines to perform tasks that typically require human intelligence, such as learning, problem-solving, and decision-making\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 1223,\"totalTokenCount\": 1223,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 1223}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"hXwYav3aI6iV6dgPoqmH0AM\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \". It encompasses key concepts like machine learning, deep learning, natural language processing, and computer vision. AI is applied across various sectors, including healthcare, finance,\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 1223,\"totalTokenCount\": 1223,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 1223}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"hXwYav3aI6iV6dgPoqmH0AM\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" transportation, and manufacturing, with current trends focusing on generative AI, explainable AI, ethics, edge AI, and AI-as-a-Service.\\\"\\n}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 1267,\"candidatesTokenCount\": 137,\"totalTokenCount\": 1404,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 1267}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 137}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"hXwYav3aI6iV6dgPoqmH0AM\"}\r\n\r\n"
+        ],
+        "chunkTimings": [0, 1, 36, 93, 157, 213, 204],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "e3fc5bf7f2181f5d",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
+        "method": "POST",
+        "body": {
+          "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": {
+              "required": ["summary", "confidence"],
+              "type": "object",
+              "properties": {
+                "summary": {
+                  "description": "Brief summary",
+                  "type": "string"
+                },
+                "confidence": {
+                  "description": "Confidence score",
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "\n    The task has been completed successfully.\n    Original task: Research AI briefly\n\n    The agent helperAgent produced this result:\n    \"Okay, here's a brief overview of Artificial Intelligence (AI):\\n\\n**Definition:** Artificial Intelligence (AI) is the broad concept of enabling machines to perform tasks that typically require human intelligence. These tasks include learning, problem-solving, decision-making, and perception.\\n\\n**Key Concepts:**\\n\\n*   **Machine Learning (ML):** A subset of AI that allows systems to learn from data without explicit programming. Algorithms are trained on data to identify patterns and make predictions.\\n*   **Deep Learning (DL):** A subfield of ML that uses artificial neural networks with multiple layers (deep neural networks) to analyze data with complex structures.\\n*   **Natural Language Processing (NLP):** Focuses on enabling computers to understand, interpret, and generate human language.\\n*   **Computer Vision:** Enables computers to \\\"see\\\" and interpret images and videos.\\n*   **Robotics:** Deals with the design, construction, operation, and application of robots, often incorporating AI for autonomous behavior.\\n\\n**Applications:**\\n\\n*   **Healthcare:** Diagnosis, drug discovery, personalized medicine.\\n*   **Finance:** Fraud detection, algorithmic trading, risk assessment.\\n*   **Transportation:** Self-driving cars, traffic optimization.\\n*   **Manufacturing:** Automation, quality control, predictive maintenance.\\n*   **Customer Service:** Chatbots, virtual assistants.\\n*   **Entertainment:** Recommendation systems, content generation.\\n\\n**Current Trends:**\\n\\n*   **Generative AI:** AI models that can generate new content, such as text, images, and code (e.g., GPT-3, DALL-E 2).\\n*   **Explainable AI (XAI):** Efforts to make AI decision-making processes more transparent and understandable.\\n*   **AI Ethics and Governance:** Growing focus on addressing ethical concerns related to AI, such as bias, fairness, and accountability.\\n*   **Edge AI:** Processing AI algorithms locally on hardware devices (e.g., smartphones, IoT devices) rather than relying on cloud servers.\\n*   **AI-as-a-Service (AIaaS):** Cloud-based platforms that provide AI tools and services to businesses, making AI more accessible.\\n\"\n\n    Based on the task and result above, generate a structured response according to the provided schema.\n    Use the conversation history and primitive results to craft the response.\n  "
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "\n          You are a router in a network of specialized AI agents.\n          Your job is to decide which agent should handle each step of a task.\n          If asking for completion of a task, make sure to follow system instructions closely.\n\n          Every step will result in a prompt message. It will be a JSON object with a \"selectionReason\" and \"finalResult\" property. Make your decision based on previous decision history, as well as the overall task criteria. If you already called a primitive, you shouldn't need to call it again, unless you strongly believe it adds something to the task completion criteria. Make sure to call enough primitives to complete the task.\n\n          ## System Instructions\n          You coordinate research tasks. Delegate to researchHelper for research.\n          You can only pick agents and workflows that are available in the lists below. Never call any agents or workflows that are not available in the lists below.\n          ## Available Agents in Network\n           - **helperAgent**: \n          ## Available Workflows in Network (make sure to use inputs corresponding to the input schema when calling a workflow)\n          \n          ## Available Tools in Network (make sure to use inputs corresponding to the input schema when calling a tool)\n          \n          If you have multiple entries that need to be called with a workflow or agent, call them separately with each input.\n          When calling a workflow, the prompt should be a JSON value that corresponds to the input schema of the workflow. The JSON value is stringified.\n          When calling a tool, the prompt should be a JSON value that corresponds to the input schema of the tool. The JSON value is stringified.\n          When calling an agent, the prompt should be a text value, like you would call an LLM in a chat interface.\n          Keep in mind that the user only sees the final result of the task. When reviewing completion, you should know that the user will not see the intermediate results.\n          \n        "
+              }
+            ]
+          }
+        },
+        "timestamp": 1779989639594
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-disposition": "attachment",
+          "content-type": "text/event-stream",
+          "date": "Thu, 28 May 2026 17:34:00 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=1043",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-xss-protection": "0"
+        },
+        "chunks": [
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 946,\"totalTokenCount\": 946,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 946}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"h3wYaujgPIOC6dgPopetiQc\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n  \\\"\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 946,\"totalTokenCount\": 946,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 946}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"h3wYaujgPIOC6dgPopetiQc\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"summary\\\": \\\"The helperAgent provided a brief overview of Artificial Intelligence (AI),\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 946,\"totalTokenCount\": 946,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 946}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"h3wYaujgPIOC6dgPopetiQc\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" including its definition, key concepts like Machine Learning and Natural Language Processing, various applications across\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 946,\"totalTokenCount\": 946,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 946}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"h3wYaujgPIOC6dgPopetiQc\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" industries, and current trends such as Generative AI and AI Ethics.\\\",\\n  \\\"confidence\\\": 0.95\\n}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 956,\"candidatesTokenCount\": 63,\"totalTokenCount\": 1019,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 956}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 63}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"h3wYaujgPIOC6dgPopetiQc\"}\r\n\r\n"
+        ],
+        "chunkTimings": [0, 0, 94, 163, 241],
+        "isStreaming": true
+      }
+    }
+  ]
+}

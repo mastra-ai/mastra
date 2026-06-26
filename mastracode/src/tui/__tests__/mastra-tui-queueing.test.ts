@@ -1,4 +1,5 @@
-import { Container } from '@mariozechner/pi-tui';
+import { Container } from '@earendil-works/pi-tui';
+import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -23,16 +24,37 @@ vi.mock('../display.js', () => ({
 }));
 
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
-import { handleAgentAborted, handleAgentEnd } from '../handlers/agent-lifecycle.js';
+import { handleAgentAborted, handleAgentEnd, handleGoalEvaluation } from '../handlers/agent-lifecycle.js';
 import type { EventHandlerContext } from '../handlers/types.js';
 import { MastraTUI, consumePendingImages, syncInitialThreadState } from '../mastra-tui.js';
 import type { TUIState } from '../state.js';
 
+const EXPECTED_USER_SIGNAL_DELIVERY_OPTIONS = {
+  ifActive: { attributes: { delivery: 'while-active' } },
+  ifIdle: { attributes: { delivery: 'message' } },
+};
+
 function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
+  // Mirror production wiring: state.session is the same object as
+  // harness.session. Tests pass per-session behavior under `session`
+  // (run-control, thread lifecycle, stream); only host-level behavior goes on
+  // `harness`. We link them here so a single `session` override drives both.
+  const { session: sessionOverride, harness: harnessOverride, ...rest } = overrides as any;
+  const session = {
+    followUps: { count: vi.fn(() => 0) },
+    getCurrentRunId: vi.fn(() => null),
+    stream: { isActive: vi.fn(() => false) },
+    sendSignal: vi.fn(() => ({ id: 'signal-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) })),
+    sendMessage: vi.fn().mockResolvedValue(undefined),
+    displayState: { get: vi.fn(() => ({ isRunning: false })) },
+    thread: { create: vi.fn().mockResolvedValue({ id: 'thread-new' }) },
+    mode: { switch: vi.fn().mockResolvedValue(undefined) },
+    ...(sessionOverride ?? {}),
+  };
   return {
-    harness: {
-      getFollowUpCount: vi.fn(() => 0),
-    },
+    session,
+    harness: { session, ...(harnessOverride ?? {}) },
+    goalManager: { stopActiveTimer: vi.fn() },
     gradientAnimator: undefined,
     projectInfo: { rootPath: '.', gitBranch: 'main' } as TUIState['projectInfo'],
     streamingComponent: undefined,
@@ -43,11 +65,15 @@ function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
     pendingFollowUpMessages: [],
     pendingQueuedActions: [],
     pendingSlashCommands: [],
+    pendingSlashCommandMessageIds: [],
     pendingTools: new Map(),
     chatContainer: {
       children: [],
       addChild: vi.fn(function (this: any, child: unknown) {
         this.children.push(child);
+      }),
+      removeChild: vi.fn(function (this: any, child: unknown) {
+        this.children = this.children.filter((candidate: unknown) => candidate !== child);
       }),
       invalidate: vi.fn(),
     },
@@ -56,7 +82,8 @@ function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
     allSystemReminderComponents: [],
     allShellComponents: [],
     ui: { requestRender: vi.fn() } as unknown as TUIState['ui'],
-    ...overrides,
+    planStartedGoalId: undefined,
+    ...rest,
   } as unknown as TUIState;
 }
 
@@ -75,9 +102,27 @@ function createQueueContext(state: TUIState, overrides: Partial<EventHandlerCont
     startGoal: vi.fn(),
     queueFollowUpMessage: vi.fn(),
     renderExistingMessages: vi.fn(),
-    renderCompletedTasksInline: vi.fn(),
     renderClearedTasksInline: vi.fn(),
+    renderCompletedTasksInline: vi.fn(),
+    renderTaskDeltaInline: vi.fn(),
     refreshModelAuthStatus: vi.fn(),
+    ...overrides,
+  };
+}
+
+function createGoalPayload(overrides: Partial<GoalEvaluationPayload> = {}): GoalEvaluationPayload {
+  return {
+    objective: 'finish the goal',
+    iteration: 1,
+    maxRuns: 20,
+    passed: false,
+    status: 'active',
+    results: [],
+    reason: 'Keep going.',
+    duration: 0,
+    timedOut: false,
+    maxRunsReached: false,
+    suppressFeedback: false,
     ...overrides,
   };
 }
@@ -97,7 +142,7 @@ describe('MastraTUI queueing', () => {
     };
     const state = {
       editor,
-      harness: { isRunning: vi.fn(() => true) },
+      session: { run: { isRunning: vi.fn(() => true) } },
       pendingSlashCommands: [],
       pendingQueuedActions: [],
       pendingFollowUpMessages: [],
@@ -132,6 +177,46 @@ describe('MastraTUI queueing', () => {
     expect(resolution).toEqual({ resolved: false, value: undefined });
   });
 
+  it('runs slash commands immediately instead of queuing while the harness is running', async () => {
+    const editor = {
+      onSubmit: undefined as ((text: string) => void) | undefined,
+      addToHistory: vi.fn(),
+      setText: vi.fn(),
+    };
+    const state = {
+      editor,
+      session: { run: { isRunning: vi.fn(() => true) } },
+      pendingSlashCommands: [],
+      pendingQueuedActions: [],
+      pendingFollowUpMessages: [],
+      pendingImages: [],
+      ui: { requestRender: vi.fn() },
+      chatContainer: {},
+      followUpComponents: [],
+    };
+
+    const tui = Object.create(MastraTUI.prototype) as {
+      state: typeof state;
+      getUserInput: () => Promise<string>;
+      queueFollowUpMessage: (text: string) => void;
+      signalMessage: (text: string) => void;
+      handleSlashCommand: (input: string) => Promise<boolean>;
+    };
+    tui.state = state;
+    tui.queueFollowUpMessage = vi.fn();
+    tui.signalMessage = vi.fn();
+    tui.handleSlashCommand = vi.fn().mockResolvedValue(true);
+
+    tui.getUserInput();
+    editor.onSubmit?.('/help');
+
+    expect(editor.addToHistory).toHaveBeenCalledWith('/help');
+    expect(editor.setText).toHaveBeenCalledWith('');
+    expect(tui.handleSlashCommand).toHaveBeenCalledWith('/help');
+    expect(tui.queueFollowUpMessage).not.toHaveBeenCalled();
+    expect(tui.signalMessage).not.toHaveBeenCalled();
+  });
+
   it('blocks editor submissions while the goal judge is evaluating', async () => {
     const editor = {
       onSubmit: undefined as ((text: string) => void) | undefined,
@@ -140,8 +225,8 @@ describe('MastraTUI queueing', () => {
     };
     const state = {
       editor,
-      activeGoalJudge: { modelId: 'openai/gpt-5.5' },
-      harness: { isRunning: vi.fn(() => false) },
+      activeGoalJudge: { modelId: '__GATEWAY_OPENAI_MODEL__' },
+      session: { run: { isRunning: vi.fn(() => false) } },
       pendingSlashCommands: [],
       pendingQueuedActions: [],
       pendingFollowUpMessages: [],
@@ -180,12 +265,12 @@ describe('MastraTUI queueing', () => {
       .fn()
       .mockReturnValue({ id: 'signal-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
     const state = createQueueState({
-      harness: {
-        sendSignal,
-        isCurrentThreadStreamActive: () => true,
+      session: {
         getCurrentRunId: () => null,
-        getDisplayState: () => ({ isRunning: true }),
-      } as unknown as TUIState['harness'],
+        stream: { isActive: () => true },
+        displayState: { get: () => ({ isRunning: true }) },
+        sendSignal,
+      } as any,
       chatContainer: new Container(),
     });
     const tui = Object.create(MastraTUI.prototype) as {
@@ -197,7 +282,10 @@ describe('MastraTUI queueing', () => {
     tui.signalMessage('stay pending');
     await Promise.resolve();
 
-    expect(sendSignal).toHaveBeenCalledWith({ content: 'stay pending' });
+    expect(sendSignal).toHaveBeenCalledWith({
+      content: 'stay pending',
+      ...EXPECTED_USER_SIGNAL_DELIVERY_OPTIONS,
+    });
     expect(state.pendingSignalMessageComponentsById.has('signal-1')).toBe(true);
     expect(state.chatContainer.children).toHaveLength(1);
     expect(mocks.addUserMessage).not.toHaveBeenCalled();
@@ -210,12 +298,12 @@ describe('MastraTUI queueing', () => {
       .mockReturnValue({ id: 'signal-after-new', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
     const state = createQueueState({
       pendingNewThread: true,
-      harness: {
-        createThread,
+      session: {
+        stream: { isActive: () => false },
+        displayState: { get: () => ({ isRunning: false }) },
+        thread: { create: createThread },
         sendSignal,
-        isCurrentThreadStreamActive: () => false,
-        getDisplayState: () => ({ isRunning: false }),
-      } as unknown as TUIState['harness'],
+      } as any,
       chatContainer: new Container(),
     });
     const tui = Object.create(MastraTUI.prototype) as {
@@ -233,7 +321,10 @@ describe('MastraTUI queueing', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(sendSignal).toHaveBeenCalledWith({ content: 'starts new thread' });
+    expect(sendSignal).toHaveBeenCalledWith({
+      content: 'starts new thread',
+      ...EXPECTED_USER_SIGNAL_DELIVERY_OPTIONS,
+    });
     expect(state.pendingNewThread).toBe(false);
   });
 
@@ -242,12 +333,12 @@ describe('MastraTUI queueing', () => {
       .fn()
       .mockReturnValue({ id: 'signal-after-hook', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
     const state = createQueueState({
-      harness: {
-        sendSignal,
-        isCurrentThreadStreamActive: () => false,
+      session: {
         getCurrentRunId: () => null,
-        getDisplayState: () => ({ isRunning: false }),
-      } as unknown as TUIState['harness'],
+        stream: { isActive: () => false },
+        displayState: { get: () => ({ isRunning: false }) },
+        sendSignal,
+      } as any,
       chatContainer: new Container(),
     });
     const tui = Object.create(MastraTUI.prototype) as {
@@ -275,12 +366,12 @@ describe('MastraTUI queueing', () => {
       .mockReturnValue({ id: 'signal-after-new', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
     const state = createQueueState({
       pendingNewThread: true,
-      harness: {
-        createThread,
+      session: {
+        stream: { isActive: () => false },
+        displayState: { get: () => ({ isRunning: false }) },
+        thread: { create: createThread },
         sendSignal,
-        isCurrentThreadStreamActive: () => false,
-        getDisplayState: () => ({ isRunning: false }),
-      } as unknown as TUIState['harness'],
+      } as any,
       chatContainer: new Container(),
     });
     const tui = Object.create(MastraTUI.prototype) as {
@@ -297,7 +388,10 @@ describe('MastraTUI queueing', () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(sendSignal).toHaveBeenCalledWith({ content: 'new thread follow-up' });
+    expect(sendSignal).toHaveBeenCalledWith({
+      content: 'new thread follow-up',
+      ...EXPECTED_USER_SIGNAL_DELIVERY_OPTIONS,
+    });
     expect(mocks.addUserMessage).toHaveBeenCalledWith(state, {
       id: 'signal-after-new',
       role: 'user',
@@ -312,12 +406,12 @@ describe('MastraTUI queueing', () => {
       .fn()
       .mockReturnValue({ id: 'signal-idle-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
     const state = createQueueState({
-      harness: {
-        sendSignal,
-        isCurrentThreadStreamActive: () => false,
+      session: {
         getCurrentRunId: () => null,
-        getDisplayState: () => ({ isRunning: false }),
-      } as unknown as TUIState['harness'],
+        stream: { isActive: () => false },
+        displayState: { get: () => ({ isRunning: false }) },
+        sendSignal,
+      } as any,
       chatContainer: new Container(),
     });
     const tui = Object.create(MastraTUI.prototype) as {
@@ -329,7 +423,10 @@ describe('MastraTUI queueing', () => {
     tui.signalMessage('render directly');
     await Promise.resolve();
 
-    expect(sendSignal).toHaveBeenCalledWith({ content: 'render directly' });
+    expect(sendSignal).toHaveBeenCalledWith({
+      content: 'render directly',
+      ...EXPECTED_USER_SIGNAL_DELIVERY_OPTIONS,
+    });
     expect(state.pendingSignalMessageComponentsById.has('signal-idle-1')).toBe(false);
     expect(state.chatContainer.children).toHaveLength(0);
     expect(mocks.addUserMessage).toHaveBeenCalledWith(state, {
@@ -345,12 +442,12 @@ describe('MastraTUI queueing', () => {
       .fn()
       .mockReturnValue({ id: 'signal-image-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
     const state = createQueueState({
-      harness: {
-        sendSignal,
-        isCurrentThreadStreamActive: () => false,
+      session: {
         getCurrentRunId: () => null,
-        getDisplayState: () => ({ isRunning: false }),
-      } as unknown as TUIState['harness'],
+        stream: { isActive: () => false },
+        displayState: { get: () => ({ isRunning: false }) },
+        sendSignal,
+      } as any,
       chatContainer: new Container(),
     });
     const tui = Object.create(MastraTUI.prototype) as {
@@ -363,13 +460,11 @@ describe('MastraTUI queueing', () => {
     await Promise.resolve();
 
     expect(sendSignal).toHaveBeenCalledWith({
-      content: {
-        role: 'user',
-        content: [
-          { type: 'text', text: "what's in this image?" },
-          { type: 'file', data: 'data:image/png;base64,abc', mediaType: 'image/png' },
-        ],
-      },
+      content: [
+        { type: 'text', text: "what's in this image?" },
+        { type: 'file', data: 'data:image/png;base64,abc', mediaType: 'image/png' },
+      ],
+      ...EXPECTED_USER_SIGNAL_DELIVERY_OPTIONS,
     });
     expect(mocks.addUserMessage).toHaveBeenCalledWith(state, {
       id: 'signal-image-1',
@@ -389,11 +484,20 @@ describe('MastraTUI queueing', () => {
     };
     tui.state = {
       pendingSlashCommands: [],
+      pendingSlashCommandMessageIds: [],
       pendingQueuedActions: [],
       pendingFollowUpMessages: [],
       pendingImages: [{ data: 'img-1', mimeType: 'image/png' }],
+      pendingSignalMessageComponentsById: new Map(),
       ui: { requestRender: vi.fn() },
-      chatContainer: {},
+      chatContainer: {
+        children: [],
+        addChild: vi.fn(function (this: any, child: unknown) {
+          this.children.push(child);
+        }),
+        removeChild: vi.fn(),
+        invalidate: vi.fn(),
+      },
       followUpComponents: [],
     };
 
@@ -407,7 +511,30 @@ describe('MastraTUI queueing', () => {
       { content: 'second message', images: undefined },
     ]);
     expect(tui.state.pendingSlashCommands).toEqual(['/help']);
+    expect(tui.state.pendingSlashCommandMessageIds).toHaveLength(1);
+    expect(tui.state.pendingSignalMessageComponentsById.size).toBe(1);
+    expect(tui.state.chatContainer.children).toHaveLength(1);
     expect(tui.state.ui.requestRender).toHaveBeenCalledTimes(3);
+  });
+
+  it('removes the grey pending slash command when the queued command drains', () => {
+    const state = createQueueState();
+    const tui = Object.create(MastraTUI.prototype) as {
+      state: TUIState;
+      queueFollowUpMessage: (text: string) => void;
+    };
+    tui.state = state;
+
+    tui.queueFollowUpMessage('/help');
+    expect(state.pendingSignalMessageComponentsById.size).toBe(1);
+    expect(state.chatContainer.children).toHaveLength(1);
+
+    const ctx = createQueueContext(state);
+    handleAgentEnd(ctx);
+
+    expect(ctx.handleSlashCommand).toHaveBeenCalledWith('/help');
+    expect(state.pendingSignalMessageComponentsById.size).toBe(0);
+    expect(state.chatContainer.children).toHaveLength(0);
   });
 
   it('drains queued messages and slash commands in FIFO order on agent end', async () => {
@@ -446,192 +573,255 @@ describe('MastraTUI queueing', () => {
     expect(ctx.updateStatusLine).toHaveBeenCalledTimes(6);
   });
 
-  it('drains queued user actions before goal continuation when queued during judge evaluation', async () => {
-    let resolveEvaluation:
-      | ((value: { continuation: string; judgeResult: { decision: 'continue'; reason: string } }) => void)
-      | undefined;
+  it('adds goal activity to the active judge display while pending', () => {
     const state = createQueueState({
-      gradientAnimator: { fadeOut: vi.fn(), start: vi.fn() } as any,
       goalManager: {
-        isActive: vi.fn(() => true),
+        applyEvaluation: vi.fn(),
         getGoal: vi.fn(() => ({
-          id: 'goal-1',
+          id: 'goal-activity',
           status: 'active',
-          judgeModelId: 'openai/gpt-5.5',
+          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
           turnsUsed: 1,
           maxTurns: 20,
         })),
-        evaluateAfterTurn: vi.fn(
-          () =>
-            new Promise(resolve => {
-              resolveEvaluation = resolve;
-            }),
-        ),
       } as any,
     });
     const ctx = createQueueContext(state);
 
-    handleAgentEnd(ctx);
-    state.pendingQueuedActions.push('message');
-    state.pendingFollowUpMessages.push({ content: 'user follow-up' });
-    resolveEvaluation?.({
-      continuation: 'goal continuation',
-      judgeResult: { decision: 'continue', reason: 'Keep going.' },
-    });
+    handleGoalEvaluation(ctx, createGoalPayload({ pending: true }));
+    handleGoalEvaluation(
+      ctx,
+      createGoalPayload({
+        pending: true,
+        activity: [{ type: 'tool-call', name: 'read', message: 'read' }],
+      } as any),
+    );
 
-    await vi.waitFor(() => {
-      expect(ctx.fireMessage).toHaveBeenCalledWith('user follow-up', undefined);
-    });
-    expect(ctx.fireMessage).not.toHaveBeenCalledWith('goal continuation');
-    expect(ctx.addUserMessage).toHaveBeenCalledWith({
-      id: expect.stringMatching(/^user-/),
-      role: 'user',
-      content: [{ type: 'text', text: 'user follow-up' }],
-      createdAt: expect.any(Date),
-    });
+    expect((state.activeGoalJudge?.component as any).activity).toEqual(['read']);
+    expect(state.goalManager.applyEvaluation).not.toHaveBeenCalled();
+    expect(state.ui.requestRender).toHaveBeenCalled();
   });
 
-  it('does not continue a goal that was paused while judge evaluation was running', async () => {
-    let goal: { id: string; status: 'active' | 'paused'; judgeModelId: string; turnsUsed: number; maxTurns: number } = {
-      id: 'goal-1',
-      status: 'active',
-      judgeModelId: 'openai/gpt-5.5',
-      turnsUsed: 1,
-      maxTurns: 20,
-    };
-    let resolveEvaluation:
-      | ((value: { continuation: string; judgeResult: { decision: 'continue'; reason: string } }) => void)
-      | undefined;
+  it('ignores late goal chunks after the user has aborted and paused the goal', () => {
+    const applyEvaluation = vi.fn();
     const state = createQueueState({
-      gradientAnimator: { fadeOut: vi.fn(), start: vi.fn() } as any,
+      userInitiatedAbort: true,
       goalManager: {
-        isActive: vi.fn(() => true),
-        getGoal: vi.fn(() => goal),
-        evaluateAfterTurn: vi.fn(
-          () =>
-            new Promise(resolve => {
-              resolveEvaluation = resolve;
-            }),
-        ),
-      } as any,
-    });
-    const ctx = createQueueContext(state);
-
-    handleAgentEnd(ctx);
-    goal = { ...goal, status: 'paused' };
-    resolveEvaluation?.({
-      continuation: 'goal continuation',
-      judgeResult: { decision: 'continue', reason: 'Keep going.' },
-    });
-
-    await vi.waitFor(() => {
-      expect(state.gradientAnimator?.fadeOut).toHaveBeenCalled();
-    });
-    expect(ctx.fireMessage).not.toHaveBeenCalledWith('goal continuation');
-  });
-
-  it('sends goal continuation as a system-reminder signal', async () => {
-    const sendSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) }));
-    const state = createQueueState({
-      harness: {
-        getFollowUpCount: vi.fn(() => 0),
-        sendSignal,
-      } as any,
-      gradientAnimator: { fadeOut: vi.fn(), start: vi.fn() } as any,
-      goalManager: {
-        isActive: vi.fn(() => true),
+        applyEvaluation,
         getGoal: vi.fn(() => ({
-          id: 'goal-1',
-          status: 'active',
-          judgeModelId: 'openai/gpt-5.5',
+          id: 'paused-goal',
+          status: 'paused',
+          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+          turnsUsed: 5,
+          maxTurns: 500,
+        })),
+      } as any,
+    });
+    const ctx = createQueueContext(state);
+
+    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 5, status: 'active' }));
+
+    expect(applyEvaluation).not.toHaveBeenCalled();
+    expect(state.activeGoalJudge).toBeUndefined();
+    expect(state.ui.requestRender).not.toHaveBeenCalled();
+  });
+
+  it('switches to plan mode when a plan-started goal completes with status=done', () => {
+    const switchMode = vi.fn().mockResolvedValue({ accepted: true });
+    const applyEvaluation = vi.fn();
+    const state = createQueueState({
+      planStartedGoalId: 'plan-goal-456',
+      session: { mode: { switch: switchMode } } as any,
+      goalManager: {
+        applyEvaluation,
+        getGoal: vi.fn(() => ({
+          id: 'plan-goal-456',
+          status: 'done',
+          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+          turnsUsed: 3,
+          maxTurns: 20,
+        })),
+      } as any,
+    });
+    const ctx = createQueueContext(state);
+
+    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 3, status: 'done', passed: true }));
+
+    expect(applyEvaluation).toHaveBeenCalledWith({ runsUsed: 3, status: 'done' });
+    expect(switchMode).toHaveBeenCalledWith({ modeId: 'plan' });
+    expect(state.planStartedGoalId).toBeUndefined();
+    expect(state.activeGoalJudge).toBeUndefined();
+  });
+
+  it('does not switch to plan mode for non-plan goals even when they complete', () => {
+    const switchMode = vi.fn().mockResolvedValue({ accepted: true });
+    const state = createQueueState({
+      planStartedGoalId: undefined,
+      session: { mode: { switch: switchMode } } as any,
+      goalManager: {
+        applyEvaluation: vi.fn(),
+        getGoal: vi.fn(() => ({
+          id: 'manual-goal-789',
+          status: 'done',
+          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
           turnsUsed: 2,
           maxTurns: 20,
         })),
-        evaluateAfterTurn: vi.fn().mockResolvedValue({
-          continuation: 'goal continuation',
-          judgeResult: { decision: 'continue', reason: 'Keep going.' },
-        }),
       } as any,
     });
     const ctx = createQueueContext(state);
 
-    handleAgentEnd(ctx);
+    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 2, status: 'done', passed: true }));
 
-    await vi.waitFor(() => {
-      expect(sendSignal).toHaveBeenCalledWith({
-        type: 'system-reminder',
-        contents: 'goal continuation',
-        attributes: { type: 'goal-judge' },
-        metadata: {
-          goalId: 'goal-1',
-          turnsUsed: 2,
-          maxTurns: 20,
-          judgeModelId: 'openai/gpt-5.5',
-        },
-      });
-    });
-    expect(ctx.fireMessage).not.toHaveBeenCalled();
+    expect(switchMode).not.toHaveBeenCalled();
   });
 
-  it('shows an error when goal continuation signal delivery fails', async () => {
-    const sendSignal = vi.fn(() => ({ accepted: Promise.reject(new Error('signal rejected')) }));
+  it('does not switch to plan mode when goal evaluation reports status=active (was decision=waiting)', () => {
+    const switchMode = vi.fn().mockResolvedValue({ accepted: true });
     const state = createQueueState({
-      harness: {
-        getFollowUpCount: vi.fn(() => 0),
-        sendSignal,
-      } as any,
-      gradientAnimator: { fadeOut: vi.fn(), start: vi.fn() } as any,
+      planStartedGoalId: 'plan-goal-123',
+      session: { mode: { switch: switchMode } } as any,
       goalManager: {
-        isActive: vi.fn(() => true),
+        applyEvaluation: vi.fn(),
         getGoal: vi.fn(() => ({
-          id: 'goal-1',
+          id: 'plan-goal-123',
           status: 'active',
-          judgeModelId: 'openai/gpt-5.5',
-          turnsUsed: 2,
+          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+          turnsUsed: 1,
           maxTurns: 20,
         })),
-        evaluateAfterTurn: vi.fn().mockResolvedValue({
-          continuation: 'goal continuation',
-          judgeResult: { decision: 'continue', reason: 'Keep going.' },
-        }),
       } as any,
     });
     const ctx = createQueueContext(state);
 
-    handleAgentEnd(ctx);
+    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 1, status: 'active' }));
 
-    await vi.waitFor(() => {
-      expect(ctx.showError).toHaveBeenCalledWith('Failed to send goal continuation: signal rejected');
-    });
+    expect(switchMode).not.toHaveBeenCalled();
+    expect(state.planStartedGoalId).toBe('plan-goal-123');
+    expect(state.activeGoalJudge).toBeUndefined();
   });
 
-  it('persists terminal goal judge responses when no continuation is queued', async () => {
-    const saveSystemReminderMessage = vi.fn().mockResolvedValue(null);
+  it('does not switch to plan mode when goal evaluation reports status=paused', () => {
+    const switchMode = vi.fn().mockResolvedValue({ accepted: true });
     const state = createQueueState({
-      harness: {
-        getFollowUpCount: vi.fn(() => 0),
-        saveSystemReminderMessage,
-      } as any,
-      gradientAnimator: { fadeOut: vi.fn(), start: vi.fn() } as any,
+      planStartedGoalId: 'plan-goal-321',
+      session: { mode: { switch: switchMode } } as any,
       goalManager: {
-        isActive: vi.fn(() => true),
-        getGoal: vi.fn(() => ({ status: 'active', judgeModelId: 'openai/gpt-5.5', turnsUsed: 1, maxTurns: 20 })),
-        evaluateAfterTurn: vi.fn().mockResolvedValue({
-          continuation: null,
-          judgeResult: { decision: 'waiting', reason: 'Waiting for explicit verification.' },
-        }),
+        applyEvaluation: vi.fn(),
+        getGoal: vi.fn(() => ({
+          id: 'plan-goal-321',
+          status: 'paused',
+          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+          turnsUsed: 5,
+          maxTurns: 20,
+        })),
       } as any,
     });
     const ctx = createQueueContext(state);
 
-    handleAgentEnd(ctx);
+    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 5, status: 'paused' }));
+
+    expect(switchMode).not.toHaveBeenCalled();
+    expect(state.planStartedGoalId).toBe('plan-goal-321');
+    expect(state.activeGoalJudge).toBeUndefined();
+  });
+
+  it('does not switch to plan mode when completed goal ID does not match planStartedGoalId', () => {
+    const switchMode = vi.fn().mockResolvedValue({ accepted: true });
+    const state = createQueueState({
+      planStartedGoalId: 'plan-goal-xyz',
+      session: { mode: { switch: switchMode } } as any,
+      goalManager: {
+        applyEvaluation: vi.fn(),
+        getGoal: vi.fn(() => ({
+          id: 'different-goal-abc',
+          status: 'done',
+          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+          turnsUsed: 1,
+          maxTurns: 20,
+        })),
+      } as any,
+    });
+    const ctx = createQueueContext(state);
+
+    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 1, status: 'done', passed: true }));
+
+    expect(switchMode).not.toHaveBeenCalled();
+    expect(state.planStartedGoalId).toBe('plan-goal-xyz');
+  });
+
+  it('restores planStartedGoalId if mode switch fails', async () => {
+    const switchMode = vi.fn().mockRejectedValue(new Error('Switch failed'));
+    const showError = vi.fn();
+    const state = createQueueState({
+      planStartedGoalId: 'plan-goal-failed',
+      session: { mode: { switch: switchMode } } as any,
+      goalManager: {
+        applyEvaluation: vi.fn(),
+        getGoal: vi.fn(() => ({
+          id: 'plan-goal-failed',
+          status: 'done',
+          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+          turnsUsed: 1,
+          maxTurns: 20,
+        })),
+      } as any,
+    });
+    const ctx = createQueueContext(state, { showError });
+
+    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 1, status: 'done', passed: true }));
 
     await vi.waitFor(() => {
-      expect(saveSystemReminderMessage).toHaveBeenCalledWith({
-        reminderType: 'goal-judge',
-        message: 'waiting (1/20)\nWaiting for explicit verification.',
-      });
+      expect(switchMode).toHaveBeenCalledWith({ modeId: 'plan' });
     });
+    await vi.waitFor(() => {
+      expect(showError).toHaveBeenCalledWith('Failed to switch to Plan mode: Switch failed');
+    });
+    expect(state.planStartedGoalId).toBe('plan-goal-failed');
+  });
+
+  it('does not switch mode when the goal was replaced before evaluation completed', () => {
+    const switchMode = vi.fn().mockResolvedValue({ accepted: true });
+    const originalGoalId = 'original-goal-123';
+    const state = createQueueState({
+      planStartedGoalId: originalGoalId,
+      session: { mode: { switch: switchMode } } as any,
+      goalManager: {
+        applyEvaluation: vi.fn(),
+        getGoal: vi.fn(() => ({
+          id: 'new-goal-456',
+          status: 'done',
+          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+          turnsUsed: 0,
+          maxTurns: 20,
+        })),
+      } as any,
+    });
+    const ctx = createQueueContext(state);
+
+    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 0, status: 'done', passed: true }));
+
+    expect(switchMode).not.toHaveBeenCalled();
+    expect(state.planStartedGoalId).toBe(originalGoalId);
+  });
+
+  it('does not switch mode when the goal was cleared before evaluation completed', () => {
+    const switchMode = vi.fn().mockResolvedValue({ accepted: true });
+    const originalGoalId = 'original-goal-123';
+    const state = createQueueState({
+      planStartedGoalId: originalGoalId,
+      session: { mode: { switch: switchMode } } as any,
+      goalManager: {
+        applyEvaluation: vi.fn(),
+        getGoal: vi.fn(() => null),
+      } as any,
+    });
+    const ctx = createQueueContext(state);
+
+    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 1, status: 'done', passed: true }));
+
+    expect(switchMode).not.toHaveBeenCalled();
+    expect(state.planStartedGoalId).toBe(originalGoalId);
   });
 
   it('does not pause an active goal when a user-initiated abort ends the agent turn', () => {
@@ -639,6 +829,7 @@ describe('MastraTUI queueing', () => {
       isActive: vi.fn(() => true),
       pause: vi.fn(),
       saveToThread: vi.fn(),
+      stopActiveTimer: vi.fn(),
     };
     const state = createQueueState({
       userInitiatedAbort: true,
@@ -648,59 +839,16 @@ describe('MastraTUI queueing', () => {
 
     handleAgentAborted(ctx);
 
+    expect(goalManager.stopActiveTimer).toHaveBeenCalled();
     expect(goalManager.pause).not.toHaveBeenCalled();
     expect(goalManager.saveToThread).not.toHaveBeenCalled();
     expect(state.userInitiatedAbort).toBe(false);
     expect(mocks.showInfo).not.toHaveBeenCalledWith(state, 'Goal paused (interrupted). Use /goal resume to continue.');
   });
 
-  it('cancels an in-flight goal judge when the user aborts before it resolves', async () => {
-    const sendSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) }));
-    let resolveEvaluation:
-      | ((value: { continuation: string; judgeResult: { decision: 'continue'; reason: string } }) => void)
-      | undefined;
-    const state = createQueueState({
-      harness: {
-        getFollowUpCount: vi.fn(() => 0),
-        sendSignal,
-      } as any,
-      gradientAnimator: { fadeOut: vi.fn(), start: vi.fn() } as any,
-      goalManager: {
-        isActive: vi.fn(() => true),
-        getGoal: vi.fn(() => ({
-          id: 'goal-1',
-          status: 'active',
-          judgeModelId: 'openai/gpt-5.5',
-          turnsUsed: 2,
-          maxTurns: 20,
-        })),
-        evaluateAfterTurn: vi.fn(
-          () =>
-            new Promise(resolve => {
-              resolveEvaluation = resolve;
-            }),
-        ),
-      } as any,
-    });
-    const ctx = createQueueContext(state);
-
-    handleAgentEnd(ctx);
-    handleAgentAborted(ctx);
-    resolveEvaluation?.({
-      continuation: 'goal continuation',
-      judgeResult: { decision: 'continue', reason: 'Keep going.' },
-    });
-
-    await vi.waitFor(() => {
-      expect(state.gradientAnimator?.fadeOut).toHaveBeenCalled();
-    });
-    expect(sendSignal).not.toHaveBeenCalled();
-    expect(state.chatContainer.children).toHaveLength(0);
-  });
-
   it('waits for harness-level follow-ups to finish before draining the local queue', () => {
     const state = createQueueState({
-      harness: { getFollowUpCount: vi.fn(() => 1) } as any,
+      session: { followUps: { count: vi.fn(() => 1) } } as any,
       pendingQueuedActions: ['message'],
       pendingFollowUpMessages: [{ content: 'queued' }],
     });
@@ -715,33 +863,81 @@ describe('MastraTUI queueing', () => {
 });
 
 describe('syncInitialThreadState', () => {
-  it('reconnects active goal metadata for the initially selected thread without prompting the agent', async () => {
+  it('falls back to legacy goal metadata only when the durable objective load returns nothing', async () => {
     const persistedGoal = {
       id: 'goal-1',
       objective: 'finish pr triage',
       status: 'active' as const,
       turnsUsed: 1,
       maxTurns: 50,
-      judgeModelId: 'openai/gpt-5.5',
+      judgeModelId: '__GATEWAY_OPENAI_MODEL__',
     };
     const state = {
-      harness: {
-        getCurrentThreadId: vi.fn(() => 'thread-1'),
-        listThreads: vi.fn().mockResolvedValue([
-          { id: 'thread-1', title: 'PR triage', metadata: { goal: persistedGoal } },
-          { id: 'thread-2', title: 'Other thread', metadata: {} },
-        ]),
+      session: {
+        thread: {
+          getId: vi.fn(() => 'thread-1'),
+          list: vi.fn().mockResolvedValue([
+            { id: 'thread-1', title: 'PR triage', metadata: { goal: persistedGoal } },
+            { id: 'thread-2', title: 'Other thread', metadata: {} },
+          ]),
+        },
         sendMessage: vi.fn(),
       },
-      goalManager: { loadFromThreadMetadata: vi.fn() },
+      goalManager: {
+        // Durable ThreadState load produced no objective, so the legacy
+        // metadata fallback should run.
+        loadFromThread: vi.fn().mockResolvedValue(undefined),
+        getGoal: vi.fn(() => null),
+        loadFromThreadMetadata: vi.fn(),
+      },
       currentThreadTitle: undefined,
     } as unknown as TUIState;
 
     await syncInitialThreadState(state);
 
     expect(state.currentThreadTitle).toBe('PR triage');
+    expect(state.goalManager.loadFromThread).toHaveBeenCalledWith(state);
     expect(state.goalManager.loadFromThreadMetadata).toHaveBeenCalledWith({ goal: persistedGoal });
-    expect(state.harness.sendMessage).not.toHaveBeenCalled();
+    expect(state.session.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('does not re-hydrate from legacy metadata when the durable objective load succeeds', async () => {
+    const persistedGoal = {
+      id: 'goal-1',
+      objective: 'stale legacy goal',
+      status: 'active' as const,
+      turnsUsed: 1,
+      maxTurns: 50,
+      judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+    };
+    const durableGoal = {
+      id: 'goal-2',
+      objective: 'fresh durable goal',
+      status: 'active' as const,
+      turnsUsed: 0,
+      maxTurns: 50,
+    };
+    const state = {
+      session: {
+        thread: {
+          getId: vi.fn(() => 'thread-1'),
+          list: vi.fn().mockResolvedValue([{ id: 'thread-1', title: 'PR triage', metadata: { goal: persistedGoal } }]),
+        },
+      },
+      goalManager: {
+        // Durable ThreadState load produced an objective, so the stale legacy
+        // metadata blob must NOT clobber it.
+        loadFromThread: vi.fn().mockResolvedValue(undefined),
+        getGoal: vi.fn(() => durableGoal),
+        loadFromThreadMetadata: vi.fn(),
+      },
+      currentThreadTitle: undefined,
+    } as unknown as TUIState;
+
+    await syncInitialThreadState(state);
+
+    expect(state.goalManager.loadFromThread).toHaveBeenCalledWith(state);
+    expect(state.goalManager.loadFromThreadMetadata).not.toHaveBeenCalled();
   });
 });
 

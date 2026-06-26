@@ -19,6 +19,7 @@ Mastra agents can be configured to store [message history](/docs/memory/message-
 - [Observational Memory](../memory/observational-memory) (Recommended): Uses background agents to maintain a dense observation log that replaces raw message history as it grows. This keeps the context window small while preserving long-term memory.
 - [Working memory](../memory/working-memory): Stores persistent, structured user data such as names, preferences, and goals.
 - [Semantic recall](../memory/semantic-recall): Retrieves relevant past messages based on semantic meaning rather than exact keywords.
+- [Multi-user threads](../memory/multi-user-threads): Share one thread between multiple users.
 
 If the combined memory exceeds the model's context limit, [memory processors](/docs/memory/memory-processors) can filter, trim, or prioritize content so the most relevant information is preserved.
 

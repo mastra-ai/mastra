@@ -18,10 +18,12 @@ import type {
 } from '@mastra/core/storage';
 import { parseFieldKey } from '@mastra/core/utils';
 
-import { TABLE_FEEDBACK_EVENTS } from './ddl';
+import { TABLE_FEEDBACK_EVENTS, TABLE_FEEDBACK_EVENTS_DELTA } from './ddl';
 import { buildFeedbackFilterConditions, buildPaginationClause, buildSignalOrderByClause } from './filters';
 import type { FilterResult } from './filters';
 import { CH_INSERT_SETTINGS, CH_SETTINGS, feedbackRecordToRow, rowToFeedbackRecord } from './helpers';
+import type { ClickHouseDeltaCursorStrategy } from './polling';
+import { assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
 
 // ============================================================================
 // Helpers
@@ -180,13 +182,44 @@ export async function batchCreateFeedback(client: ClickHouseClient, args: BatchC
 // List
 // ============================================================================
 
-export async function listFeedback(client: ClickHouseClient, args: ListFeedbackArgs): Promise<ListFeedbackResponse> {
+export async function listFeedback(
+  client: ClickHouseClient,
+  args: ListFeedbackArgs,
+  strategy: ClickHouseDeltaCursorStrategy | null,
+): Promise<ListFeedbackResponse> {
   const parsed = listFeedbackArgsSchema.parse(args);
+  const deltaCursorEnabled = deltaPollingSupported(strategy);
   const filter = buildFeedbackFilterConditions(parsed.filters, 'f');
   const pagination = buildPaginationClause(parsed.pagination);
   const orderBy = buildSignalOrderByClause(['timestamp'], parsed.orderBy, 'f');
   const whereClause = filter.conditions.length ? `WHERE ${filter.conditions.join(' AND ')}` : '';
 
+  if (parsed.mode === 'delta') {
+    assertDeltaPollingSupported(strategy);
+
+    const streamHeadCursor = await getStreamHeadCursor(client);
+    if (parsed.after === undefined) {
+      return {
+        feedback: [],
+        delta: { limit: parsed.limit, hasMore: false },
+        deltaCursor: streamHeadCursor,
+      };
+    }
+
+    const afterCursor = validateCursorId(parsed.after);
+    const rows = await queryFeedbackAfterCursor(client, whereClause, filter.params, parsed.limit, afterCursor);
+
+    const visibleRows = rows.slice(0, parsed.limit);
+
+    return {
+      feedback: visibleRows.map(rowToFeedbackRecord),
+      delta: { limit: parsed.limit, hasMore: rows.length > parsed.limit },
+      deltaCursor:
+        visibleRows.length > 0 ? buildFeedbackCursor(visibleRows[visibleRows.length - 1]!) : streamHeadCursor,
+    };
+  }
+
+  const currentDeltaCursor = deltaCursorEnabled ? await getDeltaCursor(client, whereClause, filter.params) : undefined;
   const countResult = await queryJson<{ total?: number }>(
     client,
     `SELECT count() AS total FROM ${TABLE_FEEDBACK_EVENTS} AS f ${whereClause}`,
@@ -209,7 +242,91 @@ export async function listFeedback(client: ClickHouseClient, args: ListFeedbackA
       hasMore: (pagination.page + 1) * pagination.perPage < total,
     },
     feedback: rows.map(rowToFeedbackRecord),
+    ...(deltaCursorEnabled ? { deltaCursor: currentDeltaCursor } : {}),
   };
+}
+
+type FeedbackDeltaRow = Record<string, any> & {
+  cursorId?: string;
+  traceId: string | null;
+  timestamp: string;
+  feedbackId: string;
+};
+
+async function queryFeedbackAfterCursor(
+  client: ClickHouseClient,
+  whereClause: string,
+  params: Record<string, unknown>,
+  limit: number,
+  cursorId: string,
+): Promise<FeedbackDeltaRow[]> {
+  return await queryJson<FeedbackDeltaRow>(
+    client,
+    `
+      SELECT
+        f.* EXCEPT(traceId, timestamp, feedbackId),
+        f.traceId AS traceId,
+        f.timestamp AS timestamp,
+        f.feedbackId AS feedbackId,
+        toString(d.cursorId) AS cursorId
+      FROM ${TABLE_FEEDBACK_EVENTS_DELTA} d
+      INNER JOIN ${TABLE_FEEDBACK_EVENTS} f
+        ON ((f.traceId = d.traceId) OR (f.traceId IS NULL AND d.traceId IS NULL))
+       AND f.timestamp = d.timestamp
+       AND f.feedbackId = d.feedbackId
+      ${whereClause ? `${whereClause} AND d.cursorId > {afterCursor:UInt64}` : 'WHERE d.cursorId > {afterCursor:UInt64}'}
+      ORDER BY d.cursorId ASC
+      LIMIT {fetchLimit:UInt32}
+    `,
+    { ...params, afterCursor: cursorId, fetchLimit: limit + 1 },
+  );
+}
+
+async function getDeltaCursor(
+  client: ClickHouseClient,
+  whereClause: string,
+  params: Record<string, unknown>,
+): Promise<string> {
+  const rows = await queryJson<{ cursorId?: string | null }>(
+    client,
+    `
+      SELECT toString(max(d.cursorId)) AS cursorId
+      FROM ${TABLE_FEEDBACK_EVENTS_DELTA} d
+      INNER JOIN ${TABLE_FEEDBACK_EVENTS} f
+        ON ((f.traceId = d.traceId) OR (f.traceId IS NULL AND d.traceId IS NULL))
+       AND f.timestamp = d.timestamp
+       AND f.feedbackId = d.feedbackId
+      ${whereClause}
+    `,
+    params,
+  );
+
+  const cursorId = rows[0]?.cursorId ?? null;
+  if (cursorId) {
+    return cursorId;
+  }
+
+  const streamRows = await queryJson<{ cursorId?: string | null }>(
+    client,
+    `SELECT toString(max(cursorId)) AS cursorId FROM ${TABLE_FEEDBACK_EVENTS_DELTA}`,
+    {},
+  );
+
+  return streamRows[0]?.cursorId ?? '0';
+}
+
+async function getStreamHeadCursor(client: ClickHouseClient): Promise<string> {
+  const streamRows = await queryJson<{ cursorId?: string | null }>(
+    client,
+    `SELECT toString(max(cursorId)) AS cursorId FROM ${TABLE_FEEDBACK_EVENTS_DELTA}`,
+    {},
+  );
+
+  return streamRows[0]?.cursorId ?? '0';
+}
+
+function buildFeedbackCursor(row: FeedbackDeltaRow): string {
+  return row.cursorId ?? '0';
 }
 
 // ============================================================================

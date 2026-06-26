@@ -6,12 +6,12 @@
  *   /goal             Open goal actions
  *   /goal status      Show current goal status
  *   /goal pause       Pause the continuation loop
- *   /goal resume      Resume (resets turn counter)
+ *   /goal resume      Resume without resetting the turn counter
  *   /goal clear       Drop the goal
- *   /judge            Set global judge model and max-attempt defaults
+ *   /goal judge       Set the goal judge model and max-attempt defaults
  */
-import { Box, SelectList, Spacer, Text } from '@mariozechner/pi-tui';
-import type { SelectItem } from '@mariozechner/pi-tui';
+import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
+import type { SelectItem } from '@earendil-works/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import { GoalCyclesDialogComponent } from '../components/goal-cycles-dialog.js';
@@ -53,6 +53,7 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
       return;
     }
     await goalManager.saveToThread(state);
+    ctx.updateStatusLine();
     ctx.showInfo(
       `Goal paused: "${goal.objective}" (${goal.turnsUsed}/${goal.maxTurns} turns used). Use /goal resume to continue.`,
     );
@@ -74,15 +75,17 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
       ctx.showInfo('Goal is already done. Use /goal <text> to set a new goal.');
       return;
     }
+
     goalManager.resume();
     await goalManager.saveToThread(state);
-    ctx.showInfo(
-      `Goal resumed: "${goal.objective}" — ${goal.turnsUsed}/${goal.maxTurns} turns used. Sending continuation...`,
-    );
+    ctx.updateStatusLine();
 
-    // Kick off the next turn
+    // Kick off the next turn using the same goal-reminder signal format used by
+    // startGoal, so the model receives a structured system-reminder rather than
+    // a plain user message.
+    const resumedGoal = goalManager.getGoal();
     try {
-      await state.harness.sendMessage({ content: `Continue working toward the goal: ${goal.objective}` });
+      await state.session.sendSignal(createGoalReminderSignal(resumedGoal!)).accepted;
     } catch (err) {
       goalManager.pause();
       await goalManager.saveToThread(state);
@@ -96,8 +99,29 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
   // /goal clear
   if (subCommand === 'clear') {
     goalManager.clear();
+    state.planStartedGoalId = undefined;
     await goalManager.saveToThread(state);
+    // Abort any in-flight turn. The cleared objective stops the core loop from
+    // driving *new* goal continuations, but a turn that was already running when
+    // the user cleared keeps going to completion — which reads as "it's still
+    // attempting the goal". Stop it immediately so clear means stop. Mirrors the
+    // Esc/abort cleanup so a turn parked in a tool suspension (e.g. ask_user) is
+    // also aborted cleanly.
+    if (state.session.run.isRunning() || state.session.suspensions.hasPending()) {
+      state.activeInlineQuestion = undefined;
+      state.pendingInlineQuestions.length = 0;
+      state.pendingAskUserComponents?.clear();
+      state.userInitiatedAbort = true;
+      state.session.abort();
+    }
+    ctx.updateStatusLine();
     ctx.showInfo('Goal cleared.');
+    return;
+  }
+
+  // /goal judge — set the judge model and max-attempt defaults
+  if (subCommand === 'judge') {
+    await handleJudgeCommand(ctx);
     return;
   }
 
@@ -186,9 +210,12 @@ export async function handleJudgeCommand(ctx: SlashCommandContext): Promise<void
   const defaults = await promptForJudgeDefaults(ctx, 'Judge settings unchanged.');
   if (!defaults) return;
 
-  const activeGoal = ctx.state.goalManager.updateJudgeDefaults(defaults.judgeModelId, defaults.maxTurns);
+  const activeGoal = await ctx.state.goalManager.updateJudgeDefaults(
+    ctx.state,
+    defaults.judgeModelId,
+    defaults.maxTurns,
+  );
   if (activeGoal) {
-    await ctx.state.goalManager.saveToThread(ctx.state);
     ctx.showInfo(
       `Judge defaults set: ${defaults.judgeModelId}, ${defaults.maxTurns} max attempts. Current goal updated.`,
     );
@@ -234,7 +261,7 @@ async function promptForJudgeDefaults(ctx: SlashCommandContext, cancelMessage: s
   }
 
   const settings = loadSettings();
-  const preselectedId = settings.models.goalJudgeModel ?? state.harness.getCurrentModelId() ?? undefined;
+  const preselectedId = settings.models.goalJudgeModel ?? state.session.model.get() ?? undefined;
   const defaultMaxTurns =
     typeof settings.models.goalMaxTurns === 'number' && settings.models.goalMaxTurns > 0
       ? settings.models.goalMaxTurns
@@ -301,23 +328,35 @@ async function startGoal(
   const goalManager = state.goalManager;
 
   if (state.pendingNewThread) {
-    await state.harness.createThread();
+    await state.session.thread.create();
     state.pendingNewThread = false;
   }
 
-  const shouldPersistToCreatedThread = !state.harness.getCurrentThreadId();
-  const goal = goalManager.setGoal(objective, judgeModelId, maxTurns);
+  const shouldPersistToCreatedThread = !state.session.thread.getId();
+  const goal = await goalManager.setGoal(state, objective, judgeModelId, maxTurns);
+  if (!goal) {
+    ctx.showError('Failed to set goal.');
+    return;
+  }
+
+  state.planStartedGoalId = undefined;
+  if (options.trigger === 'none') {
+    // Plan-started goals don't begin accruing active time until the user
+    // actually triggers them.
+    goalManager.resetActiveTimer();
+  }
   if (shouldPersistToCreatedThread) {
     goalManager.persistOnNextThreadCreate();
   }
   await goalManager.saveToThread(state);
+  ctx.updateStatusLine();
 
   if (options.trigger === 'none') {
     return;
   }
 
   try {
-    await state.harness.sendSignal(createGoalReminderSignal(goal)).accepted;
+    await state.session.sendSignal(createGoalReminderSignal(goal)).accepted;
   } catch (err) {
     goalManager.pause();
     await goalManager.saveToThread(state);

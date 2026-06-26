@@ -1,28 +1,16 @@
 import type { DatasetRecord } from '@mastra/client-js';
-import {
-  Badge,
-  Button,
-  Column,
-  Columns,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogBody,
-  EmptyState,
-  EntityList,
-  EntityListSkeleton,
-  Searchbar,
-  Spinner,
-  StatusBadge,
-  Tabs,
-  TabContent,
-  TabList,
-  Tab,
-  Txt,
-  Icon,
-  toast,
-} from '@mastra/playground-ui';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Column, Columns } from '@mastra/playground-ui/components/Columns';
+import { DataList, DataListSkeleton } from '@mastra/playground-ui/components/DataList';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Searchbar } from '@mastra/playground-ui/components/Searchbar';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
+import { Tabs, TabContent, TabList, Tab } from '@mastra/playground-ui/components/Tabs';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { Database, GaugeIcon, FlaskConical, ChevronLeft, Plus, Paperclip } from 'lucide-react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useWatch } from 'react-hook-form';
@@ -82,6 +70,11 @@ function formatDate(dateStr: string | Date | undefined | null): string {
   if (!dateStr) return '—';
   const d = typeof dateStr === 'string' ? new Date(dateStr) : dateStr;
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function getExperimentStartedAtTime(startedAt: AgentExperiment['startedAt']): number {
+  if (!startedAt) return 0;
+  return startedAt instanceof Date ? startedAt.getTime() : new Date(startedAt).getTime();
 }
 
 const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'error' | 'neutral'> = {
@@ -175,7 +168,8 @@ export function AgentPlaygroundEvaluate({
   });
 
   const datasetExperimentMap = (experiments || []).reduce<Record<string, AgentExperiment>>((acc, exp) => {
-    if (!acc[exp.datasetId] || new Date(exp.startedAt) > new Date(acc[exp.datasetId]!.startedAt)) {
+    const current = acc[exp.datasetId];
+    if (!current || getExperimentStartedAtTime(exp.startedAt) > getExperimentStartedAtTime(current.startedAt)) {
       acc[exp.datasetId] = exp;
     }
     return acc;
@@ -313,8 +307,8 @@ export function AgentPlaygroundEvaluate({
 
   const filteredExperiments = useMemo(() => {
     const exps = [...(experiments || [])].sort((a, b) => {
-      const da = a.startedAt ? new Date(a.startedAt as string).getTime() : 0;
-      const db = b.startedAt ? new Date(b.startedAt as string).getTime() : 0;
+      const da = getExperimentStartedAtTime(a.startedAt);
+      const db = getExperimentStartedAtTime(b.startedAt);
       return db - da;
     });
     if (!experimentsSearch) return exps;
@@ -491,7 +485,7 @@ export function AgentPlaygroundEvaluate({
 
   function renderExperimentsTab() {
     if (isLoadingExperiments) {
-      return <EntityListSkeleton columns="auto 1fr auto auto auto auto auto" />;
+      return <DataListSkeleton columns="auto minmax(15rem,1fr) auto auto auto auto auto" />;
     }
 
     if (!experiments?.length) {
@@ -507,16 +501,16 @@ export function AgentPlaygroundEvaluate({
     }
 
     return (
-      <EntityList columns="auto 1fr auto auto auto auto auto">
-        <EntityList.Top>
-          <EntityList.TopCell>Experiment</EntityList.TopCell>
-          <EntityList.TopCell>Dataset</EntityList.TopCell>
-          <EntityList.TopCell>Status</EntityList.TopCell>
-          <EntityList.TopCell className="text-center">Items</EntityList.TopCell>
-          <EntityList.TopCell className="text-center">Succeeded</EntityList.TopCell>
-          <EntityList.TopCell className="text-center">Failed</EntityList.TopCell>
-          <EntityList.TopCell>Date</EntityList.TopCell>
-        </EntityList.Top>
+      <DataList columns="auto minmax(15rem,1fr) auto auto auto auto auto" className="min-w-0">
+        <DataList.Top>
+          <DataList.TopCell>Experiment</DataList.TopCell>
+          <DataList.TopCell>Dataset</DataList.TopCell>
+          <DataList.TopCell>Status</DataList.TopCell>
+          <DataList.TopCell className="text-center">Items</DataList.TopCell>
+          <DataList.TopCell className="text-center">Succeeded</DataList.TopCell>
+          <DataList.TopCell className="text-center">Failed</DataList.TopCell>
+          <DataList.TopCell>Date</DataList.TopCell>
+        </DataList.Top>
 
         {filteredExperiments.map(exp => {
           const dsName = datasetMap.get(exp.datasetId)?.name ?? exp.datasetId.slice(0, 8);
@@ -525,40 +519,45 @@ export function AgentPlaygroundEvaluate({
           const failed = exp.failedCount ?? 0;
           const total = exp.totalItems ?? 0;
           const successPct = total > 0 ? Math.round((succeeded / total) * 100) : 0;
+          const isFeatured = detailView?.type === 'experiment' && detailView.id === exp.id;
 
           return (
-            <EntityList.Row
+            <DataList.RowButton
               key={exp.id}
-              selected={detailView?.type === 'experiment' && detailView.id === exp.id}
+              featured={isFeatured}
               onClick={() => setDetailView({ type: 'experiment', id: exp.id, datasetId: exp.datasetId })}
             >
-              <EntityList.NameCell className="font-mono">{exp.id.slice(0, 8)}</EntityList.NameCell>
-              <EntityList.TextCell>{dsName}</EntityList.TextCell>
-              <EntityList.Cell>
+              <DataList.IdCell id={exp.id} />
+              <DataList.Cell height="compact" className="min-w-0">
+                <span className="block truncate">{dsName}</span>
+              </DataList.Cell>
+              <DataList.Cell height="compact">
                 <StatusBadge variant={STATUS_VARIANT[status] ?? 'neutral'} withDot>
                   {status}
                 </StatusBadge>
-              </EntityList.Cell>
-              <EntityList.TextCell className="text-center">{total}</EntityList.TextCell>
-              <EntityList.TextCell className="text-center">
+              </DataList.Cell>
+              <DataList.Cell height="compact" className="text-center">
+                {total}
+              </DataList.Cell>
+              <DataList.Cell height="compact" className="text-center">
                 <span className={succeeded > 0 ? 'text-accent1' : ''}>
                   {succeeded} ({successPct}%)
                 </span>
-              </EntityList.TextCell>
-              <EntityList.TextCell className="text-center">
+              </DataList.Cell>
+              <DataList.Cell height="compact" className="text-center">
                 <span className={failed > 0 ? 'text-accent2' : ''}>{failed}</span>
-              </EntityList.TextCell>
-              <EntityList.TextCell>{formatDate(exp.startedAt)}</EntityList.TextCell>
-            </EntityList.Row>
+              </DataList.Cell>
+              <DataList.Cell height="compact">{formatDate(exp.startedAt)}</DataList.Cell>
+            </DataList.RowButton>
           );
         })}
-      </EntityList>
+      </DataList>
     );
   }
 
   function renderDatasetsTab() {
     if (isLoadingDatasets) {
-      return <EntityListSkeleton columns="auto 1fr auto auto auto" />;
+      return <DataListSkeleton columns="minmax(10rem,1fr) auto auto auto auto" />;
     }
 
     if (!datasets.length) {
@@ -574,28 +573,31 @@ export function AgentPlaygroundEvaluate({
     }
 
     return (
-      <EntityList columns="auto 1fr auto auto auto">
-        <EntityList.Top>
-          <EntityList.TopCell>Name</EntityList.TopCell>
-          <EntityList.TopCell>Tags</EntityList.TopCell>
-          <EntityList.TopCell>Latest Experiment</EntityList.TopCell>
-          <EntityList.TopCell>Status</EntityList.TopCell>
-          <EntityList.TopCell>Updated</EntityList.TopCell>
-        </EntityList.Top>
+      <DataList columns="minmax(10rem,1fr) auto auto auto auto" className="min-w-0">
+        <DataList.Top>
+          <DataList.TopCell>Name</DataList.TopCell>
+          <DataList.TopCell>Tags</DataList.TopCell>
+          <DataList.TopCell>Latest Experiment</DataList.TopCell>
+          <DataList.TopCell>Status</DataList.TopCell>
+          <DataList.TopCell>Updated</DataList.TopCell>
+        </DataList.Top>
 
         {filteredDatasets.map(ds => {
           const exp = datasetExperimentMap[ds.id];
           const genTask = generationTasks[ds.id];
           const isGenerating = genTask?.status === 'generating';
+          const isFeatured = detailView?.type === 'dataset' && detailView.id === ds.id;
 
           return (
-            <EntityList.Row
+            <DataList.RowButton
               key={ds.id}
-              selected={detailView?.type === 'dataset' && detailView.id === ds.id}
+              featured={isFeatured}
               onClick={() => setDetailView({ type: 'dataset', id: ds.id })}
             >
-              <EntityList.NameCell>{ds.name}</EntityList.NameCell>
-              <EntityList.Cell>
+              <DataList.Cell height="compact" className="min-w-0 text-neutral4">
+                <span className="block truncate">{ds.name}</span>
+              </DataList.Cell>
+              <DataList.Cell height="compact">
                 {ds.tags?.length ? (
                   <div className="flex gap-1">
                     {ds.tags.slice(0, 2).map(tag => (
@@ -608,11 +610,11 @@ export function AgentPlaygroundEvaluate({
                 ) : (
                   <span className="text-neutral2">—</span>
                 )}
-              </EntityList.Cell>
-              <EntityList.Cell>
+              </DataList.Cell>
+              <DataList.Cell height="compact">
                 {exp ? <ExperimentBadge experiment={exp} /> : <span className="text-neutral2">No experiments</span>}
-              </EntityList.Cell>
-              <EntityList.Cell>
+              </DataList.Cell>
+              <DataList.Cell height="compact">
                 {isGenerating ? (
                   <div className="flex items-center gap-1">
                     <Spinner className="size-3" />
@@ -627,18 +629,18 @@ export function AgentPlaygroundEvaluate({
                 ) : (
                   <span className="text-neutral2">—</span>
                 )}
-              </EntityList.Cell>
-              <EntityList.TextCell>{formatDate(ds.updatedAt)}</EntityList.TextCell>
-            </EntityList.Row>
+              </DataList.Cell>
+              <DataList.Cell height="compact">{formatDate(ds.updatedAt)}</DataList.Cell>
+            </DataList.RowButton>
           );
         })}
-      </EntityList>
+      </DataList>
     );
   }
 
   function renderScorersTab() {
     if (isLoadingScorers) {
-      return <EntityListSkeleton columns="auto 1fr auto auto" />;
+      return <DataListSkeleton columns="minmax(10rem,1fr) auto auto auto" />;
     }
 
     if (!attachedScorers.length) {
@@ -654,13 +656,13 @@ export function AgentPlaygroundEvaluate({
     }
 
     return (
-      <EntityList columns="auto 1fr auto auto">
-        <EntityList.Top>
-          <EntityList.TopCell>Name</EntityList.TopCell>
-          <EntityList.TopCell>Source</EntityList.TopCell>
-          <EntityList.TopCell>Description</EntityList.TopCell>
-          <EntityList.TopCell>Datasets</EntityList.TopCell>
-        </EntityList.Top>
+      <DataList columns="minmax(10rem,1fr) auto auto auto" className="min-w-0">
+        <DataList.Top>
+          <DataList.TopCell>Name</DataList.TopCell>
+          <DataList.TopCell>Source</DataList.TopCell>
+          <DataList.TopCell>Description</DataList.TopCell>
+          <DataList.TopCell>Datasets</DataList.TopCell>
+        </DataList.Top>
 
         {filteredScorers.map(([id, scorer]) => {
           const name = scorer.scorer?.name || id;
@@ -670,32 +672,28 @@ export function AgentPlaygroundEvaluate({
             const scorerIds = ds.scorerIds ?? [];
             return scorerIds.includes(id);
           }).length;
+          const isFeatured = detailView?.type === 'scorer' && detailView.id === id;
 
           return (
-            <EntityList.Row
-              key={id}
-              selected={detailView?.type === 'scorer' && detailView.id === id}
-              onClick={() => setDetailView({ type: 'scorer', id })}
-            >
-              <EntityList.NameCell>
-                <Icon size="sm" className="text-neutral3 mr-1.5">
-                  <GaugeIcon />
-                </Icon>
-                {name}
-              </EntityList.NameCell>
-              <EntityList.Cell>
+            <DataList.RowButton key={id} featured={isFeatured} onClick={() => setDetailView({ type: 'scorer', id })}>
+              <DataList.Cell height="compact" className="min-w-0 text-neutral4">
+                <span className="block truncate">{name}</span>
+              </DataList.Cell>
+              <DataList.Cell height="compact">
                 <Badge variant={source === 'code' ? 'default' : 'success'}>{source}</Badge>
-              </EntityList.Cell>
-              <EntityList.TextCell className="truncate max-w-[200px]">
-                {description || <span className="text-neutral2">—</span>}
-              </EntityList.TextCell>
-              <EntityList.TextCell>
+              </DataList.Cell>
+              <DataList.Cell height="compact" className="min-w-0">
+                <span className="block truncate max-w-[200px]">
+                  {description || <span className="text-neutral2">—</span>}
+                </span>
+              </DataList.Cell>
+              <DataList.Cell height="compact">
                 {linkedCount > 0 ? `${linkedCount} dataset${linkedCount > 1 ? 's' : ''}` : '—'}
-              </EntityList.TextCell>
-            </EntityList.Row>
+              </DataList.Cell>
+            </DataList.RowButton>
           );
         })}
-      </EntityList>
+      </DataList>
     );
   }
 
@@ -703,7 +701,12 @@ export function AgentPlaygroundEvaluate({
     return (
       <>
         {/* Create Dataset Dialog */}
-        <CreateDatasetDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} targetIds={[agentId]} />
+        <CreateDatasetDialog
+          open={showCreateDialog}
+          onOpenChange={setShowCreateDialog}
+          targetType="agent"
+          targetIds={[agentId]}
+        />
 
         {/* Generate Config Dialog */}
         {generateDatasetId && (
@@ -745,6 +748,8 @@ export function AgentPlaygroundEvaluate({
                       try {
                         await updateDataset.mutateAsync({
                           datasetId: ds.id,
+                          // Classify legacy/untyped datasets without overwriting existing target types.
+                          targetType: ds.targetType ?? 'agent',
                           targetIds: [...parseIdList(ds.targetIds), agentId],
                         });
                         toast.success(`Dataset "${ds.name}" attached`);

@@ -1,0 +1,1170 @@
+{
+  "meta": {
+    "name": "test-c78816dd",
+    "testFile": "packages/core/src/background-tasks/background-tasks.e2e.test.ts",
+    "testName": "Background Tasks E2E > runs a foreground tool normally",
+    "model": "gpt-4o-mini",
+    "createdAt": "2026-05-18T13:45:59.669Z"
+  },
+  "recordings": [
+    {
+      "hash": "6aca66e9ec96aff7",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant with access to tools. When asked to research something, use the research tool. When asked to greet someone, use the greet tool.\n\nYou have the ability to run certain tools in the background while continuing the conversation. The following tools support background execution:\n- research (default: background)\n- greet (default: foreground)\n\nFor any of these tools, you can include a \"_background\" field in the tool arguments to override the default:\n  \"_background\": { \"enabled\": true/false, \"timeoutMs\": number, \"maxRetries\": number }\n\nAll fields in \"_background\" are optional. Only include what you want to override.\n\nGuidelines:\n- Use background execution when the user doesn't need the result immediately, or when you're launching multiple independent tasks.\n- Use foreground execution when the user is directly waiting for the result and the conversation can't continue without it.\n- If you don't include \"_background\", the tool's default configuration is used.\n- When a tool runs in the background, you'll receive a placeholder result with a task ID. You can reference this in your response to the user.\n\nIMPORTANT: \"_background\" field is always an object. The fields in the _background field should be inside the _background object, not outside of it."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Please greet someone named Alice"
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "research",
+              "description": "Research a topic. This takes a while, use it when the user asks to research something.",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "topic": {
+                    "type": "string",
+                    "description": "The topic to research"
+                  },
+                  "_background": {
+                    "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "properties": {
+                      "enabled": {
+                        "description": "Force background (true) or foreground (false) execution for this call.",
+                        "anyOf": [
+                          {
+                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "timeoutMs": {
+                        "description": "Override timeout in milliseconds for this call.",
+                        "anyOf": [
+                          {
+                            "description": "Override timeout in milliseconds for this call.",
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "maxRetries": {
+                        "description": "Override maximum retry attempts for this call.",
+                        "anyOf": [
+                          {
+                            "description": "Override maximum retry attempts for this call.",
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": ["enabled", "timeoutMs", "maxRetries"],
+                    "x-optional": ["enabled", "timeoutMs", "maxRetries"],
+                    "anyOf": [
+                      {
+                        "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                        "properties": {
+                          "enabled": {
+                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Force background (true) or foreground (false) execution for this call.",
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "timeoutMs": {
+                            "description": "Override timeout in milliseconds for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Override timeout in milliseconds for this call.",
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "maxRetries": {
+                            "description": "Override maximum retry attempts for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Override maximum retry attempts for this call.",
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": ["enabled", "timeoutMs", "maxRetries"],
+                        "x-optional": ["enabled", "timeoutMs", "maxRetries"],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["topic", "_background"],
+                "additionalProperties": false,
+                "x-optional": ["_background"]
+              }
+            },
+            {
+              "type": "function",
+              "name": "greet",
+              "description": "Greet a person by name. Use this when the user asks to greet someone.",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "The name to greet"
+                  },
+                  "_background": {
+                    "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "properties": {
+                      "enabled": {
+                        "description": "Force background (true) or foreground (false) execution for this call.",
+                        "anyOf": [
+                          {
+                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "timeoutMs": {
+                        "description": "Override timeout in milliseconds for this call.",
+                        "anyOf": [
+                          {
+                            "description": "Override timeout in milliseconds for this call.",
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "maxRetries": {
+                        "description": "Override maximum retry attempts for this call.",
+                        "anyOf": [
+                          {
+                            "description": "Override maximum retry attempts for this call.",
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": ["enabled", "timeoutMs", "maxRetries"],
+                    "x-optional": ["enabled", "timeoutMs", "maxRetries"],
+                    "anyOf": [
+                      {
+                        "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                        "properties": {
+                          "enabled": {
+                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Force background (true) or foreground (false) execution for this call.",
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "timeoutMs": {
+                            "description": "Override timeout in milliseconds for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Override timeout in milliseconds for this call.",
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "maxRetries": {
+                            "description": "Override maximum retry attempts for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Override maximum retry attempts for this call.",
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": ["enabled", "timeoutMs", "maxRetries"],
+                        "x-optional": ["enabled", "timeoutMs", "maxRetries"],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["name", "_background"],
+                "additionalProperties": false,
+                "x-optional": ["_background"]
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1779111956652
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fdb4e222c31b714-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 18 May 2026 13:45:58 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "1261",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "200000",
+          "x-ratelimit-remaining-requests": "9997",
+          "x-ratelimit-remaining-tokens": "199127",
+          "x-ratelimit-reset-requests": "18.901s",
+          "x-ratelimit-reset-tokens": "261ms",
+          "x-request-id": "req_39ddb359d4944c418d6c18d50624abd6"
+        },
+        "body": {
+          "id": "resp_0e212fdc1d4a1f76006a0b1814fa948194ac2f08897e561a48",
+          "object": "response",
+          "created_at": 1779111957,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1779111957,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "fc_0e212fdc1d4a1f76006a0b1815a70481948b7a9f8fc753a85e",
+              "type": "function_call",
+              "status": "completed",
+              "arguments": "{\"name\":\"Alice\",\"_background\":null}",
+              "call_id": "call_1A7Cifa6sLyKc3CDsty5MW0S",
+              "name": "greet"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Research a topic. This takes a while, use it when the user asks to research something.",
+              "name": "research",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "topic": {
+                    "type": "string",
+                    "description": "The topic to research"
+                  },
+                  "_background": {
+                    "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "properties": {
+                      "enabled": {
+                        "description": "Force background (true) or foreground (false) execution for this call.",
+                        "anyOf": [
+                          {
+                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "timeoutMs": {
+                        "description": "Override timeout in milliseconds for this call.",
+                        "anyOf": [
+                          {
+                            "description": "Override timeout in milliseconds for this call.",
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "maxRetries": {
+                        "description": "Override maximum retry attempts for this call.",
+                        "anyOf": [
+                          {
+                            "description": "Override maximum retry attempts for this call.",
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": ["enabled", "timeoutMs", "maxRetries"],
+                    "x-optional": ["enabled", "timeoutMs", "maxRetries"],
+                    "anyOf": [
+                      {
+                        "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                        "properties": {
+                          "enabled": {
+                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Force background (true) or foreground (false) execution for this call.",
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "timeoutMs": {
+                            "description": "Override timeout in milliseconds for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Override timeout in milliseconds for this call.",
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "maxRetries": {
+                            "description": "Override maximum retry attempts for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Override maximum retry attempts for this call.",
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": ["enabled", "timeoutMs", "maxRetries"],
+                        "x-optional": ["enabled", "timeoutMs", "maxRetries"],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["topic", "_background"],
+                "additionalProperties": false,
+                "x-optional": ["_background"]
+              },
+              "strict": true
+            },
+            {
+              "type": "function",
+              "description": "Greet a person by name. Use this when the user asks to greet someone.",
+              "name": "greet",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "The name to greet"
+                  },
+                  "_background": {
+                    "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "properties": {
+                      "enabled": {
+                        "description": "Force background (true) or foreground (false) execution for this call.",
+                        "anyOf": [
+                          {
+                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "timeoutMs": {
+                        "description": "Override timeout in milliseconds for this call.",
+                        "anyOf": [
+                          {
+                            "description": "Override timeout in milliseconds for this call.",
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "maxRetries": {
+                        "description": "Override maximum retry attempts for this call.",
+                        "anyOf": [
+                          {
+                            "description": "Override maximum retry attempts for this call.",
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": ["enabled", "timeoutMs", "maxRetries"],
+                    "x-optional": ["enabled", "timeoutMs", "maxRetries"],
+                    "anyOf": [
+                      {
+                        "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                        "properties": {
+                          "enabled": {
+                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Force background (true) or foreground (false) execution for this call.",
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "timeoutMs": {
+                            "description": "Override timeout in milliseconds for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Override timeout in milliseconds for this call.",
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "maxRetries": {
+                            "description": "Override maximum retry attempts for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Override maximum retry attempts for this call.",
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": ["enabled", "timeoutMs", "maxRetries"],
+                        "x-optional": ["enabled", "timeoutMs", "maxRetries"],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["name", "_background"],
+                "additionalProperties": false,
+                "x-optional": ["_background"]
+              },
+              "strict": true
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 656,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 20,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 676
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "3a4f5b055924c675",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant with access to tools. When asked to research something, use the research tool. When asked to greet someone, use the greet tool.\n\nYou have the ability to run certain tools in the background while continuing the conversation. The following tools support background execution:\n- research (default: background)\n- greet (default: foreground)\n\nFor any of these tools, you can include a \"_background\" field in the tool arguments to override the default:\n  \"_background\": { \"enabled\": true/false, \"timeoutMs\": number, \"maxRetries\": number }\n\nAll fields in \"_background\" are optional. Only include what you want to override.\n\nGuidelines:\n- Use background execution when the user doesn't need the result immediately, or when you're launching multiple independent tasks.\n- Use foreground execution when the user is directly waiting for the result and the conversation can't continue without it.\n- If you don't include \"_background\", the tool's default configuration is used.\n- When a tool runs in the background, you'll receive a placeholder result with a task ID. You can reference this in your response to the user.\n\nIMPORTANT: \"_background\" field is always an object. The fields in the _background field should be inside the _background object, not outside of it."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Please greet someone named Alice"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0e212fdc1d4a1f76006a0b1815a70481948b7a9f8fc753a85e"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_1A7Cifa6sLyKc3CDsty5MW0S",
+              "output": "{\"greeting\":\"Hello, Alice!\"}"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "research",
+              "description": "Research a topic. This takes a while, use it when the user asks to research something.",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "topic": {
+                    "type": "string",
+                    "description": "The topic to research"
+                  },
+                  "_background": {
+                    "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "properties": {
+                      "enabled": {
+                        "description": "Force background (true) or foreground (false) execution for this call.",
+                        "anyOf": [
+                          {
+                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "timeoutMs": {
+                        "description": "Override timeout in milliseconds for this call.",
+                        "anyOf": [
+                          {
+                            "description": "Override timeout in milliseconds for this call.",
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "maxRetries": {
+                        "description": "Override maximum retry attempts for this call.",
+                        "anyOf": [
+                          {
+                            "description": "Override maximum retry attempts for this call.",
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": ["enabled", "timeoutMs", "maxRetries"],
+                    "x-optional": ["enabled", "timeoutMs", "maxRetries"],
+                    "anyOf": [
+                      {
+                        "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                        "properties": {
+                          "enabled": {
+                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Force background (true) or foreground (false) execution for this call.",
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "timeoutMs": {
+                            "description": "Override timeout in milliseconds for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Override timeout in milliseconds for this call.",
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "maxRetries": {
+                            "description": "Override maximum retry attempts for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Override maximum retry attempts for this call.",
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": ["enabled", "timeoutMs", "maxRetries"],
+                        "x-optional": ["enabled", "timeoutMs", "maxRetries"],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["topic", "_background"],
+                "additionalProperties": false,
+                "x-optional": ["_background"]
+              }
+            },
+            {
+              "type": "function",
+              "name": "greet",
+              "description": "Greet a person by name. Use this when the user asks to greet someone.",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "The name to greet"
+                  },
+                  "_background": {
+                    "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "properties": {
+                      "enabled": {
+                        "description": "Force background (true) or foreground (false) execution for this call.",
+                        "anyOf": [
+                          {
+                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "timeoutMs": {
+                        "description": "Override timeout in milliseconds for this call.",
+                        "anyOf": [
+                          {
+                            "description": "Override timeout in milliseconds for this call.",
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "maxRetries": {
+                        "description": "Override maximum retry attempts for this call.",
+                        "anyOf": [
+                          {
+                            "description": "Override maximum retry attempts for this call.",
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": ["enabled", "timeoutMs", "maxRetries"],
+                    "x-optional": ["enabled", "timeoutMs", "maxRetries"],
+                    "anyOf": [
+                      {
+                        "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                        "properties": {
+                          "enabled": {
+                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Force background (true) or foreground (false) execution for this call.",
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "timeoutMs": {
+                            "description": "Override timeout in milliseconds for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Override timeout in milliseconds for this call.",
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "maxRetries": {
+                            "description": "Override maximum retry attempts for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Override maximum retry attempts for this call.",
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": ["enabled", "timeoutMs", "maxRetries"],
+                        "x-optional": ["enabled", "timeoutMs", "maxRetries"],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["name", "_background"],
+                "additionalProperties": false,
+                "x-optional": ["_background"]
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1779111958228
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fdb4e2b7e1eb714-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 18 May 2026 13:45:59 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "1221",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "200000",
+          "x-ratelimit-remaining-requests": "9997",
+          "x-ratelimit-remaining-tokens": "199090",
+          "x-ratelimit-reset-requests": "25.755s",
+          "x-ratelimit-reset-tokens": "273ms",
+          "x-request-id": "req_edb4b4deb7c942f787df9934c4750c45"
+        },
+        "body": {
+          "id": "resp_0e212fdc1d4a1f76006a0b18167bf48194b54f9107feeb8de7",
+          "object": "response",
+          "created_at": 1779111958,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1779111959,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "msg_0e212fdc1d4a1f76006a0b18175ad88194ad6481b02c470f1d",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "Hello, Alice!"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "Research a topic. This takes a while, use it when the user asks to research something.",
+              "name": "research",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "topic": {
+                    "type": "string",
+                    "description": "The topic to research"
+                  },
+                  "_background": {
+                    "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "properties": {
+                      "enabled": {
+                        "description": "Force background (true) or foreground (false) execution for this call.",
+                        "anyOf": [
+                          {
+                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "timeoutMs": {
+                        "description": "Override timeout in milliseconds for this call.",
+                        "anyOf": [
+                          {
+                            "description": "Override timeout in milliseconds for this call.",
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "maxRetries": {
+                        "description": "Override maximum retry attempts for this call.",
+                        "anyOf": [
+                          {
+                            "description": "Override maximum retry attempts for this call.",
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": ["enabled", "timeoutMs", "maxRetries"],
+                    "x-optional": ["enabled", "timeoutMs", "maxRetries"],
+                    "anyOf": [
+                      {
+                        "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                        "properties": {
+                          "enabled": {
+                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Force background (true) or foreground (false) execution for this call.",
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "timeoutMs": {
+                            "description": "Override timeout in milliseconds for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Override timeout in milliseconds for this call.",
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "maxRetries": {
+                            "description": "Override maximum retry attempts for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Override maximum retry attempts for this call.",
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": ["enabled", "timeoutMs", "maxRetries"],
+                        "x-optional": ["enabled", "timeoutMs", "maxRetries"],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["topic", "_background"],
+                "additionalProperties": false,
+                "x-optional": ["_background"]
+              },
+              "strict": true
+            },
+            {
+              "type": "function",
+              "description": "Greet a person by name. Use this when the user asks to greet someone.",
+              "name": "greet",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "The name to greet"
+                  },
+                  "_background": {
+                    "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                    "properties": {
+                      "enabled": {
+                        "description": "Force background (true) or foreground (false) execution for this call.",
+                        "anyOf": [
+                          {
+                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "type": "boolean"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "timeoutMs": {
+                        "description": "Override timeout in milliseconds for this call.",
+                        "anyOf": [
+                          {
+                            "description": "Override timeout in milliseconds for this call.",
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "maxRetries": {
+                        "description": "Override maximum retry attempts for this call.",
+                        "anyOf": [
+                          {
+                            "description": "Override maximum retry attempts for this call.",
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": ["enabled", "timeoutMs", "maxRetries"],
+                    "x-optional": ["enabled", "timeoutMs", "maxRetries"],
+                    "anyOf": [
+                      {
+                        "description": "Optional: override background execution behavior for this specific call. Set enabled=false to force foreground, enabled=true to force background. Omit entirely to use the default configuration.",
+                        "properties": {
+                          "enabled": {
+                            "description": "Force background (true) or foreground (false) execution for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Force background (true) or foreground (false) execution for this call.",
+                                "type": "boolean"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "timeoutMs": {
+                            "description": "Override timeout in milliseconds for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Override timeout in milliseconds for this call.",
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "maxRetries": {
+                            "description": "Override maximum retry attempts for this call.",
+                            "anyOf": [
+                              {
+                                "description": "Override maximum retry attempts for this call.",
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "additionalProperties": false,
+                        "required": ["enabled", "timeoutMs", "maxRetries"],
+                        "x-optional": ["enabled", "timeoutMs", "maxRetries"],
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["name", "_background"],
+                "additionalProperties": false,
+                "x-optional": ["_background"]
+              },
+              "strict": true
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 693,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 6,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 699
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

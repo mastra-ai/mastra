@@ -14,15 +14,30 @@ import type {
   Session,
   SSOCallbackResult,
   SSOLoginConfig,
-} from '@mastra/core/auth';
-import type { EEUser } from '@mastra/core/auth/ee';
-import type { MastraAuthProviderOptions } from '@mastra/core/server';
-import { MastraAuthProvider } from '@mastra/core/server';
-import type { HonoRequest } from 'hono';
+} from '@internal/auth';
+import type { EEUser } from '@internal/auth/ee';
+import type { MastraAuthProviderOptions } from '@internal/auth/provider';
+import { MastraAuthProvider } from '@internal/auth/provider';
 
 import { MastraCloudAuth } from './client';
 import { parseSessionCookie } from './session/cookie';
 import type { CloudUser } from './types';
+
+type HonoRequestLike = {
+  raw?: Request;
+  headers?: Headers;
+  header(name: string): string | undefined;
+};
+
+type MastraAuthRequest = Request | HonoRequestLike;
+
+function getRequestHeader(request: MastraAuthRequest, name: string): string | null {
+  if (request instanceof Request) {
+    return request.headers.get(name);
+  }
+
+  return request.raw?.headers.get(name) ?? request.headers?.get(name) ?? request.header(name) ?? null;
+}
 
 /**
  * Configuration options for MastraCloudAuthProvider.
@@ -109,14 +124,12 @@ export class MastraCloudAuthProvider
    * Checks session cookie first, falls back to bearer token for API clients.
    *
    * @param token - Bearer token (from Authorization header)
-   * @param request - Hono or raw Request
+   * @param request - Request used for cookie access
    * @returns Authenticated user with role, or null if invalid
    */
-  async authenticateToken(token: string, request: HonoRequest | Request): Promise<CloudUser | null> {
+  async authenticateToken(token: string, request: MastraAuthRequest): Promise<CloudUser | null> {
     try {
-      // Get raw Request for cookie access
-      const rawRequest = 'raw' in request ? request.raw : request;
-      const cookieHeader = rawRequest.headers.get('cookie');
+      const cookieHeader = getRequestHeader(request, 'cookie');
 
       // Parse session token from cookie
       const sessionToken = parseSessionCookie(cookieHeader);

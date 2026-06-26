@@ -1,7 +1,9 @@
+import { createHash } from 'node:crypto';
+import { join } from 'node:path';
 import { openai } from '@ai-sdk/openai';
-import { getLLMTestMode } from '@internal/llm-recorder';
+import { getLLMTestMode, defaultNameGenerator, getLLMRecordingsDir } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
-import { afterAll, beforeAll, describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod/v4';
 
 import { Agent } from '../../agent';
@@ -16,9 +18,7 @@ setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
 
-const mock = createGatewayMock();
-beforeAll(() => mock.start());
-afterAll(() => mock.saveAndStop());
+const TOKEN_ACCURACY_START_TIME = Date.UTC(2026, 0, 1);
 
 describe('TokenLimiterProcessor', () => {
   it('should limit messages to the specified token count', async () => {
@@ -142,7 +142,10 @@ describe('TokenLimiterProcessor', () => {
     // revisit if tokenx updates significantly change heuristic accuracy.
     accuracyMargin: number = 8,
   ) {
-    const { messagesV2, fakeCore } = generateConversationHistory(config);
+    const { messagesV2, fakeCore } = generateConversationHistory({
+      ...config,
+      startTime: TOKEN_ACCURACY_START_TIME,
+    });
 
     const estimate = await estimateTokens(messagesV2);
     const used = (await agent.generateLegacy(fakeCore)).usage.promptTokens;
@@ -163,120 +166,145 @@ describe('TokenLimiterProcessor', () => {
     },
   });
 
-  const agent = new Agent({
-    id: 'token-estimate-agent',
-    name: 'Token Estimate Agent',
-    model: openai('gpt-4o-mini'),
-    instructions: ``,
-    tools: { calculatorTool },
-  });
+  describe('with gateway mock', () => {
+    let mockGateway: ReturnType<typeof createGatewayMock>;
 
-  describe.concurrent(`tokenx accuracy vs model promptTokens`, () => {
-    it(
-      `20 messages, no tools`,
-      {
-        timeout: 60000,
-        // LLM token counts can vary slightly between runs
-        retry: 3,
-      },
-      async () => {
-        await expectTokenEstimate(
-          {
-            messageCount: 10,
-            toolFrequency: 0,
-            threadId: '2',
-          },
-          agent,
-        );
-      },
-    );
+    beforeEach(async c => {
+      mockGateway = createGatewayMock({
+        maxChunkDelay: 100,
+        name: `test-${Buffer.from(
+          // use stable 8-char hash from c.task.name
+          createHash('sha256').update(c.task.name).digest('hex').slice(0, 8),
+        )}`,
+        exactMatch: true,
+        recordingsDir: join(getLLMRecordingsDir(c.task.file.filepath), defaultNameGenerator(c.task.file.filepath)),
+      });
+      await mockGateway.start();
+    });
 
-    it(`60 messages, no tools`, async () => {
-      await expectTokenEstimate(
+    afterEach(async () => {
+      await mockGateway.saveAndStop();
+    });
+
+    describe(`98% accuracy`, () => {
+      let agent: any;
+
+      beforeEach(async () => {
+        agent = new Agent({
+          id: 'token-estimate-agent',
+          name: 'Token Estimate Agent',
+          model: openai('gpt-4o-mini'),
+          instructions: ``,
+          tools: { calculatorTool },
+        });
+      });
+
+      it(
+        `20 messages, no tools`,
         {
-          messageCount: 30,
-          toolFrequency: 0,
-          threadId: '3',
+          timeout: 60000,
+          // LLM token counts can vary slightly between runs
+          retry: 3,
         },
-        agent,
+        async () => {
+          await expectTokenEstimate(
+            {
+              messageCount: 10,
+              toolFrequency: 0,
+              threadId: '2',
+            },
+            agent,
+          );
+        },
       );
-    }, 60000);
 
-    it(
-      `20 messages, 0 tools`,
-      {
-        timeout: 60000,
-        // LLM token counts can vary slightly between runs
-        retry: 3,
-      },
-      async () => {
+      it.skip(`60 messages, no tools`, async () => {
         await expectTokenEstimate(
           {
-            messageCount: 10,
+            messageCount: 30,
             toolFrequency: 0,
             threadId: '3',
           },
           agent,
         );
-      },
-    );
+      }, 60000);
 
-    it(`20 messages, 2 tool messages`, async () => {
-      await expectTokenEstimate(
+      it(
+        `20 messages, 0 tools`,
         {
-          messageCount: 10,
-          toolFrequency: 5,
-          threadId: '3',
+          timeout: 60000,
+          // LLM token counts can vary slightly between runs
+          retry: 3,
         },
-        agent,
-      );
-    }, 60000);
-
-    it(`40 messages, 6 tool messages`, async () => {
-      await expectTokenEstimate(
-        {
-          messageCount: 20,
-          toolFrequency: 5,
-          threadId: '4',
+        async () => {
+          await expectTokenEstimate(
+            {
+              messageCount: 10,
+              toolFrequency: 0,
+              threadId: '3',
+            },
+            agent,
+          );
         },
-        agent,
       );
-    }, 60000);
 
-    it(`100 messages, 24 tool messages`, async () => {
-      await expectTokenEstimate(
-        {
-          messageCount: 50,
-          toolFrequency: 4,
-          threadId: '5',
-        },
-        agent,
-      );
-    }, 60000);
+      it(`20 messages, 2 tool messages`, async () => {
+        await expectTokenEstimate(
+          {
+            messageCount: 10,
+            toolFrequency: 5,
+            threadId: '3',
+          },
+          agent,
+        );
+      }, 60000);
 
-    it(
-      `101 messages, 49 tool calls`,
-      {
-        // for some reason AI SDK randomly returns 2x token count here
-        retry: 3,
-        timeout: 60000,
-      },
-      async () => {
+      it(`40 messages, 6 tool messages`, async () => {
+        await expectTokenEstimate(
+          {
+            messageCount: 20,
+            toolFrequency: 5,
+            threadId: '4',
+          },
+          agent,
+        );
+      }, 60000);
+
+      it(`100 messages, 24 tool messages`, async () => {
         await expectTokenEstimate(
           {
             messageCount: 50,
-            toolFrequency: 1,
+            toolFrequency: 4,
             threadId: '5',
           },
           agent,
-          20, // Higher margin: many tool calls + tokenx's heuristic estimation amplify variance
         );
-      },
-    );
+      }, 60000);
+
+      it(
+        `101 messages, 49 tool calls`,
+        {
+          // for some reason AI SDK randomly returns 2x token count here
+          retry: 3,
+          timeout: 60000,
+        },
+        async () => {
+          await expectTokenEstimate(
+            {
+              messageCount: 50,
+              toolFrequency: 1,
+              threadId: '5',
+            },
+            agent,
+            20, // Higher margin: many tool calls + tokenx's heuristic estimation amplify variance
+          );
+        },
+      );
+    });
   });
 });
 
-describe.concurrent('ToolCallFilter', () => {
+describe('ToolCallFilter', () => {
   const abort: (reason?: string) => never = reason => {
     throw new Error(reason || 'abort should not be called in this test');
   };

@@ -1,8 +1,9 @@
-import React from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
-export interface IconProps extends React.HTMLAttributes<HTMLDivElement> {
-  children: React.ReactNode;
+export interface IconProps extends HTMLAttributes<HTMLSpanElement> {
+  children: ReactNode;
+  className?: string;
   size?: 'default' | 'lg' | 'sm';
 }
 

@@ -546,7 +546,7 @@ import { createTavilySearchTool, createTavilyExtractTool } from '@mastra/tavily'
 const agent = new Agent({
   id: 'web-search-agent',
   name: 'Web Search Agent',
-  model: 'anthropic/claude-sonnet-4-6',
+  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
   instructions:
     'You are a web search assistant. Use search tool to find relevant pages, then use extract tool to get full content from the best results.',
   tools: {
@@ -560,7 +560,7 @@ const agent = new Agent({
 
 | Variable | Description |
 | - | - |
-| `TAVILY_API_KEY` | Your Tavily API key. Used as the default when `apiKey` is not passed to a factory function. |
+| `TAVILY_API_KEY` | Your Tavily API key. Used as the default when `apiKey` isn't passed to a factory function. |
 
 ## Related
 

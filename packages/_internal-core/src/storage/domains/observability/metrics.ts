@@ -8,13 +8,19 @@ import {
   comparePeriodSchema,
   commonFilterFields,
   contextFields,
+  deltaLimitSchema,
+  deltaInfoSchema,
   dimensionsField,
   groupBySchema,
+  deltaCursorSchema,
+  listModeSchema,
+  normalizeObservabilityListArgs,
   paginationArgsSchema,
   paginationInfoSchema,
   percentileField,
   percentileBucketValueField,
   percentilesSchema,
+  refineObservabilityListMode,
   sortDirectionSchema,
   spanIdField,
   traceIdField,
@@ -183,25 +189,36 @@ export const metricsOrderBySchema = z
   })
   .describe('Order by configuration');
 
-/** Schema for listMetrics operation arguments */
 export const listMetricsArgsSchema = z
   .object({
+    mode: listModeSchema.optional(),
     filters: metricsFilterSchema.optional(),
-    pagination: paginationArgsSchema.default({ page: 0, perPage: 10 }).describe('Pagination settings'),
-    orderBy: metricsOrderBySchema
-      .default({ field: 'timestamp', direction: 'DESC' })
-      .describe('Ordering configuration (defaults to timestamp desc)'),
+    pagination: paginationArgsSchema.optional(),
+    orderBy: metricsOrderBySchema.optional(),
+    after: deltaCursorSchema.optional(),
+    limit: deltaLimitSchema,
   })
+  .strict()
+  .superRefine(refineObservabilityListMode)
+  .transform(value =>
+    normalizeObservabilityListArgs<MetricsFilter, z.output<typeof metricsOrderBySchema>>(value, {
+      orderBy: { field: 'timestamp', direction: 'DESC' } as const,
+    }),
+  )
   .describe('Arguments for listing metrics');
 
 /** Arguments for listing metrics */
 export type ListMetricsArgs = z.input<typeof listMetricsArgsSchema>;
 
 /** Schema for listMetrics operation response */
-export const listMetricsResponseSchema = z.object({
-  pagination: paginationInfoSchema,
-  metrics: z.array(metricRecordSchema),
-});
+export const listMetricsResponseSchema = z
+  .object({
+    pagination: paginationInfoSchema.optional(),
+    delta: deltaInfoSchema.optional(),
+    deltaCursor: deltaCursorSchema.optional(),
+    metrics: z.array(metricRecordSchema),
+  })
+  .describe('Response from listing metrics');
 
 /** Response containing paginated metrics */
 export type ListMetricsResponse = z.infer<typeof listMetricsResponseSchema>;

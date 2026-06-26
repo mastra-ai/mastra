@@ -1,6 +1,7 @@
 /**
  * @license Mastra Enterprise License - see ee/LICENSE
  */
+import { PassThrough } from 'node:stream';
 import type { IFGAProvider } from '@mastra/core/auth/ee';
 import { Mastra } from '@mastra/core/mastra';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -14,6 +15,51 @@ class TestMastraServer extends MastraServer<any, any, any> {
   registerContextMiddleware = vi.fn();
   registerAuthMiddleware = vi.fn();
   registerHttpLoggingMiddleware = vi.fn();
+
+  // Exposes the protected bridge for focused unit coverage.
+  async writeResponse(response: Response, nodeRes: any, signal?: AbortSignal) {
+    await this.writeCustomRouteResponse(response, nodeRes, signal);
+  }
+
+  buildCustomRouteHandlerForTest() {
+    return this.buildCustomRouteHandler();
+  }
+
+  handleCustomRouteRequestForTest(
+    url: string,
+    method: string,
+    headers: Record<string, string | string[] | undefined>,
+    body: unknown,
+    requestContext?: any,
+    signal?: AbortSignal,
+  ) {
+    return this.handleCustomRouteRequest(url, method, headers, body, requestContext, signal);
+  }
+
+  validateCustomRoutePathsForTest(routes: Parameters<typeof this.validateCustomRoutePaths>[0]) {
+    return this.validateCustomRoutePaths(routes);
+  }
+}
+
+function createTestAdapter() {
+  return new TestMastraServer({
+    app: {},
+    mastra: {
+      getServer: () => undefined,
+      setMastraServer: vi.fn(),
+    } as unknown as Mastra,
+  });
+}
+
+function createWritableResponse() {
+  const response = new PassThrough();
+  const originalEnd = response.end.bind(response);
+  const originalWrite = response.write.bind(response);
+  return Object.assign(response, {
+    write: vi.fn((chunk: unknown, ...args: any[]) => originalWrite(chunk as any, ...args)),
+    writeHead: vi.fn(),
+    end: vi.fn((chunk?: string) => originalEnd(chunk)),
+  });
 }
 
 function createMockFGAProvider(authorized = true): IFGAProvider {
@@ -23,6 +69,45 @@ function createMockFGAProvider(authorized = true): IFGAProvider {
     filterAccessible: vi.fn(),
   };
 }
+
+describe('custom route forwarding', () => {
+  it('should forward DELETE JSON bodies to custom routes', async () => {
+    const mastra = new Mastra({
+      logger: false,
+      server: {
+        apiRoutes: [
+          {
+            path: '/items/:id',
+            method: 'DELETE',
+            handler: async c => {
+              const body = await c.req.json();
+              const { id } = c.req.param();
+
+              return c.json({ deleted: id, reason: body.reason });
+            },
+          },
+        ],
+      },
+    });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    await expect(adapter.buildCustomRouteHandlerForTest()).resolves.toBe(true);
+
+    const response = await adapter.handleCustomRouteRequestForTest(
+      'http://localhost/items/123',
+      'DELETE',
+      { 'content-type': 'application/json' },
+      { reason: 'no longer needed' },
+    );
+
+    expect(response).not.toBeNull();
+    expect(response!.status).toBe(200);
+    await expect(response!.json()).resolves.toEqual({
+      deleted: '123',
+      reason: 'no longer needed',
+    });
+  });
+});
 
 describe('FGA Middleware - checkRouteFGA', () => {
   let checkRouteFGA: (
@@ -256,6 +341,79 @@ describe('FGA Middleware - checkRouteFGA', () => {
     );
   });
 
+  it('should derive built-in FGA metadata for stored resource item and collection routes', async () => {
+    const fgaProvider = createMockFGAProvider(true);
+    const mastra = { getServer: () => ({ fga: fgaProvider }) };
+    const requestContext = new Map<string, unknown>();
+    requestContext.set('user', { id: 'user-1' });
+    requestContext.set('mastra__resourceId', 'team-1');
+
+    await expect(
+      checkRouteFGA(
+        mastra,
+        {
+          method: 'GET',
+          path: '/stored/agents/:storedAgentId',
+          requiresAuth: true,
+        } as any,
+        requestContext as any,
+        { storedAgentId: 'agent-1' },
+      ),
+    ).resolves.toBeNull();
+    await expect(
+      checkRouteFGA(
+        mastra,
+        {
+          method: 'POST',
+          path: '/stored/skills/:storedSkillId/publish',
+          requiresAuth: true,
+        } as any,
+        requestContext as any,
+        { storedSkillId: 'skill-1' },
+      ),
+    ).resolves.toBeNull();
+    await expect(
+      checkRouteFGA(
+        mastra,
+        {
+          method: 'GET',
+          path: '/stored/workspaces',
+          requiresAuth: true,
+        } as any,
+        requestContext as any,
+        {},
+      ),
+    ).resolves.toBeNull();
+
+    expect(fgaProvider.check).toHaveBeenNthCalledWith(
+      1,
+      { id: 'user-1' },
+      {
+        resource: { type: 'stored-agents', id: 'agent-1' },
+        permission: 'stored-agents:read',
+        context: { resourceId: 'agent-1', requestContext },
+      },
+    );
+    expect(fgaProvider.check).toHaveBeenNthCalledWith(
+      2,
+      { id: 'user-1' },
+      {
+        resource: { type: 'stored-skills', id: 'skill-1' },
+        permission: 'stored-skills:publish',
+        context: { resourceId: 'skill-1', requestContext },
+      },
+    );
+    expect(fgaProvider.check).toHaveBeenNthCalledWith(
+      3,
+      { id: 'user-1' },
+      {
+        resource: { type: 'stored-workspaces', id: 'team-1' },
+        permission: 'stored-workspaces:read',
+        context: { resourceId: 'team-1', requestContext },
+      },
+    );
+  });
+
   it('should return null when FGA check passes', async () => {
     const fgaProvider = createMockFGAProvider(true);
     const mastra = { getServer: () => ({ fga: fgaProvider }) };
@@ -393,6 +551,140 @@ describe('FGA Middleware - checkRouteFGA', () => {
   });
 });
 
+describe('custom route response bridge', () => {
+  it('pipes custom route response streams to node responses', async () => {
+    const adapter = createTestAdapter();
+    const nodeRes = createWritableResponse();
+    const chunks: Buffer[] = [];
+    nodeRes.on('data', chunk => chunks.push(Buffer.from(chunk)));
+
+    await adapter.writeResponse(
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('hello '));
+            controller.enqueue(new TextEncoder().encode('world'));
+            controller.close();
+          },
+        }),
+        { status: 201, headers: { 'x-test': 'yes' } },
+      ),
+      nodeRes,
+    );
+
+    expect(nodeRes.writeHead).toHaveBeenCalledWith(201, { 'x-test': 'yes' });
+    expect(Buffer.concat(chunks).toString('utf8')).toBe('hello world');
+    expect(nodeRes.end).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips header writes and cancels response streams when the node response is already closed', async () => {
+    const adapter = createTestAdapter();
+    const nodeRes = createWritableResponse();
+    const cancel = vi.fn();
+    nodeRes.destroy();
+
+    await adapter.writeResponse(
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('late response'));
+          },
+          cancel,
+        }),
+        { status: 200 },
+      ),
+      nodeRes,
+    );
+
+    expect(nodeRes.writeHead).not.toHaveBeenCalled();
+    expect(nodeRes.end).not.toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalled();
+  });
+
+  it('cancels custom route response streams when the node response closes early', async () => {
+    const adapter = createTestAdapter();
+    const nodeRes = createWritableResponse();
+    const cancel = vi.fn();
+
+    const writePromise = adapter.writeResponse(
+      new Response(
+        new ReadableStream({
+          async pull(controller) {
+            controller.enqueue(new TextEncoder().encode('chunk\n'));
+            await new Promise(resolve => setTimeout(resolve, 5));
+          },
+          cancel,
+        }),
+      ),
+      nodeRes,
+    );
+
+    await vi.waitFor(() => expect(nodeRes.write).toHaveBeenCalled());
+
+    const closeError = new Error('client closed') as Error & { code: string };
+    closeError.code = 'ECONNRESET';
+    nodeRes.destroy(closeError);
+
+    await writePromise;
+    expect(cancel).toHaveBeenCalledWith(closeError);
+  });
+
+  it('rethrows response body stream errors instead of treating them as client disconnects', async () => {
+    const adapter = createTestAdapter();
+    const nodeRes = createWritableResponse();
+    const upstreamError = Object.assign(new Error('upstream reset'), { code: 'ECONNRESET' });
+
+    nodeRes.on('error', () => {});
+
+    await expect(
+      adapter.writeResponse(
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode('chunk\n'));
+              queueMicrotask(() => {
+                controller.error(upstreamError);
+              });
+            },
+          }),
+        ),
+        nodeRes,
+      ),
+    ).rejects.toMatchObject({ code: 'ECONNRESET' });
+  });
+
+  it('rethrows response body abort errors when they happen before response close aborts the signal', async () => {
+    const adapter = createTestAdapter();
+    const nodeRes = createWritableResponse();
+    const controller = new AbortController();
+    const upstreamError = new DOMException('upstream aborted', 'AbortError');
+
+    nodeRes.on('close', () => {
+      if (!nodeRes.writableEnded) {
+        controller.abort();
+      }
+    });
+    nodeRes.on('error', () => {});
+
+    await expect(
+      adapter.writeResponse(
+        new Response(
+          new ReadableStream({
+            start(streamController) {
+              streamController.enqueue(new TextEncoder().encode('chunk\n'));
+              queueMicrotask(() => {
+                streamController.error(upstreamError);
+              });
+            },
+          }),
+        ),
+        nodeRes,
+        controller.signal,
+      ),
+    ).rejects.toBe(upstreamError);
+  });
+});
+
 describe('EE license validation', () => {
   let originalNodeEnv: string | undefined;
   let originalMastraDev: string | undefined;
@@ -523,5 +815,74 @@ describe('FGA policy coverage validation', () => {
     const adapter = new TestMastraServer({ app: {}, mastra });
 
     await expect(adapter.validateFGAPolicyCoverage()).rejects.toThrow('protected routes are missing FGA metadata');
+  });
+});
+
+describe('validateCustomRoutePaths', () => {
+  const mockHandler = vi.fn();
+
+  it('should throw when a custom route collides with the default /api prefix', () => {
+    const mastra = new Mastra({ logger: false });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    expect(() =>
+      adapter.validateCustomRoutePathsForTest([{ path: '/api/foo', method: 'GET', handler: mockHandler }]),
+    ).toThrow(/must not start with "\/api"/);
+  });
+
+  it('should throw when a custom route exactly matches the prefix', () => {
+    const mastra = new Mastra({ logger: false });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    expect(() =>
+      adapter.validateCustomRoutePathsForTest([{ path: '/api', method: 'GET', handler: mockHandler }]),
+    ).toThrow(/must not start with "\/api"/);
+  });
+
+  it('should allow routes outside the default /api prefix', () => {
+    const mastra = new Mastra({ logger: false });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    expect(() =>
+      adapter.validateCustomRoutePathsForTest([{ path: '/webhooks/stripe', method: 'POST', handler: mockHandler }]),
+    ).not.toThrow();
+  });
+
+  it('should allow /api/ routes when a custom prefix is configured', () => {
+    const mastra = new Mastra({ logger: false });
+    const adapter = new TestMastraServer({ app: {}, mastra, prefix: '/mastra/api' });
+
+    expect(() =>
+      adapter.validateCustomRoutePathsForTest([{ path: '/api/my-endpoint', method: 'GET', handler: mockHandler }]),
+    ).not.toThrow();
+  });
+
+  it('should throw when a custom route collides with a custom prefix', () => {
+    const mastra = new Mastra({ logger: false });
+    const adapter = new TestMastraServer({ app: {}, mastra, prefix: '/mastra/api' });
+
+    expect(() =>
+      adapter.validateCustomRoutePathsForTest([{ path: '/mastra/api/agents', method: 'GET', handler: mockHandler }]),
+    ).toThrow(/must not start with "\/mastra\/api"/);
+  });
+
+  it('should skip internal routes marked with _mastraInternal', () => {
+    const mastra = new Mastra({ logger: false });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    expect(() =>
+      adapter.validateCustomRoutePathsForTest([
+        { path: '/api/agents', method: 'GET', handler: mockHandler, _mastraInternal: true },
+      ]),
+    ).not.toThrow();
+  });
+
+  it('should not throw when prefix is empty', () => {
+    const mastra = new Mastra({ logger: false });
+    const adapter = new TestMastraServer({ app: {}, mastra, prefix: '' });
+
+    expect(() =>
+      adapter.validateCustomRoutePathsForTest([{ path: '/api/anything', method: 'GET', handler: mockHandler }]),
+    ).not.toThrow();
   });
 });

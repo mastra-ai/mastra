@@ -1,8 +1,33 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
+import { MastraFGAPermissions } from '../auth/ee';
+import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage';
 
 import { MockMemory } from './mock';
+
+describe('MastraMemory FGA', () => {
+  it('bypasses thread membership resolution for a tenant-scoped trusted actor', async () => {
+    const fgaProvider = {
+      require: vi.fn().mockResolvedValue(undefined),
+    };
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'org-1');
+
+    await MockMemory.checkThreadFGA({
+      mastra: {
+        getServer: () => ({ fga: fgaProvider }),
+      } as any,
+      threadId: 'thread-1',
+      resourceId: 'tenant-1',
+      requestContext,
+      permission: MastraFGAPermissions.MEMORY_READ,
+      actor: { actorKind: 'system', sourceWorkflow: 'nightly-workflow' },
+    });
+
+    expect(fgaProvider.require).not.toHaveBeenCalled();
+  });
+});
 
 describe('MastraMemory config serialization', () => {
   it('should serialize observational memory retrieval config for thread scope', () => {
@@ -125,6 +150,28 @@ describe('MastraMemory config serialization', () => {
     expect(memory.getConfig().observationalMemory).toEqual({
       scope: 'thread',
       activateAfterIdle: '5m',
+      model: 'test-model',
+      shareTokenBudget: undefined,
+      temporalMarkers: undefined,
+      retrieval: undefined,
+    });
+  });
+
+  it('should serialize auto activateAfterIdle for observational memory', () => {
+    const memory = new MockMemory({
+      storage: new InMemoryStore(),
+      options: {
+        observationalMemory: {
+          scope: 'thread',
+          activateAfterIdle: 'auto',
+          model: 'test-model',
+        },
+      },
+    });
+
+    expect(memory.getConfig().observationalMemory).toEqual({
+      scope: 'thread',
+      activateAfterIdle: 'auto',
       model: 'test-model',
       shareTokenBudget: undefined,
       temporalMarkers: undefined,

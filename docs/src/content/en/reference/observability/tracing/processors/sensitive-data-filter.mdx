@@ -13,7 +13,7 @@ A SpanOutputProcessor that redacts sensitive information from span fields.
 
 ## Auto-applied by default
 
-`Observability` automatically appends a `SensitiveDataFilter` to every configured instance's `spanOutputProcessors` so secrets are redacted before they reach exporters such as the Mastra cloud exporter. The filter runs last (after any user-provided processors) so that sensitive data introduced or surfaced by upstream processors is still redacted. You do not need to add it manually unless you want to customize its options.
+`Observability` automatically appends a `SensitiveDataFilter` to every configured instance's `spanOutputProcessors` so secrets are redacted before they reach exporters such as the Mastra cloud exporter. The filter runs last (after any user-provided processors) so that sensitive data introduced or surfaced by upstream processors is still redacted. You don't need to add it manually unless you want to customize its options.
 
 To opt out or customize the auto-applied filter, use the `sensitiveDataFilter` option on the [`Observability` registry config](/reference/observability/tracing/configuration#observabilityregistryconfig):
 
@@ -31,7 +31,7 @@ new Observability({
 })
 ```
 
-If a config already includes a `SensitiveDataFilter` in `spanOutputProcessors`, the auto-applied filter is skipped to avoid double redaction. Pre-instantiated `ObservabilityInstance` values are not modified — add a `SensitiveDataFilter` to their processors yourself if needed.
+If a config already includes a `SensitiveDataFilter` in `spanOutputProcessors`, the auto-applied filter is skipped to avoid double redaction. Pre-instantiated `ObservabilityInstance` values aren't modified — add a `SensitiveDataFilter` to their processors yourself if needed.
 
 ## Constructor
 

@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from '
 import { dirname, join } from 'node:path';
 import { MCPClient, MCPOAuthClientProvider } from '@mastra/mcp';
 import type { MastraMCPServerDefinition, OAuthClientInformation, OAuthStorage } from '@mastra/mcp';
+import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { getAppDataDir } from '../utils/project.js';
 import { loadMcpConfig, getProjectMcpPath, getGlobalMcpPath, getClaudeSettingsPath } from './config.js';
 import type { McpConfig, McpHttpServerConfig, McpServerConfig, McpServerStatus, McpSkippedServer } from './types.js';
@@ -117,14 +118,18 @@ function getStorageKeyFingerprint(value: string): string {
  * Create an MCP manager that wraps MCPClient with config-file discovery
  * and per-server status tracking.
  */
-export function createMcpManager(projectDir: string, extraServers?: Record<string, McpServerConfig>): McpManager {
+export function createMcpManager(
+  projectDir: string,
+  configDirName = DEFAULT_CONFIG_DIR,
+  extraServers?: Record<string, McpServerConfig>,
+): McpManager {
   /** Merge programmatic servers into a base config (highest priority). */
   const applyExtraServers = (base: McpConfig): McpConfig => {
     if (!extraServers || Object.keys(extraServers).length === 0) return base;
     return { ...base, mcpServers: { ...base.mcpServers, ...extraServers } };
   };
 
-  let config = applyExtraServers(loadMcpConfig(projectDir));
+  let config = applyExtraServers(loadMcpConfig(projectDir, configDirName));
   let client: MCPClient | null = null;
   let tools: Record<string, any> = {};
   let serverStatuses = new Map<string, McpServerStatus>();
@@ -237,16 +242,17 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
 
     try {
       const { toolsets, errors } = await client.listToolsetsWithErrors();
+      const typedToolsets = toolsets as Record<string, Record<string, any>>;
 
       // Flatten toolsets into the namespaced tools map (serverName_toolName)
-      for (const [serverName, serverTools] of Object.entries(toolsets)) {
+      for (const [serverName, serverTools] of Object.entries(typedToolsets)) {
         for (const [toolName, toolConfig] of Object.entries(serverTools)) {
           tools[`${serverName}_${toolName}`] = toolConfig;
         }
       }
 
       for (const name of serverNames) {
-        const serverTools = toolsets[name];
+        const serverTools = typedToolsets[name];
         if (serverTools && Object.keys(serverTools).length > 0) {
           const toolNames = Object.keys(serverTools).map(t => `${name}_${t}`);
           serverStatuses.set(name, {
@@ -322,7 +328,7 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
 
     async reload() {
       await disconnect();
-      config = applyExtraServers(loadMcpConfig(projectDir));
+      config = applyExtraServers(loadMcpConfig(projectDir, configDirName));
       tools = {};
       serverStatuses = new Map();
       stderrLogs = new Map();
@@ -462,8 +468,8 @@ export function createMcpManager(projectDir: string, extraServers?: Record<strin
 
     getConfigPaths() {
       return {
-        project: getProjectMcpPath(projectDir),
-        global: getGlobalMcpPath(),
+        project: getProjectMcpPath(projectDir, configDirName),
+        global: getGlobalMcpPath(configDirName),
         claude: getClaudeSettingsPath(projectDir),
       };
     },

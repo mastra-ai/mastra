@@ -1,7 +1,17 @@
 import type * as http from 'node:http';
-import type { Context } from 'hono';
 import type { ToolsInput, Agent } from '../agent';
+import type { MastraFGAPermissionInput } from '../auth/ee/interfaces/permissions.generated';
+import type { RequestContext } from '../request-context';
 import type { Workflow } from '../workflows';
+
+export interface HonoContextLike {
+  req: {
+    header(name: string): string | undefined;
+    query(name: string): string | undefined;
+    json(): Promise<unknown>;
+  };
+  text(text: string, status?: number, headers?: Record<string, string>): Response;
+}
 
 interface MCPServerSSEOptionsBase {
   /**
@@ -42,7 +52,7 @@ export interface MCPServerHonoSSEOptions extends MCPServerSSEOptionsBase {
   /**
    * Incoming Hono context
    */
-  context: Context;
+  context: HonoContextLike;
 }
 
 export interface MCPServerHTTPOptions {
@@ -189,6 +199,47 @@ export interface RemoteInfo {
   url: string;
 }
 
+export type MCPAuthInfoToUserMapper<TUser = unknown> = (args: {
+  /**
+   * Authentication data provided by the MCP SDK request handler `extra.authInfo`.
+   */
+  authInfo: unknown;
+  /**
+   * Full MCP SDK request handler extra object when available.
+   */
+  extra: Record<string, unknown>;
+  /**
+   * RequestContext that will be used for the MCP tool list or execution.
+   * The mapper may read or set additional request-scoped values on it.
+   */
+  requestContext: RequestContext;
+}) => TUser | null | undefined | Promise<TUser | null | undefined>;
+
+export interface MCPServerFGAResourceMappingEntry {
+  /** The FGA resource type to authorize MCP tool checks against. */
+  fgaResourceType: string;
+  /**
+   * Derive the FGA resource ID from the MCP request/user context.
+   * Return `undefined` to fall back to the MCP tool resource ID.
+   */
+  deriveId?: (ctx: { user: unknown; resourceId?: string; requestContext?: RequestContext }) => string | undefined;
+}
+
+export type MCPServerFGAPermissionMapping = Partial<Record<MastraFGAPermissionInput, string>> & Record<string, string>;
+
+export interface MCPServerFGAConfig {
+  /**
+   * Map MCP server tool authorization resources independently from the Mastra
+   * instance's global `tool` resource mapping.
+   */
+  resourceMapping?: Partial<Record<'tool' | 'tools', MCPServerFGAResourceMappingEntry>>;
+  /**
+   * Map MCP server tool authorization permissions independently from the Mastra
+   * instance's global permission mapping.
+   */
+  permissionMapping?: MCPServerFGAPermissionMapping;
+}
+
 // +++ Authoritative MCPServerConfig +++
 /** Configuration options for creating an MCPServer instance. */
 export interface MCPServerConfig<TId extends string = string> {
@@ -218,6 +269,23 @@ export interface MCPServerConfig<TId extends string = string> {
   description?: string;
   /** Optional instructions describing how to use the server and its features. */
   instructions?: string;
+  /**
+   * Maps MCP transport auth information into the user object used by Mastra FGA.
+   *
+   * Self-hosted OAuth MCP transports pass authenticated identity to request
+   * handlers as `extra.authInfo`; Mastra FGA checks read the authenticated user
+   * from `requestContext.get('user')`. Provide this hook when the MCP server is
+   * registered on an FGA-enabled Mastra instance and the transport does not
+   * already put a `user` value in the request context.
+   */
+  mapAuthInfoToUser?: MCPAuthInfoToUserMapper;
+  /**
+   * Optional FGA mapping overrides for this MCP server's `tools/list` and
+   * `tools/call` checks. These mappings are applied before delegating to the
+   * Mastra instance FGA provider and do not affect internal agent/workflow tool
+   * execution.
+   */
+  fga?: MCPServerFGAConfig;
   /** Optional repository information for the server's source code. */
   repository?: Repository;
   /**

@@ -1,5 +1,10 @@
 import type { GetAgentResponse, GetToolResponse } from '@mastra/client-js';
-import { EntityList, EntityListSkeleton, AgentIcon, truncateString } from '@mastra/playground-ui';
+import {
+  DataList as EntityList,
+  DataListSkeleton as EntityListSkeleton,
+} from '@mastra/playground-ui/components/DataList';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { truncateString } from '@mastra/playground-ui/utils/truncate-string';
 import { useMemo } from 'react';
 import { prepareToolsTable } from '@/domains/tools/utils/prepareToolsTable';
 import { useLinkComponent } from '@/lib/framework';
@@ -26,7 +31,7 @@ export function ToolsList({ tools, agents, isLoading, search = '' }: ToolsListPr
   }
 
   return (
-    <EntityList columns="auto 1fr auto">
+    <EntityList columns="auto 1fr auto" variant="striped">
       <EntityList.Top>
         <EntityList.TopCell>Name</EntityList.TopCell>
         <EntityList.TopCell>Description</EntityList.TopCell>

@@ -1,4 +1,8 @@
-import { Input, Label, ScrollArea, SectionRoot, SubSectionRoot, Textarea } from '@mastra/playground-ui';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { SectionRoot, SubSectionRoot } from '@mastra/playground-ui/components/Section';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Controller } from 'react-hook-form';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
@@ -26,7 +30,7 @@ export function InformationPage() {
           <Input
             id="agent-name"
             placeholder="My Agent"
-            className="bg-surface2"
+            variant="outline"
             {...register('name')}
             error={!!errors.name}
             disabled={readOnly}
@@ -41,7 +45,7 @@ export function InformationPage() {
           <Textarea
             id="agent-description"
             placeholder="Describe what this agent does"
-            className="bg-surface2"
+            variant="outline"
             {...register('description')}
             error={!!errors.description}
             disabled={readOnly}

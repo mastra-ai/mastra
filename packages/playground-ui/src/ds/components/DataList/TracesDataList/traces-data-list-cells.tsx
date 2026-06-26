@@ -1,103 +1,11 @@
-import { format, isToday } from 'date-fns';
+import { EntityType } from '@mastra/core/observability';
 import { CornerDownRightIcon, ListTreeIcon } from 'lucide-react';
-import { DataListCell } from '../data-list-cells';
+import { DataListCell, DataListMonoCell } from '../data-list-cells';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { Colors } from '@/ds/tokens/colors';
 import { cn } from '@/lib/utils';
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function toDate(value: Date | string): Date | null {
-  const date = value instanceof Date ? value : new Date(value);
-  return isNaN(date.getTime()) ? null : date;
-}
-
-function getShortId(id: string | undefined): string {
-  if (!id) return '';
-  return id.length > 8 ? id.slice(0, 8) : id;
-}
-
-// ---------------------------------------------------------------------------
-// IdCell
-// ---------------------------------------------------------------------------
-
-export interface TracesDataListIdCellProps {
-  traceId: string;
-}
-
-export function TracesDataListIdCell({ traceId }: TracesDataListIdCellProps) {
-  return (
-    <DataListCell height="compact" className="text-ui-smd font-mono text-neutral3">
-      {getShortId(traceId)}
-    </DataListCell>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// KindCell
-// ---------------------------------------------------------------------------
-
-export interface TracesDataListKindCellProps {
-  /** `null`/missing → root span (Trace). Set → nested span (Subtrace). */
-  parentSpanId?: string | null;
-}
-
-export function TracesDataListKindCell({ parentSpanId }: TracesDataListKindCellProps) {
-  const isRoot = parentSpanId == null;
-  const Icon = isRoot ? ListTreeIcon : CornerDownRightIcon;
-  const label = isRoot ? 'Trace' : 'Subtrace';
-  return (
-    <DataListCell height="compact" className="flex items-center justify-center">
-      <span title={label} aria-label={label} className="inline-flex">
-        <Icon className={cn('shrink-0', isRoot ? 'size-4 text-neutral3' : 'size-3 text-neutral3')} aria-hidden />
-      </span>
-    </DataListCell>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// DateCell
-// ---------------------------------------------------------------------------
-
-export interface TracesDataListDateCellProps {
-  timestamp: Date | string;
-}
-
-export function TracesDataListDateCell({ timestamp }: TracesDataListDateCellProps) {
-  const date = toDate(timestamp);
-  return (
-    <DataListCell height="compact" className="text-ui-smd text-neutral2">
-      {date ? (isToday(date) ? 'Today' : format(date, 'MMM dd')) : '-'}
-    </DataListCell>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// TimeCell
-// ---------------------------------------------------------------------------
-
-export interface TracesDataListTimeCellProps {
-  timestamp: Date | string;
-}
-
-export function TracesDataListTimeCell({ timestamp }: TracesDataListTimeCellProps) {
-  const date = toDate(timestamp);
-  return (
-    <DataListCell height="compact" className="text-ui-smd font-mono text-neutral3 flex">
-      {date ? (
-        <>
-          {format(date, 'HH:mm:ss')}
-          <span className="text-neutral2">.{String(date.getMilliseconds()).padStart(3, '0')}</span>
-        </>
-      ) : (
-        '-'
-      )}
-    </DataListCell>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // NameCell
@@ -105,12 +13,33 @@ export function TracesDataListTimeCell({ timestamp }: TracesDataListTimeCellProp
 
 export interface TracesDataListNameCellProps {
   name?: string | null;
+  /** `null`/missing → root span (Trace). Set → nested span (Subtrace). Drives the leading level icon. */
+  parentSpanId?: string | null;
+  /** When true, the leading level icon is wrapped in a Trace/Subtrace tooltip. Off by default —
+   *  only meaningful in branches mode, where rows mix root traces and subtraces. */
+  showLevelTooltip?: boolean;
 }
 
-export function TracesDataListNameCell({ name }: TracesDataListNameCellProps) {
+export function TracesDataListNameCell({ name, parentSpanId, showLevelTooltip }: TracesDataListNameCellProps) {
+  const isRoot = parentSpanId == null;
+  const Icon = isRoot ? ListTreeIcon : CornerDownRightIcon;
+  const label = isRoot ? 'Trace' : 'Subtrace';
+  const icon = (
+    <span aria-label={label} className="inline-flex shrink-0">
+      <Icon className={cn('size-4 shrink-0', isRoot ? 'text-neutral3' : 'text-neutral2')} aria-hidden />
+    </span>
+  );
   return (
-    <DataListCell height="compact" className="text-neutral4 text-ui-smd min-w-0 truncate">
-      {name || '-'}
+    <DataListCell height="compact" className="text-neutral4 text-ui-smd min-w-0 flex items-center gap-2">
+      {showLevelTooltip ? (
+        <Tooltip>
+          <TooltipTrigger asChild>{icon}</TooltipTrigger>
+          <TooltipContent>{label}</TooltipContent>
+        </Tooltip>
+      ) : (
+        icon
+      )}
+      <span className="min-w-0 truncate">{name || '-'}</span>
     </DataListCell>
   );
 }
@@ -124,11 +53,7 @@ export interface TracesDataListInputCellProps {
 }
 
 export function TracesDataListInputCell({ input }: TracesDataListInputCellProps) {
-  return (
-    <DataListCell height="compact" className="min-w-0">
-      <span className="block text-neutral3 text-ui-smd font-mono truncate">{input || '-'}</span>
-    </DataListCell>
-  );
+  return <DataListMonoCell>{input || '-'}</DataListMonoCell>;
 }
 
 // ---------------------------------------------------------------------------
@@ -137,11 +62,13 @@ export function TracesDataListInputCell({ input }: TracesDataListInputCellProps)
 
 function EntityTypeIcon({ entityType, className }: { entityType: string; className?: string }) {
   const iconClass = cn('size-3.5 shrink-0 text-neutral2', className);
-  switch (entityType) {
-    case 'AGENT':
+  const normalizedEntityType = entityType.toLowerCase();
+
+  switch (normalizedEntityType) {
+    case EntityType.AGENT:
       return <AgentIcon className={iconClass} aria-hidden />;
-    case 'WORKFLOW':
-    case 'WORKFLOW_RUN':
+    case 'workflow':
+    case EntityType.WORKFLOW_RUN:
       return <WorkflowIcon className={iconClass} aria-hidden />;
     default:
       return null;

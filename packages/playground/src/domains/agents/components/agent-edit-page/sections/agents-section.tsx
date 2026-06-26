@@ -1,4 +1,6 @@
-import { Collapsible, CollapsibleTrigger, CollapsibleContent, MultiCombobox, AgentIcon } from '@mastra/playground-ui';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { Control } from 'react-hook-form';
@@ -93,7 +95,8 @@ export function AgentsSection({ control, error, currentAgentId, readOnly = false
                 <CollapsibleContent>
                   <div className="p-3 border-t border-border1">
                     <div className="flex flex-col gap-2">
-                      <MultiCombobox
+                      <Combobox
+                        multiple
                         options={options}
                         value={selectedIds}
                         onValueChange={handleValueChange}
@@ -102,7 +105,6 @@ export function AgentsSection({ control, error, currentAgentId, readOnly = false
                         emptyText="No agents available"
                         disabled={isLoading || readOnly}
                         error={error}
-                        variant="default"
                       />
                       {selectedOptions.length > 0 && (
                         <div className="flex flex-col gap-3 mt-2">

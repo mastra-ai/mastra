@@ -4,7 +4,7 @@ import { PickMultiPanel } from './pick-multi-panel';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
 import { Button } from '@/ds/components/Button/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
-import { MultiCombobox } from '@/ds/components/Combobox/multi-combobox';
+import { Combobox } from '@/ds/components/Combobox/combobox';
 import { Input } from '@/ds/components/Input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
 import { cn } from '@/lib/utils';
@@ -171,12 +171,13 @@ export function PropertyFilterCreator({
       <PopoverContent
         align="end"
         className="p-3 w-64"
-        onOpenAutoFocus={e => e.preventDefault()}
-        onCloseAutoFocus={e => {
+        initialFocus={false}
+        finalFocus={() => {
           if (skipCloseFocusRef.current) {
             skipCloseFocusRef.current = false;
-            e.preventDefault();
+            return false;
           }
+          return true;
         }}
       >
         <div className="grid gap-3">
@@ -298,7 +299,8 @@ export function PropertyFilterCreator({
           )}
 
           {selectedField && selectedField.kind === 'multi-select' && (
-            <MultiCombobox
+            <Combobox
+              multiple
               options={selectedField.options ?? []}
               value={multiValue}
               onValueChange={v => {
@@ -391,7 +393,7 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
         align="start"
         sideOffset={8}
         className="w-64 p-2"
-        onOpenAutoFocus={e => e.preventDefault()}
+        initialFocus={false}
         onKeyDown={e => {
           if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return;
           const items = Array.from(

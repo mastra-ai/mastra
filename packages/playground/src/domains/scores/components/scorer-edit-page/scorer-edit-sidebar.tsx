@@ -1,14 +1,11 @@
-import {
-  Button,
-  Input,
-  Label,
-  RadioGroup,
-  RadioGroupItem,
-  ScrollArea,
-  Spinner,
-  Textarea,
-  Icon,
-} from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Check, Save } from 'lucide-react';
 import type { RefObject } from 'react';
 import { Controller, useWatch } from 'react-hook-form';
@@ -60,7 +57,7 @@ export function ScorerEditSidebar({
             <Input
               id="scorer-name"
               placeholder="My Scorer"
-              className="bg-surface3"
+              variant="outline"
               {...register('name')}
               error={!!errors.name}
             />
@@ -75,7 +72,7 @@ export function ScorerEditSidebar({
             <Textarea
               id="scorer-description"
               placeholder="Describe what this scorer does"
-              className="bg-surface3"
+              variant="outline"
               {...register('description')}
               error={!!errors.description}
             />
@@ -128,7 +125,7 @@ export function ScorerEditSidebar({
                   <Input
                     type="number"
                     placeholder="Min"
-                    className="bg-surface3"
+                    variant="outline"
                     value={field.value}
                     onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
                   />
@@ -142,7 +139,7 @@ export function ScorerEditSidebar({
                   <Input
                     type="number"
                     placeholder="Max"
-                    className="bg-surface3"
+                    variant="outline"
                     value={field.value}
                     onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
                   />
@@ -185,7 +182,7 @@ export function ScorerEditSidebar({
                     min="0"
                     max="1"
                     placeholder="Rate (0-1)"
-                    className="bg-surface3"
+                    variant="outline"
                     value={field.value ?? ''}
                     onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
                   />

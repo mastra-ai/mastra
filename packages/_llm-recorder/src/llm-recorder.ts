@@ -89,7 +89,7 @@ export type LLMTestMode = 'auto' | 'update' | 'replay' | 'live' | 'record';
  */
 function isUpdateMode(): boolean {
   if (process.env.UPDATE_RECORDINGS === 'true') return true;
-  return process.argv.includes('--update-recordings') || process.argv.includes('-U');
+  return process.argv.includes('--update-recordings');
 }
 
 /**
@@ -787,11 +787,10 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
       mode = 'record';
     }
   } else if (mode === 'replay' && !recordingExists) {
-    // Strict replay: fail if no recording
-    throw new Error(
-      `[llm-recorder] No recording found for "${options.name}". ` +
-        `Run with UPDATE_RECORDINGS=true or --update-recordings to create recordings.`,
-    );
+    // Strict replay: missing files can represent tests that made no LLM calls.
+    // Keep replay mode active with an empty recording set; if a request is made,
+    // the normal per-request missing-recording error will still fail the test.
+    savedRecordings = [];
   }
 
   // Live mode: no interception, just pass through
@@ -1292,8 +1291,27 @@ export function listLLMRecordings(recordingsDir?: string): string[] {
 }
 
 /**
+ * Find the nearest package root from a file path.
+ */
+function findPackageRoot(filepath: string): string | null {
+  let dir = path.dirname(path.resolve(filepath));
+
+  while (dir !== path.dirname(dir)) {
+    if (fs.existsSync(path.join(dir, 'package.json'))) return dir;
+    dir = path.dirname(dir);
+  }
+
+  return null;
+}
+
+/**
  * Get recordings directory path
  */
-export function getLLMRecordingsDir(): string {
+export function getLLMRecordingsDir(filepath?: string): string {
+  if (filepath) {
+    const packageRoot = findPackageRoot(filepath);
+    if (packageRoot) return path.join(packageRoot, '__recordings__');
+  }
+
   return DEFAULT_RECORDINGS_DIR;
 }

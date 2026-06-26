@@ -61,6 +61,7 @@ export default defineConfig({
     'src/a2a/client.ts',
     'src/processors/index.ts',
     'src/zod-to-json.ts',
+    'src/utils/collect-tool-mocks.ts',
     'src/evals/scoreTraces/index.ts',
     'src/agent/message-list/index.ts',
     'src/agent/durable/index.ts',
@@ -91,7 +92,19 @@ export default defineConfig({
     await new Promise(resolve => setTimeout(resolve, 1000));
     await generateTypes(
       process.cwd(),
-      new Set(['@internal/ai-sdk-v4', '@internal/ai-sdk-v5', '@internal/external-types', '@internal/core']),
+      new Set([
+        '@ai-sdk/*',
+        'eventsource-parser',
+        '@internal/ai-sdk-v4',
+        '@internal/ai-sdk-v5',
+        '@internal/ai-v6',
+        '@internal/external-types',
+        '@internal/core',
+        '@internal/voice',
+        'hono',
+        'hono-openapi',
+        '@internal/auth',
+      ]),
     );
 
     // Copy provider-registry.json to dist folder
@@ -101,6 +114,24 @@ export default defineConfig({
     if (fs.existsSync(srcJson)) {
       fs.copyFileSync(srcJson, distJson);
       console.info('✓ Copied provider-registry.json to dist/');
+    }
+
+    // Copy capabilities/ directory to dist/
+    const srcCapDir = path.join(process.cwd(), 'src/llm/model/capabilities');
+    const distCapDir = path.join(process.cwd(), 'dist/capabilities');
+
+    if (fs.existsSync(srcCapDir)) {
+      if (!fs.existsSync(distCapDir)) {
+        fs.mkdirSync(distCapDir, { recursive: true });
+      }
+      for (const file of fs.readdirSync(distCapDir).filter((f: string) => f.endsWith('.json'))) {
+        fs.unlinkSync(path.join(distCapDir, file));
+      }
+      const capFiles = fs.readdirSync(srcCapDir).filter((f: string) => f.endsWith('.json'));
+      for (const file of capFiles) {
+        fs.copyFileSync(path.join(srcCapDir, file), path.join(distCapDir, file));
+      }
+      console.info(`✓ Copied ${capFiles.length} capability files to dist/capabilities/`);
     }
 
     // Copy provider-types.generated.d.ts to dist/llm/model/ folder

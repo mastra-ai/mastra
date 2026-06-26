@@ -7,15 +7,21 @@ import {
   bucketTimestampField,
   comparePeriodSchema,
   commonFilterFields,
+  deltaLimitSchema,
+  deltaInfoSchema,
   experimentIdField,
   contextFields,
   dimensionsField,
   groupBySchema,
+  deltaCursorSchema,
+  listModeSchema,
+  normalizeObservabilityListArgs,
   paginationArgsSchema,
   paginationInfoSchema,
   percentileField,
   percentileBucketValueField,
   percentilesSchema,
+  refineObservabilityListMode,
   sortDirectionSchema,
   spanIdField,
   traceIdField,
@@ -219,28 +225,36 @@ export const feedbackOrderBySchema = z
   })
   .describe('Order by configuration');
 
-/** Schema for listFeedback operation arguments */
 export const listFeedbackArgsSchema = z
   .object({
-    filters: z
-      .preprocess(normalizeLegacyFeedbackActor, feedbackFilterObjectSchema)
-      .optional()
-      .describe('Optional filters to apply'),
-    pagination: paginationArgsSchema.default({ page: 0, perPage: 10 }).describe('Pagination settings'),
-    orderBy: feedbackOrderBySchema
-      .default({ field: 'timestamp', direction: 'DESC' })
-      .describe('Ordering configuration (defaults to timestamp desc)'),
+    mode: listModeSchema.optional(),
+    filters: z.preprocess(normalizeLegacyFeedbackActor, feedbackFilterObjectSchema).optional(),
+    pagination: paginationArgsSchema.optional(),
+    orderBy: feedbackOrderBySchema.optional(),
+    after: deltaCursorSchema.optional(),
+    limit: deltaLimitSchema,
   })
+  .strict()
+  .superRefine(refineObservabilityListMode)
+  .transform(value =>
+    normalizeObservabilityListArgs<FeedbackFilter, z.output<typeof feedbackOrderBySchema>>(value, {
+      orderBy: { field: 'timestamp', direction: 'DESC' } as const,
+    }),
+  )
   .describe('Arguments for listing feedback');
 
 /** Arguments for listing feedback */
 export type ListFeedbackArgs = z.input<typeof listFeedbackArgsSchema>;
 
 /** Schema for listFeedback operation response */
-export const listFeedbackResponseSchema = z.object({
-  pagination: paginationInfoSchema,
-  feedback: z.array(feedbackRecordSchema),
-});
+export const listFeedbackResponseSchema = z
+  .object({
+    pagination: paginationInfoSchema.optional(),
+    delta: deltaInfoSchema.optional(),
+    deltaCursor: deltaCursorSchema.optional(),
+    feedback: z.array(feedbackRecordSchema),
+  })
+  .describe('Response from listing feedback');
 
 /** Response containing paginated feedback */
 export type ListFeedbackResponse = z.infer<typeof listFeedbackResponseSchema>;

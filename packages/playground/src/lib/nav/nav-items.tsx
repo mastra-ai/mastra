@@ -1,21 +1,20 @@
-import {
-  AgentIcon,
-  DatasetsIcon,
-  ExperimentsIcon,
-  LogsIcon,
-  McpServerIcon,
-  MetricsIcon,
-  ProcessorIcon,
-  PromptIcon,
-  RequestContextIcon,
-  ScorersIcon,
-  SettingsIcon,
-  ToolsIcon,
-  TraceIcon,
-  WorkflowIcon,
-  WorkspacesIcon,
-} from '@mastra/playground-ui';
-import { BookIcon } from 'lucide-react';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
+import { ExperimentsIcon } from '@mastra/playground-ui/icons/ExperimentsIcon';
+import { HomeIcon } from '@mastra/playground-ui/icons/HomeIcon';
+import { LogsIcon } from '@mastra/playground-ui/icons/LogsIcon';
+import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
+import { MetricsIcon } from '@mastra/playground-ui/icons/MetricsIcon';
+import { ProcessorIcon } from '@mastra/playground-ui/icons/ProcessorIcon';
+import { PromptIcon } from '@mastra/playground-ui/icons/PromptIcon';
+import { RequestContextIcon } from '@mastra/playground-ui/icons/RequestContextIcon';
+import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
+import { SettingsIcon } from '@mastra/playground-ui/icons/SettingsIcon';
+import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
+import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
+import { WorkspacesIcon } from '@mastra/playground-ui/icons/WorkspacesIcon';
+import { BookIcon, LayoutGrid } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 
 export type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -26,23 +25,33 @@ export interface NavItem {
   Icon: NavIcon;
   docs?: { href: string; label?: string };
   isOnMastraPlatform?: boolean;
-  requiredPermission?: string;
-  requiredAnyPermission?: string[];
   activePaths?: string[];
 }
 
 export interface NavSection {
   key: string;
   title: string;
-  href: string;
+  href?: string;
   items: NavItem[];
 }
+
+// Signals is an opt-in experimental UI, gated by the server-injected `MASTRA_SIGNALS_UI` flag.
+const isSignalsEnabled =
+  typeof window !== 'undefined' && (window as unknown as Record<string, unknown>).MASTRA_SIGNALS_UI === 'true';
+
+const signalsNavItem: NavItem = {
+  name: 'Signals',
+  url: '/signals',
+  activePaths: ['/signals'],
+  Icon: LayoutGrid,
+  docs: { href: 'https://mastra.ai/en/docs/observability/tracing/overview', label: 'Signals documentation' },
+  isOnMastraPlatform: true,
+};
 
 export const mainNav: NavSection[] = [
   {
     key: 'primitives',
     title: 'Primitives',
-    href: '/primitives',
     items: [
       {
         name: 'Agents',
@@ -50,7 +59,6 @@ export const mainNav: NavSection[] = [
         Icon: AgentIcon,
         docs: { href: 'https://mastra.ai/en/docs/agents/overview', label: 'Agents documentation' },
         isOnMastraPlatform: true,
-        requiredPermission: 'agents:read',
       },
       {
         name: 'Prompts',
@@ -68,7 +76,6 @@ export const mainNav: NavSection[] = [
         Icon: WorkflowIcon,
         docs: { href: 'https://mastra.ai/en/docs/workflows/overview', label: 'Workflows documentation' },
         isOnMastraPlatform: true,
-        requiredPermission: 'workflows:read',
       },
       {
         name: 'Processors',
@@ -76,7 +83,6 @@ export const mainNav: NavSection[] = [
         Icon: ProcessorIcon,
         docs: { href: 'https://mastra.ai/en/docs/agents/processors', label: 'Processors documentation' },
         isOnMastraPlatform: false,
-        requiredPermission: 'processors:read',
       },
       {
         name: 'MCP Servers',
@@ -84,7 +90,6 @@ export const mainNav: NavSection[] = [
         Icon: McpServerIcon,
         docs: { href: 'https://mastra.ai/en/docs/tools-mcp/mcp-overview', label: 'MCP documentation' },
         isOnMastraPlatform: true,
-        requiredPermission: 'mcps:read',
       },
       {
         name: 'Tools',
@@ -92,7 +97,6 @@ export const mainNav: NavSection[] = [
         Icon: ToolsIcon,
         docs: { href: 'https://mastra.ai/en/docs/agents/using-tools-and-mcp', label: 'Tools documentation' },
         isOnMastraPlatform: true,
-        requiredPermission: 'tools:read',
       },
       {
         name: 'Workspaces',
@@ -100,7 +104,6 @@ export const mainNav: NavSection[] = [
         Icon: WorkspacesIcon,
         docs: { href: 'https://mastra.ai/en/docs/workspace/overview', label: 'Workspaces documentation' },
         isOnMastraPlatform: true,
-        requiredPermission: 'workspaces:read',
       },
       {
         name: 'Request Context',
@@ -113,15 +116,19 @@ export const mainNav: NavSection[] = [
   {
     key: 'evaluation',
     title: 'Evaluation',
-    href: '/evaluation',
     items: [
+      {
+        name: 'Overview',
+        url: '/evaluation',
+        Icon: HomeIcon,
+        isOnMastraPlatform: true,
+      },
       {
         name: 'Scorers',
         url: '/scorers',
         Icon: ScorersIcon,
         docs: { href: 'https://mastra.ai/en/docs/evals/overview', label: 'Scorers documentation' },
         isOnMastraPlatform: true,
-        requiredPermission: 'scorers:read',
       },
       {
         name: 'Datasets',
@@ -129,7 +136,6 @@ export const mainNav: NavSection[] = [
         Icon: DatasetsIcon,
         docs: { href: 'https://mastra.ai/en/docs/evals/datasets/overview', label: 'Datasets documentation' },
         isOnMastraPlatform: true,
-        requiredAnyPermission: ['datasets:read'],
       },
       {
         name: 'Experiments',
@@ -140,14 +146,12 @@ export const mainNav: NavSection[] = [
           label: 'Experiments documentation',
         },
         isOnMastraPlatform: true,
-        requiredAnyPermission: ['datasets:read'],
       },
     ],
   },
   {
     key: 'observability',
     title: 'Observability',
-    href: '/observability-overview',
     items: [
       {
         name: 'Metrics',
@@ -155,7 +159,6 @@ export const mainNav: NavSection[] = [
         Icon: MetricsIcon,
         docs: { href: 'https://mastra.ai/en/docs/observability/overview', label: 'Metrics documentation' },
         isOnMastraPlatform: true,
-        requiredPermission: 'observability:read',
       },
       {
         name: 'Traces',
@@ -164,15 +167,14 @@ export const mainNav: NavSection[] = [
         Icon: TraceIcon,
         docs: { href: 'https://mastra.ai/en/docs/observability/tracing/overview', label: 'Traces documentation' },
         isOnMastraPlatform: true,
-        requiredPermission: 'observability:read',
       },
+      ...(isSignalsEnabled ? [signalsNavItem] : []),
       {
         name: 'Logs',
         url: '/logs',
         Icon: LogsIcon,
         docs: { href: 'https://mastra.ai/en/docs/observability/logging', label: 'Logs documentation' },
         isOnMastraPlatform: true,
-        requiredPermission: 'observability:read',
       },
     ],
   },
@@ -183,7 +185,7 @@ export const bottomNav: NavItem[] = [
   { name: 'Resources', url: '/resources', Icon: BookIcon, isOnMastraPlatform: true },
 ];
 
-/** Section-level evaluation/observability/overview crumbs the sidebar headers link to. */
+/** Section-level entries used to resolve breadcrumb label + icon for the overview routes. */
 export const sectionNav: NavItem[] = [
   {
     name: 'Evaluation',
@@ -191,20 +193,11 @@ export const sectionNav: NavItem[] = [
     Icon: ExperimentsIcon,
     docs: { href: 'https://mastra.ai/en/docs/evals/overview', label: 'Evaluation documentation' },
   },
-  {
-    name: 'Observability',
-    url: '/observability-overview',
-    Icon: TraceIcon,
-    docs: { href: 'https://mastra.ai/en/docs/observability/overview', label: 'Observability documentation' },
-  },
-  {
-    name: 'Primitives',
-    url: '/primitives',
-    Icon: AgentIcon,
-  },
 ];
 
-const allItems: NavItem[] = [...mainNav.flatMap(s => s.items), ...bottomNav, ...sectionNav];
+// sectionNav comes first so /evaluation resolves to "Evaluation" (section crumb) rather than the
+// in-section "Overview" NavLink which shares the same url.
+const allItems: NavItem[] = [...sectionNav, ...mainNav.flatMap(s => s.items), ...bottomNav];
 
 export function findNavItem(url: string): NavItem | undefined {
   return allItems.find(i => i.url === url);
