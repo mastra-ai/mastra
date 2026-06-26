@@ -520,6 +520,7 @@ export type ProviderModelsMap = {
     'xai/grok-build-0.1',
     'xai/grok-imagine-image',
     'xai/grok-imagine-video',
+    'xai/grok-imagine-video-1.5',
     'xai/grok-imagine-video-1.5-preview',
     'xai/grok-stt',
     'xai/grok-tts',
@@ -1973,7 +1974,6 @@ export type ProviderModelsMap = {
     'ministral-8b-2512',
     'mistral-large-2512',
     'mistral-large-latest',
-    'mistral-ocr-latest',
     'mistral-small-2506',
     'nemotron-3-ultra-550b',
     'o1',
@@ -2741,7 +2741,6 @@ export type ProviderModelsMap = {
   readonly ovhcloud: readonly [
     'gpt-oss-120b',
     'gpt-oss-20b',
-    'llama-3.1-8b-instruct',
     'meta-llama-3_3-70b-instruct',
     'mistral-7b-instruct-v0.3',
     'mistral-nemo-instruct-2407',
@@ -3187,6 +3186,7 @@ export type ProviderModelsMap = {
     'pearl-ai/gemma-4-31b-it',
     'zai-org/GLM-5',
     'zai-org/GLM-5.1',
+    'zai-org/GLM-5.2',
   ];
   readonly frogbot: readonly [
     'claude-haiku-4-5',

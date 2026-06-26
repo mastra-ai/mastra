@@ -15,7 +15,7 @@ import { MC_TOOLS } from '../tool-names.js';
 import { buildToolGuidance } from './prompts/tool-guidance.js';
 import { createDynamicTools } from './tools.js';
 
-// Minimal mock of HarnessRequestContext shape that createDynamicTools reads
+// Minimal mock of AgentControllerRequestContext shape that createDynamicTools reads
 function makeRequestContext(
   overrides: {
     modeId?: string;
@@ -28,7 +28,7 @@ function makeRequestContext(
     projectPath: overrides.projectPath ?? '/tmp/test-project',
     permissionRules: overrides.permissionRules ?? { categories: {}, tools: {} },
   });
-  ctx.set('harness', {
+  ctx.set('controller', {
     getState,
     session: {
       modeId: overrides.modeId ?? 'build',
@@ -107,7 +107,7 @@ describe('createDynamicTools – extraTools', () => {
 
     const getDynamicTools = createDynamicTools(undefined, ({ requestContext }) => {
       // Verify requestContext is usable
-      const ctx = requestContext.get('harness') as any;
+      const ctx = requestContext.get('controller') as any;
       if (!ctx) return {};
       return { dynamic_tool: myCustomTool };
     });
@@ -126,7 +126,7 @@ describe('createDynamicTools – extraTools', () => {
     });
 
     const getDynamicTools = createDynamicTools(undefined, ({ requestContext }) => {
-      // Condition that won't match — harness context has no 'featureFlag' key
+      // Condition that won't match — controller context has no 'featureFlag' key
       const flag = requestContext.get('featureFlag') as string | undefined;
       if (!flag) return {};
       return { conditional_tool: myCustomTool };

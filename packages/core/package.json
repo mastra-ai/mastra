@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.47.0-alpha.4",
+  "version": "1.47.0-alpha.6",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -69,6 +69,16 @@
       "require": {
         "types": "./dist/agent/message-list/index.d.ts",
         "default": "./dist/agent/message-list/index.cjs"
+      }
+    },
+    "./agent-controller": {
+      "import": {
+        "types": "./dist/agent-controller/index.d.ts",
+        "default": "./dist/agent-controller/index.js"
+      },
+      "require": {
+        "types": "./dist/agent-controller/index.d.ts",
+        "default": "./dist/agent-controller/index.cjs"
       }
     },
     "./auth": {
@@ -679,6 +689,16 @@
       "require": {
         "types": "./dist/zod-to-json.d.ts",
         "default": "./dist/zod-to-json.cjs"
+      }
+    },
+    "./utils/collect-tool-mocks": {
+      "import": {
+        "types": "./dist/utils/collect-tool-mocks.d.ts",
+        "default": "./dist/utils/collect-tool-mocks.js"
+      },
+      "require": {
+        "types": "./dist/utils/collect-tool-mocks.d.ts",
+        "default": "./dist/utils/collect-tool-mocks.cjs"
       }
     },
     "./loop/server": {

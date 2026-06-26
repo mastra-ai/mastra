@@ -174,7 +174,7 @@ values
         unixSocketPubSub: false,
       },
       onCreated: result => {
-        const agent = result.harness.getMastra()?.getAgentById('code-agent');
+        const agent = result.controller.getMastra()?.getAgentById('code-agent');
         const originalSendNotificationSignal = agent?.sendNotificationSignal?.bind(agent);
         if (!agent || !originalSendNotificationSignal) return;
         type SendNotificationSignal = typeof agent.sendNotificationSignal;
@@ -202,7 +202,7 @@ values
             // session is not on. In the multi-session world the woken run uses
             // the target resource's own session, so materialize one before
             // polling — mirroring how a server would have a session per thread.
-            await result.harness.createSession({ resourceId: threadFixture.resourceId });
+            await result.controller.createSession({ resourceId: threadFixture.resourceId });
             await result.githubSignals?.startPollingForThread(
               { threadId: threadFixture.threadId, resourceId: threadFixture.resourceId },
               { pollImmediately: true },

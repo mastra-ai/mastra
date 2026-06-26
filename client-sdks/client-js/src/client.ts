@@ -89,7 +89,7 @@ import {
   Workspace,
   Responses,
   Channels,
-  Harness,
+  AgentController,
 } from './resources';
 import type {
   ListScoresBySpanParams,
@@ -259,22 +259,22 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Lists the harnesses hosted on the connected Mastra instance.
-   * @returns Promise containing an array of harness identifiers
+   * Lists the agent controllers hosted on the connected Mastra instance.
+   * @returns Promise containing an array of agent controller identifiers
    */
-  public async listHarnesses(): Promise<{ id: string }[]> {
-    const body = await this.request<{ harnesses: { id: string }[] }>('/harness');
-    return body.harnesses;
+  public async listAgentControllers(): Promise<{ id: string }[]> {
+    const body = await this.request<{ agentControllers: { id: string }[] }>('/agent-controller');
+    return body.agentControllers;
   }
 
   /**
-   * Scopes to a harness hosted on the connected Mastra instance. Use
-   * `getHarness(id).session(resourceId)` to create/resume a session, stream its
-   * events, and send messages.
-   * @param harnessId - The id the harness is registered under on Mastra
+   * Scopes to an agent controller hosted on the connected Mastra instance. Use
+   * `getAgentController(id).session(resourceId)` to create/resume a session,
+   * stream its events, and send messages.
+   * @param controllerId - The id the agent controller is registered under on Mastra
    */
-  public getHarness(harnessId: string) {
-    return new Harness(this.options, harnessId);
+  public getAgentController(controllerId: string) {
+    return new AgentController(this.options, controllerId);
   }
 
   /**

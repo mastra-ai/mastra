@@ -14,6 +14,7 @@
 export const RESOURCES = [
   'a2a',
   'agent-builder',
+  'agent-controller',
   'agents',
   'auth',
   'background-tasks',
@@ -21,7 +22,6 @@ export const RESOURCES = [
   'datasets',
   'embedders',
   'experiments',
-  'harness',
   'heartbeats',
   'infrastructure',
   'logs',
@@ -93,6 +93,8 @@ export const PERMISSION_PATTERNS = {
   'a2a:*': 'a2a:*',
   /** Full access to agent builder */
   'agent-builder:*': 'agent-builder:*',
+  /** Full access to agent controller sessions */
+  'agent-controller:*': 'agent-controller:*',
   /** Full access to agents */
   'agents:*': 'agents:*',
   /** Full access to auth */
@@ -107,8 +109,6 @@ export const PERMISSION_PATTERNS = {
   'embedders:*': 'embedders:*',
   /** Full access to experiments */
   'experiments:*': 'experiments:*',
-  /** Full access to harness sessions */
-  'harness:*': 'harness:*',
   /** Full access to heartbeats */
   'heartbeats:*': 'heartbeats:*',
   /** Full access to infrastructure */
@@ -165,6 +165,10 @@ export const PERMISSION_PATTERNS = {
   'agent-builder:read': 'agent-builder:read',
   /** Create and modify agent builder */
   'agent-builder:write': 'agent-builder:write',
+  /** Execute agent controller sessions */
+  'agent-controller:execute': 'agent-controller:execute',
+  /** View agent controller sessions */
+  'agent-controller:read': 'agent-controller:read',
   /** Create agents */
   'agents:create': 'agents:create',
   /** Delete agents */
@@ -195,10 +199,6 @@ export const PERMISSION_PATTERNS = {
   'embedders:read': 'embedders:read',
   /** View experiments */
   'experiments:read': 'experiments:read',
-  /** Execute harness sessions */
-  'harness:execute': 'harness:execute',
-  /** View harness sessions */
-  'harness:read': 'harness:read',
   /** Delete heartbeats */
   'heartbeats:delete': 'heartbeats:delete',
   /** Execute heartbeats */
@@ -360,6 +360,8 @@ export const PERMISSIONS = [
   'agent-builder:execute',
   'agent-builder:read',
   'agent-builder:write',
+  'agent-controller:execute',
+  'agent-controller:read',
   'agents:create',
   'agents:delete',
   'agents:execute',
@@ -375,8 +377,6 @@ export const PERMISSIONS = [
   'datasets:write',
   'embedders:read',
   'experiments:read',
-  'harness:execute',
-  'harness:read',
   'heartbeats:delete',
   'heartbeats:execute',
   'heartbeats:read',
@@ -465,6 +465,10 @@ export const MastraFGAPermissions = {
   AGENT_BUILDER_READ: 'agent-builder:read',
   /** Create and modify agent builder */
   AGENT_BUILDER_WRITE: 'agent-builder:write',
+  /** Execute agent controller sessions */
+  AGENT_CONTROLLER_EXECUTE: 'agent-controller:execute',
+  /** View agent controller sessions */
+  AGENT_CONTROLLER_READ: 'agent-controller:read',
   /** Create agents */
   AGENTS_CREATE: 'agents:create',
   /** Delete agents */
@@ -495,10 +499,6 @@ export const MastraFGAPermissions = {
   EMBEDDERS_READ: 'embedders:read',
   /** View experiments */
   EXPERIMENTS_READ: 'experiments:read',
-  /** Execute harness sessions */
-  HARNESS_EXECUTE: 'harness:execute',
-  /** View harness sessions */
-  HARNESS_READ: 'harness:read',
   /** Delete heartbeats */
   HEARTBEATS_DELETE: 'heartbeats:delete',
   /** Execute heartbeats */

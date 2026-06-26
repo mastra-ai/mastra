@@ -1,15 +1,15 @@
 /**
  * Eval Context Builder for MastraCode
  *
- * Converts Harness session data into scorer-compatible format.
+ * Converts AgentController session data into scorer-compatible format.
  * Supports both agent-type scorers (ScorerRunInputForAgent) and
  * trajectory scorers (Trajectory).
  */
 
 import type { MastraDBMessage } from '@mastra/core/agent';
+import type { AgentController, Session } from '@mastra/core/agent-controller';
 import { extractTrajectoryFromTrace } from '@mastra/core/evals';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent, Trajectory } from '@mastra/core/evals';
-import type { Harness, Session } from '@mastra/core/harness';
 import type { CoreMessage, CoreSystemMessage } from '@mastra/core/llm';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 
@@ -29,8 +29,8 @@ export type MastraCodeEvalContext = {
 };
 
 export type BuildContextOptions = {
-  /** Harness instance to extract data from */
-  harness: Harness<any>;
+  /** AgentController instance to extract data from */
+  controller: AgentController<any>;
   /** Session whose state/model/thread is being evaluated */
   session: Session<any>;
   /** Thread ID to build context for (defaults to current thread) */
@@ -40,20 +40,20 @@ export type BuildContextOptions = {
 };
 
 /**
- * Build an evaluation context from a Harness session.
+ * Build an evaluation context from a AgentController session.
  *
  * This extracts messages from storage, builds trajectory from trace spans,
  * and packages everything into the format scorers expect.
  */
 export async function buildEvalContext(options: BuildContextOptions): Promise<MastraCodeEvalContext> {
-  const { harness, session, lastNTurns } = options;
+  const { controller, session, lastNTurns } = options;
   const threadId = options.threadId ?? session.thread.getId();
 
   if (!threadId) {
     throw new Error('No thread ID available. Start a session before building eval context.');
   }
 
-  const mastra = harness.getMastra();
+  const mastra = controller.getMastra();
   const storage = mastra?.getStorage();
 
   // 1. Get raw MastraDB messages from memory storage
@@ -65,13 +65,13 @@ export async function buildEvalContext(options: BuildContextOptions): Promise<Ma
   // 3. Extract trajectory from observability traces
   const { trajectory, traceId } = await extractSessionTrajectory(storage, threadId);
 
-  // 4. Build request context from Harness state
+  // 4. Build request context from AgentController state
   const requestContext = buildRequestContext(session, threadId);
 
   return {
     agentInput: {
       inputMessages,
-      rememberedMessages: [], // Harness doesn't separate these; memory recall is transparent
+      rememberedMessages: [], // AgentController doesn't separate these; memory recall is transparent
       systemMessages,
       taggedSystemMessages: {},
     },
@@ -214,7 +214,7 @@ async function extractSessionTrajectory(
 }
 
 /**
- * Build request context from Harness state for scorer evaluation.
+ * Build request context from AgentController state for scorer evaluation.
  */
 function buildRequestContext(session: Session<any>, threadId: string): Record<string, unknown> {
   const state = session.state.get() as Record<string, unknown>;

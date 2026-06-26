@@ -4,7 +4,7 @@
  *
  * Also includes pure helper functions for content partitioning.
  */
-import type { HarnessMessage, HarnessMessageContent } from '@mastra/core/harness';
+import type { AgentControllerMessage, AgentControllerMessageContent } from '@mastra/core/agent-controller';
 import { TASKS_STATE_ID } from '@mastra/core/tools';
 
 import {
@@ -34,7 +34,7 @@ function getCurrentModeColor(ctx: EventHandlerContext): string | undefined {
  * Get content parts after the last tool_call/tool_result in the message.
  * These are the parts that should be rendered in the current streaming component.
  */
-function getTrailingContentParts(message: HarnessMessage): HarnessMessage['content'] {
+function getTrailingContentParts(message: AgentControllerMessage): AgentControllerMessage['content'] {
   let lastToolIndex = -1;
   for (let i = message.content.length - 1; i >= 0; i--) {
     const c = message.content[i]!;
@@ -105,7 +105,7 @@ type StreamedNotificationPart = {
   status?: string;
 };
 
-function isInlineBoundary(part: HarnessMessageContent): boolean {
+function isInlineBoundary(part: AgentControllerMessageContent): boolean {
   return (
     part.type === 'tool_call' ||
     part.type === 'tool_result' ||
@@ -117,27 +117,27 @@ function isInlineBoundary(part: HarnessMessageContent): boolean {
   );
 }
 
-function isSystemReminderPart(part: HarnessMessageContent): boolean {
+function isSystemReminderPart(part: AgentControllerMessageContent): boolean {
   return (part as { type?: string }).type === 'system_reminder';
 }
 
-function isStateSignalPart(part: HarnessMessageContent): boolean {
+function isStateSignalPart(part: AgentControllerMessageContent): boolean {
   return (part as { type?: string }).type === 'state_signal';
 }
 
-function isReactiveSignalPart(part: HarnessMessageContent): boolean {
+function isReactiveSignalPart(part: AgentControllerMessageContent): boolean {
   return (part as { type?: string }).type === 'reactive_signal';
 }
 
-function isNotificationSummaryPart(part: HarnessMessageContent): boolean {
+function isNotificationSummaryPart(part: AgentControllerMessageContent): boolean {
   return (part as { type?: string }).type === 'notification_summary';
 }
 
-function isNotificationPart(part: HarnessMessageContent): boolean {
+function isNotificationPart(part: AgentControllerMessageContent): boolean {
   return (part as { type?: string }).type === 'notification';
 }
 
-function toStreamedSystemReminderPart(part: HarnessMessageContent): StreamedSystemReminderPart | undefined {
+function toStreamedSystemReminderPart(part: AgentControllerMessageContent): StreamedSystemReminderPart | undefined {
   if (!isSystemReminderPart(part)) return undefined;
   const reminder = part as unknown as Partial<StreamedSystemReminderPart>;
 
@@ -153,7 +153,7 @@ function toStreamedSystemReminderPart(part: HarnessMessageContent): StreamedSyst
   };
 }
 
-function toStreamedStateSignalPart(part: HarnessMessageContent): StreamedStateSignalPart | undefined {
+function toStreamedStateSignalPart(part: AgentControllerMessageContent): StreamedStateSignalPart | undefined {
   if (!isStateSignalPart(part)) return undefined;
   const stateSignal = part as unknown as Partial<StreamedStateSignalPart>;
   if (typeof stateSignal.stateId !== 'string') return undefined;
@@ -171,7 +171,7 @@ function toStreamedStateSignalPart(part: HarnessMessageContent): StreamedStateSi
   };
 }
 
-function toStreamedReactiveSignalPart(part: HarnessMessageContent): StreamedReactiveSignalPart | undefined {
+function toStreamedReactiveSignalPart(part: AgentControllerMessageContent): StreamedReactiveSignalPart | undefined {
   if (!isReactiveSignalPart(part)) return undefined;
   const reactiveSignal = part as unknown as Partial<StreamedReactiveSignalPart>;
   if (typeof reactiveSignal.tagName !== 'string') return undefined;
@@ -183,7 +183,9 @@ function toStreamedReactiveSignalPart(part: HarnessMessageContent): StreamedReac
   };
 }
 
-function toStreamedNotificationSummaryPart(part: HarnessMessageContent): StreamedNotificationSummaryPart | undefined {
+function toStreamedNotificationSummaryPart(
+  part: AgentControllerMessageContent,
+): StreamedNotificationSummaryPart | undefined {
   if (!isNotificationSummaryPart(part)) return undefined;
   const summary = part as unknown as Partial<StreamedNotificationSummaryPart>;
   if (typeof summary.message !== 'string' || typeof summary.pending !== 'number') return undefined;
@@ -196,7 +198,7 @@ function toStreamedNotificationSummaryPart(part: HarnessMessageContent): Streame
   };
 }
 
-function toStreamedNotificationPart(part: HarnessMessageContent): StreamedNotificationPart | undefined {
+function toStreamedNotificationPart(part: AgentControllerMessageContent): StreamedNotificationPart | undefined {
   if (!isNotificationPart(part)) return undefined;
   const notification = part as unknown as Partial<StreamedNotificationPart>;
   if (typeof notification.message !== 'string') return undefined;
@@ -310,10 +312,10 @@ function addInlineReminder(ctx: EventHandlerContext, reminder: StreamedSystemRem
 }
 
 function getContentBeforeToolCall(
-  message: HarnessMessage,
+  message: AgentControllerMessage,
   toolCallId: string,
   seenToolCallIds: Set<string>,
-): HarnessMessage['content'] {
+): AgentControllerMessage['content'] {
   const idx = message.content.findIndex(c => c.type === 'tool_call' && c.id === toolCallId);
   if (idx === -1) return message.content;
   // Find the start: after the last tool_call/tool_result that we've already seen
@@ -332,7 +334,7 @@ function getContentBeforeToolCall(
   return message.content.slice(startIdx, idx).filter(c => c.type === 'text' || c.type === 'thinking');
 }
 
-export function handleMessageStart(ctx: EventHandlerContext, message: HarnessMessage): void {
+export function handleMessageStart(ctx: EventHandlerContext, message: AgentControllerMessage): void {
   const { state } = ctx;
   if (message.role === 'user') {
     ctx.addUserMessage(message);
@@ -355,7 +357,7 @@ export function handleMessageStart(ctx: EventHandlerContext, message: HarnessMes
   }
 }
 
-export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMessage): void {
+export function handleMessageUpdate(ctx: EventHandlerContext, message: AgentControllerMessage): void {
   const { state } = ctx;
   if (message.role !== 'assistant') return;
 
@@ -532,7 +534,7 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
   state.ui.requestRender();
 }
 
-export function handleMessageEnd(ctx: EventHandlerContext, message: HarnessMessage): void {
+export function handleMessageEnd(ctx: EventHandlerContext, message: AgentControllerMessage): void {
   const { state } = ctx;
   if (message.role === 'user') return;
 

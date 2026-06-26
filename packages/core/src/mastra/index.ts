@@ -5,6 +5,7 @@ import type { HeartbeatConfig, HeartbeatHooks } from '../agent/heartbeat/types';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
+import type { AgentController } from '../agent-controller';
 import { BackgroundTaskManager } from '../background-tasks';
 import type { BackgroundTaskManagerConfig } from '../background-tasks/types';
 import type { BundlerConfig } from '../bundler/types';
@@ -275,11 +276,22 @@ export interface Config<
   workflows?: TWorkflows;
 
   /**
-   * Harnesses to host on this Mastra instance, keyed by id. Each registered
-   * Harness uses this Mastra (its storage, agents, gateways, and observability)
-   * instead of building its own internal one, and is reachable via
-   * {@link Mastra.getHarness} / {@link Mastra.listHarnesses}. This is how a
-   * server exposes multiple Harnesses' sessions over HTTP.
+   * AgentControllers to host on this Mastra instance, keyed by id. Each
+   * registered AgentController uses this Mastra (its storage, agents, gateways,
+   * and observability) instead of building its own internal one, and is
+   * reachable via {@link Mastra.getAgentController} /
+   * {@link Mastra.listAgentControllers}. This is how a server exposes multiple
+   * AgentControllers' sessions over HTTP.
+   */
+  agentControllers?: Record<string, AgentController<any>>;
+
+  /**
+   * Harnesses to host on this Mastra instance, keyed by id.
+   *
+   * @deprecated Use {@link MastraConfig.agentControllers} instead. `harnesses`
+   * is retained as a backwards-compatible alias and will be removed in a future
+   * major. Entries from both keys are merged, with `agentControllers` taking
+   * precedence on key collisions.
    */
   harnesses?: Record<string, Harness<any>>;
 
@@ -1532,11 +1544,15 @@ export class Mastra<
       });
     }
 
-    if (config?.harnesses) {
-      for (const [key, harness] of Object.entries(config.harnesses)) {
-        this.#harnesses[key] = harness;
-        harness.__registerMastra(this);
-      }
+    // `harnesses` is the deprecated alias of `agentControllers`; merge both,
+    // letting `agentControllers` win on key collisions.
+    const agentControllerEntries = {
+      ...(config?.harnesses ?? {}),
+      ...(config?.agentControllers ?? {}),
+    };
+    for (const [key, agentController] of Object.entries(agentControllerEntries)) {
+      this.#harnesses[key] = agentController;
+      agentController.__registerMastra(this);
     }
 
     registerHook(AvailableHooks.ON_SCORER_RUN, createOnScorerHook(this));
@@ -2003,47 +2019,75 @@ export class Mastra<
   }
 
   /**
-   * Get a Harness hosted on this Mastra instance by its registration key (the
-   * key it was registered under in `new Mastra({ harnesses })`). Returns
-   * `undefined` when no harness is registered under that key. Server route
+   * Get an AgentController hosted on this Mastra instance by its registration
+   * key (the key it was registered under in `new Mastra({ agentControllers })`).
+   * Returns `undefined` when none is registered under that key. Server route
    * handlers use this to create and drive sessions over HTTP.
    *
    * @example
    * ```typescript
-   * const code = new Harness({ id: 'code-harness', modes });
-   * const mastra = new Mastra({ harnesses: { code } });
+   * const code = new AgentController({ id: 'code-controller', modes });
+   * const mastra = new Mastra({ agentControllers: { code } });
    *
-   * mastra.getHarness('code'); // → the Harness (by key)
+   * mastra.getAgentController('code'); // → the AgentController (by key)
    * ```
    */
-  public getHarness(key: string): Harness<any> | undefined {
+  public getAgentController(key: string): AgentController<any> | undefined {
     return this.#harnesses[key];
   }
 
   /**
-   * Get a Harness hosted on this Mastra instance by its unique `id` (the `id`
-   * passed to the `Harness` constructor). Falls back to a registration-key
-   * lookup when no harness matches by id, mirroring {@link getAgentById}.
-   * Returns `undefined` when none is found.
+   * Get an AgentController hosted on this Mastra instance by its unique `id`
+   * (the `id` passed to the `AgentController` constructor). Falls back to a
+   * registration-key lookup when none matches by id, mirroring
+   * {@link getAgentById}. Returns `undefined` when none is found.
    *
    * @example
    * ```typescript
-   * const code = new Harness({ id: 'code-harness', modes });
-   * const mastra = new Mastra({ harnesses: { code } });
+   * const code = new AgentController({ id: 'code-controller', modes });
+   * const mastra = new Mastra({ agentControllers: { code } });
    *
-   * mastra.getHarnessById('code-harness'); // → the Harness (by id)
+   * mastra.getAgentControllerById('code-controller'); // → by id
    * ```
    */
+  public getAgentControllerById(id: string): AgentController<any> | undefined {
+    return Object.values(this.#harnesses).find(controller => controller.id === id) ?? this.#harnesses[id];
+  }
+
+  /**
+   * List all AgentControllers hosted on this Mastra instance, keyed by their
+   * registration key.
+   */
+  public listAgentControllers(): Record<string, AgentController<any>> {
+    return this.#harnesses;
+  }
+
+  /**
+   * Get a Harness hosted on this Mastra instance by its registration key.
+   *
+   * @deprecated Use {@link Mastra.getAgentController} instead.
+   */
+  public getHarness(key: string): Harness<any> | undefined {
+    return this.getAgentController(key);
+  }
+
+  /**
+   * Get a Harness hosted on this Mastra instance by its unique `id`.
+   *
+   * @deprecated Use {@link Mastra.getAgentControllerById} instead.
+   */
   public getHarnessById(id: string): Harness<any> | undefined {
-    return Object.values(this.#harnesses).find(harness => harness.id === id) ?? this.#harnesses[id];
+    return this.getAgentControllerById(id);
   }
 
   /**
    * List all Harnesses hosted on this Mastra instance, keyed by their
    * registration key.
+   *
+   * @deprecated Use {@link Mastra.listAgentControllers} instead.
    */
   public listHarnesses(): Record<string, Harness<any>> {
-    return this.#harnesses;
+    return this.listAgentControllers();
   }
 
   /**
@@ -2120,6 +2164,19 @@ export class Mastra<
       for (const workflow of durableWorkflows) {
         this.addWorkflow(workflow, workflow.id);
       }
+
+      // Register scorers from the underlying agent so durable runs can resolve
+      // them via mastra.getScorer()/getScorerById() at workflow time.
+      underlyingAgent
+        .listScorers()
+        .then(scorers => {
+          for (const [, entry] of Object.entries(scorers || {})) {
+            this.addScorer(entry.scorer, undefined, { source: 'code' });
+          }
+        })
+        .catch(err => {
+          this.#logger?.debug(`Failed to register scorers from durable agent ${agentKey}:`, err);
+        });
 
       return;
     }
