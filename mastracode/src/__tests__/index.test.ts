@@ -29,11 +29,11 @@ vi.mock('@mastra/core/agent', () => ({
 
 const agentConstructorMock = vi.fn();
 
-const controllerConstructorMock = vi.fn();
+const agentControllerConstructorMock = vi.fn();
 const loadSettingsMock = vi.fn();
 const getAvailableModePacksMock = vi.fn(() => []);
 const getAvailableOmPacksMock = vi.fn(() => []);
-const controllerSubscribeMock = vi.fn();
+const agentControllerSubscribeMock = vi.fn();
 const detectProjectMock = vi.fn(() => ({
   mode: 'none',
   rootPath: process.cwd(),
@@ -42,16 +42,16 @@ const detectProjectMock = vi.fn(() => ({
   hasGit: false,
   contextFiles: [],
 }));
-const controllerGetCurrentThreadIdMock = vi.fn();
-const controllerListThreadsMock = vi.fn();
-const controllerSetStateMock = vi.fn();
-const controllerSetThreadSettingMock = vi.fn();
+const agentControllerGetCurrentThreadIdMock = vi.fn();
+const agentControllerListThreadsMock = vi.fn();
+const agentControllerSetStateMock = vi.fn();
+const agentControllerSetThreadSettingMock = vi.fn();
 const createMcpManagerMock = vi.fn();
 const hookManagerConstructorMock = vi.fn();
 const getStorageConfigMock = vi.fn(() => ({ type: 'memory' }));
 const getResourceIdOverrideMock = vi.fn(() => undefined);
 const getDynamicWorkspaceMock = vi.fn();
-let controllerStateMock: Record<string, unknown> = { cavemanObservations: false };
+let agentControllerStateMock: Record<string, unknown> = { cavemanObservations: false };
 
 function createMockSettings() {
   return {
@@ -107,7 +107,7 @@ function createMockSettings() {
 vi.mock('@mastra/core/agent-controller', () => ({
   AgentController: class {
     constructor(config: unknown) {
-      controllerConstructorMock(config);
+      agentControllerConstructorMock(config);
     }
     async init() {}
     getMastra() {
@@ -115,33 +115,33 @@ vi.mock('@mastra/core/agent-controller', () => ({
     }
     async createSession() {
       return {
-        subscribe: (eventHandler: unknown) => controllerSubscribeMock(eventHandler),
+        subscribe: (eventHandler: unknown) => agentControllerSubscribeMock(eventHandler),
         identity: {
           getResourceId: () => 'project-resource',
         },
         thread: {
-          getId: () => controllerGetCurrentThreadIdMock(),
-          list: (options: unknown) => controllerListThreadsMock(options),
-          setSetting: (setting: unknown) => controllerSetThreadSettingMock(setting),
+          getId: () => agentControllerGetCurrentThreadIdMock(),
+          list: (options: unknown) => agentControllerListThreadsMock(options),
+          setSetting: (setting: unknown) => agentControllerSetThreadSettingMock(setting),
         },
         mode: { get: () => 'build' },
         model: { get: () => 'anthropic/claude-opus-4-6' },
         state: {
-          get: () => controllerStateMock,
-          set: (state: unknown) => controllerSetStateMock(state),
+          get: () => agentControllerStateMock,
+          set: (state: unknown) => agentControllerSetStateMock(state),
           update: async (updater: any) => {
-            const result = await updater(controllerStateMock);
-            if (result?.updates) controllerSetStateMock(result.updates);
+            const result = await updater(agentControllerStateMock);
+            if (result?.updates) agentControllerSetStateMock(result.updates);
             return result?.result;
           },
         },
       };
     }
     getState() {
-      return controllerStateMock;
+      return agentControllerStateMock;
     }
     setState(state: unknown) {
-      return controllerSetStateMock(state);
+      return agentControllerSetStateMock(state);
     }
   },
   taskWriteTool: {},
