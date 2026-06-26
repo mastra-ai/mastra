@@ -8,7 +8,7 @@ describe('agent-controller routes', () => {
     expect(AGENT_CONTROLLER_ROUTES.length).toBeGreaterThan(0);
     for (const route of AGENT_CONTROLLER_ROUTES) {
       expect(route.path.startsWith('/agent-controller')).toBe(true);
-      expect(route.openapi?.tags ?? []).not.toContain('AgentController');
+      expect(route.openapi?.tags ?? []).toContain('AgentController');
       const perms = Array.isArray(route.requiresPermission)
         ? route.requiresPermission
         : route.requiresPermission
