@@ -68,19 +68,19 @@ import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
 export const researchTool = createTool({
-  id: 'research',
-  description: 'Run a long research job',
-  inputSchema: z.object({ topic: z.string() }),
-  // highlight-start
-  background: {
-    enabled: true,
-    timeoutMs: 600_000,
-    maxRetries: 1,
-  },
-  // highlight-end
-  execute: async ({ context }) => {
-    // ...
-  },
+	id: 'research',
+	description: 'Run a long research job',
+	inputSchema: z.object({ topic: z.string() }),
+	// highlight-start
+	background: {
+		enabled: true,
+		timeoutMs: 600_000,
+		maxRetries: 1,
+	},
+	// highlight-end
+	execute: async ({ context }) => {
+		// ...
+	},
 })
 ```
 

@@ -22,17 +22,17 @@ import { createUIMessageStreamResponse } from 'ai'
 import { mastra } from '@/src/mastra'
 
 export async function GET(req: Request) {
-  const { searchParams } = new URL(req.url)
-  const runId = searchParams.get('runId')!
+	const { searchParams } = new URL(req.url)
+	const runId = searchParams.get('runId')!
 
-  const workflowRun = await mastra.getWorkflow('myWorkflow').getWorkflowRunById(runId)
+	const workflowRun = await mastra.getWorkflow('myWorkflow').getWorkflowRunById(runId)
 
-  if (!workflowRun) {
-    return new Response('Not found', { status: 404 })
-  }
+	if (!workflowRun) {
+		return new Response('Not found', { status: 404 })
+	}
 
-  const stream = workflowSnapshotToStream(workflowRun)
-  return createUIMessageStreamResponse({ stream })
+	const stream = workflowSnapshotToStream(workflowRun)
+	return createUIMessageStreamResponse({ stream })
 }
 ```
 
@@ -40,13 +40,13 @@ export async function GET(req: Request) {
 
 <PropertiesTable
   content={[
-  {
-    name: 'workflowRun',
-    type: 'WorkflowState',
-    description:
-      'The workflow run state object, as returned by `getWorkflowRunById()` or the workflow runs API. Contains `runId`, `workflowName`, `status`, and `steps`.',
-    isOptional: false,
-  },
+	{
+		name: 'workflowRun',
+		type: 'WorkflowState',
+		description:
+			'The workflow run state object, as returned by `getWorkflowRunById()` or the workflow runs API. Contains `runId`, `workflowName`, `status`, and `steps`.',
+		isOptional: false,
+	},
 ]}
 />
 

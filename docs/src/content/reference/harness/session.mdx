@@ -42,67 +42,67 @@ The session is organized into sub-objects, each owning one domain of per-convers
 
 <PropertiesTable
   content={[
-  {
-    name: 'identity',
-    type: 'SessionIdentity',
-    description: 'Stable session, owner, and resource identity for the conversation. See identity methods below.',
-  },
-  {
-    name: 'thread',
-    type: 'SessionThread',
-    description: 'Active thread binding and thread/message reads. See thread methods below.',
-  },
-  {
-    name: 'mode',
-    type: 'SessionMode',
-    description: 'Active mode selection. See mode methods below.',
-  },
-  {
-    name: 'model',
-    type: 'SessionModel',
-    description: 'Active model selection, including per-mode persistence. See model methods below.',
-  },
-  {
-    name: 'run',
-    type: 'SessionRun',
-    description: 'Run and trace identity plus abort state for the in-flight run. See run methods below.',
-  },
-  {
-    name: 'stream',
-    type: 'SessionStream',
-    description: 'The live subscription to the agent thread stream. See stream methods below.',
-  },
-  {
-    name: 'suspensions',
-    type: 'SessionSuspensions',
-    description: 'Parked interactive tool calls awaiting a resume. See suspensions methods below.',
-  },
-  {
-    name: 'followUps',
-    type: 'SessionFollowUps',
-    description: 'Queue of messages submitted while a run is in progress. See follow-up methods below.',
-  },
-  {
-    name: 'approval',
-    type: 'SessionApproval',
-    description: 'The pending tool-approval gate. See approval methods below.',
-  },
-  {
-    name: 'displayState',
-    type: 'SessionDisplayState',
-    description: 'The canonical HarnessDisplayState snapshot a UI renders from. See display-state methods below.',
-  },
-  {
-    name: 'state',
-    type: 'SessionState<TState>',
-    description: 'The schema-validated, session-owned Harness state. See state methods below.',
-  },
-  {
-    name: 'browser',
-    type: 'MastraBrowser | undefined',
-    description:
-      'The browser automation instance for this session. Set at creation via createSession, or from the Harness config default. Undefined when no browser is configured.',
-  },
+	{
+		name: 'identity',
+		type: 'SessionIdentity',
+		description: 'Stable session, owner, and resource identity for the conversation. See identity methods below.',
+	},
+	{
+		name: 'thread',
+		type: 'SessionThread',
+		description: 'Active thread binding and thread/message reads. See thread methods below.',
+	},
+	{
+		name: 'mode',
+		type: 'SessionMode',
+		description: 'Active mode selection. See mode methods below.',
+	},
+	{
+		name: 'model',
+		type: 'SessionModel',
+		description: 'Active model selection, including per-mode persistence. See model methods below.',
+	},
+	{
+		name: 'run',
+		type: 'SessionRun',
+		description: 'Run and trace identity plus abort state for the in-flight run. See run methods below.',
+	},
+	{
+		name: 'stream',
+		type: 'SessionStream',
+		description: 'The live subscription to the agent thread stream. See stream methods below.',
+	},
+	{
+		name: 'suspensions',
+		type: 'SessionSuspensions',
+		description: 'Parked interactive tool calls awaiting a resume. See suspensions methods below.',
+	},
+	{
+		name: 'followUps',
+		type: 'SessionFollowUps',
+		description: 'Queue of messages submitted while a run is in progress. See follow-up methods below.',
+	},
+	{
+		name: 'approval',
+		type: 'SessionApproval',
+		description: 'The pending tool-approval gate. See approval methods below.',
+	},
+	{
+		name: 'displayState',
+		type: 'SessionDisplayState',
+		description: 'The canonical HarnessDisplayState snapshot a UI renders from. See display-state methods below.',
+	},
+	{
+		name: 'state',
+		type: 'SessionState<TState>',
+		description: 'The schema-validated, session-owned Harness state. See state methods below.',
+	},
+	{
+		name: 'browser',
+		type: 'MastraBrowser | undefined',
+		description:
+			'The browser automation instance for this session. Set at creation via createSession, or from the Harness config default. Undefined when no browser is configured.',
+	},
 ]}
 />
 

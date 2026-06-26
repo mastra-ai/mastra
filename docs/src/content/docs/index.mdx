@@ -193,13 +193,13 @@ Start from the stack you already use. Mastra can be added to existing projects o
 
 <CardGrid columns={3}>
   {frameworks.map(fw => (
-      	<CardGridItem
-      		key={fw.title}
-      		title={fw.title}
-      		href={fw.href}
-      		logo={<FrameworkIcon name={fw.icon} />}
-      	/>
-      ))}
+          	<CardGridItem
+          		key={fw.title}
+          		title={fw.title}
+          		href={fw.href}
+          		logo={<FrameworkIcon name={fw.icon} />}
+          	/>
+          ))}
 </CardGrid>
 
 Looking for another stack? View all [framework integration guides](/guides).
@@ -210,16 +210,16 @@ Start from the stack you already use. Mastra can be added to existing projects o
 
 <CardGrid columns={3}>
   {platform.map(card => (
-      	<SpotlightCard
-      		key={card.title}
-      		variant="platform"
-      		title={card.title}
-      		description={card.description}
-      		href={card.href}
-      		src={card.icon}
-      		alt={`${card.title} icon`}
-      	/>
-      ))}
+          	<SpotlightCard
+          		key={card.title}
+          		variant="platform"
+          		title={card.title}
+          		description={card.description}
+          		href={card.href}
+          		src={card.icon}
+          		alt={`${card.title} icon`}
+          	/>
+          ))}
 </CardGrid>
 
 Want the full picture? Explore the [complete platform documentation](/docs/mastra-platform/overview).
@@ -228,16 +228,16 @@ Want the full picture? Explore the [complete platform documentation](/docs/mastr
 
 <Accordion>
   {buildItems.map(item => (
-      	<AccordionItem key={item.title} title={item.title}>
-      		{item.content}
-      	</AccordionItem>
-      ))}
+          	<AccordionItem key={item.title} title={item.title}>
+          		{item.content}
+          	</AccordionItem>
+          ))}
 </Accordion>
 
 ## Community
 
 <CardGrid columns={3}>
   {community.map(item => (
-      	<BrandCard key={item.title} src={item.logo} alt={item.title} href={item.href} />
-      ))}
+          	<BrandCard key={item.title} src={item.logo} alt={item.title} href={item.href} />
+          ))}
 </CardGrid>
