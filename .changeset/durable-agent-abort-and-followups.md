@@ -30,7 +30,7 @@ const out = await durable.generate('Plan a week in Lisbon', {
 // 2. stream() with result.abort() — cancel mid-run
 const result = await durable.stream('Long research task');
 setTimeout(() => result.abort(), 5_000);
-for await (const chunk of result.fullStream) {
+for await (const chunk of result.output.fullStream) {
   process.stdout.write(chunk.payload?.text ?? '');
 }
 
