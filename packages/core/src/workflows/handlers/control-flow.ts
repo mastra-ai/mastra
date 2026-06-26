@@ -11,6 +11,7 @@ import { ToolStream } from '../../tools/stream';
 import { selectFields } from '../../utils';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
+import type { ExecuteStepParams } from './step';
 import type { ConditionFunction, InnerOutput, LoopConditionFunction, Step } from '../step';
 import { getStepResult } from '../step';
 import type {
@@ -19,6 +20,7 @@ import type {
   OutputWriter,
   RestartExecutionParams,
   SerializedStepFlowEntry,
+  SingleStepEntry,
   StepFailure,
   StepFlowEntry,
   StepResult,
@@ -26,7 +28,30 @@ import type {
   StepSuspended,
   TimeTravelExecutionParams,
 } from '../types';
-import { createDeprecationProxy, runCountDeprecationMessage, getResumeLabelsByStepId } from '../utils';
+import {
+  createDeprecationProxy,
+  runCountDeprecationMessage,
+  getResumeLabelsByStepId,
+  getSingleStepEntryId,
+} from '../utils';
+
+/**
+ * Runs one child of a parallel/conditional block by dispatching on its step type
+ * to the matching engine execute method - the same per-type dispatch the engine
+ * uses for top-level entries.
+ */
+function executeChildEntry(engine: DefaultExecutionEngine, child: SingleStepEntry, params: Omit<ExecuteStepParams, 'step'>) {
+  switch (child.type) {
+    case 'step':
+      return engine.executeStep({ ...params, step: child.step });
+    case 'agent':
+      return engine.executeAgent({ ...params, entry: child });
+    case 'tool':
+      return engine.executeTool({ ...params, entry: child });
+    case 'mapping':
+      return engine.executeMapping({ ...params, entry: child });
+  }
+}
 
 export interface ExecuteParallelParams extends ObservabilityContext {
   workflowId: string;
@@ -34,10 +59,7 @@ export interface ExecuteParallelParams extends ObservabilityContext {
   resourceId?: string;
   entry: {
     type: 'parallel';
-    steps: {
-      type: 'step';
-      step: Step;
-    }[];
+    steps: SingleStepEntry[];
   };
   serializedStepGraph: SerializedStepFlowEntry[];
   prevStep: StepFlowEntry;
@@ -88,16 +110,18 @@ export async function executeParallel(
 
   const observabilityContext = resolveObservabilityContext(rest);
 
+  const steps = entry.steps;
+
   const parallelSpan = await engine.createChildSpan({
     parentSpan: observabilityContext.tracingContext.currentSpan,
     operationId: `workflow.${workflowId}.run.${runId}.parallel.${executionContext.executionPath.join('-')}.span.start`,
     options: {
       type: SpanType.WORKFLOW_PARALLEL,
-      name: `parallel: '${entry.steps.length} branches'`,
+      name: `parallel: '${steps.length} branches'`,
       input: engine.getStepOutput(stepResults, prevStep),
       attributes: {
-        branchCount: entry.steps.length,
-        parallelSteps: entry.steps.map(s => (s.type === 'step' ? s.step.id : `control-${s.type}`)),
+        branchCount: steps.length,
+        parallelSteps: steps.map(s => getSingleStepEntryId(s)),
       },
       tracingPolicy: engine.options?.tracingPolicy,
     },
@@ -105,27 +129,28 @@ export async function executeParallel(
   });
 
   const prevOutput = engine.getStepOutput(stepResults, prevStep);
-  for (const [stepIndex, step] of entry.steps.entries()) {
+  for (const [stepIndex, step] of steps.entries()) {
+    const stepId = getSingleStepEntryId(step);
     let makeStepRunning = true;
     if (restart) {
-      makeStepRunning = !!restart.activeStepsPath[step.step.id];
+      makeStepRunning = !!restart.activeStepsPath[stepId];
     }
     if (timeTravel && timeTravel.executionPath.length > 0) {
-      makeStepRunning = timeTravel.steps[0] === step.step.id;
+      makeStepRunning = timeTravel.steps[0] === stepId;
     }
     if (!makeStepRunning) {
       break;
     }
-    const startTime = resume?.steps[0] === step.step.id ? undefined : Date.now();
-    const resumeTime = resume?.steps[0] === step.step.id ? Date.now() : undefined;
-    stepResults[step.step.id] = {
-      ...stepResults[step.step.id],
+    const startTime = resume?.steps[0] === stepId ? undefined : Date.now();
+    const resumeTime = resume?.steps[0] === stepId ? Date.now() : undefined;
+    stepResults[stepId] = {
+      ...stepResults[stepId],
       status: 'running',
       ...(resumeTime ? { resumePayload: resume?.resumePayload } : { payload: prevOutput }),
       ...(startTime ? { startedAt: startTime } : {}),
       ...(resumeTime ? { resumedAt: resumeTime } : {}),
     } as StepResult<any, any, any, any>;
-    executionContext.activeStepsPath[step.step.id] = [...executionContext.executionPath, stepIndex];
+    executionContext.activeStepsPath[stepId] = [...executionContext.executionPath, stepIndex];
     if (perStep) {
       break;
     }
@@ -137,19 +162,19 @@ export async function executeParallel(
 
   let execResults: any;
   const results: StepResult<any, any, any, any>[] = await Promise.all(
-    entry.steps.map(async (step, i) => {
-      const currStepResult = stepResults[step.step.id];
+    steps.map(async (step, i) => {
+      const stepId = getSingleStepEntryId(step);
+      const currStepResult = stepResults[stepId];
       if (currStepResult && currStepResult.status !== 'running') {
         return currStepResult;
       }
       if (!currStepResult && (perStep || timeTravel)) {
         return {} as StepResult<any, any, any, any>;
       }
-      const stepExecResult = await engine.executeStep({
+      const stepExecResult = await executeChildEntry(engine, step, {
         workflowId,
         runId,
         resourceId,
-        step: step.step,
         prevOutput,
         stepResults,
         serializedStepGraph,
@@ -206,7 +231,7 @@ export async function executeParallel(
       status: 'success',
       output: results.reduce((acc: Record<string, any>, result, index) => {
         if (result.status === 'success') {
-          acc[entry.steps[index]!.step.id] = result.output;
+          acc[getSingleStepEntryId(steps[index]!)] = result.output;
         }
 
         return acc;
@@ -238,7 +263,7 @@ export interface ExecuteConditionalParams extends ObservabilityContext {
   serializedStepGraph: SerializedStepFlowEntry[];
   entry: {
     type: 'conditional';
-    steps: { type: 'step'; step: Step }[];
+    steps: SingleStepEntry[];
     conditions: ConditionFunction<any, any, any, any, any, DefaultEngineType>[];
   };
   prevOutput: any;
@@ -288,6 +313,8 @@ export async function executeConditional(
   } = params;
 
   const observabilityContext = resolveObservabilityContext(rest);
+
+  const steps = entry.steps;
 
   const conditionalSpan = await engine.createChildSpan({
     parentSpan: observabilityContext.tracingContext.currentSpan,
@@ -408,12 +435,12 @@ export async function executeConditional(
     )
   ).filter((index): index is number => index !== null);
 
-  let stepsToRun = entry.steps.filter((_, index) => truthyIndexes.includes(index));
+  let stepsToRun = steps.filter((_, index) => truthyIndexes.includes(index));
   if (perStep || (timeTravel && timeTravel.executionPath.length > 0)) {
     const possibleStepsToRun = stepsToRun.filter(s => {
-      const currStepResult = stepResults[s.step.id];
+      const currStepResult = stepResults[getSingleStepEntryId(s)];
       if (timeTravel && timeTravel.executionPath.length > 0) {
-        return timeTravel.steps[0] === s.step.id;
+        return timeTravel.steps[0] === getSingleStepEntryId(s);
       }
       return !currStepResult;
     });
@@ -425,17 +452,18 @@ export async function executeConditional(
   conditionalSpan?.update({
     attributes: {
       truthyIndexes,
-      selectedSteps: stepsToRun.map(s => (s.type === 'step' ? s.step.id : `control-${s.type}`)),
+      selectedSteps: stepsToRun.map(s => getSingleStepEntryId(s)),
     },
   });
 
   const results: StepResult<any, any, any, any>[] = await Promise.all(
     stepsToRun.map(async step => {
-      const currStepResult = stepResults[step.step.id];
-      const isRestartStep = restart ? !!restart.activeStepsPath[step.step.id] : undefined;
+      const stepId = getSingleStepEntryId(step);
+      const currStepResult = stepResults[stepId];
+      const isRestartStep = restart ? !!restart.activeStepsPath[stepId] : undefined;
 
       if (currStepResult && timeTravel && timeTravel.executionPath.length > 0) {
-        if (timeTravel.steps[0] !== step.step.id) {
+        if (timeTravel.steps[0] !== stepId) {
           return currStepResult;
         }
       }
@@ -444,11 +472,10 @@ export async function executeConditional(
         return currStepResult;
       }
 
-      const stepExecResult = await engine.executeStep({
+      const stepExecResult = await executeChildEntry(engine, step, {
         workflowId,
         runId,
         resourceId,
-        step: step.step,
         prevOutput,
         stepResults,
         serializedStepGraph,
@@ -458,7 +485,7 @@ export async function executeConditional(
         executionContext: {
           workflowId,
           runId,
-          executionPath: [...executionContext.executionPath, entry.steps.indexOf(step)],
+          executionPath: [...executionContext.executionPath, steps.indexOf(step)],
           stepExecutionPath: executionContext.stepExecutionPath,
           activeStepsPath: executionContext.activeStepsPath,
           suspendedPaths: executionContext.suspendedPaths,
@@ -508,7 +535,7 @@ export async function executeConditional(
       status: 'success',
       output: results.reduce((acc: Record<string, any>, result, index) => {
         if (result.status === 'success') {
-          acc[stepsToRun[index]!.step.id] = result.output;
+          acc[getSingleStepEntryId(stepsToRun[index]!)] = result.output;
         }
 
         return acc;

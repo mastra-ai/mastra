@@ -1,9 +1,10 @@
-import type { StepFlowEntry } from '../..';
+import type { SingleStepEntry, StepFlowEntry } from '../..';
 import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
+import { getSingleStepEntryId } from '../../utils';
 import { resolveCurrentState } from '../helpers';
 import type { StepExecutor } from '../step-executor';
-import type { ProcessorArgs } from '.';
+import { stepRunEventType, type ProcessorArgs } from '.';
 
 export async function processWorkflowParallel(
   {
@@ -36,12 +37,13 @@ export async function processWorkflowParallel(
   const currentState = resolveCurrentState({ stepResults, state });
   for (let i = 0; i < step.steps.length; i++) {
     const nestedStep = step.steps[i];
-    if (nestedStep?.type === 'step') {
+    if (nestedStep) {
+      const nestedStepId = getSingleStepEntryId(nestedStep);
       //if restart, only run the step if it's in the active steps path
       if (restart) {
-        pathsToRun[nestedStep.step.id] = !!restart.activeStepsPath[nestedStep.step.id];
+        pathsToRun[nestedStepId] = !!restart.activeStepsPath[nestedStepId];
       } else {
-        pathsToRun[nestedStep.step.id] = true;
+        pathsToRun[nestedStepId] = true;
       }
       if (perStep) {
         break;
@@ -51,10 +53,12 @@ export async function processWorkflowParallel(
 
   await Promise.all(
     step.steps
-      ?.filter(step => pathsToRun[step.step.id])
-      .map(async (_step, idx) => {
+      ?.filter(child => pathsToRun[getSingleStepEntryId(child)])
+      .map(async (child, idx) => {
         return pubsub.publish('workflows', {
-          type: 'workflow.step.run',
+          // Each child is dispatched with its own per-type run event so agent /
+          // tool / mapping children are interpreted explicitly.
+          type: stepRunEventType(child),
           runId,
           data: {
             workflowId,
@@ -128,7 +132,7 @@ export async function processWorkflowConditional(
     truthyIdxs[idxs[i]!] = true;
   }
 
-  let onlyStepToRun: Extract<StepFlowEntry, { type: 'step' }> | undefined;
+  let onlyStepToRun: SingleStepEntry | undefined;
 
   if (perStep) {
     const stepsToRun = step.steps.filter((_, idx) => truthyIdxs[idx]);
@@ -136,10 +140,11 @@ export async function processWorkflowConditional(
   }
 
   if (onlyStepToRun) {
-    const stepIndex = step.steps.findIndex(step => step.step.id === onlyStepToRun.step.id);
-    activeStepsPath[onlyStepToRun.step.id] = executionPath.concat([stepIndex]);
+    const onlyStepToRunId = getSingleStepEntryId(onlyStepToRun);
+    const stepIndex = step.steps.findIndex(child => getSingleStepEntryId(child) === onlyStepToRunId);
+    activeStepsPath[onlyStepToRunId] = executionPath.concat([stepIndex]);
     await pubsub.publish('workflows', {
-      type: 'workflow.step.run',
+      type: stepRunEventType(onlyStepToRun),
       runId,
       data: {
         workflowId,
@@ -161,13 +166,13 @@ export async function processWorkflowConditional(
     });
   } else {
     await Promise.all(
-      step.steps.map(async (step, idx) => {
+      step.steps.map(async (child, idx) => {
         if (truthyIdxs[idx]) {
-          if (step?.type === 'step') {
-            activeStepsPath[step.step.id] = executionPath.concat([idx]);
+          if (child) {
+            activeStepsPath[getSingleStepEntryId(child)] = executionPath.concat([idx]);
           }
           return pubsub.publish('workflows', {
-            type: 'workflow.step.run',
+            type: stepRunEventType(child),
             runId,
             data: {
               workflowId,

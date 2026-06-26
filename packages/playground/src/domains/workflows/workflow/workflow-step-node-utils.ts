@@ -49,12 +49,14 @@ export const resolveWorkflowGraphStep = (flow: SerializedStepFlowEntry): Resolve
         };
       }
 
+      // Back-compat: older serialized graphs encoded `.map()` as a `step` entry
+      // carrying a `mapConfig`. Newer graphs use the dedicated `mapping` entry.
       if (flow.step.mapConfig) {
         return {
           kind: 'map-step',
           id: flow.step.id,
           step: flow.step,
-          flow,
+          flow: flow as never,
         };
       }
 
@@ -62,6 +64,24 @@ export const resolveWorkflowGraphStep = (flow: SerializedStepFlowEntry): Resolve
         kind: 'step',
         id: flow.step.id,
         step: flow.step,
+        flow,
+      };
+    case 'agent':
+      return {
+        kind: 'agent-step',
+        id: flow.id,
+        flow,
+      };
+    case 'tool':
+      return {
+        kind: 'tool-step',
+        id: flow.id,
+        flow,
+      };
+    case 'mapping':
+      return {
+        kind: 'map-step',
+        id: flow.id,
         flow,
       };
     case 'foreach':

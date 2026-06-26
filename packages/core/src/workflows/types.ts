@@ -502,17 +502,40 @@ export type WorkflowInfo = {
 
 export type DefaultEngineType = {};
 
-export type StepFlowEntry<TEngineType = DefaultEngineType> =
+/**
+ * Object form of a `.map()` mapping config: a record of output keys to mapping
+ * sources (`value`, `fn`, `requestContextPath`, `step`+`path`, `initData`+`path`).
+ * Kept loose here because the precise per-key union lives in the `.map()` overload.
+ */
+export type MappingConfig = Record<string, any>;
+
+/**
+ * The "single step-like" graph entries: a plain user step plus the declarative
+ * variants that Mastra interprets at execution time (agent / tool / mapping).
+ *
+ * The live form carries runtime references (`agent`, `tool`, `mapConfig`,
+ * `options`) so the engine can materialize a runnable step on demand - mirroring
+ * how `loop` carries a live `condition`. These references are intentionally loose
+ * (`any`) because the public type-safety for these entries is enforced by the
+ * `Workflow` builder method overloads, not by this internal union.
+ */
+export type SingleStepEntry<TEngineType = DefaultEngineType> =
   | { type: 'step'; step: Step }
+  | { type: 'agent'; id: string; agentId: string; agent?: any; options?: any }
+  | { type: 'tool'; id: string; toolId: string; tool?: any; options?: any }
+  | { type: 'mapping'; id: string; mapConfig: MappingConfig | ExecuteFunction<any, any, any, any, any, TEngineType> };
+
+export type StepFlowEntry<TEngineType = DefaultEngineType> =
+  | SingleStepEntry<TEngineType>
   | { type: 'sleep'; id: string; duration?: number; fn?: ExecuteFunction<any, any, any, any, any, TEngineType> }
   | { type: 'sleepUntil'; id: string; date?: Date; fn?: ExecuteFunction<any, any, any, any, any, TEngineType> }
   | {
       type: 'parallel';
-      steps: { type: 'step'; step: Step }[];
+      steps: SingleStepEntry<TEngineType>[];
     }
   | {
       type: 'conditional';
-      steps: { type: 'step'; step: Step }[];
+      steps: SingleStepEntry<TEngineType>[];
       conditions: ConditionFunction<any, any, any, any, any, TEngineType>[];
       serializedConditions: { id: string; fn: string }[];
     }
@@ -541,11 +564,18 @@ export type SerializedStep<TEngineType = DefaultEngineType> = Pick<
   canSuspend?: boolean;
 };
 
+/**
+ * JSON-safe mirror of {@link SingleStepEntry}: declarative variants carry
+ * ids/strings only (no closures or live references).
+ */
+export type SerializedSingleStepEntry =
+  | { type: 'step'; step: SerializedStep }
+  | { type: 'agent'; id: string; agentId: string; description?: string }
+  | { type: 'tool'; id: string; toolId: string; description?: string }
+  | { type: 'mapping'; id: string; mapConfig: string };
+
 export type SerializedStepFlowEntry =
-  | {
-      type: 'step';
-      step: SerializedStep;
-    }
+  | SerializedSingleStepEntry
   | {
       type: 'sleep';
       id: string;
@@ -560,17 +590,11 @@ export type SerializedStepFlowEntry =
     }
   | {
       type: 'parallel';
-      steps: {
-        type: 'step';
-        step: SerializedStep;
-      }[];
+      steps: SerializedSingleStepEntry[];
     }
   | {
       type: 'conditional';
-      steps: {
-        type: 'step';
-        step: SerializedStep;
-      }[];
+      steps: SerializedSingleStepEntry[];
       serializedConditions: { id: string; fn: string }[];
     }
   | {

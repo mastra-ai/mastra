@@ -1,5 +1,6 @@
 import type { Step, StepFlowEntry, Workflow } from '../..';
 import type { Mastra } from '../../../mastra';
+import { isSingleStepEntry } from '../../utils';
 import { EventedWorkflow } from '../workflow';
 import type { ParentWorkflow } from '.';
 
@@ -88,7 +89,7 @@ export function getStep(workflow: Workflow, executionPath: number[]): Step<strin
     return parentStep.step;
   }
 
-  if (!(parentStep?.type === 'step' || parentStep?.type === 'loop')) {
+  if (!(parentStep && (isSingleStepEntry(parentStep) || parentStep.type === 'loop'))) {
     return null;
   }
 
@@ -96,9 +97,15 @@ export function getStep(workflow: Workflow, executionPath: number[]): Step<strin
     return getStep(parentStep, executionPath.slice(idx + 1));
   }
 
-  return parentStep.step;
+  if (parentStep.type === 'step' || parentStep.type === 'loop') {
+    return parentStep.step;
+  }
+
+  // Declarative agent / tool / mapping entries are not nested workflows; expose a
+  // lightweight id-bearing handle so callers that only need the step id keep working.
+  return { id: parentStep.id } as Step<string, any, any, any, any, any>;
 }
 
 export function isExecutableStep(step: StepFlowEntry<any>) {
-  return step.type === 'step' || step.type === 'loop' || step.type === 'foreach';
+  return isSingleStepEntry(step) || step.type === 'loop' || step.type === 'foreach';
 }

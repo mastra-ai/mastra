@@ -9173,7 +9173,18 @@ export type GetWorkflows_Response = {
         }
       | undefined;
     stepGraph: {
-      type: 'step' | 'sleep' | 'sleepUntil' | 'waitForEvent' | 'parallel' | 'conditional' | 'loop' | 'foreach';
+      type:
+        | 'step'
+        | 'agent'
+        | 'tool'
+        | 'mapping'
+        | 'sleep'
+        | 'sleepUntil'
+        | 'waitForEvent'
+        | 'parallel'
+        | 'conditional'
+        | 'loop'
+        | 'foreach';
     }[];
     inputSchema?: string | undefined;
     outputSchema?: string | undefined;
@@ -9255,7 +9266,18 @@ export type GetWorkflowsWorkflowId_Response = {
       }
     | undefined;
   stepGraph: {
-    type: 'step' | 'sleep' | 'sleepUntil' | 'waitForEvent' | 'parallel' | 'conditional' | 'loop' | 'foreach';
+    type:
+      | 'step'
+      | 'agent'
+      | 'tool'
+      | 'mapping'
+      | 'sleep'
+      | 'sleepUntil'
+      | 'waitForEvent'
+      | 'parallel'
+      | 'conditional'
+      | 'loop'
+      | 'foreach';
   }[];
   inputSchema?: string | undefined;
   outputSchema?: string | undefined;
@@ -9400,7 +9422,18 @@ export type GetWorkflowsWorkflowIdRunsRunId_Response = {
     | undefined;
   serializedStepGraph?:
     | {
-        type: 'step' | 'sleep' | 'sleepUntil' | 'waitForEvent' | 'parallel' | 'conditional' | 'loop' | 'foreach';
+        type:
+          | 'step'
+          | 'agent'
+          | 'tool'
+          | 'mapping'
+          | 'sleep'
+          | 'sleepUntil'
+          | 'waitForEvent'
+          | 'parallel'
+          | 'conditional'
+          | 'loop'
+          | 'foreach';
       }[]
     | undefined;
 };
@@ -9704,7 +9737,18 @@ export type PostWorkflowsWorkflowIdStartAsync_Response = {
     | undefined;
   serializedStepGraph?:
     | {
-        type: 'step' | 'sleep' | 'sleepUntil' | 'waitForEvent' | 'parallel' | 'conditional' | 'loop' | 'foreach';
+        type:
+          | 'step'
+          | 'agent'
+          | 'tool'
+          | 'mapping'
+          | 'sleep'
+          | 'sleepUntil'
+          | 'waitForEvent'
+          | 'parallel'
+          | 'conditional'
+          | 'loop'
+          | 'foreach';
       }[]
     | undefined;
 };
@@ -9910,7 +9954,18 @@ export type PostWorkflowsWorkflowIdResumeAsync_Response = {
     | undefined;
   serializedStepGraph?:
     | {
-        type: 'step' | 'sleep' | 'sleepUntil' | 'waitForEvent' | 'parallel' | 'conditional' | 'loop' | 'foreach';
+        type:
+          | 'step'
+          | 'agent'
+          | 'tool'
+          | 'mapping'
+          | 'sleep'
+          | 'sleepUntil'
+          | 'waitForEvent'
+          | 'parallel'
+          | 'conditional'
+          | 'loop'
+          | 'foreach';
       }[]
     | undefined;
 };
@@ -10273,7 +10328,18 @@ export type PostWorkflowsWorkflowIdTimeTravelAsync_Response = {
     | undefined;
   serializedStepGraph?:
     | {
-        type: 'step' | 'sleep' | 'sleepUntil' | 'waitForEvent' | 'parallel' | 'conditional' | 'loop' | 'foreach';
+        type:
+          | 'step'
+          | 'agent'
+          | 'tool'
+          | 'mapping'
+          | 'sleep'
+          | 'sleepUntil'
+          | 'waitForEvent'
+          | 'parallel'
+          | 'conditional'
+          | 'loop'
+          | 'foreach';
       }[]
     | undefined;
 };
@@ -10513,7 +10579,18 @@ export type PostWorkflowsWorkflowIdRestartAsync_Response = {
     | undefined;
   serializedStepGraph?:
     | {
-        type: 'step' | 'sleep' | 'sleepUntil' | 'waitForEvent' | 'parallel' | 'conditional' | 'loop' | 'foreach';
+        type:
+          | 'step'
+          | 'agent'
+          | 'tool'
+          | 'mapping'
+          | 'sleep'
+          | 'sleepUntil'
+          | 'waitForEvent'
+          | 'parallel'
+          | 'conditional'
+          | 'loop'
+          | 'foreach';
       }[]
     | undefined;
 };
@@ -88644,7 +88721,18 @@ export type GetAgentBuilder_Response = {
         }
       | undefined;
     stepGraph: {
-      type: 'step' | 'sleep' | 'sleepUntil' | 'waitForEvent' | 'parallel' | 'conditional' | 'loop' | 'foreach';
+      type:
+        | 'step'
+        | 'agent'
+        | 'tool'
+        | 'mapping'
+        | 'sleep'
+        | 'sleepUntil'
+        | 'waitForEvent'
+        | 'parallel'
+        | 'conditional'
+        | 'loop'
+        | 'foreach';
     }[];
     inputSchema?: string | undefined;
     outputSchema?: string | undefined;
@@ -88722,7 +88810,18 @@ export type GetAgentBuilderActionId_Response = {
       }
     | undefined;
   stepGraph: {
-    type: 'step' | 'sleep' | 'sleepUntil' | 'waitForEvent' | 'parallel' | 'conditional' | 'loop' | 'foreach';
+    type:
+      | 'step'
+      | 'agent'
+      | 'tool'
+      | 'mapping'
+      | 'sleep'
+      | 'sleepUntil'
+      | 'waitForEvent'
+      | 'parallel'
+      | 'conditional'
+      | 'loop'
+      | 'foreach';
   }[];
   inputSchema?: string | undefined;
   outputSchema?: string | undefined;
@@ -88867,7 +88966,18 @@ export type GetAgentBuilderActionIdRunsRunId_Response = {
     | undefined;
   serializedStepGraph?:
     | {
-        type: 'step' | 'sleep' | 'sleepUntil' | 'waitForEvent' | 'parallel' | 'conditional' | 'loop' | 'foreach';
+        type:
+          | 'step'
+          | 'agent'
+          | 'tool'
+          | 'mapping'
+          | 'sleep'
+          | 'sleepUntil'
+          | 'waitForEvent'
+          | 'parallel'
+          | 'conditional'
+          | 'loop'
+          | 'foreach';
       }[]
     | undefined;
 };
@@ -89135,7 +89245,18 @@ export type PostAgentBuilderActionIdStartAsync_Response = {
     | undefined;
   serializedStepGraph?:
     | {
-        type: 'step' | 'sleep' | 'sleepUntil' | 'waitForEvent' | 'parallel' | 'conditional' | 'loop' | 'foreach';
+        type:
+          | 'step'
+          | 'agent'
+          | 'tool'
+          | 'mapping'
+          | 'sleep'
+          | 'sleepUntil'
+          | 'waitForEvent'
+          | 'parallel'
+          | 'conditional'
+          | 'loop'
+          | 'foreach';
       }[]
     | undefined;
 };
@@ -89375,7 +89496,18 @@ export type PostAgentBuilderActionIdResumeAsync_Response = {
     | undefined;
   serializedStepGraph?:
     | {
-        type: 'step' | 'sleep' | 'sleepUntil' | 'waitForEvent' | 'parallel' | 'conditional' | 'loop' | 'foreach';
+        type:
+          | 'step'
+          | 'agent'
+          | 'tool'
+          | 'mapping'
+          | 'sleep'
+          | 'sleepUntil'
+          | 'waitForEvent'
+          | 'parallel'
+          | 'conditional'
+          | 'loop'
+          | 'foreach';
       }[]
     | undefined;
 };

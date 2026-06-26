@@ -8,6 +8,7 @@ import type { ExecutionGraph } from './execution-engine';
 import type { Step } from './step';
 import type {
   RestartExecutionParams,
+  SingleStepEntry,
   StepFlowEntry,
   StepResult,
   TimeTravelContext,
@@ -258,12 +259,33 @@ export function createDeprecationProxy<T extends Record<string, any>>(
   });
 }
 
+const SINGLE_STEP_TYPES = ['step', 'agent', 'tool', 'mapping'] as const;
+
+/**
+ * Whether an entry is a "single step-like" entry: a plain user step or one of the
+ * declarative variants (agent / tool / mapping) that resolve to exactly one step.
+ */
+export function isSingleStepEntry(entry: StepFlowEntry): entry is SingleStepEntry {
+  return (SINGLE_STEP_TYPES as readonly string[]).includes(entry.type);
+}
+
+/**
+ * The id of a single step-like entry. Plain `step` entries key off the wrapped
+ * step's id; declarative variants (agent / tool / mapping) carry their own `id`.
+ */
+export function getSingleStepEntryId(entry: SingleStepEntry): string {
+  return entry.type === 'step' ? entry.step.id : entry.id;
+}
+
 export const getStepIds = (entry: StepFlowEntry): string[] => {
-  if (entry.type === 'step' || entry.type === 'foreach' || entry.type === 'loop') {
+  if (isSingleStepEntry(entry)) {
+    return [getSingleStepEntryId(entry)];
+  }
+  if (entry.type === 'foreach' || entry.type === 'loop') {
     return [entry.step.id];
   }
   if (entry.type === 'parallel' || entry.type === 'conditional') {
-    return entry.steps.map(s => s.step.id);
+    return entry.steps.map(s => getSingleStepEntryId(s));
   }
   if (entry.type === 'sleep' || entry.type === 'sleepUntil') {
     return [entry.id];
@@ -451,7 +473,11 @@ export const createRestartExecutionParams = ({
 
   const firstEntry = graph.steps[0]!;
 
-  if (firstEntry.type === 'step' || firstEntry.type === 'foreach' || firstEntry.type === 'loop') {
+  if (isSingleStepEntry(firstEntry)) {
+    nestedWorkflowActiveStepsPath = {
+      [getSingleStepEntryId(firstEntry)]: [0],
+    };
+  } else if (firstEntry.type === 'foreach' || firstEntry.type === 'loop') {
     nestedWorkflowActiveStepsPath = {
       [firstEntry.step.id]: [0],
     };
@@ -462,7 +488,7 @@ export const createRestartExecutionParams = ({
   } else if (firstEntry.type === 'conditional' || firstEntry.type === 'parallel') {
     nestedWorkflowActiveStepsPath = firstEntry.steps.reduce(
       (acc, step) => {
-        acc[step.step.id] = [0];
+        acc[getSingleStepEntryId(step)] = [0];
         return acc;
       },
       {} as Record<string, number[]>,

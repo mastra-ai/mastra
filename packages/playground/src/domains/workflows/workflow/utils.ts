@@ -144,6 +144,10 @@ export type WStep = {
   };
 };
 
+/** Resolves the id of a single step-like serialized entry (step / agent / tool / mapping). */
+const getSingleStepFlowId = (flow: SerializedStepFlowEntry): string =>
+  'step' in flow ? flow.step.id : (flow as { id: string }).id;
+
 const getStepNodeAndEdge = ({
   stepFlow,
   xIndex,
@@ -172,7 +176,13 @@ const getStepNodeAndEdge = ({
     nextNodeIds = [nextStepId];
     nextStepIds = [nextStepFlow.step.id];
   }
-  if (nextStepFlow?.type === 'sleep' || nextStepFlow?.type === 'sleepUntil') {
+  if (
+    nextStepFlow?.type === 'sleep' ||
+    nextStepFlow?.type === 'sleepUntil' ||
+    nextStepFlow?.type === 'agent' ||
+    nextStepFlow?.type === 'tool' ||
+    nextStepFlow?.type === 'mapping'
+  ) {
     const nextStepId = allPrevNodeIds?.includes(nextStepFlow.id) ? `${nextStepFlow.id}-${yIndex + 1}` : nextStepFlow.id;
     nextNodeIds = [nextStepId];
     nextStepIds = [nextStepFlow.id];
@@ -180,15 +190,15 @@ const getStepNodeAndEdge = ({
   if (nextStepFlow?.type === 'parallel') {
     nextNodeIds =
       nextStepFlow?.steps.map(step => {
-        const stepId = step.step.id;
+        const stepId = getSingleStepFlowId(step);
         const nextStepId = allPrevNodeIds?.includes(stepId) ? `${stepId}-${yIndex + 1}` : stepId;
         return nextStepId;
       }) || [];
-    nextStepIds = nextStepFlow?.steps.map(step => step.step.id) || [];
+    nextStepIds = nextStepFlow?.steps.map(step => getSingleStepFlowId(step)) || [];
   }
   if (nextStepFlow?.type === 'conditional') {
     nextNodeIds = nextStepFlow?.serializedConditions.map(cond => cond.id) || [];
-    nextStepIds = nextStepFlow?.steps?.map(step => step.step.id) || [];
+    nextStepIds = nextStepFlow?.steps?.map(step => getSingleStepFlowId(step)) || [];
   }
 
   if (stepFlow.type === 'step' || stepFlow.type === 'foreach') {
@@ -272,6 +282,87 @@ const getStepNodeAndEdge = ({
       })),
     ];
     return { nodes, edges, nextPrevNodeIds: [nodeId], nextPrevStepIds: [stepFlow.step.id] };
+  }
+
+  if (stepFlow.type === 'agent' || stepFlow.type === 'tool' || stepFlow.type === 'mapping') {
+    const stepId = stepFlow.id;
+    const nodeId = allPrevNodeIds?.includes(stepId) ? `${stepId}-${yIndex}` : stepId;
+    const description = stepFlow.type === 'mapping' ? undefined : stepFlow.description;
+    const label = stepFlow.type === 'mapping' ? formatMappingLabel(stepId, prevStepIds, nextStepIds) : stepId;
+    const nodes = [
+      ...(condition
+        ? [
+            {
+              id: condition.id,
+              position: { x: xIndex * 300, y: yIndex * 100 },
+              type: WORKFLOW_STEP_NODE_TYPE,
+              data: {
+                label: condition.id,
+                workflowStep: conditionWorkflowStep(condition),
+                nodeRole: 'condition' as const,
+                previousStepId: prevStepIds[prevStepIds.length - 1],
+                nextStepId: stepId,
+                withoutTopHandle: !prevNodeIds.length,
+                withoutBottomHandle: !nextNodeIds.length,
+                isLarge: true,
+                conditions: [{ type: 'when' as const, fnString: condition.fn }],
+              },
+            },
+          ]
+        : []),
+      {
+        id: nodeId,
+        position: { x: xIndex * 300, y: (yIndex + (condition ? 1 : 0)) * 100 },
+        type: WORKFLOW_STEP_NODE_TYPE,
+        data: {
+          label,
+          workflowStep: resolveWorkflowGraphStep(stepFlow),
+          stepId,
+          description,
+          withoutTopHandle: condition ? false : !prevNodeIds.length,
+          withoutBottomHandle: !nextNodeIds.length,
+          mapConfig: stepFlow.type === 'mapping' ? stepFlow.mapConfig : undefined,
+        },
+      },
+    ];
+    const edges = [
+      ...(condition
+        ? [
+            ...(prevNodeIds || []).map((prevNodeId, i) => ({
+              id: `e${prevNodeId}-${condition.id}`,
+              source: prevNodeId,
+              data: { previousStepId: prevStepIds[i], nextStepId: stepId },
+              target: condition.id,
+              ...defaultEdgeOptions,
+            })),
+            {
+              id: `e${condition.id}-${nodeId}`,
+              source: condition.id,
+              data: {
+                previousStepId: prevStepIds[prevStepIds.length - 1],
+                nextStepId: stepId,
+                conditionNode: true,
+              },
+              target: nodeId,
+              ...defaultEdgeOptions,
+            },
+          ]
+        : (prevNodeIds || []).map((prevNodeId, i) => ({
+            id: `e${prevNodeId}-${nodeId}`,
+            source: prevNodeId,
+            data: { previousStepId: prevStepIds[i], nextStepId: stepId },
+            target: nodeId,
+            ...defaultEdgeOptions,
+          }))),
+      ...(nextNodeIds || []).map((nextNodeId, i) => ({
+        id: `e${nodeId}-${nextNodeId}`,
+        source: nodeId,
+        data: { previousStepId: stepId, nextStepId: nextStepIds[i] },
+        target: nextNodeId,
+        ...defaultEdgeOptions,
+      })),
+    ];
+    return { nodes, edges, nextPrevNodeIds: [nodeId], nextPrevStepIds: [stepId] };
   }
 
   if (stepFlow.type === 'sleep' || stepFlow.type === 'sleepUntil') {

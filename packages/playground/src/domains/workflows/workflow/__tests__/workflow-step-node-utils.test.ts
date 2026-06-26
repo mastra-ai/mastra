@@ -13,6 +13,9 @@ describe('resolveWorkflowGraphStep', () => {
   it.each([
     [{ type: 'step', step: step('regular') }, 'step'],
     [{ type: 'step', step: { ...step('map'), mapConfig: 'return input' } }, 'map-step'],
+    [{ type: 'agent', id: 'writer', agentId: 'writer-agent' }, 'agent-step'],
+    [{ type: 'tool', id: 'double', toolId: 'double-tool' }, 'tool-step'],
+    [{ type: 'mapping', id: 'map-1', mapConfig: 'return input' }, 'map-step'],
     [{ type: 'foreach', step: step('each'), opts: { concurrency: 2 } }, 'foreach-step'],
     [{ type: 'parallel', steps: [{ type: 'step', step: step('a') }] }, 'parallel-step'],
     [
@@ -43,6 +46,44 @@ describe('resolveWorkflowGraphStep', () => {
     ],
   ] satisfies [SerializedStepFlowEntry, string][])('maps %s to %s', (flow, kind) => {
     expect(resolveWorkflowGraphStep(flow).kind).toBe(kind);
+  });
+
+  it('exposes the declarative ids on resolved agent / tool / mapping steps', () => {
+    const agent = resolveWorkflowGraphStep({ type: 'agent', id: 'writer', agentId: 'writer-agent' });
+    expect(agent.kind).toBe('agent-step');
+    expect(agent.id).toBe('writer');
+    expect((agent.flow as Extract<SerializedStepFlowEntry, { type: 'agent' }>).agentId).toBe('writer-agent');
+
+    const tool = resolveWorkflowGraphStep({ type: 'tool', id: 'double', toolId: 'double-tool' });
+    expect(tool.kind).toBe('tool-step');
+    expect((tool.flow as Extract<SerializedStepFlowEntry, { type: 'tool' }>).toolId).toBe('double-tool');
+  });
+
+  it('resolves agent / tool children nested in a parallel entry', () => {
+    const parallel: SerializedStepFlowEntry = {
+      type: 'parallel',
+      steps: [
+        { type: 'agent', id: 'a', agentId: 'a-agent' },
+        { type: 'tool', id: 't', toolId: 't-tool' },
+      ],
+    };
+    const children = (parallel as Extract<SerializedStepFlowEntry, { type: 'parallel' }>).steps.map(child =>
+      resolveWorkflowGraphStep(child).kind,
+    );
+    expect(children).toEqual(['agent-step', 'tool-step']);
+  });
+
+  it('builds graph nodes for declarative agent / tool / mapping entries', () => {
+    const { nodes } = constructNodesAndEdges({
+      stepGraph: [
+        { type: 'agent', id: 'writer', agentId: 'writer-agent' },
+        { type: 'tool', id: 'double', toolId: 'double-tool' },
+        { type: 'mapping', id: 'map-1', mapConfig: 'return input' },
+      ],
+    });
+
+    const stepNodes = nodes.filter(node => node.type === WORKFLOW_STEP_NODE_TYPE);
+    expect(stepNodes.map(node => node.data.workflowStep.kind)).toEqual(['agent-step', 'tool-step', 'map-step']);
   });
 
   it('keeps workflow graph nodes on one React Flow node type with resolved step data', () => {

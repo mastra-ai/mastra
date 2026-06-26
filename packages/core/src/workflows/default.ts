@@ -37,6 +37,7 @@ import type {
   OutputWriter,
   RestartExecutionParams,
   SerializedStepFlowEntry,
+  SingleStepEntry,
   StepExecutionResult,
   StepFailure,
   StepFlowEntry,
@@ -44,9 +45,22 @@ import type {
   StepTripwireInfo,
   TimeTravelExecutionParams,
 } from './types';
+// Imported so the per-type execute methods (executeAgent/executeTool/executeMapping)
+// can build a runnable step from a declarative entry. This creates a
+// workflow<->default module cycle, but these are only invoked at execution time
+// (well after module init), so the bindings are always resolved when called.
+import { createMappingStep, createStepFromAgent, createStepFromTool } from './workflow';
 
 // Re-export ExecutionContext for backwards compatibility
 export type { ExecutionContext } from './types';
+
+/** Params for the per-type execute methods: the same context `executeStep` takes,
+ * with the declarative graph entry instead of a pre-built `step`. */
+export type ExecuteAgentParams = Omit<ExecuteStepParams, 'step'> & { entry: Extract<SingleStepEntry, { type: 'agent' }> };
+export type ExecuteToolParams = Omit<ExecuteStepParams, 'step'> & { entry: Extract<SingleStepEntry, { type: 'tool' }> };
+export type ExecuteMappingParams = Omit<ExecuteStepParams, 'step'> & {
+  entry: Extract<SingleStepEntry, { type: 'mapping' }>;
+};
 
 /**
  * Default implementation of the ExecutionEngine
@@ -1001,12 +1015,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       return stepResults.input;
     } else if (step.type === 'step') {
       return stepResults[step.step.id]?.output;
+    } else if (step.type === 'agent' || step.type === 'tool' || step.type === 'mapping') {
+      return stepResults[step.id]?.output;
     } else if (step.type === 'sleep' || step.type === 'sleepUntil') {
       return stepResults[step.id]?.output;
     } else if (step.type === 'parallel' || step.type === 'conditional') {
       return step.steps.reduce(
         (acc, entry) => {
-          acc[entry.step.id] = stepResults[entry.step.id]?.output;
+          const id = entry.type === 'step' ? entry.step.id : entry.id;
+          acc[id] = stepResults[id]?.output;
           return acc;
         },
         {} as Record<string, any>,
@@ -1028,6 +1045,47 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
   async executeStep(params: ExecuteStepParams): Promise<StepExecutionResult> {
     return executeStepHandler(this, params);
+  }
+
+  /**
+   * Executes a declarative `agent` step: resolves the agent (live ref, else
+   * `mastra.getAgent(agentId)`), builds its runnable step, and runs it through
+   * the shared step runner.
+   */
+  async executeAgent(params: ExecuteAgentParams): Promise<StepExecutionResult> {
+    const { entry, ...rest } = params;
+    const agent = entry.agent ?? this.mastra?.getAgent(entry.agentId);
+    if (!agent) {
+      throw new Error(
+        `Agent '${entry.agentId}' not found for workflow step '${entry.id}'. Register the agent on the Mastra instance or pass the agent instance directly.`,
+      );
+    }
+    return this.executeStep({ ...rest, step: { ...createStepFromAgent(agent as any, entry.options), id: entry.id } });
+  }
+
+  /**
+   * Executes a declarative `tool` step: resolves the tool (live ref, else
+   * `mastra.getTool(toolId)`), builds its runnable step, and runs it through the
+   * shared step runner.
+   */
+  async executeTool(params: ExecuteToolParams): Promise<StepExecutionResult> {
+    const { entry, ...rest } = params;
+    const tool = entry.tool ?? (this.mastra as any)?.getTool?.(entry.toolId);
+    if (!tool) {
+      throw new Error(
+        `Tool '${entry.toolId}' not found for workflow step '${entry.id}'. Pass the tool instance directly.`,
+      );
+    }
+    return this.executeStep({ ...rest, step: { ...createStepFromTool(tool as any, entry.options), id: entry.id } });
+  }
+
+  /**
+   * Executes a declarative `mapping` step: builds the mapping step from the
+   * declarative config/fn and runs it through the shared step runner.
+   */
+  async executeMapping(params: ExecuteMappingParams): Promise<StepExecutionResult> {
+    const { entry, ...rest } = params;
+    return this.executeStep({ ...rest, step: createMappingStep(entry.id, entry.mapConfig) });
   }
 
   async executeParallel(params: ExecuteParallelParams): Promise<StepResult<any, any, any, any>> {

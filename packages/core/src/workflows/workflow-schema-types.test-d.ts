@@ -1,5 +1,7 @@
 import { describe, expectTypeOf, it } from 'vitest';
 import { z } from 'zod/v4';
+import { Agent } from '../agent';
+import { createTool } from '../tools';
 import { createWorkflow } from './create';
 import { createStep } from './workflow';
 
@@ -549,5 +551,91 @@ describe('Workflow schema type inference', () => {
       // @ts-expect-error - step's requestContextSchema does not match the workflow's
       workflow.parallel([step]);
     });
+  });
+});
+
+/**
+ * Type-level inference for the declarative `agent` / `tool` / `mapping` builders.
+ *
+ * These assertions lock in the output-type inference rules so downstream
+ * `.then` / `.map` see the right previous-step schema.
+ */
+const agent = new Agent({
+  id: 'typed-agent',
+  name: 'typed-agent',
+  instructions: 'noop',
+  model: {} as any,
+});
+
+const numberTool = createTool({
+  id: 'number-tool',
+  description: 'tool',
+  inputSchema: z.object({ value: z.number() }),
+  outputSchema: z.object({ doubled: z.number() }),
+  execute: async ({ value }) => ({ doubled: value * 2 }),
+});
+
+describe('declarative builder output inference', () => {
+  it('.agent() (no structuredOutput) advances prev schema to { text: string }', () => {
+    createWorkflow({ id: 'wf', inputSchema: z.object({ prompt: z.string() }), outputSchema: z.any() })
+      .agent(agent)
+      .map(async ({ inputData }) => {
+        expectTypeOf(inputData).toEqualTypeOf<{ text: string }>();
+        return inputData;
+      });
+  });
+
+  it('.agent() with structuredOutput advances prev schema to the structured type', () => {
+    createWorkflow({ id: 'wf', inputSchema: z.object({ prompt: z.string() }), outputSchema: z.any() })
+      .agent(agent, { structuredOutput: { schema: z.object({ score: z.number() }) } })
+      .map(async ({ inputData }) => {
+        expectTypeOf(inputData).toEqualTypeOf<{ score: number }>();
+        return inputData;
+      });
+  });
+
+  it('.tool() advances prev schema to the tool output type', () => {
+    createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
+      .tool(numberTool)
+      .map(async ({ inputData }) => {
+        expectTypeOf(inputData.doubled).toBeNumber();
+        return inputData;
+      });
+  });
+
+  it('.then(createStep(agent)) infers { text: string } (option B)', () => {
+    createWorkflow({ id: 'wf', inputSchema: z.object({ prompt: z.string() }), outputSchema: z.any() })
+      .then(createStep(agent))
+      .map(async ({ inputData }) => {
+        expectTypeOf(inputData).toEqualTypeOf<{ text: string }>();
+        return inputData;
+      });
+  });
+
+  it('.then(createStep(tool)) infers the tool output type (option B)', () => {
+    createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
+      .then(createStep(numberTool))
+      .map(async ({ inputData }) => {
+        expectTypeOf(inputData.doubled).toBeNumber();
+        return inputData;
+      });
+  });
+
+  it('string-id .agent() falls back to { text: string }', () => {
+    createWorkflow({ id: 'wf', inputSchema: z.object({ prompt: z.string() }), outputSchema: z.any() })
+      .agent('some-registered-agent')
+      .map(async ({ inputData }) => {
+        expectTypeOf(inputData).toEqualTypeOf<{ text: string }>();
+        return inputData;
+      });
+  });
+
+  it('string-id .tool() falls back to unknown', () => {
+    createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
+      .tool('some-registered-tool')
+      .map(async ({ inputData }) => {
+        expectTypeOf(inputData).toBeUnknown();
+        return inputData;
+      });
   });
 });

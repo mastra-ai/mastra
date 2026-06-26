@@ -70,9 +70,12 @@ import type {
   DynamicMapping,
   ExtractSchemaFromStep,
   ExtractSchemaType,
+  MappingConfig,
   PathsToStringProps,
+  SerializedSingleStepEntry,
   SerializedStep,
   SerializedStepFlowEntry,
+  SingleStepEntry,
   StepFlowEntry,
   StepResult,
   StepsRecord,
@@ -181,6 +184,7 @@ function areProcessorMessageArraysEqual(before: unknown[] | undefined, after: un
 function findStepInGraph(graph: SerializedStepFlowEntry[], stepId: string): SerializedStepFlowEntry | undefined {
   for (const entry of graph) {
     if ('step' in entry && entry.step?.id === stepId) return entry;
+    if ('id' in entry && entry.id === stepId) return entry;
     if ((entry.type === 'conditional' || entry.type === 'parallel') && 'steps' in entry) {
       const found = findStepInGraph(entry.steps as SerializedStepFlowEntry[], stepId);
       if (found) return found;
@@ -434,7 +438,7 @@ function createStepFromParams<
   return step;
 }
 
-function createStepFromAgent<TStepId extends string, TStepOutput>(
+export function createStepFromAgent<TStepId extends string, TStepOutput>(
   params: SubAgent<TStepId, any> | Agent<TStepId, any, any>,
   agentOrToolOptions?: AgentStepOptions<TStepOutput> & {
     structuredOutput?: { schema: StandardSchemaWithJSON<TStepOutput> };
@@ -601,10 +605,14 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
       };
     },
     component: 'AGENT',
-  };
+    // Preserve the declarative inputs so the workflow builder can emit a
+    // `{ type: 'agent', agentId, options }` graph entry instead of an opaque step.
+    __agentRef: params,
+    __agentOptions: agentOrToolOptions,
+  } as Step<TStepId, unknown, any, TStepOutput, unknown, unknown, DefaultEngineType>;
 }
 
-function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
+export function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
   params: ToolStep<TStepInput, TSuspend, TResume, TStepOutput, any>,
   toolOpts?: { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata },
 ): Step<string, any, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType> {
@@ -654,6 +662,129 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
       return params.execute(inputData, toolContext) as TStepOutput;
     },
     component: 'TOOL',
+    // Preserve the declarative inputs so the workflow builder can emit a
+    // `{ type: 'tool', toolId, options }` graph entry instead of an opaque step.
+    __toolRef: params,
+    __toolOptions: toolOpts,
+  } as Step<string, any, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType>;
+}
+
+/**
+ * Builds a runnable step from a `.map()` mapping config or mapping function.
+ *
+ * This is the interpretation of a `{ type: 'mapping' }` graph entry: the mapping
+ * logic lives here (not baked into a closure at definition time) so the entry can
+ * stay declarative.
+ */
+export function createMappingStep(
+  id: string,
+  mappingConfig: MappingConfig | ExecuteFunction<any, any, any, any, any, DefaultEngineType>,
+): Step<string, any, any, any, any, any, DefaultEngineType> {
+  if (typeof mappingConfig === 'function') {
+    return createStep({
+      id,
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: mappingConfig as any,
+    }) as Step<string, any, any, any, any, any, DefaultEngineType>;
+  }
+
+  return createStep({
+    id,
+    inputSchema: z.any(),
+    outputSchema: z.any(),
+    execute: async ctx => {
+      const { getStepResult, getInitData, requestContext } = ctx;
+
+      const result: Record<string, any> = {};
+      for (const [key, mapping] of Object.entries(mappingConfig)) {
+        const m: any = mapping;
+
+        if (m.value !== undefined) {
+          result[key] = m.value;
+          continue;
+        }
+
+        if (m.fn !== undefined) {
+          result[key] = await m.fn(ctx);
+          continue;
+        }
+
+        if (m.requestContextPath) {
+          result[key] = requestContext.get(m.requestContextPath);
+          continue;
+        }
+
+        const stepResult = m.initData
+          ? getInitData()
+          : getStepResult(
+              Array.isArray(m.step)
+                ? m.step.find((s: any) => {
+                    const stepRes = getStepResult(s);
+                    if (typeof stepRes === 'object' && stepRes !== null) {
+                      return Object.keys(stepRes).length > 0;
+                    }
+                    return stepRes;
+                  })
+                : m.step,
+            );
+
+        if (m.path === '.') {
+          result[key] = stepResult;
+          continue;
+        }
+
+        const pathParts = m.path.split('.');
+        let value: any = stepResult;
+        for (const part of pathParts) {
+          if (typeof value === 'object' && value !== null) {
+            value = value[part];
+          } else {
+            throw new Error(`Invalid path ${m.path} in step ${m?.step?.id ?? 'initData'}`);
+          }
+        }
+
+        result[key] = value;
+      }
+      return result;
+    },
+  }) as Step<string, any, any, any, any, any, DefaultEngineType>;
+}
+
+/**
+ * Converts a step passed to `.then()` / `.parallel()` / `.branch()` into the
+ * appropriate declarative live graph entry based on its `component` discriminator.
+ * Agent/tool steps (built via `createStep`) carry their original ref + options on
+ * `__agentRef`/`__toolRef`, allowing us to emit a declarative entry.
+ */
+function toSingleStepEntry(step: any): SingleStepEntry {
+  if (step?.component === 'AGENT' && step.__agentRef) {
+    return { type: 'agent', id: step.id, agentId: step.__agentRef.id, agent: step.__agentRef, options: step.__agentOptions };
+  }
+  if (step?.component === 'TOOL' && step.__toolRef) {
+    return { type: 'tool', id: step.id, toolId: step.__toolRef.id, tool: step.__toolRef, options: step.__toolOptions };
+  }
+  return { type: 'step', step };
+}
+
+/** JSON-safe mirror of {@link toSingleStepEntry}. */
+function toSerializedSingleStepEntry(step: any): SerializedSingleStepEntry {
+  if (step?.component === 'AGENT' && step.__agentRef) {
+    return { type: 'agent', id: step.id, agentId: step.__agentRef.id, description: step.description };
+  }
+  if (step?.component === 'TOOL' && step.__toolRef) {
+    return { type: 'tool', id: step.id, toolId: step.__toolRef.id, description: step.description };
+  }
+  return {
+    type: 'step',
+    step: {
+      id: step.id,
+      description: step.description,
+      metadata: step.metadata,
+      component: (step as SerializedStep).component,
+      serializedStepFlow: (step as SerializedStep).serializedStepFlow,
+      canSuspend: Boolean(step.suspendSchema || step.resumeSchema),
+    },
   };
 }
 
@@ -1697,18 +1828,8 @@ export class Workflow<
       any
     >,
   ) {
-    this.stepFlow.push({ type: 'step', step: step as any });
-    this.serializedStepFlow.push({
-      type: 'step',
-      step: {
-        id: step.id,
-        description: step.description,
-        metadata: step.metadata,
-        component: (step as SerializedStep).component,
-        serializedStepFlow: (step as SerializedStep).serializedStepFlow,
-        canSuspend: Boolean(step.suspendSchema || step.resumeSchema),
-      },
-    });
+    this.stepFlow.push(toSingleStepEntry(step as any));
+    this.serializedStepFlow.push(toSerializedSingleStepEntry(step as any));
     this.steps[step.id] = step;
     return this as unknown as Workflow<
       TEngineType,
@@ -1720,6 +1841,99 @@ export class Workflow<
       TSchemaOut,
       TRequestContext
     >;
+  }
+
+  /**
+   * Adds an agent as a declarative `{ type: 'agent' }` step to the workflow.
+   *
+   * The step output is the agent's structured output (when `structuredOutput` is
+   * provided) or `{ text: string }` otherwise.
+   */
+  agent<TStepId extends string>(
+    agent: SubAgent<TStepId, any> | Agent<TStepId, any>,
+    options?: Omit<AgentStepOptions<{ text: string }>, 'structuredOutput'> & {
+      structuredOutput?: never;
+      retries?: number;
+      scorers?: DynamicArgument<MastraScorers>;
+      metadata?: StepMetadata;
+    },
+    stepOptions?: { id?: string },
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, { text: string }, TRequestContext>;
+  agent<TStepId extends string, TStepOutput>(
+    agent: SubAgent<TStepId, any> | Agent<TStepId, any>,
+    options: Omit<AgentStepOptions<TStepOutput>, 'structuredOutput'> & {
+      structuredOutput: { schema: StandardSchemaWithJSON<TStepOutput> };
+      retries?: number;
+      scorers?: DynamicArgument<MastraScorers>;
+      metadata?: StepMetadata;
+    },
+    stepOptions?: { id?: string },
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TStepOutput, TRequestContext>;
+  agent(
+    agentId: string,
+    options?: AgentStepOptions<any> & {
+      retries?: number;
+      scorers?: DynamicArgument<MastraScorers>;
+      metadata?: StepMetadata;
+    },
+    stepOptions?: { id?: string },
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, { text: string }, TRequestContext>;
+  agent(agentOrId: any, options?: any, stepOptions?: { id?: string }): any {
+    const isId = typeof agentOrId === 'string';
+    const agentId = isId ? agentOrId : agentOrId.id;
+    const id = stepOptions?.id || agentId;
+    this.stepFlow.push({ type: 'agent', id, agentId, agent: isId ? undefined : agentOrId, options });
+    this.serializedStepFlow.push({
+      type: 'agent',
+      id,
+      agentId,
+      description: isId ? undefined : agentOrId.getDescription?.(),
+    });
+    this.steps[id] = isId
+      ? ({ id, component: 'AGENT' } as any)
+      : ({ ...createStepFromAgent(agentOrId, options), id } as any);
+    return this as any;
+  }
+
+  /**
+   * Adds a tool as a declarative `{ type: 'tool' }` step to the workflow.
+   *
+   * The step output type is the tool's `outputSchema` type; the input it accepts
+   * is the tool's `inputSchema` type.
+   */
+  tool<
+    TSchemaIn,
+    TSchemaOut,
+    TSuspend,
+    TResume,
+    TContext extends ToolExecutionContext<TSuspend, TResume, any>,
+    TId extends string,
+    TToolRC extends Record<string, any> | unknown = unknown,
+  >(
+    tool: Tool<TSchemaIn, TSchemaOut, TSuspend, TResume, TContext, TId, TToolRC>,
+    options?: { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata },
+    stepOptions?: { id?: string },
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TSchemaOut, TRequestContext>;
+  tool(
+    toolId: string,
+    options?: { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata },
+    stepOptions?: { id?: string },
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, unknown, TRequestContext>;
+  tool(toolOrId: any, options?: any, stepOptions?: { id?: string }): any {
+    const isId = typeof toolOrId === 'string';
+    const toolId = isId ? toolOrId : toolOrId.id;
+    const id = stepOptions?.id || toolId;
+    this.stepFlow.push({ type: 'tool', id, toolId, tool: isId ? undefined : toolOrId, options });
+    this.serializedStepFlow.push({
+      type: 'tool',
+      id,
+      toolId,
+      description: isId ? undefined : toolOrId.description,
+    });
+    this.steps[id] = isId
+      ? ({ id, component: 'TOOL' } as any)
+      : ({ ...createStepFromTool(toolOrId, options), id } as any);
+    return this as any;
   }
 
   /**
@@ -1841,28 +2055,22 @@ export class Workflow<
       | ExecuteFunction<TState, TPrevSchema, any, any, any, TEngineType>,
     stepOptions?: { id?: string | null },
   ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any, TRequestContext> {
-    // Create an implicit step that handles the mapping
-    if (typeof mappingConfig === 'function') {
-      const mappingStep: any = createStep({
-        id:
-          stepOptions?.id ||
-          `mapping_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'mapping' }) || randomUUID()}`,
-        inputSchema: z.any(),
-        outputSchema: z.any(),
-        execute: mappingConfig as any,
-      });
+    // Build a declarative `{ type: 'mapping' }` graph entry; the mapping logic is
+    // interpreted at execution time by `createMappingStep`, not baked in here.
+    const mappingId =
+      stepOptions?.id ||
+      `mapping_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'mapping' }) || randomUUID()}`;
 
-      this.stepFlow.push({ type: 'step', step: mappingStep as any });
+    const truncate = (s: string) => (s.length > 1000 ? s.slice(0, 1000) + '...\n}' : s);
+
+    if (typeof mappingConfig === 'function') {
+      this.stepFlow.push({ type: 'mapping', id: mappingId, mapConfig: mappingConfig as any });
       this.serializedStepFlow.push({
-        type: 'step',
-        step: {
-          id: mappingStep.id,
-          mapConfig:
-            mappingConfig.toString()?.length > 1000
-              ? mappingConfig.toString().slice(0, 1000) + '...\n}'
-              : mappingConfig.toString(),
-        },
+        type: 'mapping',
+        id: mappingId,
+        mapConfig: truncate(mappingConfig.toString()),
       });
+      this.steps[mappingId] = createMappingStep(mappingId, mappingConfig as any) as any;
       return this as unknown as Workflow<
         TEngineType,
         TSteps,
@@ -1890,6 +2098,18 @@ export class Workflow<
             requestContextPath: m.requestContextPath,
             schema: m.schema,
           };
+        } else if (m.initData) {
+          // Serialize the init-data reference as the workflow id; the live entry
+          // (this.stepFlow) keeps the real reference for execution. Stringifying
+          // the workflow object here would walk back into this entry and form a
+          // circular structure.
+          a[key] = { initData: m.initData?.id, path: m.path };
+        } else if (m.step) {
+          // Serialize step references as ids (single or array) for the same reason.
+          a[key] = {
+            step: Array.isArray(m.step) ? m.step.map((s: any) => s?.id) : m.step?.id,
+            path: m.path,
+          };
         } else {
           a[key] = m;
         }
@@ -1897,82 +2117,16 @@ export class Workflow<
       },
       {} as Record<string, any>,
     );
-    const mappingStep: any = createStep({
-      id:
-        stepOptions?.id ||
-        `mapping_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'mapping' }) || randomUUID()}`,
-      inputSchema: z.any(),
-      outputSchema: z.any(),
-      execute: async ctx => {
-        const { getStepResult, getInitData, requestContext } = ctx;
-
-        const result: Record<string, any> = {};
-        for (const [key, mapping] of Object.entries(mappingConfig)) {
-          const m: any = mapping;
-
-          if (m.value !== undefined) {
-            result[key] = m.value;
-            continue;
-          }
-
-          if (m.fn !== undefined) {
-            result[key] = await m.fn(ctx);
-            continue;
-          }
-
-          if (m.requestContextPath) {
-            result[key] = requestContext.get(m.requestContextPath);
-            continue;
-          }
-
-          const stepResult = m.initData
-            ? getInitData()
-            : getStepResult(
-                Array.isArray(m.step)
-                  ? m.step.find((s: any) => {
-                      const result = getStepResult(s);
-                      if (typeof result === 'object' && result !== null) {
-                        return Object.keys(result).length > 0;
-                      }
-                      return result;
-                    })
-                  : m.step,
-              );
-
-          if (m.path === '.') {
-            result[key] = stepResult;
-            continue;
-          }
-
-          const pathParts = m.path.split('.');
-          let value: any = stepResult;
-          for (const part of pathParts) {
-            if (typeof value === 'object' && value !== null) {
-              value = value[part];
-            } else {
-              throw new Error(`Invalid path ${m.path} in step ${m?.step?.id ?? 'initData'}`);
-            }
-          }
-
-          result[key] = value;
-        }
-        return result;
-      },
-    });
 
     type MappedOutputSchema = any;
 
-    this.stepFlow.push({ type: 'step', step: mappingStep as any });
+    this.stepFlow.push({ type: 'mapping', id: mappingId, mapConfig: mappingConfig as MappingConfig });
     this.serializedStepFlow.push({
-      type: 'step',
-      step: {
-        id: mappingStep.id,
-        mapConfig:
-          JSON.stringify(newMappingConfig, null, 2)?.length > 1000
-            ? JSON.stringify(newMappingConfig, null, 2).slice(0, 1000) + '...\n}'
-            : JSON.stringify(newMappingConfig, null, 2),
-      },
+      type: 'mapping',
+      id: mappingId,
+      mapConfig: truncate(JSON.stringify(newMappingConfig, null, 2)),
     });
+    this.steps[mappingId] = createMappingStep(mappingId, mappingConfig as MappingConfig) as any;
     return this as unknown as Workflow<
       TEngineType,
       TSteps,
@@ -2013,20 +2167,10 @@ export class Workflow<
         : `Error: Expected Step with state schema that is a subset of workflow state`;
     },
   ) {
-    this.stepFlow.push({ type: 'parallel', steps: steps.map(step => ({ type: 'step', step: step as any })) });
+    this.stepFlow.push({ type: 'parallel', steps: steps.map((step: any) => toSingleStepEntry(step)) });
     this.serializedStepFlow.push({
       type: 'parallel',
-      steps: steps.map((step: any) => ({
-        type: 'step',
-        step: {
-          id: step.id,
-          description: step.description,
-          metadata: step.metadata,
-          component: (step as SerializedStep).component,
-          serializedStepFlow: (step as SerializedStep).serializedStepFlow,
-          canSuspend: Boolean(step.suspendSchema || step.resumeSchema),
-        },
-      })),
+      steps: steps.map((step: any) => toSerializedSingleStepEntry(step)),
     });
     steps.forEach((step: any) => {
       this.steps[step.id] = step;
@@ -2059,23 +2203,13 @@ export class Workflow<
   >(steps: TBranchSteps) {
     this.stepFlow.push({
       type: 'conditional',
-      steps: steps.map(([_cond, step]) => ({ type: 'step', step: step as any })),
+      steps: steps.map(([_cond, step]) => toSingleStepEntry(step as any)),
       conditions: steps.map(([cond]) => cond),
       serializedConditions: steps.map(([cond, _step]) => ({ id: `${_step.id}-condition`, fn: cond.toString() })),
     });
     this.serializedStepFlow.push({
       type: 'conditional',
-      steps: steps.map(([_cond, step]) => ({
-        type: 'step',
-        step: {
-          id: step.id,
-          description: step.description,
-          metadata: step.metadata,
-          component: (step as SerializedStep).component,
-          serializedStepFlow: (step as SerializedStep).serializedStepFlow,
-          canSuspend: Boolean(step.suspendSchema || step.resumeSchema),
-        },
-      })),
+      steps: steps.map(([_cond, step]) => toSerializedSingleStepEntry(step as any)),
       serializedConditions: steps.map(([cond, _step]) => ({ id: `${_step.id}-condition`, fn: cond.toString() })),
     });
     steps.forEach(([_, step]) => {
