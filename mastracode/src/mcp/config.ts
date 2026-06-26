@@ -3,9 +3,12 @@
  * Loads from:
  *   1. .claude/settings.local.json  (Claude Code compat — lowest priority)
  *   2. ~/.mastracode/mcp.json       (global)
- *   3. .mastracode/mcp.json         (project — highest priority)
+ *   3. .mcp.json                    (project root — Claude Code compatible)
+ *   4. .mastracode/mcp.json         (project — highest priority)
  *
- * Project overrides global by server name. Claude Code config is lowest priority.
+ * Higher-priority configs override lower ones by server name. The project root
+ * `.mcp.json` is read so a project that already keeps MCP servers there for
+ * Claude Code does not need to duplicate them under `.mastracode/`.
  */
 
 import * as fs from 'node:fs';
@@ -17,13 +20,18 @@ import type { McpConfig, McpHttpOAuthConfig, McpServerConfig, McpSkippedServer }
 export function loadMcpConfig(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): McpConfig {
   const claudeConfig = loadClaudeSettings(projectDir);
   const globalConfig = loadSingleConfig(getGlobalMcpPath(configDirName));
+  const rootConfig = loadSingleConfig(getRootMcpPath(projectDir));
   const projectConfig = loadSingleConfig(getProjectMcpPath(projectDir, configDirName));
 
-  return mergeConfigs(claudeConfig, globalConfig, projectConfig);
+  return mergeConfigs(claudeConfig, globalConfig, rootConfig, projectConfig);
 }
 
 export function getProjectMcpPath(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): string {
   return path.join(projectDir, configDirName, 'mcp.json');
+}
+
+export function getRootMcpPath(projectDir: string): string {
+  return path.join(projectDir, '.mcp.json');
 }
 
 export function getGlobalMcpPath(configDirName = DEFAULT_CONFIG_DIR): string {
