@@ -108,6 +108,21 @@ export function createInteroperabilityWorkflows(ctx: WorkflowCreatorContext) {
     workflows['declarative-tool-option-b'] = { workflow, mocks: {} };
   }
 
+  // Test: declarative .tool('id') resolves from the Mastra registry at run time
+  {
+    const workflow = createWorkflow({
+      id: 'declarative-tool-by-id',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ doubled: z.number() }),
+    });
+    workflow.tool('double-tool').commit();
+    workflows['declarative-tool-by-id'] = {
+      workflow,
+      mocks: {},
+      mastraTools: { 'double-tool': doubleTool },
+    };
+  }
+
   // Test: parallel with tool + agent steps (same prev output satisfies both inputs)
   {
     const workflow = createWorkflow({
@@ -199,6 +214,18 @@ export function createInteroperabilityTests(ctx: WorkflowTestContext, registry?:
         expect(result.steps['writer']).toMatchObject({
           status: 'success',
           output: { text: 'hello world' },
+        });
+      });
+
+      it('should resolve a string-id tool from the Mastra registry at execution', async () => {
+        const { workflow } = registry!['declarative-tool-by-id']!;
+
+        const result = await execute(workflow, { value: 7 });
+
+        expect(result.status).toBe('success');
+        expect(result.steps['double-tool']).toMatchObject({
+          status: 'success',
+          output: { doubled: 14 },
         });
       });
     });

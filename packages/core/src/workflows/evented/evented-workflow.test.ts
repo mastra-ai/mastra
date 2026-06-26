@@ -76,13 +76,19 @@ createWorkflowTestSuite({
   registerWorkflows: async registry => {
     registeredRegistry = registry;
     const workflows: Record<string, any> = {};
+    const agents: Record<string, any> = {};
+    const tools: Record<string, any> = {};
     for (const [id, entry] of Object.entries(registry)) {
       workflows[id] = entry.workflow;
+      if (entry.mastraAgents) Object.assign(agents, entry.mastraAgents);
+      if (entry.mastraTools) Object.assign(tools, entry.mastraTools);
     }
     registeredMastra = new Mastra({
       logger: false,
       storage: sharedStorage,
       workflows,
+      agents: Object.keys(agents).length ? agents : undefined,
+      tools: Object.keys(tools).length ? tools : undefined,
       pubsub: new EventEmitterPubSub(),
     });
     await registeredMastra.startWorkers();

@@ -15,7 +15,7 @@ import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { createWorkflow } from '../create';
 import { DefaultExecutionEngine } from '../default';
-import { SerializedStepFlowEntry } from '../types';
+import type { SerializedStepFlowEntry } from '../types';
 import { getSingleStepEntryId, getStepIds, isSingleStepEntry } from '../utils';
 import { createStep } from '../workflow';
 
@@ -107,7 +107,11 @@ describe('declarative step entries - construction & serialized graph shape', () 
 
   it('.then(createStep(agent)) emits an agent entry (option B)', () => {
     const agent = textAgent('opt-b-agent', 'hi');
-    const wf = createWorkflow({ id: 'wf-then-agent', inputSchema: z.object({ prompt: z.string() }), outputSchema: z.any() })
+    const wf = createWorkflow({
+      id: 'wf-then-agent',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.any(),
+    })
       .then(createStep(agent))
       .commit();
 
@@ -115,7 +119,11 @@ describe('declarative step entries - construction & serialized graph shape', () 
   });
 
   it('.then(createStep(tool)) emits a tool entry (option B)', () => {
-    const wf = createWorkflow({ id: 'wf-then-tool', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
+    const wf = createWorkflow({
+      id: 'wf-then-tool',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.any(),
+    })
       .then(createStep(doubleTool))
       .commit();
 
@@ -124,7 +132,11 @@ describe('declarative step entries - construction & serialized graph shape', () 
 
   it('agent/tool nested in .parallel() serialize as declarative child entries', () => {
     const agent = textAgent('par-agent', 'hi');
-    const wf = createWorkflow({ id: 'wf-parallel', inputSchema: z.object({ prompt: z.string() }), outputSchema: z.any() })
+    const wf = createWorkflow({
+      id: 'wf-parallel',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.any(),
+    })
       .parallel([createStep(agent), createStep(doubleTool)])
       .commit();
 
@@ -204,10 +216,14 @@ describe.each(ENGINES)('declarative step runtime ($name engine)', ({ evented }) 
     delete process.env.MASTRA_EVENTED_EXECUTION;
   });
 
-  function bind(workflow: ReturnType<typeof createWorkflow>, extra?: { agents?: Record<string, Agent> }) {
+  function bind(
+    workflow: ReturnType<typeof createWorkflow>,
+    extra?: { agents?: Record<string, Agent>; tools?: Record<string, any> },
+  ) {
     const mastra = new Mastra({
       workflows: { [workflow.id]: workflow },
       agents: extra?.agents,
+      tools: extra?.tools,
       storage: new InMemoryStore(),
       logger: false,
     });
@@ -245,7 +261,11 @@ describe.each(ENGINES)('declarative step runtime ($name engine)', ({ evented }) 
 
   it('.agent() executes the agent and returns { text }', async () => {
     const agent = textAgent('rt-agent', 'hello world');
-    const wf = createWorkflow({ id: 'rt-agent-wf', inputSchema: z.object({ prompt: z.string() }), outputSchema: z.any() })
+    const wf = createWorkflow({
+      id: 'rt-agent-wf',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.any(),
+    })
       .agent(agent)
       .commit();
     bind(wf, { agents: { 'rt-agent': agent } });
@@ -273,6 +293,38 @@ describe.each(ENGINES)('declarative step runtime ($name engine)', ({ evented }) 
     }
   });
 
+  it('resolves a string-id tool from the Mastra registry at execution', async () => {
+    const wf = createWorkflow({
+      id: 'rt-strid-tool',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.any(),
+    })
+      .tool('registered-tool')
+      .commit();
+    bind(wf, { tools: { 'registered-tool': doubleTool } });
+
+    const run = await wf.createRun();
+    const result = await run.start({ inputData: { value: 5 } });
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect((result.steps['registered-tool'] as any).output).toEqual({ doubled: 10 });
+    }
+  });
+
+  it('surfaces a clear error when a string-id tool is not registered on Mastra', async () => {
+    const wf = createWorkflow({
+      id: 'rt-strid-tool-missing',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.any(),
+    })
+      .tool('nope')
+      .commit();
+    bind(wf);
+
+    const run = await wf.createRun();
+    await expect(run.start({ inputData: { value: 1 } })).rejects.toThrow(/nope/);
+  });
+
   it('runs the same agent twice under distinct step ids', async () => {
     const agent = textAgent('twice-agent', 'echo');
     const wf = createWorkflow({ id: 'rt-twice', inputSchema: z.object({ prompt: z.string() }), outputSchema: z.any() })
@@ -298,7 +350,11 @@ describe.each(ENGINES)('declarative step runtime ($name engine)', ({ evented }) 
       outputSchema: z.object({ value: z.number() }),
       execute: async ({ inputData }) => ({ value: inputData.value }),
     });
-    const wf = createWorkflow({ id: 'rt-parallel', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
+    const wf = createWorkflow({
+      id: 'rt-parallel',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.any(),
+    })
       .parallel([createStep(doubleTool), passthrough])
       .commit();
     bind(wf);
@@ -400,7 +456,11 @@ describe('evented engine - per-type run events', () => {
 
   it('schedules a .agent() step with its own workflow.agent.run event', async () => {
     const agent = textAgent('ev-agent', 'hi');
-    const wf = createWorkflow({ id: 'ev-agent-wf', inputSchema: z.object({ prompt: z.string() }), outputSchema: z.any() })
+    const wf = createWorkflow({
+      id: 'ev-agent-wf',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.any(),
+    })
       .agent(agent)
       .commit();
     const mastra = bindEvented(wf, { agents: { 'ev-agent': agent } });

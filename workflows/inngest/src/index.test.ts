@@ -14839,10 +14839,15 @@ createWorkflowTestSuite({
       // Not running yet, will use inngest-cli
     }
 
-    // Collect all workflows from registry
+    // Collect all workflows + any Mastra-level agents/tools the entries declare
+    // (used by `.agent('id')` / `.tool('id')` by-id forms).
     const workflows: Record<string, InngestWorkflow<any, any, any, any, any, any, any>> = {};
+    const agents: Record<string, any> = {};
+    const tools: Record<string, any> = {};
     for (const [id, entry] of Object.entries(registry)) {
       workflows[id] = entry.workflow as InngestWorkflow<any, any, any, any, any, any, any>;
+      if (entry.mastraAgents) Object.assign(agents, entry.mastraAgents);
+      if (entry.mastraTools) Object.assign(tools, entry.mastraTools);
     }
 
     // Create storage
@@ -14859,6 +14864,8 @@ createWorkflowTestSuite({
     sharedMastra = new Mastra({
       storage: sharedStorage,
       workflows,
+      agents: Object.keys(agents).length ? agents : undefined,
+      tools: Object.keys(tools).length ? tools : undefined,
       server: {
         apiRoutes: [
           {

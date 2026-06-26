@@ -56,7 +56,9 @@ export type { ExecutionContext } from './types';
 
 /** Params for the per-type execute methods: the same context `executeStep` takes,
  * with the declarative graph entry instead of a pre-built `step`. */
-export type ExecuteAgentParams = Omit<ExecuteStepParams, 'step'> & { entry: Extract<SingleStepEntry, { type: 'agent' }> };
+export type ExecuteAgentParams = Omit<ExecuteStepParams, 'step'> & {
+  entry: Extract<SingleStepEntry, { type: 'agent' }>;
+};
 export type ExecuteToolParams = Omit<ExecuteStepParams, 'step'> & { entry: Extract<SingleStepEntry, { type: 'tool' }> };
 export type ExecuteMappingParams = Omit<ExecuteStepParams, 'step'> & {
   entry: Extract<SingleStepEntry, { type: 'mapping' }>;
@@ -1070,7 +1072,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    */
   async executeTool(params: ExecuteToolParams): Promise<StepExecutionResult> {
     const { entry, ...rest } = params;
-    const tool = entry.tool ?? (this.mastra as any)?.getTool?.(entry.toolId);
+    const tool = entry.tool ?? this.mastra?.getTool(entry.toolId);
     if (!tool) {
       throw new Error(
         `Tool '${entry.toolId}' not found for workflow step '${entry.id}'. Pass the tool instance directly.`,

@@ -7,6 +7,7 @@ import type { Mastra } from '../../../mastra';
 import type { TracingContext } from '../../../observability';
 import { RequestContext } from '../../../request-context/';
 import type { StepExecutionStrategy } from '../../../worker/types';
+import type { Step } from '../../../workflows/step';
 import type {
   RestartExecutionParams,
   StepFlowEntry,
@@ -15,9 +16,7 @@ import type {
   TimeTravelExecutionParams,
   WorkflowRunState,
 } from '../../../workflows/types';
-import type { Step } from '../../../workflows/step';
 import type { Workflow } from '../../../workflows/workflow';
-import { createMappingStep, createStepFromAgent, createStepFromTool } from '../../workflow';
 import {
   createRestartExecutionParams,
   createTimeTravelExecutionParams,
@@ -26,6 +25,7 @@ import {
   isSingleStepEntry,
   validateStepResumeData,
 } from '../../utils';
+import { createMappingStep, createStepFromAgent, createStepFromTool } from '../../workflow';
 import { resolveCurrentState } from '../helpers';
 import { StepExecutor } from '../step-executor';
 import { EventedWorkflow } from '../workflow';
@@ -1086,7 +1086,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (entry?.type !== 'tool') {
       return this.runLeafStepFromMisroute(args, entry, 'tool');
     }
-    const tool = entry.tool ?? (this.mastra as any)?.getTool?.(entry.toolId);
+    const tool = entry.tool ?? this.mastra?.getTool(entry.toolId);
     if (!tool) {
       throw new Error(
         `Tool '${entry.toolId}' not found for workflow step '${entry.id}'. Pass the tool instance directly.`,
@@ -1116,8 +1116,18 @@ export class WorkflowEventProcessor extends EventProcessor {
    * thing.
    */
   private async runLeafStepFromMisroute(args: ProcessorArgs, entry: StepFlowEntry | undefined, expected: string) {
-    const { workflowId, runId, executionPath, stepResults, activeStepsPath, resumeSteps, prevResult, resumeData, parentWorkflow, requestContext } =
-      args;
+    const {
+      workflowId,
+      runId,
+      executionPath,
+      stepResults,
+      activeStepsPath,
+      resumeSteps,
+      prevResult,
+      resumeData,
+      parentWorkflow,
+      requestContext,
+    } = args;
     return this.errorWorkflow(
       {
         workflowId,

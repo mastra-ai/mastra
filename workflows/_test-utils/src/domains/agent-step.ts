@@ -428,6 +428,21 @@ export function createAgentStepWorkflows(ctx: WorkflowCreatorContext) {
     workflows['declarative-agent-option-b'] = { workflow, mocks: {} };
   }
 
+  // Test: declarative .agent('id') resolves from the Mastra registry at run time
+  {
+    const workflow = createWorkflow({
+      id: 'declarative-agent-by-id',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.object({ text: z.string() }),
+    });
+    workflow.agent('writer').commit();
+    workflows['declarative-agent-by-id'] = {
+      workflow,
+      mocks: {},
+      mastraAgents: { writer },
+    };
+  }
+
   return workflows;
 }
 
@@ -866,6 +881,18 @@ export function createAgentStepTests(ctx: WorkflowTestContext, registry?: Workfl
 
       it('should execute an agent via .then(createStep(agent))', async () => {
         const { workflow } = registry!['declarative-agent-option-b']!;
+
+        const result = await execute(workflow, { prompt: 'say hi' });
+
+        expect(result.status).toBe('success');
+        expect(result.steps['writer']).toMatchObject({
+          status: 'success',
+          output: { text: 'hello world' },
+        });
+      });
+
+      it('should resolve a string-id agent from the Mastra registry at execution', async () => {
+        const { workflow } = registry!['declarative-agent-by-id']!;
 
         const result = await execute(workflow, { prompt: 'say hi' });
 
