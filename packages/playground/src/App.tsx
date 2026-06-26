@@ -132,7 +132,6 @@ declare global {
     MASTRA_REQUEST_CONTEXT_PRESETS?: string;
     MASTRA_EXPERIMENTAL_UI?: string;
     MASTRA_AGENT_SIGNALS?: string;
-    MASTRA_SIGNALS_UI?: string;
   }
 }
 
@@ -218,8 +217,8 @@ const MinimalRootLayout = () => {
 const isMastraPlatform = Boolean(window.MASTRA_CLOUD_API_ENDPOINT);
 const isExperimentalFeatures = coreFeatures.has('datasets');
 
-// Signals is an opt-in experimental UI, gated by the server-injected `MASTRA_SIGNALS_UI` flag.
-const isSignalsEnabled = window.MASTRA_SIGNALS_UI === 'true';
+// Signals requires the platform observability endpoint to fetch entity-learning data.
+const isSignalsEnabled = Boolean(window.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT);
 
 const agentCmsChildRoutes = [
   { index: true, element: <CmsAgentInformationPage /> },

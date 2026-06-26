@@ -596,35 +596,10 @@ describe('injectStudioHtmlConfig', () => {
       requestContextPresets: "''",
       experimentalUI: "'true'",
       agentSignals: "'true'",
-      signalsUI: "'false'",
       autoDetectUrl: "'false'",
     });
 
     expect(result).toBe("window.MASTRA_EXPERIMENTAL_UI = 'true';");
-  });
-
-  it('should inject MASTRA_SIGNALS_UI placeholder', () => {
-    const html = "window.MASTRA_SIGNALS_UI = '%%MASTRA_SIGNALS_UI%%';";
-
-    const result = injectStudioHtmlConfig(html, {
-      host: "'localhost'",
-      port: "'4111'",
-      protocol: "'http'",
-      apiPrefix: "'/api'",
-      basePath: '',
-      hideCloudCta: "'false'",
-      cloudApiEndpoint: "''",
-      experimentalFeatures: "'false'",
-      templates: "'false'",
-      telemetryDisabled: "''",
-      requestContextPresets: "''",
-      experimentalUI: "'false'",
-      agentSignals: "'true'",
-      signalsUI: "'true'",
-      autoDetectUrl: "'false'",
-    });
-
-    expect(result).toBe("window.MASTRA_SIGNALS_UI = 'true';");
   });
 
   it('should inject MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT placeholder when provided', () => {
@@ -645,7 +620,6 @@ describe('injectStudioHtmlConfig', () => {
       requestContextPresets: "''",
       experimentalUI: "'false'",
       agentSignals: "'true'",
-      signalsUI: "'false'",
       autoDetectUrl: "'false'",
     });
 
@@ -669,7 +643,6 @@ describe('injectStudioHtmlConfig', () => {
       requestContextPresets: "''",
       experimentalUI: "'false'",
       agentSignals: "'true'",
-      signalsUI: "'false'",
       autoDetectUrl: "'false'",
     });
 

@@ -35,9 +35,10 @@ export interface NavSection {
   items: NavItem[];
 }
 
-// Signals is an opt-in experimental UI, gated by the server-injected `MASTRA_SIGNALS_UI` flag.
+// Signals requires the platform observability endpoint to fetch entity-learning data.
 const isSignalsEnabled =
-  typeof window !== 'undefined' && (window as unknown as Record<string, unknown>).MASTRA_SIGNALS_UI === 'true';
+  typeof window !== 'undefined' &&
+  Boolean((window as unknown as Record<string, unknown>).MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT);
 
 const signalsNavItem: NavItem = {
   name: 'Signals',

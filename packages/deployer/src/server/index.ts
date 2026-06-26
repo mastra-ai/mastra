@@ -471,7 +471,6 @@ export async function createHonoServer(
       const experimentalUI = process.env.MASTRA_EXPERIMENTAL_UI === 'true' ? 'true' : 'false';
       const templatesEnabled = process.env.MASTRA_TEMPLATES === 'true' ? 'true' : 'false';
       const agentSignals = process.env.MASTRA_AGENT_SIGNALS === 'false' ? 'false' : 'true';
-      const signalsUI = process.env.MASTRA_SIGNALS_UI === 'true' ? 'true' : 'false';
       const requestContextPresets = process.env.MASTRA_REQUEST_CONTEXT_PRESETS || '';
 
       // Helper function to escape JSON for embedding in HTML/JavaScript
@@ -504,7 +503,6 @@ export async function createHonoServer(
         requestContextPresets: `'${escapeForHtml(requestContextPresets)}'`,
         experimentalUI: `'${experimentalUI}'`,
         agentSignals: `'${agentSignals}'`,
-        signalsUI: `'${signalsUI}'`,
         autoDetectUrl: `'${autoDetectUrl}'`,
       });
 
