@@ -40,7 +40,7 @@ await slack.configure({
 
 ## Constructor parameters
 
-`SlackProviderConfig` combines Slack-specific fields, Slack-adapter overrides (`toolDisplay`, `streaming`, `typingStatus`), and a curated subset of [`AgentChannels`](/docs/agents/channels) options forwarded to every connected agent. All fields are optional.
+`SlackProviderConfig` combines Slack-specific fields, Slack-adapter overrides (`toolDisplay`, `streaming`, `typingStatus`), and a curated subset of [`ChannelConfig`](/reference/agents/channels) options (such as `handlers`, `inlineMedia`, and `state`) forwarded to every connected agent. All fields are optional.
 
 <PropertiesTable
   content={[
