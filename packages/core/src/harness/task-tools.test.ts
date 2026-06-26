@@ -8,7 +8,7 @@ import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
 import { createMockWorkspace } from './test-utils';
 import { assignTaskIds, taskWriteTool } from './tools';
-import type { HarnessEvent } from './types';
+import type { AgentControllerEvent } from './types';
 
 async function createSession() {
   const agent = new Agent({
@@ -297,7 +297,7 @@ describe('task tool display bridge', () => {
   it('emits task_updated and updates the display snapshot when a task tool runs with a harness context', async () => {
     const { harness, session } = await createSession();
 
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => events.push(event));
 
     // Real harness request context — wires emitEvent -> harness.emit, the
@@ -321,7 +321,7 @@ describe('task tool display bridge', () => {
 
     const taskUpdated = events.filter(event => event.type === 'task_updated');
     expect(taskUpdated).toHaveLength(1);
-    expect((taskUpdated[0] as Extract<HarnessEvent, { type: 'task_updated' }>).tasks).toEqual([
+    expect((taskUpdated[0] as Extract<AgentControllerEvent, { type: 'task_updated' }>).tasks).toEqual([
       { id: 'task_write_tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
     ]);
 

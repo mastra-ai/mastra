@@ -3,7 +3,7 @@ import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
 import { createMockWorkspace } from './test-utils';
-import type { HarnessEvent } from './types';
+import type { AgentControllerEvent } from './types';
 
 function createHarness(
   storage: InMemoryStore,
@@ -104,8 +104,8 @@ describe('Harness.createSession — cross-session isolation', () => {
     const a = await harness.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
     const b = await harness.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
 
-    const aEvents: HarnessEvent[] = [];
-    const bEvents: HarnessEvent[] = [];
+    const aEvents: AgentControllerEvent[] = [];
+    const bEvents: AgentControllerEvent[] = [];
     a.subscribe(event => {
       aEvents.push(event);
     });

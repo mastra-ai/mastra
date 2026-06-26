@@ -11,7 +11,7 @@ import { summarizeTaskCheck } from '../tools/builtin/task-tools';
 import { createTool } from '../tools/tool';
 import { createWorkspaceTools } from '../workspace/tools/tools';
 
-import type { HarnessRequestContext, HarnessSubagent } from './types';
+import type { AgentControllerRequestContext, AgentControllerSubagent } from './types';
 
 // `ask_user` is an agent-agnostic built-in tool. It is defined in
 // `../tools/builtin/ask-user` and re-exported here so the Harness toolset and
@@ -67,7 +67,7 @@ export { TaskStateProcessor } from '../tools/builtin/task-state-processor';
 // =============================================================================
 
 export interface CreateSubagentToolOptions {
-  subagents: HarnessSubagent[];
+  subagents: AgentControllerSubagent[];
   resolveModel: (modelId: string) => MastraModelConfig;
   /** Resolved harness tools (already evaluated from DynamicArgument) */
   harnessTools?: ToolsInput;
@@ -165,7 +165,7 @@ Use this tool when:
         };
       }
 
-      const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext | undefined;
+      const harnessCtx = context?.requestContext?.get('harness') as AgentControllerRequestContext | undefined;
       const emitEvent = harnessCtx?.emitEvent;
       const abortSignal = harnessCtx?.abortSignal;
       const toolCallId = context?.agent?.toolCallId ?? 'unknown';
@@ -179,7 +179,7 @@ Use this tool when:
       let subagentRequestContext: RequestContext | undefined;
       let streamMemory: { thread: string; resource?: string } | undefined;
       let streamMaxSteps: number | undefined;
-      let streamStopWhen: HarnessSubagent['stopWhen'];
+      let streamStopWhen: AgentControllerSubagent['stopWhen'];
       let streamPrepareStep: ((args: { tools?: Record<string, unknown> }) => { activeTools: string[] }) | undefined;
       let forkedToolsets: ToolsetsInput | undefined;
 

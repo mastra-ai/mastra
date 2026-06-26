@@ -4,12 +4,12 @@ import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
 import { createMockWorkspace } from './test-utils';
-import type { HarnessEvent, HarnessOMConfig } from './types';
+import type { AgentControllerEvent, AgentControllerOMConfig } from './types';
 
 async function createSession(options: {
   storage: InMemoryStore;
-  omConfig?: HarnessOMConfig;
-  onEvent?: (event: HarnessEvent) => void;
+  omConfig?: AgentControllerOMConfig;
+  onEvent?: (event: AgentControllerEvent) => void;
 }) {
   const agent = new Agent({
     name: 'test-agent',
@@ -75,7 +75,7 @@ describe('session.om', () => {
   });
 
   it('observer.switchModel persists to thread settings and emits om_model_changed', async () => {
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     const { session } = await createSession({ storage, onEvent: event => events.push(event) });
     await session.thread.create();
 
@@ -91,7 +91,7 @@ describe('session.om', () => {
   });
 
   it('reflector.switchModel persists to thread settings and emits om_model_changed', async () => {
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     const { session } = await createSession({ storage, onEvent: event => events.push(event) });
     await session.thread.create();
 

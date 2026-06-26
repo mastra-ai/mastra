@@ -1,4 +1,3 @@
-import type { RuleGroup } from '@mastra/playground-ui';
 import { EntityName, EntityDescription, EntityContent, Entity } from '@mastra/playground-ui/components/Entity';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Searchbar } from '@mastra/playground-ui/components/Searchbar';
@@ -6,6 +5,7 @@ import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Sectio
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 

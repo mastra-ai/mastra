@@ -42,8 +42,8 @@ export interface HeartbeatHandler {
  * Configuration for a single agent mode within the harness.
  * Each mode represents a different "personality" or capability set.
  */
-interface HarnessModeBase {
-  /** Unique within `HarnessConfig.modes`. Validated at construction. */
+interface AgentControllerModeBase {
+  /** Unique within `AgentControllerConfig.modes`. Validated at construction. */
   id: string;
 
   name?: string;
@@ -61,7 +61,7 @@ interface HarnessModeBase {
    */
   instructions?: string;
 
-  /** @deprecated Use HarnessConfig.agent as the shared backing agent. */
+  /** @deprecated Use AgentControllerConfig.agent as the shared backing agent. */
   agent?: Agent<any, any, any, any>;
 
   /** @deprecated Prefer metadata.default. */
@@ -108,11 +108,11 @@ interface HarnessModeBase {
   metadata?: Record<string, unknown>;
 }
 
-type HarnessModeToolOverrides =
+type AgentControllerModeToolOverrides =
   | {
       /**
        * Mode-level tools added as a separate toolset alongside the backing
-       * agent's own tools. With a shared backing agent (`HarnessConfig.agent`),
+       * agent's own tools. With a shared backing agent (`AgentControllerConfig.agent`),
        * these are layered as an augment — the agent's own tools are **not**
        * masked. To restrict which tools are visible, use `availableTools`
        * instead. Mutually exclusive with `additionalTools`.
@@ -129,7 +129,7 @@ type HarnessModeToolOverrides =
       additionalTools?: ToolsInput;
     };
 
-export type HarnessMode = HarnessModeBase & HarnessModeToolOverrides;
+export type AgentControllerMode = AgentControllerModeBase & AgentControllerModeToolOverrides;
 
 // =============================================================================
 // Subagents
@@ -139,7 +139,7 @@ export type HarnessMode = HarnessModeBase & HarnessModeToolOverrides;
  * Definition of a subagent that the Harness can spawn via the built-in `subagent` tool.
  * Each subagent runs as a fresh Agent with constrained tools and its own instructions.
  */
-export interface HarnessSubagent {
+export interface AgentControllerSubagent {
   /** Unique identifier for this subagent type (e.g., "explore", "plan", "execute") */
   id: string;
 
@@ -202,7 +202,7 @@ export interface HarnessSubagent {
 /**
  * State data type for the Harness generic parameter.
  */
-export type HarnessStateSchema<T> = T;
+export type AgentControllerStateSchema<T> = T;
 
 /**
  * Configuration for creating a Harness instance.
@@ -219,7 +219,7 @@ export type BuiltinToolId =
   | 'task_check'
   | 'subagent';
 
-export interface HarnessConfig<TState = {}> {
+export interface AgentControllerConfig<TState = {}> {
   /** Unique identifier for this harness instance */
   id: string;
 
@@ -242,7 +242,7 @@ export interface HarnessConfig<TState = {}> {
   memory?: DynamicArgument<MastraMemory>;
 
   /** Available agent modes */
-  modes: HarnessMode[];
+  modes: AgentControllerMode[];
 
   /** Shared backing agent that each mode forks and decorates. */
   agent?: Agent<any, any, any, any>;
@@ -303,7 +303,7 @@ export interface HarnessConfig<TState = {}> {
    * Subagent definitions. The Harness auto-creates a `subagent` built-in tool
    * that parent agents can call to spawn focused subagents.
    */
-  subagents?: HarnessSubagent[];
+  subagents?: AgentControllerSubagent[];
 
   /**
    * Model gateways registered on Harness' internal Mastra instance.
@@ -319,7 +319,7 @@ export interface HarnessConfig<TState = {}> {
    * The Harness auto-manages OM state (model IDs, thresholds) internally
    * and provides accessors that Memory's dynamic model functions can close over.
    */
-  omConfig?: HarnessOMConfig;
+  omConfig?: AgentControllerOMConfig;
 
   /**
    * Built-in tool IDs to disable.
@@ -365,7 +365,7 @@ export interface HarnessConfig<TState = {}> {
  * These values are used when harness state doesn't have explicit OM values
  * (e.g., fresh thread with no persisted OM settings).
  */
-export interface HarnessOMConfig {
+export interface AgentControllerOMConfig {
   /** Default model ID for the observer agent */
   defaultObserverModelId?: string;
   /** Default model ID for the reflector agent */
@@ -460,7 +460,7 @@ export type ModelUseCountTracker = (modelId: string) => void;
 /**
  * Thread metadata stored in the harness.
  */
-export interface HarnessThread {
+export interface AgentControllerThread {
   id: string;
   resourceId: string;
   title?: string;
@@ -514,7 +514,7 @@ export type OMBufferedStatus = 'idle' | 'running' | 'complete';
 
 /**
  * Full progress state for Observational Memory.
- * Maintained by the Harness and exposed via `HarnessDisplayState`.
+ * Maintained by the Harness and exposed via `AgentControllerDisplayState`.
  */
 export interface OMProgressState {
   status: OMStatus;
@@ -581,7 +581,7 @@ export interface ActiveSubagentState {
   result?: string;
 }
 
-export type HarnessSubagentHistoryEntry = Omit<ActiveSubagentState, 'status'>;
+export type AgentControllerSubagentHistoryEntry = Omit<ActiveSubagentState, 'status'>;
 
 /**
  * Canonical display state maintained by the Harness.
@@ -593,14 +593,14 @@ export type HarnessSubagentHistoryEntry = Omit<ActiveSubagentState, 'status'>;
  * The Harness updates this state alongside every event emission,
  * then emits a `display_state_changed` event so UIs can react.
  */
-export interface HarnessDisplayState {
+export interface AgentControllerDisplayState {
   // ── Agent lifecycle ──────────────────────────────────────────────────
   /** Whether an agent operation is currently in progress */
   isRunning: boolean;
 
   // ── Current streaming message ────────────────────────────────────────
   /** The message currently being streamed (null when idle) */
-  currentMessage: HarnessMessage | null;
+  currentMessage: AgentControllerMessage | null;
 
   // ── Follow-up queue ──────────────────────────────────────────────────
   /** Number of follow-up messages queued locally by the Harness */
@@ -670,9 +670,9 @@ export interface HarnessDisplayState {
 }
 
 /**
- * Creates the default/initial `HarnessDisplayState`.
+ * Creates the default/initial `AgentControllerDisplayState`.
  */
-export function defaultDisplayState(): HarnessDisplayState {
+export function defaultDisplayState(): AgentControllerDisplayState {
   return {
     isRunning: false,
     currentMessage: null,
@@ -731,18 +731,18 @@ export function defaultOMProgressState(): OMProgressState {
 /**
  * Events emitted by the harness that UIs can subscribe to.
  */
-export type HarnessEvent =
+export type AgentControllerEvent =
   | { type: 'mode_changed'; modeId: string; previousModeId: string }
   | { type: 'model_changed'; modelId: string; scope?: 'global' | 'thread' | 'mode'; modeId?: string }
   | { type: 'thread_changed'; threadId: string; previousThreadId: string | null }
-  | { type: 'thread_created'; thread: HarnessThread }
+  | { type: 'thread_created'; thread: AgentControllerThread }
   | { type: 'thread_deleted'; threadId: string }
   | { type: 'state_changed'; state: Record<string, unknown>; changedKeys: string[] }
   | { type: 'agent_start' }
   | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' | 'suspended' }
-  | { type: 'message_start'; message: HarnessMessage }
-  | { type: 'message_update'; message: HarnessMessage }
-  | { type: 'message_end'; message: HarnessMessage }
+  | { type: 'message_start'; message: AgentControllerMessage }
+  | { type: 'message_update'; message: AgentControllerMessage }
+  | { type: 'message_end'; message: AgentControllerMessage }
   | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown }
   | { type: 'tool_approval_required'; toolCallId: string; toolName: string; args: unknown }
   | {
@@ -897,12 +897,12 @@ export type HarnessEvent =
       type: 'goal_evaluation';
       payload: GoalEvaluationPayload;
     }
-  | { type: 'display_state_changed'; displayState: HarnessDisplayState };
+  | { type: 'display_state_changed'; displayState: AgentControllerDisplayState };
 
 /**
  * Listener function for harness events.
  */
-export type HarnessEventListener = (event: HarnessEvent) => void | Promise<void>;
+export type AgentControllerEventListener = (event: AgentControllerEvent) => void | Promise<void>;
 
 // =============================================================================
 // Messages
@@ -912,17 +912,17 @@ export type HarnessEventListener = (event: HarnessEvent) => void | Promise<void>
  * Simplified message type for UI consumption.
  * Maps from Mastra's internal message format.
  */
-export interface HarnessMessage {
+export interface AgentControllerMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
-  content: HarnessMessageContent[];
+  content: AgentControllerMessageContent[];
   createdAt: Date;
   attributes?: Record<string, string | number | boolean | null | undefined>;
   stopReason?: 'complete' | 'tool_use' | 'aborted' | 'error';
   errorMessage?: string;
 }
 
-export type HarnessMessageContent =
+export type AgentControllerMessageContent =
   | { type: 'text'; text: string }
   | { type: 'thinking'; thinking: string }
   | { type: 'tool_call'; id: string; name: string; args: unknown }
@@ -1022,26 +1022,28 @@ export type HarnessMessageContent =
  * Snapshot of the session-owned values exposed to request-context consumers.
  * Plain data captured per request; mutating it does not affect the Session.
  */
-export type HarnessRequestStateUpdateResult<TState, TResult> = {
+export type AgentControllerRequestStateUpdateResult<TState, TResult> = {
   updates?: Partial<TState>;
-  events?: HarnessEvent[];
+  events?: AgentControllerEvent[];
   result: TResult;
 };
 
-export type HarnessRequestStateUpdater<TState, TResult> = (
+export type AgentControllerRequestStateUpdater<TState, TResult> = (
   state: Readonly<TState>,
-) => HarnessRequestStateUpdateResult<TState, TResult> | Promise<HarnessRequestStateUpdateResult<TState, TResult>>;
+) =>
+  | AgentControllerRequestStateUpdateResult<TState, TResult>
+  | Promise<AgentControllerRequestStateUpdateResult<TState, TResult>>;
 
-export interface HarnessRequestState<TState = unknown> {
+export interface AgentControllerRequestState<TState = unknown> {
   /** Get the current session-owned harness state (live, not request-context snapshot). */
   get: () => Readonly<TState>;
   /** Update session-owned harness state. */
   set: (updates: Partial<TState>) => Promise<void>;
   /** Update session-owned harness state from the latest snapshot in a serialized transaction. */
-  update: <TResult>(updater: HarnessRequestStateUpdater<TState, TResult>) => Promise<TResult>;
+  update: <TResult>(updater: AgentControllerRequestStateUpdater<TState, TResult>) => Promise<TResult>;
 }
 
-export interface HarnessRequestSession<TState = unknown> {
+export interface AgentControllerRequestSession<TState = unknown> {
   /** Stable session identifier (mirrors SessionRecord.id in storage). */
   id: string;
   /** Stable session owner (mirrors SessionRecord.ownerId in storage). */
@@ -1050,37 +1052,32 @@ export interface HarnessRequestSession<TState = unknown> {
   modeId: string;
   /** Currently-selected model ID ('' when none selected yet) */
   modelId: string;
-  /** Live session-owned harness state accessors. */
-  state: HarnessRequestState<TState>;
+  /**
+   * Live session-owned harness state accessors.
+   * @deprecated Prefer the top-level `getState()` / `setState()` / `updateState()`
+   * on the {@link AgentControllerRequestContext} instead.
+   */
+  state: AgentControllerRequestState<TState>;
 }
 
-export interface HarnessRequestContext<TState = unknown> {
+export interface AgentControllerRequestContext<TState = unknown> {
   /** The harness instance ID */
   harnessId: string;
 
   /**
    * Current harness state (read-only snapshot captured when the request context is built).
-   * @deprecated Prefer `session.state.get()` for live state reads.
+   * @deprecated Prefer `getState()` for live state reads.
    */
   state: Readonly<TState>;
 
-  /**
-   * Get the current harness state (live, not snapshot).
-   * @deprecated Prefer `session.state.get()`.
-   */
+  /** Get the current harness state (live, not snapshot). */
   getState: () => Readonly<TState>;
 
-  /**
-   * Update harness state.
-   * @deprecated Prefer `session.state.set(...)`.
-   */
+  /** Update harness state. */
   setState: (updates: Partial<TState>) => Promise<void>;
 
-  /**
-   * Update harness state from the latest state snapshot in a serialized transaction.
-   * @deprecated Prefer `session.state.update(...)`.
-   */
-  updateState?: <TResult>(updater: HarnessRequestStateUpdater<TState, TResult>) => Promise<TResult>;
+  /** Update harness state from the latest state snapshot in a serialized transaction. */
+  updateState?: <TResult>(updater: AgentControllerRequestStateUpdater<TState, TResult>) => Promise<TResult>;
 
   /** Current thread ID */
   threadId: string | null;
@@ -1092,7 +1089,7 @@ export interface HarnessRequestContext<TState = unknown> {
    * Snapshot of the relevant session-owned values for this request.
    * Plain data (not the live Session); read-only at the point of use.
    */
-  session: HarnessRequestSession<TState>;
+  session: AgentControllerRequestSession<TState>;
 
   /** Abort signal for the current operation */
   abortSignal?: AbortSignal;
@@ -1101,8 +1098,77 @@ export interface HarnessRequestContext<TState = unknown> {
   workspace?: Workspace;
 
   /** Emit a harness event (used by tools to forward events) */
-  emitEvent?: (event: HarnessEvent) => void;
+  emitEvent?: (event: AgentControllerEvent) => void;
 
   /** Get the configured subagent model ID for a specific agent type */
   getSubagentModelId?: (params?: { agentType?: string }) => string | null;
 }
+
+/**
+ * @deprecated Renamed to `AgentControllerMode`. Kept for backwards compatibility.
+ */
+export type HarnessMode = AgentControllerMode;
+/**
+ * @deprecated Renamed to `AgentControllerSubagent`. Kept for backwards compatibility.
+ */
+export type HarnessSubagent = AgentControllerSubagent;
+/**
+ * @deprecated Renamed to `AgentControllerStateSchema`. Kept for backwards compatibility.
+ */
+export type HarnessStateSchema<T> = AgentControllerStateSchema<T>;
+/**
+ * @deprecated Renamed to `AgentControllerConfig`. Kept for backwards compatibility.
+ */
+export type HarnessConfig<TState = {}> = AgentControllerConfig<TState>;
+/**
+ * @deprecated Renamed to `AgentControllerOMConfig`. Kept for backwards compatibility.
+ */
+export type HarnessOMConfig = AgentControllerOMConfig;
+/**
+ * @deprecated Renamed to `AgentControllerThread`. Kept for backwards compatibility.
+ */
+export type HarnessThread = AgentControllerThread;
+/**
+ * @deprecated Renamed to `AgentControllerSubagentHistoryEntry`. Kept for backwards compatibility.
+ */
+export type HarnessSubagentHistoryEntry = AgentControllerSubagentHistoryEntry;
+/**
+ * @deprecated Renamed to `AgentControllerDisplayState`. Kept for backwards compatibility.
+ */
+export type HarnessDisplayState = AgentControllerDisplayState;
+/**
+ * @deprecated Renamed to `AgentControllerEvent`. Kept for backwards compatibility.
+ */
+export type HarnessEvent = AgentControllerEvent;
+/**
+ * @deprecated Renamed to `AgentControllerEventListener`. Kept for backwards compatibility.
+ */
+export type HarnessEventListener = AgentControllerEventListener;
+/**
+ * @deprecated Renamed to `AgentControllerMessage`. Kept for backwards compatibility.
+ */
+export type HarnessMessage = AgentControllerMessage;
+/**
+ * @deprecated Renamed to `AgentControllerMessageContent`. Kept for backwards compatibility.
+ */
+export type HarnessMessageContent = AgentControllerMessageContent;
+/**
+ * @deprecated Renamed to `AgentControllerRequestStateUpdateResult`. Kept for backwards compatibility.
+ */
+export type HarnessRequestStateUpdateResult<TState, TResult> = AgentControllerRequestStateUpdateResult<TState, TResult>;
+/**
+ * @deprecated Renamed to `AgentControllerRequestStateUpdater`. Kept for backwards compatibility.
+ */
+export type HarnessRequestStateUpdater<TState, TResult> = AgentControllerRequestStateUpdater<TState, TResult>;
+/**
+ * @deprecated Renamed to `AgentControllerRequestState`. Kept for backwards compatibility.
+ */
+export type HarnessRequestState<TState = unknown> = AgentControllerRequestState<TState>;
+/**
+ * @deprecated Renamed to `AgentControllerRequestSession`. Kept for backwards compatibility.
+ */
+export type HarnessRequestSession<TState = unknown> = AgentControllerRequestSession<TState>;
+/**
+ * @deprecated Renamed to `AgentControllerRequestContext`. Kept for backwards compatibility.
+ */
+export type HarnessRequestContext<TState = unknown> = AgentControllerRequestContext<TState>;

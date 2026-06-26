@@ -8,7 +8,7 @@ import type { AgentExecutionOptions, AgentExecutionOptionsBase } from './agent.t
 import type { MessageListInput } from './message-list';
 import type { StructuredOutputOptions } from './types';
 
-export const supportedLanguageModelSpecifications = ['v2', 'v3'];
+export const supportedLanguageModelSpecifications = ['v2', 'v3', 'v4'];
 export const isSupportedLanguageModel = (
   model: MastraLanguageModel | MastraLegacyLanguageModel,
 ): model is MastraLanguageModel => {

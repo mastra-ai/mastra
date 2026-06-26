@@ -7037,6 +7037,7 @@ export type PostAgentsAgentIdSendToolApproval_Body = {
     | undefined;
   toolCallId: string;
   approved: boolean;
+  resumeData?: any | undefined;
   format?: string | undefined;
   messages?: any[] | undefined;
   streamOptions?: any | undefined;
@@ -90198,6 +90199,1308 @@ export interface PostChannelsPlatformAgentIdDisconnect_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /agent-controller
+// ============================================================================
+export type GetAgentController_Response = {
+  harnesses: {
+    id: string;
+  }[];
+};
+
+export type GetAgentController_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentController_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetAgentController_Request;
+  response: GetAgentController_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agent-controller/:harnessId/modes
+// ============================================================================
+export type GetAgentControllerHarnessIdModes_PathParams = {
+  harnessId: string;
+};
+
+export type GetAgentControllerHarnessIdModes_Response = {
+  modes: {
+    id: string;
+    name?: string | undefined;
+  }[];
+};
+
+export type GetAgentControllerHarnessIdModes_Request = Simplify<
+  (GetAgentControllerHarnessIdModes_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerHarnessIdModes_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentControllerHarnessIdModes_RouteContract {
+  pathParams: GetAgentControllerHarnessIdModes_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAgentControllerHarnessIdModes_Request;
+  response: GetAgentControllerHarnessIdModes_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agent-controller/:harnessId/models
+// ============================================================================
+export type GetAgentControllerHarnessIdModels_PathParams = {
+  harnessId: string;
+};
+
+export type GetAgentControllerHarnessIdModels_Response = {
+  models: {
+    id: string;
+    provider: string;
+    modelName: string;
+    hasApiKey: boolean;
+    useCount: number;
+  }[];
+};
+
+export type GetAgentControllerHarnessIdModels_Request = Simplify<
+  (GetAgentControllerHarnessIdModels_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerHarnessIdModels_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentControllerHarnessIdModels_RouteContract {
+  pathParams: GetAgentControllerHarnessIdModels_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAgentControllerHarnessIdModels_Request;
+  response: GetAgentControllerHarnessIdModels_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:harnessId/sessions
+// ============================================================================
+export type PostAgentControllerHarnessIdSessions_PathParams = {
+  harnessId: string;
+};
+
+export type PostAgentControllerHarnessIdSessions_Body = {
+  resourceId: string;
+  tags?:
+    | {
+        [key: string]: string;
+      }
+    | undefined;
+};
+
+export type PostAgentControllerHarnessIdSessions_Response = {
+  harnessId: string;
+  resourceId: string;
+  threadId?: string | undefined;
+};
+
+export type PostAgentControllerHarnessIdSessions_Request = Simplify<
+  (PostAgentControllerHarnessIdSessions_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerHarnessIdSessions_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerHarnessIdSessions_Body extends never
+      ? {}
+      : {} extends PostAgentControllerHarnessIdSessions_Body
+        ? { body?: PostAgentControllerHarnessIdSessions_Body }
+        : { body: PostAgentControllerHarnessIdSessions_Body })
+>;
+
+export interface PostAgentControllerHarnessIdSessions_RouteContract {
+  pathParams: PostAgentControllerHarnessIdSessions_PathParams;
+  queryParams: never;
+  body: PostAgentControllerHarnessIdSessions_Body;
+  request: PostAgentControllerHarnessIdSessions_Request;
+  response: PostAgentControllerHarnessIdSessions_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agent-controller/:harnessId/sessions/:resourceId
+// ============================================================================
+export type GetAgentControllerHarnessIdSessionsResourceId_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type GetAgentControllerHarnessIdSessionsResourceId_Response = {
+  harnessId: string;
+  resourceId: string;
+  threadId?: string | undefined;
+  modeId: string;
+  modelId: string;
+  omProgress?:
+    | {
+        status: string;
+        pendingTokens: number;
+        threshold: number;
+        thresholdPercent: number;
+        observationTokens: number;
+        reflectionThreshold: number;
+        reflectionThresholdPercent: number;
+        projectedMessageRemoval: number;
+        projectedReflectionSavings: number;
+      }
+    | undefined;
+  tokenUsage?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  settings?:
+    | {
+        yolo: boolean;
+        thinkingLevel: 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+        notifications: 'off' | 'bell' | 'system' | 'both';
+        smartEditing: boolean;
+      }
+    | undefined;
+};
+
+export type GetAgentControllerHarnessIdSessionsResourceId_Request = Simplify<
+  (GetAgentControllerHarnessIdSessionsResourceId_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerHarnessIdSessionsResourceId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentControllerHarnessIdSessionsResourceId_RouteContract {
+  pathParams: GetAgentControllerHarnessIdSessionsResourceId_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAgentControllerHarnessIdSessionsResourceId_Request;
+  response: GetAgentControllerHarnessIdSessionsResourceId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agent-controller/:harnessId/sessions/:resourceId/threads
+// ============================================================================
+export type GetAgentControllerHarnessIdSessionsResourceIdThreads_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type GetAgentControllerHarnessIdSessionsResourceIdThreads_QueryParams = {
+  limit?: number | undefined;
+  tags?:
+    | (
+        | {
+            [key: string]: string;
+          }
+        | undefined
+      )
+    | undefined;
+};
+
+export type GetAgentControllerHarnessIdSessionsResourceIdThreads_Response = {
+  threads: {
+    id: string;
+    title?: string | undefined;
+    updatedAt?: string | undefined;
+    tags?:
+      | {
+          [key: string]: string;
+        }
+      | undefined;
+  }[];
+};
+
+export type GetAgentControllerHarnessIdSessionsResourceIdThreads_Request = Simplify<
+  (GetAgentControllerHarnessIdSessionsResourceIdThreads_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerHarnessIdSessionsResourceIdThreads_PathParams }) &
+    (GetAgentControllerHarnessIdSessionsResourceIdThreads_QueryParams extends never
+      ? {}
+      : {} extends GetAgentControllerHarnessIdSessionsResourceIdThreads_QueryParams
+        ? { query?: GetAgentControllerHarnessIdSessionsResourceIdThreads_QueryParams }
+        : { query: GetAgentControllerHarnessIdSessionsResourceIdThreads_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentControllerHarnessIdSessionsResourceIdThreads_RouteContract {
+  pathParams: GetAgentControllerHarnessIdSessionsResourceIdThreads_PathParams;
+  queryParams: GetAgentControllerHarnessIdSessionsResourceIdThreads_QueryParams;
+  body: never;
+  request: GetAgentControllerHarnessIdSessionsResourceIdThreads_Request;
+  response: GetAgentControllerHarnessIdSessionsResourceIdThreads_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:harnessId/sessions/:resourceId/threads
+// ============================================================================
+export type PostAgentControllerHarnessIdSessionsResourceIdThreads_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdThreads_Body = {
+  title?: string | undefined;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdThreads_Response = {
+  id: string;
+  title?: string | undefined;
+  resourceId?: string | undefined;
+  createdAt?: string | undefined;
+  updatedAt?: string | undefined;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdThreads_Request = Simplify<
+  (PostAgentControllerHarnessIdSessionsResourceIdThreads_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerHarnessIdSessionsResourceIdThreads_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerHarnessIdSessionsResourceIdThreads_Body extends never
+      ? {}
+      : {} extends PostAgentControllerHarnessIdSessionsResourceIdThreads_Body
+        ? { body?: PostAgentControllerHarnessIdSessionsResourceIdThreads_Body }
+        : { body: PostAgentControllerHarnessIdSessionsResourceIdThreads_Body })
+>;
+
+export interface PostAgentControllerHarnessIdSessionsResourceIdThreads_RouteContract {
+  pathParams: PostAgentControllerHarnessIdSessionsResourceIdThreads_PathParams;
+  queryParams: never;
+  body: PostAgentControllerHarnessIdSessionsResourceIdThreads_Body;
+  request: PostAgentControllerHarnessIdSessionsResourceIdThreads_Request;
+  response: PostAgentControllerHarnessIdSessionsResourceIdThreads_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /agent-controller/:harnessId/sessions/:resourceId/threads/:threadId
+// ============================================================================
+export type DeleteAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_PathParams = {
+  harnessId: string;
+  resourceId: string;
+  threadId: string;
+};
+
+export type DeleteAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_Response = {
+  ok: boolean;
+};
+
+export type DeleteAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_Request = Simplify<
+  (DeleteAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_PathParams extends never
+    ? {}
+    : { params: DeleteAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_RouteContract {
+  pathParams: DeleteAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_PathParams;
+  queryParams: never;
+  body: never;
+  request: DeleteAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_Request;
+  response: DeleteAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PUT /agent-controller/:harnessId/sessions/:resourceId/threads/:threadId
+// ============================================================================
+export type PutAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_PathParams = {
+  harnessId: string;
+  resourceId: string;
+  threadId: string;
+};
+
+export type PutAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_Body = {
+  title: string;
+};
+
+export type PutAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_Response = {
+  ok: boolean;
+};
+
+export type PutAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_Request = Simplify<
+  (PutAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_PathParams extends never
+    ? {}
+    : { params: PutAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PutAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_Body extends never
+      ? {}
+      : {} extends PutAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_Body
+        ? { body?: PutAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_Body }
+        : { body: PutAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_Body })
+>;
+
+export interface PutAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_RouteContract {
+  pathParams: PutAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_PathParams;
+  queryParams: never;
+  body: PutAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_Body;
+  request: PutAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_Request;
+  response: PutAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:harnessId/sessions/:resourceId/threads/clone
+// ============================================================================
+export type PostAgentControllerHarnessIdSessionsResourceIdThreadsClone_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdThreadsClone_Body = {
+  sourceThreadId?: string | undefined;
+  title?: string | undefined;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdThreadsClone_Response = {
+  id: string;
+  title?: string | undefined;
+  resourceId?: string | undefined;
+  createdAt?: string | undefined;
+  updatedAt?: string | undefined;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdThreadsClone_Request = Simplify<
+  (PostAgentControllerHarnessIdSessionsResourceIdThreadsClone_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerHarnessIdSessionsResourceIdThreadsClone_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerHarnessIdSessionsResourceIdThreadsClone_Body extends never
+      ? {}
+      : {} extends PostAgentControllerHarnessIdSessionsResourceIdThreadsClone_Body
+        ? { body?: PostAgentControllerHarnessIdSessionsResourceIdThreadsClone_Body }
+        : { body: PostAgentControllerHarnessIdSessionsResourceIdThreadsClone_Body })
+>;
+
+export interface PostAgentControllerHarnessIdSessionsResourceIdThreadsClone_RouteContract {
+  pathParams: PostAgentControllerHarnessIdSessionsResourceIdThreadsClone_PathParams;
+  queryParams: never;
+  body: PostAgentControllerHarnessIdSessionsResourceIdThreadsClone_Body;
+  request: PostAgentControllerHarnessIdSessionsResourceIdThreadsClone_Request;
+  response: PostAgentControllerHarnessIdSessionsResourceIdThreadsClone_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agent-controller/:harnessId/sessions/:resourceId/threads/:threadId/messages
+// ============================================================================
+export type GetAgentControllerHarnessIdSessionsResourceIdThreadsThreadIdMessages_PathParams = {
+  harnessId: string;
+  resourceId: string;
+  threadId: string;
+};
+
+export type GetAgentControllerHarnessIdSessionsResourceIdThreadsThreadIdMessages_QueryParams = {
+  limit?: number | undefined;
+};
+
+export type GetAgentControllerHarnessIdSessionsResourceIdThreadsThreadIdMessages_Response = {
+  messages: {
+    id: string;
+    role: 'user' | 'assistant' | 'system';
+    content: {
+      type: string;
+      [x: string]: unknown;
+    }[];
+    createdAt?: string | undefined;
+  }[];
+};
+
+export type GetAgentControllerHarnessIdSessionsResourceIdThreadsThreadIdMessages_Request = Simplify<
+  (GetAgentControllerHarnessIdSessionsResourceIdThreadsThreadIdMessages_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerHarnessIdSessionsResourceIdThreadsThreadIdMessages_PathParams }) &
+    (GetAgentControllerHarnessIdSessionsResourceIdThreadsThreadIdMessages_QueryParams extends never
+      ? {}
+      : {} extends GetAgentControllerHarnessIdSessionsResourceIdThreadsThreadIdMessages_QueryParams
+        ? { query?: GetAgentControllerHarnessIdSessionsResourceIdThreadsThreadIdMessages_QueryParams }
+        : { query: GetAgentControllerHarnessIdSessionsResourceIdThreadsThreadIdMessages_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentControllerHarnessIdSessionsResourceIdThreadsThreadIdMessages_RouteContract {
+  pathParams: GetAgentControllerHarnessIdSessionsResourceIdThreadsThreadIdMessages_PathParams;
+  queryParams: GetAgentControllerHarnessIdSessionsResourceIdThreadsThreadIdMessages_QueryParams;
+  body: never;
+  request: GetAgentControllerHarnessIdSessionsResourceIdThreadsThreadIdMessages_Request;
+  response: GetAgentControllerHarnessIdSessionsResourceIdThreadsThreadIdMessages_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agent-controller/:harnessId/sessions/:resourceId/stream
+// ============================================================================
+export type GetAgentControllerHarnessIdSessionsResourceIdStream_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type GetAgentControllerHarnessIdSessionsResourceIdStream_Request = Simplify<
+  (GetAgentControllerHarnessIdSessionsResourceIdStream_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerHarnessIdSessionsResourceIdStream_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentControllerHarnessIdSessionsResourceIdStream_RouteContract {
+  pathParams: GetAgentControllerHarnessIdSessionsResourceIdStream_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAgentControllerHarnessIdSessionsResourceIdStream_Request;
+  response: unknown;
+  responseType: 'stream';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:harnessId/sessions/:resourceId/messages
+// ============================================================================
+export type PostAgentControllerHarnessIdSessionsResourceIdMessages_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdMessages_Body = {
+  message: string;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdMessages_Response = {
+  ok: boolean;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdMessages_Request = Simplify<
+  (PostAgentControllerHarnessIdSessionsResourceIdMessages_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerHarnessIdSessionsResourceIdMessages_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerHarnessIdSessionsResourceIdMessages_Body extends never
+      ? {}
+      : {} extends PostAgentControllerHarnessIdSessionsResourceIdMessages_Body
+        ? { body?: PostAgentControllerHarnessIdSessionsResourceIdMessages_Body }
+        : { body: PostAgentControllerHarnessIdSessionsResourceIdMessages_Body })
+>;
+
+export interface PostAgentControllerHarnessIdSessionsResourceIdMessages_RouteContract {
+  pathParams: PostAgentControllerHarnessIdSessionsResourceIdMessages_PathParams;
+  queryParams: never;
+  body: PostAgentControllerHarnessIdSessionsResourceIdMessages_Body;
+  request: PostAgentControllerHarnessIdSessionsResourceIdMessages_Request;
+  response: PostAgentControllerHarnessIdSessionsResourceIdMessages_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:harnessId/sessions/:resourceId/steer
+// ============================================================================
+export type PostAgentControllerHarnessIdSessionsResourceIdSteer_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdSteer_Body = {
+  message: string;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdSteer_Response = {
+  ok: boolean;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdSteer_Request = Simplify<
+  (PostAgentControllerHarnessIdSessionsResourceIdSteer_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerHarnessIdSessionsResourceIdSteer_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerHarnessIdSessionsResourceIdSteer_Body extends never
+      ? {}
+      : {} extends PostAgentControllerHarnessIdSessionsResourceIdSteer_Body
+        ? { body?: PostAgentControllerHarnessIdSessionsResourceIdSteer_Body }
+        : { body: PostAgentControllerHarnessIdSessionsResourceIdSteer_Body })
+>;
+
+export interface PostAgentControllerHarnessIdSessionsResourceIdSteer_RouteContract {
+  pathParams: PostAgentControllerHarnessIdSessionsResourceIdSteer_PathParams;
+  queryParams: never;
+  body: PostAgentControllerHarnessIdSessionsResourceIdSteer_Body;
+  request: PostAgentControllerHarnessIdSessionsResourceIdSteer_Request;
+  response: PostAgentControllerHarnessIdSessionsResourceIdSteer_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:harnessId/sessions/:resourceId/follow-up
+// ============================================================================
+export type PostAgentControllerHarnessIdSessionsResourceIdFollowUp_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdFollowUp_Body = {
+  message: string;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdFollowUp_Response = {
+  ok: boolean;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdFollowUp_Request = Simplify<
+  (PostAgentControllerHarnessIdSessionsResourceIdFollowUp_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerHarnessIdSessionsResourceIdFollowUp_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerHarnessIdSessionsResourceIdFollowUp_Body extends never
+      ? {}
+      : {} extends PostAgentControllerHarnessIdSessionsResourceIdFollowUp_Body
+        ? { body?: PostAgentControllerHarnessIdSessionsResourceIdFollowUp_Body }
+        : { body: PostAgentControllerHarnessIdSessionsResourceIdFollowUp_Body })
+>;
+
+export interface PostAgentControllerHarnessIdSessionsResourceIdFollowUp_RouteContract {
+  pathParams: PostAgentControllerHarnessIdSessionsResourceIdFollowUp_PathParams;
+  queryParams: never;
+  body: PostAgentControllerHarnessIdSessionsResourceIdFollowUp_Body;
+  request: PostAgentControllerHarnessIdSessionsResourceIdFollowUp_Request;
+  response: PostAgentControllerHarnessIdSessionsResourceIdFollowUp_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:harnessId/sessions/:resourceId/abort
+// ============================================================================
+export type PostAgentControllerHarnessIdSessionsResourceIdAbort_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdAbort_Response = {
+  ok: boolean;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdAbort_Request = Simplify<
+  (PostAgentControllerHarnessIdSessionsResourceIdAbort_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerHarnessIdSessionsResourceIdAbort_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostAgentControllerHarnessIdSessionsResourceIdAbort_RouteContract {
+  pathParams: PostAgentControllerHarnessIdSessionsResourceIdAbort_PathParams;
+  queryParams: never;
+  body: never;
+  request: PostAgentControllerHarnessIdSessionsResourceIdAbort_Request;
+  response: PostAgentControllerHarnessIdSessionsResourceIdAbort_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:harnessId/sessions/:resourceId/tool-approval
+// ============================================================================
+export type PostAgentControllerHarnessIdSessionsResourceIdToolApproval_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdToolApproval_Body = {
+  toolCallId: string;
+  approved: boolean;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdToolApproval_Response = {
+  ok: boolean;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdToolApproval_Request = Simplify<
+  (PostAgentControllerHarnessIdSessionsResourceIdToolApproval_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerHarnessIdSessionsResourceIdToolApproval_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerHarnessIdSessionsResourceIdToolApproval_Body extends never
+      ? {}
+      : {} extends PostAgentControllerHarnessIdSessionsResourceIdToolApproval_Body
+        ? { body?: PostAgentControllerHarnessIdSessionsResourceIdToolApproval_Body }
+        : { body: PostAgentControllerHarnessIdSessionsResourceIdToolApproval_Body })
+>;
+
+export interface PostAgentControllerHarnessIdSessionsResourceIdToolApproval_RouteContract {
+  pathParams: PostAgentControllerHarnessIdSessionsResourceIdToolApproval_PathParams;
+  queryParams: never;
+  body: PostAgentControllerHarnessIdSessionsResourceIdToolApproval_Body;
+  request: PostAgentControllerHarnessIdSessionsResourceIdToolApproval_Request;
+  response: PostAgentControllerHarnessIdSessionsResourceIdToolApproval_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:harnessId/sessions/:resourceId/tool-suspension
+// ============================================================================
+export type PostAgentControllerHarnessIdSessionsResourceIdToolSuspension_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdToolSuspension_Body = {
+  toolCallId: string;
+  resumeData: any;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdToolSuspension_Response = {
+  ok: boolean;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdToolSuspension_Request = Simplify<
+  (PostAgentControllerHarnessIdSessionsResourceIdToolSuspension_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerHarnessIdSessionsResourceIdToolSuspension_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerHarnessIdSessionsResourceIdToolSuspension_Body extends never
+      ? {}
+      : {} extends PostAgentControllerHarnessIdSessionsResourceIdToolSuspension_Body
+        ? { body?: PostAgentControllerHarnessIdSessionsResourceIdToolSuspension_Body }
+        : { body: PostAgentControllerHarnessIdSessionsResourceIdToolSuspension_Body })
+>;
+
+export interface PostAgentControllerHarnessIdSessionsResourceIdToolSuspension_RouteContract {
+  pathParams: PostAgentControllerHarnessIdSessionsResourceIdToolSuspension_PathParams;
+  queryParams: never;
+  body: PostAgentControllerHarnessIdSessionsResourceIdToolSuspension_Body;
+  request: PostAgentControllerHarnessIdSessionsResourceIdToolSuspension_Request;
+  response: PostAgentControllerHarnessIdSessionsResourceIdToolSuspension_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:harnessId/sessions/:resourceId/mode
+// ============================================================================
+export type PostAgentControllerHarnessIdSessionsResourceIdMode_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdMode_Body = {
+  modeId: string;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdMode_Response = {
+  ok: boolean;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdMode_Request = Simplify<
+  (PostAgentControllerHarnessIdSessionsResourceIdMode_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerHarnessIdSessionsResourceIdMode_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerHarnessIdSessionsResourceIdMode_Body extends never
+      ? {}
+      : {} extends PostAgentControllerHarnessIdSessionsResourceIdMode_Body
+        ? { body?: PostAgentControllerHarnessIdSessionsResourceIdMode_Body }
+        : { body: PostAgentControllerHarnessIdSessionsResourceIdMode_Body })
+>;
+
+export interface PostAgentControllerHarnessIdSessionsResourceIdMode_RouteContract {
+  pathParams: PostAgentControllerHarnessIdSessionsResourceIdMode_PathParams;
+  queryParams: never;
+  body: PostAgentControllerHarnessIdSessionsResourceIdMode_Body;
+  request: PostAgentControllerHarnessIdSessionsResourceIdMode_Request;
+  response: PostAgentControllerHarnessIdSessionsResourceIdMode_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:harnessId/sessions/:resourceId/model
+// ============================================================================
+export type PostAgentControllerHarnessIdSessionsResourceIdModel_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdModel_Body = {
+  modelId: string;
+  scope?: ('global' | 'thread') | undefined;
+  modeId?: string | undefined;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdModel_Response = {
+  ok: boolean;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdModel_Request = Simplify<
+  (PostAgentControllerHarnessIdSessionsResourceIdModel_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerHarnessIdSessionsResourceIdModel_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerHarnessIdSessionsResourceIdModel_Body extends never
+      ? {}
+      : {} extends PostAgentControllerHarnessIdSessionsResourceIdModel_Body
+        ? { body?: PostAgentControllerHarnessIdSessionsResourceIdModel_Body }
+        : { body: PostAgentControllerHarnessIdSessionsResourceIdModel_Body })
+>;
+
+export interface PostAgentControllerHarnessIdSessionsResourceIdModel_RouteContract {
+  pathParams: PostAgentControllerHarnessIdSessionsResourceIdModel_PathParams;
+  queryParams: never;
+  body: PostAgentControllerHarnessIdSessionsResourceIdModel_Body;
+  request: PostAgentControllerHarnessIdSessionsResourceIdModel_Request;
+  response: PostAgentControllerHarnessIdSessionsResourceIdModel_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:harnessId/sessions/:resourceId/thread
+// ============================================================================
+export type PostAgentControllerHarnessIdSessionsResourceIdThread_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdThread_Body = {
+  threadId: string;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdThread_Response = {
+  ok: boolean;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdThread_Request = Simplify<
+  (PostAgentControllerHarnessIdSessionsResourceIdThread_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerHarnessIdSessionsResourceIdThread_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerHarnessIdSessionsResourceIdThread_Body extends never
+      ? {}
+      : {} extends PostAgentControllerHarnessIdSessionsResourceIdThread_Body
+        ? { body?: PostAgentControllerHarnessIdSessionsResourceIdThread_Body }
+        : { body: PostAgentControllerHarnessIdSessionsResourceIdThread_Body })
+>;
+
+export interface PostAgentControllerHarnessIdSessionsResourceIdThread_RouteContract {
+  pathParams: PostAgentControllerHarnessIdSessionsResourceIdThread_PathParams;
+  queryParams: never;
+  body: PostAgentControllerHarnessIdSessionsResourceIdThread_Body;
+  request: PostAgentControllerHarnessIdSessionsResourceIdThread_Request;
+  response: PostAgentControllerHarnessIdSessionsResourceIdThread_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:harnessId/sessions/:resourceId/notifications
+// ============================================================================
+export type PostAgentControllerHarnessIdSessionsResourceIdNotifications_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdNotifications_Body = {
+  source: string;
+  kind: string;
+  summary: string;
+  priority?: ('low' | 'medium' | 'high' | 'urgent') | undefined;
+  payload?: any | undefined;
+  sourceId?: string | undefined;
+  dedupeKey?: string | undefined;
+  coalesceKey?: string | undefined;
+  attributes?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdNotifications_Response = {
+  accepted: boolean;
+  notificationId?: string | undefined;
+  decision?: string | undefined;
+  runId?: string | undefined;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdNotifications_Request = Simplify<
+  (PostAgentControllerHarnessIdSessionsResourceIdNotifications_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerHarnessIdSessionsResourceIdNotifications_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerHarnessIdSessionsResourceIdNotifications_Body extends never
+      ? {}
+      : {} extends PostAgentControllerHarnessIdSessionsResourceIdNotifications_Body
+        ? { body?: PostAgentControllerHarnessIdSessionsResourceIdNotifications_Body }
+        : { body: PostAgentControllerHarnessIdSessionsResourceIdNotifications_Body })
+>;
+
+export interface PostAgentControllerHarnessIdSessionsResourceIdNotifications_RouteContract {
+  pathParams: PostAgentControllerHarnessIdSessionsResourceIdNotifications_PathParams;
+  queryParams: never;
+  body: PostAgentControllerHarnessIdSessionsResourceIdNotifications_Body;
+  request: PostAgentControllerHarnessIdSessionsResourceIdNotifications_Request;
+  response: PostAgentControllerHarnessIdSessionsResourceIdNotifications_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agent-controller/:harnessId/workspace
+// ============================================================================
+export type GetAgentControllerHarnessIdWorkspace_PathParams = {
+  harnessId: string;
+};
+
+export type GetAgentControllerHarnessIdWorkspace_Response = {
+  hasWorkspace: boolean;
+  isReady: boolean;
+};
+
+export type GetAgentControllerHarnessIdWorkspace_Request = Simplify<
+  (GetAgentControllerHarnessIdWorkspace_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerHarnessIdWorkspace_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentControllerHarnessIdWorkspace_RouteContract {
+  pathParams: GetAgentControllerHarnessIdWorkspace_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAgentControllerHarnessIdWorkspace_Request;
+  response: GetAgentControllerHarnessIdWorkspace_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agent-controller/:harnessId/sessions/:resourceId/om
+// ============================================================================
+export type GetAgentControllerHarnessIdSessionsResourceIdOm_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type GetAgentControllerHarnessIdSessionsResourceIdOm_Response = {
+  record?: any | undefined;
+};
+
+export type GetAgentControllerHarnessIdSessionsResourceIdOm_Request = Simplify<
+  (GetAgentControllerHarnessIdSessionsResourceIdOm_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerHarnessIdSessionsResourceIdOm_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentControllerHarnessIdSessionsResourceIdOm_RouteContract {
+  pathParams: GetAgentControllerHarnessIdSessionsResourceIdOm_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAgentControllerHarnessIdSessionsResourceIdOm_Request;
+  response: GetAgentControllerHarnessIdSessionsResourceIdOm_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:harnessId/sessions/:resourceId/resource
+// ============================================================================
+export type PostAgentControllerHarnessIdSessionsResourceIdResource_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdResource_Body = {
+  newResourceId: string;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdResource_Response = {
+  ok: boolean;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdResource_Request = Simplify<
+  (PostAgentControllerHarnessIdSessionsResourceIdResource_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerHarnessIdSessionsResourceIdResource_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerHarnessIdSessionsResourceIdResource_Body extends never
+      ? {}
+      : {} extends PostAgentControllerHarnessIdSessionsResourceIdResource_Body
+        ? { body?: PostAgentControllerHarnessIdSessionsResourceIdResource_Body }
+        : { body: PostAgentControllerHarnessIdSessionsResourceIdResource_Body })
+>;
+
+export interface PostAgentControllerHarnessIdSessionsResourceIdResource_RouteContract {
+  pathParams: PostAgentControllerHarnessIdSessionsResourceIdResource_PathParams;
+  queryParams: never;
+  body: PostAgentControllerHarnessIdSessionsResourceIdResource_Body;
+  request: PostAgentControllerHarnessIdSessionsResourceIdResource_Request;
+  response: PostAgentControllerHarnessIdSessionsResourceIdResource_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agent-controller/:harnessId/sessions/:resourceId/resources
+// ============================================================================
+export type GetAgentControllerHarnessIdSessionsResourceIdResources_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type GetAgentControllerHarnessIdSessionsResourceIdResources_Response = {
+  resourceIds: string[];
+};
+
+export type GetAgentControllerHarnessIdSessionsResourceIdResources_Request = Simplify<
+  (GetAgentControllerHarnessIdSessionsResourceIdResources_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerHarnessIdSessionsResourceIdResources_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentControllerHarnessIdSessionsResourceIdResources_RouteContract {
+  pathParams: GetAgentControllerHarnessIdSessionsResourceIdResources_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAgentControllerHarnessIdSessionsResourceIdResources_Request;
+  response: GetAgentControllerHarnessIdSessionsResourceIdResources_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agent-controller/:harnessId/sessions/:resourceId/goal
+// ============================================================================
+export type GetAgentControllerHarnessIdSessionsResourceIdGoal_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type GetAgentControllerHarnessIdSessionsResourceIdGoal_Response = {
+  goal?:
+    | {
+        id?: string | undefined;
+        objective: string;
+        status: 'active' | 'paused' | 'done';
+        runsUsed: number;
+        maxRuns?: number | undefined;
+        judgeModelId?: string | undefined;
+        startedAt: number;
+        updatedAt: number;
+        pausedReason?: string | undefined;
+      }
+    | undefined;
+};
+
+export type GetAgentControllerHarnessIdSessionsResourceIdGoal_Request = Simplify<
+  (GetAgentControllerHarnessIdSessionsResourceIdGoal_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerHarnessIdSessionsResourceIdGoal_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentControllerHarnessIdSessionsResourceIdGoal_RouteContract {
+  pathParams: GetAgentControllerHarnessIdSessionsResourceIdGoal_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAgentControllerHarnessIdSessionsResourceIdGoal_Request;
+  response: GetAgentControllerHarnessIdSessionsResourceIdGoal_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /agent-controller/:harnessId/sessions/:resourceId/goal
+// ============================================================================
+export type PostAgentControllerHarnessIdSessionsResourceIdGoal_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdGoal_Body = {
+  objective: string;
+  judgeModelId?: string | undefined;
+  maxRuns?: number | undefined;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdGoal_Response = {
+  goal?:
+    | {
+        id?: string | undefined;
+        objective: string;
+        status: 'active' | 'paused' | 'done';
+        runsUsed: number;
+        maxRuns?: number | undefined;
+        judgeModelId?: string | undefined;
+        startedAt: number;
+        updatedAt: number;
+        pausedReason?: string | undefined;
+      }
+    | undefined;
+};
+
+export type PostAgentControllerHarnessIdSessionsResourceIdGoal_Request = Simplify<
+  (PostAgentControllerHarnessIdSessionsResourceIdGoal_PathParams extends never
+    ? {}
+    : { params: PostAgentControllerHarnessIdSessionsResourceIdGoal_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentControllerHarnessIdSessionsResourceIdGoal_Body extends never
+      ? {}
+      : {} extends PostAgentControllerHarnessIdSessionsResourceIdGoal_Body
+        ? { body?: PostAgentControllerHarnessIdSessionsResourceIdGoal_Body }
+        : { body: PostAgentControllerHarnessIdSessionsResourceIdGoal_Body })
+>;
+
+export interface PostAgentControllerHarnessIdSessionsResourceIdGoal_RouteContract {
+  pathParams: PostAgentControllerHarnessIdSessionsResourceIdGoal_PathParams;
+  queryParams: never;
+  body: PostAgentControllerHarnessIdSessionsResourceIdGoal_Body;
+  request: PostAgentControllerHarnessIdSessionsResourceIdGoal_Request;
+  response: PostAgentControllerHarnessIdSessionsResourceIdGoal_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PUT /agent-controller/:harnessId/sessions/:resourceId/goal
+// ============================================================================
+export type PutAgentControllerHarnessIdSessionsResourceIdGoal_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PutAgentControllerHarnessIdSessionsResourceIdGoal_Body = {
+  judgeModelId?: string | undefined;
+  maxRuns?: number | undefined;
+  status?: ('active' | 'paused' | 'done') | undefined;
+};
+
+export type PutAgentControllerHarnessIdSessionsResourceIdGoal_Response = {
+  goal?:
+    | {
+        id?: string | undefined;
+        objective: string;
+        status: 'active' | 'paused' | 'done';
+        runsUsed: number;
+        maxRuns?: number | undefined;
+        judgeModelId?: string | undefined;
+        startedAt: number;
+        updatedAt: number;
+        pausedReason?: string | undefined;
+      }
+    | undefined;
+};
+
+export type PutAgentControllerHarnessIdSessionsResourceIdGoal_Request = Simplify<
+  (PutAgentControllerHarnessIdSessionsResourceIdGoal_PathParams extends never
+    ? {}
+    : { params: PutAgentControllerHarnessIdSessionsResourceIdGoal_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PutAgentControllerHarnessIdSessionsResourceIdGoal_Body extends never
+      ? {}
+      : {} extends PutAgentControllerHarnessIdSessionsResourceIdGoal_Body
+        ? { body?: PutAgentControllerHarnessIdSessionsResourceIdGoal_Body }
+        : { body: PutAgentControllerHarnessIdSessionsResourceIdGoal_Body })
+>;
+
+export interface PutAgentControllerHarnessIdSessionsResourceIdGoal_RouteContract {
+  pathParams: PutAgentControllerHarnessIdSessionsResourceIdGoal_PathParams;
+  queryParams: never;
+  body: PutAgentControllerHarnessIdSessionsResourceIdGoal_Body;
+  request: PutAgentControllerHarnessIdSessionsResourceIdGoal_Request;
+  response: PutAgentControllerHarnessIdSessionsResourceIdGoal_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /agent-controller/:harnessId/sessions/:resourceId/goal
+// ============================================================================
+export type DeleteAgentControllerHarnessIdSessionsResourceIdGoal_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type DeleteAgentControllerHarnessIdSessionsResourceIdGoal_Response = {
+  ok: boolean;
+};
+
+export type DeleteAgentControllerHarnessIdSessionsResourceIdGoal_Request = Simplify<
+  (DeleteAgentControllerHarnessIdSessionsResourceIdGoal_PathParams extends never
+    ? {}
+    : { params: DeleteAgentControllerHarnessIdSessionsResourceIdGoal_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteAgentControllerHarnessIdSessionsResourceIdGoal_RouteContract {
+  pathParams: DeleteAgentControllerHarnessIdSessionsResourceIdGoal_PathParams;
+  queryParams: never;
+  body: never;
+  request: DeleteAgentControllerHarnessIdSessionsResourceIdGoal_Request;
+  response: DeleteAgentControllerHarnessIdSessionsResourceIdGoal_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agent-controller/:harnessId/sessions/:resourceId/permissions
+// ============================================================================
+export type GetAgentControllerHarnessIdSessionsResourceIdPermissions_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type GetAgentControllerHarnessIdSessionsResourceIdPermissions_Response = {
+  categories?:
+    | {
+        [key: string]: 'allow' | 'ask' | 'deny';
+      }
+    | undefined;
+  tools?:
+    | {
+        [key: string]: 'allow' | 'ask' | 'deny';
+      }
+    | undefined;
+};
+
+export type GetAgentControllerHarnessIdSessionsResourceIdPermissions_Request = Simplify<
+  (GetAgentControllerHarnessIdSessionsResourceIdPermissions_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerHarnessIdSessionsResourceIdPermissions_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentControllerHarnessIdSessionsResourceIdPermissions_RouteContract {
+  pathParams: GetAgentControllerHarnessIdSessionsResourceIdPermissions_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAgentControllerHarnessIdSessionsResourceIdPermissions_Request;
+  response: GetAgentControllerHarnessIdSessionsResourceIdPermissions_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PUT /agent-controller/:harnessId/sessions/:resourceId/permissions/category
+// ============================================================================
+export type PutAgentControllerHarnessIdSessionsResourceIdPermissionsCategory_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PutAgentControllerHarnessIdSessionsResourceIdPermissionsCategory_Body = {
+  category: 'read' | 'edit' | 'execute' | 'mcp' | 'other';
+  policy: 'allow' | 'ask' | 'deny';
+};
+
+export type PutAgentControllerHarnessIdSessionsResourceIdPermissionsCategory_Response = {
+  ok: boolean;
+};
+
+export type PutAgentControllerHarnessIdSessionsResourceIdPermissionsCategory_Request = Simplify<
+  (PutAgentControllerHarnessIdSessionsResourceIdPermissionsCategory_PathParams extends never
+    ? {}
+    : { params: PutAgentControllerHarnessIdSessionsResourceIdPermissionsCategory_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PutAgentControllerHarnessIdSessionsResourceIdPermissionsCategory_Body extends never
+      ? {}
+      : {} extends PutAgentControllerHarnessIdSessionsResourceIdPermissionsCategory_Body
+        ? { body?: PutAgentControllerHarnessIdSessionsResourceIdPermissionsCategory_Body }
+        : { body: PutAgentControllerHarnessIdSessionsResourceIdPermissionsCategory_Body })
+>;
+
+export interface PutAgentControllerHarnessIdSessionsResourceIdPermissionsCategory_RouteContract {
+  pathParams: PutAgentControllerHarnessIdSessionsResourceIdPermissionsCategory_PathParams;
+  queryParams: never;
+  body: PutAgentControllerHarnessIdSessionsResourceIdPermissionsCategory_Body;
+  request: PutAgentControllerHarnessIdSessionsResourceIdPermissionsCategory_Request;
+  response: PutAgentControllerHarnessIdSessionsResourceIdPermissionsCategory_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PUT /agent-controller/:harnessId/sessions/:resourceId/permissions/tool
+// ============================================================================
+export type PutAgentControllerHarnessIdSessionsResourceIdPermissionsTool_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PutAgentControllerHarnessIdSessionsResourceIdPermissionsTool_Body = {
+  toolName: string;
+  policy: 'allow' | 'ask' | 'deny';
+};
+
+export type PutAgentControllerHarnessIdSessionsResourceIdPermissionsTool_Response = {
+  ok: boolean;
+};
+
+export type PutAgentControllerHarnessIdSessionsResourceIdPermissionsTool_Request = Simplify<
+  (PutAgentControllerHarnessIdSessionsResourceIdPermissionsTool_PathParams extends never
+    ? {}
+    : { params: PutAgentControllerHarnessIdSessionsResourceIdPermissionsTool_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PutAgentControllerHarnessIdSessionsResourceIdPermissionsTool_Body extends never
+      ? {}
+      : {} extends PutAgentControllerHarnessIdSessionsResourceIdPermissionsTool_Body
+        ? { body?: PutAgentControllerHarnessIdSessionsResourceIdPermissionsTool_Body }
+        : { body: PutAgentControllerHarnessIdSessionsResourceIdPermissionsTool_Body })
+>;
+
+export interface PutAgentControllerHarnessIdSessionsResourceIdPermissionsTool_RouteContract {
+  pathParams: PutAgentControllerHarnessIdSessionsResourceIdPermissionsTool_PathParams;
+  queryParams: never;
+  body: PutAgentControllerHarnessIdSessionsResourceIdPermissionsTool_Body;
+  request: PutAgentControllerHarnessIdSessionsResourceIdPermissionsTool_Request;
+  response: PutAgentControllerHarnessIdSessionsResourceIdPermissionsTool_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PUT /agent-controller/:harnessId/sessions/:resourceId/state
+// ============================================================================
+export type PutAgentControllerHarnessIdSessionsResourceIdState_PathParams = {
+  harnessId: string;
+  resourceId: string;
+};
+
+export type PutAgentControllerHarnessIdSessionsResourceIdState_Body = {
+  state: {
+    [key: string]: unknown;
+  };
+};
+
+export type PutAgentControllerHarnessIdSessionsResourceIdState_Response = {
+  ok: boolean;
+};
+
+export type PutAgentControllerHarnessIdSessionsResourceIdState_Request = Simplify<
+  (PutAgentControllerHarnessIdSessionsResourceIdState_PathParams extends never
+    ? {}
+    : { params: PutAgentControllerHarnessIdSessionsResourceIdState_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PutAgentControllerHarnessIdSessionsResourceIdState_Body extends never
+      ? {}
+      : {} extends PutAgentControllerHarnessIdSessionsResourceIdState_Body
+        ? { body?: PutAgentControllerHarnessIdSessionsResourceIdState_Body }
+        : { body: PutAgentControllerHarnessIdSessionsResourceIdState_Body })
+>;
+
+export interface PutAgentControllerHarnessIdSessionsResourceIdState_RouteContract {
+  pathParams: PutAgentControllerHarnessIdSessionsResourceIdState_PathParams;
+  queryParams: never;
+  body: PutAgentControllerHarnessIdSessionsResourceIdState_Body;
+  request: PutAgentControllerHarnessIdSessionsResourceIdState_Request;
+  response: PutAgentControllerHarnessIdSessionsResourceIdState_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /harness
 // ============================================================================
 export type GetHarness_Response = {
@@ -91846,6 +93149,40 @@ export interface RouteTypes {
   'GET /channels/:platform/installations': GetChannelsPlatformInstallations_RouteContract;
   'POST /channels/:platform/connect': PostChannelsPlatformConnect_RouteContract;
   'POST /channels/:platform/:agentId/disconnect': PostChannelsPlatformAgentIdDisconnect_RouteContract;
+  'GET /agent-controller': GetAgentController_RouteContract;
+  'GET /agent-controller/:harnessId/modes': GetAgentControllerHarnessIdModes_RouteContract;
+  'GET /agent-controller/:harnessId/models': GetAgentControllerHarnessIdModels_RouteContract;
+  'POST /agent-controller/:harnessId/sessions': PostAgentControllerHarnessIdSessions_RouteContract;
+  'GET /agent-controller/:harnessId/sessions/:resourceId': GetAgentControllerHarnessIdSessionsResourceId_RouteContract;
+  'GET /agent-controller/:harnessId/sessions/:resourceId/threads': GetAgentControllerHarnessIdSessionsResourceIdThreads_RouteContract;
+  'POST /agent-controller/:harnessId/sessions/:resourceId/threads': PostAgentControllerHarnessIdSessionsResourceIdThreads_RouteContract;
+  'DELETE /agent-controller/:harnessId/sessions/:resourceId/threads/:threadId': DeleteAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_RouteContract;
+  'PUT /agent-controller/:harnessId/sessions/:resourceId/threads/:threadId': PutAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_RouteContract;
+  'POST /agent-controller/:harnessId/sessions/:resourceId/threads/clone': PostAgentControllerHarnessIdSessionsResourceIdThreadsClone_RouteContract;
+  'GET /agent-controller/:harnessId/sessions/:resourceId/threads/:threadId/messages': GetAgentControllerHarnessIdSessionsResourceIdThreadsThreadIdMessages_RouteContract;
+  'GET /agent-controller/:harnessId/sessions/:resourceId/stream': GetAgentControllerHarnessIdSessionsResourceIdStream_RouteContract;
+  'POST /agent-controller/:harnessId/sessions/:resourceId/messages': PostAgentControllerHarnessIdSessionsResourceIdMessages_RouteContract;
+  'POST /agent-controller/:harnessId/sessions/:resourceId/steer': PostAgentControllerHarnessIdSessionsResourceIdSteer_RouteContract;
+  'POST /agent-controller/:harnessId/sessions/:resourceId/follow-up': PostAgentControllerHarnessIdSessionsResourceIdFollowUp_RouteContract;
+  'POST /agent-controller/:harnessId/sessions/:resourceId/abort': PostAgentControllerHarnessIdSessionsResourceIdAbort_RouteContract;
+  'POST /agent-controller/:harnessId/sessions/:resourceId/tool-approval': PostAgentControllerHarnessIdSessionsResourceIdToolApproval_RouteContract;
+  'POST /agent-controller/:harnessId/sessions/:resourceId/tool-suspension': PostAgentControllerHarnessIdSessionsResourceIdToolSuspension_RouteContract;
+  'POST /agent-controller/:harnessId/sessions/:resourceId/mode': PostAgentControllerHarnessIdSessionsResourceIdMode_RouteContract;
+  'POST /agent-controller/:harnessId/sessions/:resourceId/model': PostAgentControllerHarnessIdSessionsResourceIdModel_RouteContract;
+  'POST /agent-controller/:harnessId/sessions/:resourceId/thread': PostAgentControllerHarnessIdSessionsResourceIdThread_RouteContract;
+  'POST /agent-controller/:harnessId/sessions/:resourceId/notifications': PostAgentControllerHarnessIdSessionsResourceIdNotifications_RouteContract;
+  'GET /agent-controller/:harnessId/workspace': GetAgentControllerHarnessIdWorkspace_RouteContract;
+  'GET /agent-controller/:harnessId/sessions/:resourceId/om': GetAgentControllerHarnessIdSessionsResourceIdOm_RouteContract;
+  'POST /agent-controller/:harnessId/sessions/:resourceId/resource': PostAgentControllerHarnessIdSessionsResourceIdResource_RouteContract;
+  'GET /agent-controller/:harnessId/sessions/:resourceId/resources': GetAgentControllerHarnessIdSessionsResourceIdResources_RouteContract;
+  'GET /agent-controller/:harnessId/sessions/:resourceId/goal': GetAgentControllerHarnessIdSessionsResourceIdGoal_RouteContract;
+  'POST /agent-controller/:harnessId/sessions/:resourceId/goal': PostAgentControllerHarnessIdSessionsResourceIdGoal_RouteContract;
+  'PUT /agent-controller/:harnessId/sessions/:resourceId/goal': PutAgentControllerHarnessIdSessionsResourceIdGoal_RouteContract;
+  'DELETE /agent-controller/:harnessId/sessions/:resourceId/goal': DeleteAgentControllerHarnessIdSessionsResourceIdGoal_RouteContract;
+  'GET /agent-controller/:harnessId/sessions/:resourceId/permissions': GetAgentControllerHarnessIdSessionsResourceIdPermissions_RouteContract;
+  'PUT /agent-controller/:harnessId/sessions/:resourceId/permissions/category': PutAgentControllerHarnessIdSessionsResourceIdPermissionsCategory_RouteContract;
+  'PUT /agent-controller/:harnessId/sessions/:resourceId/permissions/tool': PutAgentControllerHarnessIdSessionsResourceIdPermissionsTool_RouteContract;
+  'PUT /agent-controller/:harnessId/sessions/:resourceId/state': PutAgentControllerHarnessIdSessionsResourceIdState_RouteContract;
   'GET /harness': GetHarness_RouteContract;
   'GET /harness/:harnessId/modes': GetHarnessHarnessIdModes_RouteContract;
   'GET /harness/:harnessId/models': GetHarnessHarnessIdModels_RouteContract;
@@ -91947,6 +93284,98 @@ export interface Client {
   };
   '/agent-builder/:actionId/stream-legacy': {
     POST: PostAgentBuilderActionIdStreamLegacy_RouteContract;
+  };
+  '/agent-controller': {
+    GET: GetAgentController_RouteContract;
+  };
+  '/agent-controller/:harnessId/models': {
+    GET: GetAgentControllerHarnessIdModels_RouteContract;
+  };
+  '/agent-controller/:harnessId/modes': {
+    GET: GetAgentControllerHarnessIdModes_RouteContract;
+  };
+  '/agent-controller/:harnessId/sessions': {
+    POST: PostAgentControllerHarnessIdSessions_RouteContract;
+  };
+  '/agent-controller/:harnessId/sessions/:resourceId': {
+    GET: GetAgentControllerHarnessIdSessionsResourceId_RouteContract;
+  };
+  '/agent-controller/:harnessId/sessions/:resourceId/abort': {
+    POST: PostAgentControllerHarnessIdSessionsResourceIdAbort_RouteContract;
+  };
+  '/agent-controller/:harnessId/sessions/:resourceId/follow-up': {
+    POST: PostAgentControllerHarnessIdSessionsResourceIdFollowUp_RouteContract;
+  };
+  '/agent-controller/:harnessId/sessions/:resourceId/goal': {
+    DELETE: DeleteAgentControllerHarnessIdSessionsResourceIdGoal_RouteContract;
+    GET: GetAgentControllerHarnessIdSessionsResourceIdGoal_RouteContract;
+    POST: PostAgentControllerHarnessIdSessionsResourceIdGoal_RouteContract;
+    PUT: PutAgentControllerHarnessIdSessionsResourceIdGoal_RouteContract;
+  };
+  '/agent-controller/:harnessId/sessions/:resourceId/messages': {
+    POST: PostAgentControllerHarnessIdSessionsResourceIdMessages_RouteContract;
+  };
+  '/agent-controller/:harnessId/sessions/:resourceId/mode': {
+    POST: PostAgentControllerHarnessIdSessionsResourceIdMode_RouteContract;
+  };
+  '/agent-controller/:harnessId/sessions/:resourceId/model': {
+    POST: PostAgentControllerHarnessIdSessionsResourceIdModel_RouteContract;
+  };
+  '/agent-controller/:harnessId/sessions/:resourceId/notifications': {
+    POST: PostAgentControllerHarnessIdSessionsResourceIdNotifications_RouteContract;
+  };
+  '/agent-controller/:harnessId/sessions/:resourceId/om': {
+    GET: GetAgentControllerHarnessIdSessionsResourceIdOm_RouteContract;
+  };
+  '/agent-controller/:harnessId/sessions/:resourceId/permissions': {
+    GET: GetAgentControllerHarnessIdSessionsResourceIdPermissions_RouteContract;
+  };
+  '/agent-controller/:harnessId/sessions/:resourceId/permissions/category': {
+    PUT: PutAgentControllerHarnessIdSessionsResourceIdPermissionsCategory_RouteContract;
+  };
+  '/agent-controller/:harnessId/sessions/:resourceId/permissions/tool': {
+    PUT: PutAgentControllerHarnessIdSessionsResourceIdPermissionsTool_RouteContract;
+  };
+  '/agent-controller/:harnessId/sessions/:resourceId/resource': {
+    POST: PostAgentControllerHarnessIdSessionsResourceIdResource_RouteContract;
+  };
+  '/agent-controller/:harnessId/sessions/:resourceId/resources': {
+    GET: GetAgentControllerHarnessIdSessionsResourceIdResources_RouteContract;
+  };
+  '/agent-controller/:harnessId/sessions/:resourceId/state': {
+    PUT: PutAgentControllerHarnessIdSessionsResourceIdState_RouteContract;
+  };
+  '/agent-controller/:harnessId/sessions/:resourceId/steer': {
+    POST: PostAgentControllerHarnessIdSessionsResourceIdSteer_RouteContract;
+  };
+  '/agent-controller/:harnessId/sessions/:resourceId/stream': {
+    GET: GetAgentControllerHarnessIdSessionsResourceIdStream_RouteContract;
+  };
+  '/agent-controller/:harnessId/sessions/:resourceId/thread': {
+    POST: PostAgentControllerHarnessIdSessionsResourceIdThread_RouteContract;
+  };
+  '/agent-controller/:harnessId/sessions/:resourceId/threads': {
+    GET: GetAgentControllerHarnessIdSessionsResourceIdThreads_RouteContract;
+    POST: PostAgentControllerHarnessIdSessionsResourceIdThreads_RouteContract;
+  };
+  '/agent-controller/:harnessId/sessions/:resourceId/threads/:threadId': {
+    DELETE: DeleteAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_RouteContract;
+    PUT: PutAgentControllerHarnessIdSessionsResourceIdThreadsThreadId_RouteContract;
+  };
+  '/agent-controller/:harnessId/sessions/:resourceId/threads/:threadId/messages': {
+    GET: GetAgentControllerHarnessIdSessionsResourceIdThreadsThreadIdMessages_RouteContract;
+  };
+  '/agent-controller/:harnessId/sessions/:resourceId/threads/clone': {
+    POST: PostAgentControllerHarnessIdSessionsResourceIdThreadsClone_RouteContract;
+  };
+  '/agent-controller/:harnessId/sessions/:resourceId/tool-approval': {
+    POST: PostAgentControllerHarnessIdSessionsResourceIdToolApproval_RouteContract;
+  };
+  '/agent-controller/:harnessId/sessions/:resourceId/tool-suspension': {
+    POST: PostAgentControllerHarnessIdSessionsResourceIdToolSuspension_RouteContract;
+  };
+  '/agent-controller/:harnessId/workspace': {
+    GET: GetAgentControllerHarnessIdWorkspace_RouteContract;
   };
   '/agents': {
     GET: GetAgents_RouteContract;

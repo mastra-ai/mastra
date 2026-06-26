@@ -19,7 +19,7 @@ import { WORKSPACE_TOOLS } from '../../workspace/constants';
 import { LocalFilesystem } from '../../workspace/filesystem';
 import { Workspace } from '../../workspace/workspace';
 import { Harness } from '../harness';
-import type { HarnessMode } from '../types';
+import type { AgentControllerMode } from '../types';
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -76,7 +76,7 @@ describe('Harness: mode availableTools with shared workspace', () => {
     });
   }
 
-  async function setupHarness({ modes, workspace }: { modes: HarnessMode[]; workspace: Workspace }) {
+  async function setupHarness({ modes, workspace }: { modes: AgentControllerMode[]; workspace: Workspace }) {
     const model = new MockLanguageModelV2({
       doStream: (async (_options: any) => ({ stream: createTextStream() })) as any,
     });
@@ -110,7 +110,7 @@ describe('Harness: mode availableTools with shared workspace', () => {
 
   it('workspace tool names are matched by exposed names in availableTools', async () => {
     const workspace = createWorkspace();
-    const planMode: HarnessMode = {
+    const planMode: AgentControllerMode = {
       id: 'plan',
       name: 'Plan',
       default: true,
@@ -155,14 +155,14 @@ describe('Harness: mode availableTools with shared workspace', () => {
 
   it('mode switching changes activeTools without replacing the workspace instance', async () => {
     const workspace = createWorkspace();
-    const planMode: HarnessMode = {
+    const planMode: AgentControllerMode = {
       id: 'plan',
       name: 'Plan',
       default: true,
       transitionsTo: 'build',
       availableTools: ['view', 'find_files', 'search_content', 'ask_user', 'submit_plan'],
     };
-    const buildMode: HarnessMode = {
+    const buildMode: AgentControllerMode = {
       id: 'build',
       name: 'Build',
       // No availableTools — full access
@@ -207,7 +207,7 @@ describe('Harness: mode availableTools with shared workspace', () => {
 
   it('renamed workspace tools are matched by exposed name, not internal name', async () => {
     const workspace = createWorkspace();
-    const readOnlyMode: HarnessMode = {
+    const readOnlyMode: AgentControllerMode = {
       id: 'readonly',
       name: 'Read Only',
       default: true,

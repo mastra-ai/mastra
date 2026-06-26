@@ -1,0 +1,3 @@
+# The web UI is monorepo dev-only and is never part of the published TUI package.
+# (Belt-and-suspenders with the "!dist/web" negation in package.json "files".)
+dist/web

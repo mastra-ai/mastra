@@ -520,6 +520,7 @@ export type ProviderModelsMap = {
     'xai/grok-build-0.1',
     'xai/grok-imagine-image',
     'xai/grok-imagine-video',
+    'xai/grok-imagine-video-1.5',
     'xai/grok-imagine-video-1.5-preview',
     'xai/grok-stt',
     'xai/grok-tts',
@@ -2740,7 +2741,6 @@ export type ProviderModelsMap = {
   readonly ovhcloud: readonly [
     'gpt-oss-120b',
     'gpt-oss-20b',
-    'llama-3.1-8b-instruct',
     'meta-llama-3_3-70b-instruct',
     'mistral-7b-instruct-v0.3',
     'mistral-nemo-instruct-2407',

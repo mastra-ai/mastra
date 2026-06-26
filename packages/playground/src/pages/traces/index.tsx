@@ -9,7 +9,6 @@ import {
   TracesToolbar,
   buildTraceListFilters,
   createTracePropertyFilterFields,
-  isBranchesNotSupportedError,
   neutralizeFilterTokens,
   useEntityNames,
   useEnvironments,
@@ -31,6 +30,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
 import { Switch } from '@mastra/playground-ui/components/Switch';
+import { isBranchesNotSupportedError } from '@mastra/playground-ui/utils/errors';
 import { CircleSlash2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
