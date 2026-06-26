@@ -1038,16 +1038,30 @@ export class DurableAgent<
   /**
    * Generate a complete response from the agent using durable execution.
    *
-   * Convenience wrapper over {@link DurableAgent.stream} that drains the
-   * stream to completion and returns the same {@link FullOutput} shape as
-   * non-durable `Agent.generate`. The underlying workflow is identical to
-   * `stream()` — it just collects the final result for callers that don't
-   * want to consume chunks themselves.
+   * Drains the underlying durable stream to completion and returns the same
+   * {@link FullOutput} shape as non-durable `Agent.generate`. The underlying
+   * workflow is identical to `stream()` — it just collects the final result
+   * for callers that don't want to consume chunks themselves.
    *
-   * If the run suspends (e.g. tool approval or `suspend()` from a tool),
-   * the returned output's `finishReason` will be `'suspended'` and
+   * This method intentionally re-implements the `stream()` setup rather than
+   * delegating to `this.stream(...)` so that `prepareForDurableExecution` (and
+   * downstream `convertTools`) receives `methodType: 'generate'`. Tool
+   * factories that vary their `CoreTool` output based on the calling method
+   * (e.g. `clientTools` vs server-side tools) rely on this signal — calling
+   * `stream()` here would silently pass `methodType: 'stream'`.
+   *
+   * If the run suspends (e.g. tool approval or `suspend()` from a tool), the
+   * returned output's `finishReason` will be `'suspended'` and
    * `suspendPayload` will be populated. Use {@link DurableAgent.resumeGenerate}
    * to continue.
+   *
+   * Note on suspend persistence: for the base `DurableAgent`, the workflow
+   * engine's `run.start()` only resolves after the suspend snapshot is
+   * persisted, so awaiting `workflowExecution` on suspend is sufficient for
+   * a subsequent `resumeGenerate()` to find the snapshot. Subclasses like
+   * `EventedAgent` use a fire-and-forget `run.startAsync()` and therefore
+   * cannot rely on this await for snapshot durability — see the
+   * `EventedAgent` docs for the recommended pattern.
    */
   // @ts-expect-error - Intentionally different signature for durable execution
   async generate(
@@ -1185,9 +1199,14 @@ export class DurableAgent<
         throw fullOutput.error;
       }
       suspended = fullOutput.finishReason === 'suspended';
-      // On suspend, the SUSPENDED event is emitted before the workflow engine
-      // has persisted the snapshot. Await the workflow execution so a later
-      // `resumeGenerate()` can find a snapshot to resume from.
+      // On suspend, the SUSPENDED event is emitted from the tool-call step
+      // before the workflow engine has persisted the snapshot. Awaiting the
+      // workflow execution promise blocks until `run.start()` returns, which
+      // happens after the suspend snapshot has been persisted — so a later
+      // `resumeGenerate()` can find the snapshot. Subclasses that drive the
+      // workflow with a fire-and-forget API (see `EventedAgent`) need their
+      // own persistence guarantee here; their `executeWorkflow` promise may
+      // resolve before the snapshot lands.
       if (suspended) {
         await globalRunRegistry.get(runId)?.workflowExecution;
       }
@@ -1210,6 +1229,12 @@ export class DurableAgent<
    * Resume a suspended durable run and drain it to a single
    * {@link FullOutput}. Mirrors {@link Agent.resumeGenerate} on top of
    * {@link DurableAgent.resume}.
+   *
+   * Unlike `generate()`, this delegates to `resume()` because resume reads
+   * its tools from the existing run-registry entry rather than running
+   * `prepareForDurableExecution` again — there is no `methodType` to thread
+   * through. The same `EventedAgent` caveat about fire-and-forget snapshot
+   * persistence noted on `generate()` applies if the resumed turn suspends.
    */
   async resumeGenerate(
     runId: string,

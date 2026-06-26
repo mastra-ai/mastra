@@ -19,19 +19,29 @@ import { Mastra } from '../../../mastra';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
-/** Capture every ON_SCORER_RUN payload globally. Hook registration is process-wide. */
+/**
+ * Capture ON_SCORER_RUN payloads for the scorer ids owned by this suite.
+ *
+ * Hook registration is process-wide and our hooks module doesn't expose an
+ * unregister API, so we filter on suite-unique scorer ids to avoid picking
+ * up emissions from any other test running in the same worker. The empty
+ * `afterAll` is intentional: the hook handler itself is harmless because
+ * the filter rejects every non-matching payload.
+ */
+const SUITE_SCORER_IDS = new Set(['durable-parity-scorer', 'override-parity-scorer']);
 const scorerHookPayloads: ScoringHookInput[] = [];
 
 beforeAll(() => {
   registerHook(AvailableHooks.ON_SCORER_RUN, (payload: ScoringHookInput) => {
-    scorerHookPayloads.push(payload);
+    const id = (payload as { scorer?: { id?: string } }).scorer?.id;
+    if (id && SUITE_SCORER_IDS.has(id)) {
+      scorerHookPayloads.push(payload);
+    }
   });
 });
 
 afterAll(() => {
-  // mitt doesn't expose `off` via our re-export, and other tests in the same
-  // process may rely on the hook still being present. The harmless leak ends
-  // with the worker.
+  scorerHookPayloads.length = 0;
 });
 
 function createTextModel(text: string) {
