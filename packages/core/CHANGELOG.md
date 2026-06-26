@@ -1,5 +1,133 @@
 # @mastra/core
 
+## 1.47.0-alpha.6
+
+### Minor Changes
+
+- Finished closing the gap between `DurableAgent` and `Agent`. After this change the durable agent surface mirrors the in-process agent's stream, resume, and generate APIs. ([#18508](https://github.com/mastra-ai/mastra/pull/18508))
+
+  **What's new**
+  - `abortSignal` on `stream()` and `resume()`, plus `result.abort()` on `stream()`, `resume()`, and `observe()`. `result.abort()` on `streamUntilIdle()` fans out to every inner run.
+  - `untilIdle` on `resume()` (it already existed on `stream()`), using the shared `runWithIdleWrapper` so both paths drive the same idle loop.
+  - `DurableAgent.generate()` and `DurableAgent.resumeGenerate()` wrap `stream()` / `resume()` and resolve a `FullOutput` even when the run suspends mid-flight.
+  - `delegation` callbacks (`onDelegationStart`, `onDelegationComplete`, `messageFilter`) are forwarded to `convertTools` at prepare time and baked into sub-agent tool wrappers.
+  - Per-call `clientTools` and `toolsets` survive in-process resume via the run registry (cross-process resume still falls back to the agent's static tools).
+  - Scorers configured on the wrapped agent or passed per call now actually execute under durable runs and emit `ON_SCORER_RUN` payloads matching the non-durable shape.
+  - `AGENT_RUN` spans now carry `conversationId`, `instructions`, `resolvedVersionId`, `entityVersionId`, and the agent's `tracingPolicy`. Resume spans use `'agent run: <id> (resumed)'` and include `resumedFromSpanId`.
+
+  **Example**
+
+  ```ts
+  import { createDurableAgent } from '@mastra/core/agent/durable';
+
+  const durable = createDurableAgent({ agent: myAgent });
+
+  // 1. generate() — drains a durable run to a single FullOutput
+  const out = await durable.generate('Plan a week in Lisbon', {
+    abortSignal: controller.signal,
+    modelSettings: { temperature: 0.2 },
+  });
+
+  // 2. stream() with result.abort() — cancel mid-run
+  const result = await durable.stream('Long research task');
+  setTimeout(() => result.abort(), 5_000);
+  for await (const chunk of result.output.fullStream) {
+    process.stdout.write(chunk.payload?.text ?? '');
+  }
+
+  // 3. Suspend → resumeGenerate() round-trip (e.g. tool approval)
+  const first = await durable.generate('Run the dangerous tool', {
+    requireToolApproval: true,
+  });
+  if (first.finishReason === 'suspended') {
+    const final = await durable.resumeGenerate(first.runId!, { approved: true });
+    console.log(final.text);
+  }
+
+  // 4. resume({ untilIdle }) — drive a resume through to a quiescent state
+  await durable.resume(runId, resumeData, { untilIdle: true });
+  ```
+
+- Added `reasoning` option to `modelSettings` for controlling model reasoning effort level. This option accepts standardized levels ('provider-default' | 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh') and is effective with LanguageModelV4 (AI SDK v7) providers that support reasoning. When used with older model providers (V2/V3), the option is a no-op. ([#18500](https://github.com/mastra-ai/mastra/pull/18500))
+
+  **Usage:**
+
+  ```typescript
+  const result = await agent.stream('Solve this problem', {
+    modelSettings: { reasoning: 'high' },
+  });
+  ```
+
+  Also upgraded the model router to support LanguageModelV4, enabling native V4 model resolution alongside existing V2 and V3 models without regressions.
+
+- Rename the `Harness` class to `AgentController` and its associated `Harness*` types to `AgentController*` (e.g. `HarnessConfig` → `AgentControllerConfig`, `HarnessMode` → `AgentControllerMode`, `HarnessEvent` → `AgentControllerEvent`). ([#18505](https://github.com/mastra-ai/mastra/pull/18505))
+
+  `@mastra/core`: A new canonical subpath `@mastra/core/agent-controller` exports the `AgentController` class plus the `AgentController*` types. The legacy `@mastra/core/harness` subpath remains available and re-exports the deprecated `Harness*` aliases, so existing `Harness` class and type usage continues to work unchanged. New code should import from `@mastra/core/agent-controller`. On `Mastra`, the hosted-controller API is exposed under agent-controller names — `getAgentController`, `getAgentControllerById`, `listAgentControllers`, and the `agentControllers` config key — while `getHarness`/`getHarnessById`/`listHarnesses` and the `harnesses` config key remain as deprecated aliases.
+
+  `@mastra/server`: The controller session API is now served exclusively under `/agent-controller/...` (with `agent-controller:read` / `agent-controller:execute` permissions). The legacy `/harness/...` routes and `harness:*` permissions have been removed. List responses use the `agentControllers` key, session responses use `controllerId`, and path params use `:controllerId`.
+
+  `@mastra/client-js`: `AgentController` and `AgentControllerSession` are now the canonical resource classes, with `MastraClient.getAgentController(id)` / `listAgentControllers()` targeting the `/agent-controller` routes and reading the canonical `agentControllers` / `controllerId` response keys. The deprecated `getHarness` / `listHarnesses` methods and `Harness` / `HarnessSession` classes have been removed. This is a breaking change for the recently released client.
+
+  The `@mastra/core` peer dependency floor is raised to `>=1.47.0-0` so consumers must be on the release that introduces the canonical agent-controller surface. This applies to `@mastra/server`, `@mastra/deployer`, and `mastra` (CLI), and is propagated to the packages that depend on them: the deployers (`@mastra/deployer-cloud`, `@mastra/deployer-cloudflare`, `@mastra/deployer-netlify`, `@mastra/deployer-vercel`), the server adapters (`@mastra/express`, `@mastra/fastify`, `@mastra/hono`, `@mastra/koa`, `@mastra/nestjs`, `@mastra/next`, `@mastra/tanstack-start`), and `@mastra/temporal`.
+
+### Patch Changes
+
+- feat(playground): render ask_user tool as interactive question UI in Studio ([#18374](https://github.com/mastra-ai/mastra/pull/18374))
+
+  Adds an `AskUserBadge` component that renders suspended `ask_user` tool calls
+  as interactive prompts with clickable option buttons (single/multi-select) or
+  free-text input. The user's answer is sent as `resumeData` through the existing
+  `sendToolApproval` flow to properly resume the tool.
+
+  Plumbing changes:
+  - `sendToolApprovalBodySchema` now accepts optional `resumeData`
+  - `agent.sendToolApproval()` passes custom `resumeData` when provided
+  - `@mastra/client-js` and `@mastra/react` expose the new parameter
+
+- Fixed Studio failing to boot in the browser with `TypeError: os.tmpdir is not a function`. The local sandbox resolved its mount marker directory at module-load time via `os.tmpdir()`, which crashed the client bundle where `node:os` has no `tmpdir`. The directory is now resolved lazily, so importing the Agent runtime in the browser no longer throws. ([#18524](https://github.com/mastra-ai/mastra/pull/18524))
+
+- Added an optional `handlesModel` hook to the model gateway interface so a gateway can claim bare provider model IDs (like `__GATEWAY_ANTHROPIC_MODEL_OPUS__`) it is able to authenticate, before routing falls back to the default models.dev catalog. This lets gateways that hold credentials (for example OAuth-backed logins) be selected for auth resolution and availability checks instead of being bypassed. ([#18503](https://github.com/mastra-ai/mastra/pull/18503))
+
+- Fixed `InferToolInput`, `InferToolOutput`, `InferUITool`, and `InferUITools` so tools created with `createTool({ outputSchema: z.object(...) })` now produce a typed `{ input, output }` instead of falling through to `never`. UIMessage parts (`tool-<name>`) and other consumers can now discriminate on the inferred input/output types without manual workaround shims. ([#17039](https://github.com/mastra-ai/mastra/pull/17039))
+
+  ```ts
+  const echo = createTool({
+    id: 'echo',
+    inputSchema: z.object({ x: z.string() }),
+    outputSchema: z.object({ y: z.number() }),
+    execute: async ({ x }) => ({ y: x.length }),
+  });
+
+  // before: { input: never; output: never }
+  // after:  { input: { x: string }; output: { y: number } }
+  type UI = InferUITool<typeof echo>;
+  ```
+
+  Closes the gap left by #7184.
+
+- Fixed duplicate step ID warnings in Inngest workflows. When a workflow step ran, two persistence calls with the same ID caused AUTOMATIC_PARALLEL_INDEXING warnings in Inngest logs. Steps now use unique IDs for each persistence call, eliminating the warnings. ([#17320](https://github.com/mastra-ai/mastra/pull/17320))
+
+- Workspace skills now refresh on each skill-tool invocation, so edits to SKILL.md files (or new skills added to the workspace) are picked up between tool calls without restarting the server. Set `checkSkillFileMtime: true` on the workspace config to also detect content changes to existing SKILL.md files. Fixes [#16640](https://github.com/mastra-ai/mastra/issues/16640). ([#16678](https://github.com/mastra-ai/mastra/pull/16678))
+
+- Fixed createTool type error when passing jsonSchema() or a Schema object from @ai-sdk/provider-utils as inputSchema — no more cast needed ([#17435](https://github.com/mastra-ai/mastra/pull/17435))
+
+- Fixed reasoning text being lost when agent messages are persisted to memory and recalled on the next turn ([#17803](https://github.com/mastra-ai/mastra/pull/17803))
+
+- Preserve original tool-call arguments when a tool result is persisted without its matching tool-call in the same message. Previously the arguments were saved as empty `{}`, which poisoned the model's context and caused it to emit invalid empty-argument tool calls after a few cycles. The adapter now recovers the original arguments from prior persisted messages, covering the server resume path, AG-UI hosts replaying client-tool results, and `@mastra/client-js` streaming recursion. ([#16981](https://github.com/mastra-ai/mastra/pull/16981))
+
+  Also execute every streamed client tool call emitted in the same tool-calls step before continuing, instead of only continuing with one tool result. Fixes #16017 and #15576.
+
+- Added a browser-safe `@mastra/core/utils/collect-tool-mocks` export for `collectToolMocks`. The previous `@mastra/core/evals` barrel pulls in Node-only modules (`node:crypto`), which broke bundling in browser apps such as the Studio playground. Import the helper from the new subpath in browser code: ([#18504](https://github.com/mastra-ai/mastra/pull/18504))
+
+  ```ts
+  import { collectToolMocks } from '@mastra/core/utils/collect-tool-mocks';
+  ```
+
+  The `@mastra/core/evals` export still works for Node-side callers.
+
+- Updated dependencies [[`d5fa3cd`](https://github.com/mastra-ai/mastra/commit/d5fa3cda1788c3cb93a361a3c6ec47de6ba21e98)]:
+  - @mastra/schema-compat@1.3.1-alpha.0
+
 ## 1.47.0-alpha.5
 
 ### Minor Changes
