@@ -1,10 +1,10 @@
 import type { GetAgentResponse, GetToolResponse } from '@mastra/client-js';
-import { truncateString } from '@mastra/playground-ui';
 import {
   DataList as EntityList,
   DataListSkeleton as EntityListSkeleton,
 } from '@mastra/playground-ui/components/DataList';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { truncateString } from '@mastra/playground-ui/utils/truncate-string';
 import { useMemo } from 'react';
 import { prepareToolsTable } from '@/domains/tools/utils/prepareToolsTable';
 import { useLinkComponent } from '@/lib/framework';
