@@ -83,6 +83,15 @@ export interface MastraModelGatewayInterface {
   shouldEnable?(): boolean;
 
   /**
+   * Whether this gateway claims the given model/router id even when the id is
+   * not prefixed with the gateway's own id (e.g. a bare `anthropic/...` id that
+   * this gateway can authenticate via OAuth/stored credentials).
+   * Checked after exact prefix matching but before the models.dev registry
+   * fallback. Optional; defaults to `false`.
+   */
+  handlesModel?(modelId: string): boolean;
+
+  /**
    * Fetch provider configurations from the gateway.
    * Should return providers in the standard format.
    */
@@ -135,6 +144,10 @@ export abstract class MastraModelGateway implements MastraModelGatewayInterface 
 
   shouldEnable(): boolean {
     return true;
+  }
+
+  handlesModel(_modelId: string): boolean {
+    return false;
   }
 
   abstract fetchProviders(): Promise<Record<string, ProviderConfig>>;
