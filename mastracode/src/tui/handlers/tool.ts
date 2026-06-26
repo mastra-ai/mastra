@@ -6,7 +6,7 @@
  * Also includes formatToolResult helper.
  */
 
-import type { TaskItemInput } from '@mastra/core/harness';
+import type { TaskItemInput } from '@mastra/core/signals';
 import { safeStringify } from '@mastra/core/utils';
 import { parse as parsePartialJson } from 'partial-json';
 
@@ -240,7 +240,7 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
     state.ui.requestRender();
   }
 
-  // File modification tracking is handled by the Harness display state
+  // File modification tracking is handled by the AgentController display state
 }
 
 export function handleToolUpdate(ctx: EventHandlerContext, toolCallId: string, partialResult: unknown): void {
@@ -443,7 +443,7 @@ export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: strin
  * Clean up the input buffer when tool input streaming ends.
  */
 export function handleToolInputEnd(_ctx: EventHandlerContext, _toolCallId: string): void {
-  // Buffer cleanup handled by Harness display state
+  // Buffer cleanup handled by AgentController display state
 }
 
 export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, result: unknown, isError: boolean): void {
@@ -458,7 +458,7 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
     (subagentComponent as any)._pendingResult = resultText;
   }
 
-  // File modification tracking is handled by the Harness display state
+  // File modification tracking is handled by the AgentController display state
 
   // Clean up ask_user component tracking
   state.pendingAskUserComponents.delete(toolCallId);

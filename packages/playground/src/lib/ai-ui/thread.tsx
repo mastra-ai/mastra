@@ -20,6 +20,7 @@ import { BracketOverlay } from './components/bracket-overlay';
 import './composer-sending.css';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { MessageRow } from './messages/message-row';
+import { TaskPanel } from './task-panel';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
 import { ComposerModelSettings } from '@/domains/agents/components/composer-model-settings';
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
@@ -150,6 +151,8 @@ export const Thread = ({
             <BrowserThumbnail agentName={agentName} />
           </div>
         )}
+
+        <TaskPanel />
 
         <Composer
           agentId={agentId}

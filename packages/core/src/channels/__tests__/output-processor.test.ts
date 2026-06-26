@@ -5,7 +5,7 @@ import { getChatModule } from '../chat-lazy';
 import { ChatChannelOutputProcessor, CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '../output-processor';
 
 // ---------------------------------------------------------------------------
-// Test harness
+// Test runner
 // ---------------------------------------------------------------------------
 //
 // The channels rendering pipeline routes agent stream chunks to the chat

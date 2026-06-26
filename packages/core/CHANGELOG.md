@@ -1,5 +1,139 @@
 # @mastra/core
 
+## 1.47.0-alpha.5
+
+### Minor Changes
+
+- Added support for AI SDK v7 models (`LanguageModelV4`). You can now pass any AI SDK v7 provider model directly to an agent, alongside the existing AI SDK v4, v5, and v6 support. ([#18477](https://github.com/mastra-ai/mastra/pull/18477))
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { openai } from '@ai-sdk/openai'; // AI SDK v7
+
+  const agent = new Agent({
+    name: 'my-agent',
+    instructions: 'You are a helpful assistant.',
+    model: openai('gpt-5'),
+  });
+  ```
+
+  Mastra detects the model's specification version automatically, so mixing models from different AI SDK versions across your agents continues to work without any extra configuration.
+
+### Patch Changes
+
+- Added `DatasetItemPayload`, a new exported type describing the user-supplied fields of a dataset item. ([#18489](https://github.com/mastra-ai/mastra/pull/18489))
+
+  Dataset item inputs (`AddDatasetItemInput`, `UpdateDatasetItemInput`, and batch insert items) now share this type, so they stay consistent automatically. This is a type-only change with no runtime behavior change.
+
+- Added `collectToolMocks` export to `@mastra/core/evals`. The helper walks a `TrajectoryStep[]` and returns `DatasetItemToolMock[]`, collecting top-level `tool_call` and `mcp_tool_call` steps in recorded order (sub-agent delegations are emitted as `matchArgs: 'ignore'`). Consumers can now derive item-level tool mocks from a hydrated trajectory directly from `@mastra/core`. ([#18488](https://github.com/mastra-ai/mastra/pull/18488))
+
+  ```ts
+  import { collectToolMocks } from '@mastra/core/evals';
+  import type { Trajectory } from '@mastra/core/evals';
+
+  const mocks = collectToolMocks(trajectory.steps);
+  ```
+
+- Fixed dynamic workspace resolution to pass the full request context to workspace factories, allowing them to access session state through getState(), and handled async stream aborts correctly so initial streamed output is preserved. ([#18497](https://github.com/mastra-ai/mastra/pull/18497))
+
+- Fixed a thread becoming permanently unresponsive after a signal woke it without anyone reading the agent's response. ([#18493](https://github.com/mastra-ai/mastra/pull/18493))
+
+  When a signal woke a thread in the background and nothing consumed the resulting run, the run never finished and the thread stayed busy forever. Any further signals sent to that thread were then absorbed by the stuck run instead of starting a new one, so the agent stopped responding on that thread. Threads where you read the agent's response normally were never affected. Background-woken threads now finish on their own and keep accepting new signals.
+
+  Also fixed `consumeStream()` so that `await consumeStream()` always waits for the run to actually finish, even when consumption was already started elsewhere, and so that every caller's `onError` runs if the stream fails.
+
+## 1.47.0-alpha.4
+
+### Minor Changes
+
+- Moved workspace and browser ownership from the Harness to individual sessions. `createSession` now accepts optional `workspace` and `browser` overrides that are passed directly to the `Session` constructor. When no override is provided, the Harness-level config is used as a fallback. ([#18467](https://github.com/mastra-ai/mastra/pull/18467))
+
+  **Breaking changes:**
+  - `Session` constructor now requires `workspace: Workspace` and accepts optional `browser?: MastraBrowser`
+  - `HarnessConfig.workspace` no longer accepts a `WorkspaceConfig` object — pass a `Workspace` instance or a dynamic factory function
+  - `createSession` overrides accept static `Workspace` / `MastraBrowser` instances only (not `DynamicArgument`)
+  - Removed `Harness.destroyWorkspace()` — workspace lifecycle is now driven by per-session `workspace_status_changed`, `workspace_ready`, and `workspace_error` events emitted after `workspace.init()` completes
+  - `Harness.getWorkspace()` returns the static workspace instance only (returns `undefined` for dynamic factory configs); use `resolveWorkspace({ session })` to resolve and cache a factory outside the request flow
+  - `Harness.resolveWorkspace()` now requires a `session` parameter to resolve dynamic factories against the session's request context
+  - The `SessionBus` replays the last workspace lifecycle event group to subscribers that attach after session creation, so late listeners always learn the current workspace status
+
+  **Before:**
+
+  ```ts
+  const harness = new Harness({
+    name: 'my-harness',
+    workspace: { name: 'my-workspace' }, // WorkspaceConfig shorthand
+  });
+
+  const session = await harness.createSession({
+    resourceId: 'user-1',
+    ownerId: 'owner-1',
+    id: 'session-1',
+  });
+
+  // workspace resolved lazily by the harness
+  const ws = harness.getWorkspace();
+  ```
+
+  **After:**
+
+  ```ts
+  import { Workspace } from '@mastra/core';
+
+  const harness = new Harness({
+    name: 'my-harness',
+    workspace: new Workspace({ name: 'my-workspace' }),
+  });
+
+  // workspace can be overridden per session with a static instance
+  const session = await harness.createSession({
+    resourceId: 'user-1',
+    ownerId: 'owner-1',
+    id: 'session-1',
+    workspace: new Workspace({ name: 'ws-1' }),
+  });
+
+  // for dynamic per-request workspaces, use the harness-level config
+  const harness2 = new Harness({
+    name: 'my-harness',
+    workspace: ({ requestContext, mastra }) => new Workspace({ name: `ws-${requestContext.session.id}` }),
+  });
+  ```
+
+- Surface step `providerMetadata` to output-step processors ([#18432](https://github.com/mastra-ai/mastra/pull/18432))
+
+  Output-step processors now receive the finishing step's provider-specific metadata through the new optional `providerMetadata` field on `ProcessOutputStepArgs`. This lets observability and guardrail processors attribute a model response to the provider data behind it — most notably an AWS Bedrock guardrail trace on a `content-filter` block, where the completed-steps array is empty and the assessment was previously unreachable.
+
+  The field is present whenever the underlying model step produced provider metadata, in both streaming and non-streaming generation. Behaviour is unchanged for steps without provider metadata.
+
+  ```ts
+  class MyProcessor implements Processor {
+    async processOutputStep({ finishReason, providerMetadata }: ProcessOutputStepArgs) {
+      if (finishReason === 'content-filter') {
+        const guardrail = providerMetadata?.bedrock?.trace?.guardrail;
+        // attribute the block to the responsible policy/topic/filter
+      }
+    }
+  }
+  ```
+
+### Patch Changes
+
+- Fixed duplicate stream events when attaching to an in-progress durable or evented agent run. ([#18191](https://github.com/mastra-ai/mastra/pull/18191))
+
+  When you call `agent.observe(runId, { offset })` (or reconnect to a stream with replay) while `agent.stream()` is still running, the buffered portion of `output.textStream` could be delivered twice before settling into normal single delivery. Late observers now receive each text-delta exactly once.
+
+  **Why:** Two issues in the resumable-stream path could double events.
+  - If you passed a caching pubsub to `new Mastra({ pubsub })` (e.g. `withCaching(...)`), the agent adopted it as its inner transport and then wrapped it again in a second caching layer sharing the same cache. Every event was stored twice, so replay delivered the buffered prefix doubled. The agent now reuses the existing caching pubsub instead of double-wrapping it.
+
+  ```ts
+  // This setup no longer double-caches:
+  const cache = new InMemoryServerCache();
+  const mastra = new Mastra({ pubsub: withCaching(new EventEmitterPubSub(), cache), cache });
+  ```
+
+  - Replay/live deduplication keyed on `event.id`, but the underlying pubsub regenerates `id` on publish, so the cached copy and the live copy of the same event carried different ids and dedup never matched. Deduplication now keys on the event's stable sequential index, which is preserved across both paths.
+
 ## 1.47.0-alpha.3
 
 ### Minor Changes

@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { Container } from '@earendil-works/pi-tui';
-import type { HarnessMessage } from '@mastra/core/harness';
+import type { AgentControllerMessage } from '@mastra/core/agent-controller';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { getLocalPlansDir } from '../utils/plans.js';
@@ -74,30 +74,30 @@ function createState(): TUIState {
     followUpComponents: [],
     quietMode: false,
     session,
-    harness: {
+    controller: {
       session,
       setState: vi.fn().mockResolvedValue(undefined),
     },
   } as unknown as TUIState;
 }
 
-function createUserMessage(text: string, id = 'user-1'): HarnessMessage {
+function createUserMessage(text: string, id = 'user-1'): AgentControllerMessage {
   return {
     id,
     role: 'user',
     content: [{ type: 'text', text }],
-  } as HarnessMessage;
+  } as AgentControllerMessage;
 }
 
 function createReminderMessage(
-  reminder: Extract<HarnessMessage['content'][number], { type: 'system_reminder' }>,
+  reminder: Extract<AgentControllerMessage['content'][number], { type: 'system_reminder' }>,
   id = '__temporal_1',
-): HarnessMessage {
+): AgentControllerMessage {
   return {
     id,
     role: 'user',
     content: [reminder],
-  } as HarnessMessage;
+  } as AgentControllerMessage;
 }
 
 describe('addUserMessage', () => {
@@ -189,13 +189,13 @@ describe('renderExistingMessages startup history loading', () => {
       thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages },
       state: createSessionState(),
     } as unknown as TUIState['session'];
-    state.harness = {
+    state.controller = {
       session: {
         thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages },
         displayState: { get: () => ({ isRunning: false }), restoreTasks: vi.fn() },
       },
       setState: vi.fn().mockResolvedValue(undefined),
-    } as unknown as TUIState['harness'];
+    } as unknown as TUIState['controller'];
 
     await renderExistingMessages(state);
 
@@ -211,20 +211,20 @@ describe('renderExistingMessages startup history loading', () => {
     const messages = [
       { ...createUserMessage('first', 'user-1'), createdAt: new Date('2026-05-15T13:00:00.000Z') },
       { ...createUserMessage('second', 'user-2'), createdAt: latest },
-    ] as HarnessMessage[];
+    ] as AgentControllerMessage[];
     const state = createState();
     state.session = {
       ...(state.session as any),
       thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue(messages) },
       state: createSessionState(),
     } as unknown as TUIState['session'];
-    state.harness = {
+    state.controller = {
       session: {
         thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue(messages) },
         displayState: { get: () => ({ isRunning: false }), restoreTasks: vi.fn() },
       },
       setState: vi.fn().mockResolvedValue(undefined),
-    } as unknown as TUIState['harness'];
+    } as unknown as TUIState['controller'];
 
     await renderExistingMessages(state);
 
@@ -245,7 +245,7 @@ describe('renderExistingMessages startup history loading', () => {
       thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages },
       state: createSessionState({ tasks: existingTasks }, setState),
     } as unknown as TUIState['session'];
-    state.harness = {
+    state.controller = {
       session: {
         thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages },
         displayState: {
@@ -255,7 +255,7 @@ describe('renderExistingMessages startup history loading', () => {
       },
       getState: () => ({ tasks: existingTasks }),
       setState,
-    } as unknown as TUIState['harness'];
+    } as unknown as TUIState['controller'];
 
     await renderExistingMessages(state);
 
@@ -268,7 +268,7 @@ describe('renderExistingMessages startup history loading', () => {
 
 describe('renderExistingMessages subagents', () => {
   it('uses the current model id for persisted forked subagents when no metadata tag is present', async () => {
-    const message: HarnessMessage = {
+    const message: AgentControllerMessage = {
       id: 'assistant-1',
       role: 'assistant',
       createdAt: new Date(),
@@ -300,9 +300,9 @@ describe('renderExistingMessages subagents', () => {
       displayState: { get: () => ({ isRunning: false }), restoreTasks: vi.fn() },
       model: { get: () => 'openai/gpt-5.5' },
     } as unknown as TUIState['session'];
-    state.harness = {
+    state.controller = {
       session: state.session,
-    } as unknown as TUIState['harness'];
+    } as unknown as TUIState['controller'];
 
     await renderExistingMessages(state);
 
@@ -318,7 +318,7 @@ describe('renderExistingMessages subagents', () => {
 
 describe('renderExistingMessages task tools', () => {
   it('replays task patch results into the pinned task list', async () => {
-    const messages: HarnessMessage[] = [
+    const messages: AgentControllerMessage[] = [
       {
         id: 'assistant-1',
         role: 'assistant',
@@ -372,7 +372,7 @@ describe('renderExistingMessages task tools', () => {
       state: createSessionState({}, setState),
       displayState: { get: () => displayState, restoreTasks: createRestoreDisplayTasks(displayState) },
     } as unknown as TUIState['session'];
-    state.harness = { session: state.session, setState } as unknown as TUIState['harness'];
+    state.controller = { session: state.session, setState } as unknown as TUIState['controller'];
 
     await renderExistingMessages(state);
 
@@ -390,7 +390,7 @@ describe('renderExistingMessages task tools', () => {
 
   it('replays task_check result snapshots into the pinned task list', async () => {
     const checkedTasks = [{ id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' }];
-    const messages: HarnessMessage[] = [
+    const messages: AgentControllerMessage[] = [
       {
         id: 'assistant-1',
         role: 'assistant',
@@ -437,7 +437,7 @@ describe('renderExistingMessages task tools', () => {
       state: createSessionState({}, setState),
       displayState: { get: () => displayState, restoreTasks: createRestoreDisplayTasks(displayState) },
     } as unknown as TUIState['session'];
-    state.harness = { session: state.session, setState } as unknown as TUIState['harness'];
+    state.controller = { session: state.session, setState } as unknown as TUIState['controller'];
 
     await renderExistingMessages(state);
 
@@ -447,7 +447,7 @@ describe('renderExistingMessages task tools', () => {
   });
 
   it('replays early task patch history without structured task snapshots', async () => {
-    const messages: HarnessMessage[] = [
+    const messages: AgentControllerMessage[] = [
       {
         id: 'assistant-1',
         role: 'assistant',
@@ -496,13 +496,13 @@ describe('renderExistingMessages task tools', () => {
       thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue(messages) },
       state: createSessionState({}, setState),
     } as unknown as TUIState['session'];
-    state.harness = {
+    state.controller = {
       session: {
         thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue(messages) },
         displayState: { get: () => ({ isRunning: false }), restoreTasks: vi.fn() },
       },
       setState,
-    } as unknown as TUIState['harness'];
+    } as unknown as TUIState['controller'];
 
     await renderExistingMessages(state);
 
@@ -513,8 +513,8 @@ describe('renderExistingMessages task tools', () => {
     expect(setState).toHaveBeenCalledWith({ tasks: expectedTasks });
   });
 
-  it('keeps replayed task state local when harness state schema rejects tasks', async () => {
-    const messages: HarnessMessage[] = [
+  it('keeps replayed task state local when controller state schema rejects tasks', async () => {
+    const messages: AgentControllerMessage[] = [
       {
         id: 'assistant-1',
         role: 'assistant',
@@ -549,7 +549,7 @@ describe('renderExistingMessages task tools', () => {
       state: createSessionState({}, setState),
       displayState: { get: () => displayState, restoreTasks: createRestoreDisplayTasks(displayState) },
     } as unknown as TUIState['session'];
-    state.harness = { session: state.session, setState } as unknown as TUIState['harness'];
+    state.controller = { session: state.session, setState } as unknown as TUIState['controller'];
 
     await expect(renderExistingMessages(state)).resolves.toBeUndefined();
 
@@ -560,7 +560,7 @@ describe('renderExistingMessages task tools', () => {
   });
 
   it('does not reuse previous IDs by order when replaying duplicate task content', async () => {
-    const messages: HarnessMessage[] = [
+    const messages: AgentControllerMessage[] = [
       {
         id: 'assistant-1',
         role: 'assistant',
@@ -620,13 +620,13 @@ describe('renderExistingMessages task tools', () => {
       thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue(messages) },
       state: createSessionState({}, setState),
     } as unknown as TUIState['session'];
-    state.harness = {
+    state.controller = {
       session: {
         thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue(messages) },
         displayState: { get: () => ({ isRunning: false }), restoreTasks: vi.fn() },
       },
       setState,
-    } as unknown as TUIState['harness'];
+    } as unknown as TUIState['controller'];
 
     await renderExistingMessages(state);
 
@@ -639,7 +639,7 @@ describe('renderExistingMessages task tools', () => {
   });
 
   it('restores task state from snapshots in the bounded rendered window', async () => {
-    const fillerMessages = Array.from({ length: 39 }, (_, index): HarnessMessage => {
+    const fillerMessages = Array.from({ length: 39 }, (_, index): AgentControllerMessage => {
       return {
         id: `user-${index}`,
         role: 'user',
@@ -647,7 +647,7 @@ describe('renderExistingMessages task tools', () => {
         content: [{ type: 'text', text: `Message ${index}` }],
       };
     });
-    const visibleTaskUpdate: HarnessMessage = {
+    const visibleTaskUpdate: AgentControllerMessage = {
       id: 'assistant-visible',
       role: 'assistant',
       createdAt: new Date(),
@@ -680,13 +680,13 @@ describe('renderExistingMessages task tools', () => {
       thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages },
       state: createSessionState({}, setState),
     } as unknown as TUIState['session'];
-    state.harness = {
+    state.controller = {
       session: {
         thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages },
         displayState: { get: () => ({ isRunning: false }), restoreTasks: vi.fn() },
       },
       setState,
-    } as unknown as TUIState['harness'];
+    } as unknown as TUIState['controller'];
 
     await renderExistingMessages(state);
 
@@ -698,7 +698,7 @@ describe('renderExistingMessages task tools', () => {
   });
 
   it('renders inline receipts when replaying repeated complete patches that finish the list', async () => {
-    const messages: HarnessMessage[] = [
+    const messages: AgentControllerMessage[] = [
       {
         id: 'assistant-1',
         role: 'assistant',
@@ -763,13 +763,13 @@ describe('renderExistingMessages task tools', () => {
       thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue(messages) },
       state: createSessionState(),
     } as unknown as TUIState['session'];
-    state.harness = {
+    state.controller = {
       session: {
         thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue(messages) },
         displayState: { get: () => ({ isRunning: false }), restoreTasks: vi.fn() },
       },
       setState: vi.fn().mockResolvedValue(undefined),
-    } as unknown as TUIState['harness'];
+    } as unknown as TUIState['controller'];
 
     await renderExistingMessages(state);
 
@@ -782,7 +782,7 @@ describe('renderExistingMessages task tools', () => {
 
   it('renders completed task receipts when replaying repeated completed task writes', async () => {
     const completedTasks = [{ id: 'tests', content: 'Write tests', status: 'completed', activeForm: 'Writing tests' }];
-    const messages: HarnessMessage[] = [
+    const messages: AgentControllerMessage[] = [
       {
         id: 'assistant-1',
         role: 'assistant',
@@ -816,20 +816,20 @@ describe('renderExistingMessages task tools', () => {
           },
         ],
       },
-    ] as HarnessMessage[];
+    ] as AgentControllerMessage[];
     const state = createState();
     state.session = {
       ...(state.session as any),
       thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue(messages) },
       state: createSessionState(),
     } as unknown as TUIState['session'];
-    state.harness = {
+    state.controller = {
       session: {
         thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue(messages) },
         displayState: { get: () => ({ isRunning: false }), restoreTasks: vi.fn() },
       },
       setState: vi.fn().mockResolvedValue(undefined),
-    } as unknown as TUIState['harness'];
+    } as unknown as TUIState['controller'];
 
     await renderExistingMessages(state);
 
@@ -853,13 +853,13 @@ describe('renderExistingMessages task tools', () => {
       thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue([]) },
       state: createSessionState({}, setState),
     } as unknown as TUIState['session'];
-    state.harness = {
+    state.controller = {
       session: {
         thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages: vi.fn().mockResolvedValue([]) },
         displayState: { get: () => ({ isRunning: false }), restoreTasks: restoreDisplayTasks },
       },
       setState,
-    } as unknown as TUIState['harness'];
+    } as unknown as TUIState['controller'];
 
     await renderExistingMessages(state);
 

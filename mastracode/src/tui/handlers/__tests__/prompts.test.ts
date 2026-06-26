@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getLocalPlansDir } from '../../../utils/plans.js';
-import { createMockState } from '../../__tests__/harness-mock.js';
+import { createMockState } from '../../__tests__/agent-controller-mock.js';
 import { PlanApprovalInlineComponent } from '../../components/plan-approval-inline.js';
 import type { TUIState } from '../../state.js';
 import { handleAskQuestion, handlePlanApproval } from '../prompts.js';
@@ -184,7 +184,7 @@ describe('handlePlanApproval goal mode', () => {
     expect(state.ui.setFocus).toHaveBeenLastCalledWith(state.editor);
     // `startGoal` is invoked with the title+plan as the objective and the
     // default trigger — it owns sending the canonical goal-reminder signal
-    // via `harness.sendSignal`, so the handler does not also send one.
+    // via `controller.sendSignal`, so the handler does not also send one.
     expect(ctx.startGoal).toHaveBeenCalledTimes(1);
     expect(ctx.startGoal).toHaveBeenCalledWith('# Ship it\n\n1. Build\n2. Test', 'Goal cancelled.');
     expect(ctx.addUserMessage).not.toHaveBeenCalled();

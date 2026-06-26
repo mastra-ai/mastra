@@ -76,7 +76,7 @@ import { dispatchSlashCommand } from '../command-dispatch.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
 import { SlashCommandComponent } from '../components/slash-command.js';
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
-import { createMockState } from './harness-mock.js';
+import { createMockState } from './agent-controller-mock.js';
 
 describe('dispatchSlashCommand models routing', () => {
   beforeEach(() => {
@@ -340,7 +340,7 @@ describe('dispatchSlashCommand models routing', () => {
     const ctx = {
       state,
       getResolvedWorkspace: vi.fn(() => undefined),
-      harness: {
+      controller: {
         hasWorkspace: vi.fn(() => true),
         resolveWorkspace: vi.fn().mockResolvedValue(workspace),
       },
@@ -349,7 +349,7 @@ describe('dispatchSlashCommand models routing', () => {
     const handled = await dispatchSlashCommand('/goal/review focus tests', state, () => ctx);
 
     expect(handled).toBe(true);
-    expect(ctx.harness.resolveWorkspace).toHaveBeenCalledTimes(1);
+    expect(ctx.controller.resolveWorkspace).toHaveBeenCalledTimes(1);
     expect(workspace.skills.get).toHaveBeenCalledWith('/skills/review');
     expect(mocks.startGoalWithDefaults).toHaveBeenCalledWith(
       ctx,
