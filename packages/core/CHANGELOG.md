@@ -1,5 +1,47 @@
 # @mastra/core
 
+## 1.47.0-alpha.5
+
+### Minor Changes
+
+- Added support for AI SDK v7 models (`LanguageModelV4`). You can now pass any AI SDK v7 provider model directly to an agent, alongside the existing AI SDK v4, v5, and v6 support. ([#18477](https://github.com/mastra-ai/mastra/pull/18477))
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { openai } from '@ai-sdk/openai'; // AI SDK v7
+
+  const agent = new Agent({
+    name: 'my-agent',
+    instructions: 'You are a helpful assistant.',
+    model: openai('gpt-5'),
+  });
+  ```
+
+  Mastra detects the model's specification version automatically, so mixing models from different AI SDK versions across your agents continues to work without any extra configuration.
+
+### Patch Changes
+
+- Added `DatasetItemPayload`, a new exported type describing the user-supplied fields of a dataset item. ([#18489](https://github.com/mastra-ai/mastra/pull/18489))
+
+  Dataset item inputs (`AddDatasetItemInput`, `UpdateDatasetItemInput`, and batch insert items) now share this type, so they stay consistent automatically. This is a type-only change with no runtime behavior change.
+
+- Added `collectToolMocks` export to `@mastra/core/evals`. The helper walks a `TrajectoryStep[]` and returns `DatasetItemToolMock[]`, collecting top-level `tool_call` and `mcp_tool_call` steps in recorded order (sub-agent delegations are emitted as `matchArgs: 'ignore'`). Consumers can now derive item-level tool mocks from a hydrated trajectory directly from `@mastra/core`. ([#18488](https://github.com/mastra-ai/mastra/pull/18488))
+
+  ```ts
+  import { collectToolMocks } from '@mastra/core/evals';
+  import type { Trajectory } from '@mastra/core/evals';
+
+  const mocks = collectToolMocks(trajectory.steps);
+  ```
+
+- Fixed dynamic workspace resolution to pass the full request context to workspace factories, allowing them to access session state through getState(), and handled async stream aborts correctly so initial streamed output is preserved. ([#18497](https://github.com/mastra-ai/mastra/pull/18497))
+
+- Fixed a thread becoming permanently unresponsive after a signal woke it without anyone reading the agent's response. ([#18493](https://github.com/mastra-ai/mastra/pull/18493))
+
+  When a signal woke a thread in the background and nothing consumed the resulting run, the run never finished and the thread stayed busy forever. Any further signals sent to that thread were then absorbed by the stuck run instead of starting a new one, so the agent stopped responding on that thread. Threads where you read the agent's response normally were never affected. Background-woken threads now finish on their own and keep accepting new signals.
+
+  Also fixed `consumeStream()` so that `await consumeStream()` always waits for the run to actually finish, even when consumption was already started elsewhere, and so that every caller's `onError` runs if the stream fails.
+
 ## 1.47.0-alpha.4
 
 ### Minor Changes

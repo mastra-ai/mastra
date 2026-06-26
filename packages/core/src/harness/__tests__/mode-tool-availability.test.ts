@@ -18,7 +18,8 @@ import { InMemoryStore } from '../../storage/mock';
 import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 import { Harness } from '../harness';
-import type { HarnessMode } from '../types';
+import { createMockWorkspace } from '../test-utils';
+import type { AgentControllerMode } from '../types';
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -101,7 +102,7 @@ async function setupHarness({
   toolCategoryResolver,
   initialState,
 }: {
-  modes: HarnessMode[];
+  modes: AgentControllerMode[];
   tools: Record<string, ReturnType<typeof createTool>>;
   model: MastraLanguageModelV2Mock;
   toolCategoryResolver?: (toolName: string) => 'read' | 'edit' | 'execute' | 'mcp' | 'other' | null;
@@ -124,6 +125,7 @@ async function setupHarness({
     storage,
     agent: registeredAgent,
     modes,
+    workspace: createMockWorkspace(),
     ...(toolCategoryResolver && { toolCategoryResolver }),
     ...(initialState && { initialState: initialState as any }),
   });

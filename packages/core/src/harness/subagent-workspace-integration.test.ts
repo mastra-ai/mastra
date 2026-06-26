@@ -8,7 +8,7 @@ import { WORKSPACE_TOOLS } from '../workspace/constants';
 import { LocalFilesystem } from '../workspace/filesystem';
 import { Workspace } from '../workspace/workspace';
 import { createSubagentTool } from './tools';
-import type { HarnessSubagent } from './types';
+import type { AgentControllerSubagent } from './types';
 
 describe('subagent workspace tool integration', () => {
   let tempDir: string;
@@ -88,7 +88,7 @@ describe('subagent workspace tool integration', () => {
       },
     });
 
-    const subagents: HarnessSubagent[] = [
+    const subagents: AgentControllerSubagent[] = [
       {
         id: 'explorer',
         name: 'Explorer',
@@ -152,7 +152,7 @@ describe('subagent workspace tool integration', () => {
       },
     });
 
-    const subagents: HarnessSubagent[] = [
+    const subagents: AgentControllerSubagent[] = [
       {
         id: 'reader',
         name: 'Reader',

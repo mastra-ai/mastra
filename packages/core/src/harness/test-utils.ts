@@ -3,7 +3,7 @@ import { InMemoryStore } from '../storage/mock';
 import { Workspace } from '../workspace/workspace';
 import { Harness } from './harness';
 import type { Session } from './session';
-import type { HarnessConfig, HarnessMode } from './types';
+import type { AgentControllerConfig, AgentControllerMode } from './types';
 
 /**
  * Create a minimal Workspace instance for testing.
@@ -34,21 +34,21 @@ export function createTestAgent(
   });
 }
 
-export type TestHarnessConfig<TState = {}> = Partial<HarnessConfig<TState>> & {
+export type TestHarnessConfig<TState = {}> = Partial<AgentControllerConfig<TState>> & {
   /** Backing agent for the default mode. Ignored if `modes` is provided. */
   agent?: Agent<any, any, any, any>;
 };
 
 /**
  * Construct a Harness wired with a single default mode and an in-memory store.
- * Any field in {@link HarnessConfig} can be overridden; pass `agent` to swap the
+ * Any field in {@link AgentControllerConfig} can be overridden; pass `agent` to swap the
  * backing agent of the auto-generated default mode, or `modes` to take over the
  * mode list entirely.
  */
 export function createTestHarness<TState = {}>(config: TestHarnessConfig<TState> = {}): Harness<TState> {
   const { agent, modes, storage, id, workspace, ...rest } = config;
 
-  const defaultModes: HarnessMode[] = [
+  const defaultModes: AgentControllerMode[] = [
     { id: 'default', name: 'Default', default: true, agent: agent ?? createTestAgent() },
   ];
 
@@ -58,7 +58,7 @@ export function createTestHarness<TState = {}>(config: TestHarnessConfig<TState>
     modes: modes ?? defaultModes,
     workspace: workspace ?? createMockWorkspace(),
     ...rest,
-  } as HarnessConfig<TState>);
+  } as AgentControllerConfig<TState>);
 }
 
 /**

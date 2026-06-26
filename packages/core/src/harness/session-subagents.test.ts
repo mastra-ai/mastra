@@ -4,9 +4,9 @@ import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
 import { createMockWorkspace } from './test-utils';
-import type { HarnessEvent } from './types';
+import type { AgentControllerEvent } from './types';
 
-async function createSession(options: { storage: InMemoryStore; onEvent?: (event: HarnessEvent) => void }) {
+async function createSession(options: { storage: InMemoryStore; onEvent?: (event: AgentControllerEvent) => void }) {
   const agent = new Agent({
     name: 'test-agent',
     instructions: 'You are a test agent.',
@@ -40,7 +40,7 @@ describe('session.subagents.model', () => {
   });
 
   it('set (global) persists to thread settings and emits subagent_model_changed', async () => {
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     const { session } = await createSession({ storage, onEvent: event => events.push(event) });
     await session.thread.create();
 

@@ -3,7 +3,7 @@ import { Agent } from '../agent';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
 import { createMockWorkspace } from './test-utils';
-import type { HarnessEvent } from './types';
+import type { AgentControllerEvent } from './types';
 
 async function createSession() {
   const agent = new Agent({
@@ -26,7 +26,7 @@ async function createSession() {
 describe('Harness OM failure abort behavior', () => {
   it('aborts stream and emits an error when OM buffering fails', async () => {
     const { session } = await createSession();
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => events.push(event));
 
     session.run.ensureAbortController();
@@ -48,7 +48,7 @@ describe('Harness OM failure abort behavior', () => {
     expect(events.some(e => e.type === 'om_buffering_failed')).toBe(true);
     const errorEvent = events.find(e => e.type === 'error');
     expect(errorEvent?.type).toBe('error');
-    expect((errorEvent as Extract<HarnessEvent, { type: 'error' }>).error.message).toContain(
+    expect((errorEvent as Extract<AgentControllerEvent, { type: 'error' }>).error.message).toContain(
       'Observational memory observation buffering failed: Bad Request',
     );
     expect(events.some(e => e.type === 'agent_end' && e.reason === 'aborted')).toBe(true);
@@ -59,7 +59,7 @@ describe('Harness OM failure abort behavior', () => {
 
   it('aborts stream and emits an error when OM observation run fails', async () => {
     const { session } = await createSession();
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => events.push(event));
 
     session.run.ensureAbortController();
@@ -82,7 +82,7 @@ describe('Harness OM failure abort behavior', () => {
     expect(events.some(e => e.type === 'om_reflection_failed')).toBe(true);
     const errorEvent = events.find(e => e.type === 'error');
     expect(errorEvent?.type).toBe('error');
-    expect((errorEvent as Extract<HarnessEvent, { type: 'error' }>).error.message).toContain(
+    expect((errorEvent as Extract<AgentControllerEvent, { type: 'error' }>).error.message).toContain(
       'Observational memory reflection run failed: Model unavailable',
     );
     expect(events.some(e => e.type === 'agent_end' && e.reason === 'aborted')).toBe(true);
