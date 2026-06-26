@@ -71,7 +71,12 @@ function mergeAssistantParts(
       continue;
     }
 
-    merged.push(part);
+    const existingPartIndex = merged.findIndex(existing => partMatches(existing, part));
+    if (existingPartIndex === -1) {
+      merged.push(part);
+    } else {
+      merged[existingPartIndex] = part;
+    }
   }
 
   return merged;
@@ -100,11 +105,26 @@ function mergeContentMetadata(
   return metadata;
 }
 
+function sortJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortJsonValue);
+  if (!value || typeof value !== 'object') return value;
+
+  return Object.fromEntries(
+    Object.keys(value as Record<string, unknown>)
+      .sort()
+      .map(key => [key, sortJsonValue((value as Record<string, unknown>)[key])]),
+  );
+}
+
+function stableStringify(value: unknown): string {
+  return JSON.stringify(sortJsonValue(JSON.parse(JSON.stringify(value))));
+}
+
 function partsAreEqual(left: MastraMessagePart[], right: MastraMessagePart[]): boolean {
   if (left.length !== right.length) return false;
 
   try {
-    return JSON.stringify(left) === JSON.stringify(right);
+    return stableStringify(left) === stableStringify(right);
   } catch {
     return false;
   }
