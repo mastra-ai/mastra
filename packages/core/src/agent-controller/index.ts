@@ -1,5 +1,13 @@
-export { AgentController, Harness } from './harness';
-export { Session } from './session';
+/**
+ * Canonical entrypoint for the AgentController API.
+ *
+ * The implementation currently lives under `../harness` for historical reasons.
+ * This module re-exports only the canonical `AgentController*` surface; the
+ * deprecated `Harness*` aliases are intentionally not re-exported here and
+ * remain available from `@mastra/core/harness` for backwards compatibility.
+ */
+export { AgentController } from '../harness/harness';
+export { Session } from '../harness/session';
 export {
   askUserTool,
   assignTaskIds,
@@ -9,9 +17,9 @@ export {
   taskCompleteTool,
   taskUpdateTool,
   taskWriteTool,
-} from './tools';
-export type { TaskCheckResult, TaskCheckSummary, TaskItem, TaskItemInput, TaskItemSnapshot } from './tools';
-export { defaultDisplayState, defaultOMProgressState } from './types';
+} from '../harness/tools';
+export type { TaskCheckResult, TaskCheckSummary, TaskItem, TaskItemInput, TaskItemSnapshot } from '../harness/tools';
+export { defaultDisplayState, defaultOMProgressState } from '../harness/types';
 export type {
   ActiveSubagentState,
   ActiveToolState,
@@ -47,23 +55,4 @@ export type {
   ToolCategory,
   BuiltinToolId,
   TokenUsage,
-} from './types';
-export type {
-  HarnessConfig,
-  HarnessDisplayState,
-  HarnessEvent,
-  HarnessEventListener,
-  HarnessMessage,
-  HarnessMessageContent,
-  HarnessMode,
-  HarnessOMConfig,
-  HarnessRequestContext,
-  HarnessRequestSession,
-  HarnessRequestState,
-  HarnessRequestStateUpdater,
-  HarnessRequestStateUpdateResult,
-  HarnessStateSchema,
-  HarnessSubagent,
-  HarnessSubagentHistoryEntry,
-  HarnessThread,
-} from './types';
+} from '../harness/types';

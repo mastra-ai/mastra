@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Session } from './session';
 import { createMockWorkspace } from './test-utils';
-import type { HarnessEvent } from './types';
+import type { AgentControllerEvent } from './types';
 
 describe('Session event bus', () => {
   it('delivers emitted events to its own subscribers', () => {
     const session = new Session({ resourceId: 'r1', id: 's1', ownerId: 'o1', workspace: createMockWorkspace() });
-    const received: HarnessEvent[] = [];
+    const received: AgentControllerEvent[] = [];
     session.subscribe(event => {
       received.push(event);
     });
@@ -20,8 +20,8 @@ describe('Session event bus', () => {
   it("does not deliver one session's events to another session's subscribers", () => {
     const a = new Session({ resourceId: 'a', id: 'sa', ownerId: 'oa', workspace: createMockWorkspace() });
     const b = new Session({ resourceId: 'b', id: 'sb', ownerId: 'ob', workspace: createMockWorkspace() });
-    const aReceived: HarnessEvent[] = [];
-    const bReceived: HarnessEvent[] = [];
+    const aReceived: AgentControllerEvent[] = [];
+    const bReceived: AgentControllerEvent[] = [];
     a.subscribe(event => {
       aReceived.push(event);
     });
@@ -63,7 +63,7 @@ describe('Session event bus', () => {
       workspace: createMockWorkspace(),
       state: { initialState: { count: 0 } },
     });
-    const received: HarnessEvent[] = [];
+    const received: AgentControllerEvent[] = [];
     session.subscribe(event => {
       received.push(event);
     });

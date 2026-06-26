@@ -19,7 +19,7 @@ import { MastraLanguageModelV2Mock } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
 import { Harness } from '../harness';
 import { createMockWorkspace } from '../test-utils';
-import type { HarnessMode } from '../types';
+import type { AgentControllerMode } from '../types';
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -102,7 +102,7 @@ async function setupHarness({
   toolCategoryResolver,
   initialState,
 }: {
-  modes: HarnessMode[];
+  modes: AgentControllerMode[];
   tools: Record<string, ReturnType<typeof createTool>>;
   model: MastraLanguageModelV2Mock;
   toolCategoryResolver?: (toolName: string) => 'read' | 'edit' | 'execute' | 'mcp' | 'other' | null;

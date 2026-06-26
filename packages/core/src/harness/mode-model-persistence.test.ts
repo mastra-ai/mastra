@@ -5,7 +5,7 @@ import { Harness } from './harness';
 import type { Session } from './session';
 import { createMockWorkspace } from './test-utils';
 
-type HarnessTestState = { currentModelId?: string };
+type AgentControllerTestState = { currentModelId?: string };
 
 const agent = () =>
   new Agent({
@@ -16,8 +16,8 @@ const agent = () =>
 
 async function buildHarness(
   storage: InMemoryStore,
-): Promise<{ harness: Harness<HarnessTestState>; session: Session<HarnessTestState> }> {
-  const harness = new Harness<HarnessTestState>({
+): Promise<{ harness: Harness<AgentControllerTestState>; session: Session<AgentControllerTestState> }> {
+  const harness = new Harness<AgentControllerTestState>({
     workspace: createMockWorkspace(),
     id: 'test-harness',
     storage,

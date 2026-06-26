@@ -71,6 +71,16 @@
         "default": "./dist/agent/message-list/index.cjs"
       }
     },
+    "./agent-controller": {
+      "import": {
+        "types": "./dist/agent-controller/index.d.ts",
+        "default": "./dist/agent-controller/index.js"
+      },
+      "require": {
+        "types": "./dist/agent-controller/index.d.ts",
+        "default": "./dist/agent-controller/index.cjs"
+      }
+    },
     "./auth": {
       "import": {
         "types": "./dist/auth/index.d.ts",

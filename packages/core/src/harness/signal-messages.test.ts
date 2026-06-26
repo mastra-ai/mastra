@@ -6,7 +6,7 @@ import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
 import { createMockWorkspace } from './test-utils';
-import type { HarnessEvent } from './types';
+import type { AgentControllerEvent } from './types';
 
 function createTextStreamModel(responseText: string) {
   return new MockLanguageModelV2({
@@ -394,7 +394,7 @@ describe('Harness signal messages', () => {
   it('processes sendMessage streams once through the active thread subscription', async () => {
     const storage = new InMemoryStore();
     const { session } = await createHarness(storage);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -404,11 +404,11 @@ describe('Harness signal messages', () => {
     await waitFor(() => events.some(event => event.type === 'message_end' && event.message.role === 'assistant'));
 
     const assistantStarts = events.filter(
-      (event): event is Extract<HarnessEvent, { type: 'message_start' }> =>
+      (event): event is Extract<AgentControllerEvent, { type: 'message_start' }> =>
         event.type === 'message_start' && event.message.role === 'assistant',
     );
     const assistantEnds = events.filter(
-      (event): event is Extract<HarnessEvent, { type: 'message_end' }> =>
+      (event): event is Extract<AgentControllerEvent, { type: 'message_end' }> =>
         event.type === 'message_end' && event.message.role === 'assistant',
     );
     expect(assistantStarts).toHaveLength(1);
@@ -565,7 +565,7 @@ describe('Harness signal messages', () => {
   it('tracks queued follow-ups in display state while running', async () => {
     const storage = new InMemoryStore();
     const { session } = await createHarness(storage);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -588,7 +588,7 @@ describe('Harness signal messages', () => {
       model: createTextStreamModel('Hello'),
     });
     const { session } = await createHarness(storage, agent);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -634,7 +634,7 @@ describe('Harness signal messages', () => {
   it('sends idle follow-ups immediately without marking them queued', async () => {
     const storage = new InMemoryStore();
     const { session } = await createHarness(storage);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -728,7 +728,7 @@ describe('Harness signal messages', () => {
       model: createTextStreamModel('Hello'),
     });
     const { session } = await createHarness(storage, agent);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -760,7 +760,7 @@ describe('Harness signal messages', () => {
       model: createTextStreamModel('Hello'),
     });
     const { session } = await createHarness(storage, agent);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -807,7 +807,7 @@ describe('Harness signal messages', () => {
   it('starts a new idle signal after a subscription-owned run completes', async () => {
     const storage = new InMemoryStore();
     const { session } = await createHarness(storage);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -846,7 +846,7 @@ describe('Harness signal messages', () => {
     });
     await harness.init();
     const session = await harness.createSession({ id: 'test-session', ownerId: 'test-owner' });
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -896,7 +896,7 @@ describe('Harness signal messages', () => {
   it('starts idle text signals through ifIdle stream options', async () => {
     const storage = new InMemoryStore();
     const { session } = await createHarness(storage);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -907,11 +907,11 @@ describe('Harness signal messages', () => {
     await waitFor(() => events.some(event => event.type === 'message_end' && event.message.role === 'assistant'));
 
     const signalEnd = events.find(
-      (event): event is Extract<HarnessEvent, { type: 'message_end' }> =>
+      (event): event is Extract<AgentControllerEvent, { type: 'message_end' }> =>
         event.type === 'message_end' && event.message.id === signal.id,
     );
     const assistantEnd = events.find(
-      (event): event is Extract<HarnessEvent, { type: 'message_end' }> =>
+      (event): event is Extract<AgentControllerEvent, { type: 'message_end' }> =>
         event.type === 'message_end' && event.message.role === 'assistant',
     );
 
@@ -922,7 +922,7 @@ describe('Harness signal messages', () => {
   it('does not carry a stale abort reason into a later idle signal run', async () => {
     const storage = new InMemoryStore();
     const { session } = await createHarness(storage);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -934,7 +934,7 @@ describe('Harness signal messages', () => {
     await waitFor(() => events.some(event => event.type === 'agent_end'));
 
     const agentEnd = events.find(
-      (event): event is Extract<HarnessEvent, { type: 'agent_end' }> => event.type === 'agent_end',
+      (event): event is Extract<AgentControllerEvent, { type: 'agent_end' }> => event.type === 'agent_end',
     );
     expect(agentEnd?.reason).toBe('complete');
   });
@@ -1009,7 +1009,7 @@ describe('Harness signal messages', () => {
   it('emits echoed file user-message signals as user message events', async () => {
     const storage = new InMemoryStore();
     const { session } = await createHarness(storage);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -1048,7 +1048,7 @@ describe('Harness signal messages', () => {
   it('emits echoed user-message signals as user message events', async () => {
     const storage = new InMemoryStore();
     const { session } = await createHarness(storage);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -1095,7 +1095,7 @@ describe('Harness signal messages', () => {
   it('closes the current assistant message when a goal chunk arrives before continuation text', async () => {
     const storage = new InMemoryStore();
     const { session } = await createHarness(storage);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -1144,10 +1144,10 @@ describe('Harness signal messages', () => {
     );
 
     const messageEndEvents = events.filter(
-      (event): event is Extract<HarnessEvent, { type: 'message_end' }> => event.type === 'message_end',
+      (event): event is Extract<AgentControllerEvent, { type: 'message_end' }> => event.type === 'message_end',
     );
     const messageUpdateEvents = events.filter(
-      (event): event is Extract<HarnessEvent, { type: 'message_update' }> => event.type === 'message_update',
+      (event): event is Extract<AgentControllerEvent, { type: 'message_update' }> => event.type === 'message_update',
     );
 
     expect(messageEndEvents).toHaveLength(1);
@@ -1159,7 +1159,7 @@ describe('Harness signal messages', () => {
   it('emits generic reactive signal data parts as renderable message updates', async () => {
     const storage = new InMemoryStore();
     const { session } = await createHarness(storage);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -1203,7 +1203,7 @@ describe('Harness signal messages', () => {
   it('emits notification summary data parts as renderable message updates', async () => {
     const storage = new InMemoryStore();
     const { session } = await createHarness(storage);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -1257,7 +1257,7 @@ describe('Harness signal messages', () => {
   it('emits full notification data parts as renderable message updates', async () => {
     const storage = new InMemoryStore();
     const { session } = await createHarness(storage);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
@@ -1335,7 +1335,7 @@ describe('Harness signal messages', () => {
   it('emits state signal data parts as renderable message updates', async () => {
     const storage = new InMemoryStore();
     const { session } = await createHarness(storage);
-    const events: HarnessEvent[] = [];
+    const events: AgentControllerEvent[] = [];
     session.subscribe(event => {
       events.push(event);
     });
