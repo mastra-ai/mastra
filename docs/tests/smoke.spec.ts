@@ -32,6 +32,7 @@ const IGNORED_CONSOLE_PATTERNS = [
 	// Common benign warnings
 	/Download the React DevTools/i,
 	/ResizeObserver loop/i,
+	/requestStorageAccess: Permission denied/i,
 ]
 
 /**
