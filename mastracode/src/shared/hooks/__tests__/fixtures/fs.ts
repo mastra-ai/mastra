@@ -5,6 +5,6 @@ export function listing(path: string, names: string[], parent: string | null = n
     root: '/home/user',
     path,
     parent,
-    entries: names.map(name => ({ name, path: `${path}/${name}` })),
+    entries: names.map(name => ({ name, path: path === '/' ? `/${name}` : `${path}/${name}` })),
   };
 }

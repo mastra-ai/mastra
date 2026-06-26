@@ -12,5 +12,5 @@
     "noEmit": true,
     "types": ["vite/client", "node", "@testing-library/jest-dom"]
   },
-  "include": [".", "../shared"]
+  "include": [".", "../../shared"]
 }

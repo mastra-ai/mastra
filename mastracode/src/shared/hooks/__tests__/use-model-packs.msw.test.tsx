@@ -95,7 +95,7 @@ describe('useSaveModelPack', () => {
 
       const { result, client } = renderHookWithProviders(() => ({
         query: useModelPacksQuery('res-1'),
-        save: useSaveModelPack('res-1'),
+        save: useSaveModelPack(),
       }));
 
       await waitFor(() => expect(result.current.query.isSuccess).toBe(true));
@@ -130,7 +130,7 @@ describe('useRemoveModelPack', () => {
 
       const { result, client } = renderHookWithProviders(() => ({
         query: useModelPacksQuery('res-1'),
-        remove: useRemoveModelPack('res-1'),
+        remove: useRemoveModelPack(),
       }));
 
       await waitFor(() => expect(result.current.query.isSuccess).toBe(true));

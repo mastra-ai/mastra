@@ -33,8 +33,8 @@ export function ModelPacksSection({
 }) {
   const packsQuery = useModelPacksQuery(resourceId);
   const activateMutation = useActivateModelPack(resourceId);
-  const removeMutation = useRemoveModelPack(resourceId);
-  const saveMutation = useSaveModelPack(resourceId);
+  const removeMutation = useRemoveModelPack();
+  const saveMutation = useSaveModelPack();
 
   const [draftError, setDraftError] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftPack | null>(null);

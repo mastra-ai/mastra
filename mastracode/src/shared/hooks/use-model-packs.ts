@@ -39,12 +39,13 @@ export function useActivateModelPack(resourceId: string | undefined) {
   });
 }
 
-export function useSaveModelPack(resourceId: string | undefined) {
+export function useSaveModelPack() {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (body: SaveModelPackBody) => client.post<{ ok: true }>('/api/web/config/model-packs', body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.modelPacks(resourceId) }),
+    // Custom-pack CRUD is global: invalidate every cached model-packs entry, not just this resource's.
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.modelPacksAll() }),
   });
 }
 
@@ -52,12 +53,13 @@ export interface RemoveModelPackArgs {
   id: string;
 }
 
-export function useRemoveModelPack(resourceId: string | undefined) {
+export function useRemoveModelPack() {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id }: RemoveModelPackArgs) =>
       client.del<OkResponse>(`/api/web/config/model-packs/${encodeURIComponent(id)}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.modelPacks(resourceId) }),
+    // Custom-pack CRUD is global: invalidate every cached model-packs entry, not just this resource's.
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.modelPacksAll() }),
   });
 }
