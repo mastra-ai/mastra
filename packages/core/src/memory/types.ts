@@ -57,6 +57,8 @@ export type ThreadOMMetadata = {
   suggestedResponse?: string;
   /** Observer-generated thread title */
   threadTitle?: string;
+  /** Extracted Observational Memory values keyed by extractor slug */
+  extracted?: Record<string, unknown>;
   /** Timestamp of the last observed message in this thread (ISO string for JSON serialization) */
   lastObservedAt?: string;
   /** Cursor pointing at the last observed message (for replay pruning fallback) */

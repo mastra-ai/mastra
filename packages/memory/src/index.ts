@@ -53,6 +53,13 @@ export {
   ModelByInputTokens,
   type ModelByInputTokensConfig,
 } from './processors/observational-memory/model-by-input-tokens';
+export {
+  Extractor,
+  type ExtractorConfig,
+  type ExtractorOnExtractedContext,
+  type ExtractorRuntimeContext,
+  type ExtractorSource,
+} from './processors/observational-memory';
 
 /**
  * Normalize a `boolean | object` observational memory config.
@@ -1651,6 +1658,7 @@ ${workingMemory}`;
 
     return new OMClass({
       storage: memoryStore,
+      memory: this,
       scope: omConfig.scope,
       retrieval: omConfig.retrieval,
       activateAfterIdle: omConfig.activateAfterIdle,
@@ -1674,6 +1682,7 @@ ${workingMemory}`;
             instruction: omConfig.observation.instruction,
             threadTitle: omConfig.observation.threadTitle,
             observeAttachments: omConfig.observation.observeAttachments,
+            extract: omConfig.observation.extract,
           }
         : undefined,
       reflection: omConfig.reflection
@@ -1685,6 +1694,7 @@ ${workingMemory}`;
             bufferActivation: omConfig.reflection.bufferActivation,
             blockAfter: omConfig.reflection.blockAfter,
             instruction: omConfig.reflection.instruction,
+            extract: omConfig.reflection.extract,
           }
         : undefined,
     });

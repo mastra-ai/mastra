@@ -12,10 +12,12 @@
 
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { getThreadOMMetadata } from '@mastra/core/memory';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { BufferingCoordinator } from '../buffering-coordinator';
+import { Extractor } from '../extractor';
 import { ModelByInputTokens } from '../model-by-input-tokens';
 import { ObservationalMemory } from '../observational-memory';
 
@@ -150,6 +152,8 @@ function createOM(
     scope?: 'thread' | 'resource';
     observerModel?: any;
     reflectorModel?: any;
+    observationExtract?: Extractor<any>[];
+    reflectionExtract?: Extractor<any>[];
     activateAfterIdle?: number | string;
   },
 ) {
@@ -161,10 +165,12 @@ function createOM(
       model: opts?.observerModel ?? createMockObserverModel(),
       messageTokens: opts?.messageTokens ?? 100,
       bufferTokens: opts?.bufferTokens ?? false,
+      extract: opts?.observationExtract,
     },
     reflection: {
       model: opts?.reflectorModel ?? createMockReflectorModel(),
       observationTokens: opts?.observationTokens ?? 50_000,
+      extract: opts?.reflectionExtract,
     },
   });
 }
@@ -289,6 +295,52 @@ describe('observe()', () => {
       expect(result.observed).toBe(true);
       expect(result.record.activeObservations).toContain('User discussed');
       expect(result.record.lastObservedAt).toBeDefined();
+    });
+
+    it('should persist schema-less inline extracted values and call hooks', async () => {
+      const onExtracted = vi.fn(({ current }) => current);
+      const userInfo = new Extractor({
+        name: 'User info',
+        instructions: 'Information about the user: name/location/work/etc',
+        includePreviousExtraction: false,
+        onExtracted,
+      });
+      const extractOm = createOM(storage, {
+        observationExtract: [userInfo],
+        observerModel: createMockObserverModel(
+          `<observations>
+* 🔴 User said their name is Tyler.
+</observations>
+<user-info>
+name: Tyler
+</user-info>`,
+        ),
+      });
+
+      await storage.saveThread({
+        thread: {
+          id: threadId,
+          resourceId: 'observe-resource',
+          title: 'Observe thread',
+          metadata: {},
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+      const messages = createBulkMessages(10, threadId);
+      await storage.saveMessages({ messages });
+      const result = await extractOm.observe({ threadId });
+
+      expect(result.observed).toBe(true);
+      expect(onExtracted).toHaveBeenCalledWith(
+        expect.objectContaining({
+          source: 'observer',
+          threadId,
+          current: 'name: Tyler',
+        }),
+      );
+      const thread = await storage.getThreadById({ threadId });
+      expect(getThreadOMMetadata(thread?.metadata)?.extracted).toMatchObject({ 'user-info': 'name: Tyler' });
     });
 
     it('should skip when messages are below threshold', async () => {
@@ -1469,6 +1521,43 @@ describe('reflect()', () => {
     // This shouldn't throw — the prompt is passed to the reflector
     const result = await om.reflect(threadId, undefined, 'Focus on action items');
     expect(result.reflected).toBe(true);
+  });
+
+  it('persists extracted values produced by manual reflection', async () => {
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId: 'reflect-resource',
+        title: 'Reflect thread',
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    const priority = new Extractor({
+      name: 'Priority',
+      instructions: 'Extract the current priority.',
+    });
+    const reflectOm = createOM(storage, {
+      reflectionExtract: [priority],
+      reflectorModel: createMockReflectorModel(
+        `<observations>
+* Condensed: User discussed priority.
+</observations>
+<extracted-values>
+{"priority":"high"}
+</extracted-values>`,
+      ),
+    });
+
+    await storage.saveMessages({ messages: createBulkMessages(10, threadId) });
+    await reflectOm.observe({ threadId });
+
+    const result = await reflectOm.reflect(threadId);
+
+    expect(result.reflected).toBe(true);
+    const thread = await storage.getThreadById({ threadId });
+    expect(getThreadOMMetadata(thread?.metadata)?.extracted).toMatchObject({ priority: 'high' });
   });
 
   it('should preserve history across multiple reflections', async () => {
