@@ -246,6 +246,7 @@ export const API_ROUTE_METADATA = {
       "messages",
       "requestContext",
       "resourceId",
+      "resumeData",
       "streamOptions",
       "threadId",
       "toolCallId"

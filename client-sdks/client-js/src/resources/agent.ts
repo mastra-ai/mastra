@@ -2821,6 +2821,7 @@ export class Agent extends BaseResource {
     threadId: string;
     toolCallId: string;
     approved: boolean;
+    resumeData?: unknown;
     requestContext?: RequestContext | Record<string, any>;
     messages?: MessageListInput;
     streamOptions?: StreamParamsBaseWithoutMessages<any>;

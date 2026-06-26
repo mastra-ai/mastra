@@ -3,6 +3,8 @@ import { createTool } from '@mastra/core/tools';
 import { createBuilderAgent } from '@mastra/editor/ee';
 import { Memory } from '@mastra/memory';
 
+export { askUserAgent } from './ask-user-agent';
+
 import * as aiTest from 'ai/test';
 import { z } from 'zod';
 import { fixtures } from '../../../fixtures';
