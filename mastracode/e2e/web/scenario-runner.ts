@@ -14,9 +14,9 @@ export interface ScenarioContext {
   driver: ScenarioDriver;
   /** AIMock request log (OpenAI-shaped), for asserting what reached the model. */
   aimockRequests: () => unknown[];
-  /** Raw fetch into the harness server (for endpoints the driver doesn't wrap). */
+  /** Raw fetch into the controller server (for endpoints the driver doesn't wrap). */
   fetch: (url: string, init?: RequestInit) => Promise<Response>;
-  /** Base URL for the harness server (e.g. `http://scenario.local`). */
+  /** Base URL for the controller server (e.g. `http://scenario.local`). */
   baseUrl: string;
   /** The workspace root dir, when the scenario requested `server.workspace`. */
   workspaceRoot?: string;

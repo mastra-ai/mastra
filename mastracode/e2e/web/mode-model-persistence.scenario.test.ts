@@ -17,7 +17,7 @@ describe('web scenario: mode-model-persistence', () => {
         // Default mode should be 'build'.
         expect(driver.state().modeId).toBe('build');
 
-        // Send a message first (required to prove the harness is live).
+        // Send a message first (required to prove the controller is live).
         await driver.submit('hello');
         await driver.waitForText('acknowledged');
         await driver.waitForIdle();

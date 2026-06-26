@@ -8,7 +8,7 @@ import { runScenario } from './scenario-runner';
  * and the notification event appears in the SSE stream / transcript.
  *
  * This exercises the full notification pipeline:
- *   POST /harness/:id/sessions/:rid/notifications
+ *   POST /agent-controller/:controllerId/sessions/:rId/notifications
  *     → session.sendNotificationSignal(input)
  *       → agent delivery policy decision
  *         → notification event on SSE stream

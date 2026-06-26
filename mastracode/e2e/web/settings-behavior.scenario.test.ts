@@ -25,7 +25,7 @@ describe('web scenario: settings-behavior', () => {
         await driver.submit('Say the smoke phrase');
         await driver.waitForText('WEB scenario smoke response');
 
-        const base = `${baseUrl}/api/harness/code/sessions/${resourceId}`;
+        const base = `${baseUrl}/api/agent-controller/code/sessions/${resourceId}`;
         const readUrl = base; // GET base returns the session-state snapshot
         const writeUrl = `${base}/state`; // PUT /state merges updates
 
