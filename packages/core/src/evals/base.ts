@@ -916,6 +916,9 @@ class MastraScorer<
       ...(tools ? { tools } : {}),
       ...(memory ? { memory } : {}),
     });
+    if (this.#mastra) {
+      judge.__registerMastra(this.#mastra);
+    }
     const judgeRunOptions = {
       ...observabilityContext,
       ...(memoryOptions ? { memory: memoryOptions } : {}),
