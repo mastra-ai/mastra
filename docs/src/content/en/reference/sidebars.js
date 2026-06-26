@@ -494,6 +494,7 @@ const sidebars = {
         { type: 'doc', id: 'pubsub/caching-pubsub', label: 'CachingPubSub' },
         { type: 'doc', id: 'pubsub/event-emitter', label: 'EventEmitterPubSub' },
         { type: 'doc', id: 'pubsub/google-cloud-pubsub', label: 'GoogleCloudPubSub' },
+        { type: 'doc', id: 'pubsub/lease-provider', label: 'LeaseProvider' },
         { type: 'doc', id: 'pubsub/base', label: 'PubSub' },
         { type: 'doc', id: 'pubsub/redis-streams', label: 'RedisStreamsPubSub' },
         { type: 'doc', id: 'pubsub/unix-socket-pubsub', label: 'UnixSocketPubSub' },
