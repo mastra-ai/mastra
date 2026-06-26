@@ -1,5 +1,5 @@
 ---
-title: "Reference: SlackProvider | Agents"
+title: "Reference: SlackProvider | Channel Providers"
 description: "API reference for SlackProvider, the managed Slack integration that creates Slack apps, handles OAuth, and routes messages to agents."
 packages:
   - "@mastra/slack"
@@ -318,7 +318,13 @@ When `connect()` builds a Slack app, the generated manifest requests a default s
 
 ## Accessing the provider
 
-Retrieve the registered provider from Mastra to call its methods:
+Access the registered provider through the typed `channels` getter, keyed by the id you registered it under:
+
+```typescript
+const result = await mastra.channels.slack.connect('support-agent')
+```
+
+When the key is only known at runtime, look it up by string id and pass the concrete type:
 
 ```typescript
 const slack = mastra.getChannelProvider<SlackProvider>('slack')
@@ -331,5 +337,6 @@ const result = await slack.connect('support-agent')
 
 ## Related
 
+- [ChannelProvider](/reference/channels/channel-provider) — the interface `SlackProvider` implements
 - [Channels](/docs/agents/channels) — concepts, platform setup, and the `createSlackAdapter` path
 - [Channels reference](/reference/agents/channels) — the `channels` config on the `Agent` constructor

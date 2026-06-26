@@ -1,0 +1,113 @@
+---
+title: "Reference: ChannelProvider | Channel Providers"
+description: "API reference for ChannelProvider, the interface that platform integrations implement to provision apps, route webhooks, and wire adapters to agents."
+packages:
+  - "@mastra/core"
+---
+
+# ChannelProvider
+
+`ChannelProvider` is the interface that platform integrations implement to connect agents to a messaging platform. A provider owns the full lifecycle of an integration: app provisioning and OAuth, webhook routing and event handling, adapter creation and agent wiring, and credential management.
+
+Register providers on the `Mastra` constructor under `channels`, keyed by an id you choose. Each provider's routes are merged into the server's API routes automatically, and `initialize()` runs during Mastra startup.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { SlackProvider } from '@mastra/slack'
+
+export const mastra = new Mastra({
+  channels: {
+    slack: new SlackProvider({ refreshToken: process.env.SLACK_REFRESH_TOKEN! }),
+  },
+})
+```
+
+[`SlackProvider`](/reference/channels/slack-provider) is the first built-in implementation. Build a custom provider by implementing this interface.
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description:
+      "Unique identifier for this channel type, for example 'slack' or 'discord'. Used as the key when routing events and looking the provider up from Mastra.",
+  },
+]}
+/>
+
+## Methods
+
+<PropertiesTable
+  content={[
+  {
+    name: 'getRoutes',
+    type: '() => ApiRoute[]',
+    description:
+      "Returns the API routes for this channel (OAuth, webhooks, events). These are merged into the server's apiRoutes automatically.",
+  },
+  {
+    name: 'initialize',
+    type: '() => Promise<void>',
+    isOptional: true,
+    description:
+      'Called during Mastra initialization after all agents are registered. Use it for async setup such as restoring active installations. Does not provision new apps.',
+  },
+  {
+    name: 'configure',
+    type: '(credentials: Record<string, unknown> | null) => void | Promise<void>',
+    isOptional: true,
+    description:
+      'Provides or clears platform credentials at runtime. Pass null to clear credentials and delete stored tokens.',
+  },
+  {
+    name: 'getInfo',
+    type: '() => ChannelPlatformInfo',
+    isOptional: true,
+    description:
+      'Returns discovery metadata for the editor UI: platform name, configuration status, and the connect options schema.',
+  },
+  {
+    name: 'connect',
+    type: '(agentId: string, options?: Record<string, unknown>) => Promise<ChannelConnectResult>',
+    isOptional: true,
+    description:
+      'Connects an agent to the platform. Returns a discriminated result describing the authorization flow required to finish the connection.',
+  },
+  {
+    name: 'disconnect',
+    type: '(agentId: string) => Promise<void>',
+    isOptional: true,
+    description: 'Disconnects an agent from the platform. Deletes the platform app and cleans up stored state.',
+  },
+  {
+    name: 'listInstallations',
+    type: '() => Promise<ChannelInstallationInfo[]>',
+    isOptional: true,
+    description: 'Lists active installations for this platform. Returns public info only, never secrets.',
+  },
+]}
+/>
+
+## Accessing a provider
+
+Access a registered provider through the `channels` getter, keyed by the id you registered it under. The getter is typed from the constructor config, so `mastra.channels.slack` is the concrete provider with its full method surface.
+
+```typescript
+await mastra.channels.slack.configure({ refreshToken })
+```
+
+When the key is only known at runtime, look the provider up by string id instead. `getChannelProvider` takes the concrete type as a generic, and `getChannelProviders` returns every registered provider keyed by id.
+
+```typescript
+import type { SlackProvider } from '@mastra/slack'
+
+const slack = mastra.getChannelProvider<SlackProvider>('slack')
+const all = mastra.getChannelProviders()
+```
+
+## Related
+
+- [SlackProvider](/reference/channels/slack-provider)
+- [Channels](/docs/agents/channels)

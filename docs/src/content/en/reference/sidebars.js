@@ -25,7 +25,6 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'agents/agent', label: 'Agent Class' },
         { type: 'doc', id: 'agents/channels', label: 'Channels' },
-        { type: 'doc', id: 'agents/slack-provider', label: 'SlackProvider' },
         { type: 'doc', id: 'agents/inngest-agent', label: 'createInngestAgent()' },
         { type: 'doc', id: 'agents/createSkill', label: 'createSkill()' },
         { type: 'doc', id: 'agents/durable-agent', label: 'DurableAgent' },
@@ -530,6 +529,15 @@ const sidebars = {
         { type: 'doc', id: 'server/nestjs-adapter', label: 'NestJS Adapter' },
         { type: 'doc', id: 'server/register-api-route', label: 'registerApiRoute()' },
         { type: 'doc', id: 'server/routes', label: 'Server Routes' },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Channel Providers',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'channels/channel-provider', label: 'ChannelProvider' },
+        { type: 'doc', id: 'channels/slack-provider', label: 'SlackProvider' },
       ],
     },
     {
