@@ -1973,6 +1973,7 @@ export type ProviderModelsMap = {
     'ministral-8b-2512',
     'mistral-large-2512',
     'mistral-large-latest',
+    'mistral-ocr-latest',
     'mistral-small-2506',
     'nemotron-3-ultra-550b',
     'o1',
