@@ -17,10 +17,15 @@ import { SlackProvider } from '@mastra/slack'
 
 export const mastra = new Mastra({
   channels: {
-    slack: new SlackProvider({ refreshToken: process.env.SLACK_REFRESH_TOKEN! }),
+    slack: new SlackProvider({
+      refreshToken: process.env.SLACK_REFRESH_TOKEN!,
+      baseUrl: process.env.MASTRA_BASE_URL,
+    }),
   },
 })
 ```
+
+The provider's `baseUrl` is the public URL the platform sends webhooks and events to. In production this is your deployed Mastra server URL. For local development, the platform can't reach `http://localhost:4111`, so run a tunnel (such as [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/) or [ngrok](https://ngrok.com/)) and point `baseUrl` at the tunnel URL (for example `https://abc123.trycloudflare.com`) so events reach your local dev process.
 
 [`SlackProvider`](/reference/channels/slack-provider) is the first built-in implementation. Build a custom provider by implementing this interface.
 
