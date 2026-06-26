@@ -1,6 +1,6 @@
 import type { MastraClient } from '@mastra/client-js';
 import { coreFeatures } from '@mastra/core/features';
-import { isNonRetryableError } from '@mastra/playground-ui';
+import { isNonRetryableError } from '@mastra/playground-ui/utils/errors';
 import { hasMethod } from './client-utils';
 
 /**

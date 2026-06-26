@@ -366,7 +366,7 @@ async function startMastraCodeApp(
   await options?.onCreated?.(result);
 
   const tui = new MastraTUI({
-    harness: result.harness,
+    controller: result.controller,
     session: result.session,
     hookManager: result.hookManager,
     authStorage: result.authStorage,
@@ -386,7 +386,7 @@ async function startMastraCodeApp(
   if (settings.browser.enabled) {
     const browser = await createBrowserFromSettings(settings.browser);
     if (browser) {
-      result.harness.setBrowser(browser);
+      result.controller.setBrowser(browser);
       await result.session.state.set({ activeBrowserSettings: settings.browser });
     }
   }
@@ -397,8 +397,8 @@ async function startMastraCodeApp(
       const closeSignalsPubSub = (result.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
       await Promise.allSettled([
         result.mcpManager?.disconnect(),
-        result.harness.getMastra()?.stopWorkers(),
-        result.harness.stopHeartbeats(),
+        result.controller.getMastra()?.stopWorkers(),
+        result.controller.stopHeartbeats(),
         closeSignalsPubSub?.(),
       ]);
     },

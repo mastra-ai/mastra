@@ -89,7 +89,6 @@ import {
   Workspace,
   Responses,
   Channels,
-  Harness,
   AgentController,
 } from './resources';
 import type {
@@ -259,39 +258,18 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing an array of agent controller identifiers
    */
   public async listAgentControllers(): Promise<{ id: string }[]> {
-    const body = await this.request<{ harnesses: { id: string }[] }>('/agent-controller');
-    return body.harnesses;
+    const body = await this.request<{ agentControllers: { id: string }[] }>('/agent-controller');
+    return body.agentControllers;
   }
 
   /**
    * Scopes to an agent controller hosted on the connected Mastra instance. Use
    * `getAgentController(id).session(resourceId)` to create/resume a session,
    * stream its events, and send messages.
-   * @param agentControllerId - The id the agent controller is registered under on Mastra
+   * @param controllerId - The id the agent controller is registered under on Mastra
    */
-  public getAgentController(agentControllerId: string) {
-    return new AgentController(this.options, agentControllerId);
-  }
-
-  /**
-   * Lists the harnesses hosted on the connected Mastra instance.
-   * @returns Promise containing an array of harness identifiers
-   * @deprecated Use {@link MastraClient.listAgentControllers} instead.
-   */
-  public async listHarnesses(): Promise<{ id: string }[]> {
-    const body = await this.request<{ harnesses: { id: string }[] }>('/harness');
-    return body.harnesses;
-  }
-
-  /**
-   * Scopes to a harness hosted on the connected Mastra instance. Use
-   * `getHarness(id).session(resourceId)` to create/resume a session, stream its
-   * events, and send messages.
-   * @param harnessId - The id the harness is registered under on Mastra
-   * @deprecated Use {@link MastraClient.getAgentController} instead.
-   */
-  public getHarness(harnessId: string) {
-    return new Harness(this.options, harnessId);
+  public getAgentController(controllerId: string) {
+    return new AgentController(this.options, controllerId);
   }
 
   /**

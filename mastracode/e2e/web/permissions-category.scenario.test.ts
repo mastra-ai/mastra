@@ -1,7 +1,7 @@
 import { describe, it } from 'vitest';
 
-import type { WebScenario } from './harness';
-import { runScenario } from './harness';
+import type { WebScenario } from './scenario-runner';
+import { runScenario } from './scenario-runner';
 
 /**
  * Exercises the exact path the Settings → Behavior → Tool permissions UI drives:
@@ -11,11 +11,11 @@ import { runScenario } from './harness';
  */
 const scenario: WebScenario = {
   name: 'permissions-category',
-  description: 'Sets per-category permission policies and reads them back through the harness routes.',
+  description: 'Sets per-category permission policies and reads them back through the controller routes.',
   aimockFixture: 'automated-chat.json',
   server: { yolo: false },
   run: async ({ driver }) => {
-    const session = driver.getClient().getHarness('code').session(`web-scenario-${scenario.name}`);
+    const session = driver.getClient().getAgentController('code').session(`web-scenario-${scenario.name}`);
 
     await session.setPermissionForCategory('execute', 'deny');
     await session.setPermissionForCategory('edit', 'ask');
@@ -30,7 +30,7 @@ const scenario: WebScenario = {
       }
     }
 
-    // The scenario harness requires at least one model turn; this also proves
+    // The scenario controller requires at least one model turn; this also proves
     // the category writes above don't disrupt a normal run.
     await driver.submit('Say the smoke phrase');
     await driver.waitForText('WEB scenario smoke response');

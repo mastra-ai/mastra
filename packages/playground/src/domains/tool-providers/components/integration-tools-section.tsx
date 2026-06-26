@@ -1,7 +1,7 @@
-import { stringToColor } from '@mastra/playground-ui';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Entity, EntityContent, EntityName, EntityDescription } from '@mastra/playground-ui/components/Entity';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
+import { stringToColor } from '@mastra/playground-ui/utils/colors';
 import { Plug } from 'lucide-react';
 import { useMemo, useState } from 'react';
 

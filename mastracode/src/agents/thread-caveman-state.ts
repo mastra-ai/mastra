@@ -1,4 +1,4 @@
-import type { HarnessThread, Session } from '@mastra/core/harness';
+import type { AgentControllerThread, Session } from '@mastra/core/agent-controller';
 
 interface ThreadStateSetting {
   key: string;
@@ -24,14 +24,14 @@ function getStateValue(session: Session<Record<string, unknown>>, setting: Threa
 async function findThread(
   session: Session<Record<string, unknown>>,
   threadId: string,
-): Promise<HarnessThread | undefined> {
+): Promise<AgentControllerThread | undefined> {
   const threads = await session.thread.list({ allResources: true });
   return threads.find(t => t.id === threadId);
 }
 
 /**
  * Restores MastraCode-owned per-thread OM settings for the given thread:
- * - If the thread already has a valid value in metadata, mirror it into harness state.
+ * - If the thread already has a valid value in metadata, mirror it into controller state.
  * - Otherwise, persist the current session.state value to the thread so future
  *   sessions see the user's last-selected setting.
  */
@@ -70,7 +70,7 @@ async function restoreSettingsForThread(session: Session<Record<string, unknown>
 }
 
 /**
- * Wires MastraCode-owned OM settings into harness thread events so they persist
+ * Wires MastraCode-owned OM settings into controller thread events so they persist
  * per-thread and new threads inherit the most recent value.
  *
  * This is intentionally implemented in mastracode rather than core: these

@@ -1,4 +1,4 @@
-import type { PlanResume, HarnessOMProgress } from '@mastra/client-js';
+import type { PlanResume, AgentControllerOMProgress } from '@mastra/client-js';
 import { memo, useEffect, useState } from 'react';
 
 import { highlightCode, languageForPath } from './highlight';
@@ -592,7 +592,7 @@ export function StatusLine({
   running: boolean;
   followUpCount?: number;
   omPhase?: OMPhase;
-  omProgress?: HarnessOMProgress;
+  omProgress?: AgentControllerOMProgress;
   goal?: GoalSnapshot;
   workspaceReady?: boolean;
   projectName?: string;

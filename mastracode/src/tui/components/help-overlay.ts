@@ -5,7 +5,7 @@
 import type { SlashCommandMetadata } from '../../utils/slash-command-loader.js';
 
 export interface HelpTextOptions {
-  /** Number of available harness modes (mode commands shown when > 1) */
+  /** Number of available controller modes (mode commands shown when > 1) */
   modes: number;
   /** User-defined custom slash commands */
   customSlashCommands: SlashCommandMetadata[];

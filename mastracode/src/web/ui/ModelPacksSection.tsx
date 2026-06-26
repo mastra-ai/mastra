@@ -1,4 +1,4 @@
-import type { HarnessAvailableModel } from '@mastra/client-js';
+import type { AgentControllerAvailableModel } from '@mastra/client-js';
 import { useState } from 'react';
 
 import {
@@ -24,7 +24,13 @@ const EMPTY_DRAFT: DraftPack = { name: '', build: '', plan: '', fast: '' };
  * access; custom packs are user-defined. Activating a pack seeds the current
  * session's per-mode models — so it needs the active project's resourceId.
  */
-export function ModelPacksSection({ resourceId, models }: { resourceId?: string; models: HarnessAvailableModel[] }) {
+export function ModelPacksSection({
+  resourceId,
+  models,
+}: {
+  resourceId?: string;
+  models: AgentControllerAvailableModel[];
+}) {
   const packsQuery = useModelPacksQuery(resourceId);
   const activateMutation = useActivateModelPack(resourceId);
   const removeMutation = useRemoveModelPack(resourceId);

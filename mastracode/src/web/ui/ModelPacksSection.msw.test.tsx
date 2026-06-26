@@ -1,4 +1,4 @@
-import type { HarnessAvailableModel } from '@mastra/client-js';
+import type { AgentControllerAvailableModel } from '@mastra/client-js';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -15,9 +15,9 @@ const itemUrl = (id: string) => `${PACKS_URL}/${encodeURIComponent(id)}`;
 
 const RESOURCE_ID = 'res-1';
 
-const models: HarnessAvailableModel[] = [
-  { id: 'openai/gpt-x', provider: 'openai' } as HarnessAvailableModel,
-  { id: 'anthropic/claude-x', provider: 'anthropic' } as HarnessAvailableModel,
+const models: AgentControllerAvailableModel[] = [
+  { id: 'openai/gpt-x', provider: 'openai' } as AgentControllerAvailableModel,
+  { id: 'anthropic/claude-x', provider: 'anthropic' } as AgentControllerAvailableModel,
 ];
 
 function packsResponse(packs: ModelPackInfo[], activePackId: string | null = null) {

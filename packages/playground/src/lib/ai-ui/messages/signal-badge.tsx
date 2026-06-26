@@ -1,4 +1,4 @@
-import type { TaskItem } from '@mastra/core/harness';
+import type { TaskItem } from '@mastra/core/signals';
 import { Bell, Database, Radio } from 'lucide-react';
 
 import { getNotificationMetadata, isRecord, isSignalData } from './signal-data';

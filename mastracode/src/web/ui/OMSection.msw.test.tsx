@@ -1,4 +1,4 @@
-import type { HarnessAvailableModel } from '@mastra/client-js';
+import type { AgentControllerAvailableModel } from '@mastra/client-js';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -12,9 +12,9 @@ import { OMSection } from './OMSection';
 const OM_URL = `${TEST_BASE_URL}/api/web/config/om`;
 const RESOURCE_ID = 'res-1';
 
-const models: HarnessAvailableModel[] = [
-  { id: 'openai/observer-x', provider: 'openai' } as HarnessAvailableModel,
-  { id: 'openai/reflector-x', provider: 'openai' } as HarnessAvailableModel,
+const models: AgentControllerAvailableModel[] = [
+  { id: 'openai/observer-x', provider: 'openai' } as AgentControllerAvailableModel,
+  { id: 'openai/reflector-x', provider: 'openai' } as AgentControllerAvailableModel,
 ];
 
 const baseConfig: OMConfigInfo = {

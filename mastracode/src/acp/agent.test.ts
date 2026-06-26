@@ -1,5 +1,10 @@
 import type { AgentSideConnection, ContentBlock, PromptResponse } from '@agentclientprotocol/sdk';
-import type { Harness, HarnessEvent, HarnessMode, Session } from '@mastra/core/harness';
+import type {
+  AgentController,
+  AgentControllerEvent,
+  AgentControllerMode,
+  Session,
+} from '@mastra/core/agent-controller';
 
 import { describe, it, expect, vi } from 'vitest';
 
@@ -93,7 +98,7 @@ describe('ACP Agent - StopReason Mapping', () => {
 
 describe('ACP Agent - Prompt concurrency', () => {
   it('serializes thread switching for concurrent prompts', async () => {
-    let eventListener: ((event: HarnessEvent) => void) | undefined;
+    let eventListener: ((event: AgentControllerEvent) => void) | undefined;
     const switchThread = vi.fn().mockResolvedValue(undefined);
     const sendMessage = vi.fn().mockResolvedValue(undefined);
     const session = {
@@ -109,14 +114,14 @@ describe('ACP Agent - Prompt concurrency', () => {
       model: { get: vi.fn(() => 'test-model') },
       sendMessage,
     } as unknown as Session;
-    const harness = {
+    const controller = {
       listAvailableModels: vi.fn().mockResolvedValue([]),
-    } as unknown as Harness;
+    } as unknown as AgentController;
     const connection = {
       sessionUpdate: vi.fn().mockResolvedValue(undefined),
     } as unknown as AgentSideConnection;
 
-    const agent = new MastraCodeAcpAgent(connection, harness, session, [] satisfies HarnessMode[]);
+    const agent = new MastraCodeAcpAgent(connection, controller, session, [] satisfies AgentControllerMode[]);
     const { sessionId: firstSessionId } = await agent.newSession({ cwd: '/tmp', mcpServers: [] });
     const { sessionId: secondSessionId } = await agent.newSession({ cwd: '/tmp', mcpServers: [] });
     switchThread.mockClear();
@@ -136,14 +141,14 @@ describe('ACP Agent - Prompt concurrency', () => {
     expect(switchThread).toHaveBeenCalledTimes(1);
     expect(switchThread).toHaveBeenNthCalledWith(1, { threadId: 'thread-1' });
 
-    eventListener?.({ type: 'agent_end', reason: 'complete' } as HarnessEvent);
+    eventListener?.({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
     await expect(firstPrompt).resolves.toMatchObject({ stopReason: 'end_turn' });
 
     await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(2));
     expect(switchThread).toHaveBeenCalledTimes(2);
     expect(switchThread).toHaveBeenNthCalledWith(2, { threadId: 'thread-2' });
 
-    eventListener?.({ type: 'agent_end', reason: 'complete' } as HarnessEvent);
+    eventListener?.({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
     await expect(secondPrompt).resolves.toMatchObject({ stopReason: 'end_turn' } satisfies Partial<PromptResponse>);
   });
 });

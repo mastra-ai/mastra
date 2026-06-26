@@ -1,4 +1,4 @@
-import type { HarnessAvailableModel } from '@mastra/client-js';
+import type { AgentControllerAvailableModel } from '@mastra/client-js';
 import { useState } from 'react';
 
 import type { OMConfigInfo } from '../../shared/api/types';
@@ -31,7 +31,7 @@ function choiceToAttachment(choice: AttachmentChoice): 'auto' | boolean {
  * observed. Everything is session-scoped (resolved from and written to the
  * active project's session), so it needs the project's resourceId.
  */
-export function OMSection({ resourceId, models }: { resourceId?: string; models: HarnessAvailableModel[] }) {
+export function OMSection({ resourceId, models }: { resourceId?: string; models: AgentControllerAvailableModel[] }) {
   const omQuery = useOMQuery(resourceId);
   const observerMutation = useUpdateOMModel(resourceId, 'observer');
   const reflectorMutation = useUpdateOMModel(resourceId, 'reflector');

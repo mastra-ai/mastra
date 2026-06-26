@@ -1988,15 +1988,19 @@ ${formattedMessages}
       writer,
       requestContext,
       observabilityContext,
-    ).finally(() => {
-      // Clean up the operation tracking
-      BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
-      // Clear persistent flag
-      unregisterOp(record.id, 'bufferingObservation');
-      this.storage.setBufferingObservationFlag(record.id, false).catch(err => {
-        omError('[OM] Failed to clear buffering observation flag', err);
+    )
+      .catch(err => {
+        omError('[OM] async buffering observation failed', err);
+      })
+      .finally(() => {
+        // Clean up the operation tracking
+        BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
+        // Clear persistent flag
+        unregisterOp(record.id, 'bufferingObservation');
+        this.storage.setBufferingObservationFlag(record.id, false).catch(err => {
+          omError('[OM] Failed to clear buffering observation flag', err);
+        });
       });
-    });
 
     BufferingCoordinator.asyncBufferingOps.set(bufferKey, asyncOp);
   }
@@ -2081,11 +2085,16 @@ ${formattedMessages}
     // 2. When MessageList creates new messages for streaming content after the seal,
     //    those new messages have their own IDs and don't overwrite the sealed messages
     // 3. The sealed messages remain intact with their content at the time of buffering
-    await this.messageHistory.persistMessages({
-      messages: messagesToBuffer,
-      threadId,
-      resourceId: freshRecord.resourceId ?? undefined,
-    });
+    try {
+      await this.messageHistory.persistMessages({
+        messages: messagesToBuffer,
+        threadId,
+        resourceId: freshRecord.resourceId ?? undefined,
+      });
+    } catch (err) {
+      omError('[OM] Failed to persist sealed messages before buffering — skipping observation cycle', err);
+      return;
+    }
 
     // Generate cycle ID and capture start time
     const cycleId = `buffer-obs-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
