@@ -12,9 +12,11 @@ import { probeMastraServer } from './local-dev';
 import { LogBuffer } from './log-buffer';
 import { resolveAppIconPath, resolveStarterOutputPath, resolveStudioDistPath } from './paths';
 import {
+  buildHostedStudioLoginUrl,
   buildPlatformCliLoginUrl,
   fetchPlatformProjects,
   hostedStudioOrigin,
+  isHostedStudioAuthNavigation,
   normalizePlatformBaseUrl,
   refreshPlatformAccessToken,
   shouldAttachPlatformAuthorization,
@@ -115,6 +117,31 @@ function studioViewBounds() {
   };
 }
 
+function tabForWebContents(webContentsId: number) {
+  const tabId = studioWebContentsTabs.get(webContentsId);
+  return tabId ? tabs.find(tab => tab.id === tabId) : undefined;
+}
+
+function externalNavigationUrl(tab: DesktopTab | undefined, requestUrl: string) {
+  if (!requestUrl.startsWith('http://') && !requestUrl.startsWith('https://')) {
+    return requestUrl;
+  }
+
+  if (tab?.kind !== 'platform' || !tab.sourceUrl) return undefined;
+
+  if (isHostedStudioAuthNavigation(requestUrl, tab.sourceUrl)) {
+    return buildHostedStudioLoginUrl(currentSettings.platformBaseUrl, tab.sourceUrl);
+  }
+
+  try {
+    const requestOrigin = new URL(requestUrl).origin;
+    const studioOrigin = hostedStudioOrigin(tab.sourceUrl);
+    return requestOrigin === studioOrigin ? undefined : requestUrl;
+  } catch {
+    return requestUrl;
+  }
+}
+
 function createStudioContentView() {
   const view = new WebContentsView({
     webPreferences: {
@@ -132,8 +159,8 @@ function createStudioContentView() {
     return { action: 'deny' };
   });
   view.webContents.on('will-navigate', event => {
-    const url = event.url;
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    const url = externalNavigationUrl(tabForWebContents(view.webContents.id), event.url);
+    if (url) {
       event.preventDefault();
       void shell.openExternal(url);
     }
@@ -472,6 +499,9 @@ async function createPlatformTab(projectId: string) {
   }
 
   const studioUrl = normalizeServerUrl(project.instanceUrl);
+  const loginUrl = buildHostedStudioLoginUrl(currentSettings.platformBaseUrl, studioUrl);
+  await shell.openExternal(loginUrl);
+  logs.add(`Opened hosted Studio sign-in in the browser for ${studioUrl}`);
   platformStudioOrigins.add(hostedStudioOrigin(studioUrl));
   upsertTab({
     id: randomUUID(),

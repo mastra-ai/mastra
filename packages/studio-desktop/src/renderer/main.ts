@@ -38,6 +38,14 @@ function escapeHtml(value: string | undefined) {
     .replaceAll('"', '&quot;');
 }
 
+function renderMastraMark() {
+  return `
+    <svg viewBox="0 0 34 21" role="img" aria-label="Mastra">
+      <path d="M4.49805 11.6934C6.98237 11.6934 8.99609 13.7081 8.99609 16.1924C8.9959 18.6765 6.98225 20.6904 4.49805 20.6904C2.01394 20.6903 0.000196352 18.6765 0 16.1924C0 13.7081 2.01382 11.6935 4.49805 11.6934ZM10.3867 0C12.8709 0 14.8846 2.01388 14.8848 4.49805C14.8848 4.8377 14.847 5.16846 14.7755 5.48643C14.4618 6.88139 14.1953 8.4633 14.9928 9.65L16.2575 11.5319C16.3363 11.6491 16.4727 11.7115 16.6137 11.703C16.7369 11.6957 16.8525 11.6343 16.9214 11.5318L18.1876 9.64717C18.9772 8.47198 18.7236 6.90783 18.4205 5.52484C18.3523 5.21392 18.3164 4.89094 18.3164 4.55957C18.3167 2.07546 20.3313 0.0615234 22.8154 0.0615234C25.2994 0.0617476 27.3132 2.0756 27.3135 4.55957C27.3135 4.93883 27.2665 5.30712 27.178 5.65896C26.8547 6.94441 26.5817 8.37932 27.2446 9.52714L28.459 11.6301C28.4819 11.6697 28.5245 11.6934 28.5703 11.6934C31.0545 11.6935 33.0684 13.7081 33.0684 16.1924C33.0682 18.6765 31.0544 20.6903 28.5703 20.6904C26.0861 20.6904 24.0725 18.6765 24.0723 16.1924C24.0723 15.8049 24.1212 15.4288 24.2133 15.0701C24.5458 13.7746 24.8298 12.3251 24.1609 11.1668L23.0044 9.16384C22.9656 9.09659 22.8931 9.05859 22.8154 9.05859C22.7983 9.05859 22.7824 9.06614 22.7728 9.08033L21.4896 10.9895C20.686 12.1851 20.9622 13.781 21.284 15.1851C21.3582 15.5089 21.3975 15.8461 21.3975 16.1924C21.3973 18.6764 19.3834 20.6902 16.8994 20.6904C14.4152 20.6904 12.4006 18.6765 12.4004 16.1924C12.4004 15.932 12.4226 15.6768 12.4651 15.4286C12.6859 14.14 12.8459 12.7122 12.1167 11.6271L11.2419 10.3253C10.6829 9.49347 9.71913 9.05932 8.78286 8.70188C7.0906 8.05584 5.88867 6.41734 5.88867 4.49805C5.88886 2.0139 7.90254 3.29835e-05 10.3867 0Z" />
+    </svg>
+  `;
+}
+
 function providerForModelUrl(modelUrl: string): LocalModelProviderId {
   const normalized = modelUrl.replace(/\/$/, '');
   if (normalized === LOCAL_MODEL_PRESETS.ollama.modelUrl) return 'ollama';
@@ -190,19 +198,12 @@ function renderPlatformRows(current: DesktopState) {
     })
     .join('');
 
-  return `
-    <div class="section-heading">
-      <span>Platform Studios</span>
-      <button type="button" data-action="platform-refresh">${busyAction === 'platform-refresh' ? 'Refreshing...' : 'Refresh'}</button>
-      <button type="button" data-action="platform-logout">Sign out</button>
-    </div>
-    ${
-      rows ||
-      `<div class="empty-row">
-        <span>No hosted Studio is available for this organization.</span>
-      </div>`
-    }
-  `;
+  return (
+    rows ||
+    `<div class="empty-row">
+      <span>No hosted Studio is available for this organization.</span>
+    </div>`
+  );
 }
 
 function renderDetectedModels() {
@@ -280,6 +281,39 @@ function renderLocalSetup(current: DesktopState) {
   `;
 }
 
+function renderLocalRows(current: DesktopState) {
+  return `
+    <button class="launcher-row hero-row" type="button" data-action="open-template">
+      <span class="row-icon">T</span>
+      <span class="row-main">
+        <span class="row-title">Bundled Template</span>
+        <span class="row-subtitle">Local starter runtime with the default desktop assistant</span>
+      </span>
+      <span class="row-action">Open</span>
+    </button>
+
+    ${renderLocalSetup(current)}
+
+    <button class="launcher-row" type="button" data-action="open-default-local">
+      <span class="row-icon">L</span>
+      <span class="row-main">
+        <span class="row-title">Localhost :4111</span>
+        <span class="row-subtitle">Connect to a running mastra dev server</span>
+      </span>
+      <span class="row-action">Probe</span>
+    </button>
+
+    <div class="manual-row">
+      <span class="row-icon">L</span>
+      <label class="manual-field">
+        <span>Connect local server</span>
+        <input id="manual-server-url" value="${escapeHtml(manualServerUrl)}" placeholder="4111 or http://127.0.0.1:4111" />
+      </label>
+      <button type="button" data-action="open-manual-local">${busyAction === 'open-manual-local' ? 'Opening...' : 'Open'}</button>
+    </div>
+  `;
+}
+
 function renderLauncher() {
   const current = state;
   const active = activeTab();
@@ -317,40 +351,48 @@ function renderLauncher() {
         : '';
 
   launcher.innerHTML = `
-    <div class="launcher-panel">
-      <div class="launcher-list">
-        <button class="launcher-row" type="button" data-action="open-template">
-          <span class="row-icon">T</span>
-          <span class="row-main">
-            <span class="row-title">Bundled Template</span>
-            <span class="row-subtitle">Local starter runtime with the default desktop assistant</span>
-          </span>
-          <span class="row-action">Open</span>
-        </button>
-
-        ${renderLocalSetup(current)}
-
-        <button class="launcher-row" type="button" data-action="open-default-local">
-          <span class="row-icon">L</span>
-          <span class="row-main">
-            <span class="row-title">Localhost :4111</span>
-            <span class="row-subtitle">Connect to a running mastra dev server</span>
-          </span>
-          <span class="row-action">Probe</span>
-        </button>
-
-        <div class="manual-row">
-          <span class="row-icon">L</span>
-          <label class="manual-field">
-            <span>Connect local server</span>
-            <input id="manual-server-url" value="${escapeHtml(manualServerUrl)}" placeholder="4111 or http://127.0.0.1:4111" />
-          </label>
-          <button type="button" data-action="open-manual-local">${busyAction === 'open-manual-local' ? 'Opening...' : 'Open'}</button>
+    <div class="launcher-shell">
+      <div class="launcher-hero">
+        <div class="brand-lockup">
+          <span class="brand-mark">${renderMastraMark()}</span>
+          <span>Mastra Studio</span>
         </div>
+        <p>Choose a local runtime or open a hosted Studio.</p>
+      </div>
 
-        ${platformStatus}
-        ${lastError ? `<div class="error-banner">${escapeHtml(lastError)}</div>` : ''}
-        ${renderPlatformRows(current)}
+      <div class="launcher-columns">
+        <section class="source-panel local-source" aria-label="Local Studio">
+          <div class="source-header">
+            <span class="source-kicker">Local</span>
+            <h2>Studio on this Mac</h2>
+            <p>Bundled template, local models, or a running Mastra dev server.</p>
+          </div>
+          <div class="source-list">
+            ${renderLocalRows(current)}
+          </div>
+        </section>
+
+        <section class="source-panel platform-source" aria-label="Platform Studios">
+          <div class="source-header">
+            <span class="source-kicker">Platform</span>
+            <h2>Hosted Studios</h2>
+            <p>Studios attached to your Mastra Platform account.</p>
+          </div>
+          <div class="source-list">
+            <div class="section-heading platform-heading">
+              <span>${current.platform.signedIn ? 'Platform Studios' : 'Mastra Platform'}</span>
+              ${
+                current.platform.signedIn
+                  ? `<button type="button" data-action="platform-refresh">${busyAction === 'platform-refresh' ? 'Refreshing...' : 'Refresh'}</button>
+                     <button type="button" data-action="platform-logout">Sign out</button>`
+                  : ''
+              }
+            </div>
+            ${platformStatus}
+            ${lastError ? `<div class="error-banner">${escapeHtml(lastError)}</div>` : ''}
+            ${renderPlatformRows(current)}
+          </div>
+        </section>
       </div>
     </div>
   `;

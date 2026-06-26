@@ -44,6 +44,17 @@ export function hostedStudioOrigin(instanceUrl: string) {
   return new URL(normalizeServerUrl(instanceUrl)).origin;
 }
 
+export function isHostedStudioAuthNavigation(requestUrl: string, instanceUrl: string) {
+  try {
+    const url = new URL(requestUrl);
+    if (url.origin !== hostedStudioOrigin(instanceUrl)) return false;
+
+    return /(^|\/)(auth|login|sign-in|signin)(\/|$)|\/api\/auth\//i.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
 export function shouldAttachPlatformAuthorization(requestUrl: string, allowedOrigins: ReadonlySet<string>) {
   try {
     const url = new URL(requestUrl);
