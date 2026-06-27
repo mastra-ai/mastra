@@ -76,9 +76,19 @@ export function ChatProvider({
     return ctx;
   }, [agentVersionId, requestContext]);
 
+  const chat = useChat({
+    agentId,
+    threadId,
+    initialMessages,
+    requestContext: chatRequestContext,
+    enableThreadSignals: threadSignalsEnabled,
+    onThreadSignalsUnsupported: () => {
+      threadSignalsUnsupportedRef.current = true;
+      setThreadSignalsUnsupported(true);
+    },
+  });
   const {
     messages,
-    tasks,
     sendMessage,
     cancelRun,
     isRunning: isRunningStream,
@@ -92,17 +102,8 @@ export function ChatProvider({
     approveNetworkToolCall,
     declineNetworkToolCall,
     networkToolCallApprovals,
-  } = useChat({
-    agentId,
-    threadId,
-    initialMessages,
-    requestContext: chatRequestContext,
-    enableThreadSignals: threadSignalsEnabled,
-    onThreadSignalsUnsupported: () => {
-      threadSignalsUnsupportedRef.current = true;
-      setThreadSignalsUnsupported(true);
-    },
-  });
+  } = chat;
+  const tasks = 'tasks' in chat && Array.isArray(chat.tasks) ? chat.tasks : undefined;
 
   const { refetch: refreshWorkingMemory } = useWorkingMemory();
   const queryClient = useQueryClient();

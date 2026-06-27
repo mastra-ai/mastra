@@ -37,7 +37,7 @@ export interface SendContextValue {
 }
 
 export interface TasksContextValue {
-  tasks: TaskItem[];
+  tasks?: TaskItem[];
 }
 
 // NOTE: Tool/network approvals are NOT exposed here. The badge approval buttons
@@ -55,7 +55,12 @@ export const ChatRunningContext = createContext<RunningContextValue>({
 export const ChatSendContext = createContext<SendContextValue>({ send: () => {} });
 export const ChatTasksContext = createContext<TasksContextValue>({ tasks: [] });
 
+const EMPTY_TASKS: TaskItem[] = [];
+
 export const useChatMessages = (): MastraDBMessage[] => useContext(ChatMessagesContext).messages;
 export const useChatRunning = (): RunningContextValue => useContext(ChatRunningContext);
 export const useChatSend = (): SendContextValue['send'] => useContext(ChatSendContext).send;
-export const useChatTasks = (): TaskItem[] => useContext(ChatTasksContext).tasks;
+export const useChatTasks = (): TaskItem[] => {
+  const tasks = useContext(ChatTasksContext).tasks;
+  return Array.isArray(tasks) ? tasks : EMPTY_TASKS;
+};

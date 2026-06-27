@@ -8,7 +8,9 @@ import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { ChatTasksContext } from '../chat/chat-context';
 import { ChatProvider } from '../chat/chat-provider';
+import { TaskPanel } from '../task-panel';
 import { Thread } from '../thread';
 import { memoryDisabled, memoryEnabled, v2Agent } from './fixtures/agent';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
@@ -474,6 +476,16 @@ describe('TaskPanel', () => {
 
     return { pushTasks, close };
   };
+
+  it('hides when the runtime has not provided task state yet', () => {
+    render(
+      <ChatTasksContext.Provider value={{}}>
+        <TaskPanel />
+      </ChatTasksContext.Provider>,
+    );
+
+    expect(screen.queryByTestId('task-panel')).toBeFalsy();
+  });
 
   it('renders task items when a data-signal task snapshot streams in', async () => {
     const { pushTasks, close } = await renderWithControlledSubscription();
