@@ -39,6 +39,11 @@ test.describe('Agent Builder deterministic flow', () => {
   }
 
   test('builds a complex freeform prompt with deterministic tool calls', async ({ page }) => {
+    /**
+     * USER STORY: A Studio user describes an agent in plain language and expects the builder to save a real
+     * stored-agent draft from deterministic client tool calls.
+     * BEHAVIOR UNDER TEST: Builder tool calls create persisted editor-backed agent config, not just transient UI state.
+     */
     await selectFixture(page, 'agent-builder-complex');
     await page.goto('/agent-builder/agents/create');
 

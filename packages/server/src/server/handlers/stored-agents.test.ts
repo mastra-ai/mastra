@@ -77,6 +77,11 @@ interface MockAgentsStore {
   useProviderRef: ReturnType<typeof vi.fn>;
 }
 
+interface MockFavoritesStore {
+  listFavoritedIds: ReturnType<typeof vi.fn>;
+  isFavoritedBatch: ReturnType<typeof vi.fn>;
+}
+
 function createMockAgentsStore(agentsData: Map<string, MockStoredAgent> = new Map()): MockAgentsStore {
   return {
     create: vi.fn().mockImplementation(async ({ agent }: { agent: MockStoredAgent }) => {
@@ -98,13 +103,20 @@ function createMockAgentsStore(agentsData: Map<string, MockStoredAgent> = new Ma
         perPage = 20,
         authorId,
         metadata,
+        entityIds,
       }: {
         page?: number;
         perPage?: number | false;
         authorId?: string;
         metadata?: Record<string, unknown>;
+        entityIds?: string[];
       } = {}) => {
         let agents = Array.from(agentsData.values());
+
+        // Filter by explicit entity IDs if provided
+        if (entityIds) {
+          agents = agents.filter(a => entityIds.includes(a.id));
+        }
 
         // Filter by authorId if provided
         if (authorId) {
@@ -213,11 +225,21 @@ interface MockStorage {
   getStore: ReturnType<typeof vi.fn>;
 }
 
-function createMockStorage(agentsStore?: MockAgentsStore): MockStorage {
+function createMockFavoritesStore(favoritedIds: string[] = []): MockFavoritesStore {
+  return {
+    listFavoritedIds: vi.fn().mockResolvedValue(favoritedIds),
+    isFavoritedBatch: vi.fn().mockResolvedValue(new Set(favoritedIds)),
+  };
+}
+
+function createMockStorage(agentsStore?: MockAgentsStore, favoritesStore?: MockFavoritesStore): MockStorage {
   return {
     getStore: vi.fn().mockImplementation(async (storeName: string) => {
       if (storeName === 'agents' && agentsStore) {
         return agentsStore;
+      }
+      if (storeName === 'favorites' && favoritesStore) {
+        return favoritesStore;
       }
       return null;
     }),
@@ -233,6 +255,8 @@ interface MockEditor {
     preview: ReturnType<typeof vi.fn>;
   };
   getSourceControlProvider?: ReturnType<typeof vi.fn>;
+  hasEnabledBuilderConfig?: ReturnType<typeof vi.fn>;
+  resolveBuilder?: ReturnType<typeof vi.fn>;
 }
 
 function createMockEditor(agentsStore?: MockAgentsStore, sourceControlProvider?: unknown): MockEditor {
@@ -486,6 +510,89 @@ describe('Stored Agents Handlers', () => {
 
       expect(result.agents).toHaveLength(1);
       expect(result.agents[0].id).toBe('agent1');
+    });
+
+    it('should return only favorited agents and annotate them when favorites are enabled', async () => {
+      mockAgentsData.set('agent1', {
+        id: 'agent1',
+        name: 'Agent 1',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'user1',
+      });
+      mockAgentsData.set('agent2', {
+        id: 'agent2',
+        name: 'Agent 2',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'user1',
+      });
+      mockAgentsData.set('agent3', {
+        id: 'agent3',
+        name: 'Agent 3',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'user1',
+      });
+
+      const favoritesStore = createMockFavoritesStore(['agent2', 'agent3']);
+      mockStorage = createMockStorage(mockAgentsStore, favoritesStore);
+      mockEditor.hasEnabledBuilderConfig = vi.fn().mockReturnValue(true);
+      mockEditor.resolveBuilder = vi.fn().mockResolvedValue({
+        enabled: true,
+        getFeatures: () => ({ agent: { favorites: true } }),
+      });
+      mockMastra = createMockMastra({ storage: mockStorage, editor: mockEditor });
+
+      const result = await LIST_STORED_AGENTS_ROUTE.handler({
+        ...createAuthenticatedContext(mockMastra, 'user1'),
+        page: 0,
+        perPage: 10,
+        favoritedOnly: true,
+      });
+
+      expect(favoritesStore.listFavoritedIds).toHaveBeenCalledWith({ userId: 'user1', entityType: 'agent' });
+      expect(mockAgentsStore.listResolved).toHaveBeenCalledWith(
+        expect.objectContaining({ perPage: false, entityIds: ['agent2', 'agent3'] }),
+      );
+      expect(result).toMatchObject({ total: 2, page: 0, perPage: 10, hasMore: false });
+      expect(result.agents.map(agent => ({ id: agent.id, isFavorited: agent.isFavorited }))).toEqual([
+        { id: 'agent2', isFavorited: true },
+        { id: 'agent3', isFavorited: true },
+      ]);
+    });
+
+    it('should use pinFavoritedFor as the favorites subject when listing pinned favorites', async () => {
+      mockAgentsData.set('pinned-agent', {
+        id: 'pinned-agent',
+        name: 'Pinned Agent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'viewer',
+      });
+      mockAgentsData.set('viewer-agent', {
+        id: 'viewer-agent',
+        name: 'Viewer Agent',
+        model: { name: 'gpt-4', provider: 'openai' },
+        authorId: 'viewer',
+      });
+
+      const favoritesStore = createMockFavoritesStore(['pinned-agent']);
+      mockStorage = createMockStorage(mockAgentsStore, favoritesStore);
+      mockEditor.hasEnabledBuilderConfig = vi.fn().mockReturnValue(true);
+      mockEditor.resolveBuilder = vi.fn().mockResolvedValue({
+        enabled: true,
+        getFeatures: () => ({ agent: { favorites: true } }),
+      });
+      mockMastra = createMockMastra({ storage: mockStorage, editor: mockEditor });
+
+      const result = await LIST_STORED_AGENTS_ROUTE.handler({
+        ...createAuthenticatedContext(mockMastra, 'viewer'),
+        page: 0,
+        perPage: 10,
+        favoritedOnly: true,
+        pinFavoritedFor: 'admin',
+      });
+
+      expect(favoritesStore.listFavoritedIds).toHaveBeenCalledWith({ userId: 'admin', entityType: 'agent' });
+      expect(result.agents.map(agent => agent.id)).toEqual(['pinned-agent']);
+      expect(result.agents[0].isFavorited).toBe(true);
     });
 
     it('should throw error when storage is not configured', async () => {

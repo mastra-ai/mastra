@@ -59,15 +59,21 @@ function createMockSkillsStore(skillsData: Map<string, MockStoredSkill> = new Ma
         page = 1,
         perPage = 20,
         authorId,
+        metadata,
       }: {
         page?: number;
         perPage?: number;
         authorId?: string;
+        metadata?: Record<string, unknown>;
       } = {}) => {
         let skills = Array.from(skillsData.values());
 
         if (authorId) {
           skills = skills.filter(s => s.authorId === authorId);
+        }
+
+        if (metadata) {
+          skills = skills.filter(s => Object.entries(metadata).every(([key, value]) => s.metadata?.[key] === value));
         }
 
         const start = (page - 1) * perPage;
@@ -121,12 +127,14 @@ function createMockStorage(skillsStore?: MockSkillsStore): MockStorage {
 interface MockMastra {
   getStorage: ReturnType<typeof vi.fn>;
   getEditor: ReturnType<typeof vi.fn>;
+  getServer: ReturnType<typeof vi.fn>;
 }
 
-function createMockMastra(options: { storage?: MockStorage } = {}): MockMastra {
+function createMockMastra(options: { storage?: MockStorage; server?: Record<string, unknown> } = {}): MockMastra {
   return {
     getStorage: vi.fn().mockReturnValue(options.storage),
     getEditor: vi.fn().mockReturnValue(undefined),
+    getServer: vi.fn().mockReturnValue(options.server),
   };
 }
 
@@ -277,6 +285,39 @@ describe('Stored Skills Handlers', () => {
       expect(ids).toContain('other-private');
     });
 
+    it('should scope stored skill lists by request resource metadata when configured', async () => {
+      mockSkillsData.set('team-a-skill', {
+        id: 'team-a-skill',
+        name: 'Team A Skill',
+        instructions: 'team a',
+        visibility: 'public',
+        metadata: { 'mastra.resourceId': 'team-a' },
+      });
+      mockSkillsData.set('team-b-skill', {
+        id: 'team-b-skill',
+        name: 'Team B Skill',
+        instructions: 'team b',
+        visibility: 'public',
+        metadata: { 'mastra.resourceId': 'team-b' },
+      });
+
+      const scopedMastra = createMockMastra({ storage: mockStorage, server: { storedResources: { scope: true } } });
+      const context = createTestContext(scopedMastra);
+      context.requestContext.set(MASTRA_RESOURCE_ID_KEY, 'team-a');
+
+      const result = await LIST_STORED_SKILLS_ROUTE.handler({
+        ...context,
+        page: 1,
+      });
+
+      expect(result.skills.map((skill: MockStoredSkill) => skill.id)).toEqual(['team-a-skill']);
+      expect(mockSkillsStore.listResolved).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: { 'mastra.resourceId': 'team-a' },
+        }),
+      );
+    });
+
     it('should throw error when storage is not configured', async () => {
       const mastraNoStorage = createMockMastra({});
 
@@ -387,6 +428,27 @@ describe('Stored Skills Handlers', () => {
       });
 
       expect(result).toMatchObject({ id: 'unowned-skill' });
+    });
+
+    it('should hide skills outside the configured stored resource scope', async () => {
+      mockSkillsData.set('team-b-skill', {
+        id: 'team-b-skill',
+        name: 'Team B Skill',
+        instructions: 'team b',
+        visibility: 'public',
+        metadata: { 'mastra.resourceId': 'team-b' },
+      });
+
+      const scopedMastra = createMockMastra({ storage: mockStorage, server: { storedResources: { scope: true } } });
+      const context = createTestContext(scopedMastra);
+      context.requestContext.set(MASTRA_RESOURCE_ID_KEY, 'team-a');
+
+      await expect(
+        GET_STORED_SKILL_ROUTE.handler({
+          ...context,
+          storedSkillId: 'team-b-skill',
+        }),
+      ).rejects.toThrow(HTTPException);
     });
   });
 
