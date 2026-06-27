@@ -245,12 +245,10 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
                   { type: 'tool-call', name: chunk.payload.toolName, message: chunk.payload.toolName },
                   chunk.payload.args,
                 );
-              } else if (chunk.type === 'tool-result') {
-                emitJudgeActivity(
-                  { type: 'tool-result', name: chunk.payload.toolName, message: chunk.payload.toolName },
-                  chunk.payload.args,
-                );
               }
+              // tool-result is intentionally skipped — the tool-call already
+              // communicates what the judge is doing; the result would only
+              // produce a duplicate activity line in the TUI.
             }
           })();
         };
