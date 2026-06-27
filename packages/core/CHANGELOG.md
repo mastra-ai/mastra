@@ -1,5 +1,19 @@
 # @mastra/core
 
+## 1.48.0-alpha.0
+
+### Minor Changes
+
+- Added optional `maxSteps` to `ScorerJudgeConfig` and `GoalConfig`, letting callers control the internal judge agent's agentic-loop iteration limit instead of relying on the implicit default of 5. Also fixed judge agent not receiving Mastra registration, which caused the observer's API key resolution to fail silently. ([#18544](https://github.com/mastra-ai/mastra/pull/18544))
+
+- Added optional `maxSteps` to `ScorerJudgeConfig`, letting callers control the internal judge agent's agentic-loop iteration limit instead of relying on the implicit default of 5. ([#18544](https://github.com/mastra-ai/mastra/pull/18544))
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`b9a2961`](https://github.com/mastra-ai/mastra/commit/b9a2961c1be81e3639c0879e58588c26dd0ae866))
+
+- Fixed find_files and grep tools to always exclude .git directory contents — the .git directory is now skipped at the traversal boundary in both tools since its internals are never useful and waste tokens. Also fixed pipe-separated exclude patterns in find_files (e.g. ".git|node_modules") to work correctly, matching tree's -I flag behavior. ([#18548](https://github.com/mastra-ai/mastra/pull/18548))
+
 ## 1.47.0
 
 ### Minor Changes

@@ -1,15 +1,15 @@
 ---
-title: "Modes | Harness"
-description: "Configure and switch between agent modes to give a single Harness multiple personalities or capability sets."
+title: "Modes | AgentController"
+description: "Configure and switch between agent modes to give a single AgentController multiple personalities or capability sets."
 packages:
   - "@mastra/core"
 ---
 
 # Modes
 
-Modes define the different behaviors a Harness can run. Each mode layers its own instructions and tool overrides on top of a shared backing agent, so the same agent can act as a planner in one mode and an executor in another. The Harness keeps exactly one mode active at a time, carries the thread and state across switches, and handles the transition between them.
+Modes define the different behaviors an AgentController can run. Each mode layers its own instructions and tool overrides on top of a shared backing agent, so the same agent can act as a planner in one mode and an executor in another. The AgentController keeps exactly one mode active at a time, carries the thread and state across switches, and handles the transition between them.
 
-Every Harness needs at least one mode — the `modes` array is required, and the Harness throws at construction if it's empty. A single-purpose Harness still defines one mode; multiple modes are how you give a session more than one behavior to switch between.
+Every AgentController needs at least one mode — the `modes` array is required, and the AgentController throws at construction if it's empty. A single-purpose AgentController still defines one mode; multiple modes are how you give a session more than one behavior to switch between.
 
 A mode supplies three things that change how the agent behaves:
 
@@ -21,13 +21,13 @@ Because every mode shares the same backing agent, thread, and state, switching m
 
 ## Quickstart
 
-Import the `Harness` class and create a new instance with your agent and modes:
+Import the `AgentController` class and create a new instance with your agent and modes:
 
-```typescript title="src/mastra/harness.ts"
-import { Harness } from '@mastra/core/harness'
+```typescript title="src/mastra/agent-controller.ts"
+import { AgentController } from '@mastra/core/agent-controller'
 import { myAgent } from './agents'
 
-const harness = new Harness({
+const agentController = new AgentController({
   id: 'multi-mode',
   agent: myAgent,
   // highlight-start
@@ -43,17 +43,17 @@ const harness = new Harness({
   // highlight-end
 })
 
-await harness.init()
+await agentController.init()
 ```
 
 ## Defining modes
 
 Each mode requires an `id`. When a top-level `agent` is provided, modes layer instructions and tool overrides on the shared agent. Each mode can also specify a `defaultModelId` to bootstrap model selection:
 
-```typescript title="src/mastra/harness.ts"
-import { Harness } from '@mastra/core/harness'
+```typescript title="src/mastra/agent-controller.ts"
+import { AgentController } from '@mastra/core/agent-controller'
 
-const harness = new Harness({
+const agentController = new AgentController({
   id: 'multi-mode',
   agent: myAgent,
   modes: [
@@ -92,7 +92,7 @@ You can't set both `tools` and `additionalTools` on the same mode.
 
 `tools` and `additionalTools` control which tools are **added** to a mode's run — they don't hide the backing agent's own tools. To restrict which of those tools the model can actually see and call, set `availableTools`:
 
-```typescript title="src/mastra/harness.ts"
+```typescript title="src/mastra/agent-controller.ts"
 const reviewMode = {
   id: 'review',
   name: 'Review',
@@ -111,7 +111,7 @@ Workspace tools use the same list as every other tool — reference them by thei
 
 ### Mode transitions
 
-A mode can declare a `transitionsTo` target. When the `submit_plan` built-in tool runs in that mode, the Harness transitions to the target mode on approval:
+A mode can declare a `transitionsTo` target. When the `submit_plan` built-in tool runs in that mode, the AgentController transitions to the target mode on approval:
 
 ```typescript
 const planMode = {
@@ -122,33 +122,33 @@ const planMode = {
 }
 ```
 
-On plan approval, the Harness automatically switches to `build` mode. On rejection, the agent remains in `plan` mode to revise.
+On plan approval, the AgentController automatically switches to `build` mode. On rejection, the agent remains in `plan` mode to revise.
 
 ## Switching modes
 
-The active mode lives on the Session, so call `harness.session.mode.switch()` to change it. The switch aborts any in-progress generation, saves the current model to the outgoing mode, and emits a `mode_changed` event. It then resolves the incoming mode's model and, when one resolves, applies it and emits a `model_changed` event:
+The active mode lives on the Session, so call `agentController.session.mode.switch()` to change it. The switch aborts any in-progress generation, saves the current model to the outgoing mode, and emits a `mode_changed` event. It then resolves the incoming mode's model and, when one resolves, applies it and emits a `model_changed` event:
 
 ```typescript
-await harness.session.mode.switch({ modeId: 'build' })
+await agentController.session.mode.switch({ modeId: 'build' })
 ```
 
 ## Querying modes
 
-The Harness exposes the full mode catalog, while the Session tracks which mode is active. Use `harness.listModes()` to read every configured mode, `harness.session.mode.get()` for the active mode ID, and `harness.session.mode.resolve()` for the active mode's full definition:
+The AgentController exposes the full mode catalog, while the Session tracks which mode is active. Use `agentController.listModes()` to read every configured mode, `agentController.session.mode.get()` for the active mode ID, and `agentController.session.mode.resolve()` for the active mode's full definition:
 
 ```typescript
 // List all configured modes
-const modes = harness.listModes()
+const modes = agentController.listModes()
 
 // Get the current mode ID
-const modeId = harness.session.mode.get()
+const modeId = agentController.session.mode.get()
 
 // Get the full mode object
-const mode = harness.session.mode.resolve()
+const mode = agentController.session.mode.resolve()
 ```
 
 ## Related
 
-- [Harness overview](/docs/harness/overview)
-- [Threads and state](/docs/harness/threads-and-state)
-- [API reference](/reference/harness/harness-class)
+- [AgentController overview](/docs/agent-controller/overview)
+- [Threads and state](/docs/agent-controller/threads-and-state)
+- [API reference](/reference/agent-controller/agent-controller-class)
