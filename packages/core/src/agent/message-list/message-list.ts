@@ -5,6 +5,7 @@ import { v4 as randomUUID } from '@lukeed/uuid';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { IMastraLogger } from '../../logger';
+import { normalizeModelOutput } from '../../loop/workflows/agentic-execution/normalize-model-output';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../tools/payload-transform';
 import type { IdGeneratorContext } from '../../types';
 import { createSignal, isCreatedAgentSignal, mastraDBMessageToSignal } from '../signals';
@@ -40,7 +41,6 @@ import type {
   SerializedMessageListState,
 } from './state';
 import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
-import { normalizeModelOutput } from '../../loop/workflows/agentic-execution/normalize-model-output';
 import { ensureGeminiCompatibleMessages } from './utils/provider-compat';
 import { stampPart } from './utils/stamp-part';
 
@@ -1388,7 +1388,9 @@ export class MessageList {
           modified = true;
           return {
             ...part,
-            output: normalizeModelOutput(storedModelOutputs.get(part.toolCallId)) as any,
+            output: normalizeModelOutput(
+              storedModelOutputs.get(part.toolCallId),
+            ) as AIV5Type.ToolResultPart["output"],
           };
         }
         return part;
