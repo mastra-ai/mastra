@@ -140,6 +140,18 @@ describe('tokens/sec decode-window calculation', () => {
     expect(state.tokensPerSec).toBe(20);
   });
 
+  it('records stream activity on message updates', async () => {
+    const state = createMinimalState({ agentRunStartedAt: 1000, agentRunLastStreamPartAt: 1000 });
+    const ectx = createEctx();
+
+    vi.setSystemTime(4000);
+    await dispatchEvent({ type: 'message_update', message: { content: [] } } as any, ectx, state);
+
+    expect(state.agentRunLastStreamPartAt).toBe(4000);
+    expect(state.decodeStartedAt).toBe(4000);
+    expect(ectx.updateStatusLine).toHaveBeenCalled();
+  });
+
   it('includes reasoning tokens in the decode rate', async () => {
     const state = createMinimalState();
     const ectx = createEctx();
@@ -171,16 +183,39 @@ describe('tokens/sec decode-window calculation', () => {
     const state = createMinimalState({ tokensPerSec: 42, decodeStartedAt: 1000 });
     const ectx = createEctx();
 
-    // agent_end keeps the reading visible (so short turns stay readable) but
-    // clears the in-flight decode window.
-    await dispatchEvent({ type: 'agent_end', reason: 'done' } as any, ectx, state);
-    expect(state.tokensPerSec).toBe(42);
-    expect(state.decodeStartedAt).toBe(0);
-
-    // The next turn's agent_start clears it for a fresh measurement.
+    vi.setSystemTime(1000);
     await dispatchEvent({ type: 'agent_start' } as any, ectx, state);
     expect(state.tokensPerSec).toBe(0);
     expect(state.decodeStartedAt).toBe(0);
+    expect(state.agentRunStartedAt).toBe(1000);
+    expect(state.agentRunLastStreamPartAt).toBe(1000);
+    expect(state.lastAgentRunDurationMs).toBeUndefined();
+    expect(state.lastAgentRunEndedAt).toBeUndefined();
+    expect(state.lastAgentRunEndReason).toBeUndefined();
+
+    state.tokensPerSec = 42;
+    state.decodeStartedAt = 1500;
+
+    // agent_end keeps the reading visible (so short turns stay readable) but
+    // clears the in-flight decode window.
+    vi.setSystemTime(4000);
+    await dispatchEvent({ type: 'agent_end', reason: 'done' } as any, ectx, state);
+    expect(state.tokensPerSec).toBe(42);
+    expect(state.decodeStartedAt).toBe(0);
+    expect(state.agentRunStartedAt).toBeUndefined();
+    expect(state.agentRunLastStreamPartAt).toBeUndefined();
+    expect(state.lastAgentRunDurationMs).toBe(3000);
+    expect(state.lastAgentRunEndedAt).toBe(4000);
+    expect(state.lastAgentRunEndReason).toBe('done');
+
+    // The next turn's agent_start clears it for a fresh measurement.
+    vi.setSystemTime(5000);
+    await dispatchEvent({ type: 'agent_start' } as any, ectx, state);
+    expect(state.tokensPerSec).toBe(0);
+    expect(state.decodeStartedAt).toBe(0);
+    expect(state.agentRunStartedAt).toBe(5000);
+    expect(state.lastAgentRunDurationMs).toBeUndefined();
+    expect(state.lastAgentRunEndedAt).toBeUndefined();
   });
 
   it('does not compute a rate for a tool-only step with no streamed content', async () => {
@@ -196,5 +231,23 @@ describe('tokens/sec decode-window calculation', () => {
       state,
     );
     expect(state.tokensPerSec).toBe(0);
+  });
+
+  it('records aborted and error end reasons for run summaries', async () => {
+    const ectx = createEctx();
+
+    vi.setSystemTime(1000);
+    const abortedState = createMinimalState({ agentRunStartedAt: 1000 });
+    vi.setSystemTime(4000);
+    await dispatchEvent({ type: 'agent_end', reason: 'aborted' } as any, ectx, abortedState);
+    expect(abortedState.lastAgentRunDurationMs).toBe(3000);
+    expect(abortedState.lastAgentRunEndReason).toBe('aborted');
+
+    vi.setSystemTime(5000);
+    const errorState = createMinimalState({ agentRunStartedAt: 5000 });
+    vi.setSystemTime(9000);
+    await dispatchEvent({ type: 'agent_end', reason: 'error' } as any, ectx, errorState);
+    expect(errorState.lastAgentRunDurationMs).toBe(4000);
+    expect(errorState.lastAgentRunEndReason).toBe('error');
   });
 });
