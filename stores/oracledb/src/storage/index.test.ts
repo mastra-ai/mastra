@@ -1,3 +1,5 @@
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
 import {
   createClientAcceptanceTests,
   createConfigValidationTests,
@@ -8,9 +10,8 @@ import { createMemoryTest } from '../../../_test-utils/src/domains/memory';
 import { createObservabilityTests } from '../../../_test-utils/src/domains/observability';
 import { createScoresTest } from '../../../_test-utils/src/domains/scores';
 import { createWorkflowsTests } from '../../../_test-utils/src/domains/workflows';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-
 import { OraclePoolManager } from '../shared/connection';
+import type { OracleMigration } from './migrations';
 import { MemoryOracle, OracleStore, ScoresOracle, WorkflowsOracle } from '.';
 
 vi.setConfig({ testTimeout: 120_000, hookTimeout: 120_000 });
@@ -33,10 +34,10 @@ function storeConfig(id: string) {
 }
 
 describeIntegration('OracleStore shared storage suite', () => {
-  const poolManager = new OraclePoolManager(connection);
-  class PostgresStore extends OracleStore {}
-  const store = new PostgresStore({ id: 'oracle-shared-storage-suite', poolManager, skipDefaultIndexes: true });
-
+  const poolManager = runIntegration ? new OraclePoolManager(connection) : ({} as unknown as OraclePoolManager);
+  const store = runIntegration
+    ? new OracleStore({ id: 'oracle-shared-storage-suite', poolManager, skipDefaultIndexes: true })
+    : new OracleStore({ id: 'oracle-placeholder', poolManager: {} as any });
   beforeAll(async () => {
     await store.init();
   });
@@ -102,8 +103,8 @@ createConfigValidationTests({
       description: 'external auth config without password',
       config: {
         id: 'oracle-valid-external-auth-config',
-        user: 'user',
-        connectString: 'localhost/FREEPDB1',
+        user: process.env.ORACLE_DATABASE_USER,
+        connectString: process.env.ORACLE_DATABASE_CONNECT_STRING,
         externalAuth: true,
       },
     },
@@ -125,8 +126,8 @@ createConfigValidationTests({
       description: 'password missing without external auth',
       config: {
         id: 'oracle-invalid-missing-password',
-        user: 'user',
-        connectString: 'localhost/FREEPDB1',
+        user: process.env.ORACLE_DATABASE_USER,
+        connectString: process.env.ORACLE_DATABASE_CONNECT_STRING,
       },
       expectedError: /Password is required unless externalAuth is enabled/,
     },
@@ -134,9 +135,7 @@ createConfigValidationTests({
       description: 'invalid schema identifier',
       config: {
         id: 'oracle-invalid-schema',
-        user: 'user',
-        password: 'password',
-        connectString: 'localhost/FREEPDB1',
+        ...connection,
         schemaName: 'bad-schema',
       },
       expectedError: /schema name/i,
@@ -202,7 +201,7 @@ describe('OracleStore facade', () => {
       vi.spyOn(domain as { init: () => Promise<void> }, 'init').mockResolvedValue(undefined),
     );
     const migrationRegistry = {
-      run: vi.fn(async (migrations, options) => {
+      run: vi.fn(async (migrations: OracleMigration[], options: { forceRepeatable?: boolean }) => {
         for (const migration of migrations) {
           expect(migration.kind).toBe('repeatable');
           expect(migration.checksum).toMatch(/^[A-F0-9]{64}$/);

@@ -18,6 +18,10 @@ import {
   validateOracleConnectionConfig,
 } from './connection';
 
+const user = process.env.ORACLE_DATABASE_USER;
+const password = process.env.ORACLE_DATABASE_PASSWORD;
+const connectString = process.env.ORACLE_DATABASE_CONNECT_STRING;
+
 describe('Oracle shared connection helpers', () => {
   it('uses external pools without owning their lifecycle', async () => {
     const connectionClose = vi.fn(async () => undefined);
@@ -39,30 +43,29 @@ describe('Oracle shared connection helpers', () => {
 
   it('validates config, pool options, batch sizes, and bind helpers', () => {
     expect(() => validateOracleConnectionConfig({})).toThrow(/credentials/i);
-    expect(() => validateOracleConnectionConfig({ user: 'u', connectString: 'db' })).toThrow(/Password/i);
-    expect(() => validateOracleConnectionConfig({ user: 'u', connectString: 'db', externalAuth: true })).not.toThrow();
+    expect(() => validateOracleConnectionConfig({ user, connectString })).toThrow(/Password/i);
+    expect(() => validateOracleConnectionConfig({ user, connectString, externalAuth: true })).not.toThrow();
     expect(normalizeBatchSize(undefined, 'batch', 25)).toBe(25);
     expect(() => normalizeBatchSize(0, 'batch', 25)).toThrow(/positive integer/i);
-    expect(
-      buildPoolOptions({
-        user: 'u',
-        password: 'p',
-        connectString: 'db',
-        configDir: '/cfg',
-        walletLocation: '/wallet',
-        walletPassword: 'secret',
-        poolMin: 1,
-        poolMax: 2,
-        poolIncrement: 1,
-      }),
-    ).toMatchObject({
-      user: 'u',
+    const poolOptions = buildPoolOptions({
+      user,
+      password,
+      connectString,
       configDir: '/cfg',
       walletLocation: '/wallet',
-      walletPassword: 'secret',
+      walletPassword: process.env.ORACLE_DATABASE_WALLET_PASSWORD,
+      poolMin: 1,
+      poolMax: 2,
+      poolIncrement: 1,
+    });
+    expect(poolOptions).toMatchObject({
+      user,
+      configDir: '/cfg',
+      walletLocation: '/wallet',
       poolMin: 1,
       poolMax: 2,
     });
+    expect(poolOptions.walletPassword).toBe(process.env.ORACLE_DATABASE_WALLET_PASSWORD || undefined);
 
     expect(rows({} as any)).toEqual([]);
     expect(jsonBind({ a: 1 })).toMatchObject({ val: { a: 1 } });
@@ -104,7 +107,7 @@ describe('Oracle shared connection helpers', () => {
   });
 
   it('fails fast when lazy pool options are unavailable', async () => {
-    const manager = new OraclePoolManager({ user: 'u', password: 'p', connectString: 'db' });
+    const manager = new OraclePoolManager({ user, password, connectString, externalAuth: !password });
     (manager as any).poolOptions = undefined;
 
     await expect(manager.getPool()).rejects.toThrow(/pool options/i);

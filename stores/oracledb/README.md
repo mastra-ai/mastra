@@ -274,18 +274,63 @@ It also provides:
 
 ## Testing
 
-Run unit tests and type checks from the Mastra monorepo root:
+### Monorepo setup notes
+
+**1. Allow native builds** — `oracledb` requires a native Node.js addon. The monorepo defaults `oracledb: false` in `pnpm-workspace.yaml` to avoid building it for contributors who don't need Oracle. Change it to `true` before running `pnpm install`:
+
+```yaml
+# pnpm-workspace.yaml
+allowBuilds:
+  oracledb: true
+```
+
+Without this, `pnpm install` completes silently but the driver fails to load at runtime.
+
+**2. Build workspace dependencies first** — The integration tests depend on built artifacts from `@mastra/core`. Run this from the monorepo root before the first test run:
+
+```bash
+pnpm build:core
+```
+
+You will get cryptic `Cannot find module` errors if this is missing.
+
+**3. Docker setup** — Docker Compose requires the Docker daemon to be running. On a fresh Linux install you may need:
+```bash
+sudo systemctl start docker
+```
+
+For local development, create `stores/oracledb/.env` from the Mastra monorepo root. The file is gitignored and is loaded by Vitest and Docker Compose:
+
+```dotenv
+ORACLE_DATABASE_USER=mastra
+ORACLE_DATABASE_PASSWORD=<your-local-test-password>
+ORACLE_DATABASE_CONNECT_STRING=localhost:1521/FREEPDB1
+```
+
+Run unit tests and type checks from the monorepo root:
 
 ```bash
 pnpm --filter @mastra/oracledb test
 pnpm --filter @mastra/oracledb typecheck
 ```
 
-Live Oracle integration tests are opt-in because they require Oracle Database credentials:
+Live Oracle integration tests are opt-in because they require Docker or Oracle Database credentials:
 
 ```bash
-RUN_ORACLE_VECTOR_INTEGRATION=true pnpm --filter @mastra/oracledb test:vector-integration
-RUN_ORACLE_STORAGE_INTEGRATION=true pnpm --filter @mastra/oracledb test:storage-integration
+pnpm --filter @mastra/oracledb test:integration
+```
+
+The integration script starts an Oracle Database Free container with Docker Compose, creates the configured test user on the `USERS` tablespace, runs the shared storage and vector integration suites, and tears the container down afterward.
+
+To use an existing Oracle database instead of the Docker Compose container, provide your own connection values and run the integration suites directly:
+
+```bash
+export ORACLE_DATABASE_USER=...
+export ORACLE_DATABASE_CONNECT_STRING=...
+# Load ORACLE_DATABASE_PASSWORD from your environment or secret manager.
+
+pnpm --filter @mastra/oracledb test:storage-integration
+pnpm --filter @mastra/oracledb test:vector-integration
 ```
 
 ## Related Links

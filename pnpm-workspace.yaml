@@ -247,6 +247,7 @@ allowBuilds:
   msgpackr-extract: false
   msw: false
   node-pty: true
+  oracledb: false
   onnxruntime-node: false
   protobufjs: false
   sharp: false

@@ -24,11 +24,13 @@
     "build:watch": "pnpm build:lib --watch",
     "test": "pnpm test:unit",
     "test:unit": "vitest run --exclude \"src/**/*.integration.test.ts\"",
-    "test:integration": "pnpm test:vector-integration && pnpm test:storage-integration",
+    "pretest:integration": "docker compose up -d --wait",
+    "test:integration": "pnpm test:storage-integration && pnpm test:vector-integration",
+    "posttest:integration": "docker compose down -v",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test:vector-integration": "RUN_ORACLE_VECTOR_INTEGRATION=true vitest run src/vector/index.integration.test.ts",
-    "test:storage-integration": "RUN_ORACLE_STORAGE_INTEGRATION=true vitest run src/storage/db/schema.integration.test.ts"
+    "test:storage-integration": "RUN_ORACLE_STORAGE_INTEGRATION=true vitest run --fileParallelism=false src/storage/index.test.ts src/storage/db/schema.integration.test.ts"
   },
   "license": "Apache-2.0",
   "dependencies": {
