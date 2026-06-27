@@ -1,10 +1,8 @@
 ---
 '@mastra/core': minor
-'@mastra/client-js': patch
 '@mastra/cloudflare-d1': patch
 '@mastra/clickhouse': patch
 '@mastra/cloudflare': patch
-'@mastra/server': patch
 '@mastra/dynamodb': patch
 '@mastra/mongodb': patch
 '@mastra/spanner': patch
