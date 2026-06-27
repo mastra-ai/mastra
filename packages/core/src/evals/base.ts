@@ -82,6 +82,13 @@ export interface ScorerJudgeConfig {
   onStream?: (stream: Awaited<ReturnType<Agent['stream']>>) => void | Promise<void>;
   /** Optional maximum number of agentic loop iterations for the internal judge agent. */
   maxSteps?: number;
+  /**
+   * Optional request context forwarded to the judge agent execution. When the judge
+   * agent has memory with OM observers that read dynamic model config from controller
+   * state (e.g. mastracode's `getObserverModel`), this lets the OM system resolve the
+   * correct observer model and provider credentials.
+   */
+  requestContext?: RequestContext<any>;
 }
 
 export type ScorerStepJudgeConfig = Omit<ScorerJudgeConfig, 'memory' | 'defaultMemoryOptions'> & {
@@ -905,7 +912,11 @@ class MastraScorer<
 
     // Resolve the model configuration to a LanguageModel instance
     // Pass the Mastra instance to enable custom gateway resolution
-    const resolvedModel = await resolveModelConfig(modelConfig, undefined, this.#mastra);
+    const resolvedModel = await resolveModelConfig(
+      modelConfig,
+      this.config.judge?.requestContext ?? undefined,
+      this.#mastra,
+    );
     const judgeModel = resolvedModel.modelId;
 
     const judge = new Agent({
@@ -923,6 +934,7 @@ class MastraScorer<
       ...observabilityContext,
       ...(memoryOptions ? { memory: memoryOptions } : {}),
       ...(maxSteps ? { maxSteps } : {}),
+      ...(this.config.judge?.requestContext ? { requestContext: this.config.judge.requestContext } : {}),
     };
 
     // GenerateScore output must be a number

@@ -286,9 +286,11 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
               : goal.tools;
           const goalId = record.id ?? `${threadId}:${record.startedAt}`;
           scorer = createGoalScorer({
+            mastra,
             judgeModel,
             prompt: effective.prompt,
             tools: goalTools,
+            requestContext,
             onStream: observeJudgeStream,
             ...(effective.maxSteps ? { maxSteps: effective.maxSteps } : {}),
             ...(_internal?.memory
