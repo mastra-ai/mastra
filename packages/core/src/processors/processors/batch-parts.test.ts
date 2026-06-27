@@ -602,6 +602,47 @@ describe('BatchPartsProcessor', () => {
       const result = processor.flush();
       expect(result).toBeNull();
     });
+
+    it('should not drop non-text parts buffered alongside text when emitOnNonText is false', async () => {
+      processor = new BatchPartsProcessor({ batchSize: 5, emitOnNonText: false });
+      const state: BatchPartsState = { batch: [], timeoutId: undefined, timeoutTriggered: false };
+
+      const parts = [
+        { type: 'text-delta', payload: { text: 'Hello ', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
+        {
+          type: 'tool-call',
+          runId: '1',
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId: 'tc-1', toolName: 'search', args: {} },
+        },
+        { type: 'text-delta', payload: { text: 'world', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
+      ] as ChunkType[];
+
+      for (const part of parts) {
+        await processor.processOutputStream({
+          part,
+          streamParts: [part],
+          state,
+          abort: () => {
+            throw new Error('abort');
+          },
+        });
+      }
+
+      // Drain everything the processor buffered.
+      const emitted: ChunkType[] = [];
+      let chunk = processor.flush(state);
+      let guard = 0;
+      while (chunk && guard++ < 10) {
+        emitted.push(chunk);
+        chunk = processor.flush(state);
+      }
+
+      // The buffered non-text tool-call must survive (not be dropped) and order is preserved.
+      expect(emitted.map(p => p.type)).toEqual(['text-delta', 'tool-call', 'text-delta']);
+      const toolCall = emitted.find(p => p.type === 'tool-call');
+      expect(toolCall).toMatchObject({ type: 'tool-call', payload: { toolCallId: 'tc-1' } });
+    });
   });
 
   describe('edge cases', () => {
