@@ -3084,6 +3084,27 @@ export interface ListScheduleTriggersResponse {
  */
 export type HeartbeatBroadcastMode = 'live' | 'on-complete' | 'never';
 
+/** Attributes rendered onto the signal's XML tag. */
+export type HeartbeatSignalAttributes = Record<string, string | number | boolean | null | undefined>;
+
+/** Behavior applied when the thread is already streaming. */
+export interface HeartbeatIfActive {
+  behavior?: 'deliver' | 'persist' | 'discard';
+  attributes?: HeartbeatSignalAttributes;
+}
+
+/**
+ * Behavior applied when the thread is idle, plus a serializable subset of
+ * stream options forwarded to the woken run.
+ */
+export interface HeartbeatIfIdle {
+  behavior?: 'wake' | 'persist' | 'discard';
+  attributes?: HeartbeatSignalAttributes;
+  streamOptions?: {
+    requestContext?: Record<string, unknown>;
+  };
+}
+
 export interface Heartbeat {
   id: string;
   agentId: string;
@@ -3098,8 +3119,11 @@ export interface Heartbeat {
   lastFireAt?: number;
   lastRunId?: string;
   signalType?: string;
-  ifActive?: 'deliver' | 'persist' | 'discard';
-  ifIdle?: 'wake' | 'persist' | 'discard';
+  tagName?: string;
+  attributes?: HeartbeatSignalAttributes;
+  ifActive?: HeartbeatIfActive;
+  ifIdle?: HeartbeatIfIdle;
+  providerOptions?: Record<string, unknown>;
   broadcast?: HeartbeatBroadcastMode;
   metadata?: Record<string, unknown>;
   lastRun?: ScheduleRunSummary;
@@ -3123,8 +3147,11 @@ export interface CreateHeartbeatInput {
   threadId?: string;
   resourceId?: string;
   signalType?: string;
-  ifActive?: 'deliver' | 'persist' | 'discard';
-  ifIdle?: 'wake' | 'persist' | 'discard';
+  tagName?: string;
+  attributes?: HeartbeatSignalAttributes;
+  ifActive?: HeartbeatIfActive;
+  ifIdle?: HeartbeatIfIdle;
+  providerOptions?: Record<string, unknown>;
   broadcast?: HeartbeatBroadcastMode;
   metadata?: Record<string, unknown>;
 }
@@ -3140,8 +3167,11 @@ export interface UpdateHeartbeatOptions {
   name?: string;
   timezone?: string;
   signalType?: string;
-  ifActive?: 'deliver' | 'persist' | 'discard';
-  ifIdle?: 'wake' | 'persist' | 'discard';
+  tagName?: string;
+  attributes?: HeartbeatSignalAttributes;
+  ifActive?: HeartbeatIfActive;
+  ifIdle?: HeartbeatIfIdle;
+  providerOptions?: Record<string, unknown>;
   broadcast?: HeartbeatBroadcastMode;
   metadata?: Record<string, unknown>;
 }

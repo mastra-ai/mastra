@@ -5676,6 +5676,7 @@ export const API_ROUTE_METADATA = {
     "queryParams": [],
     "bodyParams": [
       "agentId",
+      "attributes",
       "broadcast",
       "cron",
       "id",
@@ -5684,8 +5685,10 @@ export const API_ROUTE_METADATA = {
       "metadata",
       "name",
       "prompt",
+      "providerOptions",
       "resourceId",
       "signalType",
+      "tagName",
       "threadId",
       "timezone"
     ],
@@ -5703,6 +5706,7 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
+      "attributes",
       "broadcast",
       "cron",
       "ifActive",
@@ -5710,7 +5714,9 @@ export const API_ROUTE_METADATA = {
       "metadata",
       "name",
       "prompt",
+      "providerOptions",
       "signalType",
+      "tagName",
       "timezone"
     ],
     "hasQuery": false,

@@ -89684,8 +89684,46 @@ export type GetSchedules_Response = {
           threadId?: string | undefined;
           resourceId?: string | undefined;
           signalType?: string | undefined;
-          ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
-          ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+          tagName?: string | undefined;
+          attributes?:
+            | {
+                [key: string]: (string | number | boolean | null) | undefined;
+              }
+            | undefined;
+          ifActive?:
+            | {
+                behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+                attributes?:
+                  | {
+                      [key: string]: (string | number | boolean | null) | undefined;
+                    }
+                  | undefined;
+              }
+            | undefined;
+          ifIdle?:
+            | {
+                behavior?: ('wake' | 'persist' | 'discard') | undefined;
+                attributes?:
+                  | {
+                      [key: string]: (string | number | boolean | null) | undefined;
+                    }
+                  | undefined;
+                streamOptions?:
+                  | {
+                      requestContext?:
+                        | {
+                            [key: string]: unknown;
+                          }
+                        | undefined;
+                    }
+                  | undefined;
+              }
+            | undefined;
+          providerOptions?:
+            | {
+                [key: string]: unknown;
+              }
+            | undefined;
           broadcast?: ('live' | 'on-complete' | 'never') | undefined;
           requestContext?:
             | {
@@ -89778,8 +89816,46 @@ export type GetSchedulesScheduleId_Response = {
         threadId?: string | undefined;
         resourceId?: string | undefined;
         signalType?: string | undefined;
-        ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
-        ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+        tagName?: string | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+        ifActive?:
+          | {
+              behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+              attributes?:
+                | {
+                    [key: string]: (string | number | boolean | null) | undefined;
+                  }
+                | undefined;
+            }
+          | undefined;
+        ifIdle?:
+          | {
+              behavior?: ('wake' | 'persist' | 'discard') | undefined;
+              attributes?:
+                | {
+                    [key: string]: (string | number | boolean | null) | undefined;
+                  }
+                | undefined;
+              streamOptions?:
+                | {
+                    requestContext?:
+                      | {
+                          [key: string]: unknown;
+                        }
+                      | undefined;
+                  }
+                | undefined;
+            }
+          | undefined;
+        providerOptions?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
         broadcast?: ('live' | 'on-complete' | 'never') | undefined;
         requestContext?:
           | {
@@ -89955,8 +90031,46 @@ export type PostSchedulesScheduleIdPause_Response = {
         threadId?: string | undefined;
         resourceId?: string | undefined;
         signalType?: string | undefined;
-        ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
-        ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+        tagName?: string | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+        ifActive?:
+          | {
+              behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+              attributes?:
+                | {
+                    [key: string]: (string | number | boolean | null) | undefined;
+                  }
+                | undefined;
+            }
+          | undefined;
+        ifIdle?:
+          | {
+              behavior?: ('wake' | 'persist' | 'discard') | undefined;
+              attributes?:
+                | {
+                    [key: string]: (string | number | boolean | null) | undefined;
+                  }
+                | undefined;
+              streamOptions?:
+                | {
+                    requestContext?:
+                      | {
+                          [key: string]: unknown;
+                        }
+                      | undefined;
+                  }
+                | undefined;
+            }
+          | undefined;
+        providerOptions?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
         broadcast?: ('live' | 'on-complete' | 'never') | undefined;
         requestContext?:
           | {
@@ -90044,8 +90158,46 @@ export type PostSchedulesScheduleIdResume_Response = {
         threadId?: string | undefined;
         resourceId?: string | undefined;
         signalType?: string | undefined;
-        ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
-        ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+        tagName?: string | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+        ifActive?:
+          | {
+              behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+              attributes?:
+                | {
+                    [key: string]: (string | number | boolean | null) | undefined;
+                  }
+                | undefined;
+            }
+          | undefined;
+        ifIdle?:
+          | {
+              behavior?: ('wake' | 'persist' | 'discard') | undefined;
+              attributes?:
+                | {
+                    [key: string]: (string | number | boolean | null) | undefined;
+                  }
+                | undefined;
+              streamOptions?:
+                | {
+                    requestContext?:
+                      | {
+                          [key: string]: unknown;
+                        }
+                      | undefined;
+                  }
+                | undefined;
+            }
+          | undefined;
+        providerOptions?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
         broadcast?: ('live' | 'on-complete' | 'never') | undefined;
         requestContext?:
           | {
@@ -90150,8 +90302,46 @@ export type GetHeartbeats_Response = {
         }
       | undefined;
     signalType?: string | undefined;
-    ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
-    ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+    tagName?: string | undefined;
+    attributes?:
+      | {
+          [key: string]: (string | number | boolean | null) | undefined;
+        }
+      | undefined;
+    ifActive?:
+      | {
+          behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+          attributes?:
+            | {
+                [key: string]: (string | number | boolean | null) | undefined;
+              }
+            | undefined;
+        }
+      | undefined;
+    ifIdle?:
+      | {
+          behavior?: ('wake' | 'persist' | 'discard') | undefined;
+          attributes?:
+            | {
+                [key: string]: (string | number | boolean | null) | undefined;
+              }
+            | undefined;
+          streamOptions?:
+            | {
+                requestContext?:
+                  | {
+                      [key: string]: unknown;
+                    }
+                  | undefined;
+              }
+            | undefined;
+        }
+      | undefined;
+    providerOptions?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
     broadcast?: ('live' | 'on-complete' | 'never') | undefined;
     metadata?:
       | {
@@ -90223,8 +90413,46 @@ export type GetHeartbeatsHeartbeatId_Response = {
       }
     | undefined;
   signalType?: string | undefined;
-  ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
-  ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+  tagName?: string | undefined;
+  attributes?:
+    | {
+        [key: string]: (string | number | boolean | null) | undefined;
+      }
+    | undefined;
+  ifActive?:
+    | {
+        behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  ifIdle?:
+    | {
+        behavior?: ('wake' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+        streamOptions?:
+          | {
+              requestContext?:
+                | {
+                    [key: string]: unknown;
+                  }
+                | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  providerOptions?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
   broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {
@@ -90263,8 +90491,46 @@ export type PostHeartbeats_Body = {
   threadId?: string | undefined;
   resourceId?: string | undefined;
   signalType?: string | undefined;
-  ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
-  ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+  tagName?: string | undefined;
+  attributes?:
+    | {
+        [key: string]: (string | number | boolean | null) | undefined;
+      }
+    | undefined;
+  ifActive?:
+    | {
+        behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  ifIdle?:
+    | {
+        behavior?: ('wake' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+        streamOptions?:
+          | {
+              requestContext?:
+                | {
+                    [key: string]: unknown;
+                  }
+                | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  providerOptions?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
   broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {
@@ -90307,8 +90573,46 @@ export type PostHeartbeats_Response = {
       }
     | undefined;
   signalType?: string | undefined;
-  ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
-  ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+  tagName?: string | undefined;
+  attributes?:
+    | {
+        [key: string]: (string | number | boolean | null) | undefined;
+      }
+    | undefined;
+  ifActive?:
+    | {
+        behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  ifIdle?:
+    | {
+        behavior?: ('wake' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+        streamOptions?:
+          | {
+              requestContext?:
+                | {
+                    [key: string]: unknown;
+                  }
+                | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  providerOptions?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
   broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {
@@ -90351,8 +90655,46 @@ export type PatchHeartbeatsHeartbeatId_Body = {
   prompt?: string | undefined;
   name?: string | undefined;
   signalType?: string | undefined;
-  ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
-  ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+  tagName?: string | undefined;
+  attributes?:
+    | {
+        [key: string]: (string | number | boolean | null) | undefined;
+      }
+    | undefined;
+  ifActive?:
+    | {
+        behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  ifIdle?:
+    | {
+        behavior?: ('wake' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+        streamOptions?:
+          | {
+              requestContext?:
+                | {
+                    [key: string]: unknown;
+                  }
+                | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  providerOptions?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
   broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {
@@ -90395,8 +90737,46 @@ export type PatchHeartbeatsHeartbeatId_Response = {
       }
     | undefined;
   signalType?: string | undefined;
-  ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
-  ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+  tagName?: string | undefined;
+  attributes?:
+    | {
+        [key: string]: (string | number | boolean | null) | undefined;
+      }
+    | undefined;
+  ifActive?:
+    | {
+        behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  ifIdle?:
+    | {
+        behavior?: ('wake' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+        streamOptions?:
+          | {
+              requestContext?:
+                | {
+                    [key: string]: unknown;
+                  }
+                | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  providerOptions?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
   broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {
@@ -90493,8 +90873,46 @@ export type PostHeartbeatsHeartbeatIdPause_Response = {
       }
     | undefined;
   signalType?: string | undefined;
-  ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
-  ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+  tagName?: string | undefined;
+  attributes?:
+    | {
+        [key: string]: (string | number | boolean | null) | undefined;
+      }
+    | undefined;
+  ifActive?:
+    | {
+        behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  ifIdle?:
+    | {
+        behavior?: ('wake' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+        streamOptions?:
+          | {
+              requestContext?:
+                | {
+                    [key: string]: unknown;
+                  }
+                | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  providerOptions?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
   broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {
@@ -90563,8 +90981,46 @@ export type PostHeartbeatsHeartbeatIdResume_Response = {
       }
     | undefined;
   signalType?: string | undefined;
-  ifActive?: ('deliver' | 'persist' | 'discard') | undefined;
-  ifIdle?: ('wake' | 'persist' | 'discard') | undefined;
+  tagName?: string | undefined;
+  attributes?:
+    | {
+        [key: string]: (string | number | boolean | null) | undefined;
+      }
+    | undefined;
+  ifActive?:
+    | {
+        behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  ifIdle?:
+    | {
+        behavior?: ('wake' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+        streamOptions?:
+          | {
+              requestContext?:
+                | {
+                    [key: string]: unknown;
+                  }
+                | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  providerOptions?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
   broadcast?: ('live' | 'on-complete' | 'never') | undefined;
   metadata?:
     | {

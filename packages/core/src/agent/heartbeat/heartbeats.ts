@@ -47,14 +47,20 @@ function normalizeHeartbeatId(rawId: string): string {
 }
 
 /**
- * Resolve a caller-supplied heartbeat id for read / mutate lookups. Applies
- * the same `hb_<slug>` normalization as `create` so callers can pass the id in
- * whichever form they used at create time (with or without the `hb_` prefix).
- * Falls back to the raw id when nothing slug-able remains so the caller still
- * gets a `not found` rather than a surprise match.
+ * Resolve a caller-supplied heartbeat id for read / mutate lookups so callers
+ * can pass the id in whichever form they used at create time.
+ *
+ * An id that already carries the `hb_` prefix is treated as a fully-formed
+ * stored id and returned verbatim — re-slugifying it would mangle characters
+ * `create` already accepted (e.g. underscores), making the heartbeat
+ * unaddressable. A bare caller id is canonicalized to `hb_<slug>` to match what
+ * `create` persisted; when nothing slug-able remains the raw id is returned so
+ * the caller gets a `not found` rather than a surprise match.
  */
 function resolveHeartbeatId(rawId: string): string {
-  return canonicalizeHeartbeatId(rawId) || rawId;
+  const trimmed = rawId.trim();
+  if (trimmed.startsWith(HEARTBEAT_SCHEDULE_PREFIX)) return trimmed;
+  return canonicalizeHeartbeatId(trimmed) || rawId;
 }
 
 /**

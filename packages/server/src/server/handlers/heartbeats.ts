@@ -106,8 +106,11 @@ export const CREATE_HEARTBEAT_ROUTE = createRoute({
       ...(body.threadId ? { threadId: body.threadId } : {}),
       ...(body.resourceId ? { resourceId: body.resourceId } : {}),
       ...(body.signalType ? { signalType: body.signalType } : {}),
+      ...(body.tagName ? { tagName: body.tagName } : {}),
+      ...(body.attributes ? { attributes: body.attributes } : {}),
       ...(body.ifActive ? { ifActive: body.ifActive } : {}),
       ...(body.ifIdle ? { ifIdle: body.ifIdle } : {}),
+      ...(body.providerOptions ? { providerOptions: body.providerOptions } : {}),
       ...(body.broadcast ? { broadcast: body.broadcast } : {}),
       ...(body.metadata ? { metadata: body.metadata } : {}),
     });
@@ -135,8 +138,11 @@ export const UPDATE_HEARTBEAT_ROUTE = createRoute({
       ...(body.prompt !== undefined ? { prompt: body.prompt } : {}),
       ...(body.name !== undefined ? { name: body.name } : {}),
       ...(body.signalType !== undefined ? { signalType: body.signalType } : {}),
+      ...(body.tagName !== undefined ? { tagName: body.tagName } : {}),
+      ...(body.attributes !== undefined ? { attributes: body.attributes } : {}),
       ...(body.ifActive !== undefined ? { ifActive: body.ifActive } : {}),
       ...(body.ifIdle !== undefined ? { ifIdle: body.ifIdle } : {}),
+      ...(body.providerOptions !== undefined ? { providerOptions: body.providerOptions } : {}),
       ...(body.broadcast !== undefined ? { broadcast: body.broadcast } : {}),
       ...(body.metadata !== undefined ? { metadata: body.metadata } : {}),
     });

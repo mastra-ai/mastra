@@ -12,6 +12,26 @@ const workflowScheduleTargetSchema = z.object({
 
 const heartbeatBroadcastModeSchema = z.enum(['live', 'on-complete', 'never']);
 
+const signalAttributesSchema = z.record(
+  z.string(),
+  z.union([z.string(), z.number(), z.boolean(), z.null()]).optional(),
+);
+
+const ifActiveSchema = z.object({
+  behavior: z.enum(['deliver', 'persist', 'discard']).optional(),
+  attributes: signalAttributesSchema.optional(),
+});
+
+const ifIdleSchema = z.object({
+  behavior: z.enum(['wake', 'persist', 'discard']).optional(),
+  attributes: signalAttributesSchema.optional(),
+  streamOptions: z
+    .object({
+      requestContext: z.record(z.string(), z.unknown()).optional(),
+    })
+    .optional(),
+});
+
 const heartbeatScheduleTargetSchema = z.object({
   type: z.literal('heartbeat'),
   agentId: z.string(),
@@ -19,8 +39,11 @@ const heartbeatScheduleTargetSchema = z.object({
   threadId: z.string().optional(),
   resourceId: z.string().optional(),
   signalType: z.string().optional(),
-  ifActive: z.enum(['deliver', 'persist', 'discard']).optional(),
-  ifIdle: z.enum(['wake', 'persist', 'discard']).optional(),
+  tagName: z.string().optional(),
+  attributes: signalAttributesSchema.optional(),
+  ifActive: ifActiveSchema.optional(),
+  ifIdle: ifIdleSchema.optional(),
+  providerOptions: z.record(z.string(), z.unknown()).optional(),
   broadcast: heartbeatBroadcastModeSchema.optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
 });

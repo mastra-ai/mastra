@@ -10,6 +10,32 @@ import { scheduleRunSummarySchema } from './schedules';
  */
 export const heartbeatBroadcastModeSchema = z.enum(['live', 'on-complete', 'never']);
 
+/** Attributes rendered onto the signal's XML tag. */
+const signalAttributesSchema = z.record(
+  z.string(),
+  z.union([z.string(), z.number(), z.boolean(), z.null()]).optional(),
+);
+
+/** Behavior + attributes applied when the thread is already streaming. */
+const ifActiveSchema = z.object({
+  behavior: z.enum(['deliver', 'persist', 'discard']).optional(),
+  attributes: signalAttributesSchema.optional(),
+});
+
+/**
+ * Behavior + attributes applied when the thread is idle, plus a serializable
+ * subset of stream options forwarded to the woken run.
+ */
+const ifIdleSchema = z.object({
+  behavior: z.enum(['wake', 'persist', 'discard']).optional(),
+  attributes: signalAttributesSchema.optional(),
+  streamOptions: z
+    .object({
+      requestContext: z.record(z.string(), z.unknown()).optional(),
+    })
+    .optional(),
+});
+
 /**
  * Public Heartbeat view model.
  *
@@ -34,8 +60,11 @@ export const heartbeatSchema = z.object({
   lastRunId: z.string().optional(),
   lastRun: scheduleRunSummarySchema.optional(),
   signalType: z.string().optional(),
-  ifActive: z.enum(['deliver', 'persist', 'discard']).optional(),
-  ifIdle: z.enum(['wake', 'persist', 'discard']).optional(),
+  tagName: z.string().optional(),
+  attributes: signalAttributesSchema.optional(),
+  ifActive: ifActiveSchema.optional(),
+  ifIdle: ifIdleSchema.optional(),
+  providerOptions: z.record(z.string(), z.unknown()).optional(),
   broadcast: heartbeatBroadcastModeSchema.optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   createdAt: z.number(),
@@ -69,8 +98,11 @@ export const createHeartbeatBodySchema = z.object({
   threadId: z.string().optional(),
   resourceId: z.string().optional(),
   signalType: z.string().optional(),
-  ifActive: z.enum(['deliver', 'persist', 'discard']).optional(),
-  ifIdle: z.enum(['wake', 'persist', 'discard']).optional(),
+  tagName: z.string().optional(),
+  attributes: signalAttributesSchema.optional(),
+  ifActive: ifActiveSchema.optional(),
+  ifIdle: ifIdleSchema.optional(),
+  providerOptions: z.record(z.string(), z.unknown()).optional(),
   broadcast: heartbeatBroadcastModeSchema.optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
@@ -87,8 +119,11 @@ export const updateHeartbeatBodySchema = z.object({
   prompt: z.string().optional(),
   name: z.string().optional(),
   signalType: z.string().optional(),
-  ifActive: z.enum(['deliver', 'persist', 'discard']).optional(),
-  ifIdle: z.enum(['wake', 'persist', 'discard']).optional(),
+  tagName: z.string().optional(),
+  attributes: signalAttributesSchema.optional(),
+  ifActive: ifActiveSchema.optional(),
+  ifIdle: ifIdleSchema.optional(),
+  providerOptions: z.record(z.string(), z.unknown()).optional(),
   broadcast: heartbeatBroadcastModeSchema.optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });

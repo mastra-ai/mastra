@@ -61,6 +61,23 @@ describe('mastra.heartbeats canonical service', () => {
     expect(withPrefix.id).toBe(`${HEARTBEAT_SCHEDULE_PREFIX}morning-report`);
   });
 
+  it('resolves lookups by the prefixed stored id and the bare caller id alike', async () => {
+    const { mastra } = makeMastra(['a']);
+
+    const hb = await mastra.heartbeats.create({
+      agentId: 'a',
+      cron: '*/5 * * * *',
+      prompt: 'A',
+      id: 'Nightly Summary!',
+    });
+    expect(hb.id).toBe(`${HEARTBEAT_SCHEDULE_PREFIX}nightly-summary`);
+
+    // The fully-formed stored id resolves verbatim (no re-slugification).
+    expect((await mastra.heartbeats.get(hb.id))?.id).toBe(hb.id);
+    // The bare caller id resolves to the same heartbeat.
+    expect((await mastra.heartbeats.get('Nightly Summary!'))?.id).toBe(hb.id);
+  });
+
   it('throws when creating a heartbeat with an id that already exists', async () => {
     const { mastra } = makeMastra(['a']);
     await mastra.heartbeats.create({ agentId: 'a', cron: '*/5 * * * *', prompt: 'A', id: 'dupe' });
