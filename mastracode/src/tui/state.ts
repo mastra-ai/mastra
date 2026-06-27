@@ -164,7 +164,6 @@ export interface TUIState {
   chatContainer: Container;
   editorContainer: Container;
   idleCounter?: IdleCounterComponent;
-  idleStartedAt?: number;
   lastRenderedMessageAt?: number;
   editor: CustomEditor;
   footer: Container;
@@ -256,6 +255,16 @@ export interface TUIState {
   modelAuthStatus: { hasAuth: boolean; apiKeyEnvVar?: string };
   githubPrGradientAnimator?: GradientAnimator;
   githubPrPollingActive: boolean;
+  /** Timestamp (ms) when the current agent run started. */
+  agentRunStartedAt?: number;
+  /** Timestamp (ms) when the current agent run last received streamed content. */
+  agentRunLastStreamPartAt?: number;
+  /** Duration (ms) of the most recently completed agent run. */
+  lastAgentRunDurationMs?: number;
+  /** Timestamp (ms) when the most recent agent run ended. */
+  lastAgentRunEndedAt?: number;
+  /** End state of the most recent agent run. */
+  lastAgentRunEndReason?: 'done' | 'aborted' | 'error';
 
   // ── Tokens/sec tracking ────────────────────────────────────────────────
   /**

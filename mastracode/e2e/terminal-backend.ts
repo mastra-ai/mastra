@@ -379,6 +379,7 @@ async function startMastraCodeApp(
     terminal,
     ...(options?.tui ?? {}),
   });
+  await options?.onTuiCreated?.(tui);
 
   void tui.run().catch(error => {
     process.stderr.write(`[mc-e2e:terminal] TUI run failed: ${error instanceof Error ? error.stack : String(error)}\n`);
