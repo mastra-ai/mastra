@@ -145,8 +145,8 @@ test.describe('CMS create agent page', () => {
     });
   });
 
-  test.describe('when required fields are partially filled', () => {
-    test('button stays disabled when only partial identity fields are filled', async ({ page }) => {
+  test.describe('when only agent name is filled', () => {
+    test('button stays disabled', async ({ page }) => {
       await page.goto('/cms/agents/create');
 
       const createButton = page.getByRole('button', { name: 'Create agent' });
@@ -156,15 +156,27 @@ test.describe('CMS create agent page', () => {
       await nameInput.fill('Test Agent');
 
       await expect(createButton).toBeDisabled();
+    });
+  });
 
-      // Fill provider but not model
+  test.describe('when agent name and provider are filled without a model', () => {
+    test('button stays disabled', async ({ page }) => {
+      await page.goto('/cms/agents/create');
+
+      const createButton = page.getByRole('button', { name: 'Create agent' });
+
+      const nameInput = page.locator('#agent-name');
+      await nameInput.fill('Test Agent');
+
       const providerCombobox = page.getByRole('combobox').nth(0);
       await providerCombobox.click();
       await page.getByRole('option', { name: 'OpenAI' }).click();
 
       await expect(createButton).toBeDisabled();
     });
+  });
 
+  test.describe('when identity fields are complete but instructions are empty', () => {
     test('button stays disabled when identity is complete but instructions are empty', async ({ page }) => {
       await page.goto('/cms/agents/create');
 
@@ -176,7 +188,9 @@ test.describe('CMS create agent page', () => {
       // Button should still be disabled because instructions are empty
       await expect(createButton).toBeDisabled();
     });
+  });
 
+  test.describe('when all required fields are filled', () => {
     test('button becomes enabled when all required fields are filled', async ({ page }) => {
       await page.goto('/cms/agents/create');
 
@@ -191,7 +205,9 @@ test.describe('CMS create agent page', () => {
       // Now enabled
       await expect(createButton).toBeEnabled();
     });
+  });
 
+  test.describe('when a required field is cleared after the form is enabled', () => {
     test('button becomes disabled again when required field is cleared', async ({ page }) => {
       await page.goto('/cms/agents/create');
 

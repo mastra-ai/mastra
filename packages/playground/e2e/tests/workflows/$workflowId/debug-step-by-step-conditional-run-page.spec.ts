@@ -156,7 +156,9 @@ test.describe('Workflow debug conditional branch selection on the run-detail pag
       const skippedArmEdge = page.locator('[data-edge-to="short-text"]').first();
       await expect(skippedArmEdge).toHaveAttribute('data-edge-status', 'idle');
     });
+  });
 
+  test.describe('when the paused :runId page is reloaded before and after the conditional', () => {
     test('takes the condition-selected branch when the conditional is reloaded then advanced', async ({ page }) => {
       // The user's "even better" repro: pause right before the conditional, navigate to the run
       // page, HARD reload, advance once (long-text), then HARD reload AGAIN and advance once more.
@@ -214,7 +216,9 @@ test.describe('Workflow debug conditional branch selection on the run-detail pag
         timeout: 20000,
       });
     });
+  });
 
+  test.describe('when the conditional is advanced on the live graph page', () => {
     test('takes the condition-selected branch on the live graph page (no reload)', async ({ page }) => {
       // Same long input, but advance the conditional on the LIVE graph page without navigating
       // away. This isolates whether the conditional re-evaluation works in the live stream path,
@@ -251,8 +255,10 @@ test.describe('Workflow debug conditional branch selection on the run-detail pag
 
       await runNextStep(page);
     });
+  });
 
-    test('check edges', async ({ page }) => {
+  test.describe('when a debug run finishes after taking the condition-selected branch', () => {
+    test('marks branch and final edges successful', async ({ page }) => {
       // Drive complexWorkflow per-step all the way to a successful finish, then verify
       // both the post-branch map -> nested edge AND the boundary edge into the End node
       // are colored green. The End edge has no step ids, so it can only light once the

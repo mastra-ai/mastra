@@ -120,8 +120,8 @@ test.describe('Workflow schedules', () => {
     });
   });
 
-  test.describe('when a workflow graph header is rendered', () => {
-    test('shows the Schedules link only when the workflow has schedules', async ({ page }) => {
+  test.describe('when a workflow graph has one schedule', () => {
+    test('routes the Schedules link to the schedule detail page', async ({ page }) => {
       await page.goto('/workflows/scheduledWorkflow/graph');
 
       // scheduledWorkflow has exactly one schedule, so the header link goes straight
@@ -131,17 +131,22 @@ test.describe('Workflow schedules', () => {
 
       await scheduledHeaderLink.click();
       await expect(page).toHaveURL(/\/workflows\/schedules\/[^/]+$/);
+    });
+  });
 
-      // multiScheduledWorkflow has 2 schedules, so the header link goes to the
-      // filtered list view (?workflowId=...) instead of a detail page.
+  test.describe('when a workflow graph has multiple schedules', () => {
+    test('routes the Schedules link to the filtered schedules list', async ({ page }) => {
       await page.goto('/workflows/multiScheduledWorkflow/graph');
       const multiHeaderLink = page.getByRole('link', { name: /Schedules/ });
       await expect(multiHeaderLink).toBeVisible();
 
       await multiHeaderLink.click();
       await expect(page).toHaveURL(/\/workflows\/schedules\?workflowId=multiScheduledWorkflow$/);
+    });
+  });
 
-      // A workflow without any declared schedules should NOT render the link.
+  test.describe('when a workflow graph has no schedules', () => {
+    test('does not render the Schedules link', async ({ page }) => {
       await page.goto('/workflows/complexWorkflow/graph');
       await expect(page.getByRole('link', { name: /Schedules/ })).toHaveCount(0);
     });
