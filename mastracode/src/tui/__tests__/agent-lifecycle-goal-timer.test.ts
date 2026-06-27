@@ -51,6 +51,23 @@ describe('agent lifecycle goal timing', () => {
     expect(state.goalManager.stopActiveTimer).toHaveBeenCalled();
   });
 
+  it('does not render redundant interrupted errors for user aborts', () => {
+    const updateContent = vi.fn();
+    const streamingMessage = { id: 'msg-1' } as any;
+    const state = createState({
+      userInitiatedAbort: true,
+      streamingComponent: { updateContent } as any,
+      streamingMessage,
+    });
+
+    handleAgentAborted(createContext(state));
+
+    expect(updateContent).not.toHaveBeenCalled();
+    expect(streamingMessage.errorMessage).toBeUndefined();
+    expect(state.streamingComponent).toBeUndefined();
+    expect(state.streamingMessage).toBeUndefined();
+  });
+
   it('stops active goal timing when an agent error ends the turn', () => {
     const state = createState();
 

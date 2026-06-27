@@ -157,6 +157,34 @@ describe('updateStatusLine', () => {
     expect(rendered).not.toContain('queued');
   });
 
+  it('shows active elapsed time directly after the model name', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(62_000);
+    const state = createState();
+    state.agentRunStartedAt = 1_000;
+    state.controller.session.model.get.mockReturnValue('openai/gpt-5');
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('openai/gpt-5 1m1s');
+    expect(rendered).not.toContain('worked for');
+    vi.useRealTimers();
+  });
+
+  it('does not show completed work timing in the footer status line', () => {
+    const state = createState();
+    state.lastAgentRunDurationMs = 61_000;
+    state.lastAgentRunEndedAt = 1_000;
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).not.toContain('done in');
+    expect(rendered).not.toContain('canceled after');
+    expect(rendered).not.toContain('errored after');
+  });
+
   it('shows the active GitHub PR subscription beside the thread path', () => {
     const state = createState();
     state.activeGithubPrSubscriptions = [

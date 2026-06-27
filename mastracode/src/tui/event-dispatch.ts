@@ -68,13 +68,28 @@ export async function dispatchEvent(
       // would otherwise zero it before it could be read.
       state.tokensPerSec = 0;
       state.decodeStartedAt = 0;
+      state.agentRunStartedAt = Date.now();
+      state.agentRunLastStreamPartAt = state.agentRunStartedAt;
+      state.lastAgentRunDurationMs = undefined;
+      state.lastAgentRunEndedAt = undefined;
+      state.lastAgentRunEndReason = undefined;
+      ectx.updateStatusLine();
       handleAgentStart(ectx);
       break;
 
     case 'agent_end':
       // Keep tokensPerSec as the last turn's reading; only clear the in-flight
       // decode window so a stale start can't bleed into the next turn.
+      if (state.agentRunStartedAt !== undefined) {
+        const now = Date.now();
+        state.lastAgentRunDurationMs = Math.max(0, now - state.agentRunStartedAt);
+        state.lastAgentRunEndedAt = now;
+        state.lastAgentRunEndReason = event.reason === 'aborted' || event.reason === 'error' ? event.reason : 'done';
+        state.agentRunStartedAt = undefined;
+        state.agentRunLastStreamPartAt = undefined;
+      }
       state.decodeStartedAt = 0;
+      ectx.updateStatusLine();
       if (event.reason === 'aborted') {
         handleAgentAborted(ectx);
       } else if (event.reason === 'error') {
@@ -88,19 +103,24 @@ export async function dispatchEvent(
       handleMessageStart(ectx, event.message);
       break;
 
-    case 'message_update':
+    case 'message_update': {
       // Only open the decode window when the message carries actual streamed
       // text — tool-result-only updates (e.g. plan approval resume) must not
       // count toward tokens/sec. This mirrors the web UI's hasAssistantText()
       // guard in transcriptReducer.
-      if (
-        state.decodeStartedAt === 0 &&
-        event.message.content.some(part => part.type === 'text' && 'text' in part && part.text.trim().length > 0)
-      ) {
-        state.decodeStartedAt = Date.now();
+      const hasAssistantText = event.message.content.some(
+        part => part.type === 'text' && 'text' in part && part.text.trim().length > 0,
+      );
+      if (hasAssistantText) {
+        state.agentRunLastStreamPartAt = Date.now();
+        if (state.decodeStartedAt === 0) {
+          state.decodeStartedAt = state.agentRunLastStreamPartAt;
+        }
       }
+      ectx.updateStatusLine();
       handleMessageUpdate(ectx, event.message);
       break;
+    }
 
     case 'message_end':
       handleMessageEnd(ectx, event.message);

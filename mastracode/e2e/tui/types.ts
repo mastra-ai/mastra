@@ -129,6 +129,7 @@ export type ScenarioName =
   | 'workspace-plan-mode-tools'
   | 'workspace-tool-names'
   | 'workspace-tool-output-rendering'
+  | 'work-idle-status'
   | 'worktree-cross-thread-resume'
   | 'worktree-thread-scoping'
   | 'resourceid-drift-prompt-accept'
@@ -168,6 +169,7 @@ export type McE2eMastraCodeAppResult = Awaited<ReturnType<typeof createMastraCod
 export type McE2eStartMastraCodeAppOptions = {
   config?: MastraCodeConfig;
   onCreated?: (result: McE2eMastraCodeAppResult) => Promise<void> | void;
+  onTuiCreated?: (tui: unknown) => Promise<void> | void;
   setupDebugLogging?: boolean;
   startupWarnings?: string[];
   tui?: Partial<Pick<MastraTUIOptions, 'appName' | 'initialMessage' | 'inlineQuestions' | 'verbose'>>;

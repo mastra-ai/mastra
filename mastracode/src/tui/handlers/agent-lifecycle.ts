@@ -8,7 +8,6 @@ import { getCurrentGitBranchAsync } from '../../utils/project.js';
 import { insertChatComponentWithBoundarySpacing } from '../chat-boundary-reconciliation.js';
 import { JudgeDisplayComponent } from '../components/judge-display.js';
 import { GradientAnimator } from '../components/obi-loader.js';
-import { showError } from '../display.js';
 import { pruneChatContainer } from '../prune-chat.js';
 import { clearPendingUserMessages, removePendingUserMessage } from '../render-messages.js';
 
@@ -143,22 +142,19 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
     state.gradientAnimator.fadeOut();
   }
 
-  // A plan "Request Changes" abort ends the run intentionally; clear any
-  // streaming state without surfacing an "Interrupted" error so the user can
-  // type revision feedback against a clean transcript.
-  if (state.planRejectionAbort) {
+  // User-initiated aborts and plan "Request Changes" aborts are intentional.
+  // The timing line already says "canceled after x", so don't also render a
+  // redundant "Error: Interrupted" message in the transcript.
+  if (state.planRejectionAbort || state.userInitiatedAbort) {
     state.streamingComponent = undefined;
     state.streamingMessage = undefined;
   } else if (state.streamingComponent && state.streamingMessage) {
-    // Update streaming message to show it was interrupted
+    // Update unexpected aborted streams to show they were interrupted.
     state.streamingMessage.stopReason = 'aborted';
     state.streamingMessage.errorMessage = 'Interrupted';
     state.streamingComponent.updateContent(state.streamingMessage);
     state.streamingComponent = undefined;
     state.streamingMessage = undefined;
-  } else if (state.userInitiatedAbort) {
-    // Show standalone "Interrupted" if user pressed Ctrl+C but no streaming component
-    showError(state, 'Interrupted');
   }
   state.userInitiatedAbort = false;
   state.planRejectionAbort = false;
