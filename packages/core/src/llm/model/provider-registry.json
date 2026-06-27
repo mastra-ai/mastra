@@ -520,6 +520,7 @@
         "perplexity/sonar-pro",
         "perplexity/sonar-reasoning-pro",
         "prodia/flux-fast-schnell",
+        "quiverai/arrow-1.1",
         "recraft/recraft-v2",
         "recraft/recraft-v3",
         "recraft/recraft-v4",
@@ -1202,6 +1203,23 @@
       "docUrl": "https://docs.vivgrid.com/models",
       "gateway": "models.dev",
       "npm": "@ai-sdk/openai"
+    },
+    "tinfoil": {
+      "url": "https://inference.tinfoil.sh/v1",
+      "apiKeyEnvVar": "TINFOIL_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "Tinfoil",
+      "models": [
+        "gemma4-31b",
+        "glm-5-2",
+        "gpt-oss-120b",
+        "gpt-oss-safeguard-120b",
+        "kimi-k2-6",
+        "llama3-3-70b",
+        "nomic-embed-text"
+      ],
+      "docUrl": "https://docs.tinfoil.sh",
+      "gateway": "models.dev"
     },
     "mistral": {
       "url": "https://api.mistral.ai/v1",
@@ -6195,6 +6213,7 @@
       "perplexity/sonar-pro",
       "perplexity/sonar-reasoning-pro",
       "prodia/flux-fast-schnell",
+      "quiverai/arrow-1.1",
       "recraft/recraft-v2",
       "recraft/recraft-v3",
       "recraft/recraft-v4",
@@ -6728,6 +6747,15 @@
       "gpt-5.4-mini",
       "gpt-5.4-nano",
       "gpt-5.5"
+    ],
+    "tinfoil": [
+      "gemma4-31b",
+      "glm-5-2",
+      "gpt-oss-120b",
+      "gpt-oss-safeguard-120b",
+      "kimi-k2-6",
+      "llama3-3-70b",
+      "nomic-embed-text"
     ],
     "mistral": [
       "codestral-latest",

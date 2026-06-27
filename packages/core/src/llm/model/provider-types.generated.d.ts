@@ -485,6 +485,7 @@ export type ProviderModelsMap = {
     'perplexity/sonar-pro',
     'perplexity/sonar-reasoning-pro',
     'prodia/flux-fast-schnell',
+    'quiverai/arrow-1.1',
     'recraft/recraft-v2',
     'recraft/recraft-v3',
     'recraft/recraft-v4',
@@ -1024,6 +1025,15 @@ export type ProviderModelsMap = {
     'gpt-5.4-mini',
     'gpt-5.4-nano',
     'gpt-5.5',
+  ];
+  readonly tinfoil: readonly [
+    'gemma4-31b',
+    'glm-5-2',
+    'gpt-oss-120b',
+    'gpt-oss-safeguard-120b',
+    'kimi-k2-6',
+    'llama3-3-70b',
+    'nomic-embed-text',
   ];
   readonly mistral: readonly [
     'codestral-latest',
