@@ -1,6 +1,6 @@
 {
   "name": "@mastra/sofya",
-  "version": "1.0.0",
+  "version": "0.0.0",
   "description": "Sofya web search, fetch, extract, and research tools for Mastra agents",
   "type": "module",
   "main": "./dist/index.js",

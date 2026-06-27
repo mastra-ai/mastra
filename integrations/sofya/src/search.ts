@@ -10,10 +10,10 @@ const inputSchema = z.object({
     .enum(['snippets', 'basic'])
     .optional()
     .describe("Search depth. 'snippets' is cheaper and returns short excerpts, 'basic' returns full page content"),
-  maxResults: z.number().min(1).max(20).optional().describe('Maximum number of results to return (1-20)'),
+  maxResults: z.number().int().min(1).max(20).optional().describe('Maximum number of results to return (1-20)'),
   includeAnswer: z.boolean().optional().describe('Include an AI-synthesized answer generated from the results'),
-  includeDomains: z.array(z.string()).optional().describe('Only include results from these domains (max 10)'),
-  excludeDomains: z.array(z.string()).optional().describe('Exclude results from these domains (max 10)'),
+  includeDomains: z.array(z.string()).max(10).optional().describe('Only include results from these domains (max 10)'),
+  excludeDomains: z.array(z.string()).max(10).optional().describe('Exclude results from these domains (max 10)'),
   topic: z.enum(['general', 'news']).optional().describe("Search topic. 'general' for web search, 'news' for news articles"),
   freshness: z
     .string()

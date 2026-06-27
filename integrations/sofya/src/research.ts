@@ -11,7 +11,7 @@ const inputSchema = z.object({
     .string()
     .optional()
     .describe("Filter sources by recency. One of 'day', 'week', 'month', 'year', or a 'YYYY-MM-DD' date"),
-  maxSources: z.number().min(1).max(30).optional().describe('Maximum number of sources to use (1-30)'),
+  maxSources: z.number().int().min(1).max(30).optional().describe('Maximum number of sources to use (1-30)'),
 });
 
 const outputSchema = z.object({
