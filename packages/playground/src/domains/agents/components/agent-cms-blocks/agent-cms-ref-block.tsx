@@ -1,5 +1,4 @@
 import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
-import type { JsonSchema } from '@mastra/playground-ui';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { ContentBlock } from '@mastra/playground-ui/components/ContentBlocks';
@@ -7,9 +6,10 @@ import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/c
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { GripVertical, X, ExternalLink, ChevronDown, AlertTriangle } from 'lucide-react';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
+import { GripVertical, X, ExternalLink, ChevronDown, AlertTriangle } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 

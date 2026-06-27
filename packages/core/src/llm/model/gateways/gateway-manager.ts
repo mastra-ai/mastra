@@ -20,7 +20,7 @@ export interface GatewayModel {
 
 /**
  * Centralises the gateway-chain operations shared between
- * {@link ModelRouterLanguageModel} and the Harness: gateway merging, model
+ * {@link ModelRouterLanguageModel} and the AgentController: gateway merging, model
  * routing, auth resolution, and provider/model listing.
  *
  * The manager owns the *gateway registry* (which gateway owns a model, auth
@@ -43,6 +43,20 @@ export class GatewayManager {
     return gatewayId === 'models.dev' ? undefined : gatewayId;
   }
 
+  /**
+   * Returns the prefix to use when parsing `routerId` for the given gateway.
+   * A gateway may claim an unprefixed id (e.g. `handlesModel` matching a bare
+   * `anthropic/...` id); in that case the gateway's prefix does not appear in
+   * the id, so parse it as an unprefixed `provider/model` id.
+   */
+  private static getPrefixForId(gatewayId: string, routerId: string): string | undefined {
+    const prefix = GatewayManager.getPrefix(gatewayId);
+    if (prefix && !routerId.startsWith(`${prefix}/`)) {
+      return undefined;
+    }
+    return prefix;
+  }
+
   /** Find the gateway that handles a given model/router id. */
   findGatewayForModel(routerId: string): MastraModelGatewayInterface {
     return findGatewayForModel(routerId, this.gateways);
@@ -52,7 +66,7 @@ export class GatewayManager {
   parseModelId(routerId: string): { providerId: string; modelId: string; gatewayId: string } {
     const gateway = this.findGatewayForModel(routerId);
     const gatewayId = getGatewayId(gateway);
-    const { providerId, modelId } = parseModelRouterId(routerId, GatewayManager.getPrefix(gatewayId));
+    const { providerId, modelId } = parseModelRouterId(routerId, GatewayManager.getPrefixForId(gatewayId, routerId));
     return { providerId, modelId, gatewayId };
   }
 
@@ -68,7 +82,7 @@ export class GatewayManager {
   async resolveAuth(routerId: string): Promise<GatewayAuthResult> {
     const gateway = this.findGatewayForModel(routerId);
     const gatewayId = getGatewayId(gateway);
-    const { providerId, modelId } = parseModelRouterId(routerId, GatewayManager.getPrefix(gatewayId));
+    const { providerId, modelId } = parseModelRouterId(routerId, GatewayManager.getPrefixForId(gatewayId, routerId));
     const request: GatewayAuthRequest = { gatewayId, providerId, modelId, routerId };
 
     const rawGatewayAuth = await gateway.resolveAuth?.(request);

@@ -100,6 +100,7 @@ describe('DurableAgent observability tracing', () => {
 
   async function spyOnSpans() {
     const agentSpans: any[] = [];
+    const agentSpanOpts: any[] = [];
     const mod = await import('../../../observability/utils');
     const spy = vi.spyOn(mod, 'getOrCreateSpan').mockImplementation((opts: any) => {
       // Honour tracingContext.currentSpan as the parent so findParent walks resolve.
@@ -107,10 +108,11 @@ describe('DurableAgent observability tracing', () => {
       const span = createMockSpan(opts.type ?? 'unknown', parent);
       if (opts.type === 'agent_run') {
         agentSpans.push(span);
+        agentSpanOpts.push(opts);
       }
       return span as any;
     });
-    return { spy, agentSpans };
+    return { spy, agentSpans, agentSpanOpts };
   }
 
   it('opens an AGENT_RUN root span with a MODEL_GENERATION child for a durable run', async () => {
@@ -228,6 +230,44 @@ describe('DurableAgent observability tracing', () => {
           call[0]?.type === 'processor_run' && call[0]?.name === 'output processor: test-output-processor',
       );
       expect(outputProcessorSpanCall).toBeDefined();
+
+      cleanup();
+    } finally {
+      spy.mockRestore();
+    }
+  }, 30000);
+
+  it('forwards AGENT_RUN attributes, metadata and tracingPolicy to match non-durable parity', async () => {
+    const { spy, agentSpanOpts } = await spyOnSpans();
+
+    try {
+      const policy = { internal: 'ALL' } as any;
+      const baseAgent = new Agent({
+        id: 'trace-agent-attrs',
+        name: 'Trace Agent (attrs)',
+        instructions: 'You are a helpful assistant',
+        model: createTextStreamModel('Hello') as LanguageModelV2,
+        options: { tracingPolicy: policy },
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const { output, cleanup } = await durableAgent.stream('Hi', {
+        memory: { thread: 'thread-trace-1', resource: 'resource-trace-1' },
+      });
+      await output.consumeStream();
+
+      expect(agentSpanOpts.length).toBe(1);
+      const opts = agentSpanOpts[0];
+      expect(opts.name).toBe(`agent run: 'trace-agent-attrs'`);
+      // attributes parity
+      expect(opts.attributes?.conversationId).toBe('thread-trace-1');
+      expect(opts.attributes?.instructions).toBe('You are a helpful assistant');
+      // metadata parity
+      expect(opts.metadata?.runId).toBeDefined();
+      expect(opts.metadata?.threadId).toBe('thread-trace-1');
+      expect(opts.metadata?.resourceId).toBe('resource-trace-1');
+      // tracingPolicy parity — forwarded straight through from the wrapped agent
+      expect(opts.tracingPolicy).toBe(policy);
 
       cleanup();
     } finally {

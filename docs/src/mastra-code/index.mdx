@@ -7,7 +7,7 @@ packages:
 
 # Mastra Code
 
-Mastra Code is a terminal-based AI coding agent that never compacts. Built on Mastra's [Harness](https://mastra.ai/reference/harness/harness-class), [Agent](https://mastra.ai/docs/agents/overview), and [Memory](https://mastra.ai/docs/memory/overview) primitives. It runs in your terminal, connects to thousands of AI models, and provides tools for reading, searching, editing, and executing code.
+Mastra Code is a terminal-based AI coding agent that never compacts. Built on Mastra's [AgentController](https://mastra.ai/reference/agent-controller/agent-controller-class), [Agent](https://mastra.ai/docs/agents/overview), and [Memory](https://mastra.ai/docs/memory/overview) primitives. It runs in your terminal, connects to thousands of AI models, and provides tools for reading, searching, editing, and executing code.
 
 Mastra Code organizes its capabilities around these areas:
 
@@ -138,7 +138,7 @@ You can also define custom slash commands as markdown files. See [Configuration]
 Mastra Code is built on four layers:
 
 1. **TUI**: Terminal interface (`pi-tui` components)
-1. **Harness**: Mode management, thread persistence, event system, state management
+1. **AgentController**: Mode management, thread persistence, event system, state management
 1. **Mastra Agent**: Dynamic model selection, tool execution, memory integration, subagents
 1. **LibSQL Storage**: Thread persistence, message history, token usage tracking, observational memory
 

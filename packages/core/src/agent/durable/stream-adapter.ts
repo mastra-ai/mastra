@@ -32,7 +32,7 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   model: {
     modelId: string | undefined;
     provider: string | undefined;
-    version: 'v2' | 'v3';
+    version: 'v2' | 'v3' | 'v4';
   };
   /** Thread ID for memory */
   threadId?: string;
@@ -60,6 +60,13 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   onIterationComplete?: (data: AgentIterationCompleteEventData) => void | Promise<void>;
   /** Optional logger for structured logging */
   logger?: IMastraLogger;
+  /**
+   * If true, close the underlying ReadableStream when a SUSPENDED event is
+   * received. Used by `generate()` / `resumeGenerate()` so that
+   * `getFullOutput()` resolves on suspend instead of hanging. Streaming
+   * callers leave this `false` so the stream stays open for a later resume.
+   */
+  closeOnSuspend?: boolean;
 }
 
 /**
@@ -100,6 +107,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     onAbort,
     onIterationComplete,
     logger,
+    closeOnSuspend = false,
   } = options;
 
   // Helper to log errors (uses logger if available, falls back to console)
@@ -217,7 +225,12 @@ export function createDurableAgentStream<OUTPUT = undefined>(
         case AgentStreamEventTypes.SUSPENDED: {
           const data = streamEvent.data as AgentSuspendedEventData;
           await onSuspended?.(data);
-          // Don't close the stream on suspend - it can be resumed
+          // By default we leave the stream open on suspend so a later resume
+          // can keep streaming chunks. `generate()`/`resumeGenerate()` opt
+          // into closing here so `getFullOutput()` can resolve.
+          if (closeOnSuspend) {
+            safeClose(controller);
+          }
           break;
         }
 

@@ -3,14 +3,19 @@ import path from 'node:path';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { getAppDataDir } from './project.js';
 
-/** Global plans directory for approved plans. */
+/** Global plans directory for approved-plan archives. */
 export function getPlansDir(): string {
   return process.env.MASTRA_PLANS_DIR ?? path.join(getAppDataDir(), 'plans');
 }
 
-/** Local (project-scoped) plans directory for in-progress plan editing. */
+/** Local (project-scoped) plans directory where the agent writes named plan files. */
 export function getLocalPlansDir(projectPath: string): string {
   return path.join(projectPath, DEFAULT_CONFIG_DIR, 'plans');
+}
+
+/** Workspace-relative directory the agent writes plan files into. */
+export function getLocalPlansRelativeDir(): string {
+  return path.join(DEFAULT_CONFIG_DIR, 'plans');
 }
 
 function slugify(str: string): string {
@@ -19,6 +24,47 @@ function slugify(str: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
   return slug || 'untitled';
+}
+
+/** Derive a plan filename from a title (e.g. `add-dark-mode.md`). */
+export function getPlanFilename(title: string): string {
+  return `${slugify(title)}.md`;
+}
+
+/**
+ * Suggested workspace-relative path for a new plan file, shown in plan-mode prompts.
+ * Without a title we fall back to a generic name the agent can rename later.
+ */
+export function getSuggestedPlanRelativePath(title?: string): string {
+  const filename = title ? getPlanFilename(title) : 'plan.md';
+  return path.join(getLocalPlansRelativeDir(), filename);
+}
+
+/**
+ * Resolve a plan path submitted by the agent (absolute or project-relative) to an
+ * absolute path. Returns `undefined` when no usable path was provided.
+ */
+export function resolvePlanPath(projectPath: string, submittedPath: string): string | undefined {
+  if (!submittedPath) return undefined;
+  return path.isAbsolute(submittedPath) ? submittedPath : path.resolve(projectPath, submittedPath);
+}
+
+/**
+ * Whether `targetPath` (absolute or project-relative) is a valid plan file: a `.md`
+ * file located directly inside the project's `.mastracode/plans/` directory. Used by the
+ * plan-mode write guard so the agent can write any named plan file there, but nothing
+ * outside that directory.
+ */
+export function isPlanFilePath(projectPath: string, targetPath: string): boolean {
+  const abs = resolvePlanPath(projectPath, targetPath);
+  if (!abs) return false;
+  if (path.extname(abs).toLowerCase() !== '.md') return false;
+
+  const plansDir = path.resolve(getLocalPlansDir(projectPath));
+  const rel = path.relative(plansDir, abs);
+  // Must be directly inside the plans dir (no nested subdirectories, no escaping it).
+  if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) return false;
+  return !rel.includes(path.sep);
 }
 
 export async function savePlanToDisk(opts: {
@@ -49,38 +95,60 @@ export async function savePlanToDisk(opts: {
 }
 
 /**
- * Write a plan snapshot to disk on each submission (not just approval).
- * This lets users view/edit the plan file and enables diffing between revisions.
- * Each plan gets a stable filename derived from its title (e.g. `add-dark-mode.md`)
- * so multiple plans can coexist on the same branch and be committed.
+ * Read a plan markdown file by absolute path.
  *
- * Returns the filename used (e.g. `add-dark-mode.md`).
+ * The leading `# <title>` heading (if present) is parsed as the title and the remaining
+ * content is returned as the plan body. Returns `undefined` when the file does not exist.
  */
-export async function savePlanSnapshot(opts: {
-  title: string;
-  plan: string;
-  projectPath: string;
-  plansDir?: string;
-}): Promise<string> {
-  const { title, plan, projectPath } = opts;
-  const plansDir = opts.plansDir ?? getLocalPlansDir(projectPath);
-  const baseDir = path.resolve(plansDir);
-
-  await fs.mkdir(baseDir, { recursive: true });
-
-  const filename = `${slugify(title)}.md`;
-  const target = path.resolve(baseDir, filename);
-  const rel = path.relative(baseDir, target);
-  if (rel.startsWith('..') || path.isAbsolute(rel)) {
-    throw new Error(`Invalid plan title: ${title}`);
+export async function readPlanFile(absPath: string): Promise<{ title: string; plan: string } | undefined> {
+  let raw: string;
+  try {
+    raw = await fs.readFile(absPath, 'utf-8');
+  } catch {
+    return undefined;
   }
 
-  const content = `# ${title}\n\n${plan}\n`;
-  await fs.writeFile(target, content, 'utf-8');
-  return filename;
+  const lines = raw.split(/\r?\n/);
+  const headingIndex = lines.findIndex(line => line.trim().length > 0);
+  const heading = headingIndex >= 0 ? lines[headingIndex] : undefined;
+  if (heading?.startsWith('# ')) {
+    const title = heading.slice(2).trim();
+    const plan = lines
+      .slice(headingIndex + 1)
+      .join('\n')
+      .replace(/^\n+/, '')
+      .trimEnd();
+    return { title, plan };
+  }
+
+  return { title: '', plan: raw.trimEnd() };
 }
 
-/** Derive the plan filename from a title without writing to disk. */
-export function getPlanFilename(title: string): string {
-  return `${slugify(title)}.md`;
+/**
+ * Approve the plan file at `planPath`: write a timestamped copy to the global plans
+ * archive so approved plans are findable later. The local named plan file is left in
+ * place so the user can review every plan made over time.
+ *
+ * Returns the local plan filename (e.g. `add-dark-mode.md`), or `undefined` when there
+ * was no plan file to approve.
+ */
+export async function approvePlanFile(opts: {
+  planPath: string;
+  title: string;
+  resourceId: string;
+  plansDir?: string;
+}): Promise<string | undefined> {
+  const { planPath, title, resourceId, plansDir } = opts;
+
+  const current = await readPlanFile(planPath);
+  if (!current) {
+    return undefined;
+  }
+
+  const resolvedTitle = title || current.title || 'Implementation Plan';
+
+  // Global archive (timestamped, never overwritten) so approved plans are findable later.
+  await savePlanToDisk({ title: resolvedTitle, plan: current.plan, resourceId, plansDir });
+
+  return path.basename(planPath);
 }

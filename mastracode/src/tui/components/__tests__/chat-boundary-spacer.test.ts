@@ -179,11 +179,11 @@ describe('ChatBoundarySpacer', () => {
 
   it('keeps plan components full size and separated normally', () => {
     const plan = PlanApprovalInlineComponent.createStreaming(ui);
-    plan.updateArgs({ title: 'Test plan', plan: '## Step one\nDo the thing.' });
+    plan.updateArgs({ path: '.mastracode/plans/test-plan.md' });
     const lines = renderSequence([quietTool('view'), plan]);
 
-    expect(lines.join('\n')).toContain('Plan: Test plan');
-    expect(lines.join('\n')).toContain('Step one');
+    expect(lines.join('\n')).toContain('Plan: Untitled plan');
+    expect(lines.join('\n')).toContain('.mastracode/plans/test-plan.md');
     expect(lines.filter(line => line === '')).toHaveLength(1);
   });
 });

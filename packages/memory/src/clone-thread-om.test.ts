@@ -1,8 +1,9 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
-import { Harness } from '@mastra/core/harness';
+import { AgentController } from '@mastra/core/agent-controller';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MemoryStorage, ObservationalMemoryRecord, BufferedObservationChunk } from '@mastra/core/storage';
+import { Workspace } from '@mastra/core/workspace';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Memory } from './index';
 
@@ -473,25 +474,26 @@ describe('cloneThread – Observational Memory', () => {
     });
   });
 
-  describe('harness dynamic memory factory', () => {
-    it('clones OM records with observedMessageIds via Harness.cloneThread', async () => {
-      await seedThread('src-thread-harness-dynamic', 3);
+  describe('controller dynamic memory factory', () => {
+    it('clones OM records with observedMessageIds via AgentController.cloneThread', async () => {
+      await seedThread('src-thread-controller-dynamic', 3);
       const memoryStore = await getMemoryStore(memory);
 
-      await seedThreadScopedOM(memoryStore, 'src-thread-harness-dynamic', {
-        activeObservations: '* Harness dynamic clone path observation',
+      await seedThreadScopedOM(memoryStore, 'src-thread-controller-dynamic', {
+        activeObservations: '* AgentController dynamic clone path observation',
         observedMessageIds: [
-          'msg-src-thread-harness-dynamic-0',
-          'msg-src-thread-harness-dynamic-1',
-          'msg-src-thread-harness-dynamic-2',
+          'msg-src-thread-controller-dynamic-0',
+          'msg-src-thread-controller-dynamic-1',
+          'msg-src-thread-controller-dynamic-2',
         ],
       });
 
       const memoryFactory = vi.fn().mockResolvedValue(memory);
-      const harness = new Harness({
+      const controller = new AgentController({
         id: 'clone-thread-dynamic-memory-test',
         resourceId,
         memory: memoryFactory,
+        workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
         modes: [
           {
             id: 'default',
@@ -507,9 +509,9 @@ describe('cloneThread – Observational Memory', () => {
         ],
       });
 
-      await harness.init();
-      const session = await harness.createSession({ resourceId });
-      const clonedThread = await session.thread.clone({ sourceThreadId: 'src-thread-harness-dynamic' });
+      await controller.init();
+      const session = await controller.createSession({ resourceId });
+      const clonedThread = await session.thread.clone({ sourceThreadId: 'src-thread-controller-dynamic' });
 
       expect(memoryFactory).toHaveBeenCalledTimes(1);
 
