@@ -1,0 +1,158 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import {
+  OraclePoolManager,
+  buildPoolOptions,
+  clobBind,
+  executeDdl,
+  isOracleErrorCode,
+  jsonBind,
+  normalizeBatchSize,
+  nullableClobBind,
+  nullableJsonBind,
+  rollbackQuietly,
+  rows,
+  safeJsonStringify,
+  safeJsonValue,
+  sanitizeJsonString,
+  validateOracleConnectionConfig,
+} from './connection';
+
+describe('Oracle shared connection helpers', () => {
+  it('uses external pools without owning their lifecycle', async () => {
+    const connectionClose = vi.fn(async () => undefined);
+    const pool = {
+      getConnection: vi.fn(async () => ({ close: connectionClose })),
+      close: vi.fn(async () => undefined),
+    };
+    const manager = new OraclePoolManager({ pool: pool as any });
+
+    await expect(manager.getPool()).resolves.toBe(pool);
+    await expect(manager.withConnection(async connection => connection)).resolves.toMatchObject({
+      close: connectionClose,
+    });
+    await manager.close();
+
+    expect(connectionClose).toHaveBeenCalledOnce();
+    expect(pool.close).not.toHaveBeenCalled();
+  });
+
+  it('validates config, pool options, batch sizes, and bind helpers', () => {
+    expect(() => validateOracleConnectionConfig({})).toThrow(/credentials/i);
+    expect(() => validateOracleConnectionConfig({ user: 'u', connectString: 'db' })).toThrow(/Password/i);
+    expect(() => validateOracleConnectionConfig({ user: 'u', connectString: 'db', externalAuth: true })).not.toThrow();
+    expect(normalizeBatchSize(undefined, 'batch', 25)).toBe(25);
+    expect(() => normalizeBatchSize(0, 'batch', 25)).toThrow(/positive integer/i);
+    expect(
+      buildPoolOptions({
+        user: 'u',
+        password: 'p',
+        connectString: 'db',
+        configDir: '/cfg',
+        walletLocation: '/wallet',
+        walletPassword: 'secret',
+        poolMin: 1,
+        poolMax: 2,
+        poolIncrement: 1,
+      }),
+    ).toMatchObject({
+      user: 'u',
+      configDir: '/cfg',
+      walletLocation: '/wallet',
+      walletPassword: 'secret',
+      poolMin: 1,
+      poolMax: 2,
+    });
+
+    expect(rows({} as any)).toEqual([]);
+    expect(jsonBind({ a: 1 })).toMatchObject({ val: { a: 1 } });
+    expect(jsonBind(undefined)).toMatchObject({ val: null });
+    expect(nullableJsonBind(undefined)).toBeNull();
+    expect(nullableJsonBind(null)).toBeNull();
+    expect(nullableClobBind(undefined)).toBeNull();
+    expect(nullableClobBind(null)).toBeNull();
+    expect(nullableClobBind('x')).toMatchObject({ val: 'x' });
+    expect(clobBind('text')).toMatchObject({ val: 'text' });
+  });
+
+  it('sanitizes JSON values and recognizes Oracle error shapes', () => {
+    const circular: Record<string, unknown> = { keep: true };
+    circular.self = circular;
+    circular.big = 10n;
+    circular.fn = () => undefined;
+    circular.symbol = Symbol('skip');
+    circular.child = {
+      toJSON() {
+        return { ok: true };
+      },
+    };
+
+    expect(safeJsonValue(circular)).toMatchObject({ keep: true, big: '10', child: { ok: true } });
+    expect(
+      safeJsonStringify({
+        toJSON() {
+          throw new Error('bad toJSON');
+        },
+      }),
+    ).toBe('null');
+    expect(sanitizeJsonString('{"bad":"\\u0000","slash":"\\q"}')).toContain('\\\\q');
+    expect(isOracleErrorCode(null, [-942])).toBe(false);
+    expect(isOracleErrorCode({ errorNum: 942 }, [-942])).toBe(true);
+    expect(isOracleErrorCode({}, [-942])).toBe(false);
+    expect(isOracleErrorCode(new Error('ORA-00942: table missing'), [-942])).toBe(true);
+    expect(isOracleErrorCode(new Error('no match'), [-942])).toBe(false);
+  });
+
+  it('fails fast when lazy pool options are unavailable', async () => {
+    const manager = new OraclePoolManager({ user: 'u', password: 'p', connectString: 'db' });
+    (manager as any).poolOptions = undefined;
+
+    await expect(manager.getPool()).rejects.toThrow(/pool options/i);
+  });
+
+  it('handles DDL ignore, retry, failure, and quiet rollback paths', async () => {
+    const ignoredConnection = {
+      execute: vi.fn(async () => {
+        throw Object.assign(new Error('ORA-00955: name is already used'), { errorNum: 955 });
+      }),
+    };
+    await expect(executeDdl(ignoredConnection as any, 'CREATE TABLE X (id NUMBER)', [-955])).resolves.toBe(false);
+
+    vi.useFakeTimers();
+    try {
+      const retryError = Object.assign(new Error('ORA-00054: resource busy'), { errorNum: 54 });
+      const retryConnection = {
+        execute: vi
+          .fn()
+          .mockRejectedValueOnce(retryError)
+          .mockRejectedValueOnce(retryError)
+          .mockResolvedValueOnce({}),
+      };
+      const retryPromise = executeDdl(retryConnection as any, 'CREATE INDEX X ON T (id)');
+      await vi.advanceTimersByTimeAsync(350);
+      await expect(retryPromise).resolves.toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    await expect(
+      executeDdl(
+        {
+          execute: vi.fn(async () => {
+            throw new Error('boom');
+          }),
+        } as any,
+        'CREATE TABLE X (id NUMBER)',
+      ),
+    ).rejects.toThrow(/boom/);
+
+    await expect(rollbackQuietly({ rollback: vi.fn(async () => undefined) } as any)).resolves.toBeUndefined();
+    await expect(
+      rollbackQuietly({
+        rollback: vi.fn(async () => {
+          throw new Error('rollback failed');
+        }),
+      } as any),
+    ).resolves.toBeUndefined();
+  });
+});

@@ -10,6 +10,34 @@ function createVector() {
   });
 }
 
+function createVectorWithConnection(connection: Record<string, unknown>, config: Record<string, unknown> = {}) {
+  const poolManager = {
+    withConnection: vi.fn(async callback => callback(connection)),
+    close: vi.fn(async () => undefined),
+  };
+  const vector = new OracleVector({
+    id: 'oracle-vector-unit-with-connection',
+    poolManager,
+    ...config,
+  } as any);
+
+  return { vector, poolManager };
+}
+
+function cacheIndex(vector: OracleVector, overrides: Record<string, unknown> = {}) {
+  (vector as any).cacheIndexMetadata(overrides.indexName ?? 'hot_index', {
+    indexName: 'hot_index',
+    tableName: 'MASTRA_VEC_HOT',
+    qualifiedTableName: '"MASTRA_VEC_HOT"',
+    dimension: 3,
+    metric: 'cosine',
+    indexType: 'none',
+    vectorFormat: 'vector',
+    accuracy: 95,
+    ...overrides,
+  });
+}
+
 // Format names are part of the public OracleVector API and should fail fast on misuse.
 describe('OracleVector format validation', () => {
   it('defaults to exact search without a physical vector index', () => {
@@ -292,5 +320,375 @@ describe('OracleVector hot path SQL shape', () => {
     expect(String(execute.mock.calls[0]?.[0])).toContain('CREATE VECTOR INDEX');
     expect(execute.mock.calls.some(call => String(call[0]).includes('UPDATE "MASTRA_VECTOR_INDEXES"'))).toBe(false);
     expect(close).toHaveBeenCalledOnce();
+  });
+});
+
+describe('OracleVector operation branches', () => {
+  it('handles upsert, metadata-only query, min-score query, update, delete, and bit vector conversion', async () => {
+    const connection = {
+      execute: vi.fn(async (sql: string) => {
+        if (sql.includes('SELECT') && sql.includes('vector_id AS "id"')) {
+          return {
+            rows: [
+              {
+                id: 'bit-1',
+                score: '0.75',
+                metadata: Buffer.from(JSON.stringify({ tag: 'x' })),
+                vector: Uint8Array.from([0b10101010]),
+              },
+            ],
+          };
+        }
+        return { rows: [], rowsAffected: 1 };
+      }),
+      executeMany: vi.fn(async () => ({ rowsAffected: 1 })),
+      commit: vi.fn(async () => undefined),
+      rollback: vi.fn(async () => undefined),
+    };
+    const { vector } = createVectorWithConnection(connection);
+    cacheIndex(vector, {
+      indexName: 'bit_index',
+      dimension: 8,
+      metric: 'hamming',
+      vectorFormat: 'bit',
+    });
+
+    await expect(
+      vector.upsert({
+        indexName: 'bit_index',
+        ids: ['bit-1'],
+        vectors: [[1, 0, 1, 0, 1, 0, 1, 0]],
+        metadata: [{ tag: 'x' }],
+        deleteFilter: { tag: 'old' },
+      }),
+    ).resolves.toEqual(['bit-1']);
+
+    const metadataOnlyResults = await vector.query({
+      indexName: 'bit_index',
+      filter: { tag: 'x' },
+      topK: 1,
+      includeVector: true,
+    });
+    const scoredResults = await vector.query({
+      indexName: 'bit_index',
+      queryVector: [1, 0, 1, 0, 1, 0, 1, 0],
+      topK: 1,
+      minScore: 0.5,
+      queryMode: 'approx',
+      targetAccuracy: 90,
+      includeVector: true,
+    });
+
+    await vector.updateVector({
+      indexName: 'bit_index',
+      id: 'bit-1',
+      update: { metadata: { tag: 'y' }, vector: [0, 1, 0, 1, 0, 1, 0, 1] },
+    });
+    await vector.updateVector({
+      indexName: 'bit_index',
+      filter: { tag: 'y' },
+      update: { metadata: { active: true } },
+    });
+    await vector.deleteVector({ indexName: 'bit_index', id: 'bit-1' });
+    await vector.deleteVectors({ indexName: 'bit_index', filter: { tag: 'y' } });
+
+    const executeManyBinds = connection.executeMany.mock.calls[0]?.[1] as Array<{ embedding: Uint8Array }>;
+    expect(Array.from(executeManyBinds[0]!.embedding)).toEqual([0b10101010]);
+    expect(metadataOnlyResults[0]).toMatchObject({
+      id: 'bit-1',
+      score: 0.75,
+      metadata: { tag: 'x' },
+      vector: [1, 0, 1, 0, 1, 0, 1, 0],
+    });
+    expect(scoredResults[0]?.vector).toEqual([1, 0, 1, 0, 1, 0, 1, 0]);
+    expect(connection.execute.mock.calls.some(call => String(call[0]).includes('WITH vector_scores'))).toBe(true);
+    expect(connection.execute.mock.calls.some(call => String(call[0]).includes('FETCH APPROX FIRST 1 ROWS ONLY WITH TARGET ACCURACY 90'))).toBe(true);
+    expect(connection.commit).toHaveBeenCalled();
+  });
+
+  it('rejects invalid vector operation inputs before touching Oracle', async () => {
+    const { vector } = createVectorWithConnection({
+      execute: vi.fn(async () => ({ rows: [] })),
+      executeMany: vi.fn(async () => ({ rowsAffected: 0 })),
+      commit: vi.fn(async () => undefined),
+      rollback: vi.fn(async () => undefined),
+    });
+
+    await expect(
+      vector.upsert({
+        indexName: 'hot_index',
+        vectors: [[1, 2, 3]],
+        sparseVectors: [{}] as any,
+      }),
+    ).rejects.toThrow(/sparseVectors/i);
+    await expect(vector.query({ indexName: 'hot_index', topK: 1 } as any)).rejects.toThrow(/queryVector or filter/i);
+    await expect(
+      vector.query({ indexName: 'hot_index', queryVector: [1, Number.NaN, 3], topK: 1 }),
+    ).rejects.toThrow(/non-finite/i);
+    await expect(
+      vector.updateVector({ indexName: 'hot_index', id: 'id-1', update: {} } as any),
+    ).rejects.toThrow(/No updates provided/i);
+    await expect(
+      vector.updateVector({
+        indexName: 'hot_index',
+        id: 'id-1',
+        filter: { tag: 'x' },
+        update: { metadata: { tag: 'y' } },
+      } as any),
+    ).rejects.toThrow(/mutually exclusive/i);
+    await expect(vector.deleteVectors({ indexName: 'hot_index', ids: [] })).rejects.toThrow(/empty ids array/i);
+    await expect(
+      vector.deleteVectors({ indexName: 'hot_index', ids: ['id-1'], filter: { tag: 'x' } } as any),
+    ).rejects.toThrow(/mutually exclusive/i);
+  });
+
+  it('reads registry diagnostics, deletes registered indexes, and closes managed pool managers', async () => {
+    const registryRow = {
+      indexName: 'registry_index',
+      tableName: 'MASTRA_VEC_REGISTRY',
+      dimension: 3,
+      metric: 'cosine',
+      indexType: 'ivf',
+      vectorFormat: 'vector',
+      accuracy: 91,
+    };
+    const connection = {
+      execute: vi.fn(async (sql: string) => {
+        if (sql.includes('DBMS_VECTOR.INDEX_ACCURACY_QUERY')) return { rows: [{ accuracy: '0.93' }] };
+        if (sql.includes('SELECT index_name AS "indexName" FROM')) {
+          return { rows: [{ indexName: 'registry_index' }, { indexName: 'z_index' }] };
+        }
+        if (sql.includes('COUNT(*) AS "count"')) return { rows: [{ count: '7' }] };
+        if (sql.includes('index_name AS "indexName"') && sql.includes('table_name AS "tableName"')) {
+          return { rows: [registryRow] };
+        }
+        return { rows: [], rowsAffected: 1 };
+      }),
+      commit: vi.fn(async () => undefined),
+      rollback: vi.fn(async () => undefined),
+    };
+    const { vector, poolManager } = createVectorWithConnection(connection);
+
+    await expect(vector.listIndexes()).resolves.toEqual(['registry_index', 'z_index']);
+    await expect(vector.describeIndex({ indexName: 'registry_index' })).resolves.toMatchObject({
+      indexName: 'registry_index',
+      dimension: 3,
+      count: 7,
+    });
+    await expect(
+      vector.indexAccuracyQuery({ indexName: 'registry_index', queryVector: [1, 0, 0], topK: 3 }),
+    ).resolves.toBe('0.93');
+    await vector.deleteIndex({ indexName: 'registry_index' });
+    await vector.disconnect();
+
+    expect(connection.execute.mock.calls.some(call => String(call[0]).includes('DROP TABLE'))).toBe(true);
+    expect(connection.execute.mock.calls.some(call => String(call[0]).includes('DELETE FROM "MASTRA_VECTOR_INDEXES"'))).toBe(
+      true,
+    );
+    expect(connection.commit).toHaveBeenCalled();
+    expect(poolManager.close).not.toHaveBeenCalled();
+  });
+
+  it('creates new vector indexes and rejects stale physical tables without registry metadata', async () => {
+    const freshConnection = {
+      execute: vi.fn(async (sql: string) => {
+        if (sql.includes('FROM all_tables')) return { rows: [] };
+        if (sql.includes('index_name AS "indexName"') && sql.includes('table_name AS "tableName"')) {
+          return { rows: [] };
+        }
+        return { rows: [], rowsAffected: 1 };
+      }),
+      commit: vi.fn(async () => undefined),
+      rollback: vi.fn(async () => undefined),
+    };
+    const { vector: freshVector } = createVectorWithConnection(freshConnection, {
+      tablePrefix: 'LOCAL_VEC',
+      registryTableName: 'LOCAL_VECTOR_REGISTRY',
+      schemaName: 'APP_SCHEMA',
+    });
+
+    await freshVector.createIndex({
+      indexName: 'fresh.index',
+      dimension: 3,
+      metric: 'cosine',
+      metadataIndexes: ['tenant.id'],
+      indexConfig: { type: 'ivf', accuracy: 88, ivf: { neighborPartitions: 2 } },
+    });
+
+    const freshSql = freshConnection.execute.mock.calls.map(call => String(call[0])).join('\n');
+    expect(freshSql).toContain('CREATE TABLE "APP_SCHEMA"."LOCAL_VECTOR_REGISTRY"');
+    expect(freshSql).toContain('CREATE TABLE "APP_SCHEMA"."LOCAL_VEC_FRESH_INDEX"');
+    expect(freshSql).toContain('CREATE VECTOR INDEX "APP_SCHEMA"."LOCAL_VEC_FRESH_INDEX_VECTOR_IDX"');
+    expect(freshSql).toContain("JSON_VALUE(metadata, '$.tenant.id' RETURNING VARCHAR2(4000) NULL ON ERROR)");
+    expect(freshSql).toContain('MERGE INTO "APP_SCHEMA"."LOCAL_VECTOR_REGISTRY"');
+
+    const staleConnection = {
+      execute: vi.fn(async (sql: string) => {
+        if (sql.includes('FROM all_tables')) return { rows: [{ exists: 1 }] };
+        if (sql.includes('index_name AS "indexName"') && sql.includes('table_name AS "tableName"')) {
+          return { rows: [] };
+        }
+        return { rows: [], rowsAffected: 1 };
+      }),
+      commit: vi.fn(async () => undefined),
+      rollback: vi.fn(async () => undefined),
+    };
+    const { vector: staleVector } = createVectorWithConnection(staleConnection);
+
+    await expect(staleVector.createIndex({ indexName: 'stale_index', dimension: 3 })).rejects.toThrow(
+      /registry metadata/i,
+    );
+  });
+
+  it('recreates missing physical tables and covers build and rebuild transitions', async () => {
+    const registryRow = {
+      indexName: 'missing_table_index',
+      tableName: 'MASTRA_VEC_MISSING_TABLE_INDEX',
+      dimension: 3,
+      metric: 'cosine',
+      indexType: 'none',
+      vectorFormat: 'vector',
+      accuracy: 95,
+    };
+    const connection = {
+      execute: vi.fn(async (sql: string) => {
+        if (sql.includes('FROM all_tables')) return { rows: [] };
+        if (sql.includes('index_name AS "indexName"') && sql.includes('table_name AS "tableName"')) {
+          return { rows: [registryRow] };
+        }
+        return { rows: [], rowsAffected: 1 };
+      }),
+      commit: vi.fn(async () => undefined),
+      rollback: vi.fn(async () => undefined),
+    };
+    const { vector } = createVectorWithConnection(connection);
+
+    await vector.createIndex({ indexName: 'missing_table_index', dimension: 3, metric: 'cosine', buildIndex: false });
+    await vector.buildIndex({ indexName: 'missing_table_index', indexConfig: { type: 'none' } });
+    await vector.buildIndex({ indexName: 'missing_table_index', indexConfig: { type: 'ivf', accuracy: 87 } });
+    await vector.rebuildIndex({
+      indexName: 'missing_table_index',
+      metric: 'euclidean',
+      indexConfig: { type: 'ivf', accuracy: 86 },
+    });
+    await vector.rebuildIndex({ indexName: 'missing_table_index', indexConfig: { type: 'none' } });
+
+    const sql = connection.execute.mock.calls.map(call => String(call[0])).join('\n');
+    expect(sql).toContain('CREATE TABLE "MASTRA_VEC_MISSING_TABLE_INDEX"');
+    expect(sql).toContain('CREATE VECTOR INDEX "MASTRA_VEC_MISSING_TABLE_INDEX_VECTOR_IDX"');
+    expect(sql).toContain('DROP INDEX "MASTRA_VEC_MISSING_TABLE_INDEX_VECTOR_IDX"');
+    expect(sql).toContain('UPDATE "MASTRA_VECTOR_INDEXES"');
+  });
+
+  it('normalizes query rows from string, null, object, array, and unsupported vector payloads', async () => {
+    const connection = {
+      execute: vi.fn(async () => ({
+        rows: [
+          { id: 'json-string', score: '0.9', metadata: '{"source":"string"}', vector: '[1,2,3]' },
+          { id: 'json-null', score: 0.8, metadata: null, vector: [3, 2, 1] },
+          { id: 'json-object', score: 0.7, metadata: { source: 'object' }, vector: { unsupported: true } },
+        ],
+      })),
+      commit: vi.fn(async () => undefined),
+      rollback: vi.fn(async () => undefined),
+    };
+    const { vector } = createVectorWithConnection(connection);
+    cacheIndex(vector);
+
+    await expect(vector.query({ indexName: 'hot_index', filter: { tenant: 'a' }, includeVector: true })).resolves.toEqual([
+      { id: 'json-string', score: 0.9, metadata: { source: 'string' }, vector: [1, 2, 3] },
+      { id: 'json-null', score: 0.8, metadata: {}, vector: [3, 2, 1] },
+      { id: 'json-object', score: 0.7, metadata: { source: 'object' }, vector: [] },
+    ]);
+  });
+
+  it('wraps operation failures and validates vector-specific payload ranges', async () => {
+    const executeFailure = Object.assign(new Error('database failed'), { errorNum: 1 });
+    const failingConnection = {
+      execute: vi.fn(async (sql: string) => {
+        if (sql.includes('index_name AS "indexName"') && sql.includes('table_name AS "tableName"')) {
+          return {
+            rows: [
+              {
+                indexName: 'hot_index',
+                tableName: 'MASTRA_VEC_HOT',
+                dimension: 3,
+                metric: 'cosine',
+                indexType: 'ivf',
+                vectorFormat: 'vector',
+                accuracy: 95,
+              },
+            ],
+          };
+        }
+        throw executeFailure;
+      }),
+      executeMany: vi.fn(async () => {
+        throw executeFailure;
+      }),
+      commit: vi.fn(async () => undefined),
+      rollback: vi.fn(async () => undefined),
+    };
+    const { vector } = createVectorWithConnection(failingConnection);
+    cacheIndex(vector);
+
+    await expect(vector.query({ indexName: 'hot_index', sparseVector: { indices: [], values: [] } as any })).rejects.toThrow(
+      /sparseVector/i,
+    );
+    await expect(vector.query({ indexName: 'hot_index', queryVector: [1, 0, 0], minScore: Number.NaN })).rejects.toThrow(
+      /minScore/i,
+    );
+    await expect(vector.query({ indexName: 'hot_index', queryVector: [1, 0, 0], queryMode: 'fast' as any })).rejects.toThrow(
+      /queryMode/i,
+    );
+    await expect(
+      vector.createIndex({
+        indexName: 'bad_index_type',
+        dimension: 3,
+        indexConfig: { type: 'flat' as any },
+        buildIndex: false,
+      }),
+    ).rejects.toThrow(/index type/i);
+    await expect(
+      vector.updateVector({ indexName: 'hot_index', id: 'id-1', update: { metadata: { tag: 'x' } } }),
+    ).rejects.toThrow(/database failed/i);
+    await expect(vector.deleteVector({ indexName: 'hot_index', id: 'id-1' })).rejects.toThrow(/database failed/i);
+    await expect(vector.deleteVectors({ indexName: 'hot_index', ids: ['id-1'] })).rejects.toThrow(/database failed/i);
+    expect(failingConnection.rollback).toHaveBeenCalled();
+
+    const { vector: bitVector } = createVectorWithConnection({
+      execute: vi.fn(async () => ({ rows: [] })),
+      executeMany: vi.fn(async () => ({ rowsAffected: 0 })),
+      commit: vi.fn(async () => undefined),
+      rollback: vi.fn(async () => undefined),
+    });
+    cacheIndex(bitVector, { indexName: 'bit_index', dimension: 8, metric: 'hamming', vectorFormat: 'bit' });
+    await expect(
+      bitVector.upsert({ indexName: 'bit_index', ids: ['bit-1'], vectors: [[1, 0, 2, 0, 1, 0, 1, 0]] }),
+    ).rejects.toThrow(/bit vectors/i);
+
+    const { vector: int8Vector } = createVectorWithConnection({
+      execute: vi.fn(async () => ({ rows: [] })),
+      executeMany: vi.fn(async () => ({ rowsAffected: 0 })),
+      commit: vi.fn(async () => undefined),
+      rollback: vi.fn(async () => undefined),
+    });
+    cacheIndex(int8Vector, { indexName: 'int8_index', dimension: 3, vectorFormat: 'int8' });
+    await expect(
+      int8Vector.upsert({ indexName: 'int8_index', ids: ['int8-1'], vectors: [[1, 128, 3]] }),
+    ).rejects.toThrow(/int8 vectors/i);
+  });
+
+  it('validates vector memory scope and wraps Oracle ALTER SYSTEM failures', async () => {
+    const connection = {
+      execute: vi.fn(async () => {
+        throw Object.assign(new Error('ORA-01031: insufficient privileges'), { errorNum: 1031 });
+      }),
+    };
+    const { vector } = createVectorWithConnection(connection);
+
+    await expect(vector.configureVectorMemory({ size: '64M', scope: 'BAD' as any })).rejects.toThrow(/vector memory scope/i);
+    await expect(vector.configureVectorMemory({ size: '64M', scope: 'spfile' })).rejects.toThrow(/VECTOR_MEMORY_SIZE=64M/i);
+    expect(connection.execute).toHaveBeenCalledWith('ALTER SYSTEM SET VECTOR_MEMORY_SIZE = 64M SCOPE=SPFILE');
   });
 });

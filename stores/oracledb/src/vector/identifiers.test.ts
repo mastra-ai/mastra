@@ -1,9 +1,31 @@
 import { describe, expect, it } from 'vitest';
 
-import { assertJsonPath, indexNameForMetadataField, indexNameForTable, qualifyName, tableNameForIndex } from './identifiers';
+import {
+  assertJsonPath,
+  indexNameForMetadataField,
+  indexNameForTable,
+  jsonPathForPredicatePrefix,
+  legacyCanonicalIndexName,
+  normalizeIdentifier,
+  normalizeLogicalIndexName,
+  qualifyName,
+  quoteIdentifier,
+  tableNameForIndex,
+} from './identifiers';
 
 // Identifier tests protect the boundary between user-facing names and Oracle object names.
 describe('Oracle SQL identifier helpers', () => {
+  it('normalizes strict and logical identifiers with validation', () => {
+    expect(normalizeIdentifier(' table_1 ', 'table')).toBe('TABLE_1');
+    expect(() => normalizeIdentifier('1bad', 'table')).toThrow(/start with a letter/i);
+    expect(() => normalizeIdentifier(`A${'X'.repeat(128)}`, 'table')).toThrow(/128/);
+    expect(normalizeLogicalIndexName(' mixed.name ')).toBe('mixed.name');
+    expect(() => normalizeLogicalIndexName('')).toThrow(/cannot be empty/i);
+    expect(() => normalizeLogicalIndexName('x'.repeat(513))).toThrow(/512/);
+    expect(legacyCanonicalIndexName('legacy_name')).toBe('LEGACY_NAME');
+    expect(quoteIdentifier('obj', 'object')).toBe('"OBJ"');
+  });
+
   it('normalizes Mastra index names into deterministic Oracle table names', () => {
     expect(tableNameForIndex('agent_memory', 'mastra_vec')).toBe('MASTRA_VEC_AGENT_MEMORY');
     expect(indexNameForTable('mastra_vec_agent_memory', 'vector_idx')).toBe('MASTRA_VEC_AGENT_MEMORY_VECTOR_IDX');
@@ -36,5 +58,11 @@ describe('Oracle SQL identifier helpers', () => {
 
   it('builds safe JSON paths for non-identifier metadata keys', () => {
     expect(assertJsonPath('source-id.section title')).toBe('$."source-id"."section title"');
+    expect(assertJsonPath('quoted"key.back\\slash')).toBe('$."quoted\\"key"."back\\\\slash"');
+    expect(jsonPathForPredicatePrefix('item.kind')).toBe('@.item.kind');
+  });
+
+  it('rejects JSON metadata paths with control characters', () => {
+    expect(() => assertJsonPath('bad\u0000key')).toThrow(/Invalid JSON metadata path/i);
   });
 });

@@ -1,4 +1,5 @@
 import {
+  TABLE_RESOURCES,
   TABLE_AGENT_VERSIONS,
   TABLE_MCP_CLIENTS,
   TABLE_MCP_CLIENT_VERSIONS,
@@ -9,7 +10,13 @@ import {
 } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 
-import { generateOracleIndexSQL, generateOracleTableSQL, oracleColumnType, parseOracleJson } from '.';
+import {
+  filterIndexesForTables,
+  generateOracleIndexSQL,
+  generateOracleTableSQL,
+  oracleColumnType,
+  parseOracleJson,
+} from '.';
 
 describe('Oracle storage table DDL', () => {
   it('generates Oracle table DDL from selected Mastra storage schemas', () => {
@@ -40,6 +47,41 @@ describe('Oracle storage table DDL', () => {
     expect(parseOracleJson('{"kind":"mcp"}')).toEqual({ kind: 'mcp' });
     expect(parseOracleJson(Buffer.from('{"kind":"agent"}'))).toEqual({ kind: 'agent' });
     expect(parseOracleJson({ kind: 'native' })).toEqual({ kind: 'native' });
+    expect(parseOracleJson(null)).toBeUndefined();
+    expect(parseOracleJson(undefined)).toBeUndefined();
+    expect(parseOracleJson('not-json')).toBe('not-json');
+  });
+
+  it('maps Mastra storage column types to Oracle column types', () => {
+    expect(oracleColumnType(TABLE_THREADS, 'id', { type: 'text', primaryKey: true } as any)).toBe('VARCHAR2(512)');
+    expect(oracleColumnType(TABLE_THREADS, 'title', { type: 'text' } as any)).toBe('VARCHAR2(4000)');
+    expect(oracleColumnType(TABLE_MESSAGES, 'content', { type: 'text' } as any)).toBe('CLOB');
+    expect(oracleColumnType(TABLE_THREADS, 'uuid_col', { type: 'uuid' } as any)).toBe('VARCHAR2(36)');
+    expect(oracleColumnType(TABLE_THREADS, 'ts', { type: 'timestamp' } as any)).toBe('TIMESTAMP WITH TIME ZONE');
+    expect(oracleColumnType(TABLE_THREADS, 'json', { type: 'jsonb' } as any)).toBe('JSON');
+    expect(oracleColumnType(TABLE_THREADS, 'int', { type: 'integer' } as any)).toBe('NUMBER(10)');
+    expect(oracleColumnType(TABLE_THREADS, 'big', { type: 'bigint' } as any)).toBe('NUMBER(20)');
+    expect(oracleColumnType(TABLE_THREADS, 'float', { type: 'float' } as any)).toBe('BINARY_DOUBLE');
+    expect(oracleColumnType(TABLE_THREADS, 'flag', { type: 'boolean' } as any)).toBe('NUMBER(1)');
+    expect(oracleColumnType(TABLE_THREADS, 'unknown', { type: 'unknown' } as any)).toBe('VARCHAR2(4000)');
+  });
+
+  it('generates composite primary keys, references, and reserved column names', () => {
+    const tableSql = generateOracleTableSQL({
+      tableName: TABLE_RESOURCES,
+      schema: {
+        id: { type: 'text' },
+        parentId: { type: 'text', references: { table: TABLE_THREADS, column: 'id' } },
+        metadata: { type: 'jsonb', nullable: true },
+        size: { type: 'integer', nullable: true },
+      } as any,
+      schemaName: 'APP',
+      compositePrimaryKey: ['id', 'parentId'],
+    });
+
+    expect(tableSql).toContain('PRIMARY KEY (id, "parentId")');
+    expect(tableSql).toContain('REFERENCES "MASTRA_THREADS" (id)');
+    expect(tableSql).toContain('"size" NUMBER(10)');
   });
 });
 
@@ -119,5 +161,94 @@ describe('Oracle storage index DDL', () => {
     ).toBe(
       'CREATE UNIQUE INDEX "IDX_MCP_CLIENT_VERSIONS_CLIENT_VERSION" ON "MASTRA_MCP_CLIENT_VERSIONS" ("mcpClientId", "versionNumber")',
     );
+  });
+
+  it('generates Oracle-specific index attributes and filters custom indexes by managed table', () => {
+    expect(
+      generateOracleIndexSQL({
+        name: 'idx_bitmap',
+        table: TABLE_THREADS,
+        columns: ['resourceId DESC'],
+        type: 'bitmap',
+      } as any),
+    ).toContain('CREATE BITMAP INDEX');
+    expect(
+      generateOracleIndexSQL(
+        {
+          name: 'idx_full',
+          table: TABLE_THREADS,
+          columns: ['resourceId ASC', "JSON_VALUE(metadata, '$.topic' RETURNING VARCHAR2(4000)) DESC"],
+          unique: true,
+          online: true,
+          invisible: true,
+          parallel: 2,
+          compress: 1,
+          noLogging: true,
+          reverse: true,
+          tablespace: 'USERS',
+          where: 'title IS NOT NULL',
+        } as any,
+        'APP',
+      ),
+    ).toContain('COMPRESS 1 TABLESPACE USERS NOLOGGING PARALLEL 2 REVERSE ONLINE INVISIBLE');
+    expect(
+      generateOracleIndexSQL({
+        name: 'idx_bool_attrs',
+        table: TABLE_THREADS,
+        columns: ['"createdAt"'],
+        parallel: true,
+        compress: true,
+      } as any),
+    ).toContain('COMPRESS PARALLEL');
+    expect(
+      generateOracleIndexSQL({
+        name: 'idx_custom_plain',
+        table: 'custom_table' as any,
+        columns: ['plain ASC'],
+        tablespace: 'USERS',
+      }),
+    ).toBe('CREATE INDEX "IDX_CUSTOM_PLAIN" ON "CUSTOM_TABLE" (PLAIN ASC) TABLESPACE USERS');
+
+    expect(filterIndexesForTables(undefined, [TABLE_THREADS])).toEqual([]);
+    expect(filterIndexesForTables([], [TABLE_THREADS])).toEqual([]);
+    expect(
+      filterIndexesForTables(
+        [
+          { name: 'keep', table: TABLE_THREADS, columns: ['id'] },
+          { name: 'drop', table: TABLE_MESSAGES, columns: ['id'] },
+        ] as any,
+        [TABLE_THREADS],
+      ),
+    ).toHaveLength(1);
+  });
+
+  it('rejects invalid Oracle index options and expressions', () => {
+    expect(() => generateOracleIndexSQL({ name: 'bad', table: TABLE_THREADS, columns: [] } as any)).toThrow(
+      /at least one/i,
+    );
+    expect(() =>
+      generateOracleIndexSQL({ name: 'bad', table: TABLE_THREADS, columns: ['id'], unique: true, type: 'bitmap' } as any),
+    ).toThrow(/unique and bitmap/i);
+    expect(() =>
+      generateOracleIndexSQL({ name: 'bad', table: TABLE_THREADS, columns: ['id'], reverse: true, type: 'bitmap' } as any),
+    ).toThrow(/reverse and bitmap/i);
+    expect(() =>
+      generateOracleIndexSQL({ name: 'bad', table: TABLE_THREADS, columns: ['id'], where: 'DROP TABLE x' } as any),
+    ).toThrow(/unsafe SQL/i);
+    expect(() =>
+      generateOracleIndexSQL({ name: 'bad', table: TABLE_THREADS, columns: ['id'], parallel: 0 } as any),
+    ).toThrow(/positive safe integer/i);
+    expect(() =>
+      generateOracleIndexSQL({ name: 'bad', table: TABLE_THREADS, columns: ['id'], compress: 0 } as any),
+    ).toThrow(/positive safe integer/i);
+    expect(() => generateOracleIndexSQL({ name: 'bad', table: TABLE_THREADS, columns: [''] } as any)).toThrow(
+      /cannot be empty/i,
+    );
+    expect(() =>
+      generateOracleIndexSQL({ name: 'bad', table: TABLE_THREADS, columns: ['LOWER(title'] } as any),
+    ).toThrow(/unbalanced/i);
+    expect(() =>
+      generateOracleIndexSQL({ name: 'bad', table: TABLE_THREADS, columns: ['LOWER(title))'] } as any),
+    ).toThrow(/unbalanced/i);
   });
 });

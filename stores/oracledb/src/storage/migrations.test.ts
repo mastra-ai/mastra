@@ -144,4 +144,32 @@ describe('OracleMigrationRegistry', () => {
       ]),
     ).rejects.toThrow(/already applied with checksum/i);
   });
+
+  it('validates migration identity metadata before recording it', async () => {
+    const registry = new OracleMigrationRegistry({ db: new FakeMigrationDb() });
+    const validRun = async () => undefined;
+
+    await expect(registry.run([{ id: '1_BAD', name: 'Bad id', run: validRun }])).rejects.toThrow(
+      /migration id must start/i,
+    );
+    await expect(registry.run([{ id: `A${'X'.repeat(256)}`, name: 'Long id', run: validRun }])).rejects.toThrow(
+      /256 characters or fewer/i,
+    );
+    await expect(registry.run([{ id: 'V002_EMPTY_NAME', name: '   ', run: validRun }])).rejects.toThrow(
+      /name must be provided/i,
+    );
+    await expect(
+      registry.run([{ id: 'V002_LONG_NAME', name: 'X'.repeat(513), run: validRun }]),
+    ).rejects.toThrow(/512 characters or fewer/i);
+    await expect(
+      registry.run([
+        {
+          id: 'V002_LONG_DESCRIPTION',
+          name: 'Long description',
+          description: 'X'.repeat(4001),
+          run: validRun,
+        },
+      ]),
+    ).rejects.toThrow(/4000 characters or fewer/i);
+  });
 });

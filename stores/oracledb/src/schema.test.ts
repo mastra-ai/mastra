@@ -71,6 +71,25 @@ describe('Oracle schema export', () => {
     expect(ddl).not.toContain('CREATE VECTOR INDEX');
   });
 
+  it('exports vector DDL without metadata indexes when explicitly disabled', () => {
+    const ddl = exportSchemas({
+      domains: ['vector'],
+      vector: {
+        indexes: [
+          {
+            indexName: 'plain_vectors',
+            dimension: 3,
+            metadataIndexes: [],
+          },
+        ],
+      },
+    });
+
+    expect(ddl).toContain('CREATE TABLE "MASTRA_VEC_PLAIN_VECTORS"');
+    expect(ddl).toContain("'cosine' AS metric");
+    expect(ddl).not.toContain('JSON_VALUE(metadata');
+  });
+
   it('omits default storage indexes when requested', () => {
     const ddl = exportSchemas({
       domains: ['memory'],
@@ -79,6 +98,22 @@ describe('Oracle schema export', () => {
 
     expect(ddl).toContain('CREATE TABLE "MASTRA_MESSAGES"');
     expect(ddl).not.toContain('CREATE INDEX');
+  });
+
+  it('omits default indexes for all selected non-memory storage domains when requested', () => {
+    const ddl = exportSchemas({
+      domains: ['workflows', 'observability', 'scores', 'scorerDefinitions', 'mcpClients', 'agents'],
+      skipDefaultIndexes: true,
+    });
+
+    expect(ddl).toContain('CREATE TABLE "MASTRA_WORKFLOW_SNAPSHOT"');
+    expect(ddl).toContain('CREATE TABLE "MASTRA_AI_SPANS"');
+    expect(ddl).toContain('CREATE TABLE "MASTRA_SCORERS"');
+    expect(ddl).toContain('CREATE TABLE "MASTRA_SCORER_DEFINITIONS"');
+    expect(ddl).toContain('CREATE TABLE "MASTRA_MCP_CLIENTS"');
+    expect(ddl).toContain('CREATE TABLE "MASTRA_AGENTS"');
+    expect(ddl).not.toContain('CREATE INDEX');
+    expect(ddl).not.toContain('CREATE UNIQUE INDEX');
   });
 
   it('exports observability spans, log events, and indexes', () => {
