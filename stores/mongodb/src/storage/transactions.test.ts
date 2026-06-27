@@ -151,4 +151,89 @@ describe('MongoDB storage — topology-aware transactions', () => {
       await store.close();
     }
   });
+
+  test('agents.create() rolls back the agent insert when version insert fails (replica set)', async () => {
+    const store = new MongoDBStore({ id: 'tx-agents-create', uri: REPLICA_SET_URI, dbName: DB });
+    await store.init();
+    const agents = await store.getStore('agents');
+
+    const agentId = `agent-create-tx-${Date.now()}`;
+
+    // The transaction calls insertOne twice: first for the agent row, second for the version row.
+    // Make the second call throw so the transaction aborts after the agent row is staged.
+    let callCount = 0;
+    const original = Collection.prototype.insertOne;
+    const spy = vi.spyOn(Collection.prototype, 'insertOne').mockImplementation(async function (
+      this: Collection<any>,
+      ...args: Parameters<typeof original>
+    ) {
+      callCount++;
+      if (callCount >= 2) throw new Error('version insert boom');
+      return original.apply(this, args);
+    });
+
+    try {
+      await expect(
+        agents?.create({
+          agent: {
+            id: agentId,
+            name: 'Test Agent',
+            instructions: 'test',
+            model: { provider: 'ANTHROPIC', toolChoice: 'auto', name: 'claude-sonnet-4-6' },
+          } as any,
+        }),
+      ).rejects.toThrow('version insert boom');
+    } finally {
+      spy.mockRestore();
+    }
+
+    // Transaction rolled back — agent row must not exist.
+    const client = new MongoClient(REPLICA_SET_URI);
+    try {
+      await client.connect();
+      const count = await client.db(DB).collection('mastra_agents').countDocuments({ id: agentId });
+      expect(count).toBe(0);
+    } finally {
+      await client.close();
+      await store.close();
+    }
+  });
+
+  test('agents.delete() rolls back version deletion when agent deleteOne fails (replica set)', async () => {
+    const store = new MongoDBStore({ id: 'tx-agents-delete', uri: REPLICA_SET_URI, dbName: DB });
+    await store.init();
+    const agents = await store.getStore('agents');
+
+    const agentId = `agent-del-tx-${Date.now()}`;
+
+    // Create the agent first (no spy — let this succeed).
+    await agents?.create({
+      agent: {
+        id: agentId,
+        name: 'To Delete',
+        instructions: 'test',
+        model: { provider: 'ANTHROPIC', toolChoice: 'auto', name: 'claude-sonnet-4-6' },
+      } as any,
+    });
+
+    // delete() runs deleteMany(versions) then deleteOne(agent) inside a transaction.
+    // Make deleteOne fail so the transaction aborts after versions have been staged for deletion.
+    const spy = vi.spyOn(Collection.prototype, 'deleteOne').mockRejectedValueOnce(new Error('agent delete boom'));
+    try {
+      await expect(agents?.delete(agentId)).rejects.toThrow();
+    } finally {
+      spy.mockRestore();
+    }
+
+    // Transaction rolled back — versions must still exist.
+    const client = new MongoClient(REPLICA_SET_URI);
+    try {
+      await client.connect();
+      const vCount = await client.db(DB).collection('mastra_agent_versions').countDocuments({ agentId });
+      expect(vCount).toBeGreaterThan(0);
+    } finally {
+      await client.close();
+      await store.close();
+    }
+  });
 });
