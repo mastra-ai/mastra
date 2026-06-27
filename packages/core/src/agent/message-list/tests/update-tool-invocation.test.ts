@@ -103,6 +103,10 @@ describe('MessageList.updateToolInvocation', () => {
         'tc-existing': {
           taskId: 'task-existing',
         },
+        'tc-background': {
+          taskId: 'task-1',
+          suspendedAt: '2026-06-27T00:05:00.000Z',
+        },
       },
     };
     messageList.add(msg, 'memory');
@@ -134,11 +138,71 @@ describe('MessageList.updateToolInvocation', () => {
         },
         'tc-background': {
           taskId: 'task-1',
+          suspendedAt: '2026-06-27T00:05:00.000Z',
           startedAt: '2026-06-27T00:00:00.000Z',
         },
       },
     });
     expect(messageList.drainUnsavedMessages()).toEqual([msg]);
+  });
+
+  it('should deep-merge background task metadata when updating a tool invocation', () => {
+    const messageList = new MessageList();
+
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'tc-background',
+          toolName: 'research',
+          args: { query: 'background task' },
+        },
+      },
+    ]);
+    msg.content.metadata = {
+      backgroundTasks: {
+        'tc-background': {
+          taskId: 'task-1',
+          startedAt: '2026-06-27T00:00:00.000Z',
+          suspendedAt: '2026-06-27T00:05:00.000Z',
+        },
+      },
+    };
+    messageList.add(msg, 'response');
+
+    const updated = messageList.updateToolInvocation(
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'tc-background',
+          toolName: 'research',
+          args: {},
+          result: { summary: 'done' },
+        },
+      },
+      {
+        backgroundTasks: {
+          'tc-background': {
+            taskId: 'task-1',
+            completedAt: '2026-06-27T00:10:00.000Z',
+          },
+        },
+      },
+    );
+
+    expect(updated).toBe(true);
+    expect(msg.content.metadata).toEqual({
+      backgroundTasks: {
+        'tc-background': {
+          taskId: 'task-1',
+          startedAt: '2026-06-27T00:00:00.000Z',
+          suspendedAt: '2026-06-27T00:05:00.000Z',
+          completedAt: '2026-06-27T00:10:00.000Z',
+        },
+      },
+    });
   });
 
   it('should move a memory message to response source for re-saving', () => {

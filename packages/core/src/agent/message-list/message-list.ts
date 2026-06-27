@@ -78,6 +78,29 @@ function mergeSignalDataParts<T extends { role: string; parts: Array<{ type: str
   return result;
 }
 
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function mergeBackgroundTasks(
+  existingBgTasks?: Record<string, unknown>,
+  incomingBgTasks?: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  if (!existingBgTasks && !incomingBgTasks) {
+    return undefined;
+  }
+
+  const merged: Record<string, unknown> = { ...(existingBgTasks ?? {}) };
+  for (const [toolCallId, incomingTask] of Object.entries(incomingBgTasks ?? {})) {
+    const existingTask = merged[toolCallId];
+    merged[toolCallId] =
+      isPlainRecord(existingTask) && isPlainRecord(incomingTask)
+        ? { ...existingTask, ...incomingTask }
+        : incomingTask;
+  }
+  return merged;
+}
+
 type MessageListAddOptions = {
   merge?: boolean;
 };
@@ -1132,13 +1155,12 @@ export class MessageList {
           const incomingMeta = (metadata ?? {}) as Record<string, unknown>;
           const existingBgTasks = existingMeta.backgroundTasks as Record<string, unknown> | undefined;
           const incomingBgTasks = incomingMeta.backgroundTasks as Record<string, unknown> | undefined;
+          const backgroundTasks = mergeBackgroundTasks(existingBgTasks, incomingBgTasks);
 
           msg.content.metadata = {
             ...existingMeta,
             ...incomingMeta,
-            ...(existingBgTasks || incomingBgTasks
-              ? { backgroundTasks: { ...(existingBgTasks ?? {}), ...(incomingBgTasks ?? {}) } }
-              : {}),
+            ...(backgroundTasks ? { backgroundTasks } : {}),
           };
 
           // Move the message to the response source so it gets
@@ -1174,13 +1196,12 @@ export class MessageList {
       const incomingMeta = (metadata ?? {}) as Record<string, unknown>;
       const existingBgTasks = existingMeta.backgroundTasks as Record<string, unknown> | undefined;
       const incomingBgTasks = incomingMeta.backgroundTasks as Record<string, unknown> | undefined;
+      const backgroundTasks = mergeBackgroundTasks(existingBgTasks, incomingBgTasks);
 
       msg.content.metadata = {
         ...existingMeta,
         ...incomingMeta,
-        ...(existingBgTasks || incomingBgTasks
-          ? { backgroundTasks: { ...(existingBgTasks ?? {}), ...(incomingBgTasks ?? {}) } }
-          : {}),
+        ...(backgroundTasks ? { backgroundTasks } : {}),
       };
 
       this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
