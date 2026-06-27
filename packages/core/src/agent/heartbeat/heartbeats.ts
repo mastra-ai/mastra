@@ -4,25 +4,38 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { Mastra } from '../../mastra';
 import type { Schedule } from '../../storage/domains/schedules/base';
 import { computeNextFireAt, validateCron } from '../../workflows/scheduler/cron';
-import type { AgentSignalType } from '../signals';
+import type { AgentSignalAttributes, AgentSignalType } from '../signals';
 import type { HeartbeatBroadcastMode, HeartbeatIfActive, HeartbeatIfIdle } from './types';
 import { HEARTBEAT_SCHEDULE_PREFIX } from './types';
 
 type HeartbeatTarget = Extract<Schedule['target'], { type: 'heartbeat' }>;
 
 /**
- * Normalize a caller-supplied heartbeat id into the canonical `hb_<slug>`
- * shape. The slug part is lowercased and stripped of characters that are
- * unsafe in storage keys / URLs; the `hb_` prefix is added only if missing so
- * a caller can pass either `nightly-summary` or `hb_nightly-summary`.
+ * Slugify the caller-facing portion of a heartbeat id into the canonical
+ * `hb_<slug>` shape. The slug part is lowercased and stripped of characters
+ * that are unsafe in storage keys / URLs; the `hb_` prefix is added only if
+ * missing so a caller can pass either `nightly-summary` or
+ * `hb_nightly-summary` and get the same canonical id. Returns an empty string
+ * when nothing slug-able remains.
  */
-function normalizeHeartbeatId(rawId: string): string {
+function canonicalizeHeartbeatId(rawId: string): string {
   const trimmed = rawId.trim();
   const withoutPrefix = trimmed.startsWith(HEARTBEAT_SCHEDULE_PREFIX)
     ? trimmed.slice(HEARTBEAT_SCHEDULE_PREFIX.length)
     : trimmed;
   const slug = slugify(withoutPrefix);
-  if (!slug) {
+  if (!slug) return '';
+  return `${HEARTBEAT_SCHEDULE_PREFIX}${slug}`;
+}
+
+/**
+ * Normalize a caller-supplied heartbeat id for `create`. Throws
+ * `HEARTBEATS_INVALID_ID` when the id is empty after normalization so callers
+ * cannot create an unaddressable heartbeat.
+ */
+function normalizeHeartbeatId(rawId: string): string {
+  const canonical = canonicalizeHeartbeatId(rawId);
+  if (!canonical) {
     throw new MastraError({
       id: 'HEARTBEATS_INVALID_ID',
       domain: ErrorDomain.AGENT,
@@ -30,7 +43,18 @@ function normalizeHeartbeatId(rawId: string): string {
       text: `createHeartbeat: id "${rawId}" is empty after normalization. Provide an id with at least one alphanumeric character.`,
     });
   }
-  return `${HEARTBEAT_SCHEDULE_PREFIX}${slug}`;
+  return canonical;
+}
+
+/**
+ * Resolve a caller-supplied heartbeat id for read / mutate lookups. Applies
+ * the same `hb_<slug>` normalization as `create` so callers can pass the id in
+ * whichever form they used at create time (with or without the `hb_` prefix).
+ * Falls back to the raw id when nothing slug-able remains so the caller still
+ * gets a `not found` rather than a surprise match.
+ */
+function resolveHeartbeatId(rawId: string): string {
+  return canonicalizeHeartbeatId(rawId) || rawId;
 }
 
 /**
@@ -53,6 +77,9 @@ export interface Heartbeat {
   lastFireAt?: number;
   lastRunId?: string;
   signalType?: AgentSignalType;
+  tagName?: string;
+  attributes?: AgentSignalAttributes;
+  providerOptions?: Record<string, unknown>;
   ifActive?: HeartbeatIfActive;
   ifIdle?: HeartbeatIfIdle;
   broadcast?: HeartbeatBroadcastMode;
@@ -78,7 +105,14 @@ export interface CreateHeartbeatInput {
   timezone?: string;
   threadId?: string;
   resourceId?: string;
+  /** Signal category for the fire. Defaults to `'notification'`. */
   signalType?: AgentSignalType;
+  /** XML tag the signal renders as. Defaults to `'heartbeat'` (so a fire surfaces as `<heartbeat>…</heartbeat>`). */
+  tagName?: string;
+  /** Attributes rendered onto the signal's XML tag. */
+  attributes?: AgentSignalAttributes;
+  /** Provider options merged into the heartbeat signal payload on every fire. JSON-safe. */
+  providerOptions?: Record<string, unknown>;
   ifActive?: HeartbeatIfActive;
   ifIdle?: HeartbeatIfIdle;
   broadcast?: HeartbeatBroadcastMode;
@@ -94,6 +128,9 @@ export interface UpdateHeartbeatInput {
   prompt?: string;
   name?: string;
   signalType?: AgentSignalType;
+  tagName?: string;
+  attributes?: AgentSignalAttributes;
+  providerOptions?: Record<string, unknown>;
   ifActive?: HeartbeatIfActive;
   ifIdle?: HeartbeatIfIdle;
   broadcast?: HeartbeatBroadcastMode;
@@ -205,6 +242,9 @@ export class Heartbeats {
       ...(input.threadId ? { threadId: input.threadId } : {}),
       ...(input.resourceId ? { resourceId: input.resourceId } : {}),
       ...(input.signalType ? { signalType: input.signalType } : {}),
+      ...(input.tagName ? { tagName: input.tagName } : {}),
+      ...(input.attributes ? { attributes: input.attributes } : {}),
+      ...(input.providerOptions ? { providerOptions: input.providerOptions } : {}),
       ...(input.ifActive ? { ifActive: input.ifActive } : {}),
       ...(input.ifIdle ? { ifIdle: input.ifIdle } : {}),
       ...(input.broadcast ? { broadcast: input.broadcast } : {}),
@@ -230,7 +270,8 @@ export class Heartbeats {
 
   async get(id: string): Promise<Heartbeat | null> {
     const store = await this.#getStore();
-    const schedule = await store.getSchedule(id);
+    const resolvedId = resolveHeartbeatId(id);
+    const schedule = await store.getSchedule(resolvedId);
     if (!schedule) return null;
     return toHeartbeat(schedule);
   }
@@ -252,7 +293,8 @@ export class Heartbeats {
 
   async update(id: string, patch: UpdateHeartbeatInput): Promise<Heartbeat> {
     const store = await this.#getStore();
-    const existing = await store.getSchedule(id);
+    const resolvedId = resolveHeartbeatId(id);
+    const existing = await store.getSchedule(resolvedId);
     if (!existing || existing.target?.type !== 'heartbeat') {
       throw new MastraError({
         id: 'HEARTBEATS_NOT_FOUND',
@@ -274,6 +316,9 @@ export class Heartbeats {
       ...(patch.prompt !== undefined ? { prompt: patch.prompt } : {}),
       ...(patch.name !== undefined ? { name: patch.name } : {}),
       ...(patch.signalType !== undefined ? { signalType: patch.signalType } : {}),
+      ...(patch.tagName !== undefined ? { tagName: patch.tagName } : {}),
+      ...(patch.attributes !== undefined ? { attributes: patch.attributes } : {}),
+      ...(patch.providerOptions !== undefined ? { providerOptions: patch.providerOptions } : {}),
       ...(patch.ifActive !== undefined ? { ifActive: patch.ifActive } : {}),
       ...(patch.ifIdle !== undefined ? { ifIdle: patch.ifIdle } : {}),
       ...(patch.broadcast !== undefined ? { broadcast: patch.broadcast } : {}),
@@ -290,7 +335,7 @@ export class Heartbeats {
         ? computeNextFireAt(nextCron, { timezone: nextTimezone, after: Date.now() })
         : undefined;
 
-    const updated = await store.updateSchedule(id, {
+    const updated = await store.updateSchedule(resolvedId, {
       ...(patch.cron !== undefined ? { cron: patch.cron } : {}),
       ...(patch.timezone !== undefined ? { timezone: patch.timezone } : {}),
       target: nextTarget,
@@ -303,7 +348,8 @@ export class Heartbeats {
 
   async delete(id: string): Promise<void> {
     const store = await this.#getStore();
-    const existing = await store.getSchedule(id);
+    const resolvedId = resolveHeartbeatId(id);
+    const existing = await store.getSchedule(resolvedId);
     if (!existing) return;
     if (existing.target?.type !== 'heartbeat') {
       throw new MastraError({
@@ -313,12 +359,13 @@ export class Heartbeats {
         text: `Schedule "${id}" is not a heartbeat.`,
       });
     }
-    await store.deleteSchedule(id);
+    await store.deleteSchedule(resolvedId);
   }
 
   async pause(id: string): Promise<Heartbeat> {
     const store = await this.#getStore();
-    const existing = await store.getSchedule(id);
+    const resolvedId = resolveHeartbeatId(id);
+    const existing = await store.getSchedule(resolvedId);
     if (!existing || existing.target?.type !== 'heartbeat') {
       throw new MastraError({
         id: 'HEARTBEATS_NOT_FOUND',
@@ -328,13 +375,14 @@ export class Heartbeats {
       });
     }
     if (existing.status === 'paused') return toHeartbeat(existing)!;
-    const updated = await store.updateSchedule(id, { status: 'paused' });
+    const updated = await store.updateSchedule(resolvedId, { status: 'paused' });
     return toHeartbeat(updated)!;
   }
 
   async resume(id: string): Promise<Heartbeat> {
     const store = await this.#getStore();
-    const existing = await store.getSchedule(id);
+    const resolvedId = resolveHeartbeatId(id);
+    const existing = await store.getSchedule(resolvedId);
     if (!existing || existing.target?.type !== 'heartbeat') {
       throw new MastraError({
         id: 'HEARTBEATS_NOT_FOUND',
@@ -348,13 +396,14 @@ export class Heartbeats {
       timezone: existing.timezone,
       after: Date.now(),
     });
-    const updated = await store.updateSchedule(id, { status: 'active', nextFireAt });
+    const updated = await store.updateSchedule(resolvedId, { status: 'active', nextFireAt });
     return toHeartbeat(updated)!;
   }
 
   async run(id: string): Promise<{ scheduleId: string; claimId: string; scheduledFireAt: number }> {
     const store = await this.#getStore();
-    const existing = await store.getSchedule(id);
+    const resolvedId = resolveHeartbeatId(id);
+    const existing = await store.getSchedule(resolvedId);
     if (!existing || existing.target?.type !== 'heartbeat') {
       throw new MastraError({
         id: 'HEARTBEATS_NOT_FOUND',
@@ -403,6 +452,9 @@ export function toHeartbeat(schedule: Schedule): Heartbeat | null {
     ...(schedule.lastFireAt !== undefined ? { lastFireAt: schedule.lastFireAt } : {}),
     ...(schedule.lastRunId ? { lastRunId: schedule.lastRunId } : {}),
     ...(target.signalType ? { signalType: target.signalType } : {}),
+    ...(target.tagName ? { tagName: target.tagName } : {}),
+    ...(target.attributes ? { attributes: target.attributes } : {}),
+    ...(target.providerOptions ? { providerOptions: target.providerOptions } : {}),
     ...(target.ifActive ? { ifActive: target.ifActive } : {}),
     ...(target.ifIdle ? { ifIdle: target.ifIdle } : {}),
     ...(target.broadcast ? { broadcast: target.broadcast } : {}),

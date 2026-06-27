@@ -1,5 +1,5 @@
 import type { HeartbeatBroadcastMode, HeartbeatIfActive, HeartbeatIfIdle } from '../../../agent/heartbeat/types';
-import type { AgentSignalType } from '../../../agent/signals';
+import type { AgentSignalAttributes, AgentSignalType } from '../../../agent/signals';
 import { StorageDomain } from '../base';
 
 /**
@@ -47,11 +47,17 @@ export type HeartbeatScheduleTarget = {
   threadId?: string;
   /** Required when `threadId` is set. */
   resourceId?: string;
-  /** Signal type used by threaded heartbeats. Defaults to `'system-reminder'`. */
+  /** Signal type used by threaded heartbeats. Defaults to `'notification'`. */
   signalType?: AgentSignalType;
-  /** Behavior when the target thread is actively streaming. Threaded only. */
+  /** XML tag the signal renders as. Defaults to `'heartbeat'`. */
+  tagName?: string;
+  /** Signal attributes rendered onto the XML tag. */
+  attributes?: AgentSignalAttributes;
+  /** Provider options merged into the heartbeat signal payload on every fire. JSON-safe. */
+  providerOptions?: Record<string, unknown>;
+  /** Options applied when the target thread is actively streaming. Threaded only. */
   ifActive?: HeartbeatIfActive;
-  /** Behavior when the target thread is idle. Threaded only. */
+  /** Options applied when the target thread is idle (incl. serializable streamOptions). Threaded only. */
   ifIdle?: HeartbeatIfIdle;
   /** Broadcast policy for the heartbeat run's stream chunks. Defaults to `'live'`. */
   broadcast?: HeartbeatBroadcastMode;

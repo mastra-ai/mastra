@@ -25,18 +25,41 @@ export const HeartbeatBroadcastModeSchema = z.enum(['live', 'on-complete', 'neve
 export type HeartbeatBroadcastMode = 'live' | 'on-complete' | 'never';
 
 /**
- * Action to take when the target thread is actively streaming. Threaded only.
- * Reuses the signal runtime's active behavior so heartbeats accept whatever
- * `agent.sendSignal` allows.
+ * Serializable subset of `AgentExecutionOptions` that a heartbeat persists and
+ * applies to the woken run. Heartbeat config is JSON-persisted to schedule
+ * storage, so only JSON-safe fields are accepted here — non-serializable run
+ * options (callbacks, abort signals, live handles) are excluded by design.
+ *
+ * `requestContext` is stored as a plain object and rehydrated into a
+ * `RequestContext` by the worker before the wake signal runs. This is how a
+ * heartbeat-woken run receives request context (e.g. channel render context).
  */
-export type HeartbeatIfActive = AgentSignalActiveBehavior;
+export type HeartbeatStreamOptions = {
+  /** Request context applied to the woken run, stored as a plain object. */
+  requestContext?: Record<string, unknown>;
+};
 
 /**
- * Action to take when the target thread is idle. Threaded only. Reuses the
- * signal runtime's idle behavior so heartbeats accept whatever
- * `agent.sendSignal` allows.
+ * Options applied when the target thread is actively streaming. Threaded only.
+ * Mirrors the signal runtime's `ifActive` options so heartbeats accept the same
+ * shape `agent.sendSignal` allows.
  */
-export type HeartbeatIfIdle = AgentSignalIdleBehavior;
+export type HeartbeatIfActive = {
+  behavior?: AgentSignalActiveBehavior;
+  attributes?: AgentSignalAttributes;
+};
+
+/**
+ * Options applied when the target thread is idle. Threaded only. Mirrors the
+ * signal runtime's `ifIdle` options, but `streamOptions` is restricted to the
+ * serializable {@link HeartbeatStreamOptions} subset so the config can be
+ * persisted to schedule storage.
+ */
+export type HeartbeatIfIdle = {
+  behavior?: AgentSignalIdleBehavior;
+  attributes?: AgentSignalAttributes;
+  streamOptions?: HeartbeatStreamOptions;
+};
 
 /** Stable schedule id prefix for heartbeats. */
 export const HEARTBEAT_SCHEDULE_PREFIX = 'hb_';
@@ -58,6 +81,27 @@ export type HeartbeatRunStatus =
   | 'agent-missing'
   | 'invalid-input';
 
+/** Shared zod for {@link AgentSignalAttributes} (XML tag attribute values). */
+const HeartbeatAttributesSchema = z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]));
+
+/** Serializable stream options applied to a woken run. See {@link HeartbeatStreamOptions}. */
+const HeartbeatStreamOptionsSchema = z.object({
+  requestContext: z.record(z.string(), z.unknown()).optional(),
+});
+
+/** Options applied when the target thread is actively streaming. */
+const HeartbeatIfActiveSchema = z.object({
+  behavior: z.enum(['deliver', 'persist', 'discard']).optional(),
+  attributes: HeartbeatAttributesSchema.optional(),
+});
+
+/** Options applied when the target thread is idle. */
+const HeartbeatIfIdleSchema = z.object({
+  behavior: z.enum(['wake', 'persist', 'discard']).optional(),
+  attributes: HeartbeatAttributesSchema.optional(),
+  streamOptions: HeartbeatStreamOptionsSchema.optional(),
+});
+
 /**
  * Input payload persisted in `Schedule.target.inputData` for the built-in
  * heartbeat workflow. The scheduler tick rehydrates this on every fire.
@@ -69,8 +113,22 @@ export const HeartbeatInputSchema = z.object({
   threadId: z.string().optional(),
   resourceId: z.string().optional(),
   signalType: z.enum(['user', 'state', 'reactive', 'notification', 'user-message', 'system-reminder']).optional(),
-  ifActive: z.enum(['deliver', 'persist', 'discard']).optional(),
-  ifIdle: z.enum(['wake', 'persist', 'discard']).optional(),
+  /**
+   * XML tag name the signal renders as. Defaults to `heartbeat`, so a fire
+   * surfaces to the agent as `<heartbeat>…</heartbeat>`. Override to render a
+   * different tag.
+   */
+  tagName: z.string().optional(),
+  /** Attributes rendered onto the signal's XML tag. */
+  attributes: HeartbeatAttributesSchema.optional(),
+  /**
+   * Provider options merged into the heartbeat signal payload on every fire.
+   * Stored as a plain JSON object (`MastraProviderMetadata` is JSON-safe) and
+   * applied regardless of `ifActive` / `ifIdle`.
+   */
+  providerOptions: z.record(z.string(), z.unknown()).optional(),
+  ifActive: HeartbeatIfActiveSchema.optional(),
+  ifIdle: HeartbeatIfIdleSchema.optional(),
   /**
    * Broadcast mode for the chunks produced by this heartbeat-driven run.
    * - `live` (default) — pass every chunk through
@@ -114,6 +172,7 @@ export type HeartbeatEffective = {
   prompt: string;
   broadcast?: HeartbeatBroadcastMode;
   signalType?: AgentSignalType;
+  tagName?: string;
   ifActive?: HeartbeatIfActive;
   ifIdle?: HeartbeatIfIdle;
   attributes?: AgentSignalAttributes;

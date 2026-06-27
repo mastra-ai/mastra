@@ -1,13 +1,16 @@
 import type { Event, EventCallback } from '../../events/types';
 import type { Mastra } from '../../mastra';
+import { RequestContext } from '../../request-context';
 import type { ScheduleTarget } from '../../storage/domains/schedules/base';
 import { PullTransport } from '../../worker/transport/pull-transport';
 import type { WorkerTransport } from '../../worker/transport/transport';
 import { MastraWorker } from '../../worker/worker';
 import type { WorkerDeps } from '../../worker/worker';
+import type { AgentSignalIfIdleOptions } from '../types';
 import type {
   HeartbeatEffective,
   HeartbeatHooks,
+  HeartbeatIfIdle,
   HeartbeatPrepareContext,
   HeartbeatPrepareResult,
   HeartbeatRunStatus,
@@ -382,7 +385,8 @@ export async function executeHeartbeat(
     try {
       signalResult = agent.sendSignal(
         {
-          type: effective.signalType ?? 'system-reminder',
+          type: effective.signalType ?? 'notification',
+          tagName: effective.tagName ?? 'heartbeat',
           contents: effective.prompt,
           ...(effective.attributes ? { attributes: effective.attributes } : {}),
           providerOptions: mergeProviderOptions(effective.providerOptions, heartbeatRunMeta),
@@ -390,8 +394,8 @@ export async function executeHeartbeat(
         {
           resourceId: effective.resourceId,
           threadId: effective.threadId,
-          ...(effective.ifActive ? { ifActive: { behavior: effective.ifActive } } : {}),
-          ...(effective.ifIdle ? { ifIdle: { behavior: effective.ifIdle } } : {}),
+          ...(effective.ifActive ? { ifActive: effective.ifActive } : {}),
+          ...(effective.ifIdle ? { ifIdle: buildIfIdleOptions(effective.ifIdle) } : {}),
         },
       );
     } catch (err) {
@@ -581,8 +585,27 @@ function buildEffectiveFromTarget(target: Extract<ScheduleTarget, { type: 'heart
     prompt: target.prompt,
     broadcast: target.broadcast,
     signalType: target.signalType,
+    tagName: target.tagName,
+    attributes: target.attributes,
+    providerOptions: target.providerOptions,
     ifActive: target.ifActive,
     ifIdle: target.ifIdle,
+  };
+}
+
+/**
+ * Maps the stored, JSON-safe `ifIdle` config onto the signal API's
+ * `AgentSignalIfIdleOptions`, rehydrating the plain `streamOptions.requestContext`
+ * object into a live `RequestContext` before the wake signal runs.
+ */
+function buildIfIdleOptions(ifIdle: HeartbeatIfIdle): AgentSignalIfIdleOptions {
+  const requestContext = ifIdle.streamOptions?.requestContext;
+  return {
+    ...(ifIdle.behavior ? { behavior: ifIdle.behavior } : {}),
+    ...(ifIdle.attributes ? { attributes: ifIdle.attributes } : {}),
+    ...(requestContext
+      ? { streamOptions: { requestContext: new RequestContext(Object.entries(requestContext)) } }
+      : {}),
   };
 }
 

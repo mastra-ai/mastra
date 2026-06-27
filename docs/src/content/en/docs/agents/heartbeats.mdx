@@ -95,13 +95,34 @@ await mastra.heartbeats.create({
 })
 ```
 
-Threaded heartbeats accept extra fields that control how the signal behaves:
+Threaded heartbeats accept extra fields that control how the signal behaves. They mirror the options [`agent.sendSignal`](/docs/agents/signals) accepts and stay JSON-serializable so they persist with the schedule.
 
-- `signalType`: the [signal type](/docs/agents/signals) to send, for example `notification` or `system-reminder`.
-- `ifActive`: action when the thread is already streaming. One of `deliver`, `persist`, or `discard`.
-- `ifIdle`: action when the thread is idle. One of `wake`, `persist`, or `discard`.
+- `signalType`: the [signal type](/docs/agents/signals) to send, for example `notification` or `system-reminder`. Defaults to `notification`.
+- `tagName`: the XML tag the signal renders as. Defaults to `heartbeat`, so a fire surfaces to the agent as `<heartbeat>…</heartbeat>`.
+- `attributes`: values rendered onto the signal's XML tag.
+- `ifActive`: behavior when the thread is already streaming, as `{ behavior, attributes }`. `behavior` is one of `deliver`, `persist`, or `discard`.
+- `ifIdle`: behavior when the thread is idle, as `{ behavior, attributes, streamOptions }`. `behavior` is one of `wake`, `persist`, or `discard`. `streamOptions.requestContext` is applied to the woken run.
 
 These fields require a `threadId`. Passing them on a threadless heartbeat throws.
+
+```typescript
+await mastra.heartbeats.create({
+  agentId: 'pinger',
+  cron: '0 9 * * *',
+  prompt: 'Summarize anything new since yesterday.',
+  threadId: 'thread-123',
+  resourceId: 'user-456',
+  tagName: 'check-in', // renders as <check-in>…</check-in>
+  attributes: { source: 'cron' },
+  ifActive: { behavior: 'discard' }, // skip if the thread is mid-stream
+  ifIdle: {
+    behavior: 'wake', // wake the agent if the thread is idle
+    streamOptions: { requestContext: { locale: 'en-US' } },
+  },
+})
+```
+
+`providerOptions` are merged into the signal payload on every fire and apply to both threaded and threadless heartbeats.
 
 ### Controlling the run's stream
 

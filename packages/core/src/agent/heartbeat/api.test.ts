@@ -48,15 +48,15 @@ describe('mastra.heartbeats', () => {
       threadId: 't1',
       resourceId: 'u1',
       signalType: 'system-reminder',
-      ifActive: 'persist',
-      ifIdle: 'wake',
+      ifActive: { behavior: 'persist' },
+      ifIdle: { behavior: 'wake' },
     });
 
     expect(hb.threadId).toBe('t1');
     expect(hb.resourceId).toBe('u1');
     expect(hb.signalType).toBe('system-reminder');
-    expect(hb.ifActive).toBe('persist');
-    expect(hb.ifIdle).toBe('wake');
+    expect(hb.ifActive).toEqual({ behavior: 'persist' });
+    expect(hb.ifIdle).toEqual({ behavior: 'wake' });
   });
 
   it('supports multiple heartbeats per agent/thread with distinct ids', async () => {

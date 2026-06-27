@@ -16,8 +16,8 @@ const hb = await mastra.heartbeats.create({
   resourceId,
   cron: '*/5 * * * *',
   prompt: 'Check in on the user',
-  ifActive: 'discard', // skip if the user is mid-conversation
-  ifIdle: 'wake', // wake the agent if the thread is idle
+  ifActive: { behavior: 'discard' }, // skip if the user is mid-conversation
+  ifIdle: { behavior: 'wake' }, // wake the agent if the thread is idle
 });
 
 // Threadless: run the agent on a cron with no conversation.
@@ -58,6 +58,27 @@ new Mastra({
     onError: ({ agentId, error, phase, heartbeat }) => {
       alerts.send(`heartbeat ${agentId}/${heartbeat.name} failed in ${phase}: ${error.message}`);
     },
+  },
+});
+```
+
+**Signal shaping**
+
+A heartbeat fire surfaces to the agent as a signal. By default it uses the `notification` type and renders as `<heartbeat>…</heartbeat>`; override `signalType` and `tagName` to change either. `ifActive` and `ifIdle` mirror the `agent.sendSignal` options shape (`{ behavior, attributes }`, plus `streamOptions` on `ifIdle`) and stay JSON-serializable so they persist with the schedule. `ifIdle.streamOptions` currently accepts `requestContext`, which is rehydrated onto the woken run. Top-level `attributes` are rendered on the signal tag, and top-level `providerOptions` are merged into the signal payload on every fire.
+
+```ts
+await mastra.heartbeats.create({
+  agentId: 'chef',
+  threadId,
+  resourceId,
+  cron: '*/5 * * * *',
+  prompt: 'Check in on the user',
+  tagName: 'check-in', // renders as <check-in>…</check-in>
+  attributes: { source: 'cron' },
+  providerOptions: { openai: { store: false } },
+  ifIdle: {
+    behavior: 'wake',
+    streamOptions: { requestContext: { locale: 'en-US' } },
   },
 });
 ```

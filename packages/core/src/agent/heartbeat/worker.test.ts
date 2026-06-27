@@ -118,7 +118,8 @@ describe('HeartbeatWorker — executeHeartbeat', () => {
     expect(sendSignal).toHaveBeenCalledTimes(1);
     const [signal, target] = sendSignal.mock.calls[0]!;
     expect(signal).toMatchObject({
-      type: 'system-reminder',
+      type: 'notification',
+      tagName: 'heartbeat',
       contents: 'ping',
       providerOptions: { mastra: { heartbeat: { scheduleId: 'hb_a1', broadcast: 'live', threadId: 't1' } } },
     });
@@ -148,18 +149,75 @@ describe('HeartbeatWorker — executeHeartbeat', () => {
         threadId: 't1',
         resourceId: 'r1',
         signalType: 'system-reminder',
-        ifActive: 'deliver',
-        ifIdle: 'persist',
+        ifActive: { behavior: 'deliver', attributes: { source: 'cron' } },
+        ifIdle: { behavior: 'persist', attributes: { kind: 'wake' } },
       }),
     );
 
     const [signal, target] = sendSignal.mock.calls[0]!;
     expect(signal.type).toBe('system-reminder');
+    expect(signal.tagName).toBe('heartbeat');
     expect(signal.providerOptions).toEqual({
       mastra: { heartbeat: { scheduleId: 'hb_a1', broadcast: 'live', threadId: 't1' } },
     });
-    expect(target.ifActive).toEqual({ behavior: 'deliver' });
-    expect(target.ifIdle).toEqual({ behavior: 'persist' });
+    expect(target.ifActive).toEqual({ behavior: 'deliver', attributes: { source: 'cron' } });
+    expect(target.ifIdle).toEqual({ behavior: 'persist', attributes: { kind: 'wake' } });
+  });
+
+  it('rehydrates ifIdle.streamOptions.requestContext into a RequestContext', async () => {
+    const sendSignal: any = vi.fn(() => signalResult({ action: 'wake', runId: 'run-3' }));
+    const agent = {
+      sendSignal,
+      generate: vi.fn(),
+      getMemory: vi.fn(async () => ({
+        getThreadById: vi.fn(async () => ({ id: 't1', updatedAt: new Date(0) })),
+      })),
+    };
+    const mastra = makeMastra({ agent });
+
+    await executeHeartbeat(
+      mastra,
+      'hb_a1',
+      makeTarget({
+        threadId: 't1',
+        resourceId: 'r1',
+        ifIdle: { behavior: 'wake', streamOptions: { requestContext: { channel: 'slack', foo: 1 } } },
+      }),
+    );
+
+    const [, target] = sendSignal.mock.calls[0]!;
+    expect(target.ifIdle.behavior).toBe('wake');
+    const rc = target.ifIdle.streamOptions.requestContext;
+    expect(rc.get('channel')).toBe('slack');
+    expect(rc.get('foo')).toBe(1);
+  });
+
+  it('forwards stored providerOptions on the signal payload merged with heartbeat run metadata', async () => {
+    const sendSignal: any = vi.fn(() => signalResult({ action: 'deliver', runId: 'run-4' }));
+    const agent = {
+      sendSignal,
+      generate: vi.fn(),
+      getMemory: vi.fn(async () => ({
+        getThreadById: vi.fn(async () => ({ id: 't1', updatedAt: new Date(0) })),
+      })),
+    };
+    const mastra = makeMastra({ agent });
+
+    await executeHeartbeat(
+      mastra,
+      'hb_a1',
+      makeTarget({
+        threadId: 't1',
+        resourceId: 'r1',
+        providerOptions: { openai: { store: true } },
+      }),
+    );
+
+    const [signal] = sendSignal.mock.calls[0]!;
+    expect(signal.providerOptions).toEqual({
+      openai: { store: true },
+      mastra: { heartbeat: { scheduleId: 'hb_a1', broadcast: 'live', threadId: 't1' } },
+    });
   });
 
   it('reports skipped-thread-blocked when the signal targets a suspended thread', async () => {
