@@ -846,6 +846,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   errorProcessors,
   logger,
   agentId,
+  agentName,
   downloadRetries,
   downloadConcurrency,
   processorStates,
@@ -876,6 +877,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // Resolve run-scoped state from either the Mastra-managed RunScope or
       // the legacy `_internal` bag (back-compat for tests).
       const scopeCtx: RunScopeContext = { mastra, runId, _internal };
+      const scopedThreadId = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId') as string | undefined;
+      const scopedResourceId = readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId') as string | undefined;
 
       // Insert a step-start boundary between loop iterations so that
       // consecutive tool-only turns are not collapsed into a single block
@@ -996,7 +999,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               inputProcessors: inputStepProcessors,
               outputProcessors: [],
               logger: logger || new ConsoleLogger({ level: 'error' }),
-              agentName: agentId || 'unknown',
+              agentId,
+              agentName: agentName || agentId || 'unknown',
               processorStates,
             });
 
@@ -1269,7 +1273,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             inputProcessors: getRequestInputProcessors({ inputProcessors, llmRequestInputProcessors }),
             outputProcessors: [],
             logger: logger || new ConsoleLogger({ level: 'error' }),
-            agentName: agentId || 'unknown',
+            agentId,
+            agentName: agentName || agentId || 'unknown',
             processorStates,
           });
           const requestStepWriter: ProcessorStreamWriter | undefined = outputWriter
@@ -1448,6 +1453,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             messageId: currentStep.messageId,
             options: {
               runId,
+              agentId,
+              agentName: agentName || agentId,
+              threadId: scopedThreadId,
+              resourceId: scopedResourceId,
               toolCallStreaming,
               includeRawChunks,
               structuredOutput: currentStep.structuredOutput,
@@ -1630,7 +1639,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 outputProcessors: outputProcessors || [],
                 errorProcessors: errorProcessors || [],
                 logger: logger || new ConsoleLogger({ level: 'error' }),
-                agentName: agentId || 'unknown',
+                agentId,
+                agentName: agentName || agentId || 'unknown',
                 processorStates,
               });
 
@@ -1652,6 +1662,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 steps: inputData.output?.steps || [],
                 retryCount: currentRetryCount,
                 requestContext,
+                threadId: scopedThreadId,
+                resourceId: scopedResourceId,
                 writer: apiErrorWriter,
                 abortSignal: options?.abortSignal,
                 messageId: currentMessageId,
@@ -1771,7 +1783,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           outputProcessors: outputProcessors || [],
           errorProcessors: errorProcessors || [],
           logger: logger || new ConsoleLogger({ level: 'error' }),
-          agentName: agentId || 'unknown',
+          agentId,
+          agentName: agentName || agentId || 'unknown',
           processorStates,
         });
 
@@ -1790,6 +1803,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           steps: inputData.output?.steps || [],
           retryCount: currentRetryCount,
           requestContext,
+          threadId: scopedThreadId,
+          resourceId: scopedResourceId,
           writer: apiErrorWriter2,
           abortSignal: options?.abortSignal,
           messageId: currentMessageId,
@@ -1893,7 +1908,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           inputProcessors: [],
           outputProcessors,
           logger: logger || new ConsoleLogger({ level: 'error' }),
-          agentName: agentId || 'unknown',
+          agentId,
+          agentName: agentName || agentId || 'unknown',
           processorStates,
         });
 
@@ -1938,6 +1954,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             ...createObservabilityContext(outputStepTracingContext),
             requestContext,
             retryCount: currentRetryCount,
+            threadId: scopedThreadId,
+            resourceId: scopedResourceId,
             writer: processorWriter,
           });
         } catch (error) {

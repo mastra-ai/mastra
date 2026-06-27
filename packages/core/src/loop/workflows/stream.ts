@@ -11,6 +11,9 @@ import { safeClose, safeEnqueue } from '../../stream/base';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import { hydrateRunScopeFromInternal } from '../hydrate-run-scope';
+import { readScoped } from '../run-scope-access';
+import type { RunScopeContext } from '../run-scope-access';
+import { RESOURCE_ID_KEY, THREAD_ID_KEY } from '../run-scope-keys';
 import type { LoopRun } from '../types';
 import { AGENTIC_EXECUTION_WORKFLOW_ID } from './agentic-execution';
 import { createAgenticLoopWorkflow } from './agentic-loop';
@@ -37,6 +40,10 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
       // Normalize requestContext so data-chunk processors and the agentic loop share the same instance
       const requestContext = rest.requestContext ?? new RequestContext();
 
+      const scopeCtx: RunScopeContext = { mastra: rest.mastra, runId, _internal };
+      const scopedThreadId = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId') as string | undefined;
+      const scopedResourceId = readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId') as string | undefined;
+
       // Create a ProcessorRunner for chunks routed through outputWriter (data-* custom
       // chunks plus lifecycle chunks like step-finish) so they go through output processors.
       // Share the loop's processorStates map so these chunks see the same per-processor state
@@ -50,7 +57,8 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         ? new ProcessorRunner({
             outputProcessors: rest.outputProcessors,
             logger: rest.logger || new ConsoleLogger({ level: 'error' }),
-            agentName: agentId || 'unknown',
+            agentId,
+            agentName: rest.agentName || agentId || 'unknown',
             processorStates: dataChunkProcessorStates,
           })
         : undefined;
@@ -84,6 +92,8 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
               messageList,
               0,
               dataChunkStreamWriter,
+              scopedThreadId,
+              scopedResourceId,
             );
 
             if (blocked) {
@@ -158,6 +168,8 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             messageList,
             0,
             dataChunkStreamWriter,
+            scopedThreadId,
+            scopedResourceId,
           );
 
           if (blocked) {

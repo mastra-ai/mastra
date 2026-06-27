@@ -348,6 +348,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         errorProcessors,
         logger: logger as any,
         agentName: agent.name,
+        agentId: agent.id,
         processorStates,
       });
       await runner.runInputProcessors(
@@ -355,6 +356,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         createObservabilityContext({ currentSpan: agentSpan }),
         requestContext,
         0,
+        threadId,
+        resourceId,
       );
     } catch (error) {
       logger?.warn?.(`[DurableAgent] Error running input processors: ${error}`);

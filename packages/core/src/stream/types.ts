@@ -1089,6 +1089,10 @@ export type MastraOnFinishCallback<OUTPUT = undefined> = (
 
 export type MastraModelOutputOptions<OUTPUT = undefined> = {
   runId: string;
+  agentId?: string;
+  agentName?: string;
+  threadId?: string;
+  resourceId?: string;
   toolCallStreaming?: boolean;
   onFinish?: MastraOnFinishCallback<OUTPUT>;
   onStepFinish?: MastraOnStepFinishCallback<OUTPUT>;

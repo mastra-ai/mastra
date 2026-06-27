@@ -51,6 +51,26 @@ export interface ProcessorStreamWriter {
  */
 export interface ProcessorContext<TTripwireMetadata = unknown> extends Partial<ObservabilityContext> {
   /**
+   * Id of the agent this processor is running for, when the run is agent-scoped.
+   * Undefined for non-agent processor pipelines.
+   */
+  agentId?: string;
+  /**
+   * Name of the agent this processor is running for, when the run is agent-scoped.
+   * Undefined for non-agent processor pipelines.
+   */
+  agentName?: string;
+  /**
+   * Id of the thread this run is bound to, when the run is thread-scoped.
+   * Undefined for threadless runs.
+   */
+  threadId?: string;
+  /**
+   * Id of the resource (e.g. user) this run is bound to, when known.
+   * Undefined for resourceless runs.
+   */
+  resourceId?: string;
+  /**
    * Function to abort processing with an optional reason and options.
    * @param reason - The reason for aborting
    * @param options - Options including retry flag and metadata

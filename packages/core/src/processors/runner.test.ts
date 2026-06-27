@@ -3715,4 +3715,77 @@ describe('ProcessorRunner', () => {
       ]);
     });
   });
+
+  describe('Processor identity (cross-path symmetry)', () => {
+    it('passes identical agentId/agentName/threadId/resourceId on both in-process and workflow-as-processor paths', async () => {
+      const inProcess: Record<string, unknown> = {};
+      const viaWorkflow: Record<string, unknown> = {};
+
+      const inProcessProcessor: Processor = {
+        id: 'in-process',
+        processOutputResult: async ({ messages, agentId, agentName, threadId, resourceId }) => {
+          Object.assign(inProcess, { agentId, agentName, threadId, resourceId });
+          return messages;
+        },
+      };
+
+      const workflowProcessor: Processor = {
+        id: 'via-workflow',
+        processOutputResult: async ({ messages, agentId, agentName, threadId, resourceId }) => {
+          Object.assign(viaWorkflow, { agentId, agentName, threadId, resourceId });
+          return messages;
+        },
+      };
+      const workflow = createWorkflow({
+        id: 'identity-workflow',
+        inputSchema: ProcessorStepSchema,
+        outputSchema: ProcessorStepSchema,
+        type: 'processor',
+        options: { validateInputs: false },
+      })
+        .then(createStep(workflowProcessor as any))
+        .commit() as ProcessorWorkflow;
+
+      const list = new MessageList({ threadId: 'thread-xyz' });
+      list.add(
+        {
+          id: 'identity-msg',
+          role: 'assistant' as const,
+          content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'hello' }] },
+          createdAt: new Date(),
+          threadId: 'thread-xyz',
+        },
+        'response',
+      );
+
+      const identityRunner = new ProcessorRunner({
+        inputProcessors: [],
+        outputProcessors: [inProcessProcessor, workflow],
+        logger: mockLogger,
+        agentName: 'identity-agent',
+        agentId: 'agent-123',
+      });
+
+      await identityRunner.runOutputProcessors(
+        list,
+        undefined,
+        new RequestContext(),
+        0,
+        undefined,
+        undefined,
+        'thread-xyz',
+        'resource-abc',
+      );
+
+      const expected = {
+        agentId: 'agent-123',
+        agentName: 'identity-agent',
+        threadId: 'thread-xyz',
+        resourceId: 'resource-abc',
+      };
+      expect(inProcess).toEqual(expected);
+      expect(viaWorkflow).toEqual(expected);
+      expect(viaWorkflow).toEqual(inProcess);
+    });
+  });
 });

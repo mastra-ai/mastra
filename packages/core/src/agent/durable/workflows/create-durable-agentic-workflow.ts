@@ -359,6 +359,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
                 errorProcessors: registryEntry.errorProcessors ?? [],
                 logger: logger as any,
                 agentName: initData.agentName ?? initData.agentId,
+                agentId: initData.agentId,
                 processorStates: registryEntry.processorStates,
               });
               const outputMessageList = new MessageList();
@@ -370,6 +371,10 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
                 createObservabilityContext(tracingContext),
                 requestContext ?? new RequestContext(),
                 0,
+                undefined,
+                undefined,
+                initData.state?.threadId,
+                initData.state?.resourceId,
               );
             } catch (error) {
               logger?.warn?.(`[DurableAgent] Error running output processors: ${error}`);

@@ -267,6 +267,7 @@ export class ProcessorRunner {
   public readonly errorProcessors: ErrorProcessorOrWorkflow[];
   private readonly logger: IMastraLogger;
   private readonly agentName: string;
+  private readonly agentId?: string;
   /**
    * Shared processor state that persists across loop iterations.
    * Used by all processor methods (input and output) to share state.
@@ -280,6 +281,7 @@ export class ProcessorRunner {
     errorProcessors,
     logger,
     agentName,
+    agentId,
     processorStates,
   }: {
     inputProcessors?: ProcessorOrWorkflow[];
@@ -287,6 +289,7 @@ export class ProcessorRunner {
     errorProcessors?: ErrorProcessorOrWorkflow[];
     logger: IMastraLogger;
     agentName: string;
+    agentId?: string;
     processorStates?: Map<string, ProcessorState>;
   }) {
     this.inputProcessors = inputProcessors ?? [];
@@ -294,6 +297,7 @@ export class ProcessorRunner {
     this.errorProcessors = errorProcessors ?? [];
     this.logger = logger;
     this.agentName = agentName;
+    this.agentId = agentId;
     this.processorStates = processorStates ?? new Map();
   }
 
@@ -396,6 +400,8 @@ export class ProcessorRunner {
       abortSignal,
       abort,
       retryCount,
+      agentId: this.agentId,
+      agentName: this.agentName,
       resourceId: resolvedResourceId,
       threadId: resolvedThreadId,
       activeStateSignals,
@@ -587,6 +593,8 @@ export class ProcessorRunner {
     retryCount: number = 0,
     writer?: ProcessorStreamWriter,
     result?: OutputResult,
+    threadId?: string,
+    resourceId?: string,
   ): Promise<MessageList> {
     for (const [index, processorOrWorkflow] of this.outputProcessors.entries()) {
       const allNewMessages = messageList.get.response.db();
@@ -604,6 +612,10 @@ export class ProcessorRunner {
             messageList,
             retryCount,
             result,
+            agentId: this.agentId,
+            agentName: this.agentName,
+            threadId,
+            resourceId,
           },
           observabilityContext,
           requestContext,
@@ -671,6 +683,10 @@ export class ProcessorRunner {
           requestContext,
           retryCount,
           writer,
+          agentId: this.agentId,
+          agentName: this.agentName,
+          threadId,
+          resourceId,
           sendSignal: createProcessorSendSignal({ messageList, writer }),
         });
 
@@ -755,6 +771,8 @@ export class ProcessorRunner {
     messageList?: MessageList,
     retryCount: number = 0,
     writer?: ProcessorStreamWriter,
+    threadId?: string,
+    resourceId?: string,
   ): Promise<{
     part: ChunkType<OUTPUT> | null | undefined;
     blocked: boolean;
@@ -796,6 +814,10 @@ export class ProcessorRunner {
                 state: state.customState,
                 messageList,
                 retryCount,
+                agentId: this.agentId,
+                agentName: this.agentName,
+                threadId,
+                resourceId,
               },
               observabilityContext,
               requestContext,
@@ -853,6 +875,10 @@ export class ProcessorRunner {
               messageList,
               retryCount,
               writer,
+              agentId: this.agentId,
+              agentName: this.agentName,
+              threadId,
+              resourceId,
             });
 
             // Track output chunk and update processedPart
@@ -1095,6 +1121,8 @@ export class ProcessorRunner {
     observabilityContext?: ObservabilityContext,
     requestContext?: RequestContext,
     retryCount: number = 0,
+    threadId?: string,
+    resourceId?: string,
   ): Promise<MessageList> {
     for (const [index, processorOrWorkflow] of this.inputProcessors.entries()) {
       let processableMessages: MastraDBMessage[] = messageList.get.input.db();
@@ -1112,6 +1140,10 @@ export class ProcessorRunner {
             messageList,
             systemMessages: currentSystemMessages,
             retryCount,
+            agentId: this.agentId,
+            agentName: this.agentName,
+            threadId,
+            resourceId,
           },
           observabilityContext,
           requestContext,
@@ -1170,6 +1202,10 @@ export class ProcessorRunner {
           messageList,
           requestContext,
           retryCount,
+          agentId: this.agentId,
+          agentName: this.agentName,
+          threadId,
+          resourceId,
           sendSignal: createProcessorSendSignal({ messageList }),
         });
 
@@ -1331,7 +1367,7 @@ export class ProcessorRunner {
    * @returns The processed MessageList
    */
   async runProcessInputStep(args: RunProcessInputStepArgs): Promise<RunProcessInputStepResult> {
-    const { messageList, stepNumber, steps, requestContext, writer } = args;
+    const { messageList, stepNumber, steps, requestContext, writer, threadId, resourceId } = args;
     const observabilityContext = resolveObservabilityContext(args);
 
     // Initialize with all provided values - processors will modify this object in order
@@ -1371,6 +1407,10 @@ export class ProcessorRunner {
             stepNumber,
             steps,
             systemMessages: currentSystemMessages,
+            agentId: this.agentId,
+            agentName: this.agentName,
+            threadId,
+            resourceId,
             rotateResponseMessageId: args.rotateResponseMessageId
               ? () => {
                   const nextMessageId = args.rotateResponseMessageId!();
@@ -1440,6 +1480,10 @@ export class ProcessorRunner {
         modelSettings: stepInput.modelSettings,
         structuredOutput: stepInput.structuredOutput,
         requestContext,
+        agentId: this.agentId,
+        agentName: this.agentName,
+        threadId,
+        resourceId,
       };
 
       // Use the current span (the step span) as the parent for processor spans
@@ -1820,6 +1864,8 @@ export class ProcessorRunner {
       requestContext?: RequestContext;
       retryCount?: number;
       writer?: ProcessorStreamWriter;
+      threadId?: string;
+      resourceId?: string;
     } & Partial<ObservabilityContext>,
   ): Promise<MessageList> {
     const {
@@ -1834,6 +1880,8 @@ export class ProcessorRunner {
       requestContext,
       retryCount = 0,
       writer,
+      threadId,
+      resourceId,
     } = args;
     const observabilityContext = resolveObservabilityContext(args);
 
@@ -1861,6 +1909,10 @@ export class ProcessorRunner {
             systemMessages: currentSystemMessages,
             steps,
             retryCount,
+            agentId: this.agentId,
+            agentName: this.agentName,
+            threadId,
+            resourceId,
           },
           observabilityContext,
           requestContext,
@@ -1934,6 +1986,10 @@ export class ProcessorRunner {
           requestContext,
           retryCount,
           writer,
+          agentId: this.agentId,
+          agentName: this.agentName,
+          threadId,
+          resourceId,
           sendSignal: createProcessorSendSignal({ messageList, writer }),
         });
 
@@ -2033,9 +2089,22 @@ export class ProcessorRunner {
       writer?: ProcessorStreamWriter;
       abortSignal?: AbortSignal;
       rotateResponseMessageId?: () => string;
+      threadId?: string;
+      resourceId?: string;
     } & Partial<ObservabilityContext>,
   ): Promise<{ retry: boolean }> {
-    const { error, messageList, stepNumber, steps, requestContext, retryCount = 0, writer, abortSignal } = args;
+    const {
+      error,
+      messageList,
+      stepNumber,
+      steps,
+      requestContext,
+      retryCount = 0,
+      writer,
+      abortSignal,
+      threadId,
+      resourceId,
+    } = args;
     const observabilityContext = resolveObservabilityContext(args);
 
     const allProcessors: ProcessorOrWorkflow[] = [
@@ -2114,6 +2183,10 @@ export class ProcessorRunner {
           retryCount,
           writer,
           abortSignal,
+          agentId: this.agentId,
+          agentName: this.agentName,
+          threadId,
+          resourceId,
           messageId: args.messageId,
           ...(rotateResponseMessageId ? { rotateResponseMessageId } : {}),
           sendSignal: createProcessorSendSignal({ messageList, writer, rotateResponseMessageId }),

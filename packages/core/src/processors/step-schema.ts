@@ -102,7 +102,19 @@ export type ProcessorStepModelConfig =
  */
 export type ProcessorStepToolsConfig = ToolSet | Record<string, unknown>;
 
-export type ProcessorInputPhaseType = {
+/**
+ * Agent/thread/resource identity threaded through every processor phase so
+ * processors can learn which agent run they belong to. All fields are plain
+ * strings, keeping the workflow-as-processor step schemas JSON-safe.
+ */
+export type ProcessorIdentityType = {
+  agentId?: string;
+  agentName?: string;
+  threadId?: string;
+  resourceId?: string;
+};
+
+export type ProcessorInputPhaseType = ProcessorIdentityType & {
   phase: 'input';
   messages: ProcessorMessageType[];
   messageList: MessageList;
@@ -110,7 +122,7 @@ export type ProcessorInputPhaseType = {
   retryCount?: number;
 };
 
-export type ProcessorInputStepPhaseType = {
+export type ProcessorInputStepPhaseType = ProcessorIdentityType & {
   phase: 'inputStep';
   messages: ProcessorMessageType[];
   messageList: MessageList;
@@ -129,7 +141,7 @@ export type ProcessorInputStepPhaseType = {
   rotateResponseMessageId?: () => string;
 };
 
-export type ProcessorOutputStreamPhaseType = {
+export type ProcessorOutputStreamPhaseType = ProcessorIdentityType & {
   phase: 'outputStream';
   part?: unknown | null;
   streamParts: unknown[];
@@ -150,7 +162,7 @@ export type SerializableOutputResult = {
   steps: unknown[];
 };
 
-export type ProcessorOutputResultPhaseType = {
+export type ProcessorOutputResultPhaseType = ProcessorIdentityType & {
   phase: 'outputResult';
   messages: ProcessorMessageType[];
   messageList: MessageList;
@@ -158,7 +170,7 @@ export type ProcessorOutputResultPhaseType = {
   result?: SerializableOutputResult;
 };
 
-export type ProcessorOutputStepPhaseType = {
+export type ProcessorOutputStepPhaseType = ProcessorIdentityType & {
   phase: 'outputStep';
   messages: ProcessorMessageType[];
   messageList: MessageList;
@@ -180,7 +192,7 @@ export type ProcessorStepInputType =
   | ProcessorOutputResultPhaseType
   | ProcessorOutputStepPhaseType;
 
-export type ProcessorStepOutputType = {
+export type ProcessorStepOutputType = ProcessorIdentityType & {
   phase: 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep';
   messages?: ProcessorMessageType[];
   messageList?: MessageList;
@@ -508,6 +520,18 @@ const toolCallSchema = z.object({
  */
 const retryCountSchema = z.number().optional();
 
+/**
+ * Agent/thread/resource identity fields shared across every processor phase
+ * schema. Spread into each phase object so identity survives the
+ * workflow-as-processor serialization boundary. All plain strings (JSON-safe).
+ */
+const identitySchema = {
+  agentId: z.string().optional(),
+  agentName: z.string().optional(),
+  threadId: z.string().optional(),
+  resourceId: z.string().optional(),
+};
+
 // =========================================================================
 // Phase-specific schemas (discriminated union)
 // =========================================================================
@@ -522,6 +546,7 @@ export const ProcessorInputPhaseSchema = z.object({
   messageList: messageListSchema,
   systemMessages: systemMessagesSchema.optional(),
   retryCount: retryCountSchema,
+  ...identitySchema,
 });
 
 /**
@@ -556,6 +581,7 @@ export const ProcessorInputStepPhaseSchema = z.object({
     .optional()
     .describe('Structured output configuration'),
   steps: z.custom<Array<StepResult<ToolSet>>>().optional().describe('Results from previous steps'),
+  ...identitySchema,
 });
 
 /**
@@ -569,6 +595,7 @@ export const ProcessorOutputStreamPhaseSchema = z.object({
   state: z.record(z.string(), z.unknown()).describe('Mutable state object that persists across chunks'),
   messageList: messageListSchema.optional(),
   retryCount: retryCountSchema,
+  ...identitySchema,
 });
 
 /**
@@ -588,6 +615,7 @@ export const ProcessorOutputResultPhaseSchema = z.object({
   messageList: messageListSchema,
   retryCount: retryCountSchema,
   result: outputResultSchema.optional(),
+  ...identitySchema,
 });
 
 /**
@@ -612,6 +640,7 @@ export const ProcessorOutputStepPhaseSchema = z.object({
     .describe('Token usage for the current step (inputTokens, outputTokens, totalTokens, etc.)'),
   systemMessages: systemMessagesSchema.optional(),
   retryCount: retryCountSchema,
+  ...identitySchema,
 });
 
 /**
@@ -684,6 +713,9 @@ export const ProcessorStepOutputSchema: z.ZodType<ProcessorStepOutputType> = z.o
   steps: z.custom<Array<StepResult<ToolSet>>>().optional(),
   messageId: z.string().optional(),
   rotateResponseMessageId: z.custom<() => string>().optional(),
+
+  // Agent/thread/resource identity (threaded through every phase)
+  ...identitySchema,
 });
 
 /**

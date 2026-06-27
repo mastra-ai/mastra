@@ -810,6 +810,11 @@ function createStepFromProcessor<TProcessorId extends string>(
         usage,
         messageId,
         rotateResponseMessageId,
+        // Identity fields so processors know which agent/thread/resource they run for
+        agentId,
+        agentName,
+        threadId,
+        resourceId,
         // Shared processor states map for accessing persisted state
         processorStates,
         // Abort signal for cancelling in-flight processor work (e.g. OM observations)
@@ -1059,6 +1064,10 @@ function createStepFromProcessor<TProcessorId extends string>(
         abortSignal,
         messageId: currentMessageId,
         rotateResponseMessageId: rotateCurrentResponseMessageId,
+        agentId,
+        agentName,
+        threadId,
+        resourceId,
         ...(processorMessageList
           ? {
               sendSignal: createProcessorSendSignal({
@@ -1100,6 +1109,11 @@ function createStepFromProcessor<TProcessorId extends string>(
         usage,
         messageId: currentMessageId,
         rotateResponseMessageId: rotateCurrentResponseMessageId,
+        // Identity fields preserved so chained processors keep the same context
+        agentId,
+        agentName,
+        threadId,
+        resourceId,
       };
 
       // Helper to execute phase with proper span lifecycle management

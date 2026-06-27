@@ -262,6 +262,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 errorProcessors: registryEntry?.errorProcessors ?? [],
                 logger: logger as any,
                 agentName: typedInput.agentName ?? typedInput.agentId,
+                agentId: typedInput.agentId,
                 processorStates: registryEntry?.processorStates,
               });
               const processInputStepResult = await runner.runProcessInputStep({
@@ -700,6 +701,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   errorProcessors: registryEntry.errorProcessors,
                   logger: logger as any,
                   agentName: typedInput.agentName ?? typedInput.agentId,
+                  agentId: typedInput.agentId,
                   processorStates: registryEntry.processorStates,
                 });
                 const currentMessageList = new MessageList();
@@ -711,6 +713,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   stepNumber: (inputData as any).stepIndex ?? 0,
                   steps: [],
                   requestContext,
+                  threadId: typedInput.state?.threadId,
+                  resourceId: typedInput.state?.resourceId,
                 });
                 if (retry) {
                   logger?.debug?.(`processAPIError requested retry for model ${modelId}`, { runId });

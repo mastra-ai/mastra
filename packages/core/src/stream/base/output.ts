@@ -323,7 +323,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
         inputProcessors: [],
         outputProcessors: options.outputProcessors,
         logger: this.logger,
-        agentName: 'MastraModelOutput',
+        agentId: options.agentId,
+        agentName: options.agentName || 'MastraModelOutput',
         processorStates: options.processorStates,
       });
     }
@@ -400,6 +401,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 self.messageList,
                 0,
                 streamWriter,
+                options.threadId,
+                options.resourceId,
               );
               const enqueueTripwire = (r?: string, opts?: { retry?: boolean; metadata?: unknown }, pid?: string) => {
                 controller.enqueue({
@@ -920,6 +923,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     0,
                     outputResultWriter,
                     outputResult,
+                    options.threadId,
+                    options.resourceId,
                   );
 
                   // Get text from the latest response message (the last assistant message)

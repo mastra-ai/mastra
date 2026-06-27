@@ -15,7 +15,13 @@ import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import { createStep } from '../../../workflows/workflow';
 import { readScoped, writeScoped } from '../../run-scope-access';
 import type { RunScopeContext } from '../../run-scope-access';
-import { DELEGATION_BAILED_KEY, STEP_TOOLS_KEY, TOOL_PAYLOAD_TRANSFORM_KEY } from '../../run-scope-keys';
+import {
+  DELEGATION_BAILED_KEY,
+  RESOURCE_ID_KEY,
+  STEP_TOOLS_KEY,
+  THREAD_ID_KEY,
+  TOOL_PAYLOAD_TRANSFORM_KEY,
+} from '../../run-scope-keys';
 import type { OuterLLMRun } from '../../types';
 import { deserializeToolError } from '../errors';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
@@ -25,6 +31,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
   llmExecutionStep: any,
 ) {
   const scopeCtx: RunScopeContext = { mastra: rest.mastra, runId: rest.runId, _internal };
+  const scopedThreadId = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId') as string | undefined;
+  const scopedResourceId = readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId') as string | undefined;
   /**
    * Output processor handling for tool-result and tool-error chunks.
    *
@@ -46,7 +54,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           inputProcessors: [],
           outputProcessors: rest.outputProcessors,
           logger: rest.logger,
-          agentName: 'LLMMappingStep',
+          agentName: rest.agentName ?? 'LLMMappingStep',
+          agentId: rest.agentId,
           processorStates: rest.processorStates,
         })
       : undefined;
@@ -77,6 +86,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         rest.messageList,
         0,
         streamWriter,
+        scopedThreadId,
+        scopedResourceId,
       );
 
       const enqueueTripwire = (r?: string, opts?: { retry?: boolean; metadata?: unknown }, pid?: string) => {
