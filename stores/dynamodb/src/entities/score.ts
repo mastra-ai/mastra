@@ -303,6 +303,14 @@ export const scoreEntity = new Entity({
       type: 'string',
       required: false,
     },
+    organizationId: {
+      type: 'string',
+      required: false,
+    },
+    projectId: {
+      type: 'string',
+      required: false,
+    },
     threadId: {
       type: 'string',
       required: false,

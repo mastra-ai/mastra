@@ -45,6 +45,8 @@ interface ScoreRow {
   entityId: string | null;
   source: string | null;
   resourceId: string | null;
+  organizationId: string | null;
+  projectId: string | null;
   threadId: string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
@@ -97,7 +99,7 @@ export class ScoresMySQL extends ScoresStorage {
     await this.operations.alterTable({
       tableName: TABLE_SCORERS,
       schema: SCORERS_SCHEMA,
-      ifNotExists: ['spanId', 'requestContext'],
+      ifNotExists: ['spanId', 'requestContext', 'organizationId', 'projectId'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -182,6 +184,8 @@ export class ScoresMySQL extends ScoresStorage {
       entityId: row.entityId ?? undefined,
       source: (row.source ?? undefined) as ScoreRowData['source'],
       resourceId: row.resourceId ?? undefined,
+      organizationId: row.organizationId ?? undefined,
+      projectId: row.projectId ?? undefined,
       threadId: row.threadId ?? undefined,
       createdAt: parseDateTime(row.createdAt) ?? new Date(),
       updatedAt: parseDateTime(row.updatedAt) ?? new Date(),
@@ -219,6 +223,8 @@ export class ScoresMySQL extends ScoresStorage {
       entity: toJson(score.entity),
       entityId: score.entityId ?? null,
       resourceId: score.resourceId ?? null,
+      organizationId: score.organizationId ?? null,
+      projectId: score.projectId ?? null,
       threadId: score.threadId ?? null,
       source: score.source ?? null,
       createdAt,

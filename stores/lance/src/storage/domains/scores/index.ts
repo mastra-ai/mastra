@@ -178,42 +178,28 @@ export class StoreScoresLance extends ScoresStorage {
 
       const table = await this.client.openTable(TABLE_SCORERS);
 
-      let query = table.query().where(`\`scorerId\` = '${scorerId}'`);
-
+      const conditions = [`\`scorerId\` = '${scorerId}'`];
       if (source) {
-        query = query.where(`\`source\` = '${source}'`);
+        conditions.push(`\`source\` = '${source}'`);
       }
-
       if (entityId) {
-        query = query.where(`\`entityId\` = '${entityId}'`);
+        conditions.push(`\`entityId\` = '${entityId}'`);
       }
       if (entityType) {
-        query = query.where(`\`entityType\` = '${entityType}'`);
+        conditions.push(`\`entityType\` = '${entityType}'`);
       }
       if (filters?.organizationId !== undefined) {
-        query = query.where(`\`organizationId\` = '${filters.organizationId}'`);
+        conditions.push(`\`organizationId\` = '${filters.organizationId}'`);
       }
       if (filters?.projectId !== undefined) {
-        query = query.where(`\`projectId\` = '${filters.projectId}'`);
+        conditions.push(`\`projectId\` = '${filters.projectId}'`);
       }
+      const whereClause = conditions.join(' AND ');
+
+      let query = table.query().where(whereClause);
 
       // Get total count first
-      let totalQuery = table.query().where(`\`scorerId\` = '${scorerId}'`);
-      if (source) {
-        totalQuery = totalQuery.where(`\`source\` = '${source}'`);
-      }
-      if (entityId) {
-        totalQuery = totalQuery.where(`\`entityId\` = '${entityId}'`);
-      }
-      if (entityType) {
-        totalQuery = totalQuery.where(`\`entityType\` = '${entityType}'`);
-      }
-      if (filters?.organizationId !== undefined) {
-        totalQuery = totalQuery.where(`\`organizationId\` = '${filters.organizationId}'`);
-      }
-      if (filters?.projectId !== undefined) {
-        totalQuery = totalQuery.where(`\`projectId\` = '${filters.projectId}'`);
-      }
+      const totalQuery = table.query().where(whereClause);
       const allRecords = await totalQuery.toArray();
       const total = allRecords.length;
 

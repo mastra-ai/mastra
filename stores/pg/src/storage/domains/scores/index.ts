@@ -1,7 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import type { StoragePagination, CreateIndexOptions } from '@mastra/core/storage';
+import type { StoragePagination, CreateIndexOptions, ScoreTenancyFilters } from '@mastra/core/storage';
 import {
   calculatePagination,
   createStorageErrorId,
@@ -11,7 +11,6 @@ import {
   TABLE_SCHEMAS,
   transformScoreRow as coreTransformScoreRow,
 } from '@mastra/core/storage';
-import type { ScoreTenancyFilters } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
