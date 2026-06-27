@@ -7,6 +7,9 @@
  */
 
 import { Agent } from '@mastra/core/agent';
+import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '@mastra/core/agent/durable';
+import { InMemoryServerCache } from '@mastra/core/cache';
+import { CachingPubSub, EventEmitterPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
 import { DefaultStorage } from '@mastra/libsql';
 import { Inngest } from 'inngest';
@@ -133,6 +136,218 @@ describe('createInngestAgent factory function', () => {
 
     // Verify observe method exists and is a function
     expect(typeof durableAgent.observe).toBe('function');
+  });
+});
+
+describe('createInngestAgent observe-replay wiring', () => {
+  const inngest = new Inngest({
+    id: 'create-inngest-agent-observe-replay',
+    baseUrl: `http://localhost:${INNGEST_PORT}`,
+  });
+
+  function makeAgent(id: string) {
+    return new Agent({
+      id,
+      name: id,
+      instructions: 'Test',
+      model: createMockModel() as any,
+    });
+  }
+
+  it('always wraps the inner pubsub in CachingPubSub, even without a configured cache', () => {
+    // Regression: bare InngestPubSub has no history replay, so `observe()` would only see
+    // chunks emitted after subscription. The factory must wrap with CachingPubSub by default
+    // (mirroring the in-memory DurableAgent), falling back to InMemoryServerCache.
+    const durableAgent = createInngestAgent({ agent: makeAgent('observe-replay-default'), inngest });
+
+    expect(durableAgent.pubsub).toBeInstanceOf(CachingPubSub);
+    expect(durableAgent.cache).toBeInstanceOf(InMemoryServerCache);
+  });
+
+  it('honors a user-provided cache instead of the InMemoryServerCache fallback', () => {
+    const customCache = new InMemoryServerCache();
+    const durableAgent = createInngestAgent({
+      agent: makeAgent('observe-replay-custom-cache'),
+      inngest,
+      cache: customCache,
+    });
+
+    expect(durableAgent.cache).toBe(customCache);
+    expect(durableAgent.pubsub).toBeInstanceOf(CachingPubSub);
+  });
+
+  // The next two tests mirror packages/core/src/agent/durable/__tests__/resumable-streams.test.ts
+  // ("Late subscriber replay") to prove createInngestAgent wires the same replay semantics
+  // that the in-memory DurableAgent provides. Without the CachingPubSub wrapper these would
+  // both fail: bare InngestPubSub has no history and a late observer would miss every chunk
+  // emitted before its subscribe call.
+  //
+  // Replace the inner InngestPubSub with an in-process EventEmitterPubSub. The wrapper's
+  // history-replay path is the code under test; we just need a live-event broker that
+  // doesn't try to hit Inngest realtime. This mirrors the inner used by the in-memory
+  // resumable-streams test in packages/core/src/agent/durable/__tests__.
+  function swapInnerToInProcess(durableAgent: any) {
+    (durableAgent.pubsub as any).inner = new EventEmitterPubSub();
+  }
+
+  it('should replay all events to a late subscriber', async () => {
+    const durableAgent = createInngestAgent({ agent: makeAgent('observe-replay-late'), inngest });
+    swapInnerToInProcess(durableAgent);
+    const pubsub = durableAgent.pubsub;
+    const runId = 'inngest-observe-run-late';
+    const topic = AGENT_STREAM_TOPIC(runId);
+    const receivedEvents: any[] = [];
+
+    // 1. Publish some events before any subscriber
+    await pubsub.publish(topic, {
+      type: AgentStreamEventTypes.CHUNK,
+      runId,
+      data: { chunk: 'Hello ' },
+    } as any);
+    await pubsub.publish(topic, {
+      type: AgentStreamEventTypes.CHUNK,
+      runId,
+      data: { chunk: 'World!' },
+    } as any);
+    await pubsub.publish(topic, {
+      type: AgentStreamEventTypes.FINISH,
+      runId,
+      data: { text: 'Hello World!' },
+    } as any);
+
+    // Wait for cache writes
+    await new Promise(resolve => setTimeout(resolve, 20));
+
+    // 2. Late subscriber joins and should receive all events
+    await pubsub.subscribeWithReplay(topic, event => {
+      receivedEvents.push(event);
+    });
+
+    // 3. Verify all events were received in order
+    expect(receivedEvents).toHaveLength(3);
+    expect(receivedEvents[0].type).toBe(AgentStreamEventTypes.CHUNK);
+    expect(receivedEvents[0].data).toEqual({ chunk: 'Hello ' });
+    expect(receivedEvents[1].type).toBe(AgentStreamEventTypes.CHUNK);
+    expect(receivedEvents[1].data).toEqual({ chunk: 'World!' });
+    expect(receivedEvents[2].type).toBe(AgentStreamEventTypes.FINISH);
+  });
+
+  it("wraps each workflow's local pubsub in a cache-sharing CachingPubSub", async () => {
+    // Regression: previously the InngestWorkflow function constructed its own bare
+    // `new InngestPubSub(...)` inside the durable handler, so workflow steps published
+    // chunk events to a pubsub instance the agent's `observe()` never sees.
+    //
+    // The fix is an `__setPubsubFactory` override that wraps each workflow's *own*
+    // workflow-local default InngestPubSub with a CachingPubSub backed by the same
+    // cache as the agent's pubsub. This preserves per-workflow event channels
+    // (workflow-events on `workflow:<workflowId>:<runId>` must stay workflow-local,
+    // otherwise nested-workflow watch isolation breaks) while still routing all
+    // publishes through the cache that observe() reads from.
+    const durableAgent = createInngestAgent({ agent: makeAgent('observe-replay-factory'), inngest });
+    swapInnerToInProcess(durableAgent);
+
+    const workflows = durableAgent.getDurableWorkflows();
+    const workflow = workflows.find((w: any) => w.id === InngestDurableStepIds.AGENTIC_LOOP) as any;
+    expect(workflow).toBeDefined();
+
+    const factory = workflow.__getPubsubFactory?.();
+    expect(typeof factory).toBe('function');
+
+    // Simulate what the workflow function does at runtime: pass in a workflow-local
+    // InngestPubSub default. The factory must wrap it (not substitute it) so the
+    // workflow-id-scoped channels survive.
+    const parentDefault = new EventEmitterPubSub(); // stand-in for the workflow's default InngestPubSub
+    const wrapped = factory(parentDefault);
+    expect(wrapped).toBeInstanceOf(CachingPubSub);
+    expect((wrapped as any).inner).toBe(parentDefault);
+    // Must reuse the same backing cache as the agent's pubsub so observe() sees workflow writes.
+    expect((wrapped as any).cache).toBe(durableAgent.cache);
+
+    // Nested InngestWorkflows (e.g. the single-iteration loop body) run as their
+    // own Inngest functions and resolve their own pubsub at runtime. Each must
+    // get its own workflow-local CachingPubSub - same cache, different inner -
+    // otherwise chunk events emitted by tool/llm steps inside the inner loop
+    // bypass the cache and `observe()` can never replay them.
+    const collectNested = (steps: any[]): any[] => {
+      const found: any[] = [];
+      for (const step of steps ?? []) {
+        if ((step.type === 'step' || step.type === 'loop' || step.type === 'foreach') && step.step?.executionGraph) {
+          found.push(step.step);
+          found.push(...collectNested(step.step.executionGraph.steps));
+        } else if (step.type === 'parallel' || step.type === 'conditional') {
+          found.push(...collectNested(step.steps));
+        }
+      }
+      return found;
+    };
+    const nested = collectNested(workflow.executionGraph.steps);
+    expect(nested.length).toBeGreaterThan(0);
+    for (const inner of nested) {
+      const innerFactory = inner.__getPubsubFactory?.();
+      expect(typeof innerFactory).toBe('function');
+      const nestedDefault = new EventEmitterPubSub();
+      const nestedWrapped = innerFactory(nestedDefault);
+      expect(nestedWrapped).toBeInstanceOf(CachingPubSub);
+      // Each nested workflow keeps its own workflow-local inner...
+      expect((nestedWrapped as any).inner).toBe(nestedDefault);
+      // ...but shares the cache, so writes from any workflow show up on observe().
+      expect((nestedWrapped as any).cache).toBe(durableAgent.cache);
+    }
+
+    // Behavioural check: a publish from any of these factory-produced pubsubs
+    // becomes replayable via the agent's pubsub because they share a cache.
+    const runId = 'inngest-observe-factory-run';
+    const topic = AGENT_STREAM_TOPIC(runId);
+    await wrapped.publish(topic, {
+      type: AgentStreamEventTypes.CHUNK,
+      runId,
+      data: { chunk: 'from-workflow' },
+    } as any);
+    await new Promise(resolve => setTimeout(resolve, 20));
+
+    const replayed: any[] = [];
+    await durableAgent.pubsub.subscribeWithReplay(topic, event => {
+      replayed.push(event);
+    });
+    expect(replayed).toHaveLength(1);
+    expect(replayed[0].data).toEqual({ chunk: 'from-workflow' });
+  });
+
+  it('should receive both cached and live events', async () => {
+    const durableAgent = createInngestAgent({ agent: makeAgent('observe-replay-mixed'), inngest });
+    swapInnerToInProcess(durableAgent);
+    const pubsub = durableAgent.pubsub;
+    const runId = 'inngest-observe-run-mixed';
+    const topic = AGENT_STREAM_TOPIC(runId);
+    const receivedEvents: any[] = [];
+
+    // 1. Publish cached events
+    await pubsub.publish(topic, {
+      type: AgentStreamEventTypes.CHUNK,
+      runId,
+      data: { chunk: 'Cached ' },
+    } as any);
+    await new Promise(resolve => setTimeout(resolve, 20));
+
+    // 2. Subscribe with replay
+    await pubsub.subscribeWithReplay(topic, event => {
+      receivedEvents.push(event);
+    });
+
+    // 3. Publish live events after subscription
+    await pubsub.publish(topic, {
+      type: AgentStreamEventTypes.CHUNK,
+      runId,
+      data: { chunk: 'Live!' },
+    } as any);
+
+    // Allow live publish to fan out
+    await new Promise(resolve => setTimeout(resolve, 20));
+
+    // 4. Verify both cached and live events received in order
+    expect(receivedEvents).toHaveLength(2);
+    expect(receivedEvents[0].data).toEqual({ chunk: 'Cached ' });
+    expect(receivedEvents[1].data).toEqual({ chunk: 'Live!' });
   });
 });
 
