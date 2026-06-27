@@ -343,9 +343,11 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const itemsCollection = await this.getCollection(TABLE_DATASET_ITEMS);
       const datasetsCollection = await this.getCollection(TABLE_DATASETS);
 
-      await versionsCollection.deleteMany({ datasetId: id });
-      await itemsCollection.deleteMany({ datasetId: id });
-      await datasetsCollection.deleteOne({ id });
+      await this.#connector.withTransaction(async session => {
+        await versionsCollection.deleteMany({ datasetId: id }, { session });
+        await itemsCollection.deleteMany({ datasetId: id }, { session });
+        await datasetsCollection.deleteOne({ id }, { session });
+      });
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -444,32 +446,39 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const organizationId = (result.organizationId as string | null | undefined) ?? null;
       const projectId = (result.projectId as string | null | undefined) ?? null;
 
-      // Insert item
-      await itemsCollection.insertOne({
-        id,
-        datasetId: args.datasetId,
-        datasetVersion: newVersion,
-        organizationId,
-        projectId,
-        validTo: null,
-        isDeleted: false,
-        input: args.input,
-        groundTruth: args.groundTruth ?? null,
-        expectedTrajectory: args.expectedTrajectory ?? null,
-        toolMocks: args.toolMocks ?? null,
-        requestContext: args.requestContext ?? null,
-        metadata: args.metadata ?? null,
-        source: args.source ?? null,
-        createdAt: now,
-        updatedAt: now,
-      });
+      // Insert item + dataset_version row atomically
+      await this.#connector.withTransaction(async session => {
+        await itemsCollection.insertOne(
+          {
+            id,
+            datasetId: args.datasetId,
+            datasetVersion: newVersion,
+            organizationId,
+            projectId,
+            validTo: null,
+            isDeleted: false,
+            input: args.input,
+            groundTruth: args.groundTruth ?? null,
+            expectedTrajectory: args.expectedTrajectory ?? null,
+            toolMocks: args.toolMocks ?? null,
+            requestContext: args.requestContext ?? null,
+            metadata: args.metadata ?? null,
+            source: args.source ?? null,
+            createdAt: now,
+            updatedAt: now,
+          },
+          { session },
+        );
 
-      // Insert dataset_version row
-      await versionsCollection.insertOne({
-        id: versionId,
-        datasetId: args.datasetId,
-        version: newVersion,
-        createdAt: now,
+        await versionsCollection.insertOne(
+          {
+            id: versionId,
+            datasetId: args.datasetId,
+            version: newVersion,
+            createdAt: now,
+          },
+          { session },
+        );
       });
 
       return {
@@ -570,38 +579,46 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const parentOrganizationId = (result.organizationId as string | null | undefined) ?? null;
       const parentProjectId = (result.projectId as string | null | undefined) ?? null;
 
-      // Close old row (set validTo = newVersion)
-      await itemsCollection.updateOne(
-        { id: args.id, validTo: null, isDeleted: false },
-        { $set: { validTo: newVersion } },
-      );
+      // Close old row, insert new row, and insert version row atomically
+      await this.#connector.withTransaction(async session => {
+        await itemsCollection.updateOne(
+          { id: args.id, validTo: null, isDeleted: false },
+          { $set: { validTo: newVersion } },
+          { session },
+        );
 
-      // Insert new row with merged fields, preserving original createdAt
-      await itemsCollection.insertOne({
-        id: args.id,
-        datasetId: args.datasetId,
-        datasetVersion: newVersion,
-        organizationId: parentOrganizationId,
-        projectId: parentProjectId,
-        validTo: null,
-        isDeleted: false,
-        input: mergedInput,
-        groundTruth: mergedGroundTruth,
-        expectedTrajectory: mergedExpectedTrajectory ?? null,
-        toolMocks: mergedToolMocks ?? null,
-        requestContext: mergedRequestContext,
-        metadata: mergedMetadata,
-        source: mergedSource,
-        createdAt: existing.createdAt,
-        updatedAt: now,
-      });
+        // Insert new row with merged fields, preserving original createdAt
+        await itemsCollection.insertOne(
+          {
+            id: args.id,
+            datasetId: args.datasetId,
+            datasetVersion: newVersion,
+            organizationId: parentOrganizationId,
+            projectId: parentProjectId,
+            validTo: null,
+            isDeleted: false,
+            input: mergedInput,
+            groundTruth: mergedGroundTruth,
+            expectedTrajectory: mergedExpectedTrajectory ?? null,
+            toolMocks: mergedToolMocks ?? null,
+            requestContext: mergedRequestContext,
+            metadata: mergedMetadata,
+            source: mergedSource,
+            createdAt: existing.createdAt,
+            updatedAt: now,
+          },
+          { session },
+        );
 
-      // Insert dataset_version row
-      await versionsCollection.insertOne({
-        id: versionId,
-        datasetId: args.datasetId,
-        version: newVersion,
-        createdAt: now,
+        await versionsCollection.insertOne(
+          {
+            id: versionId,
+            datasetId: args.datasetId,
+            version: newVersion,
+            createdAt: now,
+          },
+          { session },
+        );
       });
 
       return {
@@ -670,35 +687,47 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const parentOrganizationId = (result.organizationId as string | null | undefined) ?? null;
       const parentProjectId = (result.projectId as string | null | undefined) ?? null;
 
-      // Close old row
-      await itemsCollection.updateOne({ id, validTo: null, isDeleted: false }, { $set: { validTo: newVersion } });
+      await this.#connector.withTransaction(async session => {
+        // Close old row
+        await itemsCollection.updateOne(
+          { id, validTo: null, isDeleted: false },
+          { $set: { validTo: newVersion } },
+          { session },
+        );
 
-      // Insert tombstone
-      await itemsCollection.insertOne({
-        id,
-        datasetId,
-        datasetVersion: newVersion,
-        organizationId: parentOrganizationId,
-        projectId: parentProjectId,
-        validTo: null,
-        isDeleted: true,
-        input: existing.input,
-        groundTruth: existing.groundTruth,
-        expectedTrajectory: existing.expectedTrajectory ?? null,
-        toolMocks: existing.toolMocks ?? null,
-        requestContext: existing.requestContext,
-        metadata: existing.metadata,
-        source: existing.source,
-        createdAt: existing.createdAt,
-        updatedAt: now,
-      });
+        // Insert tombstone
+        await itemsCollection.insertOne(
+          {
+            id,
+            datasetId,
+            datasetVersion: newVersion,
+            organizationId: parentOrganizationId,
+            projectId: parentProjectId,
+            validTo: null,
+            isDeleted: true,
+            input: existing.input,
+            groundTruth: existing.groundTruth,
+            expectedTrajectory: existing.expectedTrajectory ?? null,
+            toolMocks: existing.toolMocks ?? null,
+            requestContext: existing.requestContext,
+            metadata: existing.metadata,
+            source: existing.source,
+            createdAt: existing.createdAt,
+            updatedAt: now,
+          },
+          { session },
+        );
 
-      // Insert dataset_version row
-      await versionsCollection.insertOne({
-        id: versionId,
-        datasetId,
-        version: newVersion,
-        createdAt: now,
+        // Insert dataset_version row
+        await versionsCollection.insertOne(
+          {
+            id: versionId,
+            datasetId,
+            version: newVersion,
+            createdAt: now,
+          },
+          { session },
+        );
       });
     } catch (error) {
       if (error instanceof MastraError) throw error;
@@ -764,34 +793,38 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const projectId = (result.projectId as string | null | undefined) ?? null;
 
       // Batch insert items
-      if (itemsWithIds.length > 0) {
-        const docs = itemsWithIds.map(({ generatedId, itemInput }) => ({
-          id: generatedId,
-          datasetId: input.datasetId,
-          datasetVersion: newVersion,
-          organizationId,
-          projectId,
-          validTo: null,
-          isDeleted: false,
-          input: itemInput.input,
-          groundTruth: itemInput.groundTruth ?? null,
-          expectedTrajectory: itemInput.expectedTrajectory ?? null,
-          toolMocks: itemInput.toolMocks ?? null,
-          requestContext: itemInput.requestContext ?? null,
-          metadata: itemInput.metadata ?? null,
-          source: itemInput.source ?? null,
-          createdAt: now,
-          updatedAt: now,
-        }));
-        await itemsCollection.insertMany(docs);
-      }
-
-      // Single dataset_version row
-      await versionsCollection.insertOne({
-        id: versionId,
+      const docs = itemsWithIds.map(({ generatedId, itemInput }) => ({
+        id: generatedId,
         datasetId: input.datasetId,
-        version: newVersion,
+        datasetVersion: newVersion,
+        organizationId,
+        projectId,
+        validTo: null,
+        isDeleted: false,
+        input: itemInput.input,
+        groundTruth: itemInput.groundTruth ?? null,
+        expectedTrajectory: itemInput.expectedTrajectory ?? null,
+        toolMocks: itemInput.toolMocks ?? null,
+        requestContext: itemInput.requestContext ?? null,
+        metadata: itemInput.metadata ?? null,
+        source: itemInput.source ?? null,
         createdAt: now,
+        updatedAt: now,
+      }));
+
+      await this.#connector.withTransaction(async session => {
+        await itemsCollection.insertMany(docs, { session });
+
+        // Single dataset_version row
+        await versionsCollection.insertOne(
+          {
+            id: versionId,
+            datasetId: input.datasetId,
+            version: newVersion,
+            createdAt: now,
+          },
+          { session },
+        );
       });
 
       return itemsWithIds.map(({ generatedId, itemInput }) => ({
@@ -874,14 +907,8 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const parentOrganizationId = (result.organizationId as string | null | undefined) ?? null;
       const parentProjectId = (result.projectId as string | null | undefined) ?? null;
 
-      // Close old rows in batch
+      // Close old rows, insert tombstones, and record version — all atomic
       const currentIds = currentItems.map(i => i.id);
-      await itemsCollection.updateMany(
-        { id: { $in: currentIds }, validTo: null, isDeleted: false },
-        { $set: { validTo: newVersion } },
-      );
-
-      // Insert tombstones in batch
       const tombstones = currentItems.map(item => ({
         id: item.id,
         datasetId: input.datasetId,
@@ -900,14 +927,28 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         createdAt: item.createdAt,
         updatedAt: now,
       }));
-      await itemsCollection.insertMany(tombstones);
 
-      // Single dataset_version row
-      await versionsCollection.insertOne({
-        id: versionId,
-        datasetId: input.datasetId,
-        version: newVersion,
-        createdAt: now,
+      await this.#connector.withTransaction(async session => {
+        // Close old rows in batch
+        await itemsCollection.updateMany(
+          { id: { $in: currentIds }, validTo: null, isDeleted: false },
+          { $set: { validTo: newVersion } },
+          { session },
+        );
+
+        // Insert tombstones in batch
+        await itemsCollection.insertMany(tombstones, { session });
+
+        // Single dataset_version row
+        await versionsCollection.insertOne(
+          {
+            id: versionId,
+            datasetId: input.datasetId,
+            version: newVersion,
+            createdAt: now,
+          },
+          { session },
+        );
       });
     } catch (error) {
       if (error instanceof MastraError) throw error;
