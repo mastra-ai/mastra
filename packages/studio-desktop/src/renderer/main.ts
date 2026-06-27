@@ -144,7 +144,7 @@ function renderTabs() {
   tabStrip.innerHTML = current.tabs
     .map(
       tab => `
-        <button class="tab ${tab.id === current.activeTabId ? 'active' : ''}" type="button" data-tab-id="${tab.id}" aria-pressed="${tab.id === current.activeTabId}">
+        <button class="tab status-${tab.status} ${tab.id === current.activeTabId ? 'active' : ''}" type="button" data-tab-id="${tab.id}" aria-pressed="${tab.id === current.activeTabId}" ${tab.status === 'loading' ? 'aria-busy="true"' : ''}>
           <span class="tab-kind" aria-hidden="true">${tabKindLabel(tab)}</span>
           <span class="tab-title">${escapeHtml(tab.title)}</span>
           <span class="tab-close" data-close-tab-id="${tab.id}" title="Close tab" aria-hidden="true">×</span>

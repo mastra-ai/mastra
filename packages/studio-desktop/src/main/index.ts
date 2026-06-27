@@ -332,6 +332,15 @@ function upsertTab(tab: DesktopTab) {
   emitState();
 }
 
+function replaceTab(tab: DesktopTab) {
+  const index = tabs.findIndex(candidate => candidate.id === tab.id);
+  if (index < 0) return false;
+
+  tabs[index] = tab;
+  emitState();
+  return true;
+}
+
 function createLauncherTab() {
   upsertTab({
     id: randomUUID(),
@@ -341,6 +350,25 @@ function createLauncherTab() {
     status: 'ready',
   });
   return snapshotState();
+}
+
+function wait(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function waitForMastraServer(serverUrl: string, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastError = '';
+
+  while (Date.now() < deadline) {
+    const probe = await probeMastraServer(serverUrl);
+    if (probe.ok) return;
+
+    lastError = probe.error ?? '';
+    await wait(250);
+  }
+
+  throw new Error(lastError || `Mastra server did not become ready at ${serverUrl}`);
 }
 
 async function closeStudioShellServer(key: string | undefined) {
@@ -422,6 +450,8 @@ async function ensureManagedStudio(forceRestart = false) {
     throw new Error(runtime.status.error ?? 'Managed Mastra runtime did not return a URL');
   }
 
+  await waitForMastraServer(activeServerUrl);
+
   const studio = await startStudioShellForServer(activeServerUrl);
   managedShellKey = studio.key;
   managedStudio = {
@@ -446,17 +476,38 @@ async function restartManagedRuntime() {
 }
 
 async function createManagedTab() {
-  const url = await ensureManagedStudio();
-  upsertTab({
+  const tab: DesktopTab = {
     id: randomUUID(),
     kind: 'managed',
     title: 'Bundled Template',
-    subtitle: 'Local starter runtime',
-    url,
-    sourceUrl: activeServerUrl,
-    externalUrl: url,
-    status: 'ready',
-  });
+    subtitle: 'Starting local runtime',
+    status: 'loading',
+  };
+
+  upsertTab(tab);
+
+  try {
+    const url = await ensureManagedStudio();
+    replaceTab({
+      ...tab,
+      subtitle: 'Local starter runtime',
+      url,
+      sourceUrl: activeServerUrl,
+      externalUrl: url,
+      status: 'ready',
+      error: undefined,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logs.add(`Managed runtime failed: ${message}`);
+    replaceTab({
+      ...tab,
+      subtitle: 'Local starter runtime unavailable',
+      status: 'error',
+      error: message,
+    });
+  }
+
   return snapshotState();
 }
 
@@ -1039,8 +1090,7 @@ async function boot() {
 
   installMenu();
   installIpc();
-  await ensureManagedStudio();
-  await createManagedTab();
+  void createManagedTab();
   await loadMainWindow();
   if (platformSession) {
     void refreshPlatform();

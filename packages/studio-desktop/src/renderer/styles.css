@@ -39,8 +39,8 @@ body,
 
 .product-showcase {
   position: fixed;
-  inset: 0;
-  z-index: 50;
+  inset: 42px 0 0;
+  z-index: 30;
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -418,6 +418,8 @@ input {
 }
 
 .chrome {
+  position: relative;
+  z-index: 60;
   display: flex;
   align-items: center;
   height: 42px;
@@ -482,6 +484,27 @@ input {
     inset 0 1px rgba(255, 255, 255, 0.04),
     0 1px 1px rgba(0, 0, 0, 0.18);
   color: var(--text);
+}
+
+.tab.status-loading .tab-kind {
+  position: relative;
+  color: transparent;
+}
+
+.tab.status-loading .tab-kind::after {
+  position: absolute;
+  inset: 4px;
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  border-top-color: rgba(255, 255, 255, 0.82);
+  border-radius: 999px;
+  content: '';
+  animation: tab-loading-spin 720ms linear infinite;
+}
+
+@keyframes tab-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .tab:focus-visible,
@@ -1145,6 +1168,10 @@ input {
   .tab-close,
   .icon-button {
     transition: none;
+  }
+
+  .tab.status-loading .tab-kind::after {
+    animation: none;
   }
 }
 
