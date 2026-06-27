@@ -1,0 +1,405 @@
+---
+title: "Reference: Sofya tools | Tools & MCP"
+description: "API reference for @mastra/sofya, which provides web search, fetch, extract, and research tools for Mastra agents."
+packages:
+  - "@mastra/sofya"
+---
+
+# Sofya tools
+
+The `@mastra/sofya` package wraps the [Sofya](https://sofya.co) API as Mastra-compatible tools. It exposes factory functions for search, fetch, extract, and research — each returning a tool created with [`createTool()`](./create-tool) that includes full Zod input/output schemas.
+
+## Installation
+
+```sh npm2yarn
+npm install @mastra/sofya zod
+```
+
+## Quick start
+
+Use `createSofyaTools()` to get all four tools with shared configuration:
+
+```typescript title="src/mastra/tools/index.ts"
+import { createSofyaTools } from '@mastra/sofya'
+
+const tools = createSofyaTools()
+// Or pass an explicit API key:
+// const tools = createSofyaTools({ apiKey: 'ay_live_...' })
+```
+
+Each tool can also be created individually:
+
+```typescript title="src/mastra/tools/index.ts"
+import { createSofyaSearchTool, createSofyaResearchTool } from '@mastra/sofya'
+
+const searchTool = createSofyaSearchTool()
+const researchTool = createSofyaResearchTool({ apiKey: 'ay_live_...' })
+```
+
+By default, all tools read `SOFYA_API_KEY` from the environment. You can pass `{ apiKey }` explicitly to override.
+
+## Configuration
+
+All factory functions accept `SofyaClientOptions`:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'Sofya API key. Falls back to the `SOFYA_API_KEY` environment variable.',
+    isOptional: true,
+  },
+  {
+    name: 'baseUrl',
+    type: 'string',
+    description: 'Base URL for the Sofya API.',
+    isOptional: true,
+    defaultValue: "'https://sofya.co/v1'",
+  },
+  {
+    name: 'clientSource',
+    type: 'string',
+    description: 'Attribution string sent with each request.',
+    isOptional: true,
+    defaultValue: "'mastra'",
+  },
+]}
+/>
+
+## `createSofyaTools()`
+
+Returns an object containing all four tools with a shared configuration.
+
+```typescript
+import { createSofyaTools } from '@mastra/sofya'
+
+const tools = createSofyaTools({ apiKey: 'ay_live_...' })
+// tools.sofyaSearch, tools.sofyaFetch, tools.sofyaExtract, tools.sofyaResearch
+```
+
+**Returns:** `{ sofyaSearch, sofyaFetch, sofyaExtract, sofyaResearch }`
+
+## `createSofyaSearchTool()`
+
+Creates a tool that searches the web using Sofya. Returns relevant results with full page content rather than snippets, plus an optional AI-synthesized answer.
+
+**Tool ID:** `sofya-search`
+
+```typescript
+import { createSofyaSearchTool } from '@mastra/sofya'
+
+const searchTool = createSofyaSearchTool()
+```
+
+### Input
+
+<PropertiesTable
+  content={[
+  {
+    name: 'query',
+    type: 'string',
+    description: 'The search query.',
+  },
+  {
+    name: 'searchDepth',
+    type: "'snippets' | 'basic'",
+    description: "Search depth. 'snippets' is cheaper and returns short excerpts, 'basic' returns full page content.",
+    isOptional: true,
+  },
+  {
+    name: 'maxResults',
+    type: 'number',
+    description: 'Maximum number of results to return (1-20).',
+    isOptional: true,
+  },
+  {
+    name: 'includeAnswer',
+    type: 'boolean',
+    description: 'Include an AI-synthesized answer generated from the results.',
+    isOptional: true,
+  },
+  {
+    name: 'includeDomains',
+    type: 'string[]',
+    description: 'Only include results from these domains (max 10).',
+    isOptional: true,
+  },
+  {
+    name: 'excludeDomains',
+    type: 'string[]',
+    description: 'Exclude results from these domains (max 10).',
+    isOptional: true,
+  },
+  {
+    name: 'topic',
+    type: "'general' | 'news'",
+    description: "Search topic. 'general' for web search, 'news' for news articles.",
+    isOptional: true,
+  },
+  {
+    name: 'freshness',
+    type: 'string',
+    description: "Filter results by recency. One of 'day', 'week', 'month', 'year', or a 'YYYY-MM-DD' date.",
+    isOptional: true,
+  },
+]}
+/>
+
+### Output
+
+<PropertiesTable
+  content={[
+  {
+    name: 'query',
+    type: 'string',
+    description: 'The original search query.',
+  },
+  {
+    name: 'answer',
+    type: 'string',
+    description: 'AI-synthesized answer generated from the results.',
+    isOptional: true,
+  },
+  {
+    name: 'results',
+    type: 'SearchResult[]',
+    description: 'Array of search results.',
+    properties: [
+      {
+        type: 'SearchResult',
+        parameters: [
+          { name: 'title', type: 'string', description: 'Result title.' },
+          { name: 'url', type: 'string', description: 'Result URL.' },
+          { name: 'content', type: 'string', description: 'Page content for the result.' },
+          { name: 'description', type: 'string', description: 'Short description of the result.', isOptional: true },
+          { name: 'fetched', type: 'boolean', description: 'Whether full page content was fetched.', isOptional: true },
+          { name: 'publishedDate', type: 'string', description: 'Publication date when available.', isOptional: true },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'creditsUsed',
+    type: 'number',
+    description: 'Credits consumed by this request.',
+  },
+  {
+    name: 'creditsRemaining',
+    type: 'number',
+    description: 'Credits remaining on the account.',
+  },
+]}
+/>
+
+## `createSofyaFetchTool()`
+
+Creates a tool that fetches one or more URLs as clean markdown. Supports web pages, PDFs, and documents using 250+ site-specific parsers. Each result carries a per-url success flag, so partial failures do not fail the whole request.
+
+**Tool ID:** `sofya-fetch`
+
+```typescript
+import { createSofyaFetchTool } from '@mastra/sofya'
+
+const fetchTool = createSofyaFetchTool()
+```
+
+### Input
+
+<PropertiesTable
+  content={[
+  {
+    name: 'urls',
+    type: 'string[]',
+    description: 'URLs to fetch as clean markdown (1-10). Supports web pages, PDFs, and documents.',
+  },
+  {
+    name: 'includeRawHtml',
+    type: 'boolean',
+    description: 'Include the raw HTML source for each result.',
+    isOptional: true,
+  },
+]}
+/>
+
+### Output
+
+<PropertiesTable
+  content={[
+  {
+    name: 'results',
+    type: 'FetchResult[]',
+    description: 'Fetched pages, one entry per requested URL.',
+    properties: [
+      {
+        type: 'FetchResult',
+        parameters: [
+          { name: 'title', type: 'string', description: 'Page title.', isOptional: true },
+          { name: 'url', type: 'string', description: 'Page URL.' },
+          { name: 'content', type: 'string', description: 'Page content as markdown.' },
+          { name: 'rawHtml', type: 'string', description: 'Raw HTML source (when requested).', isOptional: true },
+          { name: 'publishedTime', type: 'string', description: 'Publication time when available.', isOptional: true },
+          { name: 'success', type: 'boolean', description: 'Whether this URL was fetched successfully.' },
+          { name: 'error', type: 'string', description: 'Error message when the fetch failed.', isOptional: true },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'creditsUsed',
+    type: 'number',
+    description: 'Credits consumed by this request.',
+  },
+  {
+    name: 'creditsRemaining',
+    type: 'number',
+    description: 'Credits remaining on the account.',
+  },
+]}
+/>
+
+## `createSofyaExtractTool()`
+
+Creates a tool that extracts specific information from a URL. Fetches the page and uses AI to pull out exactly what the prompt asks for, such as pricing tables, contact details, or specifications.
+
+**Tool ID:** `sofya-extract`
+
+```typescript
+import { createSofyaExtractTool } from '@mastra/sofya'
+
+const extractTool = createSofyaExtractTool()
+```
+
+### Input
+
+<PropertiesTable
+  content={[
+  {
+    name: 'url',
+    type: 'string',
+    description: 'The URL to extract information from.',
+  },
+  {
+    name: 'prompt',
+    type: 'string',
+    description: 'What information to extract, for example "list all pricing tiers and their prices".',
+  },
+]}
+/>
+
+### Output
+
+<PropertiesTable
+  content={[
+  {
+    name: 'url',
+    type: 'string',
+    description: 'The URL the content was extracted from.',
+  },
+  {
+    name: 'content',
+    type: 'string',
+    description: 'The extracted content as text.',
+  },
+  {
+    name: 'creditsUsed',
+    type: 'number',
+    description: 'Credits consumed by this request.',
+  },
+  {
+    name: 'creditsRemaining',
+    type: 'number',
+    description: 'Credits remaining on the account.',
+  },
+]}
+/>
+
+## `createSofyaResearchTool()`
+
+Creates a tool that runs deep research on a question. Breaks the question into sub-queries, searches multiple sources, and synthesizes a cited report.
+
+**Tool ID:** `sofya-research`
+
+```typescript
+import { createSofyaResearchTool } from '@mastra/sofya'
+
+const researchTool = createSofyaResearchTool()
+```
+
+### Input
+
+<PropertiesTable
+  content={[
+  {
+    name: 'query',
+    type: 'string',
+    description: 'The research question or topic.',
+  },
+  {
+    name: 'topic',
+    type: "'general' | 'news'",
+    description: "Research topic. 'general' for web search, 'news' for news articles.",
+    isOptional: true,
+  },
+  {
+    name: 'freshness',
+    type: 'string',
+    description: "Filter sources by recency. One of 'day', 'week', 'month', 'year', or a 'YYYY-MM-DD' date.",
+    isOptional: true,
+  },
+  {
+    name: 'maxSources',
+    type: 'number',
+    description: 'Maximum number of sources to use (1-30).',
+    isOptional: true,
+  },
+]}
+/>
+
+### Output
+
+<PropertiesTable
+  content={[
+  {
+    name: 'query',
+    type: 'string',
+    description: 'The original research question.',
+  },
+  {
+    name: 'report',
+    type: 'string',
+    description: 'The synthesized research report.',
+  },
+  {
+    name: 'sources',
+    type: 'ResearchSource[]',
+    description: 'Sources used to build the report.',
+    properties: [
+      {
+        type: 'ResearchSource',
+        parameters: [
+          { name: 'title', type: 'string', description: 'Source title.' },
+          { name: 'url', type: 'string', description: 'Source URL.' },
+          { name: 'fetched', type: 'boolean', description: 'Whether full page content was fetched.', isOptional: true },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'subQueries',
+    type: 'string[]',
+    description: 'Sub-queries the research was broken into.',
+    isOptional: true,
+  },
+  {
+    name: 'creditsUsed',
+    type: 'number',
+    description: 'Credits consumed by this request.',
+  },
+  {
+    name: 'creditsRemaining',
+    type: 'number',
+    description: 'Credits remaining on the account.',
+  },
+]}
+/>

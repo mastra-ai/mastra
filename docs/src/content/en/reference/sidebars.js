@@ -657,6 +657,7 @@ const sidebars = {
         { type: 'doc', id: 'tools/mcp-client', label: 'MCPClient' },
         { type: 'doc', id: 'tools/mcp-server', label: 'MCPServer' },
         { type: 'doc', id: 'tools/perplexity', label: 'Perplexity Tools' },
+        { type: 'doc', id: 'tools/sofya', label: 'Sofya Tools' },
         { type: 'doc', id: 'tools/tavily', label: 'Tavily Tools' },
       ],
     },
