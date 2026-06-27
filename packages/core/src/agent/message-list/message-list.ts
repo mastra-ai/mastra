@@ -1156,6 +1156,48 @@ export class MessageList {
     return false;
   }
 
+  public updateMessageMetadataByToolCallId(toolCallId: string, metadata: Record<string, unknown>): boolean {
+    if (!toolCallId) {
+      return false;
+    }
+
+    for (let m = this.messages.length - 1; m >= 0; m--) {
+      const msg = this.messages[m]!;
+      if (msg.role !== 'assistant' || !msg.content?.parts) continue;
+
+      const hasToolCall = msg.content.parts.some(
+        part => part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId,
+      );
+      if (!hasToolCall) continue;
+
+      const existingMeta = (msg.content.metadata ?? {}) as Record<string, unknown>;
+      const incomingMeta = (metadata ?? {}) as Record<string, unknown>;
+      const existingBgTasks = existingMeta.backgroundTasks as Record<string, unknown> | undefined;
+      const incomingBgTasks = incomingMeta.backgroundTasks as Record<string, unknown> | undefined;
+
+      msg.content.metadata = {
+        ...existingMeta,
+        ...incomingMeta,
+        ...(existingBgTasks || incomingBgTasks
+          ? { backgroundTasks: { ...(existingBgTasks ?? {}), ...(incomingBgTasks ?? {}) } }
+          : {}),
+      };
+
+      this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
+      this.updateLastCreatedAt(msg);
+
+      if (!this.stateManager.isResponseMessage(msg)) {
+        this.stateManager.removeMessage(msg);
+        this.stateManager.addToSource(msg, 'response');
+      }
+
+      return true;
+    }
+
+    this.logger?.warn(`updateMessageMetadataByToolCallId: no matching tool call found for toolCallId=${toolCallId}`);
+    return false;
+  }
+
   /**
    * Append a `step-start` boundary to the last assistant message.
    * This marks the beginning of a new loop iteration so that
