@@ -10,6 +10,7 @@ import type {
   MastraVoiceAgentMemory,
   VoiceReplyGenerator,
   VoiceToolCall,
+  VoiceTurnCompleteHook,
   VoiceTurnContext,
 } from './bridge';
 import { parseSessionMetadata } from './metadata';
@@ -98,6 +99,13 @@ export interface CreateLiveKitWorkerOptions {
   memory?: false | ((args: ResolveMastraAgentArgs & { roomName: string }) => MastraVoiceAgentMemory | false);
   /** Spoken while a Mastra tool call runs. See {@link MastraVoiceAgentOptions.toolFeedback}. */
   toolFeedback?: (toolCall: VoiceToolCall) => string | undefined | void;
+  /**
+   * Fired once per turn after the reply has streamed to text-to-speech (agent path only), off
+   * the audio path and fire-and-forget. Use it to fully background post-turn memory maintenance
+   * — e.g. a non-blocking `memory.updateWorkingMemory(...)` — so it never adds to the caller's
+   * latency. See {@link MastraVoiceAgentOptions.onTurnComplete}.
+   */
+  onTurnComplete?: VoiceTurnCompleteHook;
   /** Static greeting spoken when the session starts. */
   greeting?: string;
   /**
@@ -392,6 +400,7 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
         memory,
         requestContext,
         toolFeedback: options.toolFeedback,
+        onTurnComplete: options.onTurnComplete,
         streamOptions: voiceObs ? { tracingContext: voiceObs.tracingContext } : undefined,
       });
 

@@ -153,6 +153,99 @@ describe('MastraVoiceAgent.llmNode', () => {
   });
 });
 
+describe('MastraVoiceAgent onTurnComplete hook', () => {
+  it('fires after the reply streams with the produced text, tool calls, and turn context', async () => {
+    const { agent } = fakeMastraAgent([
+      { type: 'text-delta', payload: { id: '1', text: 'Hello ' } },
+      { type: 'tool-call', payload: { toolCallId: 'c1', toolName: 'lookup', args: { q: 'x' } } },
+      { type: 'text-delta', payload: { id: '1', text: 'world' } },
+    ]);
+    const onTurnComplete = vi.fn();
+    const voiceAgent = new MastraVoiceAgent({
+      agent,
+      memory: { thread: 't1', resource: 'r1' },
+      onTurnComplete,
+    });
+    const result = await voiceAgent.llmNode(userTurnContext('hi'), toolCtx, modelSettings);
+    expect(await readAll(result!)).toEqual(['Hello ', 'world']);
+
+    await vi.waitFor(() => expect(onTurnComplete).toHaveBeenCalledTimes(1));
+    const ctx = onTurnComplete.mock.calls[0]![0];
+    expect(ctx.result).toEqual({
+      text: 'Hello world',
+      toolCalls: [{ toolCallId: 'c1', toolName: 'lookup', args: { q: 'x' } }],
+      interrupted: false,
+    });
+    expect(ctx.messages).toEqual([{ role: 'user', content: 'hi' }]);
+    expect(ctx.memory).toEqual({ thread: 't1', resource: 'r1' });
+  });
+
+  it('marks the turn interrupted when barge-in cancels mid-reply', async () => {
+    const stream = vi.fn(async (_messages: unknown, options: { abortSignal?: AbortSignal }) => ({
+      fullStream: (async function* () {
+        yield { type: 'text-delta', payload: { id: '1', text: 'Hello ' } };
+        await new Promise<void>(resolve => options.abortSignal?.addEventListener('abort', () => resolve()));
+        throw new DOMException('aborted', 'AbortError');
+      })(),
+    }));
+    const agent = { stream } as unknown as MastraAgent;
+    const onTurnComplete = vi.fn();
+    const voiceAgent = new MastraVoiceAgent({ agent, onTurnComplete });
+    const result = await voiceAgent.llmNode(userTurnContext(), toolCtx, modelSettings);
+
+    const reader = result!.getReader();
+    expect((await reader.read()).value).toBe('Hello ');
+    await reader.cancel();
+
+    await vi.waitFor(() => expect(onTurnComplete).toHaveBeenCalledTimes(1));
+    expect(onTurnComplete.mock.calls[0]![0].result).toEqual({
+      text: 'Hello ',
+      toolCalls: [],
+      interrupted: true,
+    });
+  });
+
+  it('does not let a throwing onTurnComplete break the turn', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { agent } = fakeMastraAgent([{ type: 'text-delta', payload: { id: '1', text: 'done' } }]);
+    const onTurnComplete = vi.fn(() => {
+      throw new Error('hook boom');
+    });
+    const voiceAgent = new MastraVoiceAgent({ agent, onTurnComplete });
+    const result = await voiceAgent.llmNode(userTurnContext(), toolCtx, modelSettings);
+    // The reply still streams cleanly even though the hook throws.
+    expect(await readAll(result!)).toEqual(['done']);
+
+    await vi.waitFor(() => expect(warn).toHaveBeenCalled());
+    expect(warn.mock.calls[0]![0]).toContain('onTurnComplete');
+    warn.mockRestore();
+  });
+
+  it('does not fire onTurnComplete when generation errors', async () => {
+    const { agent } = fakeMastraAgent([
+      { type: 'text-delta', payload: { id: '1', text: 'partial' } },
+      { type: 'error', payload: { error: new Error('boom') } },
+    ]);
+    const onTurnComplete = vi.fn();
+    const voiceAgent = new MastraVoiceAgent({ agent, onTurnComplete });
+    const result = await voiceAgent.llmNode(userTurnContext(), toolCtx, modelSettings);
+    await expect(readAll(result!)).rejects.toThrow('boom');
+
+    // Give any stray microtask a chance to run, then assert the hook stayed silent.
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(onTurnComplete).not.toHaveBeenCalled();
+  });
+
+  it('does not fire onTurnComplete when there is no new input', async () => {
+    const { agent } = fakeMastraAgent([]);
+    const onTurnComplete = vi.fn();
+    const voiceAgent = new MastraVoiceAgent({ agent, memory: { thread: 't1' }, onTurnComplete });
+    expect(await voiceAgent.llmNode(llm.ChatContext.empty(), toolCtx, modelSettings)).toBeNull();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(onTurnComplete).not.toHaveBeenCalled();
+  });
+});
+
 describe('MastraVoiceAgent reply generator seam', () => {
   it('delegates to a custom generate function with the turn context', async () => {
     const generate = vi.fn(() => {

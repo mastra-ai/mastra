@@ -5,6 +5,9 @@ export type {
   VoiceToolCall,
   VoiceReplyGenerator,
   VoiceTurnContext,
+  VoiceTurnResult,
+  VoiceTurnCompleteContext,
+  VoiceTurnCompleteHook,
   AgentReplyGeneratorOptions,
 } from './bridge';
 export { createWorkflowReplyGenerator, unwrapStepText } from './workflow-generator';

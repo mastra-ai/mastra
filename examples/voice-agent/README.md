@@ -9,19 +9,28 @@ The example ships **two interchangeable entrypoints**, one for each reply genera
 
 Run one at a time — both register with LiveKit under the same agent name (`mastra-voice`).
 
-The demo assistant "Jordan" works the front desk of **Meridian Trades**, a contractor that sends out tradespeople for plumbing, electrical work, roofing, carpentry, and painting. A site visit is when a tradesperson comes out to assess the job and give a quote. Jordan can:
+The demo assistant "Jordan" works the front desk of **Meridian Trades**, a contractor that sends out tradespeople for plumbing, electrical work, roofing, carpentry, and painting. A site visit is when a tradesperson comes out to assess the job and give a quote. Every call follows one of four paths, which Jordan routes between by listening:
 
-- Look up customers by phone number or name (`lookupCustomer`)
-- Check open site-visit slots for a trade (`checkAvailability`)
-- Book, reschedule, and cancel site visits (`bookAppointment`, `rescheduleAppointment`, `cancelAppointment`)
+1. **New lead** — qualify the job (trade, property, rough scope) and capture it.
+2. **Roof inspection** — collect the property address and zip, then run a **service-area check** (`checkServiceArea`) before promising a visit; out-of-area callers are offered a callback instead.
+3. **General callback** — take a name, number, and reason.
+4. **Existing customer / scheduling** — look the caller up and book, reschedule, or cancel a site visit.
 
-The "CRM" is in-memory and seeded with three customers. Try: **Shane Thomas, 555-0142** (has a visit booked already), Sam Bhagwat (555-0177), Abhi Aiyer (555-0163).
+At the end of the call a single deterministic **reconciliation** pass (`finalizeIntake`) validates the collected fields for the path, re-checks the service area for inspections, and submits one record with a reference number to read back. Jordan's tools:
+
+- `lookupCustomer`, `checkAvailability`, `bookAppointment`, `rescheduleAppointment`, `cancelAppointment` — the scheduling "CRM"
+- `checkServiceArea` — service-area (zip) validation for inspections
+- `finalizeIntake` — the end-of-call reconciliation that submits lead / inspection / callback records
+
+**Why an agent and not a workflow?** This mirrors a real customer's scenarios (lead capture, inspection intake with a service-area gate, general callback) using the **agent loop** as the per-turn engine. Determinism lives in code, not in driving the call as a workflow: tenant context is injected by an **input processor** (`src/mastra/processors/workspace-context.ts`, a stand-in for a per-tenant Firebase lookup keyed by the dialed number), the service-area gate and reconciliation are tools backed by a mock backend (`src/mastra/backend.ts`), and caller state is held in three layers of caller-scoped memory (see [Memory and latency](#memory-and-latency)) so a returning caller is recognized.
+
+The "CRM" is in-memory and seeded with three customers. Try: **Shane Thomas, 555-0142** (has a visit booked already), Sam Bhagwat (555-0177), Abhi Aiyer (555-0163). In-area zips include `94103` and `94110`; `90210` is out of area.
 
 ## Agent vs. workflow entrypoint
 
 Both workers wire the same audio pipeline and the same brand; they differ only in how a turn becomes a reply.
 
-The **agent worker** (`src/mastra/voice-worker.ts`) passes a Mastra agent to `createLiveKitWorker`. The agent runs its own loop each turn, calls tools, and persists the conversation to a Mastra memory thread — so you can hang up, reopen the thread, and call back with continuity.
+The **agent worker** (`src/mastra/voice-worker.ts`) passes a Mastra agent to `createLiveKitWorker`. The agent runs its own loop each turn, calls tools, and persists the conversation to a Mastra memory thread. The worker scopes memory per call — `thread` is the call, `resource` is the caller — so memory carries the caller's details across calls: hang up, call back, and Jordan recalls who you are (see [Memory and latency](#memory-and-latency)). This is the richer, primary path and the one the four scenarios above run on.
 
 The **workflow worker** (`src/mastra/voice-worker-workflow.ts`) passes a `workflow` plus a `workflowInput` mapper. LiveKit owns the turn boundary, so the `phoneConversation` workflow (`src/mastra/workflows/phone-conversation.ts`) runs once to completion per turn — there is no suspend/resume. Each turn it:
 
@@ -30,6 +39,23 @@ The **workflow worker** (`src/mastra/voice-worker-workflow.ts`) passes a `workfl
 3. Generates the spoken reply (`generateResponse` step), piping `agent.stream().textStream` into the step `writer` so text-to-speech starts before the full reply is ready.
 
 This is the "everything is a workflow" path: a turn is a workflow run, not a suspended workflow. Because the transcript is passed in each turn, there is no conversation state to reconcile. The workflow path does not auto-persist to a memory thread — the transcript is the source of truth.
+
+## Memory and latency
+
+The agent (`src/mastra/agents/call-center-agent.ts`) uses three layers of memory, all scoped to the caller (`resource`) so they carry across calls:
+
+1. **Working memory** — the structured fields collected during _this_ call (name, number, trade, address, zip, which path it is), so Jordan never asks twice.
+2. **Semantic recall** — pulls the most relevant snippets of the caller's _prior_ calls into context. Backed by a `LibSQLVector` index in the same `voice-agent.db` and an embedder.
+3. **Observational memory** — a background Observer agent distills durable facts about the caller and injects them into later calls.
+
+On a phone call latency is the product, so each layer is tuned for it:
+
+- **Recall runs before the reply, so it's kept small.** Semantic recall is synchronous — it happens before the model generates — so `topK` is `3` with a tight message range. Every extra hit is time the caller waits through. The embedder is the OpenAI router the agent model already uses (one small, cached call per turn); swap in a local embedder such as `@mastra/fastembed` to drop that network round-trip.
+- **Observational memory is off the critical path.** It runs in the background and never delays a reply. Its `messageTokens` threshold is lowered from the 30k default so it fires within a short demo; raise it in production, and route it to a cheap fast model (in a Gemini stack, Flash).
+- **Working-memory writes trail the spoken reply.** A working-memory write is an in-loop tool call, which would normally cost a round trip _before_ the caller hears anything. Two things keep it off the caller's clock: the agent is instructed to **reply first and update memory last**, and the worker streams text to text-to-speech as it arrives — so a tool call that happens _after_ the reply text doesn't delay what the caller hears. The `updateWorkingMemory` tool is intentionally left silent (no `toolFeedback`).
+- **Everything else post-turn runs off the audio path.** `createLiveKitWorker` takes an `onTurnComplete` hook that fires _after_ the reply has streamed to text-to-speech, fire-and-forget — the worker never awaits it, so it can't add to the caller's latency or delay the next turn. This worker uses it to log every turn to the contact "CRM" (`recordContact` in `src/mastra/backend.ts`); it's also the right place for a fully-backgrounded `memory.updateWorkingMemory(...)`. The hook receives the produced reply (`result.text`, `result.toolCalls`, `result.interrupted`) and the call's `memory` mapping.
+
+> One honest gap: the agent still writes its _structured_ working memory through the in-loop `updateWorkingMemory` tool (kept off the clock by the reply-first ordering above), not through the hook. Making `onTurnComplete` the **sole** working-memory writer — so the model only ever reads working memory and a background hook owns the write — needs a read-only working-memory mode (model reads, write tool suppressed) that Mastra doesn't expose cleanly yet. That follow-on is tracked in the package TODO (`integrations/livekit/TODO.md`, Workstream 4).
 
 ## Setup
 
@@ -70,14 +96,18 @@ Or combine 1 and 3 with `pnpm dev:ui` and run a worker in a second terminal.
 
 Open Studio, point it at `http://localhost:4111`, and open the **Meridian Trades Front Desk** agent chat. Click the phone button in the composer and allow microphone access. You should hear Jordan's greeting.
 
-Things to try:
+Things to try (the four scenarios run on the **agent worker**):
 
-- "Hi, I need a plumber to look at a leaking radiator. My number is five five five, zero one four two." — account lookup plus scheduling, with filler speech while tools run (agent worker only).
+- **Lead:** "Hi, I'm after a quote to repaint my hallway and stairs." — Jordan qualifies the trade and scope, then captures the lead and reads back a reference number.
+- **Roof inspection, in area:** "I'd like someone to look at my roof. The address is 12 Market Street, zip nine four one zero three." — Jordan runs the service-area check, it passes, and books the inspection.
+- **Roof inspection, out of area:** give zip **90210** instead — Jordan apologizes that it's outside the service area and offers a callback.
+- **Callback:** "Can someone just call me back about a fence?" — Jordan takes a name, number, and reason.
+- **Returning caller / scheduling:** "Hi, it's Shane Thomas, five five five, zero one four two." — account lookup plus scheduling, with filler speech while tools run.
 - Pause mid-sentence ("I was wondering if… hmm…") — the semantic turn detector should wait for you to finish.
 - Interrupt Jordan while it's speaking — playback stops and it listens (barge-in).
-- On the **agent worker**, hang up, then look at the chat thread: the voice conversation is persisted to the same memory thread. Call again and reference the earlier call.
+- Hang up, then call again from the same caller: because all three memory layers are scoped to the caller (`resource`), Jordan greets you by name and recalls what the earlier call was about (via semantic recall) instead of starting over.
 
-The same calls work against either worker. The workflow worker classifies each turn's intent before replying, but does not persist the conversation to a thread.
+The same calls work against either worker, but the four-scenario routing, service-area gate, reconciliation, and cross-call memory are the agent worker's behavior. The workflow worker classifies each turn's intent before replying and does not persist the conversation to a thread.
 
 ## Traces
 

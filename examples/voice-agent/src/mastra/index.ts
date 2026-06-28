@@ -4,6 +4,7 @@ import { liveKitConnectionRoute } from '@mastra/livekit';
 import { Observability, MastraStorageExporter, SensitiveDataFilter } from '@mastra/observability';
 import { callCenterAgent } from './agents/call-center-agent';
 import { triageAgent } from './agents/triage-agent';
+import { voiceAgentDbUrl } from './db';
 import { phoneConversationWorkflow } from './workflows/phone-conversation';
 
 export const mastra = new Mastra({
@@ -11,17 +12,13 @@ export const mastra = new Mastra({
   // worker's per-turn workflow.
   agents: { callCenter: callCenterAgent, triage: triageAgent },
   workflows: { phoneConversation: phoneConversationWorkflow },
-  // One LibSQL file for memory, threads, and traces. SQLite handles concurrent access
-  // from the server and the voice worker; single-writer stores (e.g. DuckDB) do not —
-  // the worker is a separate process writing spans for every voice turn.
-  //
-  // The path is anchored to this module instead of the working directory: the dev
-  // server (bundled into .mastra/output) and the voice worker (running src/mastra)
-  // both sit two directories below the project root, but run with different working
-  // directories — a plain relative path would give each process its own database.
+  // One LibSQL file for memory, threads, traces, and the semantic-recall vector index
+  // (see ./db). SQLite handles concurrent access from the server and the voice worker;
+  // single-writer stores (e.g. DuckDB) do not — the worker is a separate process writing
+  // spans for every voice turn.
   storage: new LibSQLStore({
     id: 'voice-agent-storage',
-    url: new URL('../../voice-agent.db', import.meta.url).href,
+    url: voiceAgentDbUrl,
   }),
   observability: new Observability({
     configs: {
