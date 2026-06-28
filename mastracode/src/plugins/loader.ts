@@ -90,7 +90,9 @@ async function importPluginModule(entryPath: string): Promise<MastraCodePlugin> 
   }
 
   const url = pathToFileURL(entryPath);
-  url.searchParams.set('mtime', String(Math.trunc(fs.statSync(entryPath).mtimeMs)));
+  const stat = fs.statSync(entryPath, { bigint: true });
+  url.searchParams.set('mtimeNs', stat.mtimeNs.toString());
+  url.searchParams.set('size', stat.size.toString());
   const mod = (await import(url.href)) as { default?: unknown; plugin?: unknown };
   return validatePluginExport(mod.default ?? mod.plugin);
 }
