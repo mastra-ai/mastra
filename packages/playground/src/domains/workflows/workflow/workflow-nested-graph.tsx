@@ -6,6 +6,7 @@ import '@xyflow/react/dist/style.css';
 import { useEffect, useState } from 'react';
 import { useWorkflowGraphRuntime } from './use-workflow-graph-runtime';
 import { constructNodesAndEdges } from './utils';
+import type { WorkflowGraphEdge, WorkflowGraphNode } from './utils';
 import { ZoomSlider } from './zoom-slider';
 
 export interface WorkflowNestedGraphProps {
@@ -19,9 +20,9 @@ export function WorkflowNestedGraph({ stepGraph, open, workflowName }: WorkflowN
     stepGraph,
   });
   const [isMounted, setIsMounted] = useState(false);
-  const [nodes, _, onNodesChange] = useNodesState(initialNodes);
-  const [edges] = useEdgesState(initialEdges);
-  const { edgeTypes, nodeTypes, styledEdges } = useWorkflowGraphRuntime({ edges, workflowName });
+  const [nodes, _, onNodesChange] = useNodesState<WorkflowGraphNode>(initialNodes);
+  const [edges] = useEdgesState<WorkflowGraphEdge>(initialEdges);
+  const { edgeTypes, nodeTypes, styledEdges } = useWorkflowGraphRuntime({ edges, workflowName, stepGraph });
 
   useEffect(() => {
     if (open) {

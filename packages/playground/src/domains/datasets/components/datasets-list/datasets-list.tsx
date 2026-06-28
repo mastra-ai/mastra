@@ -1,14 +1,14 @@
 import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Chip } from '@mastra/playground-ui/components/Chip';
 import {
-  AgentIcon,
-  Button,
   DataList as EntityList,
   DataListSkeleton as EntityListSkeleton,
-  ProcessorIcon,
-  ScorersIcon,
-  WorkflowIcon,
-} from '@mastra/playground-ui';
-import { Chip } from '@mastra/playground-ui/components/Chip';
+} from '@mastra/playground-ui/components/DataList';
+import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { ProcessorIcon } from '@mastra/playground-ui/icons/ProcessorIcon';
+import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { useMemo } from 'react';
 import type { DatasetTargetType } from '../target-type-options';
 import { getDatasetTargetTypes, matchesDatasetTargetFilter } from './helpers';

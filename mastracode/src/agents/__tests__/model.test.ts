@@ -183,7 +183,7 @@ function makeRequestContext({ threadId, resourceId }: { threadId?: string; resou
     get: (key: string) => values.get(key),
     set: (key: string, value: unknown) => values.set(key, value),
   } as any;
-  requestContext.set('harness', {
+  requestContext.set('controller', {
     threadId,
     resourceId,
   });
@@ -337,7 +337,7 @@ describe('resolveModel', () => {
       expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', { headers: undefined });
     });
 
-    it('passes harness headers to the Anthropic OAuth provider', () => {
+    it('passes controller headers to the Anthropic OAuth provider', () => {
       mockAuthStorageInstance.get.mockReturnValue({
         type: 'oauth',
         access: 'oauth-access-token',
@@ -417,7 +417,7 @@ describe('resolveModel', () => {
       expect(result.__provider).toBe('model-router');
     });
 
-    it('passes harness headers to the OpenAI OAuth provider', () => {
+    it('passes controller headers to the OpenAI OAuth provider', () => {
       mockAuthStorageInstance.get.mockReturnValue({
         type: 'oauth',
         access: 'openai-oauth-access-token',
@@ -451,7 +451,7 @@ describe('resolveModel', () => {
         get: (key: string) => values.get(key),
         set: (key: string, value: unknown) => values.set(key, value),
       } as any;
-      requestContext.set('harness', {
+      requestContext.set('controller', {
         session: { modelId: 'openai/gpt-5.2' },
         state: {
           thinkingLevel: 'high',
@@ -487,7 +487,7 @@ describe('resolveModel', () => {
       expect(auth).toEqual({ apiKey: 'msk_gateway_key_123', source: 'gateway' });
     });
 
-    it('passes harness headers to model router providers', () => {
+    it('passes controller headers to model router providers', () => {
       const result = resolveModel('google/gemini-2.0-flash', {
         requestContext: makeRequestContext({ threadId: 'thread-123', resourceId: 'resource-456' }),
       }) as Record<string, unknown>;
@@ -499,7 +499,7 @@ describe('resolveModel', () => {
       });
     });
 
-    it('passes harness headers to custom providers', () => {
+    it('passes controller headers to custom providers', () => {
       mockLoadSettings.mockReturnValue({
         customProviders: [
           {
@@ -710,7 +710,7 @@ describe('resolveModel', () => {
       });
     });
 
-    it('passes harness headers to the gateway-resolved model', () => {
+    it('passes controller headers to the gateway-resolved model', () => {
       mockAuthStorageInstance.get.mockReturnValue(undefined);
 
       const result = resolveModel('mastra/anthropic/claude-sonnet-4', {

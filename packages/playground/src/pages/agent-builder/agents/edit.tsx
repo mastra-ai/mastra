@@ -1,4 +1,4 @@
-import { Button } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useState } from 'react';
 import { FormProvider, useForm, useFormContext, useFormState, useWatch } from 'react-hook-form';

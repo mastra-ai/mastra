@@ -5,6 +5,70 @@ const reactHooks = (await import('eslint-plugin-react-hooks')).default;
 
 const config = await createConfig();
 
+const playgroundUiIconImportNames = [
+  'AgentCoinIcon',
+  'AgentIcon',
+  'AgentNetworkCoinIcon',
+  'AiIcon',
+  'AmazonIcon',
+  'AnthropicChatIcon',
+  'AnthropicMessagesIcon',
+  'ApiIcon',
+  'AzureIcon',
+  'BranchIcon',
+  'CheckIcon',
+  'ChevronIcon',
+  'CohereIcon',
+  'CommitIcon',
+  'CrossIcon',
+  'DatasetsIcon',
+  'DbIcon',
+  'DebugIcon',
+  'DeploymentIcon',
+  'DividerIcon',
+  'DocsIcon',
+  'EnvIcon',
+  'ExperimentsIcon',
+  'FiltersIcon',
+  'FolderIcon',
+  'GithubCoinIcon',
+  'GithubIcon',
+  'GoogleIcon',
+  'GroqIcon',
+  'HomeIcon',
+  'Icon',
+  'InfoIcon',
+  'JudgeIcon',
+  'LatencyIcon',
+  'LogsIcon',
+  'MastraIcon',
+  'McpCoinIcon',
+  'McpServerIcon',
+  'MemoryIcon',
+  'MetricsIcon',
+  'MistralIcon',
+  'NetlifyIcon',
+  'OpenaiChatIcon',
+  'OpenAIIcon',
+  'ProcessorIcon',
+  'PromptIcon',
+  'RepoIcon',
+  'RequestContextIcon',
+  'ScorersIcon',
+  'SettingsIcon',
+  'SkillIcon',
+  'SlashIcon',
+  'ToolCoinIcon',
+  'ToolsIcon',
+  'TraceIcon',
+  'TsIcon',
+  'VariablesIcon',
+  'WorkflowCoinIcon',
+  'WorkflowIcon',
+  'WorkspacesIcon',
+  'XGroqIcon',
+];
+
 const restrictedPlaygroundUiBarrelImportSpecifiers = [
   {
     importNames: ['useCopyToClipboard'],
@@ -27,6 +91,72 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import keyboard shortcut hooks from @mastra/playground-ui/hooks/use-keyboard-shortcut-label.',
   },
   {
+    importNames: ['cn'],
+    message: 'Import cn from @mastra/playground-ui/utils/cn.',
+  },
+  {
+    importNames: [
+      'is401UnauthorizedError',
+      'is403ForbiddenError',
+      'is404NotFoundError',
+      'isBranchesNotSupportedError',
+      'isUnsupportedObservabilityOperationError',
+      'isNonRetryableError',
+      'parseError',
+    ],
+    message: 'Import error helpers from @mastra/playground-ui/utils/errors.',
+  },
+  {
+    importNames: ['shouldRetryQuery'],
+    message: 'Import query helpers from @mastra/playground-ui/utils/query-utils.',
+  },
+  {
+    importNames: ['JsonSchema', 'JsonSchemaProperty', 'JsonSchemaType'],
+    message: 'Import JSON schema types from @mastra/playground-ui/utils/json-schema.',
+  },
+  {
+    importNames: ['Rule', 'RuleGroup', 'ConditionOperator', 'countLeafRules'],
+    message: 'Import rule-engine types and helpers from @mastra/playground-ui/utils/rule-engine.',
+  },
+  {
+    importNames: ['truncateString'],
+    message: 'Import truncateString from @mastra/playground-ui/utils/truncate-string.',
+  },
+  {
+    importNames: ['stringToColor'],
+    message: 'Import stringToColor from @mastra/playground-ui/utils/colors.',
+  },
+  {
+    importNames: ['formatJSON', 'formatTypeScript', 'isValidJson'],
+    message: 'Import formatting helpers from @mastra/playground-ui/utils/formatting.',
+  },
+  {
+    importNames: [
+      'fileToBase64',
+      'getFileContentType',
+      'isRemoteUrl',
+      'isBrowserFetchableUrl',
+      'isNonFetchableRemoteUrl',
+    ],
+    message: 'Import file helpers from @mastra/playground-ui/utils/file.',
+  },
+  {
+    importNames: ['toSigFigs'],
+    message: 'Import toSigFigs from @mastra/playground-ui/utils/number.',
+  },
+  {
+    importNames: ['lodashTitleCase'],
+    message: 'Import lodashTitleCase from @mastra/playground-ui/utils/string.',
+  },
+  {
+    importNames: ['toast'],
+    message: 'Import toast from @mastra/playground-ui/utils/toast.',
+  },
+  {
+    importNames: playgroundUiIconImportNames,
+    message: 'Import icons from @mastra/playground-ui/icons/<IconName>.',
+  },
+  {
     importNames: ['AlertDialog'],
     message: 'Import AlertDialog from @mastra/playground-ui/components/AlertDialog.',
   },
@@ -41,6 +171,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
   {
     importNames: ['Breadcrumb', 'BreadcrumbProps', 'Crumb', 'CrumbProps'],
     message: 'Import Breadcrumb exports from @mastra/playground-ui/components/Breadcrumb.',
+  },
+  {
+    importNames: ['Button', 'ButtonProps'],
+    message: 'Import Button exports from @mastra/playground-ui/components/Button.',
   },
   {
     importNames: [
@@ -75,6 +209,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
   {
     importNames: ['Checkbox', 'CheckboxProps', 'CheckedState'],
     message: 'Import Checkbox exports from @mastra/playground-ui/components/Checkbox.',
+  },
+  {
+    importNames: ['Collapsible', 'CollapsibleContent', 'CollapsibleTrigger'],
+    message: 'Import Collapsible exports from @mastra/playground-ui/components/Collapsible.',
   },
   {
     importNames: ['Chip', 'ChipProps', 'ChipsGroup', 'ChipsGroupProps'],
@@ -152,6 +290,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import DateTimeRangePicker exports from @mastra/playground-ui/components/DateTimeRangePicker.',
   },
   {
+    importNames: ['DataList', 'DataListSkeleton', 'ScoresDataList'],
+    message: 'Import DataList exports from @mastra/playground-ui/components/DataList.',
+  },
+  {
     importNames: [
       'DataKeysAndValues',
       'DataKeysAndValuesProps',
@@ -191,6 +333,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
       'DialogDescription',
     ],
     message: 'Import Dialog exports from @mastra/playground-ui/components/Dialog.',
+  },
+  {
+    importNames: ['Entity', 'EntityContent', 'EntityName', 'EntityDescription', 'EntityIcon'],
+    message: 'Import Entity exports from @mastra/playground-ui/components/Entity.',
   },
   {
     importNames: ['EntityHeader', 'EntityHeaderProps'],
@@ -404,6 +550,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import Notice exports from @mastra/playground-ui/components/Notice.',
   },
   {
+    importNames: ['PageLayout', 'NoDataPageLayout', 'PageHeadingContext'],
+    message: 'Import PageLayout exports from @mastra/playground-ui/components/PageLayout.',
+  },
+  {
     importNames: ['PageHeader', 'PageHeaderRootProps', 'PageHeaderTitleProps', 'PageHeaderDescriptionProps'],
     message: 'Import PageHeader exports from @mastra/playground-ui/components/PageHeader.',
   },
@@ -444,8 +594,16 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import RadioGroup exports from @mastra/playground-ui/components/RadioGroup.',
   },
   {
+    importNames: ['RuleBuilder', 'RuleBuilderProps'],
+    message: 'Import RuleBuilder exports from @mastra/playground-ui/components/RuleBuilder.',
+  },
+  {
     importNames: ['Searchbar', 'SearchbarWrapper', 'SearchbarProps'],
     message: 'Import Searchbar exports from @mastra/playground-ui/components/Searchbar.',
+  },
+  {
+    importNames: ['ScrollArea'],
+    message: 'Import ScrollArea from @mastra/playground-ui/components/ScrollArea.',
   },
   {
     importNames: [
@@ -516,6 +674,10 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import Textarea exports from @mastra/playground-ui/components/Textarea.',
   },
   {
+    importNames: ['Txt'],
+    message: 'Import Txt from @mastra/playground-ui/components/Txt.',
+  },
+  {
     importNames: ['ThemeProvider', 'useTheme', 'ThemeProviderProps', 'Theme', 'ResolvedTheme', 'ThemeContextValue'],
     message: 'Import ThemeProvider exports from @mastra/playground-ui/components/ThemeProvider.',
   },
@@ -584,14 +746,24 @@ const restrictedPlaygroundUiBarrelImportSpecifiers = [
     message: 'Import Tooltip exports from @mastra/playground-ui/components/Tooltip.',
   },
   {
+    importNames: ['Toaster'],
+    message: 'Import Toaster from @mastra/playground-ui/components/Toaster.',
+  },
+  {
     importNames: ['Truncate', 'TruncateProps'],
     message: 'Import Truncate exports from @mastra/playground-ui/components/Truncate.',
   },
 ].flatMap(restriction =>
-  restriction.importNames.map(importName => ({
-    selector: `ImportDeclaration[source.value="@mastra/playground-ui"] > ImportSpecifier[imported.name="${importName}"]`,
-    message: restriction.message,
-  })),
+  restriction.importNames.flatMap(importName => [
+    {
+      selector: `ImportDeclaration[source.value="@mastra/playground-ui"] > ImportSpecifier[imported.name="${importName}"]`,
+      message: restriction.message,
+    },
+    {
+      selector: `ExportNamedDeclaration[source.value="@mastra/playground-ui"] > ExportSpecifier[local.name="${importName}"]`,
+      message: restriction.message,
+    },
+  ]),
 );
 
 // Enforce the playground testing contract (packages/playground/AGENTS.md + the

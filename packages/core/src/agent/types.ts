@@ -30,6 +30,7 @@ import type {
 } from '../llm/model/base.types';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { IMastraLogger } from '../logger';
+import type { ReasoningLevel } from '../loop/types';
 import type { Mastra } from '../mastra';
 import type { VersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
@@ -71,6 +72,7 @@ export type {
   UIMessageWithMetadata,
   MessageList,
 } from './message-list/index';
+export type { ReasoningLevel } from '../loop/types';
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
 export type {
   NotificationDeliveryPolicyConfig,
@@ -296,6 +298,19 @@ export type SendAgentNotificationSignalOptions<OUTPUT = unknown> = Extract<
  */
 export type AgentNotificationConfig = {
   deliveryPolicy?: NotificationDeliveryPolicyConfig;
+  /**
+   * Resolves stream options for dispatching a deferred notification to an idle
+   * thread. Called by the notification dispatcher when a previously-deferred
+   * notification becomes due and the target thread is idle.
+   *
+   * Return the same shape you would pass as `streamOptions` inside
+   * `ifIdle` when calling `sendNotificationSignal` directly — typically
+   * includes `requestContext`, `memory`, and model settings.
+   */
+  getNotificationStreamOptions?: (target: {
+    resourceId: string;
+    threadId: string;
+  }) => Record<string, unknown> | Promise<Record<string, unknown> | undefined> | undefined;
 };
 
 /**
@@ -419,7 +434,18 @@ export interface AgentCreateOptions {
   tracingPolicy?: TracingPolicy;
 }
 
-export type ModelFallbackSettings = Omit<CallSettings, 'abortSignal' | 'maxRetries' | 'headers'>;
+export type ModelFallbackSettings = Omit<CallSettings, 'abortSignal' | 'maxRetries' | 'headers'> & {
+  /**
+   * Reasoning effort level for the model. Controls how much reasoning
+   * the model performs before generating a response.
+   *
+   * Only effective with LanguageModelV4 (AI SDK v7) model providers that support reasoning.
+   * When used with older model providers (V2/V3), this option is a no-op.
+   *
+   * @default undefined (provider default behavior)
+   */
+  reasoning?: ReasoningLevel;
+};
 
 export type ModelWithRetries = {
   id?: string;
@@ -476,6 +502,11 @@ export interface GoalConfig {
    * own judging). When omitted, the default judge is text-only.
    */
   tools?: DynamicArgument<ToolsInput | undefined>;
+  /**
+   * Max steps the judge agent may take per evaluation (its internal agentic-loop
+   * budget). When omitted the judge uses the model loop's default (5).
+   */
+  maxSteps?: number;
   /**
    * Custom goal scorer (a {@link MastraScorer} or a registered scorer id). When
    * omitted, a default rubric scorer judges the objective with the judge model.

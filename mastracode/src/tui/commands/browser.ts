@@ -12,7 +12,7 @@ import { askModalQuestion } from '../modal-question.js';
 import type { SlashCommandContext } from './types.js';
 
 /**
- * Key used to store the active browser settings in harness state.
+ * Key used to store the active browser settings in controller state.
  * This tracks what browser config is actually running in this instance,
  * which may differ from the settings file if another instance changed it.
  */
@@ -85,10 +85,10 @@ async function checkAndConfirmProviderMismatch(
 /**
  * Apply browser settings to all mode agents and track the active settings.
  */
-function resolveModeAgent(mode: unknown, harnessState: unknown): BrowserAgent | undefined {
+function resolveModeAgent(mode: unknown, agentControllerState: unknown): BrowserAgent | undefined {
   const modeAgent = (mode as { agent?: unknown }).agent;
   return typeof modeAgent === 'function'
-    ? (modeAgent(harnessState) as BrowserAgent)
+    ? (modeAgent(agentControllerState) as BrowserAgent)
     : (modeAgent as BrowserAgent | undefined);
 }
 
@@ -97,14 +97,14 @@ function applyBrowserToAgents(
   browser: MastraBrowser | undefined,
   browserSettings?: BrowserSettings,
 ): void {
-  const modes = ctx.harness.listModes();
-  let harnessState: unknown;
+  const modes = ctx.controller.listModes();
+  let agentControllerState: unknown;
   for (const mode of modes) {
-    const agent = resolveModeAgent(mode, (harnessState ??= ctx.state.session.state.get()));
+    const agent = resolveModeAgent(mode, (agentControllerState ??= ctx.state.session.state.get()));
     agent?.setBrowser?.(browser);
   }
-  ctx.harness.setBrowser?.(browser);
-  // Track the active browser settings in harness state
+  ctx.controller.setBrowser?.(browser);
+  // Track the active browser settings in controller state
   void ctx.state.session.state.set({ [ACTIVE_BROWSER_KEY]: browserSettings } as any);
 }
 
@@ -232,7 +232,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
   }
 
   if (arg === 'status') {
-    // Get the active browser settings from harness state (what's actually running)
+    // Get the active browser settings from controller state (what's actually running)
     const state = ctx.state.session.state.get() as any;
     const activeSettings = state?.[ACTIVE_BROWSER_KEY] as BrowserSettings | undefined;
 

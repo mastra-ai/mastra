@@ -1897,6 +1897,91 @@ describe('MessageList V5 Support', () => {
       });
     });
 
+    it('translates tool-result media to image-data for v6 (spec v3) models', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Take a screenshot', 'input');
+
+      const continuationMessage: AIV5ModelMessage = {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call-v6-1',
+            toolName: 'screenshotTool',
+            input: { url: 'https://example.com' },
+          },
+          {
+            type: 'tool-result',
+            toolCallId: 'call-v6-1',
+            toolName: 'screenshotTool',
+            output: { type: 'json', value: { ok: true } },
+            providerOptions: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [{ type: 'media', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+                },
+              },
+            },
+          },
+        ],
+      };
+
+      list.add(continuationMessage, 'input');
+
+      // v6 (spec 'v3') providers only accept image-data/file-data, not media.
+      const prompt = await list.get.all.aiV6.llmPrompt();
+      const toolRole = prompt.find(m => m.role === 'tool');
+      const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
+      expect(toolResultPart.output).toEqual({
+        type: 'content',
+        value: [{ type: 'image-data', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+      });
+    });
+
+    it('translates non-image tool-result media to file-data for v6 (spec v3) models', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Fetch a document', 'input');
+
+      const continuationMessage: AIV5ModelMessage = {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call-v6-2',
+            toolName: 'docTool',
+            input: {},
+          },
+          {
+            type: 'tool-result',
+            toolCallId: 'call-v6-2',
+            toolName: 'docTool',
+            output: { type: 'json', value: { ok: true } },
+            providerOptions: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [{ type: 'media', data: 'base64pdfdata', mediaType: 'application/pdf' }],
+                },
+              },
+            },
+          },
+        ],
+      };
+
+      list.add(continuationMessage, 'input');
+
+      const prompt = await list.get.all.aiV6.llmPrompt();
+      const toolRole = prompt.find(m => m.role === 'tool');
+      const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
+      expect(toolResultPart.output).toEqual({
+        type: 'content',
+        value: [{ type: 'file-data', data: 'base64pdfdata', mediaType: 'application/pdf' }],
+      });
+    });
+
     it('should convert MCP content-array tool results to multimodal model output without providerMetadata duplication', async () => {
       const list = new MessageList({ threadId, resourceId });
 

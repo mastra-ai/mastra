@@ -53,10 +53,10 @@ The number of cached input tokens.
   cachedInputTokens?: number | undefined;
 };
 
-type StepResult = {
+export type StepResult = {
   name: string;
   status: WorkflowStepStatus;
-  input: Record<string, unknown> | null;
+  input: unknown | null;
   output: unknown | null;
   suspendPayload: Record<string, unknown> | null;
   resumePayload: Record<string, unknown> | null;
@@ -136,7 +136,7 @@ function serializeWorkflowSteps(
   return Object.fromEntries(Object.entries(steps).map(([id, step]) => [id, cloneWorkflowStep(step, includeOutputs)]));
 }
 
-function createWorkflowDataPart(args: {
+export function createWorkflowDataPart(args: {
   current: BufferedWorkflowState;
   isNested?: boolean;
   runId: string;
@@ -158,7 +158,7 @@ function createWorkflowDataPart(args: {
   };
 }
 
-function createWorkflowStepDataPart(args: {
+export function createWorkflowStepDataPart(args: {
   current: BufferedWorkflowState;
   isNested?: boolean;
   runId: string;

@@ -57,15 +57,77 @@ describe('resolveWorkflowGraphStep', () => {
     const stepNodes = nodes.filter(node => node.type === WORKFLOW_STEP_NODE_TYPE);
 
     expect(nodes).toHaveLength(5);
+    expect(nodes[0].id).toBe('boundary-start');
     expect(nodes[0].type).toBe(WORKFLOW_BOUNDARY_NODE_TYPE);
     expect(nodes[0].data.label).toBe('Start');
+    expect(nodes.at(-1)?.id).toBe('boundary-end');
     expect(nodes.at(-1)?.type).toBe(WORKFLOW_BOUNDARY_NODE_TYPE);
     expect(nodes.at(-1)?.data.label).toBe('End');
     expect(stepNodes).toHaveLength(3);
+    expect(stepNodes.map(node => node.id)).toEqual(['node-regular', 'node-map', 'node-sleep']);
+    expect(stepNodes.map(node => node.data.stepId)).toEqual(['regular', 'map', 'sleep']);
     expect(stepNodes.map(node => node.data.workflowStep.kind)).toEqual(['step', 'map-step', 'sleep-step']);
     expect(stepNodes[0].data.withoutTopHandle).toBe(false);
     expect(stepNodes.at(-1)?.data.withoutBottomHandle).toBe(false);
-    expect(edges.some(edge => edge.source === '__workflow-start__' && edge.target === 'regular')).toBe(true);
-    expect(edges.some(edge => edge.source === 'sleep' && edge.target === '__workflow-end__')).toBe(true);
+    expect(
+      edges.some(
+        edge =>
+          edge.id === 'edge-boundary-boundary-start-node-regular' &&
+          edge.source === 'boundary-start' &&
+          edge.target === 'node-regular' &&
+          edge.data?.nextStepId === 'regular',
+      ),
+    ).toBe(true);
+    expect(
+      edges.some(
+        edge =>
+          edge.id === 'edge-boundary-node-sleep-boundary-end' &&
+          edge.source === 'node-sleep' &&
+          edge.target === 'boundary-end',
+      ),
+    ).toBe(true);
+  });
+
+  it('namespaces graph IDs by domain while preserving raw workflow metadata', () => {
+    const { nodes, edges } = constructNodesAndEdges({
+      stepGraph: [
+        { type: 'step', step: step('shared') },
+        {
+          type: 'conditional',
+          steps: [{ type: 'step', step: step('shared') }],
+          serializedConditions: [{ id: 'shared', fn: 'input.value === true' }],
+        },
+      ],
+    });
+
+    const nodeIds = nodes.map(node => node.id);
+    const edgeIds = edges.map(edge => edge.id);
+    const stepNodes = nodes.filter(node => node.type === WORKFLOW_STEP_NODE_TYPE && node.data.nodeRole !== 'condition');
+    const conditionNodes = nodes.filter(
+      node => node.type === WORKFLOW_STEP_NODE_TYPE && node.data.nodeRole === 'condition',
+    );
+
+    expect(new Set(nodeIds).size).toBe(nodeIds.length);
+    expect(new Set(edgeIds).size).toBe(edgeIds.length);
+    expect(stepNodes.every(node => node.id.startsWith('node-'))).toBe(true);
+    expect(conditionNodes.every(node => node.id.startsWith('condition-node-'))).toBe(true);
+    expect(edges.every(edge => edge.id.startsWith('edge-'))).toBe(true);
+    expect(nodeIds).toContain('node-shared');
+    expect(nodeIds).toContain('node-shared-1');
+    expect(nodeIds).toContain('condition-node-shared');
+    expect(edges).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source: 'node-shared',
+          target: 'condition-node-shared',
+          data: expect.objectContaining({ previousStepId: 'shared', nextStepId: 'shared' }),
+        }),
+        expect.objectContaining({
+          source: 'condition-node-shared',
+          target: 'node-shared-1',
+          data: expect.objectContaining({ previousStepId: 'shared', nextStepId: 'shared' }),
+        }),
+      ]),
+    );
   });
 });

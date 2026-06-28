@@ -18,6 +18,7 @@ export interface WorkflowStepCardViewProps {
   isNestedWorkflowStep?: boolean;
   stepKey?: string;
   isSelected?: boolean;
+  isWaiting?: boolean;
   isHovered?: boolean;
   onHoverChange?: (isHovered: boolean) => void;
   duration?: number;

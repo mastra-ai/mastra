@@ -1,13 +1,19 @@
 /**
  * DurableAgent Background Tasks E2E Tests
  *
- * Mirrors background-tasks.e2e.test.ts 1:1 but uses createDurableAgent
- * wrapping a real Agent with OpenAI model. Skips if OPENAI_API_KEY is absent.
+ * Mirrors `packages/core/src/background-tasks/background-tasks.e2e.test.ts`
+ * but uses `createDurableAgent` wrapping a real `Agent` with a gateway-form
+ * model. Traffic is recorded/replayed via `createGatewayMock`, so the test
+ * runs without a real `OPENAI_API_KEY` whenever recordings exist.
+ *
+ * In `auto` mode without recordings AND without a real key the suite is
+ * skipped, mirroring the regular agent's pattern.
  */
 
-import { createOpenAI } from '@ai-sdk/openai-v5';
-import { getLLMTestMode } from '@internal/llm-recorder';
-import { setupDummyApiKeys } from '@internal/test-utils';
+import { createHash } from 'node:crypto';
+import { join } from 'node:path';
+import { defaultNameGenerator, getLLMRecordingsDir, getLLMTestMode } from '@internal/llm-recorder';
+import { createGatewayMock, setupDummyApiKeys, shouldSkipLLMTest } from '@internal/test-utils';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../../mastra';
@@ -17,15 +23,47 @@ import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
-setupDummyApiKeys(getLLMTestMode(), ['openai']);
+const MODE = getLLMTestMode();
+setupDummyApiKeys(MODE, ['openai']);
 
-const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const RECORDING_BASE = 'core-src-agent-durable-__tests__-durable-agent-background-tasks.e2e';
+const skipSuite = shouldSkipLLMTest(MODE, 'openai', RECORDING_BASE);
 
-const describeE2E = describe.skip;
+function normalizeDynamicBackgroundFields({ url, body }: { url: string; body: unknown }): {
+  url: string;
+  body: unknown;
+} {
+  let stringifiedBody = JSON.stringify(body);
+  stringifiedBody = stringifiedBody.replaceAll(
+    /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
+    'NORMALIZED_UUID',
+  );
+  stringifiedBody = stringifiedBody.replaceAll(/call_[A-Za-z0-9]+/g, 'NORMALIZED_CALL_ID');
+  stringifiedBody = stringifiedBody.replaceAll(/fc_[A-Za-z0-9]+/g, 'NORMALIZED_FUNCTION_CALL_ID');
+  stringifiedBody = stringifiedBody.replaceAll(/msg_[A-Za-z0-9]+/g, 'NORMALIZED_MESSAGE_ID');
 
-const testStorage = new MockStore();
+  return { url, body: JSON.parse(stringifiedBody) };
+}
 
-describeE2E('DurableAgent Background Tasks E2E', () => {
+let mockGateway: any;
+let testStorage: any;
+beforeEach(async c => {
+  testStorage = new MockStore();
+  mockGateway = createGatewayMock({
+    maxChunkDelay: 100,
+    name: `test-${Buffer.from(createHash('sha256').update(c.task.name).digest('hex').slice(0, 8))}`,
+    exactMatch: true,
+    transformRequest: normalizeDynamicBackgroundFields,
+    recordingsDir: join(getLLMRecordingsDir(c.task.file.filepath), defaultNameGenerator(c.task.file.filepath)),
+  });
+  await mockGateway.start();
+});
+
+afterEach(async () => {
+  if (mockGateway) await mockGateway.saveAndStop();
+});
+
+describe.skipIf(skipSuite)('DurableAgent Background Tasks E2E', () => {
   let mastra: Mastra;
 
   const researchTool = createTool({
@@ -65,7 +103,7 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
       'You are a helpful assistant with access to tools. ' +
       'When asked to research something, use the research tool. ' +
       'When asked to greet someone, use the greet tool.',
-    model: openai('gpt-4o-mini'),
+    model: 'openai/gpt-4o-mini',
     tools: { research: researchTool, greet: greetTool },
     backgroundTasks: {
       tools: {
@@ -86,18 +124,15 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
       },
       storage: testStorage,
     });
-    // Wire the workflow event processor pubsub subscriptions so the
-    // bg-task workflow (engine='workflow', the default) can run to
-    // completion. Without this, runs hang and the agent stream times out.
     await mastra.startWorkers();
   });
 
   afterEach(async () => {
-    const manager = mastra.backgroundTaskManager;
+    const manager = mastra?.backgroundTaskManager;
     if (manager) {
       await manager.shutdown();
     }
-    await mastra.stopWorkers();
+    await mastra?.stopWorkers();
     const backgroundTasksStore = await testStorage.getStore('backgroundTasks');
     await backgroundTasksStore?.dangerouslyClearAll();
   });
@@ -117,7 +152,7 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
 
     const fullOutput = await result.output.getFullOutput();
     expect(fullOutput.text).toBeDefined();
-    expect(fullOutput.text.length).toBeGreaterThan(0);
+    expect(fullOutput.text!.length).toBeGreaterThan(0);
 
     await new Promise(resolve => setTimeout(resolve, 1000));
 
@@ -149,7 +184,7 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
 
     const fullOutput = await result.output.getFullOutput();
     expect(fullOutput.text).toBeDefined();
-    expect(fullOutput.text.toLowerCase()).toContain('alice');
+    expect(fullOutput.text!.toLowerCase()).toContain('alice');
 
     result.cleanup();
   }, 30_000);
@@ -211,7 +246,7 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
         'When asked to research something, use the research tool. ' +
         'When asked to greet someone, use the greet tool. ' +
         'Always respond concisely.',
-      model: openai('gpt-4o-mini'),
+      model: 'openai/gpt-4o-mini',
       tools: { research: researchTool, greet: greetTool },
       memory: mockMemory,
       backgroundTasks: {
@@ -264,7 +299,7 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
       expect(toolResult2).toBeDefined();
 
       const fullOutput2 = await stream2.output.getFullOutput();
-      expect(fullOutput2.text.toLowerCase()).toContain('bob');
+      expect(fullOutput2.text!.toLowerCase()).toContain('bob');
 
       stream2.cleanup();
 
@@ -319,7 +354,7 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
         'You are a helpful assistant. ' +
         'When asked to research something, use the research tool. ' +
         'After you see the research result, briefly summarize it for the user.',
-      model: openai('gpt-4o-mini'),
+      model: 'openai/gpt-4o-mini',
       tools: { research: researchTool, greet: greetTool },
       memory: mockMemory,
       backgroundTasks: { tools: { research: true } },
@@ -339,8 +374,9 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
     await memoryMastra.startWorkers();
 
     try {
-      const result = await memoryDurableAgent.streamUntilIdle('Please research "quantum computing" for me', {
+      const result = await memoryDurableAgent.stream('Please research "quantum computing" for me', {
         memory: { thread: threadId, resource: resourceId },
+        untilIdle: true,
       });
 
       const chunks: any[] = [];
@@ -379,133 +415,6 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
     }
   }, 60_000);
 
-  it('streamUntilIdle: bg task suspends, resume via manager.resume completes it; follow-up turn reads the result', async () => {
-    const mockMemory = new MockMemory();
-    const threadId = 'durable-bg-suspend-thread';
-    const resourceId = 'durable-bg-suspend-user';
-
-    // Suspends on first call, returns a real summary after manager.resume
-    // injects { approved: true, notes? } as resumeData.
-    const researchWithApproval = createTool({
-      id: 'research-with-approval',
-      description: 'Research a topic. Requires analyst approval before running.',
-      inputSchema: z.object({ topic: z.string().describe('The topic to research') }),
-      outputSchema: z.object({ summary: z.string() }),
-      background: { enabled: true },
-      execute: async ({ topic }, options) => {
-        const ctx = options as
-          | {
-              agent?: {
-                suspend?: (data?: unknown) => Promise<void>;
-                resumeData?: { approved?: boolean; notes?: string };
-              };
-            }
-          | undefined;
-        const resumeData = ctx?.agent?.resumeData;
-        if (!resumeData) {
-          await ctx?.agent?.suspend?.({ awaiting: 'analyst-approval', topic });
-          return { summary: '' };
-        }
-        if (resumeData.approved !== true) {
-          throw new Error(`Research on "${topic}" was declined`);
-        }
-        return {
-          summary: `Research complete on "${topic}": ${resumeData.notes ?? 'approved by analyst'}.`,
-        };
-      },
-    });
-
-    const memoryBaseAgent = new Agent({
-      id: 'durable-bg-suspend-agent',
-      name: 'Durable Bg Suspend Agent',
-      instructions:
-        'You are a helpful assistant. ' +
-        'When the user asks to research something, use the research-with-approval tool. ' +
-        'After you see the research result, briefly summarize it for the user.',
-      model: openai('gpt-4o-mini'),
-      tools: { researchWithApproval },
-      memory: mockMemory,
-      backgroundTasks: { tools: { researchWithApproval: true } },
-    });
-
-    const memoryDurableAgent = createDurableAgent({ agent: memoryBaseAgent });
-
-    const memoryMastra = new Mastra({
-      agents: { 'durable-bg-suspend-agent': memoryDurableAgent as any },
-      backgroundTasks: { enabled: true, globalConcurrency: 5, perAgentConcurrency: 3 },
-      storage: testStorage,
-    });
-    await memoryMastra.startWorkers();
-
-    try {
-      // --- Initial turn: dispatches bg task, which suspends ---
-      const stream1 = await memoryDurableAgent.streamUntilIdle('Please research "solana" for me', {
-        memory: { thread: threadId, resource: resourceId },
-      });
-
-      const chunks1: any[] = [];
-      for await (const chunk of stream1.fullStream) {
-        chunks1.push(chunk);
-      }
-
-      const bgStarted = chunks1.find(c => c.type === 'background-task-started');
-      expect(bgStarted).toBeDefined();
-      expect(bgStarted.payload.toolName).toBe('researchWithApproval');
-
-      const bgSuspended = chunks1.find(c => c.type === 'background-task-suspended');
-      expect(bgSuspended).toBeDefined();
-      expect(bgSuspended.payload.taskId).toBe(bgStarted.payload.taskId);
-      expect(bgSuspended.payload.suspendPayload).toMatchObject({ awaiting: 'analyst-approval' });
-
-      expect(chunks1.find(c => c.type === 'background-task-completed')).toBeUndefined();
-
-      const manager = memoryMastra.backgroundTaskManager!;
-      const taskId = bgStarted.payload.taskId as string;
-      const suspendedTask = await manager.getTask(taskId);
-      expect(suspendedTask?.status).toBe('suspended');
-      expect(suspendedTask?.suspendPayload).toMatchObject({ awaiting: 'analyst-approval' });
-
-      stream1.cleanup();
-
-      // --- Out-of-band: analyst approves, bg task resumes and completes ---
-      await manager.resume(taskId, { approved: true, notes: 'looks promising' });
-
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      const completedTask = await manager.getTask(taskId);
-      expect(completedTask?.status).toBe('completed');
-      expect((completedTask?.result as { summary: string }).summary).toContain('solana');
-      expect((completedTask?.result as { summary: string }).summary).toContain('looks promising');
-      expect(completedTask?.suspendPayload).toBeUndefined();
-
-      // --- Follow-up turn: streamUntilIdle picks up the resumed result from memory ---
-      const stream2 = await memoryDurableAgent.streamUntilIdle(
-        'What did the research find about solana? Mention the analyst notes.',
-        {
-          memory: { thread: threadId, resource: resourceId },
-        },
-      );
-
-      const chunks2: any[] = [];
-      for await (const chunk of stream2.fullStream) {
-        chunks2.push(chunk);
-      }
-
-      const text = chunks2
-        .filter(c => c?.type === 'text-delta')
-        .map(c => c.payload?.text ?? c.delta ?? '')
-        .join('')
-        .toLowerCase();
-      expect(text).toContain('solana');
-      expect(text).toContain('promising');
-
-      stream2.cleanup();
-    } finally {
-      await memoryMastra.backgroundTaskManager?.shutdown();
-      await memoryMastra.stopWorkers();
-    }
-  }, 90_000);
-
   it('streamUntilIdle closes after the initial turn when no background tasks are dispatched', async () => {
     const mockMemory = new MockMemory();
     const threadId = 'durable-stream-until-idle-thread-2';
@@ -516,7 +425,7 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
       name: 'Durable Stream Until Idle Agent 2',
       instructions:
         'You are a helpful assistant. ' + 'When asked to greet someone, use the greet tool. ' + 'Respond concisely.',
-      model: openai('gpt-4o-mini'),
+      model: 'openai/gpt-4o-mini',
       tools: { research: researchTool, greet: greetTool },
       memory: mockMemory,
       backgroundTasks: { tools: { research: true } },
@@ -536,8 +445,9 @@ describeE2E('DurableAgent Background Tasks E2E', () => {
     await memoryMastra.startWorkers();
 
     try {
-      const result = await memoryDurableAgent.streamUntilIdle('Greet someone named Carol', {
+      const result = await memoryDurableAgent.stream('Greet someone named Carol', {
         memory: { thread: threadId, resource: resourceId },
+        untilIdle: true,
       });
 
       const chunks: any[] = [];

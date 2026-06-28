@@ -5,12 +5,12 @@ import { showModalOverlay } from '../overlay.js';
 import type { SlashCommandContext } from './types.js';
 
 async function sandboxAddPath(ctx: SlashCommandContext, rawPath: string): Promise<void> {
-  const harnessState = ctx.state.session.state.get() as
+  const controllerWithState = ctx.state.session.state.get() as
     | {
         sandboxAllowedPaths?: string[];
       }
     | undefined;
-  const currentPaths = harnessState?.sandboxAllowedPaths ?? [];
+  const currentPaths = controllerWithState?.sandboxAllowedPaths ?? [];
   const resolved = path.resolve(rawPath);
 
   if (currentPaths.includes(resolved)) {
@@ -64,12 +64,12 @@ async function showSandboxAddPrompt(ctx: SlashCommandContext): Promise<void> {
 }
 
 export async function handleSandboxCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
-  const harnessState = ctx.state.session.state.get() as
+  const agentControllerState = ctx.state.session.state.get() as
     | {
         sandboxAllowedPaths?: string[];
       }
     | undefined;
-  const currentPaths = harnessState?.sandboxAllowedPaths ?? [];
+  const currentPaths = agentControllerState?.sandboxAllowedPaths ?? [];
 
   const subcommand = args[0]?.toLowerCase();
   if (subcommand === 'add' && args.length > 1) {
