@@ -64,12 +64,13 @@
     "start-deployed": "npx bun src/with-deployed.ts",
     "start": "npx bun src/index.ts",
     "processor-demo": "npx bun src/processor-demo.ts",
+    "hitl:approval": "npx tsx src/hitl-approval-recall.ts",
     "mastra:dev": "mastra dev",
     "mastra:build": "mastra build -s",
     "mastra:start": "mastra start",
     "mastra:studio": "mastra studio",
     "dev:ui": "concurrently --kill-others-on-fail --names mastra,playground \"mastra dev\" \"pnpm --dir ../.. dev:playground\"",
-    "clean": "rm -rf .mastra mastra-observability.duckdb* vector.db src/mastra/public/*.duckdb* database.sqlite"
+    "clean": "rm -rf .mastra mastra-observability.duckdb* vector.db src/mastra/public/*.duckdb* database.sqlite hitl-approval-recall.db*"
   },
   "keywords": [],
   "author": "",
