@@ -340,16 +340,17 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         // Always emit finish chunk, even for abort (tripwire) cases
         // This ensures the stream properly completes and all promises are resolved
         // The tripwire/abort status is communicated through the stepResult.reason
+        const resultPayload = executionResult.result as any;
+
         safeEnqueue(controller, {
           type: 'finish',
           runId,
           from: ChunkFrom.AGENT,
           payload: {
-            ...executionResult.result,
+            ...resultPayload,
             stepResult: {
-              ...executionResult.result.stepResult,
-              // @ts-expect-error - runtime reason can be 'tripwire' | 'retry' from processors, but zod schema infers as string
-              reason: executionResult.result.stepResult.reason,
+              ...resultPayload.stepResult,
+              reason: resultPayload.stepResult.reason as any,
             },
           },
         });

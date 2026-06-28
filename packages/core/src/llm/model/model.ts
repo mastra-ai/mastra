@@ -402,8 +402,7 @@ export class MastraLLMV1 extends MastraBase {
       };
 
       try {
-        // @ts-expect-error - output in our implementation can only be object or array
-        const result = await generateObject(argsForExecute);
+        const result = await generateObject(argsForExecute as any);
 
         llmSpan?.end({
           output: {
@@ -418,8 +417,7 @@ export class MastraLLMV1 extends MastraBase {
           },
         });
 
-        // @ts-expect-error - output in our implementation can only be object or array
-        return result;
+        return result as any;
       } catch (e: unknown) {
         const mastraError = new MastraError(
           {
