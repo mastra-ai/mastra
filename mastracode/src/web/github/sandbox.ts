@@ -146,9 +146,16 @@ export async function reattachProjectSandbox(providerSandboxId: string): Promise
   return sandbox;
 }
 
-/** Single-quote a string for safe POSIX shell interpolation. */
+/**
+ * Single-quote a string for safe POSIX shell interpolation. Wraps the value in
+ * single quotes and escapes any embedded single quote using the canonical
+ * close-quote / escaped-quote / reopen-quote sequence (`'\''`). This is the
+ * standard POSIX-safe construction and prevents the quoted string from being
+ * terminated early.
+ */
 function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
+  // Replace each ' with the four-character sequence: ' \ ' '
+  return `'` + value.split(`'`).join(`'\\''`) + `'`;
 }
 
 /** Run a shell script in the sandbox via `sh -c`. */
@@ -195,6 +202,19 @@ export async function materializeRepo(
 ): Promise<void> {
   const workdir = row.sandboxWorkdir;
   const repo = row.repoFullName;
+
+  // 0. Defense in depth: never build a git command from values that aren't
+  // strictly shaped, even if a malformed row reached the DB. Inputs are also
+  // validated at the route boundary before storage.
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
+    throw new MaterializeError(`Refusing to materialize: invalid repo full name '${repo}'.`, 'clone-failed');
+  }
+  if (!/^[A-Za-z0-9_./-]+$/.test(row.defaultBranch)) {
+    throw new MaterializeError(
+      `Refusing to materialize: invalid default branch '${row.defaultBranch}'.`,
+      'clone-failed',
+    );
+  }
 
   // 1. Preflight: git must be installed in the sandbox template.
   const gitVersion = await sh(sandbox, 'git --version');

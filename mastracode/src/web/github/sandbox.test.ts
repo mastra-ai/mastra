@@ -192,4 +192,19 @@ describe('materializeRepo', () => {
     expect(err).toBeInstanceOf(MaterializeError);
     expect(err.code).toBe('egress-blocked');
   });
+
+  it('refuses to run git when the default branch is not git-ref-safe', async () => {
+    const sandbox = new FakeSandbox();
+    const err = await materializeRepo(makeRow({ defaultBranch: "main'; rm -rf /; '" }), sandbox, 'tok').catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    // No git command should have been executed for an invalid branch.
+    expect(sandbox.calls).toHaveLength(0);
+  });
+
+  it('refuses to run git when the repo full name is not owner/name shaped', async () => {
+    const sandbox = new FakeSandbox();
+    const err = await materializeRepo(makeRow({ repoFullName: 'evil; whoami' }), sandbox, 'tok').catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(sandbox.calls).toHaveLength(0);
+  });
 });

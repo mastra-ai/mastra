@@ -46,7 +46,17 @@ export interface MountGithubRoutesOptions {
 
 /** Validate an `owner/name` repo full name. */
 function isValidRepoFullName(value: unknown): value is string {
-  return typeof value === 'string' && /^[\w.-]+\/[\w.-]+$/.test(value);
+  return typeof value === 'string' && value.length <= 256 && /^[\w.-]+\/[\w.-]+$/.test(value);
+}
+
+/**
+ * Validate a git branch/ref name against a strict whitelist. The value is later
+ * interpolated into a shell `git clone --branch` command, so it must never
+ * contain shell metacharacters. We accept only git-ref-safe characters and
+ * reject anything else rather than relying on shell quoting alone.
+ */
+function isValidGitRef(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= 255 && /^[A-Za-z0-9_./-]+$/.test(value);
 }
 
 /**
@@ -205,7 +215,12 @@ export function mountGithubRoutes(app: Hono<any>, options: MountGithubRoutesOpti
       return c.json({ error: 'Installation not found for user' }, 404);
     }
 
-    const defaultBranch = typeof body.defaultBranch === 'string' && body.defaultBranch ? body.defaultBranch : 'main';
+    if (body.defaultBranch !== undefined && body.defaultBranch !== null && body.defaultBranch !== '') {
+      if (!isValidGitRef(body.defaultBranch)) {
+        return c.json({ error: 'Invalid defaultBranch' }, 400);
+      }
+    }
+    const defaultBranch = isValidGitRef(body.defaultBranch) ? body.defaultBranch : 'main';
     const sandboxWorkdir = computeSandboxWorkdir(body.repoFullName);
 
     const [row] = await getAppDb()

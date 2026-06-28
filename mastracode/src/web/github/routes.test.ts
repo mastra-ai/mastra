@@ -200,6 +200,21 @@ describe('create project', () => {
     expect(res.status).toBe(400);
   });
 
+  it('rejects an invalid defaultBranch containing shell metacharacters', async () => {
+    tables.installations.push({ userId: 'u1', installationId: 7, accountLogin: 'octo', accountType: 'User' });
+    const res = await buildApp({ workosId: 'u1' }).request('/api/web/github/projects', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        repoFullName: 'octo/hello',
+        repoId: 99,
+        installationId: 7,
+        defaultBranch: "main'; rm -rf /; '",
+      }),
+    });
+    expect(res.status).toBe(400);
+  });
+
   it('404s when the installation is not owned by the user', async () => {
     const res = await buildApp({ workosId: 'u1' }).request('/api/web/github/projects', {
       method: 'POST',
