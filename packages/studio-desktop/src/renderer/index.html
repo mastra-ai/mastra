@@ -8,32 +8,10 @@
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Mastra Studio</title>
-    <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <div id="app">
-      <section id="boot-loader" class="boot-loader" aria-label="Loading Mastra Studio">
-        <div class="brand-loader boot-brand-loader" role="status" aria-label="Loading Mastra Studio">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 34 21" aria-hidden="true">
-            <defs>
-              <filter id="boot-brand-loader-filter" x="-5%" y="-5%" width="110%" height="110%">
-                <feGaussianBlur in="SourceGraphic" stdDeviation="0.9" />
-                <feColorMatrix values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 11 -4.3" />
-              </filter>
-            </defs>
-            <g filter="url(#boot-brand-loader-filter)">
-              <line class="brand-loader-ln23" x1="10.387" y1="4.498" x2="16.899" y2="16.192" />
-              <line class="brand-loader-ln34" x1="16.899" y1="16.192" x2="22.815" y2="4.56" />
-              <line class="brand-loader-ln45" x1="22.815" y1="4.56" x2="28.57" y2="16.192" />
-              <circle class="brand-loader-b1" cx="4.498" cy="16.192" r="4.498" />
-              <circle class="brand-loader-b2" cx="10.387" cy="4.498" r="4.498" />
-              <circle class="brand-loader-b3" cx="16.899" cy="16.192" r="4.498" />
-              <circle class="brand-loader-b4" cx="22.815" cy="4.56" r="4.498" />
-              <circle class="brand-loader-b5" cx="28.57" cy="16.192" r="4.498" />
-            </g>
-          </svg>
-        </div>
-      </section>
+      <section id="boot-loader" class="boot-loader" aria-label="Loading Mastra Studio"></section>
       <header class="chrome">
         <div id="tab-strip" class="tab-strip"></div>
         <button id="new-tab-button" class="icon-button" type="button" title="New tab" aria-label="New tab">+</button>
@@ -43,6 +21,6 @@
         <section id="webviews" class="webviews"></section>
       </main>
     </div>
-    <script type="module" src="./main.ts"></script>
+    <script type="module" src="./main.tsx"></script>
   </body>
 </html>

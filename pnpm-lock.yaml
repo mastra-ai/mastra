@@ -5522,6 +5522,15 @@ importers:
       '@mastra/editor':
         specifier: workspace:*
         version: link:../editor
+      '@mastra/playground-ui':
+        specifier: workspace:*
+        version: link:../playground-ui
+      '@types/react':
+        specifier: ^19.2.14
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.3(@types/react@19.2.14)
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.8(vitest@4.1.8)
@@ -5540,6 +5549,12 @@ importers:
       mastra:
         specifier: workspace:*
         version: link:../cli
+      react:
+        specifier: 'catalog:'
+        version: 19.2.6
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.2.6(react@19.2.6)
       typescript:
         specifier: ^6.0.3
         version: 6.0.3

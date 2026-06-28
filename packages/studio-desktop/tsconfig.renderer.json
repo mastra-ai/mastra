@@ -4,6 +4,7 @@
     "composite": true,
     "declaration": false,
     "declarationMap": false,
+    "jsx": "react-jsx",
     "moduleResolution": "bundler",
     "noEmit": true,
     "types": [],
@@ -11,5 +12,5 @@
       "@shared/*": ["./src/shared/*"]
     }
   },
-  "include": ["src/renderer/**/*.ts", "src/shared/**/*.ts"]
+  "include": ["src/renderer/**/*.ts", "src/renderer/**/*.tsx", "src/shared/**/*.ts"]
 }
