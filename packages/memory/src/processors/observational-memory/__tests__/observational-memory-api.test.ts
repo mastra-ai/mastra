@@ -56,7 +56,10 @@ function createBulkMessages(count: number, threadId: string, startTime?: number)
   }));
 }
 
-function createMockObserverModel(observationOverride?: string) {
+function createMockObserverModel(
+  observationOverride?: string,
+  providerMetadata?: Record<string, Record<string, unknown>>,
+) {
   const observationText =
     observationOverride ??
     `<observations>
@@ -77,6 +80,7 @@ Continue helping the user
       usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
       warnings: [],
       content: [{ type: 'text', text: observationText }],
+      ...(providerMetadata ? { providerMetadata } : {}),
     }),
     doStream: async () => ({
       stream: convertArrayToReadableStream([
@@ -85,7 +89,12 @@ Continue helping the user
         { type: 'text-start', id: 'text-1' },
         { type: 'text-delta', id: 'text-1', delta: observationText },
         { type: 'text-end', id: 'text-1' },
-        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 } },
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          ...(providerMetadata ? { providerMetadata } : {}),
+        },
       ]),
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -93,7 +102,10 @@ Continue helping the user
   } as any);
 }
 
-function createMockReflectorModel(reflectedObservations?: string) {
+function createMockReflectorModel(
+  reflectedObservations?: string,
+  providerMetadata?: Record<string, Record<string, unknown>>,
+) {
   const text =
     reflectedObservations ??
     `<observations>
@@ -107,6 +119,7 @@ function createMockReflectorModel(reflectedObservations?: string) {
       usage: { inputTokens: 50, outputTokens: 30, totalTokens: 80 },
       warnings: [],
       content: [{ type: 'text', text }],
+      ...(providerMetadata ? { providerMetadata } : {}),
     }),
     doStream: async () => ({
       stream: convertArrayToReadableStream([
@@ -115,7 +128,12 @@ function createMockReflectorModel(reflectedObservations?: string) {
         { type: 'text-start', id: 'text-1' },
         { type: 'text-delta', id: 'text-1', delta: text },
         { type: 'text-end', id: 'text-1' },
-        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 50, outputTokens: 30, totalTokens: 80 } },
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: { inputTokens: 50, outputTokens: 30, totalTokens: 80 },
+          ...(providerMetadata ? { providerMetadata } : {}),
+        },
       ]),
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -441,6 +459,75 @@ describe('observe()', () => {
           usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
         });
       }
+    });
+
+    it('should pass providerMetadata from the observer model result to onObservationEnd', async () => {
+      // The AI Gateway exposes per-call economics under providerMetadata.gateway
+      // (cost, generationId). Stub it on the observer model's finish/getFullOutput
+      // path — the exact path `usage` travels — and assert it reaches the hook.
+      const gatewayMetadata = { gateway: { cost: 0.0123, generationId: 'gen-obs-xyz' } };
+      const omWithMetadata = createOM(storage, {
+        observerModel: createMockObserverModel(undefined, gatewayMetadata),
+      });
+      const messages = createBulkMessages(10, threadId);
+      const hooks = {
+        onObservationStart: vi.fn(),
+        onObservationEnd: vi.fn(),
+      };
+
+      await omWithMetadata.observe({ threadId, messages, hooks });
+
+      expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+      expect(hooks.onObservationEnd).toHaveBeenCalledWith(
+        expect.objectContaining({
+          usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+          providerMetadata: gatewayMetadata,
+        }),
+      );
+    });
+
+    it('should leave providerMetadata absent when the observer model does not emit it', async () => {
+      // Provider-agnostic + zero breaking change: when the model omits providerMetadata,
+      // the hook result must not invent one.
+      const messages = createBulkMessages(10, threadId);
+      const hooks = {
+        onObservationStart: vi.fn(),
+        onObservationEnd: vi.fn(),
+      };
+
+      await om.observe({ threadId, messages, hooks });
+
+      expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+      expect(hooks.onObservationEnd.mock.calls[0]![0].providerMetadata).toBeUndefined();
+    });
+
+    it('should pass providerMetadata from the reflector model result to onReflectionEnd', async () => {
+      // Very low reflection threshold so reflection fires; stub gateway economics on
+      // the reflector model so we can assert it reaches onReflectionEnd.
+      const gatewayMetadata = { gateway: { cost: 0.0456, generationId: 'gen-ref-xyz' } };
+      const omReflect = createOM(storage, {
+        observationTokens: 5,
+        reflectorModel: createMockReflectorModel(undefined, gatewayMetadata),
+      });
+      const messages = createBulkMessages(10, threadId);
+      const hooks = {
+        onObservationStart: vi.fn(),
+        onObservationEnd: vi.fn(),
+        onReflectionStart: vi.fn(),
+        onReflectionEnd: vi.fn(),
+      };
+
+      const result = await omReflect.observe({ threadId, messages, hooks });
+
+      expect(result.observed).toBe(true);
+      expect(result.reflected).toBe(true);
+      expect(hooks.onReflectionEnd).toHaveBeenCalled();
+      expect(hooks.onReflectionEnd).toHaveBeenCalledWith(
+        expect.objectContaining({
+          usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+          providerMetadata: gatewayMetadata,
+        }),
+      );
     });
   });
 
