@@ -1,6 +1,6 @@
 import { createVectorTestSuite } from '@internal/storage-test-utils';
-import { vi, describe, it, expect, beforeAll, afterAll, test } from 'vitest';
 import { MongoClient } from 'mongodb';
+import { vi, describe, it, expect, beforeAll, afterAll, test } from 'vitest';
 import { MongoDBVector } from './';
 
 // Tests for GitHub issue #6563 - Configurable embedding field path
@@ -356,7 +356,10 @@ describe('MongoDBVector Integration Tests', () => {
       const rawClient = new MongoClient(uri);
       await rawClient.connect();
       try {
-        await rawClient.db(dbName).collection(indexName).deleteOne({ _id: '__index_metadata__' as any });
+        await rawClient
+          .db(dbName)
+          .collection(indexName)
+          .deleteOne({ _id: '__index_metadata__' as any });
       } finally {
         await rawClient.close();
       }
