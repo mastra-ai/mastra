@@ -13,8 +13,9 @@ const tabStrip = document.querySelector<HTMLDivElement>('#tab-strip');
 const newTabButton = document.querySelector<HTMLButtonElement>('#new-tab-button');
 const launcher = document.querySelector<HTMLElement>('#launcher');
 const webviews = document.querySelector<HTMLElement>('#webviews');
+const bootLoader = document.querySelector<HTMLElement>('#boot-loader');
 
-if (!tabStrip || !newTabButton || !launcher || !webviews) {
+if (!tabStrip || !newTabButton || !launcher || !webviews || !bootLoader) {
   throw new Error('Mastra Studio shell failed to mount');
 }
 
@@ -160,6 +161,11 @@ function renderStudioHost() {
 
   const active = activeTab();
   webviews.hidden = !active?.url || active.status === 'error';
+}
+
+function renderBootLoader() {
+  const active = activeTab();
+  bootLoader.hidden = !!state && (active?.kind === 'launcher' || active?.status === 'error' || !!active?.url);
 }
 
 function renderPlatformRows(current: DesktopState) {
@@ -423,6 +429,7 @@ function render() {
   renderTabs();
   renderStudioHost();
   renderLauncher();
+  renderBootLoader();
 }
 
 tabStrip.addEventListener('click', event => {
