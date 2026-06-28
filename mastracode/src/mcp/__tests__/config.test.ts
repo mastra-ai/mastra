@@ -43,6 +43,17 @@ describe('classifyServerEntry', () => {
     expect(classifyServerEntry({ url: 'http://localhost:8080/sse' }).kind).toBe('http');
     expect(classifyServerEntry({ url: 'https://mcp.example.com/mcp' }).kind).toBe('http');
   });
+
+  it('accepts http entry whose url uses ${VAR} that resolves to a valid URL', () => {
+    const previous = process.env.MC_TEST_MCP_URL;
+    process.env.MC_TEST_MCP_URL = 'https://mcp.example.com/mcp';
+    try {
+      expect(classifyServerEntry({ url: '${MC_TEST_MCP_URL}' }).kind).toBe('http');
+    } finally {
+      if (previous === undefined) delete process.env.MC_TEST_MCP_URL;
+      else process.env.MC_TEST_MCP_URL = previous;
+    }
+  });
 });
 
 describe('validateConfig', () => {
@@ -106,6 +117,25 @@ describe('validateConfig', () => {
     } finally {
       if (previous === undefined) delete process.env.MC_TEST_MCP_KEY;
       else process.env.MC_TEST_MCP_KEY = previous;
+    }
+  });
+
+  it('expands ${VAR} references in the http url from the environment', () => {
+    const previous = process.env.MC_TEST_MCP_URL;
+    process.env.MC_TEST_MCP_URL = 'https://api.example.com/mcp';
+    try {
+      const result = validateConfig({
+        mcpServers: {
+          remote: { url: '${MC_TEST_MCP_URL}' },
+        },
+      });
+      expect(result.mcpServers!['remote']).toEqual({
+        url: 'https://api.example.com/mcp',
+        headers: undefined,
+      });
+    } finally {
+      if (previous === undefined) delete process.env.MC_TEST_MCP_URL;
+      else process.env.MC_TEST_MCP_URL = previous;
     }
   });
 
