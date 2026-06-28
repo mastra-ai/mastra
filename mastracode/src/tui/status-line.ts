@@ -281,6 +281,17 @@ export function updateStatusLine(state: TUIState): void {
     state.agentRunStartedAt !== undefined &&
     state.agentRunLastStreamPartAt !== undefined &&
     now - state.agentRunLastStreamPartAt > 3 * 60_000;
+  const completedTimingLabel =
+    !activeTimingLabel && state.lastAgentRunDurationMs !== undefined
+      ? formatStatusDuration(state.lastAgentRunDurationMs, { includeSeconds: true })
+      : '';
+  const completedTimingIcon =
+    state.lastAgentRunEndReason === 'error'
+      ? '×'
+      : completedTimingLabel && state.lastAgentRunEndReason !== 'aborted'
+        ? '✓'
+        : '';
+  const timingLabel = activeTimingLabel || completedTimingLabel;
 
   const buildLine = (opts: {
     modelId: string;
@@ -294,13 +305,30 @@ export function updateStatusLine(state: TUIState): void {
   }): { plain: string; styled: string } | null => {
     const parts: Array<{ plain: string; styled: string }> = [];
     // Model ID (always present) — styleModelId adds padding spaces
-    const activeTimingPlain = activeTimingLabel ? ` ${activeTimingLabel}` : '';
-    const activeTimingStyled = activeTimingLabel
-      ? ` ${activeTimingIsStale ? theme.fg('error', activeTimingLabel) : modeColor ? chalk.hex(modeColor)(activeTimingLabel) : theme.fg('dim', activeTimingLabel)}`
+    const timingPlain = timingLabel ? ` ${timingLabel}${completedTimingIcon ? ` ${completedTimingIcon}` : ''}` : '';
+    const timingColor = activeTimingIsStale
+      ? theme.fg('error', timingLabel)
+      : activeTimingLabel
+        ? modeColor
+          ? chalk.hex(modeColor)(timingLabel)
+          : theme.fg('dim', timingLabel)
+        : state.lastAgentRunEndReason === 'aborted'
+          ? theme.fg('warning', timingLabel)
+          : state.lastAgentRunEndReason === 'error'
+            ? theme.fg('error', timingLabel)
+            : theme.fg('success', timingLabel);
+    const timingIconColor =
+      state.lastAgentRunEndReason === 'aborted'
+        ? 'warning'
+        : state.lastAgentRunEndReason === 'error'
+          ? 'error'
+          : 'success';
+    const timingStyled = timingLabel
+      ? ` ${timingColor}${completedTimingIcon ? ` ${theme.fg(timingIconColor, completedTimingIcon)}` : ''}`
       : '';
     parts.push({
-      plain: `${opts.modelId}${tintBg ? ' ' : ''}${activeTimingPlain}`,
-      styled: styleModelId(opts.modelId) + activeTimingStyled,
+      plain: `${opts.modelId}${tintBg ? ' ' : ''}${timingPlain}`,
+      styled: styleModelId(opts.modelId) + timingStyled,
     });
     const useBadge = opts.badge === 'short' ? shortModeBadge : modeBadge;
     const useBadgeWidth = opts.badge === 'short' ? shortModeBadgeWidth : modeBadgeWidth;

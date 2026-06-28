@@ -36,15 +36,8 @@ export class IdleCounterComponent extends Container {
       return;
     }
 
-    const summaryColor =
-      this.timingState?.lastAgentRunEndReason === 'aborted'
-        ? 'warning'
-        : this.timingState?.lastAgentRunEndReason === 'error'
-          ? 'error'
-          : 'dim';
-    const summary = segments.summary ? theme.fg(summaryColor, segments.summary) : '';
-    const idle = segments.idle ? theme.fg('dim', `${summary ? ' · ' : ''}${segments.idle}`) : '';
-    this.textChild.setText(`  ${summary}${idle}`);
+    const idle = segments.idle ? theme.fg('dim', segments.idle) : '';
+    this.textChild.setText(idle ? `  ${idle}` : '');
   }
 
   render(width: number): string[] {
@@ -65,20 +58,7 @@ export function formatIdleStatusTimingSegments(
 
   const idleMs = now - state.lastAgentRunEndedAt;
   const idle = idleMs >= MINUTE_MS ? `${formatStatusDuration(idleMs)} idle` : '';
-  if (state.lastAgentRunDurationMs === undefined) {
-    return idle ? { summary: '', idle } : null;
-  }
-
-  const verb =
-    state.lastAgentRunEndReason === 'aborted'
-      ? 'canceled after'
-      : state.lastAgentRunEndReason === 'error'
-        ? 'errored after'
-        : 'done in';
-  return {
-    summary: `${verb} ${formatStatusDuration(state.lastAgentRunDurationMs, { includeSeconds: true })}`,
-    idle,
-  };
+  return idle ? { summary: '', idle } : null;
 }
 
 export function formatIdleStatusTiming(state: IdleStatusTimingState, now = Date.now()): string {

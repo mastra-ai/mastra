@@ -1,3 +1,4 @@
+import { updateStatusLine } from '../../src/tui/status-line.js';
 import { expect } from './expect.js';
 import type { McE2eScenario } from './types.js';
 
@@ -5,8 +6,8 @@ let tuiRef: any;
 
 export const workIdleStatusScenario: McE2eScenario = {
   name: 'work-idle-status',
-  description: 'Verifies the TUI active timer, completed activity label, and delayed idle suffix.',
-  testName: 'shows active timing by the model and completed timing above the editor',
+  description: 'Verifies the TUI active timer, completed status-line timing, and delayed idle line.',
+  testName: 'keeps completed timing beside the model and shows delayed idle above the editor',
   useOpenAIModel: true,
   aimockFixture: 'work-idle-status.json',
   async inProcessApp({ startMastraCodeApp }) {
@@ -42,15 +43,17 @@ export const workIdleStatusScenario: McE2eScenario = {
       throw new Error('Expected TUI timing state to be available after agent run');
     }
     state.lastAgentRunDurationMs = 61_000;
+    state.lastAgentRunEndReason = 'done';
+    updateStatusLine(state);
     state.idleCounter.setTimingState(state);
     state.ui.requestRender?.();
-    await runtime.waitForScreenText(/done in \d+(?:m\d+s|hr\d*m?)/i, terminal);
+    await runtime.waitForScreenText(/\d+m\d+s\s+✓/i, terminal);
 
     state.lastAgentRunEndedAt = Date.now() - 60_000;
     state.idleCounter.setTimingState(state);
     state.ui.requestRender?.();
 
-    await runtime.waitForScreenText(/done in .* · 1m idle/i, terminal, 5_000);
+    await runtime.waitForScreenText(/1m idle/i, terminal, 5_000);
 
     terminal.keyCtrlC();
   },
