@@ -224,9 +224,10 @@ export class WorkflowRunOutput<
 
     const error = reason instanceof Error ? reason : new Error(String(reason));
     this.#streamError = error;
-    if (this.#status === 'running') {
-      this.#status = 'failed';
-    }
+    // The run terminated because the stream pipeline rejected, so it failed —
+    // overwrite any earlier non-terminal status (paused/suspended/canceled/tripwire)
+    // so downstream consumers always see a failed terminal status.
+    this.#status = 'failed';
 
     // Emit a terminal finish so fullStream consumers stop waiting and close.
     this.#emitter.emit('chunk', {
