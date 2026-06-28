@@ -629,6 +629,7 @@ export const sendToolApprovalBodySchema = z.object({
   requestContext: z.record(z.string(), z.any()).optional(),
   toolCallId: z.string(),
   approved: z.boolean(),
+  resumeData: z.any().optional(),
   format: z.string().optional(),
   messages: z.array(coreMessageSchema).optional(),
   streamOptions: z.any().optional(),

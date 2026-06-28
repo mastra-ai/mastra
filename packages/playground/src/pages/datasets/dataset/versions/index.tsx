@@ -1,10 +1,11 @@
-import { Button, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Column, Columns } from '@mastra/playground-ui/components/Columns';
 import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
 import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { TextAndIcon } from '@mastra/playground-ui/components/Text';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { ArrowLeft, ScaleIcon, HistoryIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router';

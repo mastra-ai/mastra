@@ -1,7 +1,8 @@
-import { NoDataPageLayout, PageLayout, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
 import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useState } from 'react';
 import { ScorersToolbar, useScorers } from '@/domains/scores';
 import { NoScorersInfo } from '@/domains/scores/components/scorers-list/no-scorers-info';

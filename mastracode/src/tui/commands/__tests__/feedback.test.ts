@@ -23,7 +23,7 @@ function createCtx(options?: {
   return {
     state: { session },
     session,
-    harness: {
+    controller: {
       getMastra: vi.fn(() => ({ observability: { addFeedback } })),
     },
     showInfo: vi.fn(),

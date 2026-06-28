@@ -25,6 +25,10 @@ vi.mock('@mastra/playground-ui', async () => {
   };
 });
 
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
+
 const setCurrentUser = (user: CurrentUser) => {
   server.use(http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json(user)));
 };

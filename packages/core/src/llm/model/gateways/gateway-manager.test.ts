@@ -23,6 +23,7 @@ function createFakeGateway(options?: {
   resolveAuth?: (request: GatewayAuthRequest) => GatewayAuthResult | undefined;
   enabled?: boolean;
   provider?: string;
+  handlesModel?: (modelId: string) => boolean;
 }): MastraModelGatewayInterface {
   const id = options?.id ?? 'test-gateway';
   const provider = options?.provider ?? 'acme';
@@ -49,6 +50,7 @@ function createFakeGateway(options?: {
       return options?.apiKey ?? '';
     }),
     resolveAuth: options?.resolveAuth,
+    handlesModel: options?.handlesModel,
     resolveLanguageModel: () => ({}) as GatewayLanguageModel,
   };
 }
@@ -105,6 +107,70 @@ describe('GatewayManager', () => {
       expect(parsed.gatewayId).toBe('models.dev');
       expect(parsed.providerId).toBe('openai');
       expect(parsed.modelId).toBe('gpt-4o');
+    });
+  });
+
+  describe('handlesModel routing', () => {
+    it('routes an unprefixed model id to a gateway that claims it', () => {
+      const claiming = createFakeGateway({
+        id: 'mastracode',
+        provider: 'anthropic',
+        handlesModel: id => id.startsWith('anthropic/'),
+      });
+      const manager = new GatewayManager([claiming, ...defaultGateways]);
+
+      const gateway = manager.findGatewayForModel('anthropic/claude-sonnet-4-5');
+      expect(gateway.id).toBe('mastracode');
+    });
+
+    it('still prefers an exact prefix match over a claiming gateway', () => {
+      const claiming = createFakeGateway({
+        id: 'mastracode',
+        provider: 'anthropic',
+        handlesModel: () => true,
+      });
+      const prefixed = createFakeGateway({ id: 'netlify', provider: 'anthropic' });
+      const manager = new GatewayManager([claiming, prefixed]);
+
+      expect(manager.findGatewayForModel('netlify/anthropic/claude-sonnet-4-5').id).toBe('netlify');
+    });
+
+    it('falls back to models.dev when no gateway claims the model', () => {
+      const claiming = createFakeGateway({
+        id: 'mastracode',
+        provider: 'anthropic',
+        handlesModel: id => id.startsWith('anthropic/'),
+      });
+      const manager = new GatewayManager([claiming, ...defaultGateways]);
+
+      expect(manager.findGatewayForModel('openai/gpt-4o').id).toBe('models.dev');
+    });
+
+    it('parses a claimed unprefixed id as provider/model (not gateway-prefixed)', () => {
+      const claiming = createFakeGateway({
+        id: 'mastracode',
+        provider: 'anthropic',
+        handlesModel: id => id.startsWith('anthropic/'),
+      });
+      const manager = new GatewayManager([claiming]);
+
+      expect(manager.parseModelId('anthropic/claude-sonnet-4-5')).toEqual({
+        providerId: 'anthropic',
+        modelId: 'claude-sonnet-4-5',
+        gatewayId: 'mastracode',
+      });
+    });
+
+    it('resolves auth for a claimed unprefixed id via the claiming gateway', async () => {
+      const claiming = createFakeGateway({
+        id: 'mastracode',
+        provider: 'anthropic',
+        handlesModel: id => id.startsWith('anthropic/'),
+        resolveAuth: () => ({ bearerToken: 'oauth' }),
+      });
+      const manager = new GatewayManager([claiming, ...defaultGateways]);
+
+      expect(await manager.hasAuth('anthropic/claude-sonnet-4-5')).toBe(true);
     });
   });
 

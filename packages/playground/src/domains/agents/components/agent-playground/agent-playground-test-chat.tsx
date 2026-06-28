@@ -1,5 +1,5 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import { Button } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Save } from 'lucide-react';
 import { useMemo } from 'react';

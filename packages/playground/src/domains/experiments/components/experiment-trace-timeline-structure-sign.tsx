@@ -1,4 +1,4 @@
-import { cn } from '@mastra/playground-ui';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { CircleChevronDownIcon, CircleChevronUpIcon } from 'lucide-react';
 
 type ExperimentTraceTimelineStructureSignProps = {

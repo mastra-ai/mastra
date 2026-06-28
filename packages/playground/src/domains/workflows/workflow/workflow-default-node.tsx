@@ -1,5 +1,9 @@
-import { Txt, CheckIcon, CrossIcon, Icon, cn } from '@mastra/playground-ui';
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { CheckIcon } from '@mastra/playground-ui/icons/CheckIcon';
+import { CrossIcon } from '@mastra/playground-ui/icons/CrossIcon';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
 import { CircleDashed, HourglassIcon, Loader2, PauseIcon, ShieldAlert } from 'lucide-react';

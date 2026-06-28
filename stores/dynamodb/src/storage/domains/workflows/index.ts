@@ -329,19 +329,44 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
 
     try {
       const now = new Date();
+      const createdAtValue = (createdAt ?? now).toISOString();
+      const updatedAtValue = (updatedAt ?? now).toISOString();
+
       const data: WorkflowSnapshotEntityData = {
         entity: 'workflow_snapshot',
         workflow_name: workflowName,
         run_id: runId,
         snapshot: JSON.stringify(snapshot),
-        createdAt: (createdAt ?? now).toISOString(),
-        updatedAt: (updatedAt ?? now).toISOString(),
+        createdAt: createdAtValue,
+        updatedAt: updatedAtValue,
         resourceId,
         ...getTtlProps('workflow_snapshot', this.ttlConfig),
       };
 
-      // Use upsert instead of create to handle both create and update cases
-      await this.service.entities.workflow_snapshot.upsert(data).go();
+      try {
+        await this.service.entities.workflow_snapshot
+          .create(data)
+          .where((attr: any, op: any) => op.notExists(attr.run_id))
+          .go();
+      } catch (error) {
+        if (!this.isConditionalCheckFailed(error)) {
+          throw error;
+        }
+
+        await this.service.entities.workflow_snapshot
+          .update({
+            entity: 'workflow_snapshot',
+            workflow_name: workflowName,
+            run_id: runId,
+          })
+          .set({
+            snapshot: JSON.stringify(snapshot),
+            updatedAt: updatedAtValue,
+            resourceId,
+            ...getTtlProps('workflow_snapshot', this.ttlConfig),
+          })
+          .go();
+      }
     } catch (error) {
       throw new MastraError(
         {

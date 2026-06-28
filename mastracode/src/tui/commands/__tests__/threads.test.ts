@@ -1,4 +1,4 @@
-import type { HarnessMessage, HarnessThread } from '@mastra/core/harness';
+import type { AgentControllerMessage, AgentControllerThread } from '@mastra/core/agent-controller';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { askModalQuestion } from '../../modal-question.js';
 import { handleThreadsCommand, showThreadLockPrompt } from '../threads.js';
@@ -33,7 +33,7 @@ vi.mock('../../components/thread-selector.js', () => ({
   },
 }));
 
-function createThread(id: string, updatedAtIso: string): HarnessThread {
+function createThread(id: string, updatedAtIso: string): AgentControllerThread {
   const updatedAt = new Date(updatedAtIso);
   return {
     id,
@@ -46,7 +46,7 @@ function createThread(id: string, updatedAtIso: string): HarnessThread {
   };
 }
 
-function createMessage(id: string, text: string): HarnessMessage {
+function createMessage(id: string, text: string): AgentControllerMessage {
   return {
     id,
     role: 'user',
@@ -55,7 +55,7 @@ function createMessage(id: string, text: string): HarnessMessage {
   };
 }
 
-function createContext(threads: HarnessThread[]) {
+function createContext(threads: AgentControllerThread[]) {
   const showOverlay = vi.fn();
   const trackInteractivePrompt = vi.fn();
   const state = {
@@ -80,7 +80,7 @@ function createContext(threads: HarnessThread[]) {
       },
       mode: { get: vi.fn(() => 'build') },
     },
-    harness: {
+    controller: {
       setResourceId: vi.fn(),
       switchThread: vi.fn(),
       cloneThread: vi.fn(),
@@ -149,7 +149,7 @@ describe('handleThreadsCommand thread listing', () => {
     await commandPromise;
   });
 
-  it('returns only cached previews and never requests uncached ones from the harness', async () => {
+  it('returns only cached previews and never requests uncached ones from the controller', async () => {
     const threads = [createThread('thread-1', '2026-03-17T15:10:00.000Z')];
     const { ctx, state, showOverlay } = createContext(threads);
     state.threadPreviewCache.set('thread-1', {

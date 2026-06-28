@@ -988,7 +988,7 @@ describe('DurableAgent workflow input serialization', () => {
 
     expect(result.workflowInput.options.maxSteps).toBe(5);
     expect(result.workflowInput.options.toolChoice).toBe('auto');
-    expect(result.workflowInput.options.temperature).toBe(0.7);
+    expect(result.workflowInput.options.modelSettings?.temperature).toBe(0.7);
 
     // Verify serializable
     const serialized = JSON.stringify(result.workflowInput.options);

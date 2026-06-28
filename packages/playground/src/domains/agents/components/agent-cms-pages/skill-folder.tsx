@@ -1,6 +1,6 @@
-import { Txt } from '@mastra/playground-ui';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState, useCallback, useMemo } from 'react';
 
 import type { InMemoryFileNode } from '../agent-edit-page/utils/form-validation';
