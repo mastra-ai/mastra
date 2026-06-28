@@ -935,8 +935,7 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
       // Duplicate key errors (11000) are expected in at-least-once delivery — skip them.
       if (error instanceof MongoBulkWriteError) {
         const writeErrors = Array.isArray(error.writeErrors) ? error.writeErrors : [error.writeErrors];
-        const nonDuplicates = writeErrors.filter(e => e.code !== 11000);
-        if (nonDuplicates.length === 0) return;
+        if (writeErrors.length > 0 && writeErrors.every(e => e.code === 11000)) return;
       }
       throw new MastraError(
         {
