@@ -482,7 +482,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     try {
       const collection = await this.getCollection(indexName, true);
 
-      const count = await collection.countDocuments();
+      const count = await collection.countDocuments({ _id: { $ne: '__index_metadata__' as any } });
 
       const indexNameInternal = `${indexName}_vector_index`;
       const indexInfo: any[] = await (collection as any).listSearchIndexes().toArray();
