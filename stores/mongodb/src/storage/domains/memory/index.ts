@@ -1137,14 +1137,19 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     try {
-      // Delete messages and the thread atomically when the deployment supports
-      // transactions; otherwise this degrades to sequential best-effort.
-      await this.#connector.withTransaction(async session => {
-        const collectionMessages = await this.getCollection(TABLE_MESSAGES);
-        await collectionMessages.deleteMany({ thread_id: threadId }, { session });
-        const collectionThreads = await this.getCollection(TABLE_THREADS);
-        await collectionThreads.deleteOne({ id: threadId }, { session });
-      });
+      // Best-effort cascade, deliberately NOT wrapped in a transaction: a thread
+      // can accumulate an unbounded number of messages, and a transactional
+      // deleteMany is capped by transactionLifetimeLimitSeconds (60s default) and
+      // must hold every delete in cache until commit — so a large thread would
+      // abort and become permanently undeletable. A plain deleteMany commits
+      // incrementally and always completes. Messages are removed before the thread
+      // so the thread row is the linearization point: a crash mid-drain leaves the
+      // thread re-deletable (deleteMany is idempotent), with only orphaned messages
+      // keyed by a thread_id nothing queries as transient, sweepable residue.
+      const collectionMessages = await this.getCollection(TABLE_MESSAGES);
+      await collectionMessages.deleteMany({ thread_id: threadId });
+      const collectionThreads = await this.getCollection(TABLE_THREADS);
+      await collectionThreads.deleteOne({ id: threadId });
     } catch (error) {
       throw new MastraError(
         {

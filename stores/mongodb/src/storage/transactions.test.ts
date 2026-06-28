@@ -62,7 +62,13 @@ describe('MongoDB storage — topology-aware transactions', () => {
     }
   });
 
-  test('deleteThread rolls back message deletion when the thread delete fails (replica set)', async () => {
+  test('deleteThread cascades best-effort (no rollback) and recovers via idempotent retry (replica set)', async () => {
+    // deleteThread is deliberately NOT transactional: a thread's messages are
+    // unbounded and a transactional deleteMany would be capped by the 60s
+    // transaction lifetime limit. Instead it drains messages first, then deletes
+    // the thread row last as the linearization point. This verifies that when the
+    // final thread delete fails, the message deletion is NOT rolled back, the
+    // thread row survives (re-deletable), and a retry completes the cascade.
     const store = new MongoDBStore({ id: 'tx-delete-thread', uri: REPLICA_SET_URI, dbName: DB });
     await store.init();
     const memory = await store.getStore('memory');
@@ -85,7 +91,7 @@ describe('MongoDB storage — topology-aware transactions', () => {
       ],
     });
 
-    // Make the thread deleteOne fail AFTER the messages deleteMany runs inside the transaction.
+    // Make the thread deleteOne fail AFTER the messages deleteMany has run.
     const spy = vi.spyOn(Collection.prototype, 'deleteOne').mockRejectedValueOnce(new Error('thread delete boom'));
     try {
       await expect(memory?.deleteThread({ threadId })).rejects.toThrow();
@@ -93,12 +99,22 @@ describe('MongoDB storage — topology-aware transactions', () => {
       spy.mockRestore();
     }
 
-    // Transaction aborted, so the messages must still be present.
     const client = new MongoClient(REPLICA_SET_URI);
     try {
       await client.connect();
-      const remaining = await client.db(DB).collection('mastra_messages').countDocuments({ thread_id: threadId });
-      expect(remaining).toBe(1);
+      const db = client.db(DB);
+
+      // No rollback: messages were drained before the thread delete failed.
+      const remainingMessages = await db.collection('mastra_messages').countDocuments({ thread_id: threadId });
+      expect(remainingMessages).toBe(0);
+      // The thread row survives — the failed delete left a recoverable state.
+      const remainingThreads = await db.collection('mastra_threads').countDocuments({ id: threadId });
+      expect(remainingThreads).toBe(1);
+
+      // Idempotent retry completes the cascade with no spy in place.
+      await memory?.deleteThread({ threadId });
+      const threadsAfterRetry = await db.collection('mastra_threads').countDocuments({ id: threadId });
+      expect(threadsAfterRetry).toBe(0);
     } finally {
       await client.close();
       await store.close();

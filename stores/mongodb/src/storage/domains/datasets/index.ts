@@ -338,16 +338,21 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         if (!isNamespaceNotFound) throw e;
       }
 
-      // Cascade delete
+      // Cascade delete — best-effort, deliberately NOT transactional: dataset
+      // items are unbounded, and a transactional deleteMany is capped by
+      // transactionLifetimeLimitSeconds (60s default) plus cache pressure, so a
+      // large dataset would abort and become permanently undeletable. A plain
+      // deleteMany commits incrementally and always completes. The dataset row is
+      // deleted last as the linearization point: a crash mid-cascade leaves the
+      // dataset re-deletable (deleteMany is idempotent), with only orphaned
+      // version/item rows keyed by a datasetId nothing queries as transient residue.
       const versionsCollection = await this.getCollection(TABLE_DATASET_VERSIONS);
       const itemsCollection = await this.getCollection(TABLE_DATASET_ITEMS);
       const datasetsCollection = await this.getCollection(TABLE_DATASETS);
 
-      await this.#connector.withTransaction(async session => {
-        await versionsCollection.deleteMany({ datasetId: id }, { session });
-        await itemsCollection.deleteMany({ datasetId: id }, { session });
-        await datasetsCollection.deleteOne({ id }, { session });
-      });
+      await versionsCollection.deleteMany({ datasetId: id });
+      await itemsCollection.deleteMany({ datasetId: id });
+      await datasetsCollection.deleteOne({ id });
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
