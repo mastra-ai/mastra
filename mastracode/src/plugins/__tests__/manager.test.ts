@@ -15,12 +15,21 @@ afterEach(() => {
   }
 });
 
-function writePlugin(pluginDir: string, id: string, toolName: string): void {
+function writePlugin(pluginDir: string, id: string, toolName: string, description = 'tool'): void {
   fs.mkdirSync(path.join(pluginDir, 'src'), { recursive: true });
   fs.writeFileSync(
     path.join(pluginDir, 'src/index.ts'),
-    `export default { id: '${id}', name: '${id}', tools: { ${toolName}: { id: '${toolName}', description: 'tool' } } };`,
+    `export default { id: '${id}', name: '${id}', tools: { ${toolName}: { id: '${toolName}', description: '${description}' } } };`,
   );
+}
+
+async function waitUntil(assertion: () => boolean, timeoutMs = 3000): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (assertion()) return;
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  expect(assertion()).toBe(true);
 }
 
 describe('PluginManager', () => {
@@ -56,6 +65,25 @@ describe('PluginManager', () => {
     await manager.uninstall('acme.manager', 'project');
     expect(await manager.listPlugins()).toEqual([]);
     expect(fs.existsSync(pluginDir)).toBe(true);
+  });
+
+  it('hot reloads local plugin source changes into the stable tools object', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const pluginDir = path.join(tempDir, 'plugin');
+    writePlugin(pluginDir, 'acme.hot', 'hot_tool', 'first');
+    const manager = new PluginManager({ projectRoot, homeDir });
+    const pluginTools = manager.getPluginTools();
+
+    await manager.installLocal(pluginDir, 'project');
+    expect(pluginTools.hot_tool?.description).toBe('first');
+
+    await new Promise(resolve => setTimeout(resolve, 20));
+    writePlugin(pluginDir, 'acme.hot', 'hot_tool', 'second');
+
+    await waitUntil(() => pluginTools.hot_tool?.description === 'second');
+    expect(manager.getPluginTools()).toBe(pluginTools);
   });
 
   it('removes GitHub checkout directories when uninstalling GitHub plugins', async () => {
