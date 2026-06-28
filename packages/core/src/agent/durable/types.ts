@@ -349,6 +349,16 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
     message: string;
     stack?: string;
   };
+  /**
+   * Approval decision for a `requireApproval` tool, present once the user has approved or declined.
+   * A declined call carries `approved: false` and no `result`, so it persists as `output-denied`.
+   * An approved call carries `approved: true` alongside the `result`.
+   */
+  approval?: {
+    id: string;
+    approved: boolean;
+    reason?: string;
+  };
 }
 
 /**
