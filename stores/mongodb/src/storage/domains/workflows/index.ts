@@ -241,6 +241,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
 
       return snapshot;
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'UPDATE_WORKFLOW_STATE', 'FAILED'),
