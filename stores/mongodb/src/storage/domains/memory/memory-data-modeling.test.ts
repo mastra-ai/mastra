@@ -1,8 +1,8 @@
 import { MastraError } from '@mastra/core/error';
 import { MongoClient } from 'mongodb';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
-import { MemoryStorageMongoDB } from './domains/memory';
-import { MongoDBStore } from './index';
+import { MongoDBStore } from '../../index';
+import { MemoryStorageMongoDB } from './index';
 
 const URI = process.env.MONGODB_URL || 'mongodb://localhost:27017';
 const DB = 'mastra-memory-data-modeling-test'; // dedicated, fresh db so "absence of dropped index" assertions are valid
