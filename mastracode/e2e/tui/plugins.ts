@@ -86,6 +86,11 @@ export default defineMastraCodePlugin({
 
 function writeHotReloadPlugin({ projectDir }: Pick<McE2ePrepareContext, 'projectDir'>, result: string): string {
   const pluginDir = join(projectDir, 'fixtures', 'plugins', 'hot-reload-plugin');
+  writeHotReloadPluginSource(pluginDir, result);
+  return pluginDir;
+}
+
+function writeHotReloadPluginSource(pluginDir: string, result: string): void {
   const pluginSrcDir = join(pluginDir, 'src');
   mkdirSync(pluginSrcDir, { recursive: true });
   writePluginPackageLink(pluginDir);
@@ -109,8 +114,6 @@ export default defineMastraCodePlugin({
 });
 `,
   );
-
-  return pluginDir;
 }
 
 function writePluginPackageLink(pluginDir: string): void {
@@ -314,8 +317,7 @@ export const pluginsLocalHotReloadScenario: McE2eScenario = {
     await runtime.waitForScreenText(/version-one/i, terminal, 10_000);
 
     if (!hotReloadPluginDir) throw new Error('Hot reload plugin directory was not prepared');
-    writeHotReloadPlugin({ projectDir: dirname(dirname(dirname(hotReloadPluginDir))) }, 'version-two');
-    await runtime.sleep(900);
+    writeHotReloadPluginSource(hotReloadPluginDir, 'version-two');
 
     terminal.submit('Call the hot reload plugin after edit.');
     await runtime.waitForScreenText(/version-two/i, terminal, 10_000);

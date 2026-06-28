@@ -9,10 +9,17 @@ import type { PluginPathOptions } from './paths.js';
 import { loadPluginRegistry, removePluginRecord, savePluginRegistry, setPluginRecord } from './registry.js';
 import type { LoadedPlugin, PluginScope } from './types.js';
 
+function getEntryVersion(entryPath: string): string {
+  const stat = fs.statSync(entryPath, { bigint: true });
+  return `${stat.mtimeNs}:${stat.size}`;
+}
+
 export class PluginManager {
   private loadedPlugins: LoadedPlugin[] = [];
   private readonly pluginTools: ReturnType<typeof collectActivePluginTools> = {};
+  private readonly rawPluginTools: ReturnType<typeof collectActivePluginTools> = {};
   private readonly watchedLocalEntries = new Set<string>();
+  private readonly localEntryVersions = new Map<string, string>();
   private reloadInFlight: Promise<LoadedPlugin[]> | undefined;
 
   constructor(private readonly options: PluginPathOptions) {}
@@ -23,11 +30,7 @@ export class PluginManager {
     this.reloadInFlight = (async () => {
       this.loadedPlugins = await loadPlugins(this.options);
       this.updateLocalEntryWatchers(this.loadedPlugins);
-      const nextTools = collectActivePluginTools(this.loadedPlugins);
-      for (const name of Object.keys(this.pluginTools)) {
-        delete this.pluginTools[name];
-      }
-      Object.assign(this.pluginTools, nextTools);
+      this.updatePluginTools(collectActivePluginTools(this.loadedPlugins));
       return this.loadedPlugins;
     })().finally(() => {
       this.reloadInFlight = undefined;
@@ -55,12 +58,66 @@ export class PluginManager {
     return this.pluginTools[toolName]?.mastracode?.render;
   }
 
+  private updatePluginTools(nextTools: ReturnType<typeof collectActivePluginTools>): void {
+    for (const name of Object.keys(this.rawPluginTools)) {
+      if (!(name in nextTools)) {
+        delete this.rawPluginTools[name];
+        delete this.pluginTools[name];
+      }
+    }
+
+    for (const [name, tool] of Object.entries(nextTools)) {
+      this.rawPluginTools[name] = tool;
+      if (!this.pluginTools[name]) {
+        this.pluginTools[name] = this.createLiveToolProxy(name);
+      }
+      this.syncLiveToolProxy(name, tool);
+    }
+  }
+
+  private createLiveToolProxy(toolName: string) {
+    return {
+      execute: async (...args: any[]) => {
+        await this.reloadChangedLocalPlugins();
+        const latestTool = this.rawPluginTools[toolName];
+        if (!latestTool?.execute) {
+          throw new Error(`Plugin tool "${toolName}" is no longer available`);
+        }
+        return (latestTool.execute as (...args: any[]) => unknown)(...args);
+      },
+    } as LoadedPlugin['tools'][string];
+  }
+
+  private syncLiveToolProxy(toolName: string, tool: LoadedPlugin['tools'][string]): void {
+    const proxy = this.pluginTools[toolName];
+    if (!proxy) return;
+    const mutableProxy = proxy as unknown as Record<string, unknown>;
+    for (const key of Object.keys(mutableProxy)) {
+      delete mutableProxy[key];
+    }
+    Object.assign(proxy, tool);
+    proxy.execute = this.createLiveToolProxy(toolName).execute;
+  }
+
+  private async reloadChangedLocalPlugins(): Promise<void> {
+    for (const plugin of this.loadedPlugins) {
+      if (plugin.source !== 'local' || plugin.status !== 'active') continue;
+      const entryPath = resolvePluginEntryPath(plugin, this.options);
+      const currentVersion = getEntryVersion(entryPath);
+      if (this.localEntryVersions.get(entryPath) !== currentVersion) {
+        await this.reload();
+        return;
+      }
+    }
+  }
+
   private updateLocalEntryWatchers(plugins: LoadedPlugin[]): void {
     const nextEntries = new Set<string>();
     for (const plugin of plugins) {
       if (plugin.source !== 'local' || plugin.status === 'inactive') continue;
       const entryPath = resolvePluginEntryPath(plugin, this.options);
       nextEntries.add(entryPath);
+      this.localEntryVersions.set(entryPath, getEntryVersion(entryPath));
       if (this.watchedLocalEntries.has(entryPath)) continue;
 
       const watcher = fs.watchFile(entryPath, { interval: 500 }, (current, previous) => {
@@ -75,6 +132,7 @@ export class PluginManager {
       if (nextEntries.has(entryPath)) continue;
       fs.unwatchFile(entryPath);
       this.watchedLocalEntries.delete(entryPath);
+      this.localEntryVersions.delete(entryPath);
     }
   }
 

@@ -55,7 +55,7 @@
         "endpoint": "chat"
       },
       "response": {
-        "content": "Hot reload plugin returned version-two."
+        "content": "Hot reload plugin follow-up complete."
       }
     }
   ]
