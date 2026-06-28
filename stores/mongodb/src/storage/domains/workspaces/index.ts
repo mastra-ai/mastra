@@ -325,7 +325,16 @@ export class MongoDBWorkspacesStorage extends WorkspacesStorage {
           await versionsCol.insertOne(newVersionDoc, { session });
         }
         const col = await this.getCollection(TABLE_WORKSPACES);
-        await col.updateOne({ id }, { $set: updateDoc }, { session });
+        const updateResult = await col.updateOne({ id }, { $set: updateDoc }, { session });
+        if (updateResult.matchedCount === 0) {
+          throw new MastraError({
+            id: createStorageErrorId('MONGODB', 'UPDATE_WORKSPACE', 'NOT_FOUND_AFTER_UPDATE'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.SYSTEM,
+            text: `Workspace with id ${id} was deleted during update`,
+            details: { id },
+          });
+        }
       });
 
       const updatedWorkspace = await collection.findOne<any>({ id });
