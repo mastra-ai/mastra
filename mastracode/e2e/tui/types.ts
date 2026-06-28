@@ -59,6 +59,7 @@ export type ScenarioName =
   | 'persistent-goal-reload'
   | 'plugins-local-tool'
   | 'plugins-local-hot-reload'
+  | 'plugins-github-poll-update'
   | 'plugins-scaffold-install-tool'
   | 'plugins-command-ui'
   | 'process-shortcuts'

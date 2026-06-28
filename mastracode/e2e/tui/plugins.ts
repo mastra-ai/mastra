@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +16,8 @@ const RESPONSE = 'Plugin tool availability verified.';
 
 let currentTui: unknown;
 let hotReloadPluginDir: string | undefined;
+let githubPollSourceDir: string | undefined;
+let githubPollManager: { pollGithubSourcesForUpdates: () => Promise<boolean> } | undefined;
 
 function writeLocalPlugin({ projectDir }: Pick<McE2ePrepareContext, 'projectDir'>): string {
   const pluginDir = join(projectDir, 'fixtures', 'plugins', 'local-plugin');
@@ -147,6 +150,62 @@ function writePluginRegistry(projectDir: string, pluginDir: string, enabled = tr
       2,
     ),
   );
+}
+
+function writeGithubPluginRegistry(projectDir: string, checkoutName: string): void {
+  const registryDir = join(projectDir, '.mastracode', 'plugins');
+  mkdirSync(registryDir, { recursive: true });
+  writeFileSync(
+    join(registryDir, 'plugins.json'),
+    JSON.stringify(
+      {
+        plugins: {
+          [PLUGIN_ID]: {
+            enabled: true,
+            source: 'github',
+            specifier: 'https://github.com/acme/github-poll-plugin',
+            path: `sources/github/${checkoutName}`,
+            entry: 'src/index.ts',
+          },
+        },
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+function git(cwd: string, args: string[]): void {
+  execFileSync('git', args, { cwd, stdio: 'ignore' });
+}
+
+function prepareGithubPollPlugin(projectDir: string): string {
+  const sourceDir = join(projectDir, 'fixtures', 'plugins', 'github-poll-source');
+  const remoteDir = join(projectDir, 'fixtures', 'plugins', 'github-poll-remote.git');
+  const checkoutName = 'acme-github-poll-plugin';
+  const checkoutDir = join(projectDir, '.mastracode', 'plugins', 'sources', 'github', checkoutName);
+
+  writeHotReloadPluginSource(sourceDir, 'version-one');
+  git(sourceDir, ['init', '-b', 'main']);
+  git(sourceDir, ['config', 'user.email', 'e2e@example.com']);
+  git(sourceDir, ['config', 'user.name', 'Mastra Code E2E']);
+  git(sourceDir, ['add', '.']);
+  git(sourceDir, ['commit', '-m', 'initial plugin']);
+  git(projectDir, ['init', '--bare', remoteDir]);
+  git(sourceDir, ['remote', 'add', 'origin', remoteDir]);
+  git(sourceDir, ['push', '-u', 'origin', 'main']);
+  mkdirSync(dirname(checkoutDir), { recursive: true });
+  git(projectDir, ['clone', '-b', 'main', remoteDir, checkoutDir]);
+  writeGithubPluginRegistry(projectDir, checkoutName);
+
+  return sourceDir;
+}
+
+function pushGithubPollPluginUpdate(sourceDir: string): void {
+  writeHotReloadPluginSource(sourceDir, 'version-two');
+  git(sourceDir, ['add', '.']);
+  git(sourceDir, ['commit', '-m', 'update plugin result']);
+  git(sourceDir, ['push']);
 }
 
 function getToolNames(requests: unknown[]): string[] {
@@ -335,6 +394,55 @@ export const pluginsLocalHotReloadScenario: McE2eScenario = {
     if (!requestText.includes('version-one') || !requestText.includes('version-two')) {
       throw new Error('Expected provider follow-up requests to include both hot reload tool results.');
     }
+  },
+};
+
+export const pluginsGithubPollUpdateScenario: McE2eScenario = {
+  name: 'plugins-github-poll-update',
+  description: 'Polls a GitHub-installed plugin checkout and reloads updated tool code in the same TUI session.',
+  testName: 'polls GitHub plugin updates in the same TUI session',
+  useOpenAIModel: true,
+  aimockFixture: 'plugins-github-poll-update.json',
+  prepare({ projectDir }) {
+    githubPollSourceDir = prepareGithubPollPlugin(projectDir);
+  },
+  async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
+    const { PluginManager } = await import('../../src/plugins/manager.js');
+    const manager = new PluginManager({ projectRoot: projectDir, configDir: '.mastracode', homeDir });
+    githubPollManager = manager;
+    return startMastraCodeApp({
+      config: {
+        pluginManager: manager,
+      },
+    });
+  },
+  async run({ terminal, runtime }) {
+    runtime.startLiveOutput(terminal);
+    await runtime.waitForScreenText(/Resource ID:/i, terminal);
+
+    terminal.submit('Call the GitHub plugin before update.');
+    await runtime.waitForScreenText(/version-one/i, terminal, 10_000);
+
+    if (!githubPollSourceDir) throw new Error('GitHub poll plugin source directory was not prepared');
+    if (!githubPollManager) throw new Error('GitHub poll plugin manager was not initialized');
+    pushGithubPollPluginUpdate(githubPollSourceDir);
+    const changed = await githubPollManager.pollGithubSourcesForUpdates();
+    if (!changed) throw new Error('Expected GitHub plugin poll to detect an update');
+
+    terminal.submit('Call the GitHub plugin after update.');
+    await runtime.waitForScreenText(/version-two/i, terminal, 10_000);
+
+    terminal.keyCtrlC();
+  },
+  verifyAimockRequests(requests) {
+    const names = getToolNames(requests);
+    if (!names.includes(TOOL_NAME)) {
+      throw new Error(
+        `Expected provider request to expose GitHub poll plugin tool ${TOOL_NAME}. Names: ${names.join(', ')}`,
+      );
+    }
+    // The run() screen assertions wait for version-one and version-two, while the AIMock fixture responses deliberately
+    // avoid those strings. That ensures the visible text comes from the plugin tool results, not mocked model prose.
   },
 };
 
