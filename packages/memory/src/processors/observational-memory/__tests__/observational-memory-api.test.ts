@@ -498,7 +498,9 @@ describe('observe()', () => {
       await om.observe({ threadId, messages, hooks });
 
       expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
-      expect(hooks.onObservationEnd.mock.calls[0]![0].providerMetadata).toBeUndefined();
+      // Absent, not present-with-undefined: the live hook-fire sites conditionally
+      // spread providerMetadata, so the key is omitted entirely when none is emitted.
+      expect(hooks.onObservationEnd.mock.calls[0]![0]).not.toHaveProperty('providerMetadata');
     });
 
     it('should pass providerMetadata from the reflector model result to onReflectionEnd', async () => {
@@ -527,6 +529,32 @@ describe('observe()', () => {
           usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
           providerMetadata: gatewayMetadata,
         }),
+      );
+    });
+
+    it('should pass providerMetadata to onObservationEnd through the batched resource-scoped path', async () => {
+      // Resource scope routes through callMultiThread() + the lastBatchProviderMetadata
+      // accumulator — a different code path from the single-thread observer above.
+      const gatewayMetadata = { gateway: { cost: 0.0321, generationId: 'gen-res-xyz' } };
+      const resourceId = 'res-pm';
+      await storage.saveThread({
+        thread: { id: threadId, resourceId, title: 'pm', metadata: {}, createdAt: new Date(), updatedAt: new Date() },
+      });
+      const omResource = createOM(storage, {
+        scope: 'resource',
+        observerModel: createMockObserverModel(undefined, gatewayMetadata),
+      });
+      const messages = createBulkMessages(10, threadId);
+      const hooks = {
+        onObservationStart: vi.fn(),
+        onObservationEnd: vi.fn(),
+      };
+
+      await omResource.observe({ threadId, resourceId, messages, hooks });
+
+      expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+      expect(hooks.onObservationEnd).toHaveBeenCalledWith(
+        expect.objectContaining({ providerMetadata: gatewayMetadata }),
       );
     });
   });

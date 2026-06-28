@@ -4,6 +4,18 @@
 
 Expose `providerMetadata` on Observational Memory `ObserveHooks` results
 
-`onObservationEnd` and `onReflectionEnd` now receive an optional `providerMetadata` field alongside `usage`, carrying the OM model call's full provider metadata (for example AI Gateway cost and generation id under `providerMetadata.gateway`). This lets consumers capture per-call economics directly from the lifecycle hook instead of attaching a model-stream middleware to the observer/reflector models.
+`onObservationEnd` and `onReflectionEnd` now receive the OM model call's `providerMetadata` alongside `usage`, so you can read per-call provider details — for example the AI Gateway's cost and generation id — straight from the hook instead of wrapping the observer/reflector models in a model-stream middleware:
 
-The field is additive and optional — existing hook consumers are unaffected, and it is simply absent when the provider emits no metadata. For batched resource-scoped observations and multi-attempt reflections it reflects the last batch/attempt that emitted provider metadata (`usage` is still summed; per-call provider metadata cannot be meaningfully merged).
+```ts
+const hooks: ObserveHooks = {
+  onObservationEnd: ({ usage, providerMetadata }) => {
+    const gateway = providerMetadata?.gateway;
+    recordCost({ tokens: usage?.totalTokens, cost: gateway?.cost, generationId: gateway?.generationId });
+  },
+  onReflectionEnd: ({ usage, providerMetadata }) => {
+    recordCost({ tokens: usage?.totalTokens, cost: providerMetadata?.gateway?.cost });
+  },
+};
+```
+
+The field is additive and optional, and is omitted entirely when the provider emits no metadata, so existing hook consumers are unaffected. For batched observations and multi-attempt reflections it reflects the last batch/attempt that emitted provider metadata.
