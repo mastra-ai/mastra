@@ -11,10 +11,15 @@ const DB = 'mastra-transactions-test';
 
 describe('MongoDB storage — topology-aware transactions', () => {
   test('supportsTransactions() returns false on a standalone server', async () => {
+    const client = new MongoClient(STANDALONE_URI);
     const connector = MongoDBConnector.fromDatabaseConfig({ id: 'tx-standalone', url: STANDALONE_URI, dbName: DB });
     try {
+      await client.connect();
+      const hello = await client.db(DB).admin().command({ hello: 1 });
+      expect(Boolean(hello.setName) || hello.msg === 'isdbgrid').toBe(false);
       expect(await connector.supportsTransactions()).toBe(false);
     } finally {
+      await client.close();
       await connector.close();
     }
   });
