@@ -32,6 +32,18 @@ export default defineConfig({
         target: 'http://localhost:4111',
         changeOrigin: true,
       },
+      // Optional WorkOS auth routes live on the API server too; proxy them so
+      // the dev UI (:5173) can reach login/callback/logout/me on :4111.
+      //
+      // Match only the `/auth/<route>` paths — NOT a bare `/auth` prefix.
+      // A plain `'/auth'` key prefix-matches Vite module requests like
+      // `/auth.ts` (the client auth module) and wrongly proxies them to the
+      // API server, which 401s / ECONNREFUSEs. The trailing-slash regex keeps
+      // module imports on Vite while still forwarding real auth routes.
+      '^/auth/': {
+        target: 'http://localhost:4111',
+        changeOrigin: true,
+      },
     },
   },
 });

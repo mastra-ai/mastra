@@ -19,7 +19,15 @@ export interface Project {
   /** Stable local id (localStorage key). Not used for the session. */
   id: string;
   name: string;
-  path: string;
+  /** Absolute filesystem path for local projects. Absent for GitHub projects. */
+  path?: string;
+  /**
+   * Project source. Absent (legacy) is treated as `local`. GitHub projects are
+   * materialized into a cloud sandbox on open rather than resolved from a path.
+   */
+  source?: 'local' | 'github';
+  /** Server-side GitHub project id; present only when `source === 'github'`. */
+  githubProjectId?: string;
   /**
    * Server-resolved resourceId (TUI-compatible). May be absent on projects
    * created before this field existed; `ensureResourceId` backfills it.
@@ -63,7 +71,8 @@ export function loadProjects(): Project[] {
         !!p &&
         typeof p === 'object' &&
         typeof (p as Project).id === 'string' &&
-        typeof (p as Project).path === 'string',
+        // Local projects carry a path; GitHub projects carry a githubProjectId.
+        (typeof (p as Project).path === 'string' || typeof (p as Project).githubProjectId === 'string'),
     );
   } catch {
     return [];
@@ -96,12 +105,38 @@ export async function addProject(name: string, path: string): Promise<Project> {
 }
 
 /**
+ * Persist a project created from a GitHub repo. The server already created the
+ * `github_projects` row and returned a `Project`-shaped payload; we just store
+ * it locally (de-duped by `githubProjectId`) so it shows up in the project list.
+ * The `resourceId` is filled in later, on open, by `ensureRepoMaterialized`.
+ */
+export function addGithubProject(project: Project): Project {
+  const projects = loadProjects();
+  const existing = projects.find(p => p.githubProjectId && p.githubProjectId === project.githubProjectId);
+  if (existing) return existing;
+  const stored: Project = { ...project, source: 'github', createdAt: project.createdAt ?? Date.now() };
+  projects.push(stored);
+  saveProjects(projects);
+  return stored;
+}
+
+/**
+ * Replace a stored project in place (by id) and persist. Used to record the
+ * server-resolved `resourceId` for a GitHub project once it's materialized.
+ */
+export function updateProject(project: Project): void {
+  const projects = loadProjects().map(p => (p.id === project.id ? project : p));
+  saveProjects(projects);
+}
+
+/**
  * Return a project guaranteed to have a `resourceId`, resolving + persisting it
  * if a legacy project predates the field. The session resourceId always comes
  * from the server so it matches the TUI.
  */
 export async function ensureResourceId(project: Project): Promise<Project> {
   if (project.resourceId) return project;
+  if (!project.path) throw new Error('Cannot resolve a resourceId for a project without a path');
   const resolved = await resolveProjectPath(project.path);
   const updated: Project = { ...project, resourceId: resolved.resourceId, gitBranch: resolved.gitBranch };
   const projects = loadProjects().map(p => (p.id === project.id ? updated : p));

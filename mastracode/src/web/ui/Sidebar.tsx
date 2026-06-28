@@ -26,6 +26,11 @@ interface SidebarProps {
   activeProjectId: string | null;
   /** Open the app-level Projects modal (add / manage / switch). */
   onManageProjects: () => void;
+  /**
+   * Open the GitHub connect / repo-picker modal. Only provided when the GitHub
+   * App feature is enabled; otherwise the entry point is hidden.
+   */
+  onConnectGithub?: () => void;
   threads: AgentControllerThreadInfo[];
   activeThreadId?: string;
   onSwitchThread: (threadId: string) => void;
@@ -33,12 +38,22 @@ interface SidebarProps {
   onDeleteThread: (threadId: string) => void;
   onRenameThread: (threadId: string, title: string) => void;
   onCloneThread: (threadId: string) => void;
+  /**
+   * Signed-in account info + sign-out handler. Only provided when the optional
+   * WorkOS auth gate is active and the user is authenticated; otherwise the
+   * account section is hidden entirely.
+   */
+  account?: {
+    user?: { email?: string; name?: string };
+    onSignOut: () => void;
+  };
 }
 
 export function Sidebar({
   projects,
   activeProjectId,
   onManageProjects,
+  onConnectGithub,
   threads,
   activeThreadId,
   onSwitchThread,
@@ -46,6 +61,7 @@ export function Sidebar({
   onDeleteThread,
   onRenameThread,
   onCloneThread,
+  account,
 }: SidebarProps) {
   // Per-thread action menu (⋯): which thread's menu is open, and inline-rename state.
   const [menuFor, setMenuFor] = useState<string | null>(null);
@@ -118,14 +134,16 @@ export function Sidebar({
         <button
           className={`project-switcher ${activeProject ? '' : 'empty'}`}
           onClick={onManageProjects}
-          title={activeProject ? activeProject.path : 'Select a project'}
+          title={activeProject ? (activeProject.path ?? activeProject.name) : 'Select a project'}
         >
           <FolderIcon size={16} className="project-switcher-icon" />
           <span className="project-switcher-text">
             {activeProject ? (
               <>
                 <span className="project-switcher-name">{activeProject.name}</span>
-                <span className="project-switcher-path">{activeProject.path}</span>
+                <span className="project-switcher-path">
+                  {activeProject.source === 'github' ? 'GitHub repo' : activeProject.path}
+                </span>
               </>
             ) : (
               <span className="project-switcher-name">Select a project…</span>
@@ -133,6 +151,12 @@ export function Sidebar({
           </span>
           <CloseIcon size={13} className="project-switcher-chevron" />
         </button>
+
+        {onConnectGithub && (
+          <button className="sidebar-github-btn" onClick={onConnectGithub} title="Connect a GitHub repository">
+            <span>Connect GitHub repo</span>
+          </button>
+        )}
       </div>
 
       {/* ── Threads (scoped to active project) ────────────────────────── */}
@@ -227,6 +251,21 @@ export function Sidebar({
               <div className="sidebar-overflow">+{threads.length - MAX_THREADS} more</div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ── Account (only when WorkOS auth is active) ─────────────────── */}
+      {account && (
+        <div className="sidebar-section sidebar-account">
+          <div className="sidebar-account-info">
+            <span className="sidebar-account-name">{account.user?.name || account.user?.email || 'Signed in'}</span>
+            {account.user?.email && account.user?.name && (
+              <span className="sidebar-account-email">{account.user.email}</span>
+            )}
+          </div>
+          <button className="sidebar-signout-btn" onClick={account.onSignOut} title="Sign out">
+            Sign out
+          </button>
         </div>
       )}
     </div>

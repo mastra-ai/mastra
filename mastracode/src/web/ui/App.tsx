@@ -1,10 +1,15 @@
 import type { PlanResume } from '@mastra/client-js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { fetchAuthState, redirectToLogin } from './auth';
+import type { WebAuthState } from './auth';
 import { CommandPalette } from './CommandPalette';
 import { matchCommands, SLASH_COMMANDS } from './commands';
 import type { SlashCommand } from './commands';
 import { GoalPanel, StatusLine, Transcript } from './components';
+import { ensureRepoMaterialized, fetchGithubStatus } from './github';
+import type { GithubStatus } from './github';
+import { GithubConnectModal } from './GithubConnectModal';
 import {
   ArrowDownIcon,
   ChevronIcon,
@@ -23,6 +28,7 @@ import {
   ensureResourceId,
   loadActiveProjectId,
   saveActiveProjectId,
+  updateProject,
 } from './projects';
 import type { Project } from './projects';
 import { ProjectsModal } from './ProjectsModal';
@@ -36,6 +42,49 @@ import { useAgentControllerSession } from './useAgentControllerSession';
 
 export default function App() {
   const { toast } = useToast();
+
+  // ── Optional WorkOS auth identity ───────────────────────────────────
+  // Populated from /auth/me. When the server has no auth configured this stays
+  // disabled and no sign-out UI is shown.
+  const [authState, setAuthState] = useState<WebAuthState>({ authEnabled: false, authenticated: false });
+  const [authLoading, setAuthLoading] = useState(true);
+  useEffect(() => {
+    void fetchAuthState()
+      .then(setAuthState)
+      .finally(() => setAuthLoading(false));
+  }, []);
+  const signOut = useCallback(() => {
+    window.location.assign('/auth/logout');
+  }, []);
+
+  // ── Optional GitHub App integration ─────────────────────────────────
+  // Only meaningful when authenticated. Disabled status hides all GitHub UI.
+  const [githubStatus, setGithubStatus] = useState<GithubStatus>({
+    enabled: false,
+    connected: false,
+    installations: [],
+  });
+  const githubEnabled = githubStatus.enabled;
+  const [githubOpen, setGithubOpen] = useState(false);
+  useEffect(() => {
+    if (authState.authEnabled && !authState.authenticated) return;
+    void fetchGithubStatus().then(setGithubStatus);
+  }, [authState.authEnabled, authState.authenticated]);
+
+  // After the install/connect redirect lands back on `/?github=connected`,
+  // re-fetch status, open the repo picker, and clean the URL.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('github') !== 'connected') return;
+    params.delete('github');
+    const qs = params.toString();
+    window.history.replaceState(null, '', window.location.pathname + (qs ? `?${qs}` : ''));
+    void fetchGithubStatus().then(s => {
+      setGithubStatus(s);
+      if (s.enabled) setGithubOpen(true);
+    });
+  }, []);
+
   // ── Projects (localStorage) ─────────────────────────────────────────
   const [projects, setProjects] = useState<Project[]>(() => loadProjects());
   // Restore the last active project on reload (if it still exists), so the
@@ -223,20 +272,63 @@ export default function App() {
   // backfill it so the session can connect. Runs once per project that needs it.
   const backfilledRef = useRef<string | null>(null);
   useEffect(() => {
-    if (activeProject && !activeProject.resourceId && backfilledRef.current !== activeProject.id) {
+    // GitHub projects are resolved via materialize-on-open, not path resolution.
+    if (
+      activeProject &&
+      activeProject.source !== 'github' &&
+      !activeProject.resourceId &&
+      backfilledRef.current !== activeProject.id
+    ) {
       backfilledRef.current = activeProject.id;
       void ensureResourceId(activeProject).then(() => setProjects(loadProjects()));
     }
   }, [activeProject]);
 
+  // Sandbox binding for the active GitHub project, pushed into session state once
+  // the session connects so `getDynamicWorkspace` reattaches the right sandbox.
+  const githubBindingRef = useRef<{ githubProjectId: string; sandboxId: string; sandboxWorkdir: string } | null>(null);
+
   // When a project is selected, ensure it has a server-resolved (TUI-matching)
   // resourceId, then activate it. The hook re-mounts with that resourceId,
   // creating/resuming the shared session; projectPath is pushed once connected.
+  const [preparing, setPreparing] = useState(false);
   const handleSelectProject = async (project: Project | null) => {
     if (!project) {
       setActiveProjectId(null);
       return;
     }
+
+    // GitHub projects are materialized into a cloud sandbox on open: provision/
+    // reattach the sandbox, clone/pull the repo, then bind the sandbox into the
+    // session state so the workspace reattaches to it.
+    if (project.source === 'github' && project.githubProjectId) {
+      setPreparing(true);
+      try {
+        const result = await ensureRepoMaterialized(project.githubProjectId);
+        githubBindingRef.current = {
+          githubProjectId: result.githubProjectId,
+          sandboxId: result.sandboxId,
+          sandboxWorkdir: result.sandboxWorkdir,
+        };
+        const filled: Project = { ...project, resourceId: result.resourceId };
+        updateProject(filled);
+        setProjects(loadProjects());
+        setActiveProjectId(filled.id);
+      } catch (e) {
+        const code = (e as { code?: string }).code;
+        const msg =
+          code === 'sandbox_not_configured'
+            ? 'This server has no sandbox provider configured, so GitHub repos can’t be opened.'
+            : e instanceof Error
+              ? e.message
+              : String(e);
+        toast(msg, 'error');
+      } finally {
+        setPreparing(false);
+      }
+      return;
+    }
+
     // Backfill resourceId for legacy projects created before it was stored.
     if (!project.resourceId) {
       try {
@@ -251,25 +343,43 @@ export default function App() {
     setActiveProjectId(project.id);
   };
 
-  // After the session connects for a new project, set projectPath.
+  // The session-state payload that binds the workspace to the active project:
+  // a path for local projects, or the sandbox binding for GitHub projects.
+  const projectStatePayload = useCallback((): Record<string, unknown> => {
+    if (activeProject?.source === 'github') {
+      const binding =
+        githubBindingRef.current && githubBindingRef.current.githubProjectId === activeProject.githubProjectId
+          ? githubBindingRef.current
+          : null;
+      return {
+        projectPath: '',
+        githubProjectId: activeProject.githubProjectId,
+        sandboxId: binding?.sandboxId,
+        sandboxWorkdir: binding?.sandboxWorkdir,
+      };
+    }
+    return { projectPath: activeProject?.path ?? '' };
+  }, [activeProject]);
+
+  // After the session connects for a new project, push its workspace binding.
   const prevResourceId = useRef(resourceId);
   useEffect(() => {
     if (resourceId !== prevResourceId.current) {
       prevResourceId.current = resourceId;
       if (status === 'ready') {
-        void session.setState({ projectPath: activeProject?.path ?? '' });
+        void session.setState(projectStatePayload());
       }
     }
-  }, [resourceId, status, activeProject, session]);
+  }, [resourceId, status, projectStatePayload, session]);
 
-  // Also set projectPath on initial connection for the active project.
+  // Also push the binding on initial connection for the active project.
   const initialSet = useRef(false);
   useEffect(() => {
     if (status === 'ready' && !initialSet.current && activeProject) {
       initialSet.current = true;
-      void session.setState({ projectPath: activeProject.path });
+      void session.setState(projectStatePayload());
     }
-  }, [status, activeProject, session]);
+  }, [status, activeProject, projectStatePayload, session]);
 
   const onSubmit = (e: { preventDefault: () => void }) => {
     e.preventDefault();
@@ -476,6 +586,39 @@ export default function App() {
     }
   };
 
+  // ── Auth gate ───────────────────────────────────────────────────────
+  // While the initial /auth/me check is in flight, render nothing to avoid a
+  // splash flash. When auth is enabled but the user is signed out, show the
+  // splash; the user explicitly chooses to sign in (no auto-redirect).
+  if (authLoading) {
+    return <div className="auth-splash auth-splash-loading" />;
+  }
+  if (authState.authEnabled && !authState.authenticated) {
+    return (
+      <div className="auth-splash">
+        <div className="auth-splash-card">
+          <div className="auth-splash-brand">
+            <LogoMark size={36} className="auth-splash-logo" />
+            <span className="auth-splash-wordmark">
+              Mastra<span className="auth-splash-wordmark-accent">Code</span>
+            </span>
+          </div>
+          <h1 className="auth-splash-title">Welcome back</h1>
+          <p className="auth-splash-tagline">
+            Sign in to your account to access your projects and pick up where you left off.
+          </p>
+          <button type="button" className="auth-splash-button" onClick={redirectToLogin}>
+            Continue with WorkOS
+            <span className="auth-splash-button-arrow" aria-hidden="true">
+              →
+            </span>
+          </button>
+          <p className="auth-splash-footnote">Secured by WorkOS · single sign-on</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`app-layout ${sidebarOpen ? 'sidebar-open' : ''}`}>
       <Sidebar
@@ -485,6 +628,14 @@ export default function App() {
           setProjectsOpen(true);
           closeSidebar();
         }}
+        onConnectGithub={
+          githubEnabled
+            ? () => {
+                setGithubOpen(true);
+                closeSidebar();
+              }
+            : undefined
+        }
         threads={threads}
         activeThreadId={transcript.threadId}
         onSwitchThread={id => {
@@ -508,6 +659,9 @@ export default function App() {
           void session.cloneThread(id);
           toast('Thread cloned', 'success');
         }}
+        account={
+          authState.authEnabled && authState.authenticated ? { user: authState.user, onSignOut: signOut } : undefined
+        }
       />
 
       {/* Dim + dismiss overlay for the off-canvas sidebar on mobile. */}
@@ -752,6 +906,22 @@ export default function App() {
           onProjectsChange={setProjects}
           onClose={() => setProjectsOpen(false)}
         />
+      )}
+
+      {githubOpen && (
+        <GithubConnectModal
+          status={githubStatus}
+          onProjectCreated={p => void handleSelectProject(p)}
+          onClose={() => setGithubOpen(false)}
+        />
+      )}
+
+      {preparing && (
+        <div className="palette-overlay" aria-hidden="true">
+          <div className="github-preparing" role="status">
+            Preparing sandbox…
+          </div>
+        </div>
       )}
     </div>
   );

@@ -256,6 +256,50 @@ To save plans to a project-local directory instead, set the `MASTRA_PLANS_DIR` e
 export MASTRA_PLANS_DIR=.mastracode/plans
 ```
 
+### Web UI: optional auth & GitHub projects
+
+The web UI (`mastracode web`) supports optional WorkOS authentication and a GitHub App
+integration. Both are off by default — when their environment variables are absent the web UI
+behaves exactly as before.
+
+**WorkOS auth** — when `WORKOS_API_KEY` and `WORKOS_CLIENT_ID` are set, every route requires a
+signed-in user (hosted login + encrypted session):
+
+```bash
+export WORKOS_API_KEY=...
+export WORKOS_CLIENT_ID=...
+export WORKOS_REDIRECT_URI=https://your-host/auth/callback   # optional
+export WORKOS_COOKIE_PASSWORD=...                            # optional (recommended in prod)
+```
+
+**GitHub projects** — when the GitHub App variables are set _and_ WorkOS auth is enabled,
+signed-in users can install the GitHub App, pick repositories, and turn each repo into a project.
+Repo and project metadata persist in a separate application Postgres (`APP_DATABASE_URL`):
+
+```bash
+export GITHUB_APP_ID=...
+export GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
+export GITHUB_APP_CLIENT_ID=...
+export GITHUB_APP_CLIENT_SECRET=...
+export GITHUB_APP_SLUG=your-app-slug
+export APP_DATABASE_URL=postgres://user:pass@host:5432/db
+export GITHUB_APP_REDIRECT_URI=https://your-host/auth/github/callback  # optional
+```
+
+GitHub-backed projects are cloned into an isolated cloud sandbox on open, which requires a
+sandbox provider. Railway is the first supported backend:
+
+```bash
+export RAILWAY_API_TOKEN=...
+export RAILWAY_ENVIRONMENT_ID=...
+export MASTRACODE_SANDBOX_PROVIDER=railway                  # optional (default when a token is set)
+export MASTRACODE_SANDBOX_WORKDIR=/workspace                # optional (path inside the sandbox)
+```
+
+The sandbox template must have `git` installed and outbound network access to `github.com`.
+Without a sandbox provider, users can still connect GitHub and pick repos, but opening a repo
+project shows a clear "sandbox not configured" error.
+
 ## Architecture
 
 ```

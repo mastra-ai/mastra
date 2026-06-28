@@ -11,8 +11,13 @@ import { Hono } from 'hono';
 import { mountAgentControllerOnMastra } from '../index.js';
 import type { MastraCodeConfig } from '../index.js';
 
+import { mountWebAuth } from './auth.js';
 import { mountConfigRoutes } from './config-routes.js';
 import { mountFsRoutes } from './fs-routes.js';
+import { isGithubFeatureEnabled } from './github/config.js';
+import { ensureAppDbReady } from './github/db.js';
+import { mountGithubRoutes } from './github/routes.js';
+import { isSandboxEnabled } from './github/sandbox.js';
 
 const CONTROLLER_ID = 'code';
 
@@ -74,6 +79,16 @@ export async function startWebServer(options: WebServerOptions = {}): Promise<We
   // middleware and every Mastra route under `/api`, with the same schema
   // validation, SSE framing, and error handling the production server uses.
   const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
+
+  // Optional WorkOS AuthKit gate. Mounted BEFORE the Mastra adapter and the
+  // custom routes so the `app.use('*')` gate runs ahead of every other handler
+  // and protects the whole surface. No-op unless WorkOS env vars are set.
+  const redirectUri =
+    process.env.WORKOS_REDIRECT_URI ??
+    `http://${hostname === '0.0.0.0' ? 'localhost' : hostname}:${port}/auth/callback`;
+  const webAuthEnabled = mountWebAuth(app, { redirectUri });
+  process.stderr.write(`MastraCode web auth: ${webAuthEnabled ? 'enabled (WorkOS AuthKit)' : 'disabled'}\n`);
+
   const adapter = new MastraServer({ app, mastra });
   await adapter.init();
 
@@ -87,6 +102,29 @@ export async function startWebServer(options: WebServerOptions = {}): Promise<We
   // Provider + API-key management for the settings panel (mirrors the TUI's
   // /api-keys command). Reuses the controller model catalog + the credential store.
   mountConfigRoutes(app, { controller, authStorage: result.authStorage });
+
+  // Optional GitHub App + cloud-sandbox project feature. Enabled only when the
+  // GitHub App env vars, web auth, and the app DB are all configured. Fails soft:
+  // if the app DB can't be reached we log and leave the feature disabled rather
+  // than crashing the server.
+  if (isGithubFeatureEnabled()) {
+    const baseUrl = `http://${hostname === '0.0.0.0' ? 'localhost' : hostname}:${port}`;
+    let githubReady = false;
+    try {
+      await ensureAppDbReady();
+      githubReady = true;
+    } catch (err) {
+      process.stderr.write(
+        `MastraCode GitHub: app DB unavailable, feature disabled (${err instanceof Error ? err.message : String(err)})\n`,
+      );
+    }
+    if (githubReady) {
+      mountGithubRoutes(app, { baseUrl });
+      process.stderr.write(`MastraCode GitHub: enabled (sandbox ${isSandboxEnabled() ? 'enabled' : 'disabled'})\n`);
+    }
+  } else {
+    process.stderr.write('MastraCode GitHub: disabled\n');
+  }
 
   // Serve the built UI when available (production / `mastracode web`).
   const resolvedUiDir = uiDir ?? defaultUiDir();
