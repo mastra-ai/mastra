@@ -563,13 +563,27 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             await removeToolMetadata({ toolCallId: inputData.toolCallId, toolName: inputData.toolName }, 'approval');
 
             if (!resumeData.approved) {
+              // Return the approval decision (not a `result` string) so it persists as
+              // `state: 'output-denied'` with `approval`. The denial reason carries the
+              // existing string so downstream consumers/UI keep the same message.
               return {
-                result: 'Tool call was not approved by the user',
+                approval: {
+                  id: inputData.toolCallId,
+                  approved: false,
+                  reason: 'Tool call was not approved by the user',
+                },
                 ...inputData,
               };
             }
           }
         }
+
+        // When an approval-gated tool is approved on resume, tag the resolved output with the
+        // approval decision so it round-trips through persistence as `approval: { approved: true }`.
+        const approvalGrant =
+          toolRequiresApproval && resumeData && (resumeData as { approved?: boolean }).approved === true
+            ? ({ approval: { id: inputData.toolCallId, approved: true as const } } as const)
+            : undefined;
 
         //this is to avoid passing resume data to the tool if it's not needed
         // For agent tools, always pass resume data so the agent tool wrapper knows to call
@@ -1256,6 +1270,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               return {
                 result: `Background task started. Task ID: ${task.id}. The tool "${inputData.toolName}" is running in the background. You will be notified when it completes.`,
                 ...inputData,
+                ...(approvalGrant ?? {}),
               };
             }
             // fallbackToSync: concurrency limit hit, fall through to synchronous execution
@@ -1279,7 +1294,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
-        return { result, ...inputData };
+        return { result, ...inputData, ...(approvalGrant ?? {}) };
       } catch (error) {
         // Re-throw FGA authorization errors instead of swallowing them
         if (error instanceof Error && error.name === 'FGADeniedError') {
