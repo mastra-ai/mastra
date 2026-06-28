@@ -1482,6 +1482,17 @@ export class AgentController<TState = {}> {
       memory: { thread: session.thread.getId(), resource: session.identity.getResourceId() },
       abortSignal: session.run.ensureAbortController().signal,
       requestContext,
+      outputWriter: async (chunk: { type?: string; data?: unknown }) => {
+        if (chunk.type !== 'data-mastracode-tool-progress') return;
+        const data = chunk.data as { toolCallId?: string; progress?: unknown } | undefined;
+        if (!data?.toolCallId || data.progress === undefined) return;
+
+        session.emit({ type: 'tool_update', toolCallId: data.toolCallId, partialResult: data.progress });
+        const output = this.formatToolProgressOutput(data.progress);
+        if (output) {
+          session.emit({ type: 'shell_output', toolCallId: data.toolCallId, output, stream: 'stdout' });
+        }
+      },
       ...(tracingContext && { tracingContext }),
       ...(tracingOptions && { tracingOptions }),
       ...(callTimeInstructions && { instructions: callTimeInstructions }),
@@ -1498,6 +1509,17 @@ export class AgentController<TState = {}> {
     }
 
     return streamOptions;
+  }
+
+  private formatToolProgressOutput(progress: unknown): string {
+    if (typeof progress === 'string') return progress.endsWith('\n') ? progress : `${progress}\n`;
+    if (typeof progress !== 'object' || progress === null) return `${String(progress)}\n`;
+
+    const record = progress as { status?: unknown; detail?: unknown };
+    const parts = [record.status, record.detail].filter(
+      (part): part is string => typeof part === 'string' && part.length > 0,
+    );
+    return parts.length > 0 ? `${parts.join(': ')}\n` : '';
   }
 
   /**
