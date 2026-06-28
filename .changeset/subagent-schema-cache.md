@@ -2,4 +2,4 @@
 "@mastra/core": patch
 ---
 
-Cache sub-agent tool schemas so repeated agent tool conversion does not rebuild the same Zod schemas.
+Reduce repeated schema work during sub-agent tool conversion for more stable memory usage.
