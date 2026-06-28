@@ -834,6 +834,7 @@ export { isProcessorWorkflow } from './is-processor-workflow';
 
 export * from './processors';
 export { PrefillErrorHandler } from './prefill-error-handler';
+export { TemperatureDeprecatedHandler } from './temperature-deprecated-handler';
 export { ProviderHistoryCompat, anthropicToolIdFormat, cerebrasStripReasoningContent } from './provider-history-compat';
 export {
   isBadRequestError,

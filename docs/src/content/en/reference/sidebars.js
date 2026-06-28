@@ -492,6 +492,11 @@ const sidebars = {
           label: 'StreamErrorRetryProcessor',
         },
         { type: 'doc', id: 'processors/system-prompt-scrubber', label: 'SystemPromptScrubber' },
+        {
+          type: 'doc',
+          id: 'processors/temperature-deprecated-handler',
+          label: 'TemperatureDeprecatedHandler',
+        },
         { type: 'doc', id: 'processors/token-limiter-processor', label: 'TokenLimiterProcessor' },
         { type: 'doc', id: 'processors/tool-call-filter', label: 'ToolCallFilter' },
         { type: 'doc', id: 'processors/tool-search-processor', label: 'ToolSearchProcessor' },

@@ -1,0 +1,83 @@
+---
+title: "Reference: TemperatureDeprecatedHandler | Processors"
+description: "Documentation for the TemperatureDeprecatedHandler processor in Mastra, which recovers from models that reject deprecated sampling parameters by stripping them and retrying."
+packages:
+  - "@mastra/core"
+---
+
+# TemperatureDeprecatedHandler
+
+The `TemperatureDeprecatedHandler` recovers from models that have dropped support for sampling parameters (`temperature`, `top_p`, `top_k`) within a previously-supported family. Some models reject any request that still carries these parameters with a hard `400` (for example, Anthropic's `claude-opus-4-7` returns `400 — temperature is deprecated for this model.`).
+
+When the error is detected, the processor strips the offending sampling parameters from `modelSettings` and retries the same model once. It is the sampling-parameter sibling of [`PrefillErrorHandler`](/reference/processors/prefill-error-handler).
+
+## How it works
+
+The handler uses two hooks that run from different processor lists, so it must be registered in both `inputProcessors` and `errorProcessors`:
+
+1. The LLM API call fails with a `400` that names a sampling parameter and an "unsupported"/"deprecated" reason.
+1. `processAPIError` (which runs for error processors) checks that this is the first retry attempt, flags shared state, and returns `{ retry: true }`.
+1. On the retry, `processInputStep` (which runs for input processors) reads that flag and removes `temperature`, `topP`, and `topK` from `modelSettings` before the request is dispatched.
+1. The flag stays set for the rest of the run, so later steps keep stripping the parameters.
+
+Both hooks share the same per-processor state, so register the **same instance in both lists**.
+
+## Usage example
+
+```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { TemperatureDeprecatedHandler } from '@mastra/core/processors'
+
+const temperatureDeprecatedHandler = new TemperatureDeprecatedHandler()
+
+export const agent = new Agent({
+  name: 'my-agent',
+  instructions: 'You are a helpful assistant.',
+  model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
+  inputProcessors: [temperatureDeprecatedHandler],
+  errorProcessors: [temperatureDeprecatedHandler],
+})
+```
+
+## Constructor parameters
+
+The `TemperatureDeprecatedHandler` takes no constructor parameters.
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: "'temperature-deprecated-handler'",
+    description: 'Processor identifier.',
+    isOptional: false,
+  },
+  {
+    name: 'name',
+    type: "'Temperature Deprecated Handler'",
+    description: 'Processor display name.',
+    isOptional: false,
+  },
+  {
+    name: 'processAPIError',
+    type: '(args: ProcessAPIErrorArgs) => Promise<ProcessAPIErrorResult | void>',
+    description:
+      'Detects a deprecated sampling-parameter rejection, flags shared state, and signals retry. Only triggers on the first retry attempt.',
+    isOptional: false,
+  },
+  {
+    name: 'processInputStep',
+    type: '(args: ProcessInputStepArgs) => ProcessInputStepResult | void',
+    description:
+      'On the retried step, strips temperature, topP, and topK from modelSettings once the deprecation has been detected.',
+    isOptional: false,
+  },
+]}
+/>
+
+## Related
+
+- [PrefillErrorHandler](/reference/processors/prefill-error-handler)
+- [Processor interface](/reference/processors/processor-interface)
+- [Guardrails](/docs/agents/guardrails)

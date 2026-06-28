@@ -948,6 +948,8 @@ export class ContextLengthHandler implements Processor {
 
 Mastra includes a built-in [`PrefillErrorHandler`](/reference/processors/prefill-error-handler) that automatically handles the Anthropic "assistant message prefill" error. This processor is auto-injected and requires no configuration.
 
+Mastra also ships a [`TemperatureDeprecatedHandler`](/reference/processors/temperature-deprecated-handler) for models that dropped support for `temperature` / `top_p` / `top_k` (such as `claude-opus-4-7`). It strips the rejected sampling parameters and retries. Register the same instance in both `inputProcessors` and `errorProcessors` to enable it.
+
 ## Related documentation
 
 - [Guardrails](/docs/agents/guardrails): Security and validation processors
