@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -89,7 +90,7 @@ async function importPluginModule(entryPath: string): Promise<MastraCodePlugin> 
   }
 
   const url = pathToFileURL(entryPath);
-  url.searchParams.set('mtime', String(Date.now()));
+  url.searchParams.set('mtime', String(Math.trunc(fs.statSync(entryPath).mtimeMs)));
   const mod = (await import(url.href)) as { default?: unknown; plugin?: unknown };
   return validatePluginExport(mod.default ?? mod.plugin);
 }
