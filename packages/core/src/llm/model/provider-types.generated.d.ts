@@ -2178,6 +2178,7 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.7-Flash',
     'zai-org/GLM-5',
     'zai-org/GLM-5.1',
+    'zai-org/GLM-5.2',
   ];
   readonly cerebras: readonly ['gpt-oss-120b', 'zai-glm-4.7'];
   readonly 'zai-coding-plan': readonly ['glm-4.5-air', 'glm-4.7', 'glm-5-turbo', 'glm-5.1', 'glm-5.2', 'glm-5v-turbo'];
@@ -2714,8 +2715,6 @@ export type ProviderModelsMap = {
     'Qwen/Qwen3-235B-A22B-Instruct-2507',
     'deepseek-ai/DeepSeek-V3.2',
     'google/gemma-4-31B-it',
-    'meta-llama/Llama-3.1-8B-Instruct',
-    'meta-llama/Llama-3.3-70B-Instruct',
     'zai-org/GLM-5',
     'zai-org/GLM-5.1',
     'zai-org/GLM-5.2',

@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.48.0-alpha.2
+
+### Patch Changes
+
+- Reduce repeated schema work during sub-agent tool conversion for more stable memory usage. ([#18566](https://github.com/mastra-ai/mastra/pull/18566))
+
 ## 1.48.0-alpha.1
 
 ### Patch Changes

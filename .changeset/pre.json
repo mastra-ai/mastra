@@ -169,10 +169,12 @@
     "clear-cougars-decide",
     "cool-singers-peel",
     "cozy-bottles-melt",
+    "fix-qdrant-ts-expect-error-18572",
     "green-birds-knock",
     "huge-maps-kick",
     "inngest-observe-replay",
     "legal-dots-kick",
-    "solid-bees-shave"
+    "solid-bees-shave",
+    "subagent-schema-cache"
   ]
 }
