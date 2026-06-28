@@ -36,6 +36,21 @@
       "permanent": true
     },
     {
+      "source": "/docs/harness/overview",
+      "destination": "/docs/agent-controller/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/session",
+      "destination": "/docs/agent-controller/session",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/threads-and-state",
+      "destination": "/docs/agent-controller/threads-and-state",
+      "permanent": true
+    },
+    {
       "source": "/docs/v1/:path*",
       "destination": "/docs/:path*",
       "permanent": true

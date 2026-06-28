@@ -1438,7 +1438,6 @@ describe('headless mode — thread control', () => {
         prompt: 'Hello',
         format: 'json',
         continue_: false,
-        model: 'anthropic/claude-haiku-4-5',
         cloneThread: true,
         thread: 'source-thread',
       });

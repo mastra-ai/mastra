@@ -49,6 +49,7 @@ import type {
   AgentSuspendedEventData,
 } from '@mastra/core/agent/durable';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
+import { InMemoryServerCache } from '@mastra/core/cache';
 import type { MastraServerCache } from '@mastra/core/cache';
 import { CachingPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
@@ -59,6 +60,7 @@ import type { Workflow } from '@mastra/core/workflows';
 import type { Inngest } from 'inngest';
 
 import { InngestPubSub } from '../pubsub';
+import type { InngestWorkflow } from '../workflow';
 import { createInngestDurableAgenticWorkflow, InngestDurableStepIds } from './create-inngest-agentic-workflow';
 
 // =============================================================================
@@ -389,20 +391,55 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   let innerPubsub: PubSub = customPubsub ?? new InngestPubSub(inngest, InngestDurableStepIds.AGENTIC_LOOP);
   let _cachingPubsub: PubSub | null = null;
 
-  // Lazily create CachingPubSub - this allows inheriting cache from mastra if not provided
+  // Resolve the cache that backs CachingPubSub history.
+  //
+  // Resolution order: user-provided > mastra's serverCache > InMemoryServerCache fallback.
+  // The fallback gives single-process observe replay parity with the in-memory durable agent.
+  // Cross-process observe still requires a shared cache backend (Redis, etc.) supplied via
+  // `cache` or `mastra.serverCache`.
+  function resolveCache(): MastraServerCache {
+    const resolved = _customCache ?? mastra?.serverCache ?? new InMemoryServerCache();
+    _customCache = resolved;
+    return resolved;
+  }
+
+  // Lazily create CachingPubSub for the agent.
+  //
+  // We always wrap the inner pubsub with CachingPubSub (mirroring the in-memory DurableAgent
+  // at packages/core/src/agent/durable/durable-agent.ts#ensurePubsubInitialized). Without it,
+  // `observe()` would only see live events: the bare InngestPubSub.subscribe streams from the
+  // current point in the realtime channel, with no history replay, so reconnects and late
+  // observers miss everything emitted before they attached.
+  //
+  // If the inner pubsub is already a CachingPubSub (e.g. a user passed `new Mastra({ pubsub })`
+  // with their own caching layer), we reuse it instead of double-wrapping (issue #18148).
   function getPubsub(): PubSub {
     if (!_cachingPubsub) {
-      // Resolve cache: user-provided > mastra's cache > no caching (just use inner pubsub)
-      const resolvedCache = _customCache ?? mastra?.serverCache;
-      if (resolvedCache) {
-        _customCache = resolvedCache; // Store for the cache getter
-        _cachingPubsub = new CachingPubSub(innerPubsub, resolvedCache);
-      } else {
+      if (innerPubsub instanceof CachingPubSub) {
         _cachingPubsub = innerPubsub;
+        _customCache = _customCache ?? mastra?.serverCache;
+      } else {
+        _cachingPubsub = new CachingPubSub(innerPubsub, resolveCache());
       }
     }
     return _cachingPubsub;
   }
+
+  // Route workflow event publishes through a CachingPubSub backed by the same cache
+  // as the agent's pubsub. Each InngestWorkflow function (including nested ones)
+  // passes its own workflow-local InngestPubSub as `defaultPubsub`, which we wrap.
+  // This keeps per-workflow event channels (`workflow:<workflowId>:<runId>`)
+  // workflow-local while sharing the cache that `observe()` reads from for
+  // agent-stream replay.
+  // The chained `.commit()` builder loses the InngestWorkflow subtype, so cast back.
+  (workflow as unknown as InngestWorkflow).__setPubsubFactory(defaultPubsub => {
+    // If the caller already supplied a CachingPubSub upstream, defer to it.
+    if (defaultPubsub instanceof CachingPubSub) return defaultPubsub;
+    // Ensure the agent's CachingPubSub (and its cache) is resolved so workflow
+    // events and agent.stream events share the same history backend.
+    getPubsub();
+    return new CachingPubSub(defaultPubsub, resolveCache());
+  });
 
   // Lazily resolve cache
   function getCache(): MastraServerCache | undefined {
