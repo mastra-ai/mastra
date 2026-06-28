@@ -29,42 +29,31 @@ describe('formatIdleStatusTiming', () => {
     );
   });
 
-  it('shows successful activity over one minute and idle time after one minute', () => {
+  it('shows only idle time after one minute', () => {
     const state = {
       lastAgentRunDurationMs: 61 * 60_000,
       lastAgentRunEndedAt: 1_000,
       lastAgentRunEndReason: 'done' as const,
     };
 
-    expect(formatIdleStatusTiming(state, 60_999)).toBe('done in 1hr1m');
-    expect(formatIdleStatusTiming(state, 61_000)).toBe('done in 1hr1m · 1m idle');
-    expect(formatIdleStatusTiming(state, 181_000)).toBe('done in 1hr1m · 3m idle');
+    expect(formatIdleStatusTiming(state, 60_999)).toBe('');
+    expect(formatIdleStatusTiming(state, 61_000)).toBe('1m idle');
+    expect(formatIdleStatusTiming(state, 181_000)).toBe('3m idle');
   });
 
-  it('shows successful activity under one minute', () => {
-    const state = {
-      lastAgentRunDurationMs: 59_000,
-      lastAgentRunEndedAt: 1_000,
-      lastAgentRunEndReason: 'done' as const,
-    };
-
-    expect(formatIdleStatusTiming(state, 60_999)).toBe('done in 59s');
-    expect(formatIdleStatusTiming(state, 61_000)).toBe('done in 59s · 1m idle');
-  });
-
-  it('shows canceled and errored activity with explicit labels', () => {
+  it('does not show completed activity labels above input', () => {
     expect(
       formatIdleStatusTiming(
         { lastAgentRunDurationMs: 61_000, lastAgentRunEndedAt: 1_000, lastAgentRunEndReason: 'aborted' },
         2_000,
       ),
-    ).toBe('canceled after 1m1s');
+    ).toBe('');
     expect(
       formatIdleStatusTiming(
         { lastAgentRunDurationMs: 61_000, lastAgentRunEndedAt: 1_000, lastAgentRunEndReason: 'error' },
-        2_000,
+        61_000,
       ),
-    ).toBe('errored after 1m1s');
+    ).toBe('1m idle');
   });
 
   it('can show restored idle time without a known prior work duration', () => {
@@ -77,7 +66,7 @@ describe('formatIdleStatusTiming', () => {
 });
 
 describe('IdleCounterComponent', () => {
-  it('reserves one stable line and renders work/idle timing above input', () => {
+  it('reserves one stable line and renders only idle timing above input', () => {
     const component = new IdleCounterComponent();
 
     expect(component.render(80)).toEqual(['']);
@@ -86,13 +75,12 @@ describe('IdleCounterComponent', () => {
       { lastAgentRunDurationMs: 61_000, lastAgentRunEndedAt: 1_000, lastAgentRunEndReason: 'done' },
       60_999,
     );
-    expect(component.render(80).join('\n')).toContain('done in 1m1s');
-    expect(component.render(80).join('\n')).not.toContain('idle');
+    expect(component.render(80)).toEqual(['']);
 
     component.update(181_000);
     const renderedWithIdle = component.render(80).join('\n');
-    expect(renderedWithIdle).toContain('done in 1m1s');
-    expect(renderedWithIdle).toContain(' · ');
+    expect(renderedWithIdle).not.toContain('done in');
+    expect(renderedWithIdle).not.toContain(' · ');
     expect(renderedWithIdle).toContain('3m idle');
 
     component.setTimingState(undefined);
