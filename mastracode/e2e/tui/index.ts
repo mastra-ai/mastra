@@ -75,6 +75,7 @@ import { planApprovalHandoffScenario } from './plan-approval-handoff.js';
 import { planApprovalRequestChangesScenario } from './plan-approval-request-changes.js';
 import {
   pluginsCommandUiScenario,
+  pluginsGithubPollUpdateScenario,
   pluginsLocalHotReloadScenario,
   pluginsLocalToolScenario,
   pluginsScaffoldInstallToolScenario,
@@ -218,6 +219,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'plan-approval-request-changes': planApprovalRequestChangesScenario,
   'plugins-local-tool': pluginsLocalToolScenario,
   'plugins-local-hot-reload': pluginsLocalHotReloadScenario,
+  'plugins-github-poll-update': pluginsGithubPollUpdateScenario,
   'plugins-scaffold-install-tool': pluginsScaffoldInstallToolScenario,
   'plugins-streaming-tool-output': pluginsStreamingToolOutputScenario,
   'plugins-command-ui': pluginsCommandUiScenario,

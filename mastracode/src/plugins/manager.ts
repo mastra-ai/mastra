@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { execa } from 'execa';
+
 import { discoverLocalPlugins, installGithubPlugin, installLocalPlugin } from './install.js';
 import type { InstallPluginOptions } from './install.js';
 import { collectActivePluginTools, loadPlugins, resolvePluginEntryPath } from './loader.js';
@@ -8,6 +10,8 @@ import { getPluginScopePaths } from './paths.js';
 import type { PluginPathOptions } from './paths.js';
 import { loadPluginRegistry, removePluginRecord, savePluginRegistry, setPluginRecord } from './registry.js';
 import type { LoadedPlugin, PluginScope } from './types.js';
+
+const GITHUB_PLUGIN_POLL_INTERVAL_MS = 60_000;
 
 function getEntryVersion(entryPath: string): string {
   const stat = fs.statSync(entryPath, { bigint: true });
@@ -20,6 +24,8 @@ export class PluginManager {
   private readonly rawPluginTools: ReturnType<typeof collectActivePluginTools> = {};
   private readonly watchedLocalEntries = new Set<string>();
   private readonly localEntryVersions = new Map<string, string>();
+  private githubPollTimer: ReturnType<typeof setInterval> | undefined;
+  private githubPollInFlight: Promise<boolean> | undefined;
   private reloadInFlight: Promise<LoadedPlugin[]> | undefined;
 
   constructor(private readonly options: PluginPathOptions) {}
@@ -30,6 +36,7 @@ export class PluginManager {
     this.reloadInFlight = (async () => {
       this.loadedPlugins = await loadPlugins(this.options);
       this.updateLocalEntryWatchers(this.loadedPlugins);
+      this.updateGithubPoller(this.loadedPlugins);
       this.updatePluginTools(collectActivePluginTools(this.loadedPlugins));
       return this.loadedPlugins;
     })().finally(() => {
@@ -134,6 +141,59 @@ export class PluginManager {
       this.watchedLocalEntries.delete(entryPath);
       this.localEntryVersions.delete(entryPath);
     }
+  }
+
+  private updateGithubPoller(plugins: LoadedPlugin[]): void {
+    const hasGithubPlugin = plugins.some(plugin => plugin.source === 'github' && plugin.enabled);
+    if (hasGithubPlugin && !this.githubPollTimer) {
+      this.githubPollTimer = setInterval(() => {
+        void this.pollGithubSourcesForUpdates().catch(() => undefined);
+      }, GITHUB_PLUGIN_POLL_INTERVAL_MS);
+      this.githubPollTimer.unref?.();
+    }
+    if (!hasGithubPlugin && this.githubPollTimer) {
+      clearInterval(this.githubPollTimer);
+      this.githubPollTimer = undefined;
+    }
+  }
+
+  async pollGithubSourcesForUpdates(): Promise<boolean> {
+    if (this.githubPollInFlight) return this.githubPollInFlight;
+    this.githubPollInFlight = this.pollGithubSourcesForUpdatesOnce().finally(() => {
+      this.githubPollInFlight = undefined;
+    });
+    return this.githubPollInFlight;
+  }
+
+  private async pollGithubSourcesForUpdatesOnce(): Promise<boolean> {
+    let changed = false;
+    const seen = new Set<string>();
+    for (const plugin of this.loadedPlugins) {
+      if (plugin.source !== 'github' || plugin.status === 'inactive') continue;
+      const checkoutPath = this.resolvePluginSourcePath(plugin);
+      if (seen.has(checkoutPath) || !fs.existsSync(path.join(checkoutPath, '.git'))) continue;
+      seen.add(checkoutPath);
+
+      const before = await this.readGitHead(checkoutPath);
+      await execa('git', ['pull', '--ff-only'], { cwd: checkoutPath });
+      const after = await this.readGitHead(checkoutPath);
+      if (before !== after) changed = true;
+    }
+
+    if (changed) {
+      await this.reload();
+    }
+    return changed;
+  }
+
+  private resolvePluginSourcePath(plugin: LoadedPlugin): string {
+    const paths = getPluginScopePaths(plugin.scope, this.options);
+    return path.isAbsolute(plugin.path) ? plugin.path : path.join(paths.root, plugin.path);
+  }
+
+  private async readGitHead(cwd: string): Promise<string> {
+    const { stdout } = await execa('git', ['rev-parse', 'HEAD'], { cwd });
+    return stdout.trim();
   }
 
   discoverLocal(searchRoot = '.'): ReturnType<typeof discoverLocalPlugins> {
