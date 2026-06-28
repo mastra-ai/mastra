@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
+import { upsertPluginManifestEntry } from './manifest.js';
 import { ensureMastraCodePackageLink } from './package-link.js';
 
 export type ScaffoldPluginOptions = {
@@ -87,8 +88,28 @@ export function scaffoldPlugin(targetDir: string, options: ScaffoldPluginOptions
   );
   fs.writeFileSync(path.join(dir, 'src/index.ts'), renderIndex(pluginId, pluginName));
   fs.writeFileSync(path.join(dir, 'README.md'), renderReadme(pluginName, pluginId));
+  writeScaffoldManifest(targetDir, dir, pluginId, pluginName, options);
   ensureMastraCodePackageLink(dir);
   return dir;
+}
+
+function writeScaffoldManifest(
+  originalTarget: string,
+  scaffoldDir: string,
+  pluginId: string,
+  pluginName: string,
+  options: ScaffoldPluginOptions,
+): void {
+  const projectRoot = options.projectRoot ?? process.cwd();
+  const manifestRoot = isBarePluginName(originalTarget) ? projectRoot : scaffoldDir;
+  const entry = isBarePluginName(originalTarget)
+    ? path.join(path.relative(projectRoot, scaffoldDir), 'src/index.ts')
+    : 'src/index.ts';
+  upsertPluginManifestEntry(manifestRoot, {
+    id: pluginId,
+    name: pluginName,
+    entry: entry.split(path.sep).join('/'),
+  });
 }
 
 export function formatScaffoldSuccess(targetDir: string): string {

@@ -233,7 +233,7 @@ async function installPluginWithOptionalEntryPrompt(
     }
 
     const entry = await askModalQuestion(ctx.state.ui, {
-      question: 'Could not auto-detect plugin entry. Entry file path:',
+      question: 'Could not auto-detect plugin entry. Entry file or directory path:',
       allowCustomResponse: true,
     });
     if (!entry) return undefined;
