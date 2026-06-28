@@ -47,6 +47,35 @@ describe('detectEntry', () => {
 
     expect(() => detectEntry(dir, 'index.js')).toThrow('Plugin entry must be a .ts file');
   });
+
+  it('accepts an explicit entry directory and detects its TypeScript entry', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-install-'));
+    tempDir = dir;
+    writePlugin(path.join(dir, '.mastracode', 'plugins', 'sources', 'local', 'alexandria'), 'alexandria');
+
+    expect(detectEntry(dir, '.mastracode/plugins/sources/local/alexandria')).toBe(
+      '.mastracode/plugins/sources/local/alexandria/src/index.ts',
+    );
+  });
+
+  it('uses .mastracode-plugin.json when present', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-install-'));
+    tempDir = dir;
+    writePlugin(path.join(dir, '.mastracode', 'plugins', 'sources', 'local', 'alexandria'), 'alexandria');
+    fs.writeFileSync(
+      path.join(dir, '.mastracode-plugin.json'),
+      JSON.stringify({
+        plugins: [
+          {
+            id: 'alexandria',
+            entry: '.mastracode/plugins/sources/local/alexandria/src/index.ts',
+          },
+        ],
+      }),
+    );
+
+    expect(detectEntry(dir)).toBe('.mastracode/plugins/sources/local/alexandria/src/index.ts');
+  });
 });
 
 describe('discoverLocalPlugins', () => {
@@ -139,6 +168,43 @@ describe('installGithubPlugin', () => {
       source: 'github',
       path: 'sources/github/acme-mastracode-plugin',
       ref: 'main',
+    });
+  });
+
+  it('uses a repository plugin manifest for nested scaffolded GitHub plugins', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-install-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    execaMock.mockImplementation(async (_cmd: string, args: string[]) => {
+      if (args[0] === 'clone') {
+        const checkoutDir = args[2];
+        if (!checkoutDir) throw new Error('missing checkout dir');
+        writePlugin(path.join(checkoutDir, '.mastracode', 'plugins', 'sources', 'local', 'alexandria'), 'alexandria');
+        fs.writeFileSync(
+          path.join(checkoutDir, '.mastracode-plugin.json'),
+          JSON.stringify({
+            plugins: [
+              {
+                id: 'alexandria',
+                entry: '.mastracode/plugins/sources/local/alexandria/src/index.ts',
+              },
+            ],
+          }),
+        );
+      }
+      return { stdout: '' };
+    });
+
+    await expect(
+      installGithubPlugin('https://github.com/acme/alexandria', 'project', { projectRoot, homeDir }),
+    ).resolves.toBe('alexandria');
+
+    expect(
+      loadPluginRegistry(path.join(projectRoot, '.mastracode/plugins/plugins.json')).plugins.alexandria,
+    ).toMatchObject({
+      source: 'github',
+      path: 'sources/github/acme-alexandria',
+      entry: '.mastracode/plugins/sources/local/alexandria/src/index.ts',
     });
   });
 });

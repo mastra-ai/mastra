@@ -116,7 +116,7 @@ describe('handlePluginsCommand', () => {
     expect(pluginManager.installLocal).toHaveBeenNthCalledWith(1, '../foo', 'project');
     expect(pluginManager.installLocal).toHaveBeenNthCalledWith(2, '../foo', 'project', { entry: 'plugin.ts' });
     expect(modal.askModalQuestion).toHaveBeenLastCalledWith(ctx.state.ui, {
-      question: 'Could not auto-detect plugin entry. Entry file path:',
+      question: 'Could not auto-detect plugin entry. Entry file or directory path:',
       allowCustomResponse: true,
     });
     expect(ctx.showInfo).toHaveBeenCalledWith('Installed plugin acme.foo.');
@@ -229,7 +229,7 @@ describe('handlePluginsCommand', () => {
       entry: 'plugin.ts',
     });
     expect(modal.askModalQuestion).toHaveBeenLastCalledWith(ctx.state.ui, {
-      question: 'Could not auto-detect plugin entry. Entry file path:',
+      question: 'Could not auto-detect plugin entry. Entry file or directory path:',
       allowCustomResponse: true,
     });
     expect(ctx.showInfo).toHaveBeenCalledWith('Installed plugin acme.foo.');
