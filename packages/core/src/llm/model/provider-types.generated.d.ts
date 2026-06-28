@@ -597,6 +597,7 @@ export type ProviderModelsMap = {
     'moonshotai/Kimi-K2.5',
     'moonshotai/Kimi-K2.6',
     'moonshotai/Kimi-K2.7-Code',
+    'openai/gpt-oss-120b',
     'stepfun-ai/Step-3.5-Flash',
     'stepfun-ai/Step-3.7-Flash',
     'zai-org/GLM-4.5',
