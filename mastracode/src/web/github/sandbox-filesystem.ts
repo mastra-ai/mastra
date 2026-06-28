@@ -50,6 +50,9 @@ export interface SandboxFilesystemOptions {
   id?: string;
 }
 
+/** Default per-command deadline so a hung sandbox can't block file tools forever. */
+const COMMAND_TIMEOUT_MS = 30_000;
+
 /** Single-quote a string for safe POSIX shell interpolation. */
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
@@ -102,7 +105,23 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   // ── Command helper ─────────────────────────────────────────────────────
 
   private async exec(script: string): Promise<SandboxCommandResult> {
-    return this.sandbox.executeCommand('sh', ['-c', script]);
+    return this.sandbox.executeCommand('sh', ['-c', script], { timeout: COMMAND_TIMEOUT_MS });
+  }
+
+  /**
+   * Lexical guard catches `..` traversal, but a symlink inside the workdir can
+   * still point outside it. After resolving a path that refers to an existing
+   * entry, verify its realpath is still contained in the workdir.
+   */
+  private async assertContainedRealpath(abs: string, inputPath: string): Promise<void> {
+    const result = await this.exec(`readlink -f -- ${shellQuote(abs)} 2>/dev/null`);
+    const real = result.stdout.trim();
+    // If readlink couldn't resolve (path doesn't exist yet), nothing to check.
+    if (result.exitCode !== 0 || !real) return;
+    const root = posixPath.normalize(this.basePath);
+    if (real !== root && !real.startsWith(`${root}/`)) {
+      throw new Error(`Path escapes workspace root (symlink): ${inputPath}`);
+    }
   }
 
   private async execOk(script: string, context: string): Promise<SandboxCommandResult> {
@@ -117,6 +136,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async readFile(path: string, options?: ReadOptions): Promise<string | Buffer> {
     const abs = this.resolve(path);
+    await this.assertContainedRealpath(abs, path);
     const result = await this.exec(`base64 < ${shellQuote(abs)}`);
     if (result.exitCode !== 0) {
       throw new Error(`File not found: ${path}`);
@@ -161,6 +181,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   async copyFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
     const srcAbs = this.resolve(src);
     const destAbs = this.resolve(dest);
+    await this.assertContainedRealpath(srcAbs, src);
     const recursive = options?.recursive ? '-r ' : '';
     if (options?.overwrite === false) {
       const exists = await this.exists(dest);
@@ -172,6 +193,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   async moveFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
     const srcAbs = this.resolve(src);
     const destAbs = this.resolve(dest);
+    await this.assertContainedRealpath(srcAbs, src);
     if (options?.overwrite === false) {
       const exists = await this.exists(dest);
       if (exists) throw new Error(`Destination exists: ${dest}`);
@@ -202,6 +224,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async readdir(path: string, options?: ListOptions): Promise<FileEntry[]> {
     const abs = this.resolve(path);
+    await this.assertContainedRealpath(abs, path);
     if (options?.recursive) {
       // Use find for recursive listings; emit "type\tpath".
       const result = await this.exec(
@@ -265,6 +288,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async stat(path: string): Promise<FileStat> {
     const abs = this.resolve(path);
+    await this.assertContainedRealpath(abs, path);
     // %F=type, %s=size, %X=atime, %Y=mtime (epoch seconds), %W=birth (or -1).
     const result = await this.exec(`stat -c '%F\\t%s\\t%Y\\t%W' ${shellQuote(abs)}`);
     if (result.exitCode !== 0) {

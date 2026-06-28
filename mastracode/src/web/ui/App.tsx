@@ -310,7 +310,15 @@ export default function App() {
           sandboxId: result.sandboxId,
           sandboxWorkdir: result.sandboxWorkdir,
         };
-        const filled: Project = { ...project, resourceId: result.resourceId };
+        // Persist the sandbox binding on the project so a re-opened project
+        // (e.g. after a reload, before the ref is repopulated) still has the
+        // sandbox id/workdir available for the workspace to reattach.
+        const filled: Project = {
+          ...project,
+          resourceId: result.resourceId,
+          sandboxId: result.sandboxId,
+          sandboxWorkdir: result.sandboxWorkdir,
+        };
         updateProject(filled);
         setProjects(loadProjects());
         setActiveProjectId(filled.id);
@@ -347,6 +355,8 @@ export default function App() {
   // a path for local projects, or the sandbox binding for GitHub projects.
   const projectStatePayload = useCallback((): Record<string, unknown> => {
     if (activeProject?.source === 'github') {
+      // Prefer the freshly materialized binding from this open; fall back to the
+      // binding persisted on the project (e.g. after a page reload).
       const binding =
         githubBindingRef.current && githubBindingRef.current.githubProjectId === activeProject.githubProjectId
           ? githubBindingRef.current
@@ -354,21 +364,22 @@ export default function App() {
       return {
         projectPath: '',
         githubProjectId: activeProject.githubProjectId,
-        sandboxId: binding?.sandboxId,
-        sandboxWorkdir: binding?.sandboxWorkdir,
+        sandboxId: binding?.sandboxId ?? activeProject.sandboxId,
+        sandboxWorkdir: binding?.sandboxWorkdir ?? activeProject.sandboxWorkdir,
       };
     }
     return { projectPath: activeProject?.path ?? '' };
   }, [activeProject]);
 
   // After the session connects for a new project, push its workspace binding.
+  // Only advance the tracked resourceId once the session is actually ready and
+  // the state has been pushed; otherwise a resourceId change that arrives before
+  // `status === 'ready'` would mark itself handled and never push the binding.
   const prevResourceId = useRef(resourceId);
   useEffect(() => {
-    if (resourceId !== prevResourceId.current) {
+    if (resourceId !== prevResourceId.current && status === 'ready') {
       prevResourceId.current = resourceId;
-      if (status === 'ready') {
-        void session.setState(projectStatePayload());
-      }
+      void session.setState(projectStatePayload());
     }
   }, [resourceId, status, projectStatePayload, session]);
 

@@ -42,6 +42,7 @@ vi.mock('./db', () => {
 
 vi.mock('./client', () => ({
   buildInstallUrl: (state: string) => `https://github.com/apps/test/installations/new?state=${state}`,
+  buildOAuthIdentifyUrl: (state: string) => `https://github.com/login/oauth/authorize?state=${state}`,
   exchangeOAuthCode: vi.fn(async () => 'user-token'),
   listUserInstallations: vi.fn(async () => [{ installationId: 7, accountLogin: 'octo', accountType: 'User' }]),
   listInstallationRepos: vi.fn(async () => [
@@ -55,6 +56,19 @@ vi.mock('./client', () => ({
       installationId: 7,
     },
   ]),
+  getInstallationRepo: vi.fn(async (installationId: number, fullName: string) =>
+    fullName === 'octo/hello'
+      ? {
+          id: 99,
+          fullName: 'octo/hello',
+          name: 'hello',
+          owner: 'octo',
+          defaultBranch: 'main',
+          private: false,
+          installationId,
+        }
+      : null,
+  ),
   mintInstallationToken: vi.fn(async () => 'install-token'),
 }));
 
@@ -173,6 +187,14 @@ describe('connect + callback', () => {
     expect(res.headers.get('location')).toBe('/?github=connected');
     expect(tables.installations).toHaveLength(1);
   });
+
+  it('does not trust an unverified installation_id without a code', async () => {
+    const res = await buildApp({ workosId: 'u1' }).request('/auth/github/callback?state=state.u1&installation_id=999');
+    // No code → bounce through OAuth identify, persist nothing.
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toContain('/login/oauth/authorize');
+    expect(tables.installations).toHaveLength(0);
+  });
 });
 
 describe('create project', () => {
@@ -200,19 +222,29 @@ describe('create project', () => {
     expect(res.status).toBe(400);
   });
 
-  it('rejects an invalid defaultBranch containing shell metacharacters', async () => {
+  it('404s when the repo is not accessible to the installation', async () => {
+    tables.installations.push({ userId: 'u1', installationId: 7, accountLogin: 'octo', accountType: 'User' });
+    const res = await buildApp({ workosId: 'u1' }).request('/api/web/github/projects', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ repoFullName: 'octo/other-repo', installationId: 7 }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it('persists the server-returned defaultBranch, ignoring the client value', async () => {
     tables.installations.push({ userId: 'u1', installationId: 7, accountLogin: 'octo', accountType: 'User' });
     const res = await buildApp({ workosId: 'u1' }).request('/api/web/github/projects', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         repoFullName: 'octo/hello',
-        repoId: 99,
         installationId: 7,
         defaultBranch: "main'; rm -rf /; '",
       }),
     });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(200);
+    expect(tables.projects[0].defaultBranch).toBe('main');
   });
 
   it('404s when the installation is not owned by the user', async () => {

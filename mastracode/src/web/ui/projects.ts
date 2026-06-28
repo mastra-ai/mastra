@@ -29,6 +29,13 @@ export interface Project {
   /** Server-side GitHub project id; present only when `source === 'github'`. */
   githubProjectId?: string;
   /**
+   * Cloud sandbox binding for a GitHub project, persisted after the repo is
+   * materialized so a re-opened project (e.g. after a page reload) can reattach
+   * to the same sandbox without re-running the open flow first.
+   */
+  sandboxId?: string;
+  sandboxWorkdir?: string;
+  /**
    * Server-resolved resourceId (TUI-compatible). May be absent on projects
    * created before this field existed; `ensureResourceId` backfills it.
    */

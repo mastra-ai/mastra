@@ -20,6 +20,12 @@ export interface GithubStatus {
   sandboxEnabled?: boolean;
   connected: boolean;
   installations: GithubInstallation[];
+  /**
+   * True when the status request failed because the user is not authenticated
+   * (HTTP 401), as opposed to the feature being genuinely disabled. Lets the SPA
+   * prompt re-login instead of silently hiding GitHub.
+   */
+  authRequired?: boolean;
 }
 
 export interface GithubRepo {
@@ -33,12 +39,17 @@ export interface GithubRepo {
 }
 
 /**
- * Read GitHub feature/connection status. Resolves to a disabled status on 404
- * or any error so the SPA can cleanly hide the feature when it's not configured.
+ * Read GitHub feature/connection status. Resolves to a disabled status on 404,
+ * a network error, or when the feature is off, so the SPA can cleanly hide the
+ * feature. A 401 is reported distinctly via `authRequired` so the SPA can prompt
+ * re-login instead of treating the feature as disabled.
  */
 export async function fetchGithubStatus(): Promise<GithubStatus> {
   try {
     const res = await fetch('/api/web/github/status', { headers: { Accept: 'application/json' } });
+    if (res.status === 401) {
+      return { enabled: false, connected: false, installations: [], authRequired: true };
+    }
     if (!res.ok) return { enabled: false, connected: false, installations: [] };
     return (await res.json()) as GithubStatus;
   } catch {

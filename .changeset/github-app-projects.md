@@ -7,3 +7,17 @@ Added optional GitHub App integration to the MastraCode web UI. When the GitHub 
 GitHub-backed projects are materialized into an isolated cloud sandbox (a MastraSandbox such as RailwaySandbox) on open: the server provisions or reattaches the project's sandbox, clones (or pulls) the repo inside it using a short-lived installation token that never reaches the browser, and the agent operates entirely against the sandbox checkout via a sandbox-backed filesystem and command execution. Opening a GitHub project requires a configured sandbox provider (RAILWAY_API_TOKEN / RAILWAY_ENVIRONMENT_ID); without one, connecting and picking repos still works but opening shows a clear "sandbox not configured" error.
 
 When the GitHub App variables are absent the feature is a no-op: no GitHub UI is shown and local-path projects work exactly as before.
+
+Enabling it (alongside WorkOS auth) looks like:
+
+```bash
+GITHUB_APP_ID=123456
+GITHUB_APP_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----"
+GITHUB_APP_CLIENT_ID=Iv1.xxxxxxxx
+GITHUB_APP_CLIENT_SECRET=xxxxxxxx
+GITHUB_APP_SLUG=your-app-slug
+APP_DATABASE_URL=postgres://user:pass@localhost:54329/mastracode_web
+# Required to open (clone) repo projects into a cloud sandbox:
+RAILWAY_API_TOKEN=xxxxxxxx
+RAILWAY_ENVIRONMENT_ID=xxxxxxxx
+```

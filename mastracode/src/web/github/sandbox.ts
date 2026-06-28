@@ -227,32 +227,61 @@ export async function materializeRepo(
 
   const authUrl = tokenUrl(repo, token);
 
-  if (!row.materializedAt) {
-    // 2a. First open: clone the default branch into the workdir.
-    const clone = await sh(
-      sandbox,
-      `git clone --branch ${shellQuote(row.defaultBranch)} ${shellQuote(authUrl)} ${shellQuote(workdir)}`,
-    );
-    if (clone.exitCode !== 0) {
-      throw classifyGitFailure(clone, 'clone-failed');
+  try {
+    if (!row.materializedAt) {
+      // 2a. First open: clone the default branch into the workdir.
+      const clone = await sh(
+        sandbox,
+        `git clone --branch ${shellQuote(row.defaultBranch)} ${shellQuote(authUrl)} ${shellQuote(workdir)}`,
+      );
+      if (clone.exitCode !== 0) {
+        throw classifyGitFailure(clone, 'clone-failed');
+      }
+    } else {
+      // 2b. Re-open: refresh remote to the token URL and fast-forward pull.
+      const setUrl = await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(authUrl)}`);
+      if (setUrl.exitCode !== 0) {
+        throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr}`, 'pull-failed');
+      }
+      const pull = await sh(sandbox, `git -C ${shellQuote(workdir)} pull --ff-only`);
+      if (pull.exitCode !== 0) {
+        throw classifyGitFailure(pull, 'pull-failed');
+      }
     }
-  } else {
-    // 2b. Re-open: refresh remote to the token URL and fast-forward pull.
-    const setUrl = await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(authUrl)}`);
-    if (setUrl.exitCode !== 0) {
-      throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr}`, 'pull-failed');
-    }
-    const pull = await sh(sandbox, `git -C ${shellQuote(workdir)} pull --ff-only`);
-    if (pull.exitCode !== 0) {
-      throw classifyGitFailure(pull, 'pull-failed');
-    }
+  } finally {
+    // 3. Always scrub the token from the remote so it isn't left in the VM's
+    // git config, even when the clone/pull above failed partway through. This
+    // is best-effort on the failure path (the workdir may not exist yet after a
+    // failed clone); on the success path the scrub must succeed or we surface it.
+    await scrubRemote(sandbox, workdir, repo, Boolean(row.materializedAt));
   }
-
-  // 3. Scrub the token from the remote so it isn't persisted in the VM.
-  await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(cleanUrl(repo))}`);
 
   // 4. Mark materialized.
   await getAppDb().update(githubProjects).set({ materializedAt: new Date() }).where(eq(githubProjects.id, row.id));
+}
+
+/**
+ * Reset the git remote back to the tokenless URL. On a successful clone/pull the
+ * workdir always has a `.git`, so a non-zero exit code here means the token may
+ * still be persisted — surface it. On the failure path the workdir may not exist
+ * (e.g. a failed clone), so a non-zero exit is tolerated.
+ */
+async function scrubRemote(
+  sandbox: MaterializationSandbox,
+  workdir: string,
+  repoFullName: string,
+  expectGitDir: boolean,
+): Promise<void> {
+  const result = await sh(
+    sandbox,
+    `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(cleanUrl(repoFullName))}`,
+  );
+  if (result.exitCode !== 0 && expectGitDir) {
+    throw new MaterializeError(
+      `Failed to scrub installation token from git remote: ${result.stderr.trim() || result.stdout.trim()}`,
+      'pull-failed',
+    );
+  }
 }
 
 /**

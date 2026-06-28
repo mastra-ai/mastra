@@ -207,4 +207,42 @@ describe('materializeRepo', () => {
     expect(err).toBeInstanceOf(MaterializeError);
     expect(sandbox.calls).toHaveLength(0);
   });
+
+  it('scrubs the tokenized remote even when the pull fails on re-open', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script === 'git --version') return OK;
+      if (script.includes('pull --ff-only')) {
+        return { exitCode: 1, stdout: '', stderr: 'fatal: not a fast-forward' };
+      }
+      return OK;
+    });
+
+    const err = await materializeRepo(makeRow({ materializedAt: new Date() }), sandbox, 'tok-secret').catch(e => e);
+
+    // The pull failure is surfaced...
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(err.code).toBe('pull-failed');
+    // ...but the token is still scrubbed back to the tokenless URL afterwards,
+    // and no tokenized remote is left as the final remote state.
+    const scrub = sandbox.calls.filter(c => c.includes('remote set-url origin')).at(-1);
+    expect(scrub).toContain('https://github.com/octocat/hello.git');
+    expect(scrub).not.toContain('tok-secret');
+    // The repo is not marked materialized when the pull failed.
+    expect(dbUpdates.some(u => 'materializedAt' in u)).toBe(false);
+  });
+
+  it('surfaces a scrub failure on the success path when the remote reset fails', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote set-url origin') && script.includes('github.com/octocat/hello.git')) {
+        // The final tokenless scrub fails — the token may still be persisted.
+        return { exitCode: 1, stdout: '', stderr: 'error: could not write config' };
+      }
+      return OK;
+    });
+
+    const err = await materializeRepo(makeRow({ materializedAt: new Date() }), sandbox, 'tok').catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(err.code).toBe('pull-failed');
+    expect(String(err.message)).toContain('scrub');
+  });
 });

@@ -34,7 +34,11 @@ function getStateSecret(): string {
 interface StatePayload {
   userId: string;
   nonce: string;
+  issuedAt: number;
 }
+
+/** Signed `state` values expire after this window to bound the CSRF token. */
+const STATE_MAX_AGE_MS = 10 * 60 * 1000;
 
 /**
  * Build a signed `state` bound to the user id. The payload is base64url JSON
@@ -42,7 +46,7 @@ interface StatePayload {
  * belongs to the same user.
  */
 export function signState(userId: string): string {
-  const payload: StatePayload = { userId, nonce: randomBytes(8).toString('hex') };
+  const payload: StatePayload = { userId, nonce: randomBytes(8).toString('hex'), issuedAt: Date.now() };
   const body = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
   const sig = createHmac('sha256', getStateSecret()).update(body).digest('base64url');
   return `${body}.${sig}`;
@@ -65,7 +69,9 @@ export function verifyState(state: string | undefined): string | null {
   }
   try {
     const parsed = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as StatePayload;
-    return typeof parsed.userId === 'string' ? parsed.userId : null;
+    if (typeof parsed.userId !== 'string' || typeof parsed.issuedAt !== 'number') return null;
+    if (Date.now() - parsed.issuedAt > STATE_MAX_AGE_MS) return null;
+    return parsed.userId;
   } catch {
     return null;
   }

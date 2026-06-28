@@ -146,7 +146,10 @@ async function getSandboxWorkspace({
   workdir: string;
   mastra?: Mastra;
 }): Promise<Workspace> {
-  const workspaceId = `${WORKSPACE_ID_PREFIX}-gh-${githubProjectId}`;
+  // Include the sandbox id in the reuse key: if the project is re-provisioned
+  // onto a new sandbox (e.g. the previous one expired), the key changes so we
+  // build a fresh Workspace instead of reusing one bound to the dead sandbox.
+  const workspaceId = `${WORKSPACE_ID_PREFIX}-gh-${githubProjectId}-${sandboxId}`;
 
   // Reuse the existing remote workspace if already registered (preserves the
   // reattached sandbox + ProcessManager state across re-opens).

@@ -16,7 +16,9 @@ import type { Hono } from 'hono';
 import { getWebAuthUser, getWebAuthUserId } from '../auth';
 import {
   buildInstallUrl,
+  buildOAuthIdentifyUrl,
   exchangeOAuthCode,
+  getInstallationRepo,
   listInstallationRepos,
   listUserInstallations,
   mintInstallationToken,
@@ -126,38 +128,31 @@ export function mountGithubRoutes(app: Hono<any>, options: MountGithubRoutesOpti
     }
 
     const code = c.req.query('code');
+    // We only ever persist installations that GitHub confirms belong to *this*
+    // user via the OAuth code path. The raw `installation_id` from the install
+    // redirect is not trusted on its own — anyone with a valid state could pass
+    // an arbitrary id — so when no code is present we bounce through the OAuth
+    // identify flow to obtain a verified user token first.
+    if (!code) {
+      return c.redirect(buildOAuthIdentifyUrl(signState(userId), redirectUri));
+    }
+
     try {
-      // Exchange the OAuth code (if present) for a user token and use it to list
-      // the user's installations, persisting each one. The install flow may also
-      // return an `installation_id` directly.
-      if (code) {
-        const userToken = await exchangeOAuthCode(code, redirectUri);
-        const installations = await listUserInstallations(userToken);
-        const db = getAppDb();
-        for (const inst of installations) {
-          await db
-            .insert(githubInstallations)
-            .values({
-              userId,
-              installationId: inst.installationId,
-              accountLogin: inst.accountLogin,
-              accountType: inst.accountType,
-            })
-            .onConflictDoNothing({
-              target: [githubInstallations.userId, githubInstallations.installationId],
-            });
-        }
-      } else {
-        const installationIdRaw = c.req.query('installation_id');
-        const installationId = installationIdRaw ? Number(installationIdRaw) : NaN;
-        if (Number.isFinite(installationId)) {
-          await getAppDb()
-            .insert(githubInstallations)
-            .values({ userId, installationId })
-            .onConflictDoNothing({
-              target: [githubInstallations.userId, githubInstallations.installationId],
-            });
-        }
+      const userToken = await exchangeOAuthCode(code, redirectUri);
+      const installations = await listUserInstallations(userToken);
+      const db = getAppDb();
+      for (const inst of installations) {
+        await db
+          .insert(githubInstallations)
+          .values({
+            userId,
+            installationId: inst.installationId,
+            accountLogin: inst.accountLogin,
+            accountType: inst.accountType,
+          })
+          .onConflictDoNothing({
+            target: [githubInstallations.userId, githubInstallations.installationId],
+          });
       }
     } catch {
       return c.redirect('/?github=error');
@@ -190,7 +185,7 @@ export function mountGithubRoutes(app: Hono<any>, options: MountGithubRoutesOpti
     const userId = getWebAuthUserId(getWebAuthUser(c));
     if (!userId) return c.json({ error: 'unauthorized' }, 401);
 
-    let body: { repoFullName?: unknown; repoId?: unknown; installationId?: unknown; defaultBranch?: unknown };
+    let body: { repoFullName?: unknown; installationId?: unknown };
     try {
       body = await c.req.json();
     } catch {
@@ -200,10 +195,9 @@ export function mountGithubRoutes(app: Hono<any>, options: MountGithubRoutesOpti
     if (!isValidRepoFullName(body.repoFullName)) {
       return c.json({ error: 'Invalid repoFullName' }, 400);
     }
-    const repoId = Number(body.repoId);
     const installationId = Number(body.installationId);
-    if (!Number.isFinite(repoId) || !Number.isFinite(installationId)) {
-      return c.json({ error: 'Invalid repoId or installationId' }, 400);
+    if (!Number.isFinite(installationId)) {
+      return c.json({ error: 'Invalid installationId' }, 400);
     }
 
     // The installation must belong to this user.
@@ -215,28 +209,30 @@ export function mountGithubRoutes(app: Hono<any>, options: MountGithubRoutesOpti
       return c.json({ error: 'Installation not found for user' }, 404);
     }
 
-    if (body.defaultBranch !== undefined && body.defaultBranch !== null && body.defaultBranch !== '') {
-      if (!isValidGitRef(body.defaultBranch)) {
-        return c.json({ error: 'Invalid defaultBranch' }, 400);
-      }
+    // Verify the repo is actually accessible to the installation and use the
+    // server-returned metadata rather than trusting the client's repoId /
+    // defaultBranch. This prevents creating a project for an arbitrary repo.
+    const repo = await getInstallationRepo(installationId, body.repoFullName);
+    if (!repo) {
+      return c.json({ error: 'Repository not accessible to installation' }, 404);
     }
-    const defaultBranch = isValidGitRef(body.defaultBranch) ? body.defaultBranch : 'main';
-    const sandboxWorkdir = computeSandboxWorkdir(body.repoFullName);
+    const defaultBranch = isValidGitRef(repo.defaultBranch) ? repo.defaultBranch : 'main';
+    const sandboxWorkdir = computeSandboxWorkdir(repo.fullName);
 
     const [row] = await getAppDb()
       .insert(githubProjects)
       .values({
         userId,
         installationId,
-        repoFullName: body.repoFullName,
-        repoId,
+        repoFullName: repo.fullName,
+        repoId: repo.id,
         defaultBranch,
         sandboxProvider: getSandboxProvider(),
         sandboxWorkdir,
       })
       .onConflictDoUpdate({
         target: [githubProjects.userId, githubProjects.repoId],
-        set: { installationId, repoFullName: body.repoFullName, defaultBranch },
+        set: { installationId, repoFullName: repo.fullName, defaultBranch, sandboxWorkdir },
       })
       .returning();
 

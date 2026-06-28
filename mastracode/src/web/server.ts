@@ -80,12 +80,18 @@ export async function startWebServer(options: WebServerOptions = {}): Promise<We
   // validation, SSE framing, and error handling the production server uses.
   const app = new Hono<{ Bindings: HonoBindings; Variables: HonoVariables }>();
 
+  // The browser-facing origin used to build OAuth callback URLs. In dev the SPA
+  // is served by Vite on a different port (e.g. :5173) and proxies to this
+  // server, so callback URLs must point at the SPA origin, not this bind. Set
+  // MASTRACODE_PUBLIC_URL to that origin; otherwise we fall back to the bind.
+  const publicOrigin = (
+    process.env.MASTRACODE_PUBLIC_URL ?? `http://${hostname === '0.0.0.0' ? 'localhost' : hostname}:${port}`
+  ).replace(/\/+$/, '');
+
   // Optional WorkOS AuthKit gate. Mounted BEFORE the Mastra adapter and the
   // custom routes so the `app.use('*')` gate runs ahead of every other handler
   // and protects the whole surface. No-op unless WorkOS env vars are set.
-  const redirectUri =
-    process.env.WORKOS_REDIRECT_URI ??
-    `http://${hostname === '0.0.0.0' ? 'localhost' : hostname}:${port}/auth/callback`;
+  const redirectUri = process.env.WORKOS_REDIRECT_URI ?? `${publicOrigin}/auth/callback`;
   const webAuthEnabled = mountWebAuth(app, { redirectUri });
   process.stderr.write(`MastraCode web auth: ${webAuthEnabled ? 'enabled (WorkOS AuthKit)' : 'disabled'}\n`);
 
@@ -108,7 +114,7 @@ export async function startWebServer(options: WebServerOptions = {}): Promise<We
   // if the app DB can't be reached we log and leave the feature disabled rather
   // than crashing the server.
   if (isGithubFeatureEnabled()) {
-    const baseUrl = `http://${hostname === '0.0.0.0' ? 'localhost' : hostname}:${port}`;
+    const baseUrl = publicOrigin;
     let githubReady = false;
     try {
       await ensureAppDbReady();

@@ -35,12 +35,39 @@ describe('SandboxFilesystem', () => {
   it('reads a file via base64 and decodes it', async () => {
     const content = 'hello world';
     const b64 = Buffer.from(content, 'utf8').toString('base64');
-    const { sandbox, fs } = makeFs(() => ({ exitCode: 0, stdout: b64, stderr: '' }));
+    const { sandbox, fs } = makeFs(script => {
+      // The realpath containment check runs first; resolve it inside the workdir.
+      if (script.startsWith('readlink')) return { exitCode: 0, stdout: `${WORKDIR}/src/index.ts`, stderr: '' };
+      return { exitCode: 0, stdout: b64, stderr: '' };
+    });
 
     const result = await fs.readFile('/src/index.ts', { encoding: 'utf8' });
 
     expect(result).toBe(content);
-    expect(sandbox.calls[0]).toContain(`base64 < '${WORKDIR}/src/index.ts'`);
+    expect(sandbox.calls.some(c => c.includes(`base64 < '${WORKDIR}/src/index.ts'`))).toBe(true);
+  });
+
+  it('rejects a symlink whose realpath escapes the workspace root', async () => {
+    const { fs } = makeFs(script => {
+      if (script.startsWith('readlink')) return { exitCode: 0, stdout: '/etc/passwd', stderr: '' };
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    await expect(fs.readFile('/link')).rejects.toThrow(/escapes workspace root \(symlink\)/);
+  });
+
+  it('passes a command timeout to the sandbox', async () => {
+    const timeouts: Array<number | undefined> = [];
+    const sandbox: SandboxExec = {
+      id: 'fake',
+      async executeCommand(_cmd, _args, options) {
+        timeouts.push(options?.timeout);
+        return { exitCode: 0, stdout: '', stderr: '' };
+      },
+    };
+    const fs = new SandboxFilesystem({ sandbox, workdir: WORKDIR });
+    await fs.exists('/x');
+    expect(timeouts[0]).toBe(30_000);
   });
 
   it('writes a file by piping base64 into the resolved path', async () => {
@@ -54,7 +81,10 @@ describe('SandboxFilesystem', () => {
   });
 
   it('lists a directory and parses type/name pairs', async () => {
-    const { sandbox, fs } = makeFs(() => ({ exitCode: 0, stdout: 'd\tsrc\nf\tREADME.md\n', stderr: '' }));
+    const { sandbox, fs } = makeFs(script => {
+      if (script.startsWith('readlink')) return { exitCode: 0, stdout: WORKDIR, stderr: '' };
+      return { exitCode: 0, stdout: 'd\tsrc\nf\tREADME.md\n', stderr: '' };
+    });
 
     const entries = await fs.readdir('/');
 
@@ -62,11 +92,14 @@ describe('SandboxFilesystem', () => {
       { name: 'src', type: 'directory' },
       { name: 'README.md', type: 'file' },
     ]);
-    expect(sandbox.calls[0]).toContain(`cd '${WORKDIR}'`);
+    expect(sandbox.calls.some(c => c.includes(`cd '${WORKDIR}'`))).toBe(true);
   });
 
   it('stats a file and returns parsed metadata', async () => {
-    const { fs } = makeFs(() => ({ exitCode: 0, stdout: 'regular file\t42\t1700000000\t-1\n', stderr: '' }));
+    const { fs } = makeFs(script => {
+      if (script.startsWith('readlink')) return { exitCode: 0, stdout: `${WORKDIR}/a.txt`, stderr: '' };
+      return { exitCode: 0, stdout: 'regular file\t42\t1700000000\t-1\n', stderr: '' };
+    });
 
     const stat = await fs.stat('/a.txt');
 

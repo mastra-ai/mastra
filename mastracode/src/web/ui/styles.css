@@ -3438,8 +3438,7 @@ body::before {
   max-width: 25rem;
   padding: 40px;
   text-align: left;
-  background:
-    linear-gradient(180deg, color-mix(in oklch, var(--bg-surface2) 92%, transparent), var(--bg-surface));
+  background: linear-gradient(180deg, color-mix(in oklch, var(--bg-surface2) 92%, transparent), var(--bg-surface));
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);

@@ -170,6 +170,34 @@ export async function listInstallationRepos(installationId: number): Promise<Rep
 }
 
 /**
+ * Fetch a single repo's metadata through an installation token and confirm the
+ * installation actually has access to it. Returns `null` when the repo is not
+ * accessible to the installation (so a client can't create a project for an
+ * arbitrary repo under an installation id it merely owns).
+ */
+export async function getInstallationRepo(installationId: number, repoFullName: string): Promise<RepoSummary | null> {
+  const slash = repoFullName.indexOf('/');
+  if (slash <= 0) return null;
+  const owner = repoFullName.slice(0, slash);
+  const repo = repoFullName.slice(slash + 1);
+  const octokit = getInstallationOctokit(installationId);
+  try {
+    const { data } = await octokit.repos.get({ owner, repo });
+    return {
+      id: data.id,
+      fullName: data.full_name,
+      name: data.name,
+      owner: data.owner.login,
+      defaultBranch: data.default_branch,
+      private: data.private,
+      installationId,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Build the GitHub App install URL. `state` is carried through the install flow
  * and validated on callback.
  */
@@ -200,6 +228,7 @@ export async function exchangeOAuthCode(code: string, redirectUri: string): Prom
   const config = requireConfig();
   const res = await fetch('https://github.com/login/oauth/access_token', {
     method: 'POST',
+    signal: AbortSignal.timeout(10_000),
     headers: { 'content-type': 'application/json', accept: 'application/json' },
     body: JSON.stringify({
       client_id: config.clientId,
