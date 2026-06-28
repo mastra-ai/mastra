@@ -2,4 +2,4 @@
 "@mastra/qdrant": patch
 ---
 
-Fix type error in qdrant metric assignment
+Improve type safety for `describeIndex` metric field — removes compiler suppression so TypeScript can fully validate the returned `IndexStats` shape
