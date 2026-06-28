@@ -433,26 +433,28 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const itemsCollection = await this.getCollection(TABLE_DATASET_ITEMS);
       const versionsCollection = await this.getCollection(TABLE_DATASET_VERSIONS);
 
-      // Bump dataset version
-      const result = await datasetsCollection.findOneAndUpdate(
-        { id: args.datasetId },
-        { $inc: { version: 1 } },
-        { returnDocument: 'after' },
-      );
-      if (!result) {
-        throw new MastraError({
-          id: createStorageErrorId('MONGODB', 'ADD_ITEM', 'DATASET_NOT_FOUND'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { datasetId: args.datasetId },
-        });
-      }
-      const newVersion = result.version as number;
-      const organizationId = (result.organizationId as string | null | undefined) ?? null;
-      const projectId = (result.projectId as string | null | undefined) ?? null;
-
-      // Insert item + dataset_version row atomically
+      // Bump version and insert item + dataset_version row atomically
+      let newVersion = 0;
+      let organizationId: string | null = null;
+      let projectId: string | null = null;
       await this.#connector.withTransaction(async session => {
+        const result = await datasetsCollection.findOneAndUpdate(
+          { id: args.datasetId },
+          { $inc: { version: 1 } },
+          { session, returnDocument: 'after' },
+        );
+        if (!result) {
+          throw new MastraError({
+            id: createStorageErrorId('MONGODB', 'ADD_ITEM', 'DATASET_NOT_FOUND'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { datasetId: args.datasetId },
+          });
+        }
+        newVersion = result.version as number;
+        organizationId = (result.organizationId as string | null | undefined) ?? null;
+        projectId = (result.projectId as string | null | undefined) ?? null;
+
         await itemsCollection.insertOne(
           {
             id,
@@ -565,27 +567,29 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const itemsCollection = await this.getCollection(TABLE_DATASET_ITEMS);
       const versionsCollection = await this.getCollection(TABLE_DATASET_VERSIONS);
 
-      // Bump dataset version
-      const result = await datasetsCollection.findOneAndUpdate(
-        { id: args.datasetId },
-        { $inc: { version: 1 } },
-        { returnDocument: 'after' },
-      );
-      if (!result) {
-        throw new MastraError({
-          id: createStorageErrorId('MONGODB', 'UPDATE_ITEM', 'DATASET_NOT_FOUND'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { datasetId: args.datasetId },
-        });
-      }
-      const newVersion = result.version as number;
+      // Bump version, close old row, insert new row, and insert version row atomically
+      let newVersion = 0;
       // Tenancy re-inherited from parent dataset (Option B)
-      const parentOrganizationId = (result.organizationId as string | null | undefined) ?? null;
-      const parentProjectId = (result.projectId as string | null | undefined) ?? null;
-
-      // Close old row, insert new row, and insert version row atomically
+      let parentOrganizationId: string | null = null;
+      let parentProjectId: string | null = null;
       await this.#connector.withTransaction(async session => {
+        const result = await datasetsCollection.findOneAndUpdate(
+          { id: args.datasetId },
+          { $inc: { version: 1 } },
+          { session, returnDocument: 'after' },
+        );
+        if (!result) {
+          throw new MastraError({
+            id: createStorageErrorId('MONGODB', 'UPDATE_ITEM', 'DATASET_NOT_FOUND'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { datasetId: args.datasetId },
+          });
+        }
+        newVersion = result.version as number;
+        parentOrganizationId = (result.organizationId as string | null | undefined) ?? null;
+        parentProjectId = (result.projectId as string | null | undefined) ?? null;
+
         await itemsCollection.updateOne(
           { id: args.id, validTo: null, isDeleted: false },
           { $set: { validTo: newVersion } },
@@ -673,26 +677,26 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const itemsCollection = await this.getCollection(TABLE_DATASET_ITEMS);
       const versionsCollection = await this.getCollection(TABLE_DATASET_VERSIONS);
 
-      // Bump dataset version
-      const result = await datasetsCollection.findOneAndUpdate(
-        { id: datasetId },
-        { $inc: { version: 1 } },
-        { returnDocument: 'after' },
-      );
-      if (!result) {
-        throw new MastraError({
-          id: createStorageErrorId('MONGODB', 'DELETE_ITEM', 'DATASET_NOT_FOUND'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { datasetId },
-        });
-      }
-      const newVersion = result.version as number;
-      // Tenancy re-inherited from parent dataset (Option B)
-      const parentOrganizationId = (result.organizationId as string | null | undefined) ?? null;
-      const parentProjectId = (result.projectId as string | null | undefined) ?? null;
-
+      // Bump version, close old row, insert tombstone, and insert version row atomically
       await this.#connector.withTransaction(async session => {
+        const result = await datasetsCollection.findOneAndUpdate(
+          { id: datasetId },
+          { $inc: { version: 1 } },
+          { session, returnDocument: 'after' },
+        );
+        if (!result) {
+          throw new MastraError({
+            id: createStorageErrorId('MONGODB', 'DELETE_ITEM', 'DATASET_NOT_FOUND'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { datasetId },
+          });
+        }
+        const newVersion = result.version as number;
+        // Tenancy re-inherited from parent dataset (Option B)
+        const parentOrganizationId = (result.organizationId as string | null | undefined) ?? null;
+        const parentProjectId = (result.projectId as string | null | undefined) ?? null;
+
         // Close old row
         await itemsCollection.updateOne(
           { id, validTo: null, isDeleted: false },
@@ -779,45 +783,47 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const itemsCollection = await this.getCollection(TABLE_DATASET_ITEMS);
       const versionsCollection = await this.getCollection(TABLE_DATASET_VERSIONS);
 
-      // Single version bump
-      const result = await datasetsCollection.findOneAndUpdate(
-        { id: input.datasetId },
-        { $inc: { version: 1 } },
-        { returnDocument: 'after' },
-      );
-      if (!result) {
-        throw new MastraError({
-          id: createStorageErrorId('MONGODB', 'BULK_ADD_ITEMS', 'DATASET_NOT_FOUND'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { datasetId: input.datasetId },
-        });
-      }
-      const newVersion = result.version as number;
-      const organizationId = (result.organizationId as string | null | undefined) ?? null;
-      const projectId = (result.projectId as string | null | undefined) ?? null;
-
-      // Batch insert items
-      const docs = itemsWithIds.map(({ generatedId, itemInput }) => ({
-        id: generatedId,
-        datasetId: input.datasetId,
-        datasetVersion: newVersion,
-        organizationId,
-        projectId,
-        validTo: null,
-        isDeleted: false,
-        input: itemInput.input,
-        groundTruth: itemInput.groundTruth ?? null,
-        expectedTrajectory: itemInput.expectedTrajectory ?? null,
-        toolMocks: itemInput.toolMocks ?? null,
-        requestContext: itemInput.requestContext ?? null,
-        metadata: itemInput.metadata ?? null,
-        source: itemInput.source ?? null,
-        createdAt: now,
-        updatedAt: now,
-      }));
-
+      // Single version bump, batch insert items, and record version row atomically
+      let newVersion = 0;
+      let organizationId: string | null = null;
+      let projectId: string | null = null;
       await this.#connector.withTransaction(async session => {
+        const result = await datasetsCollection.findOneAndUpdate(
+          { id: input.datasetId },
+          { $inc: { version: 1 } },
+          { session, returnDocument: 'after' },
+        );
+        if (!result) {
+          throw new MastraError({
+            id: createStorageErrorId('MONGODB', 'BULK_ADD_ITEMS', 'DATASET_NOT_FOUND'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { datasetId: input.datasetId },
+          });
+        }
+        newVersion = result.version as number;
+        organizationId = (result.organizationId as string | null | undefined) ?? null;
+        projectId = (result.projectId as string | null | undefined) ?? null;
+
+        const docs = itemsWithIds.map(({ generatedId, itemInput }) => ({
+          id: generatedId,
+          datasetId: input.datasetId,
+          datasetVersion: newVersion,
+          organizationId,
+          projectId,
+          validTo: null,
+          isDeleted: false,
+          input: itemInput.input,
+          groundTruth: itemInput.groundTruth ?? null,
+          expectedTrajectory: itemInput.expectedTrajectory ?? null,
+          toolMocks: itemInput.toolMocks ?? null,
+          requestContext: itemInput.requestContext ?? null,
+          metadata: itemInput.metadata ?? null,
+          source: itemInput.source ?? null,
+          createdAt: now,
+          updatedAt: now,
+        }));
+
         await itemsCollection.insertMany(docs, { session });
 
         // Single dataset_version row
@@ -893,47 +899,46 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const datasetsCollection = await this.getCollection(TABLE_DATASETS);
       const versionsCollection = await this.getCollection(TABLE_DATASET_VERSIONS);
 
-      // Single version bump
-      const result = await datasetsCollection.findOneAndUpdate(
-        { id: input.datasetId },
-        { $inc: { version: 1 } },
-        { returnDocument: 'after' },
-      );
-      if (!result) {
-        throw new MastraError({
-          id: createStorageErrorId('MONGODB', 'BULK_DELETE_ITEMS', 'DATASET_NOT_FOUND'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { datasetId: input.datasetId },
-        });
-      }
-      const newVersion = result.version as number;
-      // Tenancy re-inherited from parent dataset (Option B)
-      const parentOrganizationId = (result.organizationId as string | null | undefined) ?? null;
-      const parentProjectId = (result.projectId as string | null | undefined) ?? null;
-
-      // Close old rows, insert tombstones, and record version — all atomic
+      // Close old rows, insert tombstones, and record version — all atomic including the version bump
       const currentIds = currentItems.map(i => i.id);
-      const tombstones = currentItems.map(item => ({
-        id: item.id,
-        datasetId: input.datasetId,
-        datasetVersion: newVersion,
-        organizationId: parentOrganizationId,
-        projectId: parentProjectId,
-        validTo: null,
-        isDeleted: true,
-        input: item.input,
-        groundTruth: item.groundTruth,
-        expectedTrajectory: item.expectedTrajectory ?? null,
-        toolMocks: item.toolMocks ?? null,
-        requestContext: item.requestContext,
-        metadata: item.metadata,
-        source: item.source,
-        createdAt: item.createdAt,
-        updatedAt: now,
-      }));
-
       await this.#connector.withTransaction(async session => {
+        const result = await datasetsCollection.findOneAndUpdate(
+          { id: input.datasetId },
+          { $inc: { version: 1 } },
+          { session, returnDocument: 'after' },
+        );
+        if (!result) {
+          throw new MastraError({
+            id: createStorageErrorId('MONGODB', 'BULK_DELETE_ITEMS', 'DATASET_NOT_FOUND'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { datasetId: input.datasetId },
+          });
+        }
+        const newVersion = result.version as number;
+        // Tenancy re-inherited from parent dataset (Option B)
+        const parentOrganizationId = (result.organizationId as string | null | undefined) ?? null;
+        const parentProjectId = (result.projectId as string | null | undefined) ?? null;
+
+        const tombstones = currentItems.map(item => ({
+          id: item.id,
+          datasetId: input.datasetId,
+          datasetVersion: newVersion,
+          organizationId: parentOrganizationId,
+          projectId: parentProjectId,
+          validTo: null,
+          isDeleted: true,
+          input: item.input,
+          groundTruth: item.groundTruth,
+          expectedTrajectory: item.expectedTrajectory ?? null,
+          toolMocks: item.toolMocks ?? null,
+          requestContext: item.requestContext,
+          metadata: item.metadata,
+          source: item.source,
+          createdAt: item.createdAt,
+          updatedAt: now,
+        }));
+
         // Close old rows in batch
         await itemsCollection.updateMany(
           { id: { $in: currentIds }, validTo: null, isDeleted: false },
