@@ -63,10 +63,36 @@ export const githubProjects = pgTable(
   table => [uniqueIndex('github_projects_user_repo_unique').on(table.userId, table.repoId)],
 );
 
+/**
+ * A git worktree / feature branch created inside a project's sandbox for a unit
+ * of work. The worktree path is always computed server-side; one row per
+ * `(githubProjectId, branch)` so re-opening a branch reattaches the same tree.
+ */
+export const githubWorktrees = pgTable(
+  'github_worktrees',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** Stable WorkOS user id. */
+    userId: text('user_id').notNull(),
+    /** Project the worktree belongs to. */
+    githubProjectId: uuid('github_project_id').notNull(),
+    /** The feature branch this worktree checks out. */
+    branch: text('branch').notNull(),
+    /** The branch this worktree's branch was forked from. */
+    baseBranch: text('base_branch').notNull(),
+    /** Absolute path of the worktree inside the sandbox (server-computed). */
+    worktreePath: text('worktree_path').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  table => [uniqueIndex('github_worktrees_project_branch_unique').on(table.githubProjectId, table.branch)],
+);
+
 export type GithubInstallationRow = typeof githubInstallations.$inferSelect;
 export type GithubProjectRow = typeof githubProjects.$inferSelect;
+export type GithubWorktreeRow = typeof githubWorktrees.$inferSelect;
 export type NewGithubInstallationRow = typeof githubInstallations.$inferInsert;
 export type NewGithubProjectRow = typeof githubProjects.$inferInsert;
+export type NewGithubWorktreeRow = typeof githubWorktrees.$inferInsert;
 
 /**
  * Idempotent DDL run on boot when the feature is enabled. We keep migrations
@@ -103,4 +129,17 @@ CREATE TABLE IF NOT EXISTS github_projects (
 
 CREATE UNIQUE INDEX IF NOT EXISTS github_projects_user_repo_unique
   ON github_projects (user_id, repo_id);
+
+CREATE TABLE IF NOT EXISTS github_worktrees (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id text NOT NULL,
+  github_project_id uuid NOT NULL,
+  branch text NOT NULL,
+  base_branch text NOT NULL,
+  worktree_path text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS github_worktrees_project_branch_unique
+  ON github_worktrees (github_project_id, branch);
 `;

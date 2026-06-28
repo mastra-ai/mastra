@@ -22,6 +22,10 @@ export interface MastraCodeState {
   sandboxId?: string;
   /** Path inside the sandbox the repo is cloned into. */
   sandboxWorkdir?: string;
+  /** Active git worktree path inside the sandbox for the current unit of work. */
+  worktreePath?: string;
+  /** Active feature branch checked out in the worktree. */
+  branch?: string;
   configDir: string;
   homeDir?: string;
   gitBranch?: string;
@@ -83,6 +87,8 @@ export const stateSchema = z.object({
   githubProjectId: z.string().optional(),
   sandboxId: z.string().optional(),
   sandboxWorkdir: z.string().optional(),
+  worktreePath: z.string().optional(),
+  branch: z.string().optional(),
   configDir: z.string().default(DEFAULT_CONFIG_DIR),
   homeDir: z.string().optional(),
   gitBranch: z.string().optional(),

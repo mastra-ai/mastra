@@ -12,7 +12,7 @@
  */
 
 import { and, eq } from 'drizzle-orm';
-import type { Hono } from 'hono';
+import type { Context, Hono } from 'hono';
 import { getWebAuthUser, getWebAuthUserId } from '../auth';
 import {
   buildInstallUrl,
@@ -26,14 +26,22 @@ import {
 import { isGithubFeatureEnabled, signState, verifyState } from './config';
 import { getAppDb } from './db';
 import {
+  commitAll,
   computeSandboxWorkdir,
+  createPullRequest,
   ensureProjectSandbox,
+  ensureWorktree,
   getSandboxProvider,
   isSandboxEnabled,
+  isValidGitRef as isValidGitRefSandbox,
   materializeRepo,
   MaterializeError,
+  pushBranch,
+  reattachProjectSandbox,
+  WorktreeError,
 } from './sandbox';
-import { githubInstallations, githubProjects } from './schema';
+import type { GitIdentity, MaterializationSandbox } from './sandbox';
+import { githubInstallations, githubProjects, githubWorktrees } from './schema';
 import type { GithubProjectRow } from './schema';
 
 export interface MountGithubRoutesOptions {
@@ -279,5 +287,281 @@ export function mountGithubRoutes(app: Hono<any>, options: MountGithubRoutesOpti
     }
   });
 
+  // ── Worktree / branch / commit / push / PR ──────────────────────────────
+  mountProjectGitRoutes(app);
+
   return true;
+}
+
+/**
+ * In-process per-project async mutex. The push/PR flows temporarily rewrite the
+ * sandbox git remote to a tokenized URL and scrub it again in a `finally`; two
+ * concurrent operations on the same project could interleave those rewrites and
+ * leak a tokenized remote. Serializing per `githubProjectId` removes that race.
+ *
+ * This lock is in-process only; multi-replica deploys need a shared lock
+ * (called out as out-of-scope follow-up in the plan).
+ */
+const projectLocks = new Map<string, Promise<unknown>>();
+
+function withProjectLock<T>(projectId: string, fn: () => Promise<T>): Promise<T> {
+  const prev = projectLocks.get(projectId) ?? Promise.resolve();
+  const next = prev.then(fn, fn);
+  // Keep the chain alive but swallow rejections so one failure doesn't poison
+  // the lock for subsequent callers.
+  projectLocks.set(
+    projectId,
+    next.then(
+      () => undefined,
+      () => undefined,
+    ),
+  );
+  return next;
+}
+
+/** Derive a commit/author identity from the authenticated WorkOS user. */
+function identityFromUser(user: { name?: string; email?: string } | undefined): GitIdentity {
+  return { name: user?.name ?? null, email: user?.email ?? null };
+}
+
+/**
+ * Resolve a live, started sandbox for a project row. The project must already
+ * have been materialized (`sandboxId` set) — the git write routes never clone,
+ * they operate on the existing checkout.
+ */
+async function resolveProjectSandbox(row: GithubProjectRow): Promise<MaterializationSandbox> {
+  if (!row.sandboxId) {
+    throw new MaterializeError('Project sandbox is not provisioned. Open the project first.', 'clone-failed');
+  }
+  return reattachProjectSandbox(row.sandboxId);
+}
+
+/** Map a sandbox/worktree error to an actionable HTTP response. */
+function gitErrorResponse(c: Context, err: unknown) {
+  if (err instanceof WorktreeError) {
+    return c.json({ error: err.code, message: err.message }, err.code === 'invalid-branch' ? 400 : 502);
+  }
+  if (err instanceof MaterializeError) {
+    return c.json({ error: err.code, message: err.message }, 502);
+  }
+  return c.json({ error: 'git_failed', message: err instanceof Error ? err.message : String(err) }, 500);
+}
+
+/**
+ * Look up a project row scoped to the authenticated user. Returns the userId and
+ * row, or a ready-to-return error response. Centralizes the auth + ownership
+ * checks every git route shares.
+ */
+async function loadOwnedProject(
+  c: Context,
+): Promise<{ userId: string; row: GithubProjectRow } | { response: Response }> {
+  const userId = getWebAuthUserId(getWebAuthUser(c));
+  if (!userId) return { response: c.json({ error: 'unauthorized' }, 401) };
+
+  if (!isSandboxEnabled()) {
+    return {
+      response: c.json({ error: 'sandbox_not_configured', message: 'No sandbox provider is configured.' }, 503),
+    };
+  }
+
+  const projectId = c.req.param('id');
+  if (!projectId) {
+    return { response: c.json({ error: 'Project not found' }, 404) };
+  }
+  const [row] = await getAppDb()
+    .select()
+    .from(githubProjects)
+    .where(and(eq(githubProjects.id, projectId), eq(githubProjects.userId, userId)));
+  if (!row) {
+    return { response: c.json({ error: 'Project not found' }, 404) };
+  }
+  return { userId, row };
+}
+
+function mountProjectGitRoutes(app: Hono<any>): void {
+  // ── Create / reuse a worktree + feature branch ──────────────────────────
+  app.post('/api/web/github/projects/:id/worktree', async c => {
+    const owned = await loadOwnedProject(c);
+    if ('response' in owned) return owned.response;
+    const { userId, row } = owned;
+
+    let body: { branch?: unknown; baseBranch?: unknown };
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'Invalid JSON body' }, 400);
+    }
+    if (!isValidGitRefSandbox(body.branch)) {
+      return c.json({ error: 'Invalid branch' }, 400);
+    }
+    const baseBranch = body.baseBranch === undefined ? row.defaultBranch : body.baseBranch;
+    if (!isValidGitRefSandbox(baseBranch)) {
+      return c.json({ error: 'Invalid baseBranch' }, 400);
+    }
+    const branch = body.branch;
+
+    try {
+      return await withProjectLock(row.id, async () => {
+        const sandbox = await resolveProjectSandbox(row);
+        const result = await ensureWorktree(sandbox, row.sandboxWorkdir, { branch, baseBranch });
+
+        await getAppDb()
+          .insert(githubWorktrees)
+          .values({
+            userId,
+            githubProjectId: row.id,
+            branch: result.branch,
+            baseBranch: result.baseBranch,
+            worktreePath: result.worktreePath,
+          })
+          .onConflictDoUpdate({
+            target: [githubWorktrees.githubProjectId, githubWorktrees.branch],
+            set: { baseBranch: result.baseBranch, worktreePath: result.worktreePath },
+          });
+
+        return c.json({
+          worktreePath: result.worktreePath,
+          branch: result.branch,
+          baseBranch: result.baseBranch,
+          resourceId: row.id,
+        });
+      });
+    } catch (err) {
+      return gitErrorResponse(c, err);
+    }
+  });
+
+  // ── Stage all + commit inside a worktree ────────────────────────────────
+  app.post('/api/web/github/projects/:id/commit', async c => {
+    const owned = await loadOwnedProject(c);
+    if ('response' in owned) return owned.response;
+    const { row } = owned;
+
+    let body: { message?: unknown; worktreePath?: unknown };
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'Invalid JSON body' }, 400);
+    }
+    if (typeof body.message !== 'string' || body.message.trim().length === 0 || body.message.length > 5000) {
+      return c.json({ error: 'Invalid message' }, 400);
+    }
+    const workdir = await resolveWorktreePath(row.id, body.worktreePath, row.sandboxWorkdir);
+    if (!workdir) {
+      return c.json({ error: 'Invalid worktreePath' }, 400);
+    }
+
+    try {
+      return await withProjectLock(row.id, async () => {
+        const sandbox = await resolveProjectSandbox(row);
+        const result = await commitAll(sandbox, workdir, body.message as string, identityFromUser(getWebAuthUser(c)));
+        return c.json({ committed: result.committed });
+      });
+    } catch (err) {
+      return gitErrorResponse(c, err);
+    }
+  });
+
+  // ── Push a branch back to GitHub ────────────────────────────────────────
+  app.post('/api/web/github/projects/:id/push', async c => {
+    const owned = await loadOwnedProject(c);
+    if ('response' in owned) return owned.response;
+    const { row } = owned;
+
+    let body: { branch?: unknown; worktreePath?: unknown };
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'Invalid JSON body' }, 400);
+    }
+    if (!isValidGitRefSandbox(body.branch)) {
+      return c.json({ error: 'Invalid branch' }, 400);
+    }
+    const branch = body.branch;
+    const workdir = await resolveWorktreePath(row.id, body.worktreePath, row.sandboxWorkdir);
+    if (!workdir) {
+      return c.json({ error: 'Invalid worktreePath' }, 400);
+    }
+
+    try {
+      return await withProjectLock(row.id, async () => {
+        const sandbox = await resolveProjectSandbox(row);
+        const token = await mintInstallationToken(row.installationId);
+        await pushBranch(sandbox, workdir, branch, token, row.repoFullName);
+        return c.json({ pushed: true, branch });
+      });
+    } catch (err) {
+      return gitErrorResponse(c, err);
+    }
+  });
+
+  // ── Open a pull request via the gh CLI ──────────────────────────────────
+  app.post('/api/web/github/projects/:id/pr', async c => {
+    const owned = await loadOwnedProject(c);
+    if ('response' in owned) return owned.response;
+    const { row } = owned;
+
+    let body: { branch?: unknown; base?: unknown; title?: unknown; body?: unknown; worktreePath?: unknown };
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'Invalid JSON body' }, 400);
+    }
+    if (!isValidGitRefSandbox(body.branch)) {
+      return c.json({ error: 'Invalid branch' }, 400);
+    }
+    const base = body.base === undefined ? row.defaultBranch : body.base;
+    if (!isValidGitRefSandbox(base)) {
+      return c.json({ error: 'Invalid base' }, 400);
+    }
+    if (typeof body.title !== 'string' || body.title.trim().length === 0 || body.title.length > 256) {
+      return c.json({ error: 'Invalid title' }, 400);
+    }
+    if (body.body !== undefined && (typeof body.body !== 'string' || body.body.length > 65536)) {
+      return c.json({ error: 'Invalid body' }, 400);
+    }
+    const head = body.branch;
+    const title = body.title;
+    const prBody = body.body as string | undefined;
+    const workdir = await resolveWorktreePath(row.id, body.worktreePath, row.sandboxWorkdir);
+    if (!workdir) {
+      return c.json({ error: 'Invalid worktreePath' }, 400);
+    }
+
+    try {
+      return await withProjectLock(row.id, async () => {
+        const sandbox = await resolveProjectSandbox(row);
+        const token = await mintInstallationToken(row.installationId);
+        const result = await createPullRequest(sandbox, workdir, { token, base, head, title, body: prBody });
+        return c.json({ url: result.url });
+      });
+    } catch (err) {
+      return gitErrorResponse(c, err);
+    }
+  });
+}
+
+/**
+ * Resolve and validate the worktree path a git write operation targets. The
+ * path is never trusted from the client verbatim: it must either be the
+ * project's repo workdir (committing/pushing on the base checkout) or match a
+ * persisted worktree row for this project. Returns the validated path or
+ * `undefined` when it isn't recognized.
+ */
+async function resolveWorktreePath(
+  projectId: string,
+  worktreePath: unknown,
+  repoWorkdir: string,
+): Promise<string | undefined> {
+  if (worktreePath === undefined || worktreePath === repoWorkdir) {
+    return repoWorkdir;
+  }
+  if (typeof worktreePath !== 'string') {
+    return undefined;
+  }
+  const [row] = await getAppDb()
+    .select()
+    .from(githubWorktrees)
+    .where(and(eq(githubWorktrees.githubProjectId, projectId), eq(githubWorktrees.worktreePath, worktreePath)));
+  return row ? row.worktreePath : undefined;
 }

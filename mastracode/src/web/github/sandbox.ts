@@ -48,6 +48,8 @@ export interface MaterializationSandbox {
 export type SandboxFactory = (opts: {
   providerSandboxId?: string;
   env?: Record<string, string>;
+  /** Idle teardown window (minutes). The provider stops the VM after this idle period. */
+  idleTimeoutMinutes?: number;
 }) => MaterializationSandbox;
 
 /**
@@ -84,11 +86,26 @@ export function computeSandboxWorkdir(repoFullName: string): string {
   return `/workspace/${repoName}`;
 }
 
+/**
+ * Idle teardown window for provisioned sandboxes, in minutes. Read from
+ * `MASTRACODE_SANDBOX_IDLE_MINUTES`; defaults to 30. The provider stops an idle
+ * VM after this window so abandoned sandboxes don't linger (GC). A re-open
+ * detects the stopped VM and re-provisions cleanly.
+ */
+export function getSandboxIdleMinutes(): number | undefined {
+  const raw = process.env.MASTRACODE_SANDBOX_IDLE_MINUTES;
+  if (raw === undefined || raw === '') return 30;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 30;
+  return Math.floor(parsed);
+}
+
 /** Default factory: a Railway sandbox, optionally reattaching by id. */
-const railwayFactory: SandboxFactory = ({ providerSandboxId, env }) =>
+const railwayFactory: SandboxFactory = ({ providerSandboxId, env, idleTimeoutMinutes }) =>
   new RailwaySandbox({
     ...(providerSandboxId ? { sandboxId: providerSandboxId } : {}),
     ...(env ? { env } : {}),
+    ...(idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes } : {}),
   });
 
 let sandboxFactory: SandboxFactory = railwayFactory;
@@ -118,17 +135,29 @@ async function readProviderSandboxId(sandbox: MaterializationSandbox): Promise<s
  * reattach to the stored one. Returns a started, live sandbox.
  */
 export async function ensureProjectSandbox(row: GithubProjectRow): Promise<MaterializationSandbox> {
-  const sandbox = sandboxFactory({ providerSandboxId: row.sandboxId ?? undefined });
+  const idleTimeoutMinutes = getSandboxIdleMinutes();
+
+  // Reattach path: if we have a stored sandbox id, try to reattach. The VM may
+  // have been torn down by the provider's idle GC (or otherwise died), in which
+  // case `start()` fails. Recover by clearing the stale id and provisioning a
+  // fresh sandbox so the next open succeeds instead of being permanently wedged.
+  if (row.sandboxId) {
+    const reattached = sandboxFactory({ providerSandboxId: row.sandboxId, idleTimeoutMinutes });
+    try {
+      await reattached.start();
+      return reattached;
+    } catch {
+      await getAppDb().update(githubProjects).set({ sandboxId: null }).where(eq(githubProjects.id, row.id));
+      // fall through to fresh provision below
+    }
+  }
+
+  const sandbox = sandboxFactory({ idleTimeoutMinutes });
   await sandbox.start();
 
-  if (!row.sandboxId) {
-    const providerSandboxId = await readProviderSandboxId(sandbox);
-    if (providerSandboxId) {
-      await getAppDb()
-        .update(githubProjects)
-        .set({ sandboxId: providerSandboxId })
-        .where(eq(githubProjects.id, row.id));
-    }
+  const providerSandboxId = await readProviderSandboxId(sandbox);
+  if (providerSandboxId) {
+    await getAppDb().update(githubProjects).set({ sandboxId: providerSandboxId }).where(eq(githubProjects.id, row.id));
   }
 
   return sandbox;
@@ -141,7 +170,7 @@ export async function ensureProjectSandbox(row: GithubProjectRow): Promise<Mater
  * round-trip is needed.
  */
 export async function reattachProjectSandbox(providerSandboxId: string): Promise<MaterializationSandbox> {
-  const sandbox = sandboxFactory({ providerSandboxId });
+  const sandbox = sandboxFactory({ providerSandboxId, idleTimeoutMinutes: getSandboxIdleMinutes() });
   await sandbox.start();
   return sandbox;
 }
@@ -167,7 +196,15 @@ async function sh(sandbox: MaterializationSandbox, script: string): Promise<Sand
 export class MaterializeError extends Error {
   constructor(
     message: string,
-    readonly code: 'git-missing' | 'egress-blocked' | 'clone-failed' | 'pull-failed',
+    readonly code:
+      | 'git-missing'
+      | 'egress-blocked'
+      | 'clone-failed'
+      | 'pull-failed'
+      | 'push-failed'
+      | 'commit-failed'
+      | 'gh-missing'
+      | 'pr-failed',
   ) {
     super(message);
     this.name = 'MaterializeError';
@@ -288,7 +325,10 @@ async function scrubRemote(
  * Turn a failed git command into an actionable error, detecting the common
  * "cannot reach github.com" egress failure.
  */
-function classifyGitFailure(result: SandboxCommandResult, fallback: 'clone-failed' | 'pull-failed'): MaterializeError {
+function classifyGitFailure(
+  result: SandboxCommandResult,
+  fallback: 'clone-failed' | 'pull-failed' | 'push-failed',
+): MaterializeError {
   const stderr = result.stderr || '';
   if (/could not resolve host|failed to connect|network is unreachable|Connection timed out/i.test(stderr)) {
     return new MaterializeError(
@@ -296,5 +336,381 @@ function classifyGitFailure(result: SandboxCommandResult, fallback: 'clone-faile
       'egress-blocked',
     );
   }
-  return new MaterializeError(`git ${fallback === 'clone-failed' ? 'clone' : 'pull'} failed: ${stderr}`, fallback);
+  const verb = fallback === 'clone-failed' ? 'clone' : fallback === 'pull-failed' ? 'pull' : 'push';
+  return new MaterializeError(`git ${verb} failed: ${stderr}`, fallback);
+}
+
+// ---------------------------------------------------------------------------
+// Phase 1 — git identity + token-scoped push primitive
+//
+// These helpers let the sandbox author and push commits safely. The install
+// token is short-lived, minted per-operation server-side, injected only into
+// the temporary remote URL inside the sandbox, and always scrubbed in a
+// `finally` so it never persists in `.git/config`.
+// ---------------------------------------------------------------------------
+
+/**
+ * Validate a git ref (branch) name. Server-side defense-in-depth: only allow a
+ * conservative character set so a branch can never be built into a shell
+ * command in a way that escapes quoting. Mirrors the route-layer check.
+ */
+export function isValidGitRef(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= 255 && /^[A-Za-z0-9_./-]+$/.test(value);
+}
+
+/** Identity used to author commits inside the sandbox. */
+export interface GitIdentity {
+  name?: string | null;
+  email?: string | null;
+  /** GitHub login, used to derive a stable noreply identity when name/email are absent. */
+  login?: string | null;
+}
+
+/**
+ * Resolve a concrete `{ name, email }` for git authorship from a possibly-sparse
+ * identity. Falls back to a GitHub-style noreply identity so commits are never
+ * authored with an empty or host-derived identity.
+ */
+export function resolveGitIdentity(identity: GitIdentity): { name: string; email: string } {
+  const login = (identity.login || '').trim();
+  const name = (identity.name || '').trim() || login || 'Mastra Code';
+  const email =
+    (identity.email || '').trim() ||
+    (login ? `${login}@users.noreply.github.com` : 'mastra-code@users.noreply.github.com');
+  return { name, email };
+}
+
+/**
+ * Configure `user.name` / `user.email` for the given repo working tree inside
+ * the sandbox so commits are authored correctly. Values are shell-quoted.
+ */
+export async function configureGitIdentity(
+  sandbox: MaterializationSandbox,
+  workdir: string,
+  identity: GitIdentity,
+): Promise<void> {
+  const { name, email } = resolveGitIdentity(identity);
+  const setName = await sh(sandbox, `git -C ${shellQuote(workdir)} config user.name ${shellQuote(name)}`);
+  if (setName.exitCode !== 0) {
+    throw new MaterializeError(`Failed to set git user.name: ${setName.stderr.trim()}`, 'commit-failed');
+  }
+  const setEmail = await sh(sandbox, `git -C ${shellQuote(workdir)} config user.email ${shellQuote(email)}`);
+  if (setEmail.exitCode !== 0) {
+    throw new MaterializeError(`Failed to set git user.email: ${setEmail.stderr.trim()}`, 'commit-failed');
+  }
+}
+
+/**
+ * Temporarily rewrite `origin` to a tokenized URL, run `fn` (e.g. a push), and
+ * **always** scrub the remote back to the tokenless URL in a `finally`. The
+ * token therefore only ever lives in the remote URL for the duration of the
+ * operation and is never left in the VM's git config.
+ *
+ * On the success path the scrub must succeed (a leaked token is a hard error);
+ * if it fails we surface it. On the failure path the scrub is best-effort but
+ * still attempted, and the original operation error is rethrown.
+ */
+export async function withInstallToken<T>(
+  sandbox: MaterializationSandbox,
+  workdir: string,
+  repoFullName: string,
+  token: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repoFullName)) {
+    throw new MaterializeError(`Refusing to push: invalid repo full name '${repoFullName}'.`, 'push-failed');
+  }
+
+  const setUrl = await sh(
+    sandbox,
+    `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(tokenUrl(repoFullName, token))}`,
+  );
+  if (setUrl.exitCode !== 0) {
+    // Best-effort scrub even though set-url failed, then surface the failure.
+    await scrubRemote(sandbox, workdir, repoFullName, false);
+    throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr.trim()}`, 'push-failed');
+  }
+
+  try {
+    return await fn();
+  } finally {
+    // Always restore the tokenless remote. The workdir has a `.git` (we just
+    // rewrote its remote) so a scrub failure means the token may still persist
+    // — surface it.
+    await scrubRemote(sandbox, workdir, repoFullName, true);
+  }
+}
+
+/**
+ * Push a branch back to GitHub from inside the sandbox using a short-lived
+ * installation token. The branch is ref-validated, the token is injected only
+ * into the remote URL via `withInstallToken`, and egress failures are
+ * classified into actionable errors.
+ */
+export async function pushBranch(
+  sandbox: MaterializationSandbox,
+  workdir: string,
+  branch: string,
+  token: string,
+  repoFullName: string,
+): Promise<void> {
+  if (!isValidGitRef(branch)) {
+    throw new MaterializeError(`Refusing to push: invalid branch name '${branch}'.`, 'push-failed');
+  }
+
+  await withInstallToken(sandbox, workdir, repoFullName, token, async () => {
+    const push = await sh(sandbox, `git -C ${shellQuote(workdir)} push -u origin ${shellQuote(branch)}`);
+    if (push.exitCode !== 0) {
+      throw classifyGitFailure(push, 'push-failed');
+    }
+  });
+}
+
+export interface CommitResult {
+  /** True when a commit was created; false when there was nothing to commit. */
+  committed: boolean;
+}
+
+/**
+ * Stage every change in the working tree and create a commit inside the
+ * sandbox. The git identity is configured first so authorship is correct. When
+ * there is nothing to commit this is a no-op (`committed: false`) rather than an
+ * error, so callers can safely commit-then-push without first diffing.
+ *
+ * @param sandbox  the live sandbox containing the checkout
+ * @param workdir  the worktree (or repo) path to commit in
+ * @param message  the commit message (quoted; arbitrary text is safe)
+ * @param identity authorship identity for the commit
+ */
+export async function commitAll(
+  sandbox: MaterializationSandbox,
+  workdir: string,
+  message: string,
+  identity: GitIdentity,
+): Promise<CommitResult> {
+  await configureGitIdentity(sandbox, workdir, identity);
+
+  const add = await sh(sandbox, `git -C ${shellQuote(workdir)} add -A`);
+  if (add.exitCode !== 0) {
+    throw new MaterializeError(`git add failed: ${add.stderr.trim() || add.stdout.trim()}`, 'commit-failed');
+  }
+
+  // Nothing staged → nothing to commit. `git diff --cached --quiet` exits 1 when
+  // there are staged changes, 0 when the index is clean.
+  const staged = await sh(sandbox, `git -C ${shellQuote(workdir)} diff --cached --quiet`);
+  if (staged.exitCode === 0) {
+    return { committed: false };
+  }
+
+  const commit = await sh(sandbox, `git -C ${shellQuote(workdir)} commit -m ${shellQuote(message)}`);
+  if (commit.exitCode !== 0) {
+    throw new MaterializeError(`git commit failed: ${commit.stderr.trim() || commit.stdout.trim()}`, 'commit-failed');
+  }
+
+  return { committed: true };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 — worktree / branch lifecycle
+//
+// Each unit of work gets its own branch + working tree inside the same sandbox
+// as the base checkout. The worktree path is always computed server-side from a
+// sanitized branch name; client input never reaches a filesystem path.
+// ---------------------------------------------------------------------------
+
+/** Error raised when a worktree cannot be created/reused inside the sandbox. */
+export class WorktreeError extends Error {
+  constructor(
+    message: string,
+    readonly code: 'invalid-branch' | 'worktree-failed',
+  ) {
+    super(message);
+    this.name = 'WorktreeError';
+  }
+}
+
+/**
+ * Reduce a (already ref-validated) branch name to a filesystem-safe directory
+ * segment for the worktree path: lowercase, slashes/dots/unsafe chars collapsed
+ * to `-`. This only affects the *directory name*, never the git branch itself.
+ */
+export function safeBranchDir(branch: string): string {
+  return (
+    branch
+      .replace(/[^A-Za-z0-9._-]+/g, '-')
+      .replace(/\/+/g, '-')
+      .replace(/^[-.]+|[-.]+$/g, '')
+      .slice(0, 100) || 'work'
+  );
+}
+
+/**
+ * Compute the absolute worktree path for a branch, server-side only. Worktrees
+ * live alongside the repo checkout under a sibling `worktrees/` directory so the
+ * repo's `.git` is shared. Never derived from client-supplied paths.
+ */
+export function computeWorktreePath(repoWorkdir: string, branch: string): string {
+  const parent = repoWorkdir.replace(/\/+$/, '').split('/').slice(0, -1).join('/') || '';
+  return `${parent}/worktrees/${safeBranchDir(branch)}`;
+}
+
+export interface EnsureWorktreeResult {
+  worktreePath: string;
+  branch: string;
+  baseBranch: string;
+  /** True when an existing worktree was reused rather than freshly created. */
+  reused: boolean;
+}
+
+/**
+ * Create (or reuse) a git worktree + branch inside the sandbox for a unit of
+ * work. Idempotent: if a worktree already exists at the computed path it is
+ * reused. The branch is created from `baseBranch` when it does not yet exist.
+ *
+ * @param sandbox      live sandbox containing the base checkout
+ * @param repoWorkdir  the base repo checkout path inside the sandbox
+ * @param branch       the feature branch (ref-validated server-side)
+ * @param baseBranch   the branch to fork from (ref-validated; default's repo branch)
+ */
+export async function ensureWorktree(
+  sandbox: MaterializationSandbox,
+  repoWorkdir: string,
+  { branch, baseBranch }: { branch: string; baseBranch: string },
+): Promise<EnsureWorktreeResult> {
+  if (!isValidGitRef(branch)) {
+    throw new WorktreeError(`Invalid branch name '${branch}'.`, 'invalid-branch');
+  }
+  if (!isValidGitRef(baseBranch)) {
+    throw new WorktreeError(`Invalid base branch name '${baseBranch}'.`, 'invalid-branch');
+  }
+
+  const worktreePath = computeWorktreePath(repoWorkdir, branch);
+
+  // Idempotent reuse: a worktree already checked out at this path has a `.git`
+  // file (worktrees use a gitfile, not a directory). Reuse it as-is.
+  const exists = await sh(sandbox, `test -e ${shellQuote(`${worktreePath}/.git`)}`);
+  if (exists.exitCode === 0) {
+    return { worktreePath, branch, baseBranch, reused: true };
+  }
+
+  // Make sure the base ref is present locally before forking from it.
+  await sh(sandbox, `git -C ${shellQuote(repoWorkdir)} fetch origin ${shellQuote(baseBranch)}`);
+
+  // Create the worktree. If the branch already exists, check it out into the
+  // worktree; otherwise create it from the base branch. `git worktree add -B`
+  // creates-or-resets the branch to the base, which keeps this idempotent for a
+  // fresh worktree while still working when the branch already exists remotely.
+  const add = await sh(
+    sandbox,
+    `git -C ${shellQuote(repoWorkdir)} worktree add -B ${shellQuote(branch)} ${shellQuote(worktreePath)} ${shellQuote(baseBranch)}`,
+  );
+  if (add.exitCode !== 0) {
+    throw new WorktreeError(`git worktree add failed: ${add.stderr.trim() || add.stdout.trim()}`, 'worktree-failed');
+  }
+
+  return { worktreePath, branch, baseBranch, reused: false };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3 — `gh` CLI pull-request creation primitive
+//
+// PRs are opened from inside the sandbox with the GitHub CLI. `gh` must be
+// present in the sandbox template (preflighted only on the PR path so clone /
+// open still work when it is absent). The token is passed to `gh` via a
+// per-invocation `GH_TOKEN` env that is scoped to the single `gh` process and
+// never written to git config, a shell rc, or the VM's environment.
+// ---------------------------------------------------------------------------
+
+export interface CreatePullRequestArgs {
+  /** Short-lived installation token, injected only into the `gh` process env. */
+  token: string;
+  /** Base branch the PR merges into. Ref-validated. */
+  base: string;
+  /** Head branch the PR is opened from. Ref-validated. */
+  head: string;
+  /** PR title. */
+  title: string;
+  /** PR body (optional). */
+  body?: string;
+}
+
+export interface CreatePullRequestResult {
+  /** The PR URL parsed from `gh pr create` stdout. */
+  url: string;
+}
+
+/**
+ * Preflight that `gh` is installed in the sandbox. Only called on the PR path so
+ * a missing `gh` never blocks clone/open. Surfaces an actionable error naming
+ * the sandbox template requirement.
+ */
+async function assertGhAvailable(sandbox: MaterializationSandbox): Promise<void> {
+  const version = await sh(sandbox, 'gh --version');
+  if (version.exitCode !== 0) {
+    throw new MaterializeError(
+      'The GitHub CLI (gh) is not installed in the sandbox. The sandbox template must include gh to open pull requests.',
+      'gh-missing',
+    );
+  }
+}
+
+/** Match the first GitHub PR URL in `gh pr create` output. */
+function parsePullRequestUrl(stdout: string): string | undefined {
+  const match = stdout.match(/https:\/\/github\.com\/[^\s]+\/pull\/\d+/);
+  return match?.[0];
+}
+
+/**
+ * Open a pull request from inside the sandbox via `gh pr create`. The token is
+ * passed only through a per-invocation `GH_TOKEN` env scoped to the single `gh`
+ * process (never persisted), all arguments are shell-quoted, and the resulting
+ * PR URL is parsed from stdout.
+ *
+ * @param sandbox live sandbox containing the checkout
+ * @param workdir the worktree (or repo) path the PR head branch is checked out in
+ */
+export async function createPullRequest(
+  sandbox: MaterializationSandbox,
+  workdir: string,
+  { token, base, head, title, body }: CreatePullRequestArgs,
+): Promise<CreatePullRequestResult> {
+  if (!isValidGitRef(base)) {
+    throw new MaterializeError(`Refusing to open PR: invalid base branch '${base}'.`, 'pr-failed');
+  }
+  if (!isValidGitRef(head)) {
+    throw new MaterializeError(`Refusing to open PR: invalid head branch '${head}'.`, 'pr-failed');
+  }
+
+  await assertGhAvailable(sandbox);
+
+  // GH_TOKEN is prefixed inline so it is exported only to the single `gh`
+  // process and never to the wider shell session, git config, or VM env. `gh`
+  // is run from inside the checkout so it targets the correct repo/head branch.
+  const ghCommand = [
+    `GH_TOKEN=${shellQuote(token)} gh pr create`,
+    `--base ${shellQuote(base)}`,
+    `--head ${shellQuote(head)}`,
+    `--title ${shellQuote(title)}`,
+    `--body ${shellQuote(body ?? '')}`,
+  ].join(' ');
+  const script = `cd ${shellQuote(workdir)} && ${ghCommand}`;
+
+  const result = await sh(sandbox, script);
+  if (result.exitCode !== 0) {
+    const classified = classifyGitFailure(result, 'push-failed');
+    if (classified.code === 'egress-blocked') {
+      throw classified;
+    }
+    throw new MaterializeError(`gh pr create failed: ${result.stderr.trim() || result.stdout.trim()}`, 'pr-failed');
+  }
+
+  const url = parsePullRequestUrl(result.stdout);
+  if (!url) {
+    throw new MaterializeError(
+      `gh pr create succeeded but no PR URL was found in its output: ${result.stdout.trim()}`,
+      'pr-failed',
+    );
+  }
+
+  return { url };
 }

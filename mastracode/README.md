@@ -294,11 +294,35 @@ export RAILWAY_API_TOKEN=...
 export RAILWAY_ENVIRONMENT_ID=...
 export MASTRACODE_SANDBOX_PROVIDER=railway                  # optional (default when a token is set)
 export MASTRACODE_SANDBOX_WORKDIR=/workspace                # optional (path inside the sandbox)
+export MASTRACODE_SANDBOX_IDLE_MINUTES=30                   # optional (idle teardown window; default 30)
 ```
 
-The sandbox template must have `git` installed and outbound network access to `github.com`.
+The sandbox template must have `git` and `gh` (the GitHub CLI) installed and outbound network
+access to `github.com`. `gh` is only required to open pull requests; clone/open work without it.
+Idle sandboxes are stopped by the provider after `MASTRACODE_SANDBOX_IDLE_MINUTES`; the next open
+detects the stopped VM and re-provisions automatically.
 Without a sandbox provider, users can still connect GitHub and pick repos, but opening a repo
 project shows a clear "sandbox not configured" error.
+
+### Per-user storage isolation
+
+When WorkOS web auth is enabled, every authenticated user operates against their own dedicated
+libSQL database for all agent state (threads, messages, memory, observational memory, recall
+vectors) — no tenant can read another tenant's data at the storage layer. The database location
+is derived server-side from a hashed WorkOS user id (no client-supplied paths).
+
+```bash
+# Local files (default): one isolated DB dir per user under this root
+export MASTRACODE_TENANT_DB_ROOT=~/.mastracode/web/tenants    # optional
+
+# Or remote libSQL/Turso per tenant ({id} = hashed WorkOS user id)
+export MASTRACODE_TENANT_DB_URL_TEMPLATE=libsql://{id}-org.turso.io        # optional
+export MASTRACODE_TENANT_VECTOR_URL_TEMPLATE=libsql://{id}-vec-org.turso.io # optional
+export MASTRACODE_TENANT_DB_AUTH_TOKEN=...                                  # optional
+export MASTRACODE_TENANT_VECTOR_AUTH_TOKEN=...                              # optional
+```
+
+When web auth is disabled the server uses a single shared store, exactly as before.
 
 ## Architecture
 
