@@ -1,7 +1,11 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const execaMock = vi.hoisted(() => vi.fn());
+
+vi.mock('execa', () => ({ execa: execaMock }));
 
 import { PluginManager } from '../manager.js';
 import { loadPluginRegistry } from '../registry.js';
@@ -9,6 +13,7 @@ import { loadPluginRegistry } from '../registry.js';
 let tempDir: string | undefined;
 
 afterEach(() => {
+  vi.clearAllMocks();
   if (tempDir) {
     fs.rmSync(tempDir, { recursive: true, force: true });
     tempDir = undefined;
@@ -84,6 +89,50 @@ describe('PluginManager', () => {
 
     await waitUntil(() => pluginTools.hot_tool?.description === 'second');
     expect(manager.getPluginTools()).toBe(pluginTools);
+  });
+
+  it('polls GitHub plugin checkouts and reloads changed tools', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const checkoutDir = path.join(projectRoot, '.mastracode/plugins/sources/github/acme-plugin');
+    writePlugin(checkoutDir, 'acme.github', 'github_tool', 'first');
+    fs.mkdirSync(path.join(checkoutDir, '.git'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, '.mastracode/plugins'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, '.mastracode/plugins/plugins.json'),
+      JSON.stringify({
+        plugins: {
+          'acme.github': {
+            enabled: true,
+            source: 'github',
+            specifier: 'https://github.com/acme/plugin',
+            path: 'sources/github/acme-plugin',
+            entry: 'src/index.ts',
+          },
+        },
+      }),
+    );
+    execaMock.mockImplementation(async (_cmd: string, args: string[], options: { cwd?: string } = {}) => {
+      if (args[0] === 'rev-parse') {
+        return { stdout: execaMock.mock.calls.filter(call => call[1][0] === 'rev-parse').length === 1 ? 'old' : 'new' };
+      }
+      if (args[0] === 'pull') {
+        expect(options.cwd).toBe(checkoutDir);
+        writePlugin(checkoutDir, 'acme.github', 'github_tool', 'second');
+      }
+      return { stdout: '' };
+    });
+
+    const manager = new PluginManager({ projectRoot, homeDir });
+    const pluginTools = manager.getPluginTools();
+    await manager.reload();
+    expect(pluginTools.github_tool?.description).toBe('first');
+
+    await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(true);
+
+    expect(pluginTools.github_tool?.description).toBe('second');
+    expect(execaMock).toHaveBeenCalledWith('git', ['pull', '--ff-only'], { cwd: checkoutDir });
   });
 
   it('removes GitHub checkout directories when uninstalling GitHub plugins', async () => {
