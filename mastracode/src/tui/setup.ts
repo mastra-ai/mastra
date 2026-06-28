@@ -369,6 +369,7 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'theme', description: 'Switch color theme (auto/dark/light)' },
     { name: 'update', description: 'Check for and install updates' },
     { name: 'api-keys', description: 'Manage API keys for model providers' },
+    { name: 'plugins', description: 'Manage Mastra Code plugins' },
     { name: 'observability', description: 'Configure cloud observability' },
     {
       name: 'github',

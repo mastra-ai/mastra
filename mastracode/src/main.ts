@@ -8,6 +8,7 @@ import { createMastraCodeAnalytics } from './analytics.js';
 import { isStreamDestroyedError } from './error-classification.js';
 import { hasHeadlessFlag, runMCCli } from './headless/index.js';
 import { createBrowserFromSettings, loadSettings } from './onboarding/settings.js';
+import { formatScaffoldSuccess, scaffoldPlugin } from './plugins/scaffold.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
 import { applyThemeMode, restoreTerminalForeground } from './tui/theme.js';
@@ -123,6 +124,7 @@ async function tuiMain(pipedInput?: string | null) {
     analytics,
     authStorage,
     mcpManager,
+    pluginManager: result.pluginManager,
     appName: 'Mastra Code',
     version: getCurrentVersion(),
     inlineQuestions: true,
@@ -180,6 +182,30 @@ function hasEconnrefused(err: unknown, depth = 0): boolean {
   return false;
 }
 
+function pluginMain(args: string[]): void {
+  if (args[0] !== 'scaffold') {
+    process.stderr.write('Usage: mastracode plugin scaffold <dir> [--id acme.foo] [--name "Foo Tools"]\n');
+    process.exit(1);
+  }
+
+  const dir = args[1];
+  if (!dir) {
+    process.stderr.write('Usage: mastracode plugin scaffold <dir> [--id acme.foo] [--name "Foo Tools"]\n');
+    process.exit(1);
+  }
+
+  const id = readFlag(args, '--id');
+  const name = readFlag(args, '--name');
+  const targetDir = scaffoldPlugin(dir, { ...(id ? { id } : {}), ...(name ? { name } : {}) });
+  process.stdout.write(`${formatScaffoldSuccess(targetDir)}\n`);
+}
+
+function readFlag(args: string[], flag: string): string | undefined {
+  const index = args.indexOf(flag);
+  if (index === -1) return undefined;
+  return args[index + 1];
+}
+
 function handleFatalError(error: unknown): never {
   // Always write to real stderr, even if console.error was overridden
   const write = (msg: string) => process.stderr.write(msg + '\n');
@@ -211,6 +237,10 @@ function handleFatalError(error: unknown): never {
 }
 
 async function main() {
+  if (process.argv[2] === 'plugin') {
+    return pluginMain(process.argv.slice(3));
+  }
+
   if (hasHeadlessFlag(process.argv) || process.argv.includes('--help') || process.argv.includes('-h')) {
     return runMCCli();
   }

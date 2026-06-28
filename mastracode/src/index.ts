@@ -71,6 +71,7 @@ import {
   saveSettings,
 } from './onboarding/settings.js';
 import { getToolCategory } from './permissions.js';
+import { PluginManager } from './plugins/manager.js';
 import { PlanRejectionAbortProcessor } from './processors/plan-rejection-abort.js';
 import { createAmazonBedrockGateway } from './providers/amazon-bedrock-gateway.js';
 import { setAuthStorage } from './providers/claude-max.js';
@@ -189,6 +190,10 @@ export interface MastraCodeConfig {
   disableMcp?: boolean;
   /** Disable hooks. Default: false */
   disableHooks?: boolean;
+  /** Disable plugin discovery/loading. Default: false */
+  disablePlugins?: boolean;
+  /** Override the plugin manager. Primarily useful for tests or embedding. */
+  pluginManager?: PluginManager;
   /**
    * Override the memory instance (or dynamic factory) passed to the AgentController.
    * When provided, this replaces the default `getDynamicMemory(storage, vectorStore)` which
@@ -455,6 +460,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     ? undefined
     : new HookManager(project.rootPath, 'session-init', configDir, homeDir);
 
+  const pluginManager = config?.disablePlugins
+    ? undefined
+    : (config?.pluginManager ?? new PluginManager({ projectRoot: project.rootPath, configDir, homeDir }));
+  const loadedPlugins = pluginManager ? await pluginManager.reload() : [];
+  const pluginTools = pluginManager?.getPluginTools() ?? {};
+
   // Scorers (live evaluation with sampling)
   const outcomeScorer = createOutcomeScorer();
   const efficiencyScorer = createEfficiencyScorer();
@@ -529,7 +540,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     workspace: undefined,
     instructions: getDynamicInstructions,
     model: getDynamicModel,
-    tools: createDynamicTools(mcpManager, config?.extraTools, config?.disabledTools, storage),
+    tools: createDynamicTools(mcpManager, config?.extraTools, config?.disabledTools, storage, pluginTools),
     hooks: createToolHooks(hookManager),
     scorers: {
       outcome: {
@@ -810,6 +821,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     memory,
     mcpManager,
     hookManager,
+    pluginManager,
+    loadedPlugins,
+    pluginTools,
     signalsPubSub,
     authStorage,
     resolveModel,
