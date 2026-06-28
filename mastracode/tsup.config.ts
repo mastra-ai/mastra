@@ -11,6 +11,7 @@ export default defineConfig({
     cli: 'src/main.ts',
     tui: 'src/tui/index.ts',
     acp: 'src/acp.ts',
+    plugin: 'src/plugin.ts',
   },
   format: ['esm', 'cjs'],
   clean: true,
