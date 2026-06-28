@@ -53,6 +53,12 @@
         "default": "./dist/acp.cjs"
       }
     },
+    "./plugin": {
+      "import": {
+        "types": "./dist/plugin.d.ts",
+        "default": "./dist/plugin.js"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

@@ -1091,6 +1091,7 @@ export class MastraTUI {
       session: this.state.session,
       hookManager: this.state.hookManager,
       mcpManager: this.state.mcpManager,
+      pluginManager: this.state.pluginManager,
       analytics: this.state.analytics,
       authStorage: this.state.authStorage,
       customSlashCommands: this.state.customSlashCommands,

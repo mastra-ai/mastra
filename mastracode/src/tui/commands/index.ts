@@ -33,6 +33,7 @@ export { handleThemeCommand } from './theme.js';
 export { handleUpdateCommand } from './update.js';
 export { handleMemoryGatewayCommand } from './memory-gateway.js';
 export { handleApiKeysCommand } from './api-keys.js';
+export { handlePluginsCommand } from './plugins.js';
 export { handleFeedbackCommand } from './feedback.js';
 export { handleObservabilityCommand } from './observability.js';
 export { handleGithubCommand } from './github.js';

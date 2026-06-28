@@ -39,6 +39,7 @@ import {
   handleUpdateCommand,
   handleMemoryGatewayCommand,
   handleApiKeysCommand,
+  handlePluginsCommand,
   handleFeedbackCommand,
   handleObservabilityCommand,
   handleGithubCommand,
@@ -239,6 +240,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'api-keys':
       await handleApiKeysCommand(buildCtx());
+      return true;
+    case 'plugins':
+      await handlePluginsCommand(buildCtx(), args);
       return true;
     case 'feedback':
       await handleFeedbackCommand(buildCtx(), args);

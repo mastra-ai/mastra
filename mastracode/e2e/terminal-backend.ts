@@ -371,6 +371,7 @@ async function startMastraCodeApp(
     hookManager: result.hookManager,
     authStorage: result.authStorage,
     mcpManager: result.mcpManager,
+    pluginManager: result.pluginManager,
     appName: 'Mastra Code',
     version: process.env.npm_package_version ?? 'mc-e2e-terminal',
     inlineQuestions: true,

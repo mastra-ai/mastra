@@ -7,3 +7,4 @@ For E2E scenarios, prefer the narrowest scenario via `pnpm --filter ./mastracode
 
 Most TUI tests live under mastracode/src/tui/ and mastracode/e2e/tui/.
 Keep TUI changes focused and verify visible behavior with unit coverage plus narrow E2E when timing, terminal rendering, or input flow changes.
+All new features, behavior changes, and bug fixes require e2e test coverage.
