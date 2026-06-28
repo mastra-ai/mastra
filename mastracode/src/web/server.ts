@@ -14,11 +14,12 @@ import type { MastraCodeConfig } from '../index.js';
 import { mountWebAuth } from './auth.js';
 import { mountConfigRoutes } from './config-routes.js';
 import { mountFsRoutes } from './fs-routes.js';
-import { isGithubFeatureEnabled } from './github/config.js';
+import { assertReplicaStableStateSecret, isGithubFeatureEnabled } from './github/config.js';
 import { ensureAppDbReady } from './github/db.js';
 import { mountGithubRoutes } from './github/routes.js';
 import { isSandboxEnabled } from './github/sandbox.js';
 import { TenantDispatcher } from './tenant-server.js';
+import { assertRemoteTenantDbIfRequired } from './tenant-storage.js';
 
 const CONTROLLER_ID = 'code';
 
@@ -104,6 +105,9 @@ export async function startWebServer(options: WebServerOptions = {}): Promise<We
   // shared adapter below for the auth-disabled / unauthenticated public path.
   let tenantDispatcher: TenantDispatcher | undefined;
   if (webAuthEnabled) {
+    // Fail loud if a remote tenant DB is required (multi-replica/ephemeral
+    // deploy) but only local-file tenant DBs are configured.
+    assertRemoteTenantDbIfRequired();
     tenantDispatcher = new TenantDispatcher({
       baseConfig: mastraCodeConfig,
       controllerId: CONTROLLER_ID,
@@ -133,6 +137,10 @@ export async function startWebServer(options: WebServerOptions = {}): Promise<We
   // if the app DB can't be reached we log and leave the feature disabled rather
   // than crashing the server.
   if (isGithubFeatureEnabled()) {
+    // Fail loud if state signing wouldn't be stable across replicas. A random
+    // per-process secret silently breaks the OAuth/install callback on a replica
+    // that didn't sign the `state`.
+    assertReplicaStableStateSecret();
     const baseUrl = publicOrigin;
     let githubReady = false;
     try {

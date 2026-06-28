@@ -53,10 +53,34 @@ afterEach(() => {
   }
 });
 
+// Write a private thread + message into a tenant store. Returns the ids used.
+async function seedPrivateThread(mem: ReturnType<typeof memoryOf>, marker: string) {
+  const threadId = `thread-${marker}`;
+  const resourceId = `resource-${marker}`;
+  const messageId = `msg-${marker}`;
+  const now = new Date();
+  await mem.saveThread({
+    thread: { id: threadId, resourceId, title: `${marker} secret`, createdAt: now, updatedAt: now },
+  });
+  await mem.saveMessages({
+    messages: [
+      {
+        id: messageId,
+        threadId,
+        resourceId,
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: `${marker} private content` }] },
+        createdAt: now,
+      } as never,
+    ],
+  });
+  return { threadId, resourceId, messageId };
+}
+
 describe('S3: cross-tenant libSQL isolation', () => {
   it('keeps one tenant from reading another tenant threads and messages', async () => {
-    const a = resolveTenantStorage('user_a');
-    const b = resolveTenantStorage('user_b');
+    const a = resolveTenantStorage({ userId: 'user_a' });
+    const b = resolveTenantStorage({ userId: 'user_b' });
 
     // Different tenants → different hashed dirs → different db files.
     expect(a.storageConfig.url).not.toBe(b.storageConfig.url);
@@ -115,5 +139,84 @@ describe('S3: cross-tenant libSQL isolation', () => {
 
     await storeA.close?.();
     await storeB.close?.();
+  });
+});
+
+describe('S3: per-(org,user) libSQL isolation', () => {
+  it('isolates two users in the SAME org into distinct databases', async () => {
+    const a = resolveTenantStorage({ orgId: 'org_a', userId: 'user_1' });
+    const b = resolveTenantStorage({ orgId: 'org_a', userId: 'user_2' });
+
+    expect(a.tenantKey).not.toBe(b.tenantKey);
+    expect(a.storageConfig.url).not.toBe(b.storageConfig.url);
+
+    const storeA = buildLibSQLStore({ id: 'org-a-u1', url: a.storageConfig.url });
+    const storeB = buildLibSQLStore({ id: 'org-a-u2', url: b.storageConfig.url });
+    await storeA.init();
+    await storeB.init();
+    const memA = memoryOf(storeA);
+    const memB = memoryOf(storeB);
+
+    const { threadId, resourceId, messageId } = await seedPrivateThread(memA, 'orgA-u1');
+
+    // Same org, different user → no cross-read.
+    expect(await memB.getThreadById({ threadId })).toBeNull();
+    expect((await memB.listThreads({ filter: { resourceId } })).threads).toHaveLength(0);
+    expect((await memB.listMessagesById({ messageIds: [messageId] })).messages).toHaveLength(0);
+
+    // Owner reads its own data back.
+    expect((await memA.getThreadById({ threadId }))?.id).toBe(threadId);
+
+    // Distinct files on disk under distinct hashed dirs.
+    const fileA = dbFilePath(a.storageConfig.url);
+    const fileB = dbFilePath(b.storageConfig.url);
+    expect(path.dirname(fileA)).not.toBe(path.dirname(fileB));
+    expect(existsSync(fileA)).toBe(true);
+    expect(existsSync(fileB)).toBe(true);
+
+    await storeA.close?.();
+    await storeB.close?.();
+  });
+
+  it('isolates the SAME user across two orgs into distinct databases', async () => {
+    const a = resolveTenantStorage({ orgId: 'org_a', userId: 'user_1' });
+    const b = resolveTenantStorage({ orgId: 'org_b', userId: 'user_1' });
+
+    expect(a.tenantKey).not.toBe(b.tenantKey);
+    expect(a.storageConfig.url).not.toBe(b.storageConfig.url);
+
+    const storeA = buildLibSQLStore({ id: 'u1-org-a', url: a.storageConfig.url });
+    const storeB = buildLibSQLStore({ id: 'u1-org-b', url: b.storageConfig.url });
+    await storeA.init();
+    await storeB.init();
+    const memA = memoryOf(storeA);
+    const memB = memoryOf(storeB);
+
+    const { threadId, resourceId, messageId } = await seedPrivateThread(memA, 'u1-orgA');
+
+    // Same user, different org → no cross-read.
+    expect(await memB.getThreadById({ threadId })).toBeNull();
+    expect((await memB.listThreads({ filter: { resourceId } })).threads).toHaveLength(0);
+    expect((await memB.listMessagesById({ messageIds: [messageId] })).messages).toHaveLength(0);
+
+    expect((await memA.getThreadById({ threadId }))?.id).toBe(threadId);
+
+    await storeA.close?.();
+    await storeB.close?.();
+  });
+});
+
+describe('S3: remote URL template per-(org,user) isolation', () => {
+  it('produces distinct remote urls carrying each tenant composite key', () => {
+    process.env.MASTRACODE_TENANT_DB_URL_TEMPLATE = 'libsql://{id}.turso.io';
+
+    const a = resolveTenantStorage({ orgId: 'org_a', userId: 'user_1' });
+    const b = resolveTenantStorage({ orgId: 'org_b', userId: 'user_1' });
+
+    expect(a.storageConfig.isRemote).toBe(true);
+    expect(b.storageConfig.isRemote).toBe(true);
+    expect(a.storageConfig.url).toBe(`libsql://${a.tenantKey}.turso.io`);
+    expect(b.storageConfig.url).toBe(`libsql://${b.tenantKey}.turso.io`);
+    expect(a.storageConfig.url).not.toBe(b.storageConfig.url);
   });
 });

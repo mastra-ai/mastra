@@ -65,6 +65,20 @@ export async function ensureAppDbReady(): Promise<void> {
 }
 
 /**
+ * Get the underlying pg `Pool`, lazily creating the client if needed. Used by
+ * the distributed project lock, which needs a single dedicated connection to
+ * hold a transaction-scoped advisory lock.
+ * @throws if `APP_DATABASE_URL` is not set.
+ */
+export function getAppDbPool(): pkg.Pool {
+  getAppDb();
+  if (!pool) {
+    throw new Error('APP_DATABASE_URL is not set; the GitHub App feature requires an application database.');
+  }
+  return pool;
+}
+
+/**
  * Close the pool. Primarily for tests / graceful shutdown.
  */
 export async function closeAppDb(): Promise<void> {

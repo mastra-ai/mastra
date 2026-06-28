@@ -1,7 +1,14 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { getWebAuthUser, getWebAuthUserId, isWebAuthEnabled, mountWebAuth } from './auth.js';
+import {
+  getWebAuthOrgId,
+  getWebAuthUser,
+  getWebAuthUserId,
+  isWebAuthEnabled,
+  mountWebAuth,
+  webAuthTenant,
+} from './auth.js';
 
 // Mock @mastra/auth-workos so the tests exercise the gating/routing logic in
 // this module without constructing a real WorkOS client. `authenticateToken`'s
@@ -208,5 +215,56 @@ describe('mountWebAuth /auth routes (enabled)', () => {
     const res = await app.request('/auth/me');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ authenticated: true, user: { email: 'user@example.com', name: 'User' } });
+  });
+
+  it('/auth/me surfaces the organization id to the SPA', async () => {
+    mockAuthenticate.mockResolvedValue({
+      workosId: 'user_1',
+      email: 'user@example.com',
+      name: 'User',
+      organizationId: 'org_a',
+    });
+    const { app } = buildApp();
+    const res = await app.request('/auth/me');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      authenticated: true,
+      user: { email: 'user@example.com', name: 'User', organizationId: 'org_a' },
+    });
+  });
+});
+
+describe('org-tenant identity', () => {
+  beforeEach(enableEnv);
+
+  it('getWebAuthOrgId reads the organization id from the user shape', () => {
+    expect(getWebAuthOrgId({ workosId: 'user_1', organizationId: 'org_a' })).toBe('org_a');
+    expect(getWebAuthOrgId({ workosId: 'user_1' })).toBeUndefined();
+    expect(getWebAuthOrgId(undefined)).toBeUndefined();
+  });
+
+  it('gate stashes organizationId and webAuthTenant returns { orgId, userId }', async () => {
+    mockAuthenticate.mockResolvedValue({ workosId: 'user_1', organizationId: 'org_a', email: 'u@e.com' });
+    const app = new Hono();
+    mountWebAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
+    app.get('/api/web/whoami', c => c.json(webAuthTenant(c) ?? { tenant: null }));
+
+    const res = await app.request('/api/web/whoami', { headers: { Accept: 'application/json' } });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ orgId: 'org_a', userId: 'user_1' });
+  });
+
+  it('webAuthTenant omits orgId for personal (no-org) users but keeps userId', async () => {
+    mockAuthenticate.mockResolvedValue({ workosId: 'user_solo', email: 'solo@e.com' });
+    const app = new Hono();
+    mountWebAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
+    app.get('/api/web/whoami', c => {
+      const tenant = webAuthTenant(c);
+      return c.json({ orgId: tenant?.orgId ?? null, userId: tenant?.userId ?? null });
+    });
+
+    const res = await app.request('/api/web/whoami', { headers: { Accept: 'application/json' } });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ orgId: null, userId: 'user_solo' });
   });
 });

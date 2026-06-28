@@ -19,8 +19,8 @@
 import { RailwaySandbox } from '@mastra/railway';
 import { eq } from 'drizzle-orm';
 import { getAppDb } from './db';
-import { githubProjects } from './schema';
-import type { GithubProjectRow } from './schema';
+import { githubProjectSandboxes } from './schema';
+import type { GithubProjectSandboxRow } from './schema';
 
 /** Minimal command result shape we depend on. */
 export interface SandboxCommandResult {
@@ -38,6 +38,8 @@ export interface MaterializationSandbox {
   start(): Promise<void>;
   getInfo(): Promise<{ metadata?: Record<string, unknown> }>;
   executeCommand(command: string, args?: string[], options?: { timeout?: number }): Promise<SandboxCommandResult>;
+  /** Tear down the underlying VM. Optional: providers without it are no-ops. */
+  stop?(): Promise<void>;
 }
 
 /**
@@ -100,6 +102,49 @@ export function getSandboxIdleMinutes(): number | undefined {
   return Math.floor(parsed);
 }
 
+/**
+ * Per-replica cap on concurrently *provisioned* sandboxes. Reads
+ * `MASTRACODE_MAX_SANDBOXES`; 0 / unset means unlimited. This is a lightweight
+ * per-process budget to keep a single replica from exhausting provider quota —
+ * it is not a global, cross-replica scheduler (that is a deferred follow-up).
+ */
+export function getMaxSandboxes(): number {
+  const raw = process.env.MASTRACODE_MAX_SANDBOXES;
+  if (raw === undefined || raw === '') return 0;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 0;
+  return Math.floor(parsed);
+}
+
+/**
+ * Count of sandboxes this replica has freshly provisioned and not yet torn
+ * down. Reattaches to existing VMs do not count (they reuse an already-billed
+ * sandbox). Used to enforce `getMaxSandboxes()`.
+ */
+let liveSandboxCount = 0;
+
+/** Current live (freshly provisioned, not torn down) sandbox count. */
+export function getLiveSandboxCount(): number {
+  return liveSandboxCount;
+}
+
+/** For tests: reset the live-sandbox counter to a known state. */
+export function __resetLiveSandboxCount(value = 0): void {
+  liveSandboxCount = value;
+}
+
+/** Raised when provisioning would exceed the per-replica sandbox budget. */
+export class SandboxBudgetError extends Error {
+  readonly code = 'sandbox-budget-exceeded' as const;
+  constructor(readonly max: number) {
+    super(
+      `Sandbox budget exceeded: this server already has ${max} active sandbox(es) ` +
+        `(MASTRACODE_MAX_SANDBOXES=${max}). Close an existing project's sandbox and try again.`,
+    );
+    this.name = 'SandboxBudgetError';
+  }
+}
+
 /** Default factory: a Railway sandbox, optionally reattaching by id. */
 const railwayFactory: SandboxFactory = ({ providerSandboxId, env, idleTimeoutMinutes }) =>
   new RailwaySandbox({
@@ -134,7 +179,7 @@ async function readProviderSandboxId(sandbox: MaterializationSandbox): Promise<s
  * Provision a new sandbox (persisting its provider id on first open) or
  * reattach to the stored one. Returns a started, live sandbox.
  */
-export async function ensureProjectSandbox(row: GithubProjectRow): Promise<MaterializationSandbox> {
+export async function ensureProjectSandbox(row: GithubProjectSandboxRow): Promise<MaterializationSandbox> {
   const idleTimeoutMinutes = getSandboxIdleMinutes();
 
   // Reattach path: if we have a stored sandbox id, try to reattach. The VM may
@@ -147,20 +192,62 @@ export async function ensureProjectSandbox(row: GithubProjectRow): Promise<Mater
       await reattached.start();
       return reattached;
     } catch {
-      await getAppDb().update(githubProjects).set({ sandboxId: null }).where(eq(githubProjects.id, row.id));
+      await getAppDb()
+        .update(githubProjectSandboxes)
+        .set({ sandboxId: null })
+        .where(eq(githubProjectSandboxes.id, row.id));
       // fall through to fresh provision below
     }
   }
 
+  // Fresh provision: enforce the per-replica budget before spending quota.
+  const max = getMaxSandboxes();
+  if (max > 0 && liveSandboxCount >= max) {
+    throw new SandboxBudgetError(max);
+  }
+
   const sandbox = sandboxFactory({ idleTimeoutMinutes });
   await sandbox.start();
+  liveSandboxCount += 1;
 
   const providerSandboxId = await readProviderSandboxId(sandbox);
   if (providerSandboxId) {
-    await getAppDb().update(githubProjects).set({ sandboxId: providerSandboxId }).where(eq(githubProjects.id, row.id));
+    await getAppDb()
+      .update(githubProjectSandboxes)
+      .set({ sandboxId: providerSandboxId })
+      .where(eq(githubProjectSandboxes.id, row.id));
   }
 
   return sandbox;
+}
+
+/**
+ * Tear down a user's sandbox for a project: stop the live VM (best-effort) and
+ * clear the persisted `sandboxId`/`materializedAt` on the per-(project,user)
+ * binding row so the next open re-provisions cleanly. Decrements the
+ * per-replica live-sandbox counter.
+ *
+ * @param row     the per-(project,user) sandbox binding to tear down
+ * @param sandbox an already-reattached live sandbox to stop, when available
+ */
+export async function teardownProjectSandbox(
+  row: GithubProjectSandboxRow,
+  sandbox?: MaterializationSandbox,
+): Promise<void> {
+  if (sandbox?.stop) {
+    try {
+      await sandbox.stop();
+    } catch {
+      // Best-effort: the VM may already be gone (idle GC). Still clear the row.
+    }
+  }
+  if (row.sandboxId) {
+    if (liveSandboxCount > 0) liveSandboxCount -= 1;
+    await getAppDb()
+      .update(githubProjectSandboxes)
+      .set({ sandboxId: null, materializedAt: null })
+      .where(eq(githubProjectSandboxes.id, row.id));
+  }
 }
 
 /**
@@ -223,22 +310,31 @@ function cleanUrl(repoFullName: string): string {
   return `https://github.com/${repoFullName}.git`;
 }
 
+/** Repo metadata needed to materialize, read from the org-owned project row. */
+export interface RepoMaterializeInfo {
+  repoFullName: string;
+  defaultBranch: string;
+}
+
 /**
- * Materialize the repo inside its sandbox. Clones on first open, pulls on
+ * Materialize the repo inside the user's sandbox. Clones on first open, pulls on
  * re-open. Always scrubs the install token from the remote afterwards and sets
- * `materialized_at` in the DB.
+ * `materialized_at` on the per-user sandbox binding row.
  *
- * @param row     the project row (already provisioned via `ensureProjectSandbox`)
- * @param sandbox the live sandbox to run git inside
- * @param token   a freshly minted, short-lived installation access token
+ * @param sandboxRow the per-(project,user) sandbox binding (provisioned via
+ *                   `ensureProjectSandbox`)
+ * @param repo       repo metadata from the org-owned project row
+ * @param sandbox    the live sandbox to run git inside
+ * @param token      a freshly minted, short-lived installation access token
  */
 export async function materializeRepo(
-  row: GithubProjectRow,
+  sandboxRow: GithubProjectSandboxRow,
+  repoInfo: RepoMaterializeInfo,
   sandbox: MaterializationSandbox,
   token: string,
 ): Promise<void> {
-  const workdir = row.sandboxWorkdir;
-  const repo = row.repoFullName;
+  const workdir = sandboxRow.sandboxWorkdir;
+  const repo = repoInfo.repoFullName;
 
   // 0. Defense in depth: never build a git command from values that aren't
   // strictly shaped, even if a malformed row reached the DB. Inputs are also
@@ -246,9 +342,9 @@ export async function materializeRepo(
   if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
     throw new MaterializeError(`Refusing to materialize: invalid repo full name '${repo}'.`, 'clone-failed');
   }
-  if (!/^[A-Za-z0-9_./-]+$/.test(row.defaultBranch)) {
+  if (!/^[A-Za-z0-9_./-]+$/.test(repoInfo.defaultBranch)) {
     throw new MaterializeError(
-      `Refusing to materialize: invalid default branch '${row.defaultBranch}'.`,
+      `Refusing to materialize: invalid default branch '${repoInfo.defaultBranch}'.`,
       'clone-failed',
     );
   }
@@ -265,11 +361,11 @@ export async function materializeRepo(
   const authUrl = tokenUrl(repo, token);
 
   try {
-    if (!row.materializedAt) {
+    if (!sandboxRow.materializedAt) {
       // 2a. First open: clone the default branch into the workdir.
       const clone = await sh(
         sandbox,
-        `git clone --branch ${shellQuote(row.defaultBranch)} ${shellQuote(authUrl)} ${shellQuote(workdir)}`,
+        `git clone --branch ${shellQuote(repoInfo.defaultBranch)} ${shellQuote(authUrl)} ${shellQuote(workdir)}`,
       );
       if (clone.exitCode !== 0) {
         throw classifyGitFailure(clone, 'clone-failed');
@@ -290,11 +386,14 @@ export async function materializeRepo(
     // git config, even when the clone/pull above failed partway through. This
     // is best-effort on the failure path (the workdir may not exist yet after a
     // failed clone); on the success path the scrub must succeed or we surface it.
-    await scrubRemote(sandbox, workdir, repo, Boolean(row.materializedAt));
+    await scrubRemote(sandbox, workdir, repo, Boolean(sandboxRow.materializedAt));
   }
 
   // 4. Mark materialized.
-  await getAppDb().update(githubProjects).set({ materializedAt: new Date() }).where(eq(githubProjects.id, row.id));
+  await getAppDb()
+    .update(githubProjectSandboxes)
+    .set({ materializedAt: new Date() })
+    .where(eq(githubProjectSandboxes.id, sandboxRow.id));
 }
 
 /**

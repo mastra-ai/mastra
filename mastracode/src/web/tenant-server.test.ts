@@ -35,27 +35,32 @@ vi.mock('@mastra/hono', () => ({
   },
 }));
 
-const mockGetWebAuthUser = vi.fn();
+const mockWebAuthTenant = vi.fn();
 vi.mock('./auth.js', () => ({
-  getWebAuthUser: (c: unknown) => mockGetWebAuthUser(c),
-  getWebAuthUserId: (user: { workosId?: string; id?: string } | undefined) => user?.workosId ?? user?.id,
+  webAuthTenant: (c: unknown) => mockWebAuthTenant(c),
 }));
+
+interface TenantIdentity {
+  orgId?: string;
+  userId: string;
+}
 
 const mockGetUserStorage = vi.fn();
 vi.mock('./tenant-storage.js', () => ({
-  getUserStorage: (workosId: string) => mockGetUserStorage(workosId),
+  getUserStorage: (identity: TenantIdentity) => mockGetUserStorage(identity),
 }));
 
 import { TenantDispatcher } from './tenant-server.js';
 
-function tenantStorageFor(workosId: string) {
-  return { tenantKey: `key_${workosId}`, storageConfig: { tenant: workosId } };
+function tenantStorageFor(identity: TenantIdentity) {
+  const key = identity.orgId ? `${identity.orgId}:${identity.userId}` : identity.userId;
+  return { tenantKey: `key_${key}`, storageConfig: { tenant: key } };
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
   builtStorages.length = 0;
-  mockGetUserStorage.mockImplementation((workosId: string) => tenantStorageFor(workosId));
+  mockGetUserStorage.mockImplementation((identity: TenantIdentity) => tenantStorageFor(identity));
 });
 
 afterEach(() => {
@@ -77,7 +82,7 @@ describe('TenantDispatcher', () => {
     const dispatcher = new TenantDispatcher({ baseConfig: {}, controllerId: 'code' });
     const app = buildApp(dispatcher);
 
-    mockGetWebAuthUser.mockReturnValue({ workosId: 'user_a' });
+    mockWebAuthTenant.mockReturnValue({ userId: 'user_a' });
     const res = await app.request('/api/echo');
     expect(await res.json()).toEqual({ tenant: 'user_a' });
   });
@@ -86,9 +91,9 @@ describe('TenantDispatcher', () => {
     const dispatcher = new TenantDispatcher({ baseConfig: {}, controllerId: 'code' });
     const app = buildApp(dispatcher);
 
-    mockGetWebAuthUser.mockReturnValue({ workosId: 'user_a' });
+    mockWebAuthTenant.mockReturnValue({ userId: 'user_a' });
     const resA = await app.request('/api/echo');
-    mockGetWebAuthUser.mockReturnValue({ workosId: 'user_b' });
+    mockWebAuthTenant.mockReturnValue({ userId: 'user_b' });
     const resB = await app.request('/api/echo');
 
     expect(await resA.json()).toEqual({ tenant: 'user_a' });
@@ -97,11 +102,39 @@ describe('TenantDispatcher', () => {
     expect(builtStorages).toEqual([{ tenant: 'user_a' }, { tenant: 'user_b' }]);
   });
 
-  it('reuses the cached tenant app for repeated requests by the same user', async () => {
+  it('routes two users in the same org to two isolated tenant apps', async () => {
     const dispatcher = new TenantDispatcher({ baseConfig: {}, controllerId: 'code' });
     const app = buildApp(dispatcher);
 
-    mockGetWebAuthUser.mockReturnValue({ workosId: 'user_a' });
+    mockWebAuthTenant.mockReturnValue({ orgId: 'org_a', userId: 'user_a' });
+    const resA = await app.request('/api/echo');
+    mockWebAuthTenant.mockReturnValue({ orgId: 'org_a', userId: 'user_b' });
+    const resB = await app.request('/api/echo');
+
+    expect(await resA.json()).toEqual({ tenant: 'org_a:user_a' });
+    expect(await resB.json()).toEqual({ tenant: 'org_a:user_b' });
+    expect(builtStorages).toEqual([{ tenant: 'org_a:user_a' }, { tenant: 'org_a:user_b' }]);
+  });
+
+  it('routes the same user in two orgs to two isolated tenant apps', async () => {
+    const dispatcher = new TenantDispatcher({ baseConfig: {}, controllerId: 'code' });
+    const app = buildApp(dispatcher);
+
+    mockWebAuthTenant.mockReturnValue({ orgId: 'org_a', userId: 'user_a' });
+    const resA = await app.request('/api/echo');
+    mockWebAuthTenant.mockReturnValue({ orgId: 'org_b', userId: 'user_a' });
+    const resB = await app.request('/api/echo');
+
+    expect(await resA.json()).toEqual({ tenant: 'org_a:user_a' });
+    expect(await resB.json()).toEqual({ tenant: 'org_b:user_a' });
+    expect(builtStorages).toEqual([{ tenant: 'org_a:user_a' }, { tenant: 'org_b:user_a' }]);
+  });
+
+  it('reuses the cached tenant app for repeated requests by the same identity', async () => {
+    const dispatcher = new TenantDispatcher({ baseConfig: {}, controllerId: 'code' });
+    const app = buildApp(dispatcher);
+
+    mockWebAuthTenant.mockReturnValue({ orgId: 'org_a', userId: 'user_a' });
     await app.request('/api/echo');
     await app.request('/api/echo');
     expect(builtStorages).toHaveLength(1);
@@ -111,7 +144,7 @@ describe('TenantDispatcher', () => {
     const dispatcher = new TenantDispatcher({ baseConfig: {}, controllerId: 'code' });
     const app = buildApp(dispatcher);
 
-    mockGetWebAuthUser.mockReturnValue(undefined);
+    mockWebAuthTenant.mockReturnValue(undefined);
     const res = await app.request('/api/echo');
     expect(await res.json()).toEqual({ tenant: 'SHARED' });
     expect(builtStorages).toHaveLength(0);
@@ -121,7 +154,7 @@ describe('TenantDispatcher', () => {
     const dispatcher = new TenantDispatcher({ baseConfig: {}, controllerId: 'code' });
     const app = buildApp(dispatcher);
 
-    mockGetWebAuthUser.mockReturnValue({ workosId: 'user_a' });
+    mockWebAuthTenant.mockReturnValue({ userId: 'user_a' });
     const res = await app.request('/api/web/status');
     expect(await res.json()).toEqual({ route: 'web' });
     expect(builtStorages).toHaveLength(0);
@@ -130,7 +163,7 @@ describe('TenantDispatcher', () => {
   it('stops all tenant stacks on shutdown', async () => {
     const dispatcher = new TenantDispatcher({ baseConfig: {}, controllerId: 'code' });
     const app = buildApp(dispatcher);
-    mockGetWebAuthUser.mockReturnValue({ workosId: 'user_a' });
+    mockWebAuthTenant.mockReturnValue({ userId: 'user_a' });
     await app.request('/api/echo');
     await expect(dispatcher.stopAll()).resolves.toBeUndefined();
   });

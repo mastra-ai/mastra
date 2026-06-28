@@ -26,36 +26,85 @@ export function isGithubFeatureEnabled(): boolean {
 let stateSecret: string | undefined;
 function getStateSecret(): string {
   if (stateSecret) return stateSecret;
-  stateSecret =
-    process.env.GITHUB_APP_WEBHOOK_SECRET || process.env.WORKOS_COOKIE_PASSWORD || randomBytes(32).toString('hex');
+  stateSecret = explicitStateSecret() ?? randomBytes(32).toString('hex');
   return stateSecret;
 }
 
+/**
+ * The explicit, deployment-stable state secret if one is configured. When
+ * undefined, `getStateSecret()` falls back to a per-process random secret, which
+ * is NOT stable across replicas: a `state` signed by one replica cannot be
+ * verified by another. Multi-replica deploys must set an explicit secret.
+ */
+function explicitStateSecret(): string | undefined {
+  return process.env.GITHUB_APP_WEBHOOK_SECRET || process.env.WORKOS_COOKIE_PASSWORD || undefined;
+}
+
+/**
+ * True when a deployment-stable state secret is configured. Startup uses this to
+ * fail loud when the GitHub feature is on but state signing would not be
+ * replica-stable.
+ */
+export function hasExplicitStateSecret(): boolean {
+  return explicitStateSecret() !== undefined;
+}
+
+/**
+ * Fail loud at startup if the GitHub feature is on but no replica-stable state
+ * secret is configured. A random per-process secret silently breaks the
+ * OAuth/install callback whenever it lands on a different replica than the one
+ * that signed the `state`. Returns without error when the feature is off (the
+ * random fallback is acceptable for single-process/local dev).
+ */
+export function assertReplicaStableStateSecret(): void {
+  if (!isGithubFeatureEnabled()) return;
+  if (hasExplicitStateSecret()) return;
+  throw new Error(
+    'GitHub App feature is enabled but no replica-stable state secret is set. ' +
+      'Set GITHUB_APP_WEBHOOK_SECRET (or WORKOS_COOKIE_PASSWORD) so OAuth/install ' +
+      '`state` can be verified across replicas. Without it, the install callback ' +
+      'fails whenever it lands on a different replica than the one that signed it.',
+  );
+}
+
 interface StatePayload {
+  orgId: string;
   userId: string;
   nonce: string;
   issuedAt: number;
+}
+
+/** Verified `(orgId, userId)` tenant carried by a signed install `state`. */
+export interface StateTenant {
+  orgId: string;
+  userId: string;
 }
 
 /** Signed `state` values expire after this window to bound the CSRF token. */
 const STATE_MAX_AGE_MS = 10 * 60 * 1000;
 
 /**
- * Build a signed `state` bound to the user id. The payload is base64url JSON
- * with an HMAC suffix so the callback can verify it was not tampered with and
- * belongs to the same user.
+ * Build a signed `state` bound to the `(orgId, userId)` tenant. The payload is
+ * base64url JSON with an HMAC suffix so the callback can verify it was not
+ * tampered with and belongs to the same org + user.
  */
-export function signState(userId: string): string {
-  const payload: StatePayload = { userId, nonce: randomBytes(8).toString('hex'), issuedAt: Date.now() };
+export function signState(orgId: string, userId: string): string {
+  const payload: StatePayload = {
+    orgId,
+    userId,
+    nonce: randomBytes(8).toString('hex'),
+    issuedAt: Date.now(),
+  };
   const body = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
   const sig = createHmac('sha256', getStateSecret()).update(body).digest('base64url');
   return `${body}.${sig}`;
 }
 
 /**
- * Verify a signed `state` and return the bound user id, or `null` if invalid.
+ * Verify a signed `state` and return the bound `(orgId, userId)` tenant, or
+ * `null` if invalid.
  */
-export function verifyState(state: string | undefined): string | null {
+export function verifyState(state: string | undefined): StateTenant | null {
   if (!state) return null;
   const dot = state.lastIndexOf('.');
   if (dot <= 0) return null;
@@ -69,9 +118,10 @@ export function verifyState(state: string | undefined): string | null {
   }
   try {
     const parsed = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as StatePayload;
-    if (typeof parsed.userId !== 'string' || typeof parsed.issuedAt !== 'number') return null;
+    if (typeof parsed.orgId !== 'string' || typeof parsed.userId !== 'string') return null;
+    if (typeof parsed.issuedAt !== 'number') return null;
     if (Date.now() - parsed.issuedAt > STATE_MAX_AGE_MS) return null;
-    return parsed.userId;
+    return { orgId: parsed.orgId, userId: parsed.userId };
   } catch {
     return null;
   }

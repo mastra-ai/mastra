@@ -15,15 +15,17 @@ vi.mock('drizzle-orm', () => ({
 
 interface Tables {
   installations: Array<{
+    orgId?: string;
     userId: string;
     installationId: number;
     accountLogin: string | null;
     accountType: string | null;
   }>;
   projects: Array<Record<string, any>>;
+  sandboxes: Array<Record<string, any>>;
   worktrees: Array<Record<string, any>>;
 }
-const tables: Tables = { installations: [], projects: [], worktrees: [] };
+const tables: Tables = { installations: [], projects: [], sandboxes: [], worktrees: [] };
 
 vi.mock('./db', () => {
   const makeDb = () => ({
@@ -35,7 +37,12 @@ vi.mock('./db', () => {
     insert: (table: any) => ({
       values: (vals: any) => {
         const chain = {
-          onConflictDoNothing: async () => insertRow(table, vals),
+          onConflictDoNothing: (opts?: any) => {
+            const ret = insertIfAbsent(table, vals, opts);
+            const promise: any = Promise.resolve(ret ? [ret] : []);
+            promise.returning = async () => (ret ? [ret] : []);
+            return promise;
+          },
           onConflictDoUpdate: (opts: any) => {
             const ret = upsertRow(table, vals, opts);
             return { returning: async () => [ret] };
@@ -137,8 +144,13 @@ vi.mock('./sandbox', () => {
 let featureEnabled = true;
 vi.mock('./config', () => ({
   isGithubFeatureEnabled: () => featureEnabled,
-  signState: (userId: string) => `state.${userId}`,
-  verifyState: (state: string | undefined) => (state?.startsWith('state.') ? state.slice('state.'.length) : null),
+  signState: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
+  verifyState: (state: string | undefined) => {
+    if (!state?.startsWith('state.')) return null;
+    const [orgId, userId] = state.slice('state.'.length).split('.');
+    if (!orgId || !userId) return null;
+    return { orgId, userId };
+  },
 }));
 
 import { mountGithubRoutes } from './routes';
@@ -147,10 +159,12 @@ import { mountGithubRoutes } from './routes';
 function tableKind(table: any): keyof Tables {
   if (table === installationsRef) return 'installations';
   if (table === worktreesRef) return 'worktrees';
+  if (table === sandboxesRef) return 'sandboxes';
   return 'projects';
 }
 let installationsRef: any;
 let worktreesRef: any;
+let sandboxesRef: any;
 
 function dbNameToJsKey(table: any, dbName: string): string {
   for (const [jsKey, col] of Object.entries(table)) {
@@ -185,13 +199,25 @@ function upsertRow(table: any, vals: any, opts: any): any {
   }
   return insertRow(table, vals);
 }
+function insertIfAbsent(table: any, vals: any, opts: any): any | undefined {
+  const kind = tableKind(table);
+  const targets: string[] = (opts?.target ?? [])
+    .map((col: any) => (col?.name ? dbNameToJsKey(table, col.name) : undefined))
+    .filter(Boolean);
+  const existing = targets.length
+    ? tables[kind].find(row => targets.every(t => (row as any)[t] === vals[t]))
+    : undefined;
+  if (existing) return undefined;
+  return insertRow(table, vals);
+}
 function updateRows(table: any, vals: any): void {
   for (const row of tables[tableKind(table)]) Object.assign(row, vals);
 }
 
-import { githubInstallations, githubWorktrees } from './schema';
+import { githubInstallations, githubProjectSandboxes, githubWorktrees } from './schema';
 installationsRef = githubInstallations;
 worktreesRef = githubWorktrees;
+sandboxesRef = githubProjectSandboxes;
 
 // A tiny deferred so S2 can control when a push resolves.
 function deferred<T = void>() {
@@ -204,7 +230,7 @@ function deferred<T = void>() {
   return { promise, resolve, reject };
 }
 
-function buildApp(user: { workosId: string } | null) {
+function buildApp(user: { workosId: string; organizationId?: string } | null) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('webAuthUser' as never, user as never);
@@ -225,9 +251,13 @@ function postJson(app: ReturnType<typeof buildApp>, path: string, body: unknown)
 beforeEach(() => {
   tables.installations = [];
   tables.projects = [];
+  tables.sandboxes = [];
   tables.worktrees = [];
   featureEnabled = true;
   sandboxEnabled = true;
+  // No Postgres in these scenario tests: keep the project lock in-process.
+  // The in-process mutex still serializes same-replica callers (S2).
+  process.env.MASTRACODE_DISTRIBUTED_LOCK = '0';
   mintCount = 0;
   pushImpl = async () => {};
   ensureProjectSandbox.mockClear();
@@ -239,7 +269,10 @@ beforeEach(() => {
   createPullRequest.mockClear();
 });
 
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  delete process.env.MASTRACODE_DISTRIBUTED_LOCK;
+  vi.clearAllMocks();
+});
 
 // ── S1: full write-back journey ──────────────────────────────────────────
 describe('S1: full write-back journey through the real route handlers', () => {
@@ -248,8 +281,14 @@ describe('S1: full write-back journey through the real route handlers', () => {
       mintInstallationToken: ReturnType<typeof vi.fn>;
     };
     const mint = mintModule.mintInstallationToken;
-    tables.installations.push({ userId: 'u1', installationId: 7, accountLogin: 'octo', accountType: 'User' });
-    const app = buildApp({ workosId: 'u1' });
+    tables.installations.push({
+      orgId: 'org1',
+      userId: 'u1',
+      installationId: 7,
+      accountLogin: 'octo',
+      accountType: 'User',
+    });
+    const app = buildApp({ workosId: 'u1', organizationId: 'org1' });
 
     // 1. Create the project from an owned installation.
     const createRes = await postJson(app, '/api/web/github/projects', {
@@ -261,11 +300,16 @@ describe('S1: full write-back journey through the real route handlers', () => {
     expect(tables.projects).toHaveLength(1);
     expect(projectId).toBeTruthy();
 
-    // The project must be materializable: seed the sandbox binding the way
-    // `ensure` would persist it (the sandbox provisioning itself is mocked).
-    const projectRow = tables.projects[0];
-    projectRow.sandboxId = 'sb-1';
-    projectRow.sandboxWorkdir = '/workspace/hello';
+    // The project must be materializable: seed the per-(project,user) sandbox
+    // binding the way `ensure` would persist it (provisioning itself is mocked).
+    tables.sandboxes.push({
+      id: 'sbrow-1',
+      githubProjectId: projectId,
+      userId: 'u1',
+      sandboxId: 'sb-1',
+      sandboxWorkdir: '/workspace/hello',
+      materializedAt: null,
+    });
 
     // 2. Ensure → provisions the sandbox + materialises the repo.
     const ensureRes = await postJson(app, `/api/web/github/projects/${projectId}/ensure`, {});
@@ -335,22 +379,30 @@ describe('S1: full write-back journey through the real route handlers', () => {
 
 // ── S2: concurrent push serialisation (per-project mutex) ─────────────────
 describe('S2: per-project mutex serialises concurrent pushes', () => {
-  function seed(id: string, userId = 'u1') {
+  function seed(id: string, userId = 'u1', orgId = 'org1') {
     tables.projects.push({
       id,
+      orgId,
       userId,
       installationId: 7,
       repoFullName: 'octo/hello',
       repoId: 99,
       defaultBranch: 'main',
+      sandboxWorkdir: '/workspace/hello',
+    });
+    tables.sandboxes.push({
+      id: `sbrow-${id}`,
+      githubProjectId: id,
+      userId,
       sandboxId: `sb-${id}`,
       sandboxWorkdir: '/workspace/hello',
+      materializedAt: new Date(),
     });
   }
 
   it('does not start the second push for the same project until the first resolves', async () => {
     seed('p1');
-    const app = buildApp({ workosId: 'u1' });
+    const app = buildApp({ workosId: 'u1', organizationId: 'org1' });
 
     const order: string[] = [];
     const gate = deferred();
@@ -389,7 +441,7 @@ describe('S2: per-project mutex serialises concurrent pushes', () => {
   it('allows pushes for different projects to overlap', async () => {
     seed('p1');
     seed('p2');
-    const app = buildApp({ workosId: 'u1' });
+    const app = buildApp({ workosId: 'u1', organizationId: 'org1' });
 
     const gate = deferred();
     let active = 0;

@@ -8,9 +8,9 @@
  * convention. That is a hard multi-tenancy/privacy violation: a bug or a crafted
  * `resourceId` could read another tenant's conversations.
  *
- * This module resolves a dedicated, isolated libSQL database **per WorkOS user**
- * so the tenant boundary is the storage backend itself, not just a scoping
- * convention. The resolver is provider-agnostic in shape (mirroring
+ * This module resolves a dedicated, isolated libSQL database **per
+ * (org, user)** so the tenant boundary is the storage backend itself, not just a
+ * scoping convention. The resolver is provider-agnostic in shape (mirroring
  * `getStorageConfig`) so a hosted deployment can point at a network volume or
  * swap in remote libSQL/Turso per user via a URL template.
  *
@@ -21,12 +21,12 @@
  *      DB url comes from `MASTRACODE_TENANT_VECTOR_URL_TEMPLATE` (same `{id}`),
  *      falling back to the storage template when absent.
  *   2. Local libSQL files under `MASTRACODE_TENANT_DB_ROOT` (default
- *      `~/.mastracode/web/tenants/<sha256(workosId)>/`), with `storage.db` +
- *      `vectors.db`.
+ *      `~/.mastracode/web/tenants/<sha256(orgId\0userId)>/`), with `storage.db`
+ *      + `vectors.db`.
  *
- * The WorkOS user id is hashed (sha256, hex) to a filesystem-safe directory
- * name — the raw id is never used as a path component, and no client-supplied
- * path ever reaches the filesystem.
+ * The `(org, user)` identity is hashed (sha256, hex) to a filesystem-safe
+ * directory name — the raw ids are never used as a path component, and no
+ * client-supplied path ever reaches the filesystem.
  */
 
 import { createHash } from 'node:crypto';
@@ -43,15 +43,31 @@ import type { LibSQLStorageConfig } from '../utils/project.js';
  * domains, memory, recall vectors) is built per tenant with no duplication.
  */
 export interface TenantStorage {
-  /** Filesystem-safe key derived from the WorkOS user id (sha256 hex). */
+  /** Filesystem-safe key derived from the (org, user) identity (sha256 hex). */
   tenantKey: string;
   /** Storage config passed to the controller factory for this tenant. */
   storageConfig: LibSQLStorageConfig;
 }
 
-/** Hash a WorkOS user id to a filesystem-safe, collision-resistant dir name. */
-export function tenantKeyFor(workosId: string): string {
-  return createHash('sha256').update(workosId).digest('hex');
+/**
+ * The tenant identity for agent-state isolation: a WorkOS organization plus a
+ * user inside it. `orgId` is `undefined`/empty for personal (no-org) accounts,
+ * which fall back to a user-only key so single-user dev keeps working.
+ */
+export interface TenantIdentity {
+  orgId?: string;
+  userId: string;
+}
+
+/**
+ * Hash the `(orgId, userId)` identity to a filesystem-safe, collision-resistant
+ * dir name. Two users in the same org get distinct keys; the same user across
+ * two orgs gets distinct keys. Personal accounts (no org) hash the user id only,
+ * so they stay stable and isolated from any org-scoped tenant.
+ */
+export function tenantKeyFor(identity: TenantIdentity): string {
+  const composite = identity.orgId ? `${identity.orgId}\u0000${identity.userId}` : identity.userId;
+  return createHash('sha256').update(composite).digest('hex');
 }
 
 /** Root directory for local per-tenant libSQL files. */
@@ -71,11 +87,11 @@ function applyTemplate(template: string, tenantKey: string): string {
  * ensuring the local directory exists) so it is easy to unit test. Use
  * {@link getUserStorage} for the cached entry point.
  */
-export function resolveTenantStorage(workosId: string): TenantStorage {
-  if (!workosId) {
-    throw new Error('resolveTenantStorage requires a non-empty workosId');
+export function resolveTenantStorage(identity: TenantIdentity): TenantStorage {
+  if (!identity.userId) {
+    throw new Error('resolveTenantStorage requires a non-empty userId');
   }
-  const tenantKey = tenantKeyFor(workosId);
+  const tenantKey = tenantKeyFor(identity);
 
   // 1. Remote libSQL/Turso via URL template.
   const urlTemplate = process.env.MASTRACODE_TENANT_DB_URL_TEMPLATE;
@@ -116,17 +132,39 @@ export function resolveTenantStorage(workosId: string): TenantStorage {
 const tenantCache = new Map<string, TenantStorage>();
 
 /**
- * Get-or-create the cached tenant storage descriptor for a WorkOS user. Same
- * user → same cached descriptor; distinct users → distinct descriptors backed
- * by distinct databases.
+ * Get-or-create the cached tenant storage descriptor for an `(org, user)`
+ * identity. Same identity → same cached descriptor; distinct identities →
+ * distinct descriptors backed by distinct databases.
  */
-export function getUserStorage(workosId: string): TenantStorage {
-  const tenantKey = tenantKeyFor(workosId);
+export function getUserStorage(identity: TenantIdentity): TenantStorage {
+  const tenantKey = tenantKeyFor(identity);
   const cached = tenantCache.get(tenantKey);
   if (cached) return cached;
-  const resolved = resolveTenantStorage(workosId);
+  const resolved = resolveTenantStorage(identity);
   tenantCache.set(resolved.tenantKey, resolved);
   return resolved;
+}
+
+/** True when a remote (network-backed) tenant DB template is configured. */
+export function hasRemoteTenantDb(): boolean {
+  return Boolean(process.env.MASTRACODE_TENANT_DB_URL_TEMPLATE);
+}
+
+/**
+ * Fail loud at startup when a remote tenant DB is required but not configured.
+ * Local-file tenant DBs do not survive container restarts and are not shared
+ * across replicas, so a multi-replica/ephemeral deploy must set
+ * `MASTRACODE_TENANT_DB_URL_TEMPLATE`. Gated behind
+ * `MASTRACODE_REQUIRE_REMOTE_TENANT_DB=1` so local dev is unaffected.
+ */
+export function assertRemoteTenantDbIfRequired(): void {
+  if (process.env.MASTRACODE_REQUIRE_REMOTE_TENANT_DB !== '1') return;
+  if (hasRemoteTenantDb()) return;
+  throw new Error(
+    'MASTRACODE_REQUIRE_REMOTE_TENANT_DB=1 but no MASTRACODE_TENANT_DB_URL_TEMPLATE is set. ' +
+      'Local-file tenant databases do not persist across container restarts and are not ' +
+      'shared across replicas. Set MASTRACODE_TENANT_DB_URL_TEMPLATE to a remote libSQL/Turso URL.',
+  );
 }
 
 /** Clear the in-process tenant cache (test helper). */

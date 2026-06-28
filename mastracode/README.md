@@ -274,7 +274,13 @@ export WORKOS_COOKIE_PASSWORD=...                            # optional (recomme
 
 **GitHub projects** — when the GitHub App variables are set _and_ WorkOS auth is enabled,
 signed-in users can install the GitHub App, pick repositories, and turn each repo into a project.
-Repo and project metadata persist in a separate application Postgres (`APP_DATABASE_URL`):
+The tenant boundary is the **WorkOS organization**: the GitHub App installation and the connected
+project (repo) are owned by the org, while each user inside the org gets their own isolated
+sandbox, worktrees, branches, and PRs against that repo. The **same repo can be connected
+independently by different orgs** without ever seeing each other's projects, sandboxes, or state.
+Users without a WorkOS organization (personal accounts) can't use GitHub projects, but still get
+isolated agent state. Repo and project metadata persist in a separate application Postgres
+(`APP_DATABASE_URL`):
 
 ```bash
 export GITHUB_APP_ID=...
@@ -304,18 +310,20 @@ detects the stopped VM and re-provisions automatically.
 Without a sandbox provider, users can still connect GitHub and pick repos, but opening a repo
 project shows a clear "sandbox not configured" error.
 
-### Per-user storage isolation
+### Per-(org,user) storage isolation
 
-When WorkOS web auth is enabled, every authenticated user operates against their own dedicated
-libSQL database for all agent state (threads, messages, memory, observational memory, recall
-vectors) — no tenant can read another tenant's data at the storage layer. The database location
-is derived server-side from a hashed WorkOS user id (no client-supplied paths).
+When WorkOS web auth is enabled, the tenant boundary is the **(organization, user)** pair: each
+user in each org operates against their own dedicated libSQL database for all agent state (threads,
+messages, memory, observational memory, recall vectors) — no tenant can read another tenant's data
+at the storage layer. Two users in the same org are isolated, and the same user across two orgs is
+also isolated. The database location is derived server-side from a hash of `(orgId, userId)` (no
+client-supplied paths); users without an org fall back to a user-only key.
 
 ```bash
-# Local files (default): one isolated DB dir per user under this root
+# Local files (default): one isolated DB dir per tenant under this root
 export MASTRACODE_TENANT_DB_ROOT=~/.mastracode/web/tenants    # optional
 
-# Or remote libSQL/Turso per tenant ({id} = hashed WorkOS user id)
+# Or remote libSQL/Turso per tenant ({id} = hashed (orgId, userId))
 export MASTRACODE_TENANT_DB_URL_TEMPLATE=libsql://{id}-org.turso.io        # optional
 export MASTRACODE_TENANT_VECTOR_URL_TEMPLATE=libsql://{id}-vec-org.turso.io # optional
 export MASTRACODE_TENANT_DB_AUTH_TOKEN=...                                  # optional
@@ -323,6 +331,33 @@ export MASTRACODE_TENANT_VECTOR_AUTH_TOKEN=...                              # op
 ```
 
 When web auth is disabled the server uses a single shared store, exactly as before.
+
+### Multi-replica deployment
+
+The web server keeps each tenant's Mastra stack in an in-memory cache and serializes per-user git
+write operations. For hosted, multi-replica deployments a few settings make this safe and bounded:
+
+```bash
+# Replica-stable state signing — REQUIRED across replicas. Without an explicit
+# GITHUB_APP_WEBHOOK_SECRET (or WORKOS_COOKIE_PASSWORD) the OAuth/install state
+# is signed with a per-process random key and callbacks fail on other replicas.
+export GITHUB_APP_WEBHOOK_SECRET=...
+
+# Cross-replica serialization of per-(project,user) git writes via Postgres
+# advisory locks (default on, requires APP_DATABASE_URL). Set 0 for local dev.
+export MASTRACODE_DISTRIBUTED_LOCK=1
+
+# Persist/share tenant DBs across replicas — fail/warn at startup if no remote
+# tenant DB template is set (local-file DBs don't survive restarts or sharing).
+export MASTRACODE_REQUIRE_REMOTE_TENANT_DB=1
+
+# Bound in-memory tenant caches as the team grows.
+export MASTRACODE_TENANT_IDLE_MINUTES=30    # idle eviction window (0 disables)
+export MASTRACODE_TENANT_MAX_APPS=100       # LRU cap on cached stacks (0 disables)
+
+# Per-replica cap on concurrently live sandboxes (0 / unset = unlimited).
+export MASTRACODE_MAX_SANDBOXES=50
+```
 
 ## Architecture
 

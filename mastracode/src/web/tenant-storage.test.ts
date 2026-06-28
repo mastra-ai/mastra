@@ -26,19 +26,39 @@ afterEach(() => {
 
 describe('tenantKeyFor', () => {
   it('produces a stable filesystem-safe sha256 hex key', () => {
-    const key = tenantKeyFor('user_workos_12345');
+    const key = tenantKeyFor({ userId: 'user_workos_12345' });
     expect(key).toMatch(/^[0-9a-f]{64}$/);
-    expect(tenantKeyFor('user_workos_12345')).toBe(key);
+    expect(tenantKeyFor({ userId: 'user_workos_12345' })).toBe(key);
   });
 
-  it('produces distinct keys for distinct ids', () => {
-    expect(tenantKeyFor('user_a')).not.toBe(tenantKeyFor('user_b'));
+  it('produces distinct keys for distinct users', () => {
+    expect(tenantKeyFor({ userId: 'user_a' })).not.toBe(tenantKeyFor({ userId: 'user_b' }));
+  });
+
+  it('produces distinct keys for the same user in different orgs', () => {
+    expect(tenantKeyFor({ orgId: 'org_a', userId: 'user_a' })).not.toBe(
+      tenantKeyFor({ orgId: 'org_b', userId: 'user_a' }),
+    );
+  });
+
+  it('produces distinct keys for different users in the same org', () => {
+    expect(tenantKeyFor({ orgId: 'org_a', userId: 'user_a' })).not.toBe(
+      tenantKeyFor({ orgId: 'org_a', userId: 'user_b' }),
+    );
+  });
+
+  it('falls back to a user-only key for personal (no-org) accounts', () => {
+    expect(tenantKeyFor({ orgId: undefined, userId: 'user_a' })).toBe(tenantKeyFor({ userId: 'user_a' }));
+  });
+
+  it('does not collide an org-scoped key with a user-only key', () => {
+    expect(tenantKeyFor({ orgId: 'org_a', userId: 'user_a' })).not.toBe(tenantKeyFor({ userId: 'user_a' }));
   });
 });
 
 describe('resolveTenantStorage (local libSQL)', () => {
   it('creates a hashed per-tenant directory with separate storage and vector DBs', () => {
-    const { tenantKey, storageConfig } = resolveTenantStorage('user_a');
+    const { tenantKey, storageConfig } = resolveTenantStorage({ userId: 'user_a' });
     const dir = path.join(tmpRoot, tenantKey);
     expect(existsSync(dir)).toBe(true);
     expect(storageConfig.backend).toBe('libsql');
@@ -48,8 +68,8 @@ describe('resolveTenantStorage (local libSQL)', () => {
   });
 
   it('gives distinct users distinct DB paths', () => {
-    const a = resolveTenantStorage('user_a');
-    const b = resolveTenantStorage('user_b');
+    const a = resolveTenantStorage({ userId: 'user_a' });
+    const b = resolveTenantStorage({ userId: 'user_b' });
     expect(a.tenantKey).not.toBe(b.tenantKey);
     expect(a.storageConfig.url).not.toBe(b.storageConfig.url);
     expect(a.storageConfig.vectorUrl).not.toBe(b.storageConfig.vectorUrl);
@@ -57,14 +77,14 @@ describe('resolveTenantStorage (local libSQL)', () => {
 
   it('never uses the raw workos id as a path component', () => {
     const rawId = 'user/with/../traversal';
-    const { tenantKey, storageConfig } = resolveTenantStorage(rawId);
+    const { tenantKey, storageConfig } = resolveTenantStorage({ userId: rawId });
     expect(tenantKey).toMatch(/^[0-9a-f]{64}$/);
     expect(storageConfig.url).not.toContain('..');
     expect(storageConfig.url).toContain(tenantKey);
   });
 
-  it('throws on an empty workos id', () => {
-    expect(() => resolveTenantStorage('')).toThrow();
+  it('throws on an empty user id', () => {
+    expect(() => resolveTenantStorage({ userId: '' })).toThrow();
   });
 });
 
@@ -75,7 +95,7 @@ describe('resolveTenantStorage (remote URL template)', () => {
     process.env.MASTRACODE_TENANT_DB_AUTH_TOKEN = 'tok_storage';
     process.env.MASTRACODE_TENANT_VECTOR_AUTH_TOKEN = 'tok_vector';
 
-    const { tenantKey, storageConfig } = resolveTenantStorage('user_a');
+    const { tenantKey, storageConfig } = resolveTenantStorage({ userId: 'user_a' });
     expect(storageConfig.isRemote).toBe(true);
     expect(storageConfig.url).toBe(`libsql://${tenantKey}-org.turso.io`);
     expect(storageConfig.vectorUrl).toBe(`libsql://${tenantKey}-vec.turso.io`);
@@ -87,28 +107,35 @@ describe('resolveTenantStorage (remote URL template)', () => {
     process.env.MASTRACODE_TENANT_DB_URL_TEMPLATE = 'libsql://{id}.turso.io';
     process.env.MASTRACODE_TENANT_DB_AUTH_TOKEN = 'tok_shared';
 
-    const { storageConfig } = resolveTenantStorage('user_a');
+    const { storageConfig } = resolveTenantStorage({ userId: 'user_a' });
     expect(storageConfig.vectorUrl).toBe(storageConfig.url);
     expect(storageConfig.vectorAuthToken).toBe('tok_shared');
   });
 
   it('does not touch the local filesystem when a template is configured', () => {
     process.env.MASTRACODE_TENANT_DB_URL_TEMPLATE = 'libsql://{id}.turso.io';
-    const { tenantKey } = resolveTenantStorage('user_a');
+    const { tenantKey } = resolveTenantStorage({ userId: 'user_a' });
     expect(existsSync(path.join(tmpRoot, tenantKey))).toBe(false);
   });
 });
 
 describe('getUserStorage caching', () => {
-  it('returns the same cached descriptor for the same user', () => {
-    const first = getUserStorage('user_a');
-    const second = getUserStorage('user_a');
+  it('returns the same cached descriptor for the same identity', () => {
+    const first = getUserStorage({ orgId: 'org_a', userId: 'user_a' });
+    const second = getUserStorage({ orgId: 'org_a', userId: 'user_a' });
     expect(second).toBe(first);
   });
 
   it('returns distinct descriptors for distinct users', () => {
-    const a = getUserStorage('user_a');
-    const b = getUserStorage('user_b');
+    const a = getUserStorage({ userId: 'user_a' });
+    const b = getUserStorage({ userId: 'user_b' });
+    expect(a).not.toBe(b);
+    expect(a.tenantKey).not.toBe(b.tenantKey);
+  });
+
+  it('returns distinct descriptors for the same user in different orgs', () => {
+    const a = getUserStorage({ orgId: 'org_a', userId: 'user_a' });
+    const b = getUserStorage({ orgId: 'org_b', userId: 'user_a' });
     expect(a).not.toBe(b);
     expect(a.tenantKey).not.toBe(b.tenantKey);
   });

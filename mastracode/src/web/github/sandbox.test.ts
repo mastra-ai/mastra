@@ -35,8 +35,8 @@ import {
   withInstallToken,
   WorktreeError,
 } from './sandbox';
-import type { MaterializationSandbox, SandboxCommandResult } from './sandbox';
-import type { GithubProjectRow } from './schema';
+import type { MaterializationSandbox, RepoMaterializeInfo, SandboxCommandResult } from './sandbox';
+import type { GithubProjectSandboxRow } from './schema';
 
 type Responder = (script: string) => SandboxCommandResult;
 const OK: SandboxCommandResult = { exitCode: 0, stdout: '', stderr: '' };
@@ -67,21 +67,21 @@ class FakeSandbox implements MaterializationSandbox {
   }
 }
 
-function makeRow(overrides: Partial<GithubProjectRow> = {}): GithubProjectRow {
+function makeRow(overrides: Partial<GithubProjectSandboxRow> = {}): GithubProjectSandboxRow {
   return {
-    id: 'proj-1',
+    id: 'sbrow-1',
+    githubProjectId: 'proj-1',
     userId: 'user-1',
-    installationId: 42,
-    repoFullName: 'octocat/hello',
-    repoId: 99,
-    defaultBranch: 'main',
-    sandboxProvider: 'railway',
     sandboxId: null,
     sandboxWorkdir: '/workspace/hello',
     materializedAt: null,
     createdAt: new Date(),
     ...overrides,
   };
+}
+
+function makeRepoInfo(overrides: Partial<RepoMaterializeInfo> = {}): RepoMaterializeInfo {
+  return { repoFullName: 'octocat/hello', defaultBranch: 'main', ...overrides };
 }
 
 beforeEach(() => {
@@ -219,7 +219,7 @@ describe('getSandboxIdleMinutes', () => {
 describe('materializeRepo', () => {
   it('clones on first open, scrubs the token, and marks materialized', async () => {
     const sandbox = new FakeSandbox();
-    await materializeRepo(makeRow({ materializedAt: null }), sandbox, 'tok-123');
+    await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok-123');
 
     const joined = sandbox.calls.join('\n');
     expect(sandbox.calls[0]).toBe('git --version');
@@ -234,7 +234,7 @@ describe('materializeRepo', () => {
 
   it('pulls (not clones) on re-open', async () => {
     const sandbox = new FakeSandbox();
-    await materializeRepo(makeRow({ materializedAt: new Date() }), sandbox, 'tok-xyz');
+    await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok-xyz');
 
     const joined = sandbox.calls.join('\n');
     expect(joined).toContain('git -C ');
@@ -247,7 +247,7 @@ describe('materializeRepo', () => {
     const sandbox = new FakeSandbox(script =>
       script === 'git --version' ? { exitCode: 127, stdout: '', stderr: 'not found' } : OK,
     );
-    await expect(materializeRepo(makeRow(), sandbox, 'tok')).rejects.toMatchObject({
+    await expect(materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok')).rejects.toMatchObject({
       code: 'git-missing',
     });
   });
@@ -260,14 +260,19 @@ describe('materializeRepo', () => {
       }
       return OK;
     });
-    const err = await materializeRepo(makeRow(), sandbox, 'tok').catch(e => e);
+    const err = await materializeRepo(makeRow(), makeRepoInfo(), sandbox, 'tok').catch(e => e);
     expect(err).toBeInstanceOf(MaterializeError);
     expect(err.code).toBe('egress-blocked');
   });
 
   it('refuses to run git when the default branch is not git-ref-safe', async () => {
     const sandbox = new FakeSandbox();
-    const err = await materializeRepo(makeRow({ defaultBranch: "main'; rm -rf /; '" }), sandbox, 'tok').catch(e => e);
+    const err = await materializeRepo(
+      makeRow(),
+      makeRepoInfo({ defaultBranch: "main'; rm -rf /; '" }),
+      sandbox,
+      'tok',
+    ).catch(e => e);
     expect(err).toBeInstanceOf(MaterializeError);
     // No git command should have been executed for an invalid branch.
     expect(sandbox.calls).toHaveLength(0);
@@ -275,7 +280,9 @@ describe('materializeRepo', () => {
 
   it('refuses to run git when the repo full name is not owner/name shaped', async () => {
     const sandbox = new FakeSandbox();
-    const err = await materializeRepo(makeRow({ repoFullName: 'evil; whoami' }), sandbox, 'tok').catch(e => e);
+    const err = await materializeRepo(makeRow(), makeRepoInfo({ repoFullName: 'evil; whoami' }), sandbox, 'tok').catch(
+      e => e,
+    );
     expect(err).toBeInstanceOf(MaterializeError);
     expect(sandbox.calls).toHaveLength(0);
   });
@@ -289,7 +296,12 @@ describe('materializeRepo', () => {
       return OK;
     });
 
-    const err = await materializeRepo(makeRow({ materializedAt: new Date() }), sandbox, 'tok-secret').catch(e => e);
+    const err = await materializeRepo(
+      makeRow({ materializedAt: new Date() }),
+      makeRepoInfo(),
+      sandbox,
+      'tok-secret',
+    ).catch(e => e);
 
     // The pull failure is surfaced...
     expect(err).toBeInstanceOf(MaterializeError);
@@ -312,7 +324,9 @@ describe('materializeRepo', () => {
       return OK;
     });
 
-    const err = await materializeRepo(makeRow({ materializedAt: new Date() }), sandbox, 'tok').catch(e => e);
+    const err = await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok').catch(
+      e => e,
+    );
     expect(err).toBeInstanceOf(MaterializeError);
     expect(err.code).toBe('pull-failed');
     expect(String(err.message)).toContain('scrub');
