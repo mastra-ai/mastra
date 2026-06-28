@@ -49,6 +49,9 @@ describe('scaffoldPlugin', () => {
     expect(indexSource).toContain("import { createTool, defineMastraCodePlugin, z } from 'mastracode/plugin';");
     expect(indexSource).toContain('execute: async context =>');
     expect(indexSource).toContain('id: "acme.foo"');
+    expect(JSON.parse(fs.readFileSync(path.join(target, '.mastracode-plugin.json'), 'utf-8'))).toEqual({
+      plugins: [{ id: 'acme.foo', name: 'Foo Tools', entry: 'src/index.ts' }],
+    });
     expect(fs.existsSync(path.join(target, 'node_modules', 'mastracode'))).toBe(true);
   });
 
@@ -60,6 +63,15 @@ describe('scaffoldPlugin', () => {
     expect(createdDir).toBe(path.join(tempDir, '.mastracode', 'plugins', 'sources', 'local', 'my-plugin'));
     expect(JSON.parse(fs.readFileSync(path.join(createdDir, 'package.json'), 'utf-8'))).toMatchObject({
       name: 'my-plugin',
+    });
+    expect(JSON.parse(fs.readFileSync(path.join(tempDir, '.mastracode-plugin.json'), 'utf-8'))).toEqual({
+      plugins: [
+        {
+          id: 'my-plugin',
+          name: 'My Plugin',
+          entry: '.mastracode/plugins/sources/local/my-plugin/src/index.ts',
+        },
+      ],
     });
   });
 

@@ -5,6 +5,7 @@ import { execa } from 'execa';
 
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { loadPluginFromEntry } from './loader.js';
+import { getSingleManifestPlugin } from './manifest.js';
 import { ensureMastraCodePackageLink } from './package-link.js';
 import { getPluginRoot, getPluginScopePaths } from './paths.js';
 import type { PluginPathOptions } from './paths.js';
@@ -129,10 +130,15 @@ function tryDetectEntry(pluginDir: string): string | undefined {
 }
 
 export function detectEntry(pluginDir: string, explicitEntry?: string): string {
+  const root = path.resolve(pluginDir);
   if (explicitEntry) {
     const entryPath = path.resolve(pluginDir, explicitEntry);
-    if (!entryPath.startsWith(path.resolve(pluginDir) + path.sep)) {
+    if (!isInsideDirectory(entryPath, root)) {
       throw new Error('Plugin entry must be inside the plugin directory');
+    }
+    if (fs.existsSync(entryPath) && fs.statSync(entryPath).isDirectory()) {
+      const nestedEntry = detectEntry(entryPath);
+      return path.relative(root, path.join(entryPath, nestedEntry));
     }
     if (path.extname(entryPath) !== '.ts') {
       throw new Error('Plugin entry must be a .ts file');
@@ -140,7 +146,12 @@ export function detectEntry(pluginDir: string, explicitEntry?: string): string {
     if (!fs.existsSync(entryPath) || !fs.statSync(entryPath).isFile()) {
       throw new Error(`Plugin entry file does not exist: ${explicitEntry}`);
     }
-    return explicitEntry;
+    return path.relative(root, entryPath);
+  }
+
+  const manifestPlugin = getSingleManifestPlugin(pluginDir);
+  if (manifestPlugin) {
+    return detectEntry(pluginDir, manifestPlugin.entry);
   }
 
   for (const candidate of ENTRY_CANDIDATES) {
@@ -151,6 +162,10 @@ export function detectEntry(pluginDir: string, explicitEntry?: string): string {
   }
 
   throw new Error(`Could not find a plugin entry file. Tried: ${ENTRY_CANDIDATES.join(', ')}`);
+}
+
+function isInsideDirectory(targetPath: string, root: string): boolean {
+  return targetPath === root || targetPath.startsWith(root + path.sep);
 }
 
 function parseGithubUrl(specifier: string): { owner: string; repo: string; cloneUrl: string; ref?: string } {
