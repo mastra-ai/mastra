@@ -29,7 +29,7 @@ export const notificationInboxCrudFlowScenario = {
           if (seeded || !threadId || !result.session.stream.isActive()) return;
           seeded = true;
           if (timer) clearInterval(timer);
-          const storage = await result.harness.getMastra()?.getStorage()?.getStore('notifications');
+          const storage = await result.controller.getMastra()?.getStorage()?.getStore('notifications');
           if (!storage) throw new Error('notification storage unavailable');
           const resourceId = result.session.identity.getResourceId();
           const agentId = 'code-agent';

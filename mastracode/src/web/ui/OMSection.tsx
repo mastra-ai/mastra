@@ -1,13 +1,15 @@
-import type { HarnessAvailableModel } from '@mastra/client-js';
-import { useEffect, useState } from 'react';
+import type { AgentControllerAvailableModel } from '@mastra/client-js';
+import { useState } from 'react';
 
-interface OMConfig {
-  observerModelId: string;
-  reflectorModelId: string;
-  observationThreshold: number;
-  reflectionThreshold: number;
-  observeAttachments: 'auto' | boolean;
-}
+import type { OMConfigInfo } from '../../shared/api/types';
+import {
+  useOMQuery,
+  useUpdateOMModel,
+  useUpdateOMObserveAttachments,
+  useUpdateOMThresholds,
+} from '../../shared/hooks/use-om';
+
+type OMConfig = OMConfigInfo;
 
 type AttachmentChoice = 'auto' | 'on' | 'off';
 
@@ -29,83 +31,50 @@ function choiceToAttachment(choice: AttachmentChoice): 'auto' | boolean {
  * observed. Everything is session-scoped (resolved from and written to the
  * active project's session), so it needs the project's resourceId.
  */
-export function OMSection({
-  baseUrl = '',
-  resourceId,
-  models,
-}: {
-  baseUrl?: string;
-  resourceId?: string;
-  models: HarnessAvailableModel[];
-}) {
-  const [config, setConfig] = useState<OMConfig | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  // Local threshold drafts so typing doesn't fire a request per keystroke.
+export function OMSection({ resourceId, models }: { resourceId?: string; models: AgentControllerAvailableModel[] }) {
+  const omQuery = useOMQuery(resourceId);
+  const observerMutation = useUpdateOMModel(resourceId, 'observer');
+  const reflectorMutation = useUpdateOMModel(resourceId, 'reflector');
+  const thresholdsMutation = useUpdateOMThresholds(resourceId);
+  const attachmentsMutation = useUpdateOMObserveAttachments(resourceId);
+
+  const config = omQuery.data?.config ?? null;
+  const loading = omQuery.isPending && !!resourceId;
+  const busy =
+    observerMutation.isPending ||
+    reflectorMutation.isPending ||
+    thresholdsMutation.isPending ||
+    attachmentsMutation.isPending;
+
+  const mutationError =
+    (observerMutation.error ??
+      reflectorMutation.error ??
+      thresholdsMutation.error ??
+      attachmentsMutation.error) instanceof Error
+      ? (observerMutation.error ?? reflectorMutation.error ?? thresholdsMutation.error ?? attachmentsMutation.error)!
+          .message
+      : null;
+  const [localError, setLocalError] = useState<string | null>(null);
+  const error = localError ?? mutationError ?? (omQuery.error instanceof Error ? omQuery.error.message : null);
+
+  // Local threshold drafts so typing doesn't fire a request per keystroke. They
+  // re-seed from the query's config during render whenever that config changes —
+  // no effect needed (react-best-practices: derive-from-props, no useEffect
+  // state reset).
   const [obsDraft, setObsDraft] = useState('');
   const [refDraft, setRefDraft] = useState('');
-
-  const apply = (cfg: OMConfig) => {
-    setConfig(cfg);
-    setObsDraft(String(cfg.observationThreshold));
-    setRefDraft(String(cfg.reflectionThreshold));
-  };
-
-  const load = async () => {
-    if (!resourceId) {
-      setLoading(false);
-      return;
-    }
-    try {
-      const res = await fetch(`${baseUrl}/api/web/config/om?resourceId=${encodeURIComponent(resourceId)}`);
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? `Failed to load OM settings (${res.status})`);
-      }
-      const data = (await res.json()) as { config: OMConfig };
-      apply(data.config);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void load();
-  }, [baseUrl, resourceId]);
-
-  const put = async (path: string, body: Record<string, unknown>) => {
-    if (!resourceId) {
-      setError('Open a project first to change OM settings.');
-      return;
-    }
-    setBusy(true);
-    try {
-      const res = await fetch(`${baseUrl}/api/web/config/om${path}`, {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ resourceId, ...body }),
-      });
-      if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error ?? `Request failed (${res.status})`);
-      }
-      const data = (await res.json()) as { config: OMConfig };
-      apply(data.config);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
+  const [seededFrom, setSeededFrom] = useState<OMConfig | null>(null);
+  if (config && config !== seededFrom) {
+    setSeededFrom(config);
+    setObsDraft(String(config.observationThreshold));
+    setRefDraft(String(config.reflectionThreshold));
+  }
 
   const switchModel = (role: 'observer' | 'reflector', modelId: string) => {
     if (!modelId) return;
-    void put(`/${role}/model`, { modelId });
+    setLocalError(null);
+    const mutation = role === 'observer' ? observerMutation : reflectorMutation;
+    mutation.mutate({ modelId });
   };
 
   const commitThreshold = (role: 'observation' | 'reflection') => {
@@ -120,7 +89,8 @@ export function OMSection({
       return;
     }
     if (Math.round(parsed) === current) return;
-    void put('/thresholds', { [`${role}Threshold`]: Math.round(parsed) });
+    setLocalError(null);
+    thresholdsMutation.mutate({ [`${role}Threshold`]: Math.round(parsed) });
   };
 
   const modelOptions = models.map(m => m.id);
@@ -239,7 +209,10 @@ export function OMSection({
               className={`seg-btn ${attachmentChoice === choice ? 'active' : ''}`}
               aria-pressed={attachmentChoice === choice}
               disabled={busy}
-              onClick={() => void put('/observe-attachments', { value: choiceToAttachment(choice) })}
+              onClick={() => {
+                setLocalError(null);
+                attachmentsMutation.mutate({ value: choiceToAttachment(choice) });
+              }}
             >
               {choice === 'auto' ? 'Auto' : choice === 'on' ? 'On' : 'Off'}
             </button>

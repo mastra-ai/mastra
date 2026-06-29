@@ -47,7 +47,6 @@ const RESOURCE_DESCRIPTIONS: Record<string, string> = {
   'agent-controller': 'agent controller sessions',
   agents: 'agents',
   'background-tasks': 'background tasks',
-  harness: 'harness sessions',
   logs: 'logs',
   mcp: 'MCP servers',
   memory: 'memory and threads',

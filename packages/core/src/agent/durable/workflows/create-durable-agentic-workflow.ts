@@ -503,8 +503,23 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
             const { scorerName, sampling } = scorerEntry;
 
             try {
-              // Resolve the scorer from Mastra
-              const scorer = (mastra as Mastra)?.getScorer?.(scorerName) as MastraScorer | undefined;
+              // Resolve the scorer from Mastra. We serialize scorers by name,
+              // and `getScorerById` searches by id-or-name without throwing
+              // on the common path, so try it first. Fall back to the
+              // registration-key-keyed `getScorer` for older configs.
+              let scorer: MastraScorer | undefined;
+              try {
+                scorer = (mastra as Mastra)?.getScorerById?.(scorerName) as MastraScorer | undefined;
+              } catch {
+                scorer = undefined;
+              }
+              if (!scorer) {
+                try {
+                  scorer = (mastra as Mastra)?.getScorer?.(scorerName) as MastraScorer | undefined;
+                } catch {
+                  scorer = undefined;
+                }
+              }
 
               if (!scorer) {
                 logger?.warn?.(`Scorer ${scorerName} not found in Mastra, skipping`, {

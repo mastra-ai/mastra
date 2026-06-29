@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 
-import { runScenario } from './harness';
+import { runScenario } from './scenario-runner';
 
 /**
  * Reproduces the browser-tool availability path in MastraCode web scenarios:
- * when the harness is configured with browser support, model-selected browser
+ * when the controller is configured with browser support, model-selected browser
  * tools should be executable instead of surfacing as unavailable tools.
  */
 describe('web scenario: browser-tool-unavailable', () => {

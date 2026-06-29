@@ -1,16 +1,16 @@
-import { harnessMessageText } from '@mastra/client-js';
+import { agentControllerMessageText } from '@mastra/client-js';
 import type {
-  HarnessEvent,
-  KnownHarnessEvent,
-  HarnessMessage,
-  HarnessTaskSnapshot,
-  HarnessOMProgress,
+  AgentControllerEvent,
+  KnownAgentControllerEvent,
+  AgentControllerMessage,
+  AgentControllerTaskSnapshot,
+  AgentControllerOMProgress,
 } from '@mastra/client-js';
 
 /**
  * Transcript model + reducer.
  *
- * Folds the harness event stream into an ordered list of timeline entries the
+ * Folds the controller event stream into an ordered list of timeline entries the
  * UI renders top-to-bottom — mirroring what MastraCode's TUI shows: user and
  * assistant messages, tool-execution cards, interactive prompts, and notices.
  */
@@ -28,7 +28,7 @@ export interface ToolCall {
 }
 
 /**
- * An ordered piece of an assistant turn. The harness streams an assistant
+ * An ordered piece of an assistant turn. The controller streams an assistant
  * message whose `content[]` interleaves text, thinking, and tool_call parts in
  * execution order; we mirror that order here so the UI renders
  * text → tool → text → tool exactly as it happened (matching the TUI), rather
@@ -169,13 +169,13 @@ export interface TranscriptState {
   modelId?: string;
   threadId?: string;
   /** Current task list from task_updated events. */
-  tasks: HarnessTaskSnapshot[];
+  tasks: AgentControllerTaskSnapshot[];
   /** Accumulated token usage. */
   usage?: UsageSnapshot;
   /** Number of queued follow-up messages. */
   followUpCount: number;
   /** OM progress for the status line (msg/mem budgets), from display_state_changed. */
-  omProgress?: HarnessOMProgress;
+  omProgress?: AgentControllerOMProgress;
   /** Observational memory phase. */
   omPhase: OMPhase;
   /** Whether the workspace is ready. */
@@ -207,7 +207,7 @@ export const initialTranscript: TranscriptState = {
 let noticeSeq = 0;
 
 type Action =
-  | { type: 'event'; event: HarnessEvent }
+  | { type: 'event'; event: AgentControllerEvent }
   | { type: 'localUser'; text: string; steer?: boolean }
   | { type: 'localNotice'; text: string; level: 'info' | 'error' }
   | { type: 'resolvePrompt'; id: string }
@@ -216,16 +216,16 @@ type Action =
       modeId?: string;
       modelId?: string;
       threadId?: string;
-      omProgress?: HarnessOMProgress;
+      omProgress?: AgentControllerOMProgress;
       usage?: UsageSnapshot;
     }
   | {
       type: 'hydrate';
-      messages: HarnessMessage[];
+      messages: AgentControllerMessage[];
       modeId?: string;
       modelId?: string;
       threadId?: string;
-      omProgress?: HarnessOMProgress;
+      omProgress?: AgentControllerOMProgress;
       usage?: UsageSnapshot;
     };
 
@@ -262,8 +262,8 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
   }
 }
 
-function applyEvent(state: TranscriptState, raw: HarnessEvent): TranscriptState {
-  const event = raw as KnownHarnessEvent;
+function applyEvent(state: TranscriptState, raw: AgentControllerEvent): TranscriptState {
+  const event = raw as KnownAgentControllerEvent;
   switch (event.type) {
     case 'agent_start':
       // Reset the rate at the start of a new turn (not at the end) so the last
@@ -523,17 +523,17 @@ function applyEvent(state: TranscriptState, raw: HarnessEvent): TranscriptState 
  * call (matched to its result) as part of the same assistant entry.
  */
 function hydrate(
-  messages: HarnessMessage[],
+  messages: AgentControllerMessage[],
   modeId?: string,
   modelId?: string,
   threadId?: string,
-  omProgress?: HarnessOMProgress,
+  omProgress?: AgentControllerOMProgress,
   usage?: UsageSnapshot,
 ): TranscriptState {
   const entries: TimelineEntry[] = [];
   for (const message of messages) {
     if (message.role === 'user') {
-      entries.push({ kind: 'user', id: message.id, text: harnessMessageText(message) });
+      entries.push({ kind: 'user', id: message.id, text: agentControllerMessageText(message) });
     } else if (message.role === 'assistant') {
       const { segments, toolsById } = buildSegments(message);
       entries.push({ kind: 'assistant', id: message.id, segments, toolsById, streaming: false });
@@ -554,7 +554,7 @@ function hydrate(
  * tools.
  */
 function buildSegments(
-  message: HarnessMessage,
+  message: AgentControllerMessage,
   prevTools: Record<string, ToolCall> = {},
 ): { segments: AssistantSegment[]; toolsById: Record<string, ToolCall> } {
   const segments: AssistantSegment[] = [];
@@ -588,7 +588,7 @@ function buildSegments(
   return { segments, toolsById };
 }
 
-function upsertAssistant(state: TranscriptState, message: HarnessMessage, streaming: boolean): TranscriptState {
+function upsertAssistant(state: TranscriptState, message: AgentControllerMessage, streaming: boolean): TranscriptState {
   if (message.role !== 'assistant') return state;
   const entries = [...state.entries];
   const idx = entries.findIndex(e => e.kind === 'assistant' && e.id === message.id);

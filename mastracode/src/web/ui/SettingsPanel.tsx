@@ -1,6 +1,6 @@
 import type {
-  HarnessAvailableModel,
-  HarnessSessionSettings,
+  AgentControllerAvailableModel,
+  AgentControllerSessionSettings,
   PermissionPolicy,
   PermissionRules,
   ToolCategory,
@@ -24,24 +24,23 @@ import { OMSection } from './OMSection';
 import { ProvidersSection } from './ProvidersSection';
 import type { Density, Theme } from './theme';
 
-type ThinkingLevel = HarnessSessionSettings['thinkingLevel'];
-type NotificationMode = HarnessSessionSettings['notifications'];
+type ThinkingLevel = AgentControllerSessionSettings['thinkingLevel'];
+type NotificationMode = AgentControllerSessionSettings['notifications'];
 type Tab = 'general' | 'model' | 'packs' | 'memory' | 'behavior' | 'providers' | 'custom-providers';
 
 interface SettingsPanelProps {
   theme: Theme;
   density: Density;
-  models: HarnessAvailableModel[];
+  models: AgentControllerAvailableModel[];
   currentModelId: string | null;
-  settings: HarnessSessionSettings | null;
-  baseUrl?: string;
+  settings: AgentControllerSessionSettings | null;
   /** Active project's resourceId — required to activate a model pack on its session. */
   resourceId?: string;
   onThemeChange: (theme: Theme) => void;
   onDensityChange: (density: Density) => void;
   onModelChange: (modelId: string) => void;
   /** Merge behavior settings into the server-side session state. */
-  onBehaviorChange: (updates: Partial<HarnessSessionSettings>) => void;
+  onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
   /** Read the session's current tool-permission rules. */
   getPermissions: () => Promise<PermissionRules>;
   /** Set a tool category's approval policy on the session. */
@@ -86,7 +85,6 @@ export function SettingsPanel({
   models,
   currentModelId,
   settings,
-  baseUrl,
   resourceId,
   onThemeChange,
   onDensityChange,
@@ -147,8 +145,8 @@ export function SettingsPanel({
                 onBehaviorChange={onBehaviorChange}
               />
             )}
-            {tab === 'packs' && <ModelPacksSection baseUrl={baseUrl} resourceId={resourceId} models={models} />}
-            {tab === 'memory' && <OMSection baseUrl={baseUrl} resourceId={resourceId} models={models} />}
+            {tab === 'packs' && <ModelPacksSection resourceId={resourceId} models={models} />}
+            {tab === 'memory' && <OMSection resourceId={resourceId} models={models} />}
             {tab === 'behavior' && (
               <BehaviorTab
                 settings={settings}
@@ -157,8 +155,8 @@ export function SettingsPanel({
                 setPermissionForCategory={setPermissionForCategory}
               />
             )}
-            {tab === 'providers' && <ProvidersSection baseUrl={baseUrl} />}
-            {tab === 'custom-providers' && <CustomProvidersSection baseUrl={baseUrl} />}
+            {tab === 'providers' && <ProvidersSection />}
+            {tab === 'custom-providers' && <CustomProvidersSection />}
           </div>
         </div>
       </div>
@@ -347,7 +345,7 @@ function ModelPicker({
   currentModelId,
   onModelChange,
 }: {
-  models: HarnessAvailableModel[];
+  models: AgentControllerAvailableModel[];
   currentModelId: string | null;
   onModelChange: (id: string) => void;
 }) {
@@ -399,7 +397,7 @@ function ModelPicker({
     return () => document.removeEventListener('mousedown', onDocClick);
   }, [open]);
 
-  const choose = (m: HarnessAvailableModel) => {
+  const choose = (m: AgentControllerAvailableModel) => {
     if (!m.hasApiKey) return;
     onModelChange(m.id);
     setOpen(false);
