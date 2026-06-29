@@ -47,6 +47,7 @@ interface ScoreRow {
   resourceId: string | null;
   organizationId: string | null;
   projectId: string | null;
+  batchId: string | null;
   threadId: string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
@@ -99,7 +100,7 @@ export class ScoresMySQL extends ScoresStorage {
     await this.operations.alterTable({
       tableName: TABLE_SCORERS,
       schema: SCORERS_SCHEMA,
-      ifNotExists: ['spanId', 'requestContext', 'organizationId', 'projectId'],
+      ifNotExists: ['spanId', 'requestContext', 'organizationId', 'projectId', 'batchId'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -186,6 +187,7 @@ export class ScoresMySQL extends ScoresStorage {
       resourceId: row.resourceId ?? undefined,
       organizationId: row.organizationId ?? undefined,
       projectId: row.projectId ?? undefined,
+      batchId: row.batchId ?? undefined,
       threadId: row.threadId ?? undefined,
       createdAt: parseDateTime(row.createdAt) ?? new Date(),
       updatedAt: parseDateTime(row.updatedAt) ?? new Date(),
@@ -225,6 +227,7 @@ export class ScoresMySQL extends ScoresStorage {
       resourceId: score.resourceId ?? null,
       organizationId: score.organizationId ?? null,
       projectId: score.projectId ?? null,
+      batchId: score.batchId ?? null,
       threadId: score.threadId ?? null,
       source: score.source ?? null,
       createdAt,
@@ -404,6 +407,25 @@ export class ScoresMySQL extends ScoresStorage {
         entityId,
         entityType,
         source,
+        organizationId: filters?.organizationId,
+        projectId: filters?.projectId,
+      }),
+      pagination,
+    );
+  }
+
+  async listScoresByBatchId({
+    batchId,
+    pagination,
+    filters,
+  }: {
+    batchId: string;
+    pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
+  }): Promise<ListScoresResult> {
+    return this.fetchScores(
+      this.buildWhereClause({
+        batchId,
         organizationId: filters?.organizationId,
         projectId: filters?.projectId,
       }),

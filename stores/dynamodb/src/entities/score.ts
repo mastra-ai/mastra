@@ -311,6 +311,10 @@ export const scoreEntity = new Entity({
       type: 'string',
       required: false,
     },
+    batchId: {
+      type: 'string',
+      required: false,
+    },
     threadId: {
       type: 'string',
       required: false,

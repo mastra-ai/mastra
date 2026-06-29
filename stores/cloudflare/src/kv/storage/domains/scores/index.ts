@@ -274,6 +274,66 @@ export class ScoresStorageCloudflare extends ScoresStorage {
     }
   }
 
+  async listScoresByBatchId({
+    batchId,
+    pagination,
+    filters,
+  }: {
+    batchId: string;
+    pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
+  }): Promise<ListScoresResponse> {
+    try {
+      const keys = await this.#db.listKV(TABLE_SCORERS);
+      const scores: ScoreRowData[] = [];
+
+      for (const { name: key } of keys) {
+        const score = await this.#db.getKV(TABLE_SCORERS, key);
+        if (score && score.batchId === batchId && matchesTenancy(score, filters)) {
+          scores.push(transformScoreRow(score));
+        }
+      }
+
+      // Sort by createdAt desc
+      scores.sort((a, b) => {
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        return dateB - dateA;
+      });
+
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+      const total = scores.length;
+      const end = perPageInput === false ? scores.length : start + perPage;
+      const pagedScores = scores.slice(start, end);
+
+      return {
+        pagination: {
+          total,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
+        },
+        scores: pagedScores,
+      };
+    } catch (error) {
+      const mastraError = new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE', 'GET_SCORES_BY_BATCH_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Failed to get scores by batch id: ${batchId}`,
+        },
+        error,
+      );
+      this.logger?.trackException(mastraError);
+      this.logger?.error(mastraError.toString());
+      return { pagination: { total: 0, page: 0, perPage: 100, hasMore: false }, scores: [] };
+    }
+  }
+
   async listScoresByEntityId({
     entityId,
     entityType,

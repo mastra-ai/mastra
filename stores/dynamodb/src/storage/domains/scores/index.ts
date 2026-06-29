@@ -329,6 +329,58 @@ export class ScoresStorageDynamoDB extends ScoresStorage {
     }
   }
 
+  async listScoresByBatchId({
+    batchId,
+    pagination,
+    filters,
+  }: {
+    batchId: string;
+    pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
+  }): Promise<ListScoresResponse> {
+    this.logger.debug('Getting scores by batch ID', { batchId, pagination });
+
+    try {
+      // No dedicated batch GSI; scan and filter by batchId in memory.
+      const results = await this.service.entities.score.scan.go({ pages: 'all' });
+      const allScores = results.data
+        .map((data: any) => this.parseScoreData(data))
+        .filter((score: ScoreRowData) => score.batchId === batchId && matchesTenancy(score, filters));
+
+      // Sort by createdAt DESC (newest first)
+      allScores.sort((a: ScoreRowData, b: ScoreRowData) => b.createdAt.getTime() - a.createdAt.getTime());
+
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, Number.MAX_SAFE_INTEGER);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+      // Apply pagination in memory
+      const total = allScores.length;
+      const end = perPageInput === false ? allScores.length : start + perPage;
+      const paginatedScores = allScores.slice(start, end);
+
+      return {
+        scores: paginatedScores,
+        pagination: {
+          total,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
+        },
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DYNAMODB', 'LIST_SCORES_BY_BATCH_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { batchId, page: pagination.page, perPage: pagination.perPage },
+        },
+        error,
+      );
+    }
+  }
+
   async listScoresByEntityId({
     entityId,
     entityType,

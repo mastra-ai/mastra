@@ -113,12 +113,30 @@ export class ScoresConvex extends ScoresStorage {
     });
   }
 
+  async listScoresByBatchId({
+    batchId,
+    pagination,
+    filters,
+  }: {
+    batchId: string;
+    pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
+  }): Promise<ListScoresResponse> {
+    return this.listScores({
+      filters: { batchId, ...filters },
+      pagination,
+    });
+  }
+
   private async listScores({
     filters,
     pagination,
   }: {
     filters: Partial<
-      Pick<ScoreRowData, 'scorerId' | 'entityId' | 'entityType' | 'runId' | 'source' | 'organizationId' | 'projectId'>
+      Pick<
+        ScoreRowData,
+        'scorerId' | 'entityId' | 'entityType' | 'runId' | 'source' | 'organizationId' | 'projectId' | 'batchId'
+      >
     >;
     pagination: StoragePagination;
   }): Promise<ListScoresResponse> {
@@ -139,6 +157,7 @@ export class ScoresConvex extends ScoresStorage {
       .filter(row => (filters.entityId ? row.entityId === filters.entityId : true))
       .filter(row => (filters.entityType ? row.entityType === filters.entityType : true))
       .filter(row => (filters.runId ? row.runId === filters.runId : true))
+      .filter(row => (filters.batchId ? row.batchId === filters.batchId : true))
       .filter(row => (filters.source ? row.source === filters.source : true))
       .filter(row => (filters.organizationId !== undefined ? row.organizationId === filters.organizationId : true))
       .filter(row => (filters.projectId !== undefined ? row.projectId === filters.projectId : true))

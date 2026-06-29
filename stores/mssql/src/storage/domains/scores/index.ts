@@ -413,6 +413,79 @@ export class ScoresMSSQL extends ScoresStorage {
     }
   }
 
+  async listScoresByBatchId({
+    batchId,
+    pagination,
+    filters,
+  }: {
+    batchId: string;
+    pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
+  }): Promise<ListScoresResponse> {
+    try {
+      const tenancy = buildTenancyConditions(filters);
+      const tenancySql = tenancy.conditions.length > 0 ? ` AND ${tenancy.conditions.join(' AND ')}` : '';
+
+      const request = this.pool.request();
+      request.input('p1', batchId);
+      Object.entries(tenancy.params).forEach(([key, value]) => request.input(key, value));
+
+      const totalResult = await request.query(
+        `SELECT COUNT(*) as count FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [batchId] = @p1${tenancySql}`,
+      );
+
+      const total = totalResult.recordset[0]?.count || 0;
+      const { page, perPage: perPageInput } = pagination;
+
+      if (total === 0) {
+        return {
+          pagination: {
+            total: 0,
+            page,
+            perPage: perPageInput,
+            hasMore: false,
+          },
+          scores: [],
+        };
+      }
+
+      const perPage = normalizePerPage(perPageInput, 100); // false → MAX_SAFE_INTEGER
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+      const limitValue = perPageInput === false ? total : perPage;
+      const end = perPageInput === false ? total : start + perPage;
+
+      const dataRequest = this.pool.request();
+      dataRequest.input('p1', batchId);
+      dataRequest.input('p2', limitValue);
+      dataRequest.input('p3', start);
+      Object.entries(tenancy.params).forEach(([key, value]) => dataRequest.input(key, value));
+
+      const result = await dataRequest.query(
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.schema) })} WHERE [batchId] = @p1${tenancySql} ORDER BY [createdAt] DESC OFFSET @p3 ROWS FETCH NEXT @p2 ROWS ONLY`,
+      );
+
+      return {
+        pagination: {
+          total: Number(total),
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
+        },
+        scores: result.recordset.map(row => transformScoreRow(row)),
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'LIST_SCORES_BY_BATCH_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { batchId },
+        },
+        error,
+      );
+    }
+  }
+
   async listScoresByEntityId({
     entityId,
     entityType,

@@ -167,6 +167,21 @@ export class ScoresRedis extends ScoresStorage {
     return this.fetchAndFilterScores(pagination, row => row.runId === runId && matchesTenancy(row, filters));
   }
 
+  public async listScoresByBatchId({
+    batchId,
+    pagination = { page: 0, perPage: 20 },
+    filters,
+  }: {
+    batchId: string;
+    pagination?: StoragePagination;
+    filters?: ScoreTenancyFilters;
+  }): Promise<{
+    scores: ScoreRowData[];
+    pagination: PaginationInfo;
+  }> {
+    return this.fetchAndFilterScores(pagination, row => row.batchId === batchId && matchesTenancy(row, filters));
+  }
+
   public async listScoresByEntityId({
     entityId,
     entityType,
