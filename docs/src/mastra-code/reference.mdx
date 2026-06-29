@@ -13,15 +13,15 @@ The `createMastraCode()` factory function bootstraps Mastra Code and returns a c
 import { createMastraCode } from 'mastracode'
 
 const {
-  controller,
-  mcpManager,
-  hookManager,
-  authStorage,
-  resolveModel,
-  storageWarning,
-  builtinPacks,
-  builtinOmPacks,
-  effectiveDefaults,
+	controller,
+	mcpManager,
+	hookManager,
+	authStorage,
+	resolveModel,
+	storageWarning,
+	builtinPacks,
+	builtinOmPacks,
+	effectiveDefaults,
 } = createMastraCode(options)
 ```
 
@@ -153,12 +153,12 @@ import { MastraTUI } from 'mastracode/tui'
 const { controller, mcpManager, hookManager, authStorage } = await createMastraCode()
 
 const tui = new MastraTUI({
-  controller,
-  hookManager,
-  authStorage,
-  mcpManager,
-  appName: 'My Agent',
-  version: '1.0.0',
+	controller,
+	hookManager,
+	authStorage,
+	mcpManager,
+	appName: 'My Agent',
+	version: '1.0.0',
 })
 
 tui.run()
@@ -183,16 +183,16 @@ tui.run()
 import { createMastraCode } from 'mastracode'
 
 const { controller } = await createMastraCode({
-  cwd: '/path/to/project',
+	cwd: '/path/to/project',
 })
 
 await controller.init()
 await controller.selectOrCreateThread()
 
 controller.subscribe(event => {
-  if (event.type === 'message_update') {
-    console.log(event.message.content)
-  }
+	if (event.type === 'message_update') {
+		console.log(event.message.content)
+	}
 })
 
 await controller.sendMessage({ content: 'Explain the auth module' })
@@ -212,16 +212,16 @@ const reviewAgent = new Agent({
 })
 
 const { controller } = await createMastraCode({
-  modes: [
-    {
-      id: 'review',
-      name: 'Review',
-      default: true,
-      defaultModelId: 'anthropic/claude-sonnet-4-6',
-      color: '#f59e0b',
-      agent: reviewAgent,
-    },
-  ],
+	modes: [
+		{
+			id: 'review',
+			name: 'Review',
+			default: true,
+			defaultModelId: 'anthropic/claude-sonnet-4-6',
+			color: '#f59e0b',
+			agent: reviewAgent,
+		},
+	],
 })
 ```
 
@@ -245,7 +245,7 @@ const deployTool = createTool({
 })
 
 const { controller } = await createMastraCode({
-  extraTools: { deploy: deployTool },
+	extraTools: { deploy: deployTool },
 })
 ```
 
@@ -255,10 +255,10 @@ const { controller } = await createMastraCode({
 import { createMastraCode } from 'mastracode'
 
 const { controller } = await createMastraCode({
-  storage: {
-    url: 'libsql://my-db.turso.io',
-    authToken: process.env.TURSO_AUTH_TOKEN,
-  },
+	storage: {
+		url: 'libsql://my-db.turso.io',
+		authToken: process.env.TURSO_AUTH_TOKEN,
+	},
 })
 ```
 
@@ -268,17 +268,17 @@ const { controller } = await createMastraCode({
 import { createMastraCode } from 'mastracode'
 
 const { controller } = await createMastraCode({
-  initialState: {
-    yolo: false,
-    permissionRules: {
-      categories: {
-        read: 'allow',
-        edit: 'ask',
-        execute: 'ask',
-        mcp: 'deny',
-      },
-      tools: {},
-    },
-  },
+	initialState: {
+		yolo: false,
+		permissionRules: {
+			categories: {
+				read: 'allow',
+				edit: 'ask',
+				execute: 'ask',
+				mcp: 'deny',
+			},
+			tools: {},
+		},
+	},
 })
 ```

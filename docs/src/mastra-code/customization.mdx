@@ -17,19 +17,19 @@ Import `createMastraCode` to bootstrap Mastra Code in your own application:
 import { createMastraCode } from 'mastracode'
 
 const { controller, mcpManager, authStorage } = await createMastraCode({
-  cwd: '/path/to/project',
-  initialState: {
-    yolo: false,
-  },
+	cwd: '/path/to/project',
+	initialState: {
+		yolo: false,
+	},
 })
 
 await controller.init()
 await controller.selectOrCreateThread()
 
 controller.subscribe(event => {
-  if (event.type === 'message_update') {
-    console.log(event.message.content)
-  }
+	if (event.type === 'message_update') {
+		console.log(event.message.content)
+	}
 })
 
 await controller.sendMessage({ content: 'Explain the auth module' })
@@ -54,23 +54,23 @@ const reviewAgent = new Agent({
 })
 
 const { controller } = await createMastraCode({
-  modes: [
-    {
-      id: 'review',
-      name: 'Review',
-      default: true,
-      defaultModelId: 'anthropic/claude-sonnet-4-6',
-      color: '#f59e0b',
-      agent: reviewAgent,
-    },
-    {
-      id: 'build',
-      name: 'Build',
-      defaultModelId: 'anthropic/claude-opus-4-7',
-      color: '#7c3aed',
-      agent: reviewAgent,
-    },
-  ],
+	modes: [
+		{
+			id: 'review',
+			name: 'Review',
+			default: true,
+			defaultModelId: 'anthropic/claude-sonnet-4-6',
+			color: '#f59e0b',
+			agent: reviewAgent,
+		},
+		{
+			id: 'build',
+			name: 'Build',
+			defaultModelId: 'anthropic/claude-opus-4-7',
+			color: '#7c3aed',
+			agent: reviewAgent,
+		},
+	],
 })
 ```
 
@@ -97,7 +97,7 @@ const deployTool = createTool({
 })
 
 const { controller } = await createMastraCode({
-  extraTools: { deploy: deployTool },
+	extraTools: { deploy: deployTool },
 })
 ```
 
@@ -112,22 +112,22 @@ import { createMastraCode } from 'mastracode'
 import { createTool } from '@mastra/core/tools'
 
 const { controller } = await createMastraCode({
-  subagents: [
-    {
-      id: 'explore',
-      name: 'Explore',
-      description: 'Read-only codebase exploration',
-      instructions:
-        'You are an expert code explorer. Use read-only tools to answer questions about the codebase.',
-    },
-    {
-      id: 'test-writer',
-      name: 'Test Writer',
-      description: 'Write tests for the specified module',
-      instructions:
-        'You are a test-writing specialist. Generate comprehensive tests for the given module.',
-    },
-  ],
+	subagents: [
+		{
+			id: 'explore',
+			name: 'Explore',
+			description: 'Read-only codebase exploration',
+			instructions:
+				'You are an expert code explorer. Use read-only tools to answer questions about the codebase.',
+		},
+		{
+			id: 'test-writer',
+			name: 'Test Writer',
+			description: 'Write tests for the specified module',
+			instructions:
+				'You are a test-writing specialist. Generate comprehensive tests for the given module.',
+		},
+	],
 })
 ```
 
@@ -139,10 +139,10 @@ Connect to a remote database instead of the default local SQLite:
 import { createMastraCode } from 'mastracode'
 
 const { controller } = await createMastraCode({
-  storage: {
-    url: 'libsql://my-db.turso.io',
-    authToken: 'my-auth-token',
-  },
+	storage: {
+		url: 'libsql://my-db.turso.io',
+		authToken: 'my-auth-token',
+	},
 })
 ```
 
@@ -156,15 +156,15 @@ Replace or extend the default background tasks:
 import { createMastraCode } from 'mastracode'
 
 const { controller } = await createMastraCode({
-  heartbeatHandlers: [
-    {
-      id: 'sync-config',
-      intervalMs: 60_000,
-      handler: async () => {
-        await syncConfigFromRemote()
-      },
-    },
-  ],
+	heartbeatHandlers: [
+		{
+			id: 'sync-config',
+			intervalMs: 60_000,
+			handler: async () => {
+				await syncConfigFromRemote()
+			},
+		},
+	],
 })
 ```
 
@@ -181,12 +181,12 @@ import { MastraTUI } from 'mastracode/tui'
 const { controller, mcpManager, hookManager, authStorage } = createMastraCode()
 
 const tui = new MastraTUI({
-  controller,
-  hookManager,
-  authStorage,
-  mcpManager,
-  appName: 'My Coding Agent',
-  version: '1.0.0',
+	controller,
+	hookManager,
+	authStorage,
+	mcpManager,
+	appName: 'My Coding Agent',
+	version: '1.0.0',
 })
 
 tui.run()
@@ -202,21 +202,21 @@ Control default behavior through `initialState`:
 import { createMastraCode } from 'mastracode'
 
 const { controller } = await createMastraCode({
-  initialState: {
-    yolo: false,
-    thinkingLevel: 'high',
-    smartEditing: true,
-    notifications: 'system',
-    permissionRules: {
-      categories: {
-        read: 'allow',
-        edit: 'ask',
-        execute: 'ask',
-        mcp: 'deny',
-      },
-      tools: {},
-    },
-  },
+	initialState: {
+		yolo: false,
+		thinkingLevel: 'high',
+		smartEditing: true,
+		notifications: 'system',
+		permissionRules: {
+			categories: {
+				read: 'allow',
+				edit: 'ask',
+				execute: 'ask',
+				mcp: 'deny',
+			},
+			tools: {},
+		},
+	},
 })
 ```
 
