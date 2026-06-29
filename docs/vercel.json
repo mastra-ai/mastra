@@ -824,6 +824,16 @@
       "source": "/docs/harness/tool-approvals",
       "destination": "/docs/agent-controller/tool-approvals",
       "permanent": true
+    },
+    {
+      "source": "/reference/harness/harness-class",
+      "destination": "/reference/agent-controller/agent-controller-class",
+      "permanent": true
+    },
+    {
+      "source": "/reference/harness/session",
+      "destination": "/reference/agent-controller/session",
+      "permanent": true
     }
   ]
 }
