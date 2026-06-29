@@ -1229,6 +1229,7 @@ export type ProviderModelsMap = {
     'stable-diffusion-3.5-large',
     'wan2-2-t2v-a14b',
   ];
+  readonly subconscious: readonly ['subconscious/tim-qwen3.6-27b'];
   readonly lmstudio: readonly ['openai/gpt-oss-20b', 'qwen/qwen3-30b-a3b-2507', 'qwen/qwen3-coder-30b'];
   readonly poolside: readonly ['poolside/laguna-m.1', 'poolside/laguna-xs.2'];
   readonly zenmux: readonly [
@@ -1843,6 +1844,7 @@ export type ProviderModelsMap = {
     'claude-3-opus',
     'claude-haiku-4-5',
     'claude-haiku-4-5-20251001',
+    'claude-haiku-4-5-free',
     'claude-opus-4-1-20250805',
     'claude-opus-4-5-20251101',
     'claude-opus-4-6',
@@ -1873,16 +1875,13 @@ export type ProviderModelsMap = {
     'glm-4.5',
     'glm-4.5-air',
     'glm-4.5-airx',
-    'glm-4.5-flash',
     'glm-4.5-x',
     'glm-4.5v',
     'glm-4.6',
     'glm-4.6v',
-    'glm-4.6v-flash',
     'glm-4.6v-flashx',
     'glm-4.7',
     'glm-4.7-flash',
-    'glm-4.7-flash-free',
     'glm-4.7-flashx',
     'glm-5',
     'glm-5.1',
