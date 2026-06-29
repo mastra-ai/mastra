@@ -510,13 +510,22 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       }
 
       const vectorField = indexData.latestDefinition?.fields?.find((f: any) => f.type === 'vector');
-      const dimension = vectorField?.numDimensions ?? 0;
+      if (!vectorField) {
+        throw new MastraError({
+          id: createVectorErrorId('MONGODB', 'DESCRIBE_INDEX', 'INVALID'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          text: `Atlas Search index "${indexNameInternal}" exists but has no vector field. The index may have been created outside of Mastra or without vector configuration.`,
+        });
+      }
+      const dimension = vectorField.numDimensions;
       const reverseMetricMap: Record<string, 'cosine' | 'euclidean' | 'dotproduct'> = {
         cosine: 'cosine',
         euclidean: 'euclidean',
         dotProduct: 'dotproduct',
       };
-      const metric = reverseMetricMap[vectorField?.similarity] ?? 'cosine';
+      const metric = reverseMetricMap[vectorField.similarity] ?? 'cosine';
 
       return { dimension, count, metric };
     } catch (error) {
