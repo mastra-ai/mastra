@@ -144,6 +144,19 @@ export interface SubscribeAgentThreadParams {
   threadId: string;
 }
 
+export type ListAgentSuspendedRunsParams = GeneratedRequest<QueryParams<'GET /agents/:agentId/suspended-runs'>>;
+
+/**
+ * Listed suspended runs as returned by `agent.listSuspendedRuns()`.
+ * Date fields (e.g. `suspendedAt`) are ISO strings over the wire, matching
+ * the rest of the client SDK.
+ */
+export type ListAgentSuspendedRunsResponse = GeneratedResponse<'GET /agents/:agentId/suspended-runs'>;
+
+export type AgentSuspendedRun = ListAgentSuspendedRunsResponse['runs'][number];
+
+export type AgentSuspendedRunToolCall = AgentSuspendedRun['toolCalls'][number];
+
 /**
  * @experimental Agent signals are experimental and may change in a future release.
  */

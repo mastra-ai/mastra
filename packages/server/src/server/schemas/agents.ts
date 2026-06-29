@@ -476,6 +476,49 @@ export const sendToolApprovalResponseSchema = z.object({
   toolCallId: z.string().optional(),
 });
 
+/**
+ * Query schema for listing suspended agent runs
+ */
+export const listSuspendedRunsQuerySchema = z
+  .object({
+    threadId: z.string().optional(),
+    resourceId: z.string().optional(),
+    fromDate: z.coerce.date().optional(),
+    toDate: z.coerce.date().optional(),
+    perPage: z.coerce.number().int().positive().optional(),
+    // page is zero-indexed, so 0 is valid
+    page: z.coerce.number().int().nonnegative().optional(),
+  })
+  .refine(data => !data.fromDate || !data.toDate || data.fromDate <= data.toDate, {
+    message: 'fromDate must be less than or equal to toDate',
+    path: ['fromDate'],
+  });
+
+/**
+ * Response schema for listing suspended agent runs
+ */
+export const listSuspendedRunsResponseSchema = z.object({
+  runs: z.array(
+    z.object({
+      runId: z.string(),
+      status: z.literal('suspended'),
+      threadId: z.string().optional(),
+      resourceId: z.string().optional(),
+      suspendedAt: z.date(),
+      toolCalls: z.array(
+        z.object({
+          toolCallId: z.string().optional(),
+          toolName: z.string().optional(),
+          args: z.unknown().optional(),
+          requiresApproval: z.boolean(),
+          suspendPayload: z.unknown().optional(),
+        }),
+      ),
+    }),
+  ),
+  total: z.number().int().nonnegative(),
+});
+
 // ============================================================================
 // Resume Stream Schema
 // ============================================================================
