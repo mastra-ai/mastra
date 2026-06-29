@@ -11,6 +11,8 @@ packages:
 
 Channels connect your agents to messaging platforms like Slack, Discord, and Telegram. When a user sends a message on a platform, the agent receives it, processes it through the normal agent pipeline, and streams the response back to the conversation.
 
+Channels are not limited to inbound messages. Any agent run on a channel-backed thread posts back to the channel, including background runs such as [heartbeats](/docs/agents/heartbeats). The `textDisplay` option controls _when_ that text is posted — progressively as the run produces it, or once when the run ends — and individual runs can override the channel's render options (see [Per-run render overrides](#per-run-render-overrides)).
+
 ## When to use channels
 
 Use channels when you want your agent to:
@@ -221,6 +223,49 @@ export const mastra = new Mastra({
 ```
 
 Vercel's one-click Redis integration and Upstash Redis both work well. For more on when a distributed pub/sub is needed, see the [PubSub guide](/docs/server/pubsub) and the [`RedisStreamsPubSub` reference](/reference/pubsub/redis-streams).
+
+## Per-run render overrides
+
+A channel's render options (`textDisplay`, `toolDisplay`, `streaming`) are configured per adapter and apply to every run on that channel. A single run can deviate from those defaults — or skip posting entirely — by setting the `channel.render` key on its `requestContext`:
+
+- `false` suppresses this run's channel post. The run still executes; nothing is posted.
+- `{ textDisplay?, toolDisplay?, streaming? }` overrides individual render options for this run only, leaving the channel's configured defaults unchanged.
+
+This is most useful for background runs. For example, a [heartbeat](/docs/agents/heartbeats) that does internal bookkeeping can stay silent, while one that produces a status update can post only the final answer:
+
+```typescript title="src/mastra/heartbeats.ts"
+// Suppress this run's channel post entirely
+await mastra.heartbeats.create({
+  agentId: 'support-agent',
+  threadId,
+  resourceId,
+  cron: '*/10 * * * * *',
+  prompt: 'internal bookkeeping',
+  ifActive: 'discard',
+  ifIdle: {
+    streamOptions: {
+      requestContext: { 'channel.render': false },
+    },
+  },
+})
+
+// Post only the final answer, no tool cards
+await mastra.heartbeats.create({
+  agentId: 'support-agent',
+  threadId,
+  resourceId,
+  cron: '0 9 * * *',
+  prompt: 'summarize overnight activity',
+  ifActive: 'discard',
+  ifIdle: {
+    streamOptions: {
+      requestContext: { 'channel.render': { textDisplay: 'final', toolDisplay: 'hidden' } },
+    },
+  },
+})
+```
+
+`requestContext` set via `ifIdle.streamOptions.requestContext` only rides the idle/wake path — not the `ifActive` path or a threadless run. Pairing the override with `ifActive: 'discard'` pins the heartbeat to wake-only semantics, so the override applies deterministically.
 
 ## Related
 

@@ -46,6 +46,40 @@ export interface ChatChannelRenderContext {
 /** Key the processor reads off `requestContext` to locate its render deps. */
 export const CHAT_CHANNEL_RENDER_CONTEXT_KEY = '__mastra_chat_channel_render';
 
+/**
+ * `requestContext` key for per-run channel render overrides.
+ *
+ * Set this to deviate a single run from the channel's configured render
+ * options without changing the channel defaults:
+ *
+ * - `false` — suppress this run's channel post entirely (the run still
+ *   executes; nothing is posted to the channel).
+ * - `{ textDisplay?, toolDisplay?, streaming? }` — override individual render
+ *   knobs for this run only. Each provided field replaces the base value;
+ *   omitted fields keep the channel's configured value.
+ *
+ * Reach: when set via `ifIdle.streamOptions.requestContext` on a heartbeat,
+ * this only rides the idle/wake path (not `ifActive`, not the threadless
+ * `agent.generate` path). Pair with `ifActive: 'discard'` to pin a heartbeat
+ * to wake-only semantics so the override is a deterministic opt-in.
+ */
+export const CHAT_CHANNEL_RENDER_OVERRIDE_KEY = 'channel.render';
+
+/**
+ * Value shape for {@link CHAT_CHANNEL_RENDER_OVERRIDE_KEY}. `false` suppresses
+ * the channel post for the run; an object overrides individual render knobs.
+ */
+export type ChatChannelRenderOverride =
+  | false
+  | {
+      /** Override when text posts. See {@link TextDisplay}. */
+      textDisplay?: TextDisplay;
+      /** Override tool display. Coerced through the channel's invariant logic. */
+      toolDisplay?: ToolDisplay;
+      /** Override streaming. `false` forces the static driver. */
+      streaming?: boolean | { updateIntervalMs?: number };
+    };
+
 interface ChunkQueue {
   iterable: AsyncIterable<AgentChunkType<any>>;
   push: (chunk: AgentChunkType<any>) => void;
@@ -141,6 +175,14 @@ interface RenderSession {
  * Runs that resolve no render context at all — non-channel threads, or an
  * unbound processor with no `requestContext` key — pass through untouched.
  *
+ * Per-run overrides: a run may set {@link CHAT_CHANNEL_RENDER_OVERRIDE_KEY}
+ * (`'channel.render'`) on `requestContext` to deviate from the channel's
+ * configured render options for that run only. `false` suppresses the post
+ * entirely; an object `{ textDisplay?, toolDisplay?, streaming? }` overrides
+ * individual knobs (routed through the channel's invariant logic). When set via
+ * `ifIdle.streamOptions.requestContext` on a heartbeat, the override only rides
+ * the idle/wake path — pair with `ifActive: 'discard'` to make it deterministic.
+ *
  * @internal
  */
 export class ChatChannelOutputProcessor {
@@ -211,24 +253,93 @@ export class ChatChannelOutputProcessor {
     requestContext: ProcessOutputStreamArgs['requestContext'],
   ): Promise<ChatChannelRenderContext | undefined> {
     if (state.render !== undefined) {
-      return state.render as ChatChannelRenderContext | undefined;
+      return (state.render as ChatChannelRenderContext | null) ?? undefined;
+    }
+
+    // Suppression (cheapest, first): `channel.render === false` drops this run's
+    // channel post entirely. Cache `null` so we skip the fast path + fallback on
+    // every subsequent chunk and the run passes through untouched.
+    const override = requestContext?.get(CHAT_CHANNEL_RENDER_OVERRIDE_KEY) as ChatChannelRenderOverride | undefined;
+    if (override === false) {
+      state.render = null;
+      return undefined;
     }
 
     const fromRequest = requestContext?.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
     if (fromRequest) {
-      state.render = fromRequest;
-      return fromRequest;
+      const merged = this.#applyRenderOverride(fromRequest, override);
+      state.render = merged;
+      return merged;
     }
 
     const threadId = parseMemoryRequestContext(requestContext)?.thread?.id;
     if (this.#agentChannels && threadId) {
       const rebuilt = await this.#agentChannels.buildRenderContextForThread(threadId);
+      const merged = rebuilt ? this.#applyRenderOverride(rebuilt, override) : null;
       // Cache `null` too, so a non-channel thread isn't re-resolved per chunk.
-      state.render = rebuilt ?? null;
-      return rebuilt ?? undefined;
+      state.render = merged;
+      return merged ?? undefined;
     }
 
     return undefined;
+  }
+
+  /**
+   * Merge a per-run `channel.render` override object onto a built render
+   * context. Only an object override reaches here — `false` (suppress) is
+   * handled in `#resolveRenderContext` before this is called.
+   *
+   * `toolDisplay` and `streaming` overrides are routed through the channel's own
+   * invariant logic (`resolveToolDisplayForOverride` / `normalizeStreamingForOverride`)
+   * so streaming-only tool modes can't reach the static driver as invalid modes.
+   * When the processor is unbound (no `AgentChannels`, e.g. in standalone tests)
+   * those overrides are applied directly — there's no invariant source to defer
+   * to, and the driver-selection coercion still guards the static path.
+   */
+  #applyRenderOverride(
+    base: ChatChannelRenderContext,
+    override: ChatChannelRenderOverride | undefined,
+  ): ChatChannelRenderContext {
+    if (!override) return base;
+
+    const next: ChatChannelRenderContext = { ...base };
+
+    if (override.textDisplay !== undefined) {
+      next.textDisplay = override.textDisplay;
+    }
+
+    if (override.streaming !== undefined) {
+      next.streaming = this.#agentChannels
+        ? this.#agentChannels.normalizeStreamingForOverride(override.streaming)
+        : this.#normalizeStreaming(override.streaming);
+    }
+
+    if (override.toolDisplay !== undefined) {
+      if (this.#agentChannels) {
+        const { resolved, fn } = this.#agentChannels.resolveToolDisplayForOverride(
+          base.platform,
+          override.toolDisplay,
+          next.streaming.enabled,
+        );
+        next.toolDisplay = resolved;
+        next.toolDisplayFn = fn;
+      } else {
+        next.toolDisplay = typeof override.toolDisplay === 'function' ? 'cards' : override.toolDisplay;
+        next.toolDisplayFn = typeof override.toolDisplay === 'function' ? override.toolDisplay : undefined;
+      }
+    }
+
+    return next;
+  }
+
+  /** Local mirror of `AgentChannels.resolveStreaming` for the unbound case. */
+  #normalizeStreaming(raw: boolean | { updateIntervalMs?: number }): {
+    enabled: boolean;
+    options?: { updateIntervalMs?: number };
+  } {
+    if (raw === false) return { enabled: false };
+    if (raw === true) return { enabled: true, options: {} };
+    return { enabled: true, options: raw };
   }
 
   #openSession(render: ChatChannelRenderContext): RenderSession {

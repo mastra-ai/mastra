@@ -124,6 +124,31 @@ await mastra.heartbeats.create({
 
 `providerOptions` are merged into the signal payload on every fire and apply to both threaded and threadless heartbeats.
 
+### Controlling channel output
+
+When a heartbeat runs on a [channel-backed thread](/docs/agents/channels), its output posts back to the channel. Use `ifIdle.streamOptions.requestContext` with the `channel.render` key to suppress that post or change how it renders for the heartbeat's runs only. Pair it with `ifActive: 'discard'` so the override applies deterministically on the wake path.
+
+```typescript
+await mastra.heartbeats.create({
+  agentId: 'pinger',
+  cron: '0 9 * * *',
+  prompt: 'Summarize overnight activity.',
+  threadId: 'thread-123',
+  resourceId: 'user-456',
+  ifActive: { behavior: 'discard' },
+  ifIdle: {
+    behavior: 'wake',
+    streamOptions: {
+      // Post only the final answer, no tool cards
+      requestContext: { 'channel.render': { textDisplay: 'final', toolDisplay: 'hidden' } },
+      // Or `{ 'channel.render': false }` to stay silent
+    },
+  },
+})
+```
+
+See [Per-run render overrides](/docs/agents/channels#per-run-render-overrides) for the full list of options.
+
 ## Managing heartbeats
 
 Use `mastra.heartbeats` for all heartbeat operations. To scope to a single agent, pass `agentId` to `create` or `list`.

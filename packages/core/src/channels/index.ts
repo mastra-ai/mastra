@@ -1,4 +1,6 @@
 export { AgentChannels } from './agent-channels';
+export { CHAT_CHANNEL_RENDER_OVERRIDE_KEY } from './output-processor';
+export type { ChatChannelRenderOverride } from './output-processor';
 export { ChatChannelProcessor } from './processor';
 export { MastraStateAdapter } from './state-adapter';
 export { defaultTypingStatus } from './typing-status';

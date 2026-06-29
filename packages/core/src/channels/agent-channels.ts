@@ -1246,6 +1246,37 @@ export class AgentChannels {
   }
 
   /**
+   * Apply a per-run `toolDisplay` override through the same invariant logic as
+   * the configured path (`resolveToolDisplay`), so streaming-only modes
+   * (`'timeline'`/`'grouped'`) still fall back to `'cards'` when streaming is
+   * off. Used by `ChatChannelOutputProcessor` when a run sets a `channel.render`
+   * override. The single source of truth stays in `resolveToolDisplay`.
+   *
+   * @internal
+   */
+  resolveToolDisplayForOverride(
+    platform: string,
+    requested: ToolDisplay,
+    streamingEnabled: boolean,
+  ): { resolved: 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden'; fn?: ToolDisplayFn } {
+    return this.resolveToolDisplay(platform, requested, streamingEnabled);
+  }
+
+  /**
+   * Normalize a per-run `streaming` override into the flat `{ enabled, options }`
+   * shape, reusing the configured-path logic (`resolveStreaming`). Used by
+   * `ChatChannelOutputProcessor` for `channel.render` overrides.
+   *
+   * @internal
+   */
+  normalizeStreamingForOverride(raw: StreamingConfig): {
+    enabled: boolean;
+    options?: { updateIntervalMs?: number };
+  } {
+    return this.resolveStreaming(raw);
+  }
+
+  /**
    * Pass-through async generator that yields chunks unchanged but emits
    * typing-status updates (`startTyping`) along the way. Lives outside the
    * drivers so both drivers benefit from the same dedup + gate logic.

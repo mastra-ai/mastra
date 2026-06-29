@@ -120,9 +120,10 @@ export async function runStaticDriver({
     }
   };
 
-  // Progressive: post the in-flight text block now. Final: stash the cleaned
-  // block (so it survives `resetRunState`) and defer posting to the terminal
-  // flush. Strips zero-width chars (U+200B-U+200D, U+FEFF) LLMs sometimes emit.
+  // Close the in-flight text block. Progressive: post it now. Final: stash the
+  // cleaned block (so it survives `resetRunState`) and defer posting to the
+  // terminal flush, where blocks join with a blank line. Strips zero-width
+  // chars (U+200B-U+200D, U+FEFF) LLMs sometimes emit.
   const flushText = async () => {
     const cleaned = cleanText(textBuffer);
     textBuffer = '';
@@ -132,13 +133,6 @@ export async function runStaticDriver({
     } else {
       finalTextBlocks.push(cleaned);
     }
-  };
-
-  // Only flush in progressive mode; in `'final'` mode intermediate flush points
-  // (`text-end` / `step-finish` / pre-tool-call / `file` / `data-user-message`)
-  // keep accumulating instead of posting.
-  const flushIfProgressive = async () => {
-    if (postProgressively) await flushText();
   };
 
   // Terminal flush: in `'final'` mode, fold the in-flight buffer into the
@@ -172,10 +166,10 @@ export async function runStaticDriver({
     const chunkType = chunk.type as string;
     if (typeof chunkType === 'string' && chunkType.startsWith('data-')) {
       if (chunkType === 'data-user-message') {
-        // Flush any in-flight text so the agent's reply to the signal
+        // Close any in-flight text block so the agent's reply to the signal
         // posts as its own message after the user's signal echo. In `'final'`
-        // mode this is suppressed — a single post at the end is the point.
-        await flushIfProgressive();
+        // mode the block is accumulated, not posted — one post at the end.
+        await flushText();
       }
       // OM and other data-* parts are dropped silently — no Plan widget to
       // render OM lifecycle into in static mode.
@@ -189,23 +183,29 @@ export async function runStaticDriver({
     }
 
     if (chunk.type === 'text-end') {
-      // Flush as soon as the model finishes a text block so the message
-      // posts before any subsequent tool-call card. In `'final'` mode the
-      // block is accumulated, not posted.
-      await flushIfProgressive();
+      // Close the block as soon as the model finishes it so the message posts
+      // before any subsequent tool-call card. In `'final'` mode the block is
+      // accumulated (joined into the single terminal post), not posted now.
+      await flushText();
       continue;
     }
 
     if (chunk.type === 'step-finish') {
-      // Flush text accumulated in this step. Tool cards have already been
-      // posted as they happened (cards mode) or suppressed (hidden mode),
-      // so there's nothing to do for tools here. Suppressed in `'final'` mode.
-      await flushIfProgressive();
+      // A terminal step-finish (`isContinued !== true`) ends the run — there
+      // may be no following `finish` chunk, so this is the `'final'` mode's
+      // single flush point. Intermediate (continued) steps keep accumulating.
+      // In progressive mode every step-finish flushes the step's text now.
+      const isContinued = chunk.payload?.stepResult?.isContinued === true;
+      if (isContinued) {
+        await flushText();
+      } else {
+        await flushTerminal();
+      }
       continue;
     }
 
     if (chunk.type === 'file') {
-      await flushIfProgressive();
+      await flushText();
       await postFileAttachment({ chunk, chatThread, logger });
       continue;
     }

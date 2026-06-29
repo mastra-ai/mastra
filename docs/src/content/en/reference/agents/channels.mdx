@@ -213,6 +213,14 @@ const agent = new Agent({
       'Stream agent text deltas to the channel as the agent generates them instead of buffering and posting once per step. Requires the underlying adapter to support post-and-edit streaming. Slack defaults to `true`; other adapters default to `false`.',
   },
   {
+    name: 'textDisplay',
+    type: "'progressive' | 'final'",
+    isOptional: true,
+    defaultValue: "'progressive'",
+    description:
+      "When the agent's text is posted to the channel. `'progressive'` (default) posts text as the run produces it — one message per text block, or a live-updating message when `streaming` is enabled. `'final'` accumulates all of the run's text and posts it once when the run ends. `'final'` renders text statically even under `streaming: true`, so streaming tool widgets are not combined with `'final'` text.",
+  },
+  {
     name: 'toolDisplay',
     type: "'cards' | 'text' | 'timeline' | 'grouped' | 'hidden' | ToolDisplayFn",
     isOptional: true,
@@ -276,6 +284,46 @@ const agent = new Agent({
   },
 })
 ```
+
+## Text display
+
+`textDisplay` controls _when_ the agent's text is posted, not what is posted —
+both modes post all of the run's text. The default `'progressive'` posts text as
+the run produces it: one message per text block when `streaming` is off, or a
+single live-updating message when `streaming` is on.
+
+`'final'` accumulates every text block across the run and posts them once, joined
+with a blank line, when the run ends. Use it when you want a single clean answer
+in the channel instead of a play-by-play. `'final'` is inherently non-streaming
+for text, so it renders statically even under `streaming: true`.
+
+Combine `'final'` with `toolDisplay: 'hidden'` to post only the final answer —
+no per-step narration, no tool cards:
+
+```typescript title="src/mastra/agents/final-answer.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+const agent = new Agent({
+  name: 'Final Answer Agent',
+  instructions: '...',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  channels: {
+    adapters: {
+      slack: {
+        adapter: createSlackAdapter(),
+        textDisplay: 'final',
+        toolDisplay: 'hidden',
+      },
+    },
+  },
+})
+```
+
+These render options are also overridable for a single run via the
+`requestContext['channel.render']` key — see
+[Per-run render overrides](/docs/agents/channels#per-run-render-overrides) in the
+channels guide.
 
 ## Custom typing status
 

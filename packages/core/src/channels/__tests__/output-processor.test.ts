@@ -3,7 +3,11 @@ import { describe, it, expect, vi, beforeAll } from 'vitest';
 import { InMemoryStore } from '../../storage/mock';
 import { AgentChannels } from '../agent-channels';
 import { getChatModule } from '../chat-lazy';
-import { ChatChannelOutputProcessor, CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '../output-processor';
+import {
+  ChatChannelOutputProcessor,
+  CHAT_CHANNEL_RENDER_CONTEXT_KEY,
+  CHAT_CHANNEL_RENDER_OVERRIDE_KEY,
+} from '../output-processor';
 
 // ---------------------------------------------------------------------------
 // Test runner
@@ -65,6 +69,7 @@ function makeChannels(
   opts: {
     streaming?: boolean | { updateIntervalMs?: number };
     toolDisplay?: 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden' | ((event: any, ctx: any) => any);
+    textDisplay?: 'progressive' | 'final';
     typingStatus?: boolean | ((chunk: any, ctx: any) => any);
     cards?: boolean;
     formatToolCall?: (info: {
@@ -82,6 +87,7 @@ function makeChannels(
     streaming: opts.streaming ?? false,
   };
   if (opts.toolDisplay !== undefined) adapterConfig.toolDisplay = opts.toolDisplay;
+  if (opts.textDisplay !== undefined) adapterConfig.textDisplay = opts.textDisplay;
   if (opts.typingStatus !== undefined) adapterConfig.typingStatus = opts.typingStatus;
   if (opts.cards !== undefined) adapterConfig.cards = opts.cards;
   if (opts.formatToolCall !== undefined) adapterConfig.formatToolCall = opts.formatToolCall;
@@ -1746,5 +1752,229 @@ describe('ChatChannelOutputProcessor fallback render context', () => {
 
     const posts = calls.filter(c => c.kind === 'post');
     expect(posts).toEqual([{ kind: 'post', arg: 'inbound message' }]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// textDisplay foundation: progressive (default) vs final
+// ---------------------------------------------------------------------------
+
+// A "text block" is a text-start..text-end pair. The static driver flushes a
+// block in progressive mode and accumulates it in final mode.
+function textBlock(text: string) {
+  return [
+    { type: 'text-start', payload: {} },
+    { type: 'text-delta', payload: { text } },
+    { type: 'text-end', payload: {} },
+  ];
+}
+
+function step(...chunks: any[]) {
+  return [...chunks, { type: 'step-finish', payload: { stepResult: { isContinued: true } } }];
+}
+
+function toolCallResult(name: string, result: unknown) {
+  return [
+    { type: 'tool-call', payload: { toolCallId: `${name}-1`, toolName: name, args: {} } },
+    { type: 'tool-result', payload: { toolCallId: `${name}-1`, toolName: name, args: {}, result } },
+  ];
+}
+
+describe('ChatChannelOutputProcessor textDisplay', () => {
+  it("'progressive' (default) posts one message per text block", async () => {
+    const { channels, calls, chatThread } = makeChannels({ streaming: false });
+    await drive(channels, [...textBlock('first block'), ...textBlock('second block')], chatThread);
+
+    const posts = calls.filter(c => c.kind === 'post');
+    expect(posts).toEqual([
+      { kind: 'post', arg: 'first block' },
+      { kind: 'post', arg: 'second block' },
+    ]);
+  });
+
+  it("'final' accumulates all text blocks and posts once on the terminal chunk", async () => {
+    const { channels, calls, chatThread } = makeChannels({ streaming: false, textDisplay: 'final' });
+    await drive(channels, [...step(...textBlock('first block')), ...step(...textBlock('second block'))], chatThread);
+
+    const posts = calls.filter(c => c.kind === 'post');
+    expect(posts).toEqual([{ kind: 'post', arg: 'first block\n\nsecond block' }]);
+  });
+
+  it("'final' + hidden tools posts one text message and zero tool messages", async () => {
+    const { channels, calls, chatThread } = makeChannels({
+      streaming: false,
+      textDisplay: 'final',
+      toolDisplay: 'hidden',
+    });
+    await drive(
+      channels,
+      [...textBlock('thinking'), ...toolCallResult('search', { ok: true }), ...textBlock('the answer')],
+      chatThread,
+    );
+
+    const posts = calls.filter(c => c.kind === 'post');
+    expect(posts).toEqual([{ kind: 'post', arg: 'thinking\n\nthe answer' }]);
+  });
+
+  it("'final' still flushes accumulated text on an error terminal chunk", async () => {
+    const { channels, calls, chatThread } = makeChannels({ streaming: false, textDisplay: 'final' });
+    await drive(
+      channels,
+      [...textBlock('partial answer'), { type: 'error', payload: { error: new Error('boom') } }],
+      chatThread,
+    );
+
+    const posts = calls.filter(c => c.kind === 'post');
+    expect(posts[0]).toEqual({ kind: 'post', arg: 'partial answer' });
+  });
+
+  it("'final' with no text posts nothing on a tool-only run", async () => {
+    const { channels, calls, chatThread } = makeChannels({
+      streaming: false,
+      textDisplay: 'final',
+      toolDisplay: 'hidden',
+    });
+    await drive(channels, [...toolCallResult('search', { ok: true })], chatThread);
+
+    expect(calls.filter(c => c.kind === 'post')).toHaveLength(0);
+  });
+
+  it("'final' routes through the static driver even when streaming is enabled", async () => {
+    // streaming:true would normally select the streaming driver; textDisplay
+    // 'final' forces static so text accumulates and posts once. A single
+    // plain-string post (not an editMessage stream) proves the static path.
+    const { channels, calls, chatThread } = makeChannels({ streaming: true, textDisplay: 'final' });
+    await drive(channels, [...step(...textBlock('block a')), ...step(...textBlock('block b'))], chatThread);
+
+    const posts = calls.filter(c => c.kind === 'post');
+    expect(posts).toEqual([{ kind: 'post', arg: 'block a\n\nblock b' }]);
+    expect(calls.filter(c => c.kind === 'editMessage')).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Per-run channel.render override (suppress + per-knob overrides)
+// ---------------------------------------------------------------------------
+
+describe('ChatChannelOutputProcessor channel.render override', () => {
+  beforeAll(async () => {
+    await getChatModule();
+  });
+
+  it('channel.render: false suppresses the post and caches null', async () => {
+    const { channels, calls } = await makeFallbackChannels();
+    const requestContext = new Map<string, unknown>();
+    requestContext.set('MastraMemory', { thread: { id: FALLBACK_THREAD_ID } });
+    requestContext.set(CHAT_CHANNEL_RENDER_OVERRIDE_KEY, false);
+
+    await driveFallback(channels, [{ type: 'text-delta', payload: { text: 'silent run' } }], {
+      requestContext,
+    });
+
+    expect(calls.filter(c => c.kind === 'post')).toHaveLength(0);
+  });
+
+  it('override textDisplay: final accumulates and posts once on the fallback path', async () => {
+    const { channels, calls } = await makeFallbackChannels();
+    const requestContext = new Map<string, unknown>();
+    requestContext.set('MastraMemory', { thread: { id: FALLBACK_THREAD_ID } });
+    requestContext.set(CHAT_CHANNEL_RENDER_OVERRIDE_KEY, { textDisplay: 'final' });
+
+    await driveFallback(channels, [...step(...textBlock('one')), ...step(...textBlock('two'))], { requestContext });
+
+    const posts = calls.filter(c => c.kind === 'post');
+    expect(posts).toEqual([{ kind: 'post', arg: 'one\n\ntwo' }]);
+  });
+
+  it('override toolDisplay: hidden suppresses tool cards', async () => {
+    const { channels, calls } = await makeFallbackChannels();
+    const requestContext = new Map<string, unknown>();
+    requestContext.set('MastraMemory', { thread: { id: FALLBACK_THREAD_ID } });
+    requestContext.set(CHAT_CHANNEL_RENDER_OVERRIDE_KEY, { toolDisplay: 'hidden' });
+
+    await driveFallback(
+      channels,
+      [...toolCallResult('search', { ok: true }), { type: 'text-delta', payload: { text: 'done' } }],
+      { requestContext },
+    );
+
+    const posts = calls.filter(c => c.kind === 'post');
+    expect(posts).toEqual([{ kind: 'post', arg: 'done' }]);
+  });
+
+  it('combined { textDisplay: final, toolDisplay: hidden } posts one text, zero tools', async () => {
+    const { channels, calls } = await makeFallbackChannels();
+    const requestContext = new Map<string, unknown>();
+    requestContext.set('MastraMemory', { thread: { id: FALLBACK_THREAD_ID } });
+    requestContext.set(CHAT_CHANNEL_RENDER_OVERRIDE_KEY, { textDisplay: 'final', toolDisplay: 'hidden' });
+
+    await driveFallback(
+      channels,
+      [
+        ...step(...textBlock('thinking'), ...toolCallResult('search', { ok: true })),
+        ...step(...textBlock('final answer')),
+      ],
+      { requestContext },
+    );
+
+    const posts = calls.filter(c => c.kind === 'post');
+    expect(posts).toEqual([{ kind: 'post', arg: 'thinking\n\nfinal answer' }]);
+  });
+
+  it('override { streaming: false, toolDisplay: timeline } coerces to a valid static mode', async () => {
+    // 'timeline' is streaming-only. With streaming:false it must coerce to a
+    // valid static mode ('cards') and never reach the static driver as an
+    // invalid mode — the run must complete and post text without throwing.
+    const { channels, calls } = await makeFallbackChannels();
+    const requestContext = new Map<string, unknown>();
+    requestContext.set('MastraMemory', { thread: { id: FALLBACK_THREAD_ID } });
+    requestContext.set(CHAT_CHANNEL_RENDER_OVERRIDE_KEY, { streaming: false, toolDisplay: 'timeline' });
+
+    await driveFallback(channels, [{ type: 'text-delta', payload: { text: 'coerced ok' } }], {
+      requestContext,
+    });
+
+    const posts = calls.filter(c => c.kind === 'post');
+    expect(posts).toEqual([{ kind: 'post', arg: 'coerced ok' }]);
+  });
+
+  it('no override leaves channel defaults unchanged (regression)', async () => {
+    const { channels, calls } = await makeFallbackChannels();
+    await driveFallback(channels, [...textBlock('a'), ...textBlock('b')], {
+      threadId: FALLBACK_THREAD_ID,
+    });
+
+    // Default progressive: one post per block.
+    const posts = calls.filter(c => c.kind === 'post');
+    expect(posts).toEqual([
+      { kind: 'post', arg: 'a' },
+      { kind: 'post', arg: 'b' },
+    ]);
+  });
+
+  it('channel.render: false on a non-channel thread is still a no-op', async () => {
+    const { channels, calls } = await makeFallbackChannels({ some: 'other-metadata' });
+    const requestContext = new Map<string, unknown>();
+    requestContext.set('MastraMemory', { thread: { id: FALLBACK_THREAD_ID } });
+    requestContext.set(CHAT_CHANNEL_RENDER_OVERRIDE_KEY, false);
+
+    await driveFallback(channels, [{ type: 'text-delta', payload: { text: 'nope' } }], {
+      requestContext,
+    });
+
+    expect(calls.filter(c => c.kind === 'post')).toHaveLength(0);
+  });
+
+  it('override applies on the inbound fast path too', async () => {
+    const { channels, calls, chatThread } = await makeFallbackChannels();
+    const render = (channels as any)._buildRenderContext(chatThread, 'test');
+    const requestContext = new Map<string, unknown>();
+    requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, render);
+    requestContext.set(CHAT_CHANNEL_RENDER_OVERRIDE_KEY, { textDisplay: 'final' });
+
+    await driveFallback(channels, [...step(...textBlock('alpha')), ...step(...textBlock('beta'))], { requestContext });
+
+    const posts = calls.filter(c => c.kind === 'post');
+    expect(posts).toEqual([{ kind: 'post', arg: 'alpha\n\nbeta' }]);
   });
 });
