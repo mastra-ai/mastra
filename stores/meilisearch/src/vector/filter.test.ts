@@ -106,11 +106,21 @@ describe('MeilisearchFilterTranslator', () => {
       );
     });
 
-    it('maps field-level $not with nested operators (double negation)', () => {
+    it('maps field-level $not with nested operators (double negation), guarded by EXISTS', () => {
+      // A bare NOT(...) in Meilisearch also matches documents missing the field
+      // (the inner predicate is false for them). Negating a positive predicate
+      // should only match documents that have the field, so we AND in EXISTS.
       expect(translate({ category: { $not: { $ne: 'electronics' } } })).toBe(
-        'NOT (metadata.category != "electronics")',
+        '(metadata.category EXISTS) AND (NOT (metadata.category != "electronics"))',
       );
-      expect(translate({ price: { $not: { $gt: 50 } } })).toBe('NOT (metadata.price > 50)');
+      expect(translate({ price: { $not: { $gt: 50 } } })).toBe(
+        '(metadata.price EXISTS) AND (NOT (metadata.price > 50))',
+      );
+    });
+
+    it('does not add an EXISTS guard when $not wraps $exists', () => {
+      // Guarding existence-negation with EXISTS would be self-contradictory.
+      expect(translate({ description: { $not: { $exists: true } } })).toBe('NOT (metadata.description EXISTS)');
     });
   });
 

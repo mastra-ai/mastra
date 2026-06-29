@@ -197,12 +197,23 @@ export class MeilisearchFilterTranslator extends BaseFilterTranslator<
         case '$exists':
           parts.push(raw ? expr(`${field} EXISTS`) : this.not(expr(`${field} EXISTS`)));
           break;
-        case '$not':
+        case '$not': {
           if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
             throw new Error('$not operator requires an object');
           }
-          parts.push(this.not(this.translateOperators(field, raw)));
+          const negated = this.not(this.translateOperators(field, raw));
+          // In Meilisearch a missing attribute makes the inner predicate false,
+          // so a bare `NOT (...)` would also match documents that lack the field
+          // entirely. The conformance contract (and Mongo intuition for these
+          // cases) is that negating a positive predicate only matches documents
+          // that actually have the field. Guard with `field EXISTS`, unless the
+          // inner predicate is itself about existence (then the guard would be
+          // contradictory). Note: `EXISTS` matches null-valued fields too, so
+          // `$ne: null`-style negations are unaffected.
+          const aboutExistence = Object.prototype.hasOwnProperty.call(raw, '$exists');
+          parts.push(aboutExistence ? negated : this.and([expr(`${field} EXISTS`), negated]));
           break;
+        }
         default:
           throw new Error(`Unsupported operator: ${op}`);
       }
