@@ -4,8 +4,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { AppleContainerSandbox } from './index';
 
 const shouldRunIntegration = process.env.MASTRA_APPLE_CONTAINER_INTEGRATION === '1';
-const hasAppleContainerCli =
-  shouldRunIntegration && spawnSync('container', ['--version'], { stdio: 'ignore' }).status === 0;
+const cliProbe = shouldRunIntegration ? spawnSync('container', ['--version'], { stdio: 'ignore' }) : undefined;
+const hasAppleContainerCli = cliProbe?.status === 0;
+
+if (shouldRunIntegration && !hasAppleContainerCli) {
+  throw cliProbe?.error ?? new Error('MASTRA_APPLE_CONTAINER_INTEGRATION=1 but `container --version` failed');
+}
 
 describe.skipIf(!hasAppleContainerCli)('AppleContainerSandbox integration', () => {
   let sandbox: AppleContainerSandbox | undefined;

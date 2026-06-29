@@ -245,6 +245,21 @@ describe('AppleContainerSandbox', () => {
     );
   });
 
+  it('preserves shell command strings when no args are provided', async () => {
+    const runner = createRunner([{ success: false, exitCode: 1, stderr: 'container not found' }, {}, {}]);
+    const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
+
+    await sandbox._start();
+    runner.run.mockClear();
+
+    await sandbox.executeCommand('printf apple-container');
+
+    expect(runner.run).toHaveBeenCalledWith(
+      ['exec', '--workdir', '/workspace', 'apple-test', 'sh', '-lc', 'printf apple-container'],
+      expect.any(Object),
+    );
+  });
+
   it('stops instead of deletes when deleteOnDestroy is disabled', async () => {
     const runner = createRunner([inspectResult('running'), {}]);
     const sandbox = new AppleContainerSandbox({ id: 'apple-test', deleteOnDestroy: false, runner });
