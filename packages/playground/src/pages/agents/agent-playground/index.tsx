@@ -1,7 +1,7 @@
-import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
 import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useCallback, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 import { AgentPlaygroundView } from '@/domains/agents/components/agent-playground/agent-playground-view';

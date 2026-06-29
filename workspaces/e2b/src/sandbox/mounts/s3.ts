@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { FilesystemMountConfig } from '@mastra/core/workspace';
 
 import { shellQuote } from '../../utils/shell-quote';
@@ -81,7 +83,13 @@ export async function mountS3(mountPath: string, config: E2BS3MountConfig, ctx: 
 
   // Determine if we have credentials or using public bucket mode
   const hasCredentials = config.accessKeyId && config.secretAccessKey;
-  const credentialsPath = '/tmp/.passwd-s3fs';
+  // Use a per-mount credentials file. s3fs reads `passwd_file` at mount time, so a
+  // single shared path (rewritten rm -> write -> chmod on every mount) lets
+  // concurrent mounts race: one mount's write/chmod interleaves with another's rm,
+  // causing EACCES or a mount reading another mount's credentials. Hashing the
+  // mountPath gives each mount a unique, stable file (same approach as azure.ts).
+  const mountHash = createHash('md5').update(mountPath).digest('hex').slice(0, 8);
+  const credentialsPath = `/tmp/.passwd-s3fs-${mountHash}`;
 
   // S3-compatible services (R2, MinIO, etc.) require credentials
   // public_bucket=1 only works for truly public AWS S3 buckets

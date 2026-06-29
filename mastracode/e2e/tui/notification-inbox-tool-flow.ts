@@ -28,7 +28,7 @@ export const notificationInboxToolFlowScenario = {
           if (sent || !threadId || !result.session.stream.isActive()) return;
           sent = true;
           if (timer) clearInterval(timer);
-          const agent = result.harness.getMastra()?.getAgentById('code-agent');
+          const agent = result.controller.getMastra()?.getAgentById('code-agent');
           void agent?.sendNotificationSignal(
             {
               source: 'github',

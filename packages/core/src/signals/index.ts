@@ -12,6 +12,20 @@ export { WebhookSignalProvider, type WebhookSignalProviderOptions } from './webh
 // and the TaskStateProcessor so they are registered together on an agent.
 export { TaskSignalProvider } from './task-signal-provider';
 
+// Task signal payload types. These describe the task list that `TaskSignalProvider`
+// projects onto the state-signal lane, so this is their canonical home.
+export type {
+  TaskItem,
+  TaskItemInput,
+  TaskItemSnapshot,
+  TaskCheckResult,
+  TaskCheckSummary,
+} from '../tools/builtin/task-tools';
+
+// `assignTaskIds` derives stable task IDs for the task list projected by
+// `TaskSignalProvider`, so it belongs with the task signal payload types.
+export { assignTaskIds } from '../tools/builtin/task-tools';
+
 // `GoalSignalProvider` projects the agent's current objective onto the
 // state-signal lane. Auto-registered when an agent is configured with `goal`.
 // The implementation lives with the goal built-in under `agent/goal`.

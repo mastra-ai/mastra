@@ -1,4 +1,3 @@
-import type { RuleGroup } from '@mastra/playground-ui';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EntityName, EntityDescription, EntityContent, Entity } from '@mastra/playground-ui/components/Entity';
 import { Notice } from '@mastra/playground-ui/components/Notice';
@@ -8,6 +7,7 @@ import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Sectio
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
 import { PlusIcon, XIcon } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';

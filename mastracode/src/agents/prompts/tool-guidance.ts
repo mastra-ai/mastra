@@ -213,15 +213,15 @@ ${patchToolGuidance}
 - Call this tool when your plan is complete. Do NOT just describe your plan in text — you MUST call this tool.
 - The plan will be rendered as markdown and the user can approve, reject, or request changes.
 - On approval, the system automatically switches to the default mode so you can implement.
-- Takes two arguments: \`title\` (short descriptive title) and \`plan\` (full plan in markdown).`);
+- Takes one argument: \`path\` (the plan markdown file you wrote under \`.mastracode/plans/\`). Do NOT pass the plan body — it lives in the file.`);
   }
 
   if (modeId === 'plan') {
     sections.push(`
-**Plan file access** — Your plan lives in \`.mastracode/plans/\` with a filename derived from the title (e.g. \`add-dark-mode-toggle.md\`)
+**Plan file access** — Your plan lives in a markdown file under \`.mastracode/plans/\` (e.g. \`add-dark-mode-toggle.md\`)
 - Use \`write_file\` to create the plan file, \`view\` to read it, and \`string_replace_lsp\` for targeted edits.
-- On first submission: write the plan to the file, then call \`submit_plan\`.
-- On revision: read the existing file, edit specific sections, re-read, then call \`submit_plan\` with updated content.
+- On first submission: write the plan to the file, then call \`submit_plan\` with its \`path\`.
+- On revision: read the existing file, edit specific sections, re-read, then call \`submit_plan\` with the same \`path\`.
 - If a plan file already exists, you previously submitted it — read it before revising.`);
   }
 

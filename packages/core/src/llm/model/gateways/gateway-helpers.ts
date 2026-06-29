@@ -33,6 +33,13 @@ export function findGatewayForModel(
     return prefixedGateway;
   }
 
+  // Then check gateways that explicitly claim this (possibly unprefixed) model
+  // id, e.g. a gateway that authenticates a bare `anthropic/...` id via OAuth.
+  const claimingGateway = gateways.find(g => getGatewayId(g) !== 'models.dev' && g.handlesModel?.(gatewayId) === true);
+  if (claimingGateway) {
+    return claimingGateway;
+  }
+
   // Then check models.dev (provider registry without prefix)
   const modelsDevGateway = gateways.find(g => getGatewayId(g) === 'models.dev');
   if (modelsDevGateway) {

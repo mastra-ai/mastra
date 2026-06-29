@@ -8,13 +8,13 @@ import { MastraServer } from '@mastra/hono';
 import type { HonoBindings, HonoVariables } from '@mastra/hono';
 import { Hono } from 'hono';
 
-import { mountHarnessOnMastra } from '../index.js';
+import { mountAgentControllerOnMastra } from '../index.js';
 import type { MastraCodeConfig } from '../index.js';
 
 import { mountConfigRoutes } from './config-routes.js';
 import { mountFsRoutes } from './fs-routes.js';
 
-const HARNESS_ID = 'code';
+const CONTROLLER_ID = 'code';
 
 export interface WebServerOptions extends MastraCodeConfig {
   /** Port to listen on. Default 4111. */
@@ -45,12 +45,12 @@ export interface WebServer {
 }
 
 /**
- * Boots the real MastraCode harness (the same one the terminal uses), registers
- * it on a Mastra instance, and serves the harness HTTP routes plus the built
+ * Boots the real MastraCode controller (the same one the terminal uses), registers
+ * it on a Mastra instance, and serves the controller HTTP routes plus the built
  * web UI over a Node Hono server.
  *
- * Each browser client creates/resumes its own isolated session via the harness
- * routes (`harness.createSession({ resourceId })` get-or-create), so a single
+ * Each browser client creates/resumes its own isolated session via the controller
+ * routes (`controller.createSession({ resourceId })` get-or-create), so a single
  * server can drive many concurrent web users.
  */
 export async function startWebServer(options: WebServerOptions = {}): Promise<WebServer> {
@@ -58,18 +58,18 @@ export async function startWebServer(options: WebServerOptions = {}): Promise<We
   const hostname = options.hostname ?? '127.0.0.1';
   const { port: _p, hostname: _h, uiDir, fsRoot, ...mastraCodeConfig } = options;
 
-  // Build the full production harness (agents, modes, tools, memory, OM, MCP,
+  // Build the full production controller (agents, modes, tools, memory, OM, MCP,
   // providers, observability) — identical to the terminal app — and register it
   // on a server-owned Mastra. Registration happens BEFORE init (inside
-  // mountHarnessOnMastra), so the harness inherits the server's single Mastra
+  // mountControllerOnMastra), so the controller inherits the server's single Mastra
   // and storage instead of spinning up a duplicate internal one. No eager
   // session is minted; each browser client creates/resumes its own isolated
-  // session via the harness routes.
-  const result = await mountHarnessOnMastra({ ...mastraCodeConfig, harnessId: HARNESS_ID });
-  const harness = result.harness;
+  // session via the controller routes.
+  const result = await mountAgentControllerOnMastra({ ...mastraCodeConfig, controllerId: CONTROLLER_ID });
+  const controller = result.controller;
   const mastra = result.mastra;
 
-  // Mount the real Mastra HTTP surface (including the harness session routes)
+  // Mount the real Mastra HTTP surface (including the controller session routes)
   // via the official Hono server adapter. `init()` registers context + auth
   // middleware and every Mastra route under `/api`, with the same schema
   // validation, SSE framing, and error handling the production server uses.
@@ -85,8 +85,8 @@ export async function startWebServer(options: WebServerOptions = {}): Promise<We
   // absolute paths). Confined to fsRoot (default: home dir).
   mountFsRoutes(app, { root: fsRoot });
   // Provider + API-key management for the settings panel (mirrors the TUI's
-  // /api-keys command). Reuses the harness model catalog + the credential store.
-  mountConfigRoutes(app, { harness, authStorage: result.authStorage });
+  // /api-keys command). Reuses the controller model catalog + the credential store.
+  mountConfigRoutes(app, { controller, authStorage: result.authStorage });
 
   // Serve the built UI when available (production / `mastracode web`).
   const resolvedUiDir = uiDir ?? defaultUiDir();
@@ -103,7 +103,7 @@ export async function startWebServer(options: WebServerOptions = {}): Promise<We
     url: `http://localhost:${port}`,
     stop: async () => {
       await new Promise<void>(resolve => server.close(() => resolve()));
-      await Promise.allSettled([harness.getMastra()?.stopWorkers(), harness.stopHeartbeats()]);
+      await Promise.allSettled([controller.getMastra()?.stopWorkers(), controller.stopHeartbeats()]);
     },
   };
 }

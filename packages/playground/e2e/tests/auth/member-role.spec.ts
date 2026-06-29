@@ -21,7 +21,7 @@ test.describe('Member Role', () => {
     await resetStorage();
   });
 
-  test.describe('Navigation Access', () => {
+  test.describe('when a member user navigates the studio', () => {
     test('member sees main navigation items', async ({ page }) => {
       await setupMemberAuth(page);
       await page.goto('/agents');
@@ -52,7 +52,7 @@ test.describe('Member Role', () => {
     });
   });
 
-  test.describe('Agents Access - Read Only', () => {
+  test.describe('when a member user accesses agents read-only', () => {
     test('member can view agents list', async ({ page }) => {
       await setupMemberAuth(page);
       await page.goto('/agents');
@@ -130,7 +130,7 @@ test.describe('Member Role', () => {
     });
   });
 
-  test.describe('Workflows Access - Full Permissions', () => {
+  test.describe('when a member user accesses workflows with full permissions', () => {
     test('member can view workflows list', async ({ page }) => {
       await setupMemberAuth(page);
       await page.goto('/workflows');
@@ -191,7 +191,7 @@ test.describe('Member Role', () => {
     });
   });
 
-  test.describe('Tools Access - Read and Execute', () => {
+  test.describe('when a member user accesses tools to read and execute', () => {
     test('member can view tools list', async ({ page }) => {
       await setupMemberAuth(page);
       await page.goto('/tools');
@@ -237,7 +237,7 @@ test.describe('Member Role', () => {
     });
   });
 
-  test.describe('Permission Verification', () => {
+  test.describe('when verifying the member permission set', () => {
     test('member has correct permissions', async ({ page }) => {
       // Set up member with explicit permission verification
       await setupMockAuth(page, {
@@ -286,7 +286,7 @@ test.describe('Member Role', () => {
     });
   });
 
-  test.describe('Member vs Other Roles Comparison', () => {
+  test.describe('when comparing the member role to other roles', () => {
     test('member has fewer permissions than admin', async ({ page }) => {
       // First, check member view
       await setupMemberAuth(page);
@@ -353,7 +353,7 @@ test.describe('Member Role', () => {
     });
   });
 
-  test.describe('Restricted Actions', () => {
+  test.describe('when a member user attempts restricted actions', () => {
     test('member cannot see admin-only settings', async ({ page }) => {
       await setupMemberAuth(page);
       await page.goto('/agents');

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 
+import { useDirectoryListing } from '../../shared/hooks/use-fs';
 import { ArrowDownIcon, FolderIcon } from './icons';
 
 /**
@@ -12,18 +13,6 @@ import { ArrowDownIcon, FolderIcon } from './icons';
  * a host modal (see ProjectsModal) so project selection is a first-class,
  * centered flow rather than a sidebar popover.
  */
-
-interface DirectoryEntry {
-  name: string;
-  path: string;
-}
-
-interface DirectoryListing {
-  root: string;
-  path: string;
-  parent: string | null;
-  entries: DirectoryEntry[];
-}
 
 interface DirectoryBrowserProps {
   /** Called with the chosen absolute path and its basename. */
@@ -53,29 +42,16 @@ function crumbs(path: string): { label: string; path: string }[] {
 }
 
 export function DirectoryBrowser({ onPick, onCancel, busy = false, error: pickError = null }: DirectoryBrowserProps) {
-  const [listing, setListing] = useState<DirectoryListing | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // `undefined` lists the server root; explicit paths drill into subfolders.
+  // React Query owns the fetch + per-path cache, so navigation is just state.
+  const [path, setPath] = useState<string | undefined>(undefined);
+  const listingQuery = useDirectoryListing(path);
 
-  const browse = useCallback(async (path?: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const url = path ? `/api/web/fs/list?path=${encodeURIComponent(path)}` : '/api/web/fs/list';
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`Failed to list directory (${res.status})`);
-      const data = (await res.json()) as DirectoryListing;
-      setListing(data);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const listing = listingQuery.data ?? null;
+  const loading = listingQuery.isPending;
+  const error = listingQuery.error instanceof Error ? listingQuery.error.message : null;
 
-  useEffect(() => {
-    void browse();
-  }, [browse]);
+  const browse = (next?: string) => setPath(next);
 
   return (
     <div className="dirbrowser">

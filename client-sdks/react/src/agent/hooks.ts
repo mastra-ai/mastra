@@ -5,6 +5,7 @@ import { AIV5Adapter } from '@mastra/core/agent/message-list';
 import type { CoreUserMessage } from '@mastra/core/llm';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { TaskItem } from '@mastra/core/signals';
 import type { ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/stream';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -16,6 +17,11 @@ import {
 } from '../lib/mastra-db';
 import type { MastraDBMessageMetadata } from '../lib/mastra-db';
 import { useMastraClient } from '../mastra-client-context';
+import {
+  extractLatestTasksFromMessages,
+  extractTasksFromSignalChunk,
+  extractTasksFromToolResultChunk,
+} from './extract-tasks';
 import { extractRunIdFromMessages } from './extractRunIdFromMessages';
 import { convertSignalDataToBase64String } from './signal-data';
 import type { ClientToolsInput, ModelSettings } from './types';
@@ -297,6 +303,7 @@ export const useChat = ({
   const _threadSubscriptionPromiseRef = useRef<Promise<void> | null>(null);
   const _threadSignalsUnsupportedRef = useRef(false);
   const [messages, setMessages] = useState<MastraDBMessage[]>([]);
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [toolCallApprovals, setToolCallApprovals] = useState<{
     [toolCallId: string]: { status: 'approved' | 'declined' };
   }>({});
@@ -312,6 +319,7 @@ export const useChat = ({
   useEffect(() => {
     const formattedMessages = resolveInitialMessages(initialMessages ?? []);
     setMessages(formattedMessages);
+    setTasks(extractLatestTasksFromMessages(formattedMessages));
     pendingToolApprovalIdsRef.current = extractPendingToolApprovalIdsFromMessages(formattedMessages);
     setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
     _currentRunId.current = extractRunIdFromMessages(formattedMessages);
@@ -414,6 +422,11 @@ export const useChat = ({
   const processStreamChunk = useCallback(
     async (chunk: ChunkType, onChunk?: (chunk: ChunkType) => Promise<void>) => {
       setMessages(prev => accumulateChunk({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
+
+      const signalTasks = extractTasksFromSignalChunk(chunk);
+      if (signalTasks !== undefined) setTasks(signalTasks);
+      const toolTasks = extractTasksFromToolResultChunk(chunk);
+      if (toolTasks !== undefined) setTasks(toolTasks);
 
       if (
         chunk.type === 'data-user-message' &&
@@ -910,7 +923,7 @@ export const useChat = ({
     _requestContext.current = undefined;
   };
 
-  const approveToolCall = async (toolCallId: string) => {
+  const approveToolCall = async (toolCallId: string, resumeData?: unknown) => {
     const onChunk = _onChunk.current;
     const currentRunId = _currentRunId.current;
 
@@ -928,6 +941,7 @@ export const useChat = ({
           threadId,
           toolCallId,
           approved: true,
+          ...(resumeData !== undefined ? { resumeData } : {}),
           requestContext: _requestContext.current,
         });
         pendingToolApprovalIdsRef.current.delete(toolCallId);
@@ -1173,6 +1187,7 @@ export const useChat = ({
     isRunning,
     isAwaitingToolApproval,
     messages,
+    tasks,
     approveToolCall,
     declineToolCall,
     approveToolCallGenerate,

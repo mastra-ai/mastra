@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { runScenario } from './harness';
+import { runScenario } from './scenario-runner';
 
 /**
  * Follow-up queue: send a message, then while the agent is running (or just

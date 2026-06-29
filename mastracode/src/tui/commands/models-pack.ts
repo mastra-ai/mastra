@@ -75,7 +75,7 @@ async function selectModel(
   modeColor?: string,
   currentModelId?: string,
 ): Promise<string | undefined> {
-  const availableModels = await ctx.state.harness.listAvailableModels();
+  const availableModels = await ctx.state.controller.listAvailableModels();
   if (availableModels.length === 0) return undefined;
 
   return new Promise<string | undefined>(resolve => {
@@ -377,8 +377,8 @@ export function removeCustomPackFromSettings(settings: GlobalSettings, packId: s
 }
 
 async function applyPack(ctx: SlashCommandContext, pack: ModePack, previousPackId?: string): Promise<void> {
-  const harness = ctx.state.harness;
-  const modes = harness.listModes();
+  const controller = ctx.state.controller;
+  const modes = controller.listModes();
 
   for (const mode of modes) {
     const modelId = (pack.models as Record<string, string>)[mode.id];
@@ -571,8 +571,8 @@ async function askImportCollision(
 }
 
 export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise<void> {
-  const harness = ctx.state.harness;
-  const models = await harness.listAvailableModels();
+  const controller = ctx.state.controller;
+  const models = await controller.listAvailableModels();
 
   const hasEnv = (provider: string) => models.some(m => m.provider === provider && m.hasApiKey);
   const accessLevel = (storageProviderId: string): ProviderAccessLevel => {

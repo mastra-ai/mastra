@@ -1,12 +1,14 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
-import { observationalMemoryQueryKey, memoryThreadMessagesQueryKey, memoryStatusQueryKey } from '@mastra/playground-ui';
+import { memoryStatusQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-status';
+import { memoryThreadMessagesQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
+import { observationalMemoryQueryKey } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
 import { useChat } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
-import { ChatMessagesContext, ChatRunningContext, ChatSendContext } from './chat-context';
-import type { MessagesContextValue, RunningContextValue, SendContextValue } from './chat-context';
+import { ChatMessagesContext, ChatRunningContext, ChatSendContext, ChatTasksContext } from './chat-context';
+import type { MessagesContextValue, RunningContextValue, SendContextValue, TasksContextValue } from './chat-context';
 import { useChatSendHandler } from './use-chat-send-handler';
 import { useObservationalMemoryContext } from '@/domains/agents/context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
@@ -84,6 +86,7 @@ export function ChatProvider({
 
   const {
     messages,
+    tasks,
     sendMessage,
     cancelRun,
     isRunning: isRunningStream,
@@ -297,25 +300,28 @@ export function ChatProvider({
     [isRunning, cancel, canSendWhileStreaming],
   );
   const sendValue = useMemo<SendContextValue>(() => ({ send }), [send]);
+  const tasksValue = useMemo<TasksContextValue>(() => ({ tasks }), [tasks]);
 
   return (
     <ChatRunningContext.Provider value={runningValue}>
       <ChatMessagesContext.Provider value={messagesValue}>
-        <ChatSendContext.Provider value={sendValue}>
-          <ToolCallProvider
-            approveToolcall={approveToolCall}
-            declineToolcall={declineToolCall}
-            approveToolcallGenerate={approveToolCallGenerate}
-            declineToolcallGenerate={declineToolCallGenerate}
-            approveNetworkToolcall={approveNetworkToolCall}
-            declineNetworkToolcall={declineNetworkToolCall}
-            isRunning={isRunningStream}
-            toolCallApprovals={toolCallApprovals}
-            networkToolCallApprovals={networkToolCallApprovals}
-          >
-            {children}
-          </ToolCallProvider>
-        </ChatSendContext.Provider>
+        <ChatTasksContext.Provider value={tasksValue}>
+          <ChatSendContext.Provider value={sendValue}>
+            <ToolCallProvider
+              approveToolcall={approveToolCall}
+              declineToolcall={declineToolCall}
+              approveToolcallGenerate={approveToolCallGenerate}
+              declineToolcallGenerate={declineToolCallGenerate}
+              approveNetworkToolcall={approveNetworkToolCall}
+              declineNetworkToolcall={declineNetworkToolCall}
+              isRunning={isRunningStream}
+              toolCallApprovals={toolCallApprovals}
+              networkToolCallApprovals={networkToolCallApprovals}
+            >
+              {children}
+            </ToolCallProvider>
+          </ChatSendContext.Provider>
+        </ChatTasksContext.Provider>
       </ChatMessagesContext.Provider>
     </ChatRunningContext.Provider>
   );

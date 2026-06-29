@@ -6,7 +6,7 @@ import { transcriptReducer, initialTranscript } from '../../src/web/ui/transcrip
  * Slash commands are client-side only (they push local notices into the
  * transcript reducer). No server round-trip needed, so we test them by
  * driving the reducer directly — faster and more deterministic than a
- * full scenario harness.
+ * full scenario.
  */
 
 describe('slash commands (reducer-level)', () => {

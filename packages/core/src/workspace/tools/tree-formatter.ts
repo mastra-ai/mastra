@@ -116,6 +116,12 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
    * Build tree recursively using tab indentation
    */
   async function buildTree(currentPath: string, depth: number): Promise<void> {
+    // Never descend into .git even when explicitly targeted as root
+    const normalizedCurrentPath = currentPath.replace(/\/$/, '');
+    if (normalizedCurrentPath === '.git' || normalizedCurrentPath.endsWith('/.git')) {
+      return;
+    }
+
     if (depth >= maxDepth) {
       truncated = true;
       return;
@@ -136,14 +142,23 @@ export async function formatAsTree(fs: WorkspaceFilesystem, path: string, option
     // Filter entries
     let filtered = entries;
 
+    // Always skip .git directory — its internals are never useful and waste tokens.
+    // This is applied before any other filtering so we never traverse into .git.
+    filtered = filtered.filter(e => !(e.type === 'directory' && e.name === '.git'));
+
     // Filter hidden files unless showHidden
     if (!showHidden) {
       filtered = filtered.filter(e => !e.name.startsWith('.'));
     }
 
-    // Filter by exclude pattern (like tree's -I flag)
+    // Filter by exclude pattern (like tree's -I flag, supports pipe-separated patterns)
     if (exclude) {
-      const patterns = Array.isArray(exclude) ? exclude : [exclude];
+      const patterns = Array.isArray(exclude)
+        ? exclude
+        : exclude
+            .split('|')
+            .map(p => p.trim())
+            .filter(Boolean);
       filtered = filtered.filter(e => {
         return !patterns.some(pattern => e.name.includes(pattern));
       });

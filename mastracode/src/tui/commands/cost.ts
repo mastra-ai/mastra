@@ -3,7 +3,7 @@ import type { SlashCommandContext } from './types.js';
 export function handleCostCommand(ctx: SlashCommandContext): void {
   const formatNumber = (n: number) => n.toLocaleString();
 
-  // Read from Harness display state (canonical source)
+  // Read from AgentController display state (canonical source)
   const ds = ctx.state.session.displayState.get();
 
   let omTokensText = '';

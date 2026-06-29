@@ -20,6 +20,7 @@ const localStorageMock = (() => {
 Object.defineProperty(global, 'localStorage', { value: localStorageMock });
 
 import { isAnthropicModelWithSamplingRestriction } from '../../utils/model-restrictions';
+import { defaultSettings } from '../use-agent-settings-state';
 
 /**
  * Test file for use-agent-settings-state.ts
@@ -42,6 +43,10 @@ describe('use-agent-settings-state defaults', () => {
     // This also avoids Claude 4.5+ errors where both cannot be specified
     expect(modelSettings.temperature).toBeUndefined();
     expect(modelSettings.topP).toBeUndefined();
+  });
+
+  it('should default maxSteps to 15', () => {
+    expect(defaultSettings.modelSettings.maxSteps).toBe(15);
   });
 });
 
