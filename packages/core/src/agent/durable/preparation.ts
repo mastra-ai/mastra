@@ -14,13 +14,30 @@ import type { CoreTool, ToolHooks, ToolPayloadTransformPolicy } from '../../tool
 import { deepMerge } from '../../utils';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
-import type { AgentExecutionOptions } from '../agent.types';
+import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
-import type { AgentInstructions, AgentModelManagerConfig, ToolsetsInput, ToolsInput } from '../types';
+import type { AgentInstructions, AgentMethodType, AgentModelManagerConfig, ToolsetsInput, ToolsInput } from '../types';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
 import { createWorkflowInput } from './utils/serialize-state';
+
+/**
+ * Mirror of Agent#convertInstructionsToString — used for the AGENT_RUN span
+ * `attributes.instructions` field so durable runs publish the same shape as
+ * non-durable runs. Kept local to avoid promoting the private method.
+ */
+function convertInstructionsToString(instructions: AgentInstructions | undefined): string {
+  if (!instructions) return '';
+  if (typeof instructions === 'string') return instructions;
+  if (Array.isArray(instructions)) {
+    return instructions
+      .map(msg => (typeof msg === 'string' ? msg : typeof msg.content === 'string' ? msg.content : ''))
+      .filter(Boolean)
+      .join('\n\n');
+  }
+  return typeof instructions.content === 'string' ? instructions.content : '';
+}
 
 /**
  * Interface for the Agent methods needed during durable preparation.
@@ -48,6 +65,8 @@ interface DurablePreparationAgent {
     memoryConfig?: MemoryConfig;
     autoResumeSuspendedTools?: boolean;
     hooks?: ToolHooks;
+    delegation?: DelegationConfig;
+    methodType?: AgentMethodType;
   }): Promise<Record<string, CoreTool>>;
   listInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
   listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
@@ -94,6 +113,8 @@ export interface PreparationOptions<OUTPUT = undefined> {
   logger?: IMastraLogger;
   /** Mastra instance (for version overrides, background tasks, etc.) */
   mastra?: Mastra;
+  /** Method type */
+  methodType?: AgentMethodType;
 }
 
 /**
@@ -122,6 +143,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     requestContext: providedRequestContext,
     logger,
     mastra,
+    methodType = 'stream',
   } = options;
 
   const typedAgent = agent as unknown as DurablePreparationAgent;
@@ -277,6 +299,15 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // Open AGENT_RUN here so processor_run spans (and their MEMORY_OPERATION
   // children) parent to it. MODEL_GENERATION is opened later under it.
+  //
+  // Mirrors non-durable Agent.stream(): forward attributes (conversationId,
+  // resolved instructions string, resolvedVersionId), metadata (entityVersionId),
+  // and the agent-level tracingPolicy so durable runs land in the same span
+  // shape as in-process runs.
+  const rawConfig = typeof (agent as any).toRawConfig === 'function' ? (agent as any).toRawConfig() : undefined;
+  const resolvedVersionId = rawConfig?.resolvedVersionId as string | undefined;
+  const agentTracingPolicy =
+    typeof (agent as any).getTracingPolicy === 'function' ? (agent as any).getTracingPolicy() : undefined;
   const agentSpan = getOrCreateSpan({
     type: SpanType.AGENT_RUN,
     name: `agent run: '${agent.id}'`,
@@ -284,11 +315,20 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     entityId: agent.id,
     entityName: agent.name,
     input: messages,
+    attributes: {
+      conversationId: threadId,
+      instructions: convertInstructionsToString(instructions),
+      // @deprecated — use entityVersionId (top-level span context field) instead.
+      // Kept for backward compatibility during migration.
+      ...(resolvedVersionId ? { resolvedVersionId } : {}),
+    },
     metadata: {
       runId,
       resourceId,
       threadId,
+      ...(resolvedVersionId ? { entityVersionId: resolvedVersionId } : {}),
     },
+    tracingPolicy: agentTracingPolicy,
     tracingContext: execOptions?.tracingContext,
     tracingOptions: execOptions?.tracingOptions,
     requestContext,
@@ -334,6 +374,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       memoryConfig: execOptions?.memory?.options,
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
       hooks: execOptions?.hooks,
+      delegation: execOptions?.delegation,
+      methodType,
     });
   } catch (error) {
     logger?.warn?.(`[DurableAgent] Error converting tools: ${error}`);

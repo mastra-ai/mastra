@@ -298,6 +298,19 @@ export type SendAgentNotificationSignalOptions<OUTPUT = unknown> = Extract<
  */
 export type AgentNotificationConfig = {
   deliveryPolicy?: NotificationDeliveryPolicyConfig;
+  /**
+   * Resolves stream options for dispatching a deferred notification to an idle
+   * thread. Called by the notification dispatcher when a previously-deferred
+   * notification becomes due and the target thread is idle.
+   *
+   * Return the same shape you would pass as `streamOptions` inside
+   * `ifIdle` when calling `sendNotificationSignal` directly — typically
+   * includes `requestContext`, `memory`, and model settings.
+   */
+  getNotificationStreamOptions?: (target: {
+    resourceId: string;
+    threadId: string;
+  }) => Record<string, unknown> | Promise<Record<string, unknown> | undefined> | undefined;
 };
 
 /**
@@ -489,6 +502,11 @@ export interface GoalConfig {
    * own judging). When omitted, the default judge is text-only.
    */
   tools?: DynamicArgument<ToolsInput | undefined>;
+  /**
+   * Max steps the judge agent may take per evaluation (its internal agentic-loop
+   * budget). When omitted the judge uses the model loop's default (5).
+   */
+  maxSteps?: number;
   /**
    * Custom goal scorer (a {@link MastraScorer} or a registered scorer id). When
    * omitted, a default rubric scorer judges the objective with the judge model.

@@ -1,0 +1,3 @@
+# Generated test-storage SQLite DB and editor artifacts created when running the
+# live Playwright E2E suite (`pnpm test:e2e`). These are build outputs, not source.
+src/mastra/public/

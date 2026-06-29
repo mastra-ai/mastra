@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { runScenario } from './harness';
+import { runScenario } from './scenario-runner';
 
 /**
  * Web equivalent of MastraCode's notification flow: a notification signal is
@@ -8,7 +8,7 @@ import { runScenario } from './harness';
  * and the notification event appears in the SSE stream / transcript.
  *
  * This exercises the full notification pipeline:
- *   POST /harness/:id/sessions/:rid/notifications
+ *   POST /agent-controller/:controllerId/sessions/:rId/notifications
  *     → session.sendNotificationSignal(input)
  *       → agent delivery policy decision
  *         → notification event on SSE stream

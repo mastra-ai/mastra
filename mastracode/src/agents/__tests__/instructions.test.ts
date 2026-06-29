@@ -20,7 +20,7 @@ vi.mock('../prompts/agent-instructions.js', () => ({
 import { getDynamicInstructions } from '../instructions.js';
 
 describe('getDynamicInstructions', () => {
-  it('builds commit attribution guidance from restored harness model state', async () => {
+  it('builds commit attribution guidance from restored controller model state', async () => {
     const prompt = await getDynamicInstructions({
       requestContext: {
         get: vi.fn(key => {
@@ -30,7 +30,7 @@ describe('getDynamicInstructions', () => {
             gitBranch: 'main',
             permissionRules: { tools: {} },
           }));
-          return key === 'harness'
+          return key === 'controller'
             ? {
                 getState,
                 session: {

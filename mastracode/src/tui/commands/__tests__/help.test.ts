@@ -12,7 +12,7 @@ import { handleHelpCommand } from '../help.js';
 
 function createCtx(modeCount = 2) {
   return {
-    harness: {
+    controller: {
       listModes: vi.fn(() => Array.from({ length: modeCount }, (_, i) => ({ id: `mode-${i}` }))),
     },
     customSlashCommands: [

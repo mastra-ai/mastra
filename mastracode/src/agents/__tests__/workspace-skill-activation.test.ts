@@ -53,7 +53,7 @@ describe('mastracode workspace skill activation', () => {
         projectPath: tempDir,
         sandboxAllowedPaths: [],
       });
-      requestContext.set('harness', {
+      requestContext.set('controller', {
         modeId: 'build',
         getState,
         session: {

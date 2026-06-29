@@ -1,5 +1,5 @@
 import type { SessionNotification, RequestPermissionRequest, AgentSideConnection } from '@agentclientprotocol/sdk';
-import type { HarnessEvent, Session, TokenUsage } from '@mastra/core/harness';
+import type { AgentControllerEvent, Session, TokenUsage } from '@mastra/core/agent-controller';
 
 let autoApprove = false;
 
@@ -47,12 +47,12 @@ export interface PromptState {
 }
 
 /**
- * Translate a HarnessEvent into an ACP SessionNotification and send it
+ * Translate an AgentControllerEvent into an ACP SessionNotification and send it
  * via the provided connection. Returns null for events that don't produce
  * a session update.
  */
-export function handleHarnessEvent(
-  event: HarnessEvent,
+export function handleAgentControllerEvent(
+  event: AgentControllerEvent,
   state: PromptState | null,
   connection: AgentSideConnection,
   session: Session,
@@ -141,7 +141,7 @@ async function handleToolApproval(
   state: PromptState,
   connection: AgentSideConnection,
   session: Session,
-  event: Extract<HarnessEvent, { type: 'tool_approval_required' }>,
+  event: Extract<AgentControllerEvent, { type: 'tool_approval_required' }>,
 ): Promise<void> {
   // Auto-approve if --dangerous-auto-approve flag is set
   if (autoApprove) {
@@ -180,7 +180,7 @@ async function handleToolSuspended(
   state: PromptState,
   connection: AgentSideConnection,
   session: Session,
-  event: Extract<HarnessEvent, { type: 'tool_suspended' }>,
+  event: Extract<AgentControllerEvent, { type: 'tool_suspended' }>,
 ): Promise<void> {
   const { toolCallId, toolName, args, suspendPayload } = event;
 

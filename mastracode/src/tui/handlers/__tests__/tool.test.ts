@@ -17,7 +17,7 @@ function createContext(bufferText: string | undefined) {
   const session = { displayState: { get: () => ({ toolInputBuffers }) } };
   const ctx = {
     state: {
-      harness: { session },
+      controller: { session },
       session,
       pendingTools: new Map([['call-1', component]]),
       pendingAskUserComponents: new Map(),

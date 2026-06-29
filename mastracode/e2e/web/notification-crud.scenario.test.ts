@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { runScenario } from './harness';
+import { runScenario } from './scenario-runner';
 
 /**
  * Send notification signals via the API and verify the round-trip works.
@@ -21,7 +21,7 @@ describe('web scenario: notification-crud', () => {
 
         // Send a notification via the SDK.
         const client = driver.getClient();
-        const session = client.getHarness('code').session('web-scenario-notification-crud');
+        const session = client.getAgentController('code').session('web-scenario-notification-crud');
         const result = await session.sendNotification({
           source: 'ci',
           kind: 'build',

@@ -13,8 +13,8 @@ function escapeSkillBoundary(value: string): string {
 
 async function resolveWorkspace(ctx: SlashCommandContext) {
   let workspace = ctx.getResolvedWorkspace();
-  if (!workspace && ctx.harness.hasWorkspace()) {
-    workspace = await ctx.harness.resolveWorkspace({ session: ctx.state.session });
+  if (!workspace && ctx.controller.hasWorkspace()) {
+    workspace = await ctx.controller.resolveWorkspace({ session: ctx.state.session });
   }
   return workspace;
 }
