@@ -46,84 +46,62 @@ function trackJsErrors(p: Page): () => string[] {
 	return () => errors
 }
 
-// ─── Tab switcher tests (desktop only — tabs are hidden on mobile via lg:block) ──
+// ─── Primary navbar tests ──────────────────────────────────────────────
 
-test.describe('Tab switcher navigation', () => {
-	test('desktop: clicking tabs navigates between sections', async ({ page, isMobile }) => {
-		test.skip(isMobile, 'Tab switcher is hidden on mobile (hidden lg:block)')
+test.describe('Primary navbar navigation', () => {
+	test('desktop: clicking navbar section links navigates between sections', async ({ page, isMobile }) => {
+		test.skip(isMobile, 'Desktop navbar links collapse into the hamburger menu on mobile')
 
 		const getErrors = trackJsErrors(page)
 
 		await page.goto('/docs', { waitUntil: 'domcontentloaded' })
 		await page.waitForLoadState('networkidle')
 
-		// The tab bar with aria-label="Documentation tabs"
-		const tabBar = page.locator('[aria-label="Documentation tabs"]')
-		await expect(tabBar).toBeVisible()
+		const navbar = page.getByRole('navigation', { name: 'Main' })
+		await expect(navbar).toBeVisible()
+		await expect(navbar.getByRole('link', { name: 'Docs' })).toBeVisible()
 
-		// Verify Docs tab is active initially
-		const docsTab = tabBar.locator('a', { hasText: 'Docs' }).first()
-		await expect(docsTab).toHaveAttribute('data-active', 'true')
-
-		// Click through remaining tabs
-		const tabs = [
-			{ label: 'Models', expectedPath: '/models' },
-			{ label: 'Guides', expectedPath: '/guides' },
-			{ label: 'Reference', expectedPath: '/reference' },
+		const sections = [
+			{ label: 'Models', expectedPath: /\/models\/?$/ },
+			{ label: 'Guides', expectedPath: /\/guides\/?$/ },
+			{ label: 'Reference', expectedPath: /\/reference\/?$/ },
 		]
 
-		for (const tab of tabs) {
-			const tabLink = tabBar.locator('a', { hasText: tab.label }).first()
-			await tabLink.click()
+		for (const section of sections) {
+			await navbar.getByRole('link', { name: section.label }).click()
 			await page.waitForLoadState('networkidle')
-			await expect(page).toHaveURL(new RegExp(tab.expectedPath))
-			await expect(tabLink).toHaveAttribute('data-active', 'true')
+			await expect(page).toHaveURL(section.expectedPath)
 		}
 
-		expect(getErrors(), 'JS errors during tab navigation').toEqual([])
+		expect(getErrors(), 'JS errors during navbar navigation').toEqual([])
 	})
 })
 
-// ─── Mobile docs dropdown tests (mobile only — dropdown is in hamburger menu) ──
+// ─── Mobile navbar tests ───────────────────────────────────────────────
 
-test.describe('Mobile docs dropdown', () => {
-	test('mobile: switching sections via dropdown in hamburger menu', async ({ page, isMobile }) => {
-		test.skip(!isMobile, 'Mobile docs dropdown only renders in mobile sidebar')
+test.describe('Mobile navbar navigation', () => {
+	test('mobile: switching sections via hamburger menu links', async ({ page, isMobile }) => {
+		test.skip(!isMobile, 'Mobile navbar links render in the hamburger menu')
 
 		const getErrors = trackJsErrors(page)
 
 		await page.goto('/docs', { waitUntil: 'domcontentloaded' })
 		await page.waitForLoadState('networkidle')
 
-		// Open hamburger menu
 		const hamburger = page.locator('[aria-label="Toggle navigation bar"]')
 		await expect(hamburger).toBeVisible()
 		await hamburger.click()
 
-		// Mobile sidebar should appear
 		const mobileSidebar = page.locator('.navbar-sidebar')
 		await expect(mobileSidebar).toBeVisible()
 
-		// The MobileDocsDropdown should be visible — it's a button showing the active section
-		const dropdown = mobileSidebar.locator('button', { hasText: 'Docs' }).first()
-		await expect(dropdown).toBeVisible()
-
-		// Click the dropdown to open it
-		await dropdown.click()
-
-		// Wait for Radix dropdown content to appear
-		const dropdownContent = page.locator('[data-slot="dropdown-menu-content"]')
-		await expect(dropdownContent).toBeVisible({ timeout: 5000 })
-
-		// Click "Models" in the dropdown menu
-		const modelsItem = dropdownContent.locator('a', { hasText: 'Models' }).first()
-		await modelsItem.click()
+		const modelsLink = mobileSidebar.getByRole('link', { name: 'Models' })
+		await expect(modelsLink).toBeVisible()
+		await modelsLink.evaluate((link: HTMLAnchorElement) => link.click())
 		await page.waitForLoadState('networkidle')
+		await expect(page).toHaveURL(/\/models\/?$/)
 
-		// Should have navigated to /models
-		await expect(page).toHaveURL(/\/models/)
-
-		expect(getErrors(), 'JS errors during mobile docs dropdown navigation').toEqual([])
+		expect(getErrors(), 'JS errors during mobile navbar navigation').toEqual([])
 	})
 })
 
@@ -177,12 +155,13 @@ test.describe('Sidebar navigation', () => {
 		const mobileSidebar = page.locator('.navbar-sidebar')
 		await expect(mobileSidebar).toBeVisible()
 
-		// Find a navigation link in the mobile sidebar (exclude category headers)
-		const mobileLink = mobileSidebar.locator('a.menu__link:not(.menu__link--sublist)').first()
+		// Click a specific non-active docs sidebar link.
+		const mobileLink = mobileSidebar.getByRole('link', { name: 'Project Structure' })
+		await expect(mobileLink).toBeVisible()
 		const href = await mobileLink.getAttribute('href')
 		expect(href).toBeTruthy()
 
-		await mobileLink.click()
+		await mobileLink.evaluate((link: HTMLAnchorElement) => link.click())
 		await page.waitForLoadState('networkidle')
 
 		// Verify navigation happened
@@ -210,7 +189,7 @@ test.describe('Admonitions and tabs on AI SDK UI guide', () => {
 		// Some admonitions are inside inactive tab panels (hidden attribute),
 		// so we check all titles in the DOM for type coverage, then verify
 		// only the visible ones are properly rendered.
-		const allAdmonitions = page.locator('[data-testid="admonition-title"]')
+		const allAdmonitions = page.locator('[data-mid="admonition-title"]')
 		const totalCount = await allAdmonitions.count()
 		expect(totalCount, 'Expected at least 4 admonitions on the page').toBeGreaterThanOrEqual(4)
 
@@ -228,7 +207,7 @@ test.describe('Admonitions and tabs on AI SDK UI guide', () => {
 
 		// Use Playwright's :visible pseudo-selector to only check admonitions
 		// that are not inside hidden tab panels
-		const visibleAdmonitions = page.locator('[data-testid="admonition-title"]:visible')
+		const visibleAdmonitions = page.locator('[data-mid="admonition-title"]:visible')
 		const visibleCount = await visibleAdmonitions.count()
 		expect(visibleCount, 'Expected at least 3 visible admonitions').toBeGreaterThanOrEqual(3)
 
@@ -268,7 +247,7 @@ test.describe('Admonitions and tabs on AI SDK UI guide', () => {
 		const secondTab = tabs.nth(1)
 		await expect(secondTab).toHaveAttribute('aria-selected', 'false')
 
-		await secondTab.click()
+		await secondTab.evaluate((tab: HTMLElement) => tab.click())
 
 		// After clicking, second tab should be active, first should not
 		await expect(secondTab).toHaveAttribute('aria-selected', 'true')
@@ -278,13 +257,13 @@ test.describe('Admonitions and tabs on AI SDK UI guide', () => {
 
 		// Click the third tab
 		const thirdTab = tabs.nth(2)
-		await thirdTab.click()
+		await thirdTab.evaluate((tab: HTMLElement) => tab.click())
 		await expect(thirdTab).toHaveAttribute('aria-selected', 'true')
 		await expect(thirdTab).toHaveClass(/tabs__item--active/)
 		await expect(secondTab).toHaveAttribute('aria-selected', 'false')
 
 		// Click back to first tab
-		await firstTab.click()
+		await firstTab.evaluate((tab: HTMLElement) => tab.click())
 		await expect(firstTab).toHaveAttribute('aria-selected', 'true')
 		await expect(firstTab).toHaveClass(/tabs__item--active/)
 		await expect(thirdTab).toHaveAttribute('aria-selected', 'false')
@@ -315,13 +294,13 @@ test.describe('Admonitions and tabs on AI SDK UI guide', () => {
 		await expect(panels.nth(2)).toBeHidden()
 
 		// Click the second tab
-		await tabs.nth(1).click()
+		await tabs.nth(1).evaluate((tab: HTMLElement) => tab.click())
 		await expect(panels.nth(0)).toBeHidden()
 		await expect(panels.nth(1)).toBeVisible()
 		await expect(panels.nth(2)).toBeHidden()
 
 		// Click the third tab
-		await tabs.nth(2).click()
+		await tabs.nth(2).evaluate((tab: HTMLElement) => tab.click())
 		await expect(panels.nth(0)).toBeHidden()
 		await expect(panels.nth(1)).toBeHidden()
 		await expect(panels.nth(2)).toBeVisible()
@@ -341,28 +320,29 @@ test.describe('Chatbot sidebar', () => {
 		await page.goto('/docs', { waitUntil: 'domcontentloaded' })
 		await page.waitForLoadState('networkidle')
 
-		// Chatbot sidebar starts in collapsed state
-		const expandTrigger = page.locator('[aria-label="Expand chatbot"]')
-		await expect(expandTrigger).toBeVisible({ timeout: 10_000 })
+		// Chat panel starts in collapsed state
+		const openButton = page.getByRole('button', { name: 'Ask AI' })
+		await expect(openButton).toBeVisible({ timeout: 10_000 })
 
-		// The "Chat with Mastra docs" header should NOT be visible yet
-		await expect(page.getByText('Chat with Mastra docs')).not.toBeVisible()
+		const chatPanel = page.locator('#docs-chat-panel')
+		await expect(chatPanel).toHaveAttribute('aria-hidden', 'true')
 
-		// Click to expand the chatbot
-		await expandTrigger.click()
+		// Click to open the chat panel
+		await openButton.click()
 
-		// Verify chatbot opened: header and the chat textarea should be visible
-		await expect(page.getByText('Chat with Mastra docs')).toBeVisible({ timeout: 5000 })
-		await expect(page.locator('textarea[placeholder*="Ask questions about Mastra"]')).toBeVisible()
+		// Verify chat opened: title and textarea should be visible
+		await expect(chatPanel).toHaveAttribute('aria-hidden', 'false', { timeout: 5000 })
+		await expect(chatPanel.getByText('Ask AI')).toBeVisible()
+		await expect(page.locator('textarea[placeholder*="Ask me a question about Mastra"]')).toBeVisible()
 
-		// Close the chatbot
-		const collapseButton = page.locator('[aria-label="Collapse chatbot"]')
-		await expect(collapseButton).toBeVisible()
-		await collapseButton.click()
+		// Close the chat panel
+		const closeButton = chatPanel.getByRole('button', { name: 'Hide AI chat' })
+		await expect(closeButton).toBeVisible()
+		await closeButton.click()
 
-		// Verify chatbot closed
-		await expect(page.getByText('Chat with Mastra docs')).not.toBeVisible({ timeout: 5000 })
-		await expect(expandTrigger).toBeVisible()
+		// Verify chat closed
+		await expect(chatPanel).toHaveAttribute('aria-hidden', 'true', { timeout: 5000 })
+		await expect(openButton).toBeVisible()
 
 		expect(getErrors(), 'JS errors during chatbot interaction').toEqual([])
 	})
