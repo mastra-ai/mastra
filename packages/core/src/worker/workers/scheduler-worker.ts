@@ -1,6 +1,7 @@
 import type { IMastraLogger } from '../../logger';
-import { WorkflowScheduler } from '../../workflows/scheduler/scheduler';
-import type { WorkflowSchedulerConfig } from '../../workflows/scheduler/types';
+import type { ScheduleTarget } from '../../storage/domains/schedules/base';
+import { Scheduler } from '../../workflows/scheduler/scheduler';
+import type { SchedulerConfig } from '../../workflows/scheduler/types';
 import { MastraWorker } from '../worker';
 import type { WorkerDeps } from '../worker';
 
@@ -16,11 +17,11 @@ import type { WorkerDeps } from '../worker';
 export class SchedulerWorker extends MastraWorker {
   readonly name = 'scheduler';
 
-  #scheduler?: WorkflowScheduler;
-  #config: WorkflowSchedulerConfig;
+  #scheduler?: Scheduler;
+  #config: SchedulerConfig;
   #running = false;
 
-  constructor(config: WorkflowSchedulerConfig = {}) {
+  constructor(config: SchedulerConfig = {}) {
     super();
     this.#config = config;
   }
@@ -39,26 +40,33 @@ export class SchedulerWorker extends MastraWorker {
       return;
     }
 
-    // Bind a workflow-existence predicate so the scheduler can reclaim
-    // schedule rows whose target workflow is no longer registered with
-    // Mastra (e.g. workflow renamed or deleted in code). `getWorkflowById`
-    // throws on miss; we adapt that into a boolean.
+    // Bind a target-existence predicate so the scheduler can reclaim
+    // schedule rows whose target (workflow id or agent id) is no longer
+    // registered with Mastra. `getWorkflowById` / `getAgentById` throw on
+    // miss; we adapt that into a boolean.
     const mastra = this.mastra;
-    const isWorkflowRegistered = mastra
-      ? (workflowId: string) => {
+    const isTargetReady = mastra
+      ? (target: ScheduleTarget) => {
           try {
-            mastra.getWorkflowById(workflowId);
-            return true;
+            if (target.type === 'workflow') {
+              mastra.getWorkflowById(target.workflowId);
+              return true;
+            }
+            if (target.type === 'heartbeat') {
+              mastra.getAgentById(target.agentId);
+              return true;
+            }
+            return false;
           } catch {
             return false;
           }
         }
       : undefined;
 
-    this.#scheduler = new WorkflowScheduler({
+    this.#scheduler = new Scheduler({
       schedulesStore,
       pubsub: deps.pubsub,
-      config: { ...this.#config, isWorkflowRegistered },
+      config: { ...this.#config, isTargetReady },
     });
     this.#scheduler.__setLogger(deps.logger as IMastraLogger);
 
@@ -94,7 +102,7 @@ export class SchedulerWorker extends MastraWorker {
   }
 
   /** Expose the underlying scheduler for direct API access (e.g., schedule management). */
-  get scheduler(): WorkflowScheduler | undefined {
+  get scheduler(): Scheduler | undefined {
     return this.#scheduler;
   }
 }
