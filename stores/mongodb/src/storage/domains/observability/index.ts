@@ -812,7 +812,9 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
                 },
               },
             },
-            { $sort: { _durationMissing: 1, _durationMs: sortDirection } },
+            {
+              $sort: { _durationMissing: 1, _durationMs: sortDirection, traceId: sortDirection, spanId: sortDirection },
+            },
             { $skip: page * perPage },
             { $limit: perPage },
             { $project: { _errorSpans: 0, _durationMissing: 0, _durationMs: 0 } },
@@ -892,7 +894,14 @@ export class ObservabilityMongoDB extends ObservabilityStorage {
                   },
                 },
               },
-              { $sort: { _durationMissing: 1, _durationMs: sortDirection } },
+              {
+                $sort: {
+                  _durationMissing: 1,
+                  _durationMs: sortDirection,
+                  traceId: sortDirection,
+                  spanId: sortDirection,
+                },
+              },
               { $skip: page * perPage },
               { $limit: perPage },
               { $project: { _durationMissing: 0, _durationMs: 0 } },

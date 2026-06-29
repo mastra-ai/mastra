@@ -662,7 +662,7 @@ export class ObservabilityStorageClickhouse extends ObservabilityStorage {
       const sortDirection = orderBy?.direction ?? 'DESC';
       let orderClause: string;
       if (sortField === 'durationMs') {
-        orderClause = `ORDER BY CASE WHEN endedAt IS NULL THEN 1 ELSE 0 END, greatest(0, dateDiff('millisecond', startedAt, ifNull(endedAt, startedAt))) ${sortDirection}`;
+        orderClause = `ORDER BY CASE WHEN endedAt IS NULL THEN 1 ELSE 0 END, greatest(0, dateDiff('millisecond', startedAt, ifNull(endedAt, startedAt))) ${sortDirection}, traceId ${sortDirection}, spanId ${sortDirection}`;
       } else if (sortField === 'endedAt') {
         // Use CASE WHEN to handle NULLs for endedAt (DateTime64 column)
         // DESC: NULLs first (0 sorts before 1)

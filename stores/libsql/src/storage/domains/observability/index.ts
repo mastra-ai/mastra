@@ -473,7 +473,7 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
       const sortDirection = orderBy?.direction ?? 'DESC';
       let orderByClause: string;
       if (sortField === 'durationMs') {
-        orderByClause = `CASE WHEN endedAt IS NULL THEN 1 ELSE 0 END, MAX(0, (julianday(endedAt) - julianday(startedAt)) * 86400000) ${sortDirection}`;
+        orderByClause = `CASE WHEN endedAt IS NULL THEN 1 ELSE 0 END, MAX(0, (julianday(endedAt) - julianday(startedAt)) * 86400000) ${sortDirection}, traceId ${sortDirection}, spanId ${sortDirection}`;
       } else if (sortField === 'endedAt') {
         // endedAt DESC: want NULLs first (running spans on top) - need CASE WHEN
         // endedAt ASC: want NULLs last (oldest completed first) - need CASE WHEN

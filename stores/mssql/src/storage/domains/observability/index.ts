@@ -676,10 +676,10 @@ export class ObservabilityMSSQL extends ObservabilityStorage {
       const sortDirection = orderBy?.direction ?? 'DESC';
       const orderClause =
         sortField === 'durationMs'
-          ? `CASE WHEN r.[endedAt] IS NULL THEN 1 ELSE 0 END, CASE WHEN DATEDIFF_BIG(millisecond, r.[startedAt], r.[endedAt]) < 0 THEN 0 ELSE DATEDIFF_BIG(millisecond, r.[startedAt], r.[endedAt]) END ${sortDirection}`
+          ? `CASE WHEN r.[endedAt] IS NULL THEN 1 ELSE 0 END, CASE WHEN DATEDIFF_BIG(millisecond, r.[startedAt], r.[endedAt]) < 0 THEN 0 ELSE DATEDIFF_BIG(millisecond, r.[startedAt], r.[endedAt]) END ${sortDirection}, r.[traceId] ${sortDirection}, r.[spanId] ${sortDirection}`
           : sortField === 'endedAt'
-            ? `CASE WHEN r.[endedAt] IS NULL THEN ${sortDirection === 'DESC' ? 0 : 1} ELSE ${sortDirection === 'DESC' ? 1 : 0} END, r.[endedAt] ${sortDirection}`
-            : `r.[${sortField}] ${sortDirection}`;
+            ? `CASE WHEN r.[endedAt] IS NULL THEN ${sortDirection === 'DESC' ? 0 : 1} ELSE ${sortDirection === 'DESC' ? 1 : 0} END, r.[endedAt] ${sortDirection}, r.[traceId] ${sortDirection}, r.[spanId] ${sortDirection}`
+            : `r.[${sortField}] ${sortDirection}, r.[traceId] ${sortDirection}, r.[spanId] ${sortDirection}`;
 
       // Get total count
       const countRequest = this.pool.request();
