@@ -622,10 +622,10 @@ export class MastraClient extends BaseResource {
     if (logLevel) {
       searchParams.set('logLevel', logLevel);
     }
-    if (page) {
+    if (page !== undefined) {
       searchParams.set('page', String(page));
     }
-    if (perPage) {
+    if (perPage !== undefined) {
       searchParams.set('perPage', String(perPage));
     }
     if (_filters) {
@@ -670,10 +670,10 @@ export class MastraClient extends BaseResource {
     if (logLevel) {
       searchParams.set('logLevel', logLevel);
     }
-    if (page) {
+    if (page !== undefined) {
       searchParams.set('page', String(page));
     }
-    if (perPage) {
+    if (perPage !== undefined) {
       searchParams.set('perPage', String(perPage));
     }
 
