@@ -167,9 +167,29 @@ export async function handleChatStream<OUTPUT = undefined>({
     throw new Error('runId is required when resumeData is provided');
   }
 
-  const agentObj = agentVersion ? await mastra.getAgentById(agentId, agentVersion) : mastra.getAgentById(agentId);
-  if (!agentObj) {
+  const baseAgent = mastra.getAgentById(agentId);
+  if (!baseAgent) {
     throw new Error(`Agent ${agentId} not found`);
+  }
+
+  // When an editor is configured, an agent's runtime config (instructions, tools,
+  // model, ...) can live in stored config rather than the code definition. Studio
+  // resolves these stored overrides before every run, so this endpoint must do the
+  // same or it would execute a stale/empty code-defined agent (issue #18574). An
+  // explicit agentVersion (from query params or route options) wins; otherwise we
+  // default to the published version, matching the built-in agent handlers.
+  let agentObj = baseAgent;
+  const editorAgent = mastra.getEditor?.()?.agent;
+  if (editorAgent) {
+    agentObj = await editorAgent.applyStoredOverrides(
+      baseAgent,
+      agentVersion ?? { status: 'published' },
+      requestContext as RequestContext | undefined,
+    );
+  } else if (agentVersion) {
+    // No editor configured: preserve the prior behavior of surfacing the
+    // "editor required for versioned agent lookup" error for explicit versions.
+    agentObj = await mastra.getAgentById(agentId, agentVersion);
   }
 
   if (!Array.isArray(messages)) {
