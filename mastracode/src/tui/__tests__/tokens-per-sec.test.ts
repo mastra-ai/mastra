@@ -79,7 +79,11 @@ async function decodeStep(
   opts: { startMs: number; endMs: number; completionTokens: number; reasoningTokens?: number },
 ): Promise<void> {
   vi.setSystemTime(opts.startMs);
-  await dispatchEvent({ type: 'message_update', message: { content: [] } } as any, ectx, state);
+  await dispatchEvent(
+    { type: 'message_update', message: { content: [{ type: 'text', text: 'streaming...' }] } } as any,
+    ectx,
+    state,
+  );
   vi.setSystemTime(opts.endMs);
   await dispatchEvent(
     {
@@ -129,7 +133,11 @@ describe('tokens/sec decode-window calculation', () => {
     // 20 tokens over 1s = 20 tok/s — not 20 / 4s.
     vi.setSystemTime(1000); // request issued; nothing streamed yet
     vi.setSystemTime(4000);
-    await dispatchEvent({ type: 'message_update', message: { content: [] } } as any, ectx, state);
+    await dispatchEvent(
+      { type: 'message_update', message: { content: [{ type: 'text', text: 'hello' }] } } as any,
+      ectx,
+      state,
+    );
     vi.setSystemTime(5000);
     await dispatchEvent(
       { type: 'usage_update', usage: { completionTokens: 20, promptTokens: 0, totalTokens: 20 } } as any,
@@ -195,6 +203,55 @@ describe('tokens/sec decode-window calculation', () => {
       ectx,
       state,
     );
+    expect(state.tokensPerSec).toBe(0);
+  });
+
+  it('does not spike tok/s when message_update carries only tool-result content (plan approval resume)', async () => {
+    const state = createMinimalState();
+    const ectx = createEctx();
+
+    // Simulate plan approval resume: agent_start resets state, then a
+    // message_update fires carrying only a tool-result (submit_plan result)
+    // with NO text content. The decode window should NOT open for this because
+    // no actual LLM text is being streamed yet.
+    vi.setSystemTime(10_000);
+    await dispatchEvent({ type: 'agent_start' } as any, ectx, state);
+    expect(state.tokensPerSec).toBe(0);
+    expect(state.decodeStartedAt).toBe(0);
+
+    // message_update with tool-result only (no text content) — this is what
+    // fires when the plan tool's result is delivered back to the model.
+    vi.setSystemTime(10_010);
+    await dispatchEvent(
+      {
+        type: 'message_update',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'tool-call', toolCallId: 'tc_1', toolName: 'submit_plan', args: {} }],
+        },
+      } as any,
+      ectx,
+      state,
+    );
+
+    // The decode window should NOT have opened — there's no streamed text.
+    expect(state.decodeStartedAt).toBe(0);
+
+    // Now usage_update arrives 10ms later with the token count from the
+    // original plan-generation step. If the decode window was incorrectly
+    // opened, this would compute 550 / 0.01 = 55,000 tok/s — the exact
+    // spike observed in the bug report.
+    vi.setSystemTime(10_020);
+    await dispatchEvent(
+      {
+        type: 'usage_update',
+        usage: { completionTokens: 550, reasoningTokens: 0, promptTokens: 200, totalTokens: 750 },
+      } as any,
+      ectx,
+      state,
+    );
+
+    // With the decode window never opened, tok/s should remain 0 — NOT 55,000.
     expect(state.tokensPerSec).toBe(0);
   });
 });

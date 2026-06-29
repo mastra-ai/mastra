@@ -71,6 +71,7 @@ import {
 } from './onboarding/settings.js';
 import { getToolCategory } from './permissions.js';
 import { PlanRejectionAbortProcessor } from './processors/plan-rejection-abort.js';
+import { createAmazonBedrockGateway } from './providers/amazon-bedrock-gateway.js';
 import { setAuthStorage } from './providers/claude-max.js';
 import { setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
@@ -173,6 +174,8 @@ export interface MastraCodeConfig {
   settingsPath?: string;
   /** Initial state overrides (yolo, thinkingLevel, etc.) */
   initialState?: Partial<MastraCodeState>;
+  /** Override id generation for threads/messages. Primarily useful for deterministic tests. */
+  idGenerator?: AgentControllerConfig<MastraCodeState>['idGenerator'];
   /** Override heartbeat handlers. Default: gateway-sync */
   heartbeatHandlers?: HeartbeatHandler[];
   /** Override the workspace. Default: local filesystem + local sandbox based on detected project */
@@ -313,6 +316,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     routeThroughMastraGateway: false,
     settingsPath: config?.settingsPath,
   });
+  const amazonBedrockGateway = createAmazonBedrockGateway();
 
   // Project detection
   const project = detectProject(cwd);
@@ -549,6 +553,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // config (a custom settings file would otherwise diverge).
       judge: ctx => getGoalJudgeModel(ctx, config?.settingsPath),
       maxRuns: globalSettings.models.goalMaxTurns ?? 50,
+      maxSteps: 1000,
       prompt: DEFAULT_GOAL_JUDGE_PROMPT,
       // Read-only workspace tools the default goal judge may call to verify the
       // agent's work against the actual filesystem (view, search_content,
@@ -743,9 +748,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     stateSchema: typedStateSchema,
     agent: codeAgent,
     subagents: config?.subagents ?? [],
-    gateways: [mastraCodeGateway],
+    gateways: [amazonBedrockGateway, mastraCodeGateway],
     workspace: config?.workspace ?? (args => getDynamicWorkspace(args)),
     browser: config?.browser,
+    idGenerator: config?.idGenerator,
     toolCategoryResolver: getToolCategory,
     initialState: {
       projectPath: project.rootPath,

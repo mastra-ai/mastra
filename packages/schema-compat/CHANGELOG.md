@@ -1,5 +1,19 @@
 # @mastra/schema-compat
 
+## 1.3.2-alpha.0
+
+### Patch Changes
+
+- Fix inverted date constraint descriptions in the Zod v4 schema handler. `z.date().min()` and `z.date().max()` were described with their bounds swapped (a lower bound was labelled "older than" and an upper bound "newer than"), so the schema sent to the model stated the opposite and impossible constraint. The handler now matches Zod semantics and the existing v3 handler. Closes #18581. ([#18582](https://github.com/mastra-ai/mastra/pull/18582))
+
+- Fixed 'Type instantiation is excessively deep' (TS2589) errors that occurred when defining workflows with Zod schemas. Workflow and step type inference is now significantly faster and no longer causes TypeScript to crash or report depth errors. ([#18608](https://github.com/mastra-ai/mastra/pull/18608))
+
+## 1.3.1
+
+### Patch Changes
+
+- Fixed createTool type error when passing jsonSchema() or a Schema object from @ai-sdk/provider-utils as inputSchema — no more cast needed ([#17435](https://github.com/mastra-ai/mastra/pull/17435))
+
 ## 1.3.1-alpha.0
 
 ### Patch Changes

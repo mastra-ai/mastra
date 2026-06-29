@@ -1141,14 +1141,24 @@ export class AgentController<TState = {}> {
   /**
    * Check if the current model's provider has authentication configured.
    * Delegates to the {@link GatewayManager} auth chain (the same resolution
-   * the model router uses at run time). Falls back to `hasAuth: true` when
-   * no model is selected or the chain cannot resolve auth.
+   * the model router uses at run time). Returns `hasAuth: true` only when no
+   * model is selected; gateway-chain failures return `hasAuth: false` so the
+   * auth-status endpoint stays stable instead of erroring.
    */
   async getCurrentModelAuthStatus(session: Session<TState>): Promise<ModelAuthStatus> {
     const modelId = session.model.get();
     if (!modelId) return { hasAuth: true };
 
-    const hasAuth = this.#gatewayManager ? await this.#gatewayManager.hasAuth(modelId) : true;
+    // hasAuth returns false for expected missing-auth/missing-gateway cases.
+    // It rethrows unexpected gateway failures (token exchange errors, network
+    // bugs) — catch those here so the UI auth-status endpoint stays stable
+    // and falls back to "no auth" instead of erroring.
+    let hasAuth = true;
+    try {
+      hasAuth = this.#gatewayManager ? await this.#gatewayManager.hasAuth(modelId) : true;
+    } catch {
+      hasAuth = false;
+    }
     if (hasAuth) return { hasAuth: true };
 
     // Surface the env-var hint from the catalog when available.

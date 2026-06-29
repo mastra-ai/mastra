@@ -215,6 +215,8 @@ When both are available, Claude Max OAuth takes priority.
 
 For **other providers** (OpenAI, Google, etc.), set the corresponding environment variable (e.g., `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`) or use OAuth where supported.
 
+For **Amazon Bedrock**, mastracode authenticates with AWS SigV4 through the standard AWS credential chain — environment variables (`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN`), a shared `~/.aws` profile (`AWS_PROFILE`, including SSO), or a container/instance role all work, the same resolution order as the AWS CLI. Set `AWS_REGION` (defaults to `us-east-1`) to choose a region. Select Bedrock models with the `amazon-bedrock/<modelId>` form, where `<modelId>` is any Bedrock model ID surfaced via `/models`. To use Bedrock API-key auth instead of SigV4, set `AWS_BEARER_TOKEN_BEDROCK`.
+
 Credentials are stored alongside the database in `auth.json`.
 
 ### Custom providers and models
