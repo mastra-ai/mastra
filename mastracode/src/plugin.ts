@@ -76,10 +76,23 @@ export async function writeToolProgress(
   await context.writer?.custom(chunk);
 }
 
+export type MastraCodePluginConfigValue = string | boolean | undefined;
+
+export type MastraCodePluginConfigOption = {
+  type: 'model' | 'boolean' | 'string';
+  label?: string;
+  description?: string;
+  default?: string | boolean;
+};
+
+export type MastraCodePluginConfigSchema = Record<string, MastraCodePluginConfigOption>;
+export type MastraCodePluginConfigValues = Record<string, MastraCodePluginConfigValue>;
+
 export type MastraCodePluginContext = {
   cwd: string;
   scope: 'global' | 'project';
   pluginDir: string;
+  config: MastraCodePluginConfigValues;
 };
 
 export type MastraCodePluginTool = (Tool | ToolAction<any, any, any, any, any, any, any>) & {
@@ -95,6 +108,7 @@ export type MastraCodePlugin = {
   name?: string;
   version?: string;
   description?: string;
+  config?: MastraCodePluginConfigSchema;
   tools?:
     | MastraCodePluginTools
     | ((context: MastraCodePluginContext) => MastraCodePluginTools | Promise<MastraCodePluginTools>);

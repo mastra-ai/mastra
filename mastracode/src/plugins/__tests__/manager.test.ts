@@ -72,6 +72,33 @@ describe('PluginManager', () => {
     expect(fs.existsSync(pluginDir)).toBe(true);
   });
 
+  it('persists plugin config values and reloads plugin context', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const pluginDir = path.join(tempDir, 'plugin');
+    fs.mkdirSync(path.join(pluginDir, 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(pluginDir, 'src/index.ts'),
+      `export default {
+        id: 'acme.config',
+        config: { answerModel: { type: 'model', default: 'default-model' } },
+        tools: context => ({ config_tool: { id: 'config_tool', description: context.config.answerModel } })
+      };`,
+    );
+    const manager = new PluginManager({ projectRoot, homeDir });
+
+    await manager.installLocal(pluginDir, 'project');
+    expect(manager.getPluginTools().config_tool?.description).toBe('default-model');
+
+    await manager.setConfigValue('acme.config', 'project', 'answerModel', 'chosen-model');
+
+    expect(manager.getPluginTools().config_tool?.description).toBe('chosen-model');
+    expect(
+      loadPluginRegistry(path.join(projectRoot, '.mastracode/plugins/plugins.json')).plugins['acme.config']?.config,
+    ).toEqual({ answerModel: 'chosen-model' });
+  });
+
   it('hot reloads local plugin source changes into the stable tools object', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
     const projectRoot = path.join(tempDir, 'project');

@@ -96,8 +96,20 @@ function validatePluginRegistry(raw: unknown): PluginRegistry {
       entry: record.entry,
       ...(typeof record.ref === 'string' ? { ref: record.ref } : {}),
       ...(typeof record.version === 'string' ? { version: record.version } : {}),
+      ...(record.config && typeof record.config === 'object' && !Array.isArray(record.config)
+        ? { config: validatePluginConfigValues(record.config) }
+        : {}),
     };
   }
 
   return validated;
+}
+
+function validatePluginConfigValues(raw: object): Record<string, string | boolean> {
+  const values: Record<string, string | boolean> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof key !== 'string' || key.trim().length === 0) continue;
+    if (typeof value === 'string' || typeof value === 'boolean') values[key] = value;
+  }
+  return values;
 }

@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { execa } from 'execa';
 
+import type { MastraCodePluginConfigValue } from '../plugin.js';
 import { discoverLocalPlugins, installGithubPlugin, installLocalPlugin } from './install.js';
 import type { InstallPluginOptions } from './install.js';
 import { collectActivePluginTools, loadPlugins, resolvePluginEntryPath } from './loader.js';
@@ -230,6 +231,28 @@ export class PluginManager {
       throw new Error(`Plugin "${pluginId}" is not installed in ${scope} scope`);
     }
     savePluginRegistry(paths.registryPath, setPluginRecord(registry, pluginId, { ...record, enabled }));
+    await this.reload();
+  }
+
+  async setConfigValue(
+    pluginId: string,
+    scope: PluginScope,
+    key: string,
+    value: MastraCodePluginConfigValue,
+  ): Promise<void> {
+    const paths = getPluginScopePaths(scope, this.options);
+    const registry = loadPluginRegistry(paths.registryPath);
+    const record = registry.plugins[pluginId];
+    if (!record) {
+      throw new Error(`Plugin "${pluginId}" is not installed in ${scope} scope`);
+    }
+    const config = { ...(record.config ?? {}) };
+    if (value === undefined || value === '') {
+      delete config[key];
+    } else {
+      config[key] = value;
+    }
+    savePluginRegistry(paths.registryPath, setPluginRecord(registry, pluginId, { ...record, config }));
     await this.reload();
   }
 

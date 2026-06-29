@@ -1,4 +1,4 @@
-import type { MastraCodePluginTools } from '../plugin.js';
+import type { MastraCodePluginConfigSchema, MastraCodePluginConfigValue, MastraCodePluginTools } from '../plugin.js';
 
 export type PluginScope = 'global' | 'project';
 export type PluginSource = 'local' | 'github';
@@ -12,6 +12,7 @@ export type InstalledPluginRecord = {
   entry: string;
   ref?: string;
   version?: string;
+  config?: Record<string, MastraCodePluginConfigValue>;
 };
 
 export type PluginRegistry = {
@@ -32,6 +33,8 @@ export type LoadedPlugin = ScopedInstalledPluginRecord & {
   error?: string;
   tools: MastraCodePluginTools;
   toolNames: string[];
+  configSchema?: MastraCodePluginConfigSchema;
+  configValues?: Record<string, MastraCodePluginConfigValue>;
   conflicts?: string[];
 };
 

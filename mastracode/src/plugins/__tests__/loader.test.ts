@@ -82,6 +82,49 @@ describe('plugin loader', () => {
     expect(loaded.find(plugin => plugin.id === 'acme.enabled')?.toolNames).toEqual(['enabled_tool']);
   });
 
+  it('passes configured plugin option values into tools functions', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const pluginDir = path.join(tempDir, 'plugin');
+    writePlugin(
+      path.join(pluginDir, 'src/index.ts'),
+      `export default {
+        id: 'acme.config',
+        config: {
+          answerModel: { type: 'model', default: 'default-model' },
+          enabled: { type: 'boolean', default: true },
+          prompt: { type: 'string', default: 'default prompt' }
+        },
+        tools: context => ({ configured_tool: { id: 'configured_tool', description: JSON.stringify(context.config) } })
+      };`,
+    );
+
+    const loaded = await loadPlugins({
+      projectRoot,
+      homeDir: path.join(tempDir, 'home'),
+      projectRegistry: {
+        plugins: {
+          'acme.config': {
+            enabled: true,
+            source: 'local',
+            specifier: '../plugin',
+            path: pluginDir,
+            entry: 'src/index.ts',
+            config: { answerModel: 'chosen-model', enabled: false },
+          },
+        },
+      },
+      globalRegistry: { plugins: {} },
+    });
+
+    expect(loaded[0]).toMatchObject({
+      id: 'acme.config',
+      status: 'active',
+      configValues: { answerModel: 'chosen-model', enabled: false, prompt: 'default prompt' },
+    });
+    expect(loaded[0]?.tools.configured_tool?.description).toContain('chosen-model');
+  });
+
   it('surfaces load failures without throwing', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
     const projectRegistry: PluginRegistry = {
