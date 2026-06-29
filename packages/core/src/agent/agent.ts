@@ -1563,7 +1563,6 @@ export class Agent<
     // processor hookup. Channels render the agent's stream to the originating
     // chat platform via this processor; without it, replies never reach Slack.
     const channelProcessors = this.#agentChannels ? this.#agentChannels.getOutputProcessors(configuredProcessors) : [];
-
     // Combine all processors into a single workflow
     // User-configured processors run first so they can transform chunks
     // (e.g. PII redaction, translation) before the channel renders them.
