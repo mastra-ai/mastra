@@ -357,20 +357,15 @@ export function getSerializedProcessors(
 }
 
 /**
- * Extract skills from agent's workspace.
- * Uses agent.getWorkspace() to get the workspace and then workspace.skills.list().
+ * Extract skills from an agent (both inline and workspace skills).
+ * Uses agent.listSkills() which merges agent-level and workspace-level skills.
  */
 export async function getSerializedSkillsFromAgent(
   agent: Agent,
   requestContext?: RequestContext,
 ): Promise<SerializedSkill[]> {
   try {
-    const workspace = await agent.getWorkspace({ requestContext });
-    if (!workspace?.skills) {
-      return [];
-    }
-
-    const skillsList = await workspace.skills.list();
+    const skillsList = await agent.listSkills({ requestContext });
     return skillsList.map(skill => ({
       name: skill.name,
       description: skill.description,
@@ -3322,7 +3317,7 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
   queryParamSchema: skillDisambiguationQuerySchema,
   responseSchema: getAgentSkillResponseSchema,
   summary: 'Get agent skill',
-  description: 'Returns details for a specific skill available to the agent via its workspace',
+  description: 'Returns details for a specific skill available to the agent (inline or workspace)',
   tags: ['Agents', 'Skills'],
   handler: async ({ mastra, agentId, skillName, path, requestContext }) => {
     try {
@@ -3331,17 +3326,11 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Agent not found' });
       }
 
-      // Get the agent's workspace
-      const workspace = await agent.getWorkspace({ requestContext });
-      if (!workspace?.skills) {
-        throw new HTTPException(404, { message: 'Agent does not have skills configured' });
-      }
-
       // Use the optional ?path= query param for disambiguation, otherwise fall back to name
       const identifier = path ? decodeURIComponent(path) : skillName;
 
-      // Get the skill from the workspace
-      const skill = await workspace.skills.get(identifier);
+      // Get the skill from the agent (searches both inline and workspace skills)
+      const skill = await agent.getSkill(identifier, { requestContext });
       if (!skill) {
         throw new HTTPException(404, { message: `Skill "${identifier}" not found` });
       }

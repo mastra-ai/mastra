@@ -1,15 +1,15 @@
+import { Button } from '@mastra/playground-ui/components/Button';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import {
-  Button,
-  Txt,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogBody,
-  toSigFigs,
-} from '@mastra/playground-ui';
-import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+} from '@mastra/playground-ui/components/Dialog';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { toSigFigs } from '@mastra/playground-ui/utils/number';
 import { Loader2Icon, Share2 } from 'lucide-react';
 import { useState } from 'react';
 import { useTimeDiff } from '../../hooks/use-time-diff';

@@ -5,6 +5,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 const createSessionCalls = vi.hoisted<Array<{ id?: string; ownerId?: string; resourceId?: string }>>(() => []);
 
 vi.mock('@mastra/core/llm', () => ({
+  MastraModelGateway: class {},
   GatewayRegistry: {
     getInstance: vi.fn(() => ({
       syncGateways: vi.fn(),
@@ -19,8 +20,8 @@ vi.mock('@mastra/core/agent', () => ({
   SignalProvider: class {},
 }));
 
-vi.mock('@mastra/core/harness', () => ({
-  Harness: class {
+vi.mock('@mastra/core/agent-controller', () => ({
+  AgentController: class {
     constructor(config: {
       resourceId?: string;
       heartbeatHandlers?: Array<{ immediate?: boolean; handler: () => unknown }>;
@@ -231,7 +232,7 @@ describe('createAuthStorage', () => {
   });
 });
 
-describe('Harness session id and ownerId wiring', () => {
+describe('AgentController session id and ownerId wiring', () => {
   beforeEach(() => {
     createSessionCalls.length = 0;
   });

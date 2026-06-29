@@ -1,5 +1,4 @@
-import type * as PlaygroundUi from '@mastra/playground-ui';
-import { TooltipProvider } from '@mastra/playground-ui';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
@@ -13,17 +12,13 @@ import type { AuthCapabilities } from '@/domains/auth/types';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
+vi.mock('@mastra/playground-ui/store/playground-store', () => ({
+  usePlaygroundStore: () => ({ requestContext: undefined }),
+}));
 
-// `toast` and the playground store are app-shell singletons, not data hooks.
-// Stubbing them is an allowed thin seam.
-vi.mock('@mastra/playground-ui', async () => {
-  const actual = await vi.importActual<typeof PlaygroundUi>('@mastra/playground-ui');
-  return {
-    ...actual,
-    toast: { success: vi.fn(), error: vi.fn() },
-    usePlaygroundStore: () => ({ requestContext: undefined }),
-  };
-});
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
 
 // The starter renders a chat-driven builder that boots an SSE stream and has
 // its own dedicated test. Stub it as a thin seam and assert the create page

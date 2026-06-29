@@ -21,10 +21,6 @@ function findClusterByTraceId(signal: Signal | undefined, traceId: string | unde
   return signal.clusters.find(cluster => cluster.traceSummaries.some(trace => trace.id === traceId));
 }
 
-export function getSignalName(signalId: string) {
-  return signals.find(signal => signal.id === signalId)?.name ?? signalId;
-}
-
 interface SignalClusterSidebarProps {
   signal: Signal;
   selectedClusterIds: string[];

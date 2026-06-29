@@ -1,5 +1,17 @@
 # @mastra/auth-better-auth
 
+## 1.1.1
+
+### Patch Changes
+
+- Improved auth package builds by removing the direct core dependency from auth providers while preserving the existing public auth APIs. ([#17142](https://github.com/mastra-ai/mastra/pull/17142))
+
+## 1.1.1-alpha.0
+
+### Patch Changes
+
+- Improved auth package builds by removing the direct core dependency from auth providers while preserving the existing public auth APIs. ([#17142](https://github.com/mastra-ai/mastra/pull/17142))
+
 ## 1.1.0
 
 ### Minor Changes

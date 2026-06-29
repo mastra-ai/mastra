@@ -1,8 +1,6 @@
 'use client';
-
+import { Button } from '@mastra/playground-ui/components/Button';
 import {
-  Button,
-  toast,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -10,8 +8,9 @@ import {
   DialogDescription,
   DialogBody,
   DialogFooter,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/Dialog';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useCallback, useState } from 'react';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import { useJSONParser } from '../../hooks/use-json-parser';

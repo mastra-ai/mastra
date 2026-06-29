@@ -1,8 +1,8 @@
 'use client';
 
-import { toast } from '@mastra/playground-ui';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useEffect } from 'react';
 import { useDatasets } from '../hooks/use-datasets';
 import { useLinkComponent } from '@/lib/framework';

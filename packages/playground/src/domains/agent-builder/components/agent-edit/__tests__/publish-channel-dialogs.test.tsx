@@ -1,5 +1,4 @@
-import type * as PlaygroundUi from '@mastra/playground-ui';
-import { TooltipProvider } from '@mastra/playground-ui';
+import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -12,16 +11,12 @@ import { server } from '@/test/msw-server';
 const toastSuccessMock = vi.fn();
 const toastErrorMock = vi.fn();
 
-vi.mock('@mastra/playground-ui', async () => {
-  const actual = await vi.importActual<typeof PlaygroundUi>('@mastra/playground-ui');
-  return {
-    ...actual,
-    toast: {
-      success: (...args: unknown[]) => toastSuccessMock(...args),
-      error: (...args: unknown[]) => toastErrorMock(...args),
-    },
-  };
-});
+vi.mock('@mastra/playground-ui/utils/toast', () => ({
+  toast: {
+    success: (...args: unknown[]) => toastSuccessMock(...args),
+    error: (...args: unknown[]) => toastErrorMock(...args),
+  },
+}));
 
 const BASE_URL = 'http://localhost:4111';
 

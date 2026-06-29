@@ -1,7 +1,11 @@
-import type { Edge, EdgeProps, NodeProps } from '@xyflow/react';
-import { useMemo } from 'react';
+import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
+import type { EdgeProps, NodeProps } from '@xyflow/react';
+import { useContext, useMemo } from 'react';
 
 import { useCurrentRun } from '../context/use-current-run';
+import { WorkflowRunContext } from '../context/workflow-run-context';
+import { buildStepSuccessors, buildStepsFlow, collectGraphStepFlags, isBranchArmBypassed } from './utils';
+import type { WorkflowGraphEdge } from './utils';
 import { WorkflowBoundaryNode } from './workflow-boundary-node';
 import { WorkflowDataEdge, WORKFLOW_DATA_EDGE_TYPE } from './workflow-data-edge';
 import { WorkflowGraphNode } from './workflow-graph-node';
@@ -11,31 +15,35 @@ import type { WorkflowBoundaryNode as WorkflowBoundaryNodeType, WorkflowStepNode
 const getScopedStepId = (stepId: string | undefined, workflowName?: string) =>
   stepId && workflowName ? `${workflowName}.${stepId}` : stepId;
 
-const buildStepsFlow = (edges: Edge[]) =>
-  edges.reduce(
-    (acc, edge) => {
-      if (!edge.data || edge.data.boundaryPayload) {
-        return acc;
-      }
-
-      const stepId = edge.data.nextStepId as string;
-      const prevStepId = edge.data.previousStepId as string;
-
-      if (!stepId || !prevStepId) {
-        return acc;
-      }
-
-      return {
-        ...acc,
-        [stepId]: [...new Set([...(acc[stepId] || []), prevStepId])],
-      };
-    },
-    {} as Record<string, string[]>,
-  );
-
-export const useWorkflowGraphRuntime = ({ edges, workflowName }: { edges: Edge[]; workflowName?: string }) => {
+export const useWorkflowGraphRuntime = ({
+  edges,
+  workflowName,
+  stepGraph,
+}: {
+  edges: WorkflowGraphEdge[];
+  workflowName?: string;
+  stepGraph?: SerializedStepFlowEntry[];
+}) => {
   const { steps } = useCurrentRun();
+  const workflowRun = useContext(WorkflowRunContext);
+  // For a nested graph the End edge should light when that nested workflow's own
+  // step succeeds, not when the entire parent run finishes. For the top-level graph
+  // there is no `workflowName`, so fall back to the overall run status.
+  const workflowSucceeded = workflowName
+    ? steps[workflowName]?.status === 'success'
+    : workflowRun.result?.status === 'success';
   const stepsFlow = useMemo(() => buildStepsFlow(edges), [edges]);
+  // A conditional resolves to a single arm; the other arms never enter run state
+  // (their status stays `undefined`, not `skipped`). To keep their edges neutral
+  // we detect bypassed arms from the static graph the same way the step controls do.
+  const isArmBypassed = useMemo(() => {
+    const stepSuccessors = buildStepSuccessors(stepsFlow);
+    const { conditionalStepIds } = collectGraphStepFlags(stepGraph ?? workflowRun.workflow?.stepGraph);
+    const isStepSuccess = (stepId: string) => steps[getScopedStepId(stepId, workflowName) ?? '']?.status === 'success';
+    return (stepId: string | undefined) =>
+      Boolean(stepId) &&
+      isBranchArmBypassed({ stepId: stepId!, conditionalStepIds, stepSuccessors, stepsFlow, isStepSuccess });
+  }, [stepsFlow, stepGraph, workflowRun.workflow?.stepGraph, steps, workflowName]);
   const nodeTypes = useMemo(
     () => ({
       [WORKFLOW_STEP_NODE_TYPE]: (props: NodeProps<WorkflowStepNode>) => (
@@ -49,7 +57,7 @@ export const useWorkflowGraphRuntime = ({ edges, workflowName }: { edges: Edge[]
   );
   const edgeTypes = useMemo(
     () => ({
-      [WORKFLOW_DATA_EDGE_TYPE]: (props: EdgeProps) => (
+      [WORKFLOW_DATA_EDGE_TYPE]: (props: EdgeProps<WorkflowGraphEdge>) => (
         <WorkflowDataEdge parentWorkflowName={workflowName} {...props} />
       ),
     }),
@@ -58,16 +66,82 @@ export const useWorkflowGraphRuntime = ({ edges, workflowName }: { edges: Edge[]
   const styledEdges = useMemo(
     () =>
       edges.map(edge => {
-        const previousStepId = getScopedStepId(edge.data?.previousStepId as string | undefined, workflowName);
-        const nextStepId = getScopedStepId(edge.data?.nextStepId as string | undefined, workflowName);
-        const isFinishedEdge =
-          (steps[previousStepId ?? '']?.status === 'success' && Boolean(steps[nextStepId ?? ''])) ||
-          (edge.data?.conditionNode && !steps[previousStepId ?? ''] && Boolean(steps[nextStepId ?? '']?.status));
+        const previousStepId = getScopedStepId(edge.data?.previousStepId, workflowName);
+        const nextStepId = getScopedStepId(edge.data?.nextStepId, workflowName);
+        const previousStepSucceeded = steps[previousStepId ?? '']?.status === 'success';
+        const nextStepStatus = steps[nextStepId ?? '']?.status;
+        // A conditional arm that lost the branch decision never runs, so its status
+        // stays `undefined`. Treat such a bypassed arm like an explicitly skipped step
+        // so edges feeding it stay neutral.
+        const nextStepBypassed = isArmBypassed(edge.data?.nextStepId);
+        // The boundary edge into the End node carries no step ids; it should light
+        // green once the whole workflow run has finished successfully.
+        if (edge.data?.boundaryPayload === 'workflow-output') {
+          const isFinishedEdge = workflowSucceeded;
+
+          return {
+            ...edge,
+            type: WORKFLOW_DATA_EDGE_TYPE,
+            animated: isFinishedEdge ? false : edge.animated,
+            data: { ...edge.data, edgeStatus: isFinishedEdge ? 'success' : 'idle' },
+            style: {
+              ...edge.style,
+              stroke: isFinishedEdge ? '#22c55e' : '#8e8e8e',
+              strokeDasharray: isFinishedEdge ? 'none' : edge.style?.strokeDasharray,
+            },
+          };
+        }
+        // The Start boundary edge has no predecessor step. It turns green once the
+        // first step exists in run state, which means workflow input reached that step.
+        if (edge.data?.boundaryPayload === 'workflow-input') {
+          const firstStepStarted = Boolean(nextStepStatus) && nextStepStatus !== 'skipped';
+
+          return {
+            ...edge,
+            type: WORKFLOW_DATA_EDGE_TYPE,
+            animated: firstStepStarted ? false : edge.animated,
+            data: { ...edge.data, edgeStatus: firstStepStarted ? 'success' : 'idle' },
+            style: {
+              ...edge.style,
+              stroke: firstStepStarted ? '#22c55e' : '#8e8e8e',
+              strokeDasharray: firstStepStarted ? 'none' : edge.style?.strokeDasharray,
+            },
+          };
+        }
+        // A conditional arm edge must only light when that specific arm was actually taken — i.e.
+        // the arm step has run (any status other than the un-taken `skipped`). Lighting it purely
+        // off the shared predecessor would falsely show the un-taken branch as active, since both
+        // arms share the same (successful) condition predecessor.
+        if (edge.data?.conditionNode) {
+          const armTaken = Boolean(nextStepStatus) && nextStepStatus !== 'skipped' && !nextStepBypassed;
+          const isFinishedEdge = armTaken;
+
+          return {
+            ...edge,
+            type: WORKFLOW_DATA_EDGE_TYPE,
+            animated: isFinishedEdge ? false : edge.animated,
+            data: { ...edge.data, edgeStatus: isFinishedEdge ? 'success' : 'idle' },
+            style: {
+              ...edge.style,
+              stroke: isFinishedEdge ? '#22c55e' : '#8e8e8e',
+              strokeDasharray: isFinishedEdge ? 'none' : edge.style?.strokeDasharray,
+            },
+          };
+        }
+        // A normal edge is green when data flowed out of a successful predecessor; the next step's
+        // own running/idle state does not matter, so the taken path stays continuous mid-run. The
+        // only suppression is an explicitly `skipped` next step (the un-taken arm of a resolved
+        // conditional reached through a non-condition edge).
+        const isFinishedEdge = previousStepSucceeded && nextStepStatus !== 'skipped' && !nextStepBypassed;
 
         return {
           ...edge,
           type: WORKFLOW_DATA_EDGE_TYPE,
           animated: isFinishedEdge ? false : edge.animated,
+          data: {
+            ...edge.data,
+            edgeStatus: isFinishedEdge ? 'success' : 'idle',
+          },
           style: {
             ...edge.style,
             stroke: isFinishedEdge ? '#22c55e' : '#8e8e8e',
@@ -75,7 +149,7 @@ export const useWorkflowGraphRuntime = ({ edges, workflowName }: { edges: Edge[]
           },
         };
       }),
-    [edges, steps, workflowName],
+    [edges, steps, workflowName, workflowSucceeded, isArmBypassed],
   );
 
   return { edgeTypes, nodeTypes, stepsFlow, styledEdges };

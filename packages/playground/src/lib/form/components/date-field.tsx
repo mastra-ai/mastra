@@ -1,6 +1,8 @@
 import type { AutoFormFieldProps } from '@autoform/react';
-import { Button, Popover, PopoverContent, PopoverTrigger, cn } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { DatePicker } from '@mastra/playground-ui/components/DateTimePicker';
+import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { format, isValid } from 'date-fns';
 import { CalendarIcon } from 'lucide-react';
 import React, { useState, useEffect } from 'react';

@@ -1,17 +1,11 @@
 import { jsonLanguage } from '@codemirror/lang-json';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-  Txt,
-  Icon,
-  formatJSON,
-  isValidJson,
-} from '@mastra/playground-ui';
 import { useCodemirrorTheme } from '@mastra/playground-ui/components/CodeEditor';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { formatJSON, isValidJson } from '@mastra/playground-ui/utils/formatting';
 import CodeMirror from '@uiw/react-codemirror';
 import { Braces, CopyIcon, SaveIcon, CheckIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';

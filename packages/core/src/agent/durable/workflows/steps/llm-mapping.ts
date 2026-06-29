@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Mastra } from '../../../../mastra';
 import type { ExportedSpan, SpanType } from '../../../../observability';
-import { createStep } from '../../../../workflows';
+import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';
 import { DurableStepIds } from '../../constants';
 import type {

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { stateSchema } from './schema.js';
 
 describe('stateSchema', () => {
-  it('preserves task ids in harness state', () => {
+  it('preserves task ids in controller state', () => {
     const parsed = stateSchema.parse({
       tasks: [
         {
@@ -25,10 +25,10 @@ describe('stateSchema', () => {
     ]);
   });
 
-  // Regression: the legacy Harness validates its state against this schema and
+  // Regression: the legacy controller validates its state against this schema and
   // assigns the parsed result back to state. Zod strips unknown keys, so if
   // currentModelId/modeId are not declared here, the seeded model is silently
-  // discarded and the harness reports "no model selected" for every pack.
+  // discarded and the controller reports "no model selected" for every pack.
   it('preserves currentModelId through parse', () => {
     const parsed = stateSchema.parse({
       currentModelId: 'anthropic/claude-opus-4-8',

@@ -1,16 +1,17 @@
 import type { DatasetItemToolMock } from '@mastra/client-js';
-import { Button, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, toast } from '@mastra/playground-ui';
+import { collectToolMocks } from '@mastra/core/utils/collect-tool-mocks';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Label } from '@mastra/playground-ui/components/Label';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@mastra/playground-ui/components/Select';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
 import { TextAndIcon, getShortId } from '@mastra/playground-ui/components/Text';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
 import { EyeIcon, WrenchIcon } from 'lucide-react';
 import { useState } from 'react';
-import { collectToolMocks } from './collect-tool-mocks';
-import type { ToolCallTrajectoryStep } from './collect-tool-mocks';
 import { useDatasetItem, useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
@@ -46,9 +47,7 @@ export function AddTraceMocksToItemDialog({ traceId, isOpen, onClose, level = 2 
     enabled: isOpen && !!traceId,
   });
 
-  const derivedMocks: DatasetItemToolMock[] = trajectory?.steps
-    ? (collectToolMocks(trajectory.steps as ToolCallTrajectoryStep[]) as DatasetItemToolMock[])
-    : [];
+  const derivedMocks: DatasetItemToolMock[] = trajectory?.steps ? collectToolMocks(trajectory.steps) : [];
   const initialMocksJson = derivedMocks.length > 0 ? JSON.stringify(derivedMocks, null, 2) : '';
 
   return (
