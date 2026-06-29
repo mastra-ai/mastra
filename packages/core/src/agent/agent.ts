@@ -6845,13 +6845,17 @@ export class Agent<
             ).then(
               async title => {
                 if (title) {
-                  await memory.createThread({
-                    threadId: thread.id,
-                    resourceId,
-                    memoryConfig,
-                    title,
-                    metadata: thread.metadata,
-                  });
+                  try {
+                    await memory.createThread({
+                      threadId: thread.id,
+                      resourceId,
+                      memoryConfig,
+                      title,
+                      metadata: thread.metadata,
+                    });
+                  } catch (error) {
+                    this.logger.error('Error persisting generated title:', error);
+                  }
                 }
               },
               error => {
