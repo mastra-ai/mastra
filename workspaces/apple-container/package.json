@@ -24,8 +24,9 @@
     "build:watch": "pnpm build --watch",
     "test:unit": "vitest run --exclude '**/*.integration.test.ts'",
     "test:watch": "vitest watch",
-    "test": "vitest run ./src/**/*.integration.test.ts",
-    "test:cloud": "pnpm test",
+    "test:integration": "vitest run ./src/**/*.integration.test.ts",
+    "test": "pnpm test:unit && pnpm test:integration",
+    "test:cloud": "pnpm test:integration",
     "lint": "eslint ."
   },
   "license": "Apache-2.0",
