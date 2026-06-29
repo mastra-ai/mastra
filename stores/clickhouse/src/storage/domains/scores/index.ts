@@ -333,6 +333,90 @@ export class ScoresStorageClickhouse extends ScoresStorage {
     }
   }
 
+  async listScoresByDatasetId({
+    datasetId,
+    pagination,
+    filters,
+  }: {
+    datasetId: string;
+    pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
+  }): Promise<ListScoresResponse> {
+    const tenancy = buildTenancyFilter(filters);
+    try {
+      // Get total count
+      const countResult = await this.client.query({
+        query: `SELECT COUNT(*) as count FROM ${TABLE_SCORERS} WHERE datasetId = {var_datasetId:String}${tenancy.sql}`,
+        query_params: { var_datasetId: datasetId, ...tenancy.params },
+        format: 'JSONEachRow',
+      });
+      const countRows = await countResult.json();
+      let total = 0;
+      if (Array.isArray(countRows) && countRows.length > 0 && countRows[0]) {
+        const countObj = countRows[0] as { count: string | number };
+        total = Number(countObj.count);
+      }
+
+      const { page, perPage: perPageInput } = pagination;
+
+      if (!total) {
+        return {
+          pagination: {
+            total: 0,
+            page,
+            perPage: perPageInput,
+            hasMore: false,
+          },
+          scores: [],
+        };
+      }
+
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+      const limitValue = perPageInput === false ? total : perPage;
+      const end = perPageInput === false ? total : start + perPage;
+
+      // Get paginated results
+      const result = await this.client.query({
+        query: `SELECT * FROM ${TABLE_SCORERS} WHERE datasetId = {var_datasetId:String}${tenancy.sql} ORDER BY createdAt DESC LIMIT {var_limit:Int64} OFFSET {var_offset:Int64}`,
+        query_params: {
+          var_datasetId: datasetId,
+          var_limit: limitValue,
+          var_offset: start,
+          ...tenancy.params,
+        },
+        format: 'JSONEachRow',
+        clickhouse_settings: {
+          date_time_input_format: 'best_effort',
+          date_time_output_format: 'iso',
+          use_client_time_zone: 1,
+          output_format_json_quote_64bit_integers: 0,
+        },
+      });
+      const rows = await result.json();
+      const scores = Array.isArray(rows) ? rows.map(row => this.transformScoreRow(row)) : [];
+      return {
+        pagination: {
+          total,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
+        },
+        scores,
+      };
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'LIST_SCORES_BY_DATASET_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { datasetId },
+        },
+        error,
+      );
+    }
+  }
+
   async listScoresByScorerId({
     scorerId,
     entityId,

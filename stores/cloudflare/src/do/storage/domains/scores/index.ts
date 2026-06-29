@@ -392,6 +392,76 @@ export class ScoresStorageDO extends ScoresStorage {
     }
   }
 
+  async listScoresByDatasetId({
+    datasetId,
+    pagination,
+    filters,
+  }: {
+    datasetId: string;
+    pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
+  }): Promise<ListScoresResponse> {
+    try {
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+      const fullTableName = this.#db.getTableName(TABLE_SCORERS);
+
+      // Get total count
+      const countQuery = createSqlBuilder().count().from(fullTableName).where('datasetId = ?', datasetId);
+      applyTenancyFilters(countQuery, filters);
+      const countResult = await this.#db.executeQuery(countQuery.build());
+      const total = Array.isArray(countResult)
+        ? Number(countResult?.[0]?.count ?? 0)
+        : Number((countResult as Record<string, unknown>)?.count ?? 0);
+
+      if (total === 0) {
+        return {
+          pagination: {
+            total: 0,
+            page,
+            perPage: perPageForResponse,
+            hasMore: false,
+          },
+          scores: [],
+        };
+      }
+
+      const end = perPageInput === false ? total : start + perPage;
+      const limitValue = perPageInput === false ? total : perPage;
+
+      // Get paginated results
+      const selectQuery = createSqlBuilder().select('*').from(fullTableName).where('datasetId = ?', datasetId);
+      applyTenancyFilters(selectQuery, filters);
+      selectQuery.limit(limitValue).offset(start);
+
+      const { sql, params } = selectQuery.build();
+      const results = await this.#db.executeQuery({ sql, params });
+
+      const scores = Array.isArray(results) ? results.map(r => transformScoreRow(r as Record<string, unknown>)) : [];
+
+      return {
+        pagination: {
+          total,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
+        },
+        scores,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE_DO', 'GET_SCORES_BY_DATASET_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
   async listScoresByEntityId({
     entityId,
     entityType,

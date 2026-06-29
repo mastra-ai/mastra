@@ -332,6 +332,33 @@ export class ScoresSpanner extends ScoresStorage {
     }
   }
 
+  async listScoresByDatasetId({
+    datasetId,
+    pagination,
+    filters,
+  }: {
+    datasetId: string;
+    pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
+  }): Promise<ListScoresResponse> {
+    try {
+      const conditions = [`${quoteIdent('datasetId', 'column name')} = @datasetId`];
+      const params: Record<string, any> = { datasetId };
+      applyTenancyFilters(conditions, params, filters);
+      return await this.listScoresByConditions(conditions, params, pagination);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('SPANNER', 'LIST_SCORES_BY_DATASET_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { datasetId },
+        },
+        error,
+      );
+    }
+  }
+
   async listScoresByEntityId({
     entityId,
     entityType,

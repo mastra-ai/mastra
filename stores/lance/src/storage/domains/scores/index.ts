@@ -45,7 +45,15 @@ export class StoreScoresLance extends ScoresStorage {
     await this.#db.alterTable({
       tableName: TABLE_SCORERS,
       schema: SCORERS_SCHEMA,
-      ifNotExists: ['spanId', 'requestContext', 'organizationId', 'projectId', 'batchId'],
+      ifNotExists: [
+        'spanId',
+        'requestContext',
+        'organizationId',
+        'projectId',
+        'batchId',
+        'datasetId',
+        'datasetItemId',
+      ],
     });
   }
 
@@ -353,6 +361,65 @@ export class StoreScoresLance extends ScoresStorage {
         {
           id: createStorageErrorId('LANCE', 'LIST_SCORES_BY_BATCH_ID', 'FAILED'),
           text: 'Failed to get scores by batchId in LanceStorage',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { error: error?.message },
+        },
+        error,
+      );
+    }
+  }
+
+  async listScoresByDatasetId({
+    datasetId,
+    pagination,
+    filters,
+  }: {
+    datasetId: string;
+    pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
+  }): Promise<ListScoresResponse> {
+    try {
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+      const table = await this.client.openTable(TABLE_SCORERS);
+
+      const whereClause = `\`datasetId\` = ${lanceStringLiteral(datasetId)}${tenancyClause(filters)}`;
+
+      // Get total count for pagination
+      const allRecords = await table.query().where(whereClause).toArray();
+      const total = allRecords.length;
+
+      const end = perPageInput === false ? total : start + perPage;
+
+      // Query for scores with the given datasetId
+      let query = table.query().where(whereClause);
+
+      // For perPage: false, don't use limit/offset
+      if (perPageInput !== false) {
+        query = query.limit(perPage);
+        if (start > 0) query = query.offset(start);
+      }
+
+      const records = await query.toArray();
+      const scores = await Promise.all(records.map(async record => await this.transformScoreRow(record)));
+
+      return {
+        pagination: {
+          page,
+          perPage: perPageForResponse,
+          total,
+          hasMore: end < total,
+        },
+        scores,
+      };
+    } catch (error: any) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LANCE', 'LIST_SCORES_BY_DATASET_ID', 'FAILED'),
+          text: 'Failed to get scores by datasetId in LanceStorage',
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { error: error?.message },

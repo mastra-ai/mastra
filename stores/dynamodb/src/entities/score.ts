@@ -315,6 +315,14 @@ export const scoreEntity = new Entity({
       type: 'string',
       required: false,
     },
+    datasetId: {
+      type: 'string',
+      required: false,
+    },
+    datasetItemId: {
+      type: 'string',
+      required: false,
+    },
     threadId: {
       type: 'string',
       required: false,

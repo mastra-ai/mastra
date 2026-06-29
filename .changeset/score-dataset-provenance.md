@@ -1,6 +1,20 @@
 ---
 '@mastra/core': minor
 '@mastra/pg': patch
+'@mastra/libsql': patch
+'@mastra/cloudflare-d1': patch
+'@mastra/dsql': patch
+'@mastra/mysql': patch
+'@mastra/mssql': patch
+'@mastra/clickhouse': patch
+'@mastra/spanner': patch
+'@mastra/mongodb': patch
+'@mastra/redis': patch
+'@mastra/upstash': patch
+'@mastra/dynamodb': patch
+'@mastra/convex': patch
+'@mastra/lance': patch
+'@mastra/cloudflare': patch
 ---
 
 Add `datasetId` / `datasetItemId` provenance handles to scores so baseline scores
@@ -11,8 +25,8 @@ truth) they scored — without re-running the agent.
   fields on `ScoreRowData` / save payloads.
 - New `listScoresByDatasetId({ datasetId, pagination, filters })` read method on
   the scores storage domain, tenant-scoped via `organizationId` / `projectId`
-  filters like the other list methods. Implemented for in-memory and `@mastra/pg`;
-  other adapters fall back to a default-throw and will be filled in as a follow-up.
+  filters like the other list methods. Implemented across all built-in storage
+  adapters (in-memory plus every `@mastra/*` store).
 - `runScorerOnTarget` accepts optional top-level `datasetId` / `datasetItemId`
   (independent of how the trace is resolved) that are stamped on the persisted
   score alongside `batchId`.

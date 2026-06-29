@@ -48,6 +48,8 @@ interface ScoreRow {
   organizationId: string | null;
   projectId: string | null;
   batchId: string | null;
+  datasetId: string | null;
+  datasetItemId: string | null;
   threadId: string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
@@ -100,7 +102,15 @@ export class ScoresMySQL extends ScoresStorage {
     await this.operations.alterTable({
       tableName: TABLE_SCORERS,
       schema: SCORERS_SCHEMA,
-      ifNotExists: ['spanId', 'requestContext', 'organizationId', 'projectId', 'batchId'],
+      ifNotExists: [
+        'spanId',
+        'requestContext',
+        'organizationId',
+        'projectId',
+        'batchId',
+        'datasetId',
+        'datasetItemId',
+      ],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -188,6 +198,8 @@ export class ScoresMySQL extends ScoresStorage {
       organizationId: row.organizationId ?? undefined,
       projectId: row.projectId ?? undefined,
       batchId: row.batchId ?? undefined,
+      datasetId: row.datasetId ?? undefined,
+      datasetItemId: row.datasetItemId ?? undefined,
       threadId: row.threadId ?? undefined,
       createdAt: parseDateTime(row.createdAt) ?? new Date(),
       updatedAt: parseDateTime(row.updatedAt) ?? new Date(),
@@ -228,6 +240,8 @@ export class ScoresMySQL extends ScoresStorage {
       organizationId: score.organizationId ?? null,
       projectId: score.projectId ?? null,
       batchId: score.batchId ?? null,
+      datasetId: score.datasetId ?? null,
+      datasetItemId: score.datasetItemId ?? null,
       threadId: score.threadId ?? null,
       source: score.source ?? null,
       createdAt,
@@ -426,6 +440,25 @@ export class ScoresMySQL extends ScoresStorage {
     return this.fetchScores(
       this.buildWhereClause({
         batchId,
+        organizationId: filters?.organizationId,
+        projectId: filters?.projectId,
+      }),
+      pagination,
+    );
+  }
+
+  async listScoresByDatasetId({
+    datasetId,
+    pagination,
+    filters,
+  }: {
+    datasetId: string;
+    pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
+  }): Promise<ListScoresResult> {
+    return this.fetchScores(
+      this.buildWhereClause({
+        datasetId,
         organizationId: filters?.organizationId,
         projectId: filters?.projectId,
       }),

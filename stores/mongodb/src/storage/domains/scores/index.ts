@@ -437,6 +437,72 @@ export class ScoresStorageMongoDB extends ScoresStorage {
     }
   }
 
+  async listScoresByDatasetId({
+    datasetId,
+    pagination,
+    filters,
+  }: {
+    datasetId: string;
+    pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
+  }): Promise<ListScoresResponse> {
+    try {
+      const { page, perPage: perPageInput } = pagination;
+      const perPage = normalizePerPage(perPageInput, 100);
+      const { offset: start, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+      const query: any = { datasetId };
+      applyTenancyFilters(query, filters);
+
+      const collection = await this.getCollection(TABLE_SCORERS);
+      const total = await collection.countDocuments(query);
+
+      if (total === 0) {
+        return {
+          scores: [],
+          pagination: {
+            total: 0,
+            page,
+            perPage: perPageInput,
+            hasMore: false,
+          },
+        };
+      }
+
+      const end = perPageInput === false ? total : start + perPage;
+
+      // Build query - omit limit() when perPage is false to fetch all results
+      let cursor = collection.find(query).sort({ createdAt: -1 }).skip(start);
+
+      if (perPageInput !== false) {
+        cursor = cursor.limit(perPage);
+      }
+
+      const documents = await cursor.toArray();
+      const scores = documents.map(row => transformScoreRow(row));
+
+      return {
+        scores,
+        pagination: {
+          total,
+          page,
+          perPage: perPageForResponse,
+          hasMore: end < total,
+        },
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'LIST_SCORES_BY_DATASET_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { datasetId, page: pagination.page, perPage: pagination.perPage },
+        },
+        error,
+      );
+    }
+  }
+
   async listScoresByEntityId({
     entityId,
     entityType,
