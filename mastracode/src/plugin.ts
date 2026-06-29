@@ -102,13 +102,7 @@ export type MastraCodePluginToolEntry = {
   render?: MastraCodeToolRenderConfig;
 };
 
-export type MastraCodePluginResolvedTool = MastraCodePluginTool & {
-  mastracode?: {
-    render?: MastraCodeToolRenderConfig;
-  };
-};
-
-export type MastraCodePluginTools = Record<string, MastraCodePluginResolvedTool>;
+export type MastraCodePluginTools = Record<string, MastraCodePluginTool>;
 export type MastraCodePluginToolEntries = Record<string, MastraCodePluginToolEntry>;
 export type MastraCodePluginInstructions = string | ((context: MastraCodePluginContext) => string | Promise<string>);
 

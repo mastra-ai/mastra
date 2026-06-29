@@ -7,7 +7,6 @@ import type {
   MastraCodePluginConfigSchema,
   MastraCodePluginConfigValues,
   MastraCodePluginContext,
-  MastraCodePluginTool,
   MastraCodePluginToolEntries,
   MastraCodePluginTools,
   MastraCodeToolRenderConfig,
@@ -67,7 +66,7 @@ export async function loadPluginRecord(
       pluginDir,
       config: configValues,
     };
-    const tools = await resolvePluginTools(plugin, context);
+    const { tools, renderConfigs } = await resolvePluginTools(plugin, context);
     const instructions = await resolvePluginInstructions(plugin, context);
 
     return {
@@ -78,6 +77,7 @@ export async function loadPluginRecord(
       instructions,
       status: 'active',
       tools,
+      renderConfigs,
       toolNames: Object.keys(tools).sort(),
       skillPaths: resolveExistingAssetDirs(pluginRoot, 'skills'),
       commandPaths: resolveExistingAssetDirs(pluginRoot, 'commands'),
@@ -151,8 +151,8 @@ function validatePluginExport(value: unknown): MastraCodePlugin {
 async function resolvePluginTools(
   plugin: MastraCodePlugin,
   context: MastraCodePluginContext,
-): Promise<MastraCodePluginTools> {
-  if (!plugin.tools) return {};
+): Promise<{ tools: MastraCodePluginTools; renderConfigs: Record<string, MastraCodeToolRenderConfig> }> {
+  if (!plugin.tools) return { tools: {}, renderConfigs: {} };
   const entries = typeof plugin.tools === 'function' ? await plugin.tools(context) : plugin.tools;
   if (!entries || typeof entries !== 'object' || Array.isArray(entries)) {
     throw new Error('Plugin tools function must return an object');
@@ -174,34 +174,26 @@ async function resolvePluginInstructions(
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function normalizePluginToolEntries(entries: MastraCodePluginToolEntries): MastraCodePluginTools {
+function normalizePluginToolEntries(entries: MastraCodePluginToolEntries): {
+  tools: MastraCodePluginTools;
+  renderConfigs: Record<string, MastraCodeToolRenderConfig>;
+} {
   const tools: MastraCodePluginTools = {};
+  const renderConfigs: Record<string, MastraCodeToolRenderConfig> = {};
   for (const [name, entry] of Object.entries(entries)) {
     if (!isToolEntryObject(entry)) {
       throw new Error(`Plugin tool "${name}" must be an object with a tool property`);
     }
-    tools[name] = withRenderConfig(entry.tool, entry.render);
+    tools[name] = entry.tool;
+    if (entry.render) renderConfigs[name] = entry.render;
   }
-  return tools;
+  return { tools, renderConfigs };
 }
 
-function isToolEntryObject(
-  entry: MastraCodePluginToolEntries[string],
-): entry is { tool: MastraCodePluginTool; render?: MastraCodeToolRenderConfig } {
+function isToolEntryObject(entry: MastraCodePluginToolEntries[string]): entry is MastraCodePluginToolEntries[string] {
   return (
     !!entry && typeof entry === 'object' && 'tool' in entry && typeof (entry as { tool?: unknown }).tool === 'object'
   );
-}
-
-function withRenderConfig(
-  tool: MastraCodePluginTool,
-  render: MastraCodeToolRenderConfig | undefined,
-): MastraCodePluginTools[string] {
-  return Object.assign(tool, {
-    mastracode: {
-      render,
-    },
-  });
 }
 
 function validatePluginConfigSchema(schema: unknown): MastraCodePluginConfigSchema | undefined {

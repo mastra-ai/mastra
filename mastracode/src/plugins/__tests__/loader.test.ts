@@ -166,7 +166,7 @@ describe('plugin loader', () => {
       globalRegistry: { plugins: {} },
     });
 
-    expect(loaded[0]?.tools.rendered_tool?.mastracode?.render).toEqual({ type: 'subagent', agentType: 'assets' });
+    expect(loaded[0]?.renderConfigs?.rendered_tool).toEqual({ type: 'subagent', agentType: 'assets' });
     expect(loaded[0]?.instructions).toBe(`Plugin instruction for ${projectRoot}`);
     expect(loaded[0]?.skillPaths).toEqual([path.join(pluginDir, 'skills')]);
     expect(loaded[0]?.commandPaths).toEqual([path.join(pluginDir, 'commands')]);

@@ -277,6 +277,7 @@ describe('PluginManager', () => {
       if (args[0] === 'rev-list') return { stdout: '0\t1' };
       if (args[0] === 'status') return { stdout: ' M src/index.ts' };
       if (args[0] === 'branch') return { stdout: 'main' };
+      if (args[0] === 'diff') throw new Error('staged changes');
       return { stdout: '' };
     });
 
@@ -294,6 +295,7 @@ describe('PluginManager', () => {
       'branch',
       'switch',
       'add',
+      'diff',
       '-c',
       'switch',
       'reset',
