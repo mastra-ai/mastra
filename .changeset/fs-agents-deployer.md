@@ -1,0 +1,5 @@
+---
+'@mastra/deployer': minor
+---
+
+Added build support for file-based agents. The bundler now discovers agents defined under `src/mastra/agents/<name>/` (a `config.ts`, `instructions.md`, `tools/*.ts`, `skills/`, and an optional `workspace.ts`), assembles them, and registers them onto your Mastra instance during build. Tools under `agents/*/tools` are bundled alongside the top-level `tools/` directory, and skills under `agents/*/skills` are inlined into the bundle (a `createSkill()` module, a packaged `SKILL.md` directory with its `references/`, or a flat `<skill>.md`). Each file-based agent is given a default workspace unless `workspace.ts` or `config.workspace` overrides it, and files committed under `agents/<name>/workspace/` are mirrored into the bundle and used to seed that workspace at runtime. Projects with no file-based agents are unaffected — the original entry is used unchanged.

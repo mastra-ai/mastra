@@ -105,6 +105,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/file-based-agents',
+          label: 'File-based Agents',
+        },
+        {
+          type: 'doc',
           id: 'agents/skills',
           label: 'Skills',
         },

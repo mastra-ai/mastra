@@ -2184,6 +2184,39 @@ export class Mastra<
   }
 
   /**
+   * Registers a map of file-system routed agents (discovered from
+   * `agents/<name>/` directories) into this Mastra instance.
+   *
+   * Code-registered agents win on name collisions: if an agent with the same
+   * key already exists, the file-system agent is skipped and a warning is
+   * logged. Otherwise each agent is added via {@link addAgent} with
+   * `source: 'fs'`.
+   *
+   * Intended to be called by the bundler/dev generated entry, not by user code.
+   *
+   * @internal
+   */
+  public __registerFsAgents(fsAgents: Record<string, Agent | ToolLoopAgentLike | DurableAgentLike>): void {
+    if (!fsAgents) {
+      return;
+    }
+
+    const agents = this.#agents as Record<string, Agent<any>>;
+    for (const [key, agent] of Object.entries(fsAgents)) {
+      if (agent == null) {
+        continue;
+      }
+      if (agents[key]) {
+        this.getLogger().warn(
+          `File-system routed agent "${key}" conflicts with a code-registered agent of the same name. Keeping the code-registered agent.`,
+        );
+        continue;
+      }
+      this.addAgent(agent, key, { source: 'fs' });
+    }
+  }
+
+  /**
    * Removes an agent from the Mastra instance by its key or ID.
    * Used when stored agents are updated/deleted to allow fresh data to be loaded.
    *
