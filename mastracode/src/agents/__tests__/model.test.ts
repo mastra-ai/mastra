@@ -82,6 +82,25 @@ vi.mock('@ai-sdk/openai-compatible', () => ({
   })),
 }));
 
+// Mock @ai-sdk/amazon-bedrock
+vi.mock('@ai-sdk/amazon-bedrock', () => ({
+  createAmazonBedrock: vi.fn((opts: Record<string, unknown>) => {
+    return (modelId: string) => ({
+      __provider: 'amazon-bedrock',
+      modelId,
+      region: opts.region,
+      credentialProvider: opts.credentialProvider,
+      headers: opts.headers,
+    });
+  }),
+}));
+
+// Mock @aws-sdk/credential-providers
+const mockCredentialProvider = vi.hoisted(() => vi.fn());
+vi.mock('@aws-sdk/credential-providers', () => ({
+  fromNodeProviderChain: vi.fn(() => mockCredentialProvider),
+}));
+
 // Mock ai SDK's wrapLanguageModel to pass through with a marker
 vi.mock('ai', () => ({
   wrapLanguageModel: vi.fn(({ model }: { model: Record<string, unknown> }) => ({
@@ -160,11 +179,14 @@ vi.mock('../../onboarding/settings.js', () => ({
   MEMORY_GATEWAY_DEFAULT_URL: 'https://gateway-api.mastra.ai',
 }));
 
+import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
+import { fromNodeProviderChain } from '@aws-sdk/credential-providers';
 import { MastraGateway, ModelRouterLanguageModel } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { MODEL_TOKENS } from '../../../../docs/src/plugins/remark-model-tokens/models';
 import { opencodeClaudeMaxProvider, buildAnthropicOAuthFetch } from '../../providers/claude-max.js';
 import { openaiCodexProvider, buildOpenAICodexOAuthFetch } from '../../providers/openai-codex.js';
 import {
@@ -519,6 +541,48 @@ describe('resolveModel', () => {
       expect(result.modelId).toBe('reasoner-v1');
       expect(result.url).toBe('https://llm.acme.dev/v1');
       expect(result.apiKey).toBe('acme-secret');
+      expect(result.headers).toEqual({
+        'x-thread-id': 'thread-123',
+        'x-resource-id': 'resource-456',
+      });
+    });
+  });
+
+  describe('amazon-bedrock/* models', () => {
+    it('resolves Bedrock models through the AWS SDK with the credential chain', () => {
+      process.env.AWS_REGION = 'us-west-2';
+
+      const result = resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_OPUS__) as Record<string, unknown>;
+
+      expect(result.__provider).toBe('amazon-bedrock');
+      expect(result.modelId).toBe(MODEL_TOKENS.__BEDROCK_MODEL_OPUS_BARE__);
+      expect(result.region).toBe('us-west-2');
+      expect(result.credentialProvider).toBe(mockCredentialProvider);
+      expect(fromNodeProviderChain).toHaveBeenCalled();
+      expect(createAmazonBedrock).toHaveBeenCalled();
+    });
+
+    it('falls back to us-east-1 when no AWS region is configured', () => {
+      delete process.env.AWS_REGION;
+      delete process.env.AWS_DEFAULT_REGION;
+
+      const result = resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_OPUS__) as Record<string, unknown>;
+
+      expect(result.region).toBe('us-east-1');
+    });
+
+    it('preserves a colon-bearing Bedrock model id', () => {
+      const result = resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_SONNET__) as Record<string, unknown>;
+
+      expect(result.__provider).toBe('amazon-bedrock');
+      expect(result.modelId).toBe(MODEL_TOKENS.__BEDROCK_MODEL_SONNET_BARE__);
+    });
+
+    it('passes harness headers to the Bedrock provider', () => {
+      const result = resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_OPUS__, {
+        requestContext: makeRequestContext({ threadId: 'thread-123', resourceId: 'resource-456' }),
+      }) as Record<string, unknown>;
+
       expect(result.headers).toEqual({
         'x-thread-id': 'thread-123',
         'x-resource-id': 'resource-456',
