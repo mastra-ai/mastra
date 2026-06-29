@@ -1,4 +1,5 @@
-import { useObservationalMemory, useMemoryThreadMessages } from '@mastra/playground-ui';
+import { useMemoryThreadMessages } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
+import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, render } from '@testing-library/react';
