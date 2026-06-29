@@ -83,6 +83,7 @@ import {
   cryptoResearchAgent,
 } from './agents/model-v2-agent';
 import { myWorkflowX, nestedWorkflow, findUserWorkflow } from './workflows/other';
+import { weatherReportWorkflow } from './workflows/weather-report-workflow';
 import { moderationProcessor } from './agents/model-v2-agent';
 import {
   moderatedAssistantAgent,
@@ -180,6 +181,7 @@ export const mastra = new Mastra({
     heartbeatWorkflow,
     multiCadenceWorkflow,
     refundWorkflow,
+    weatherReportWorkflow,
   },
   bundler: {
     sourcemap: true,
