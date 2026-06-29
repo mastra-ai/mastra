@@ -15,13 +15,24 @@ export interface AppleContainerProviderConfig {
   mounts?: string[];
   network?: string;
   publishedPorts?: string[];
+  publishedSockets?: string[];
   cpus?: number | string;
   memory?: string;
   platform?: string;
   arch?: string;
+  os?: string;
   rosetta?: boolean;
   readOnlyRootfs?: boolean;
   ssh?: boolean;
+  init?: boolean;
+  virtualization?: boolean;
+  capAdd?: string[];
+  capDrop?: string[];
+  tmpfs?: string[];
+  dns?: string[];
+  dnsSearch?: string[];
+  noDns?: boolean;
+  labels?: Record<string, string>;
   workingDir?: string;
   timeout?: number;
   deleteOnDestroy?: boolean;
@@ -73,6 +84,11 @@ export const appleContainerSandboxProvider: SandboxProvider<AppleContainerProvid
         description: 'Port publish specs',
         items: { type: 'string' },
       },
+      publishedSockets: {
+        type: 'array',
+        description: 'Socket publish specs',
+        items: { type: 'string' },
+      },
       cpus: {
         anyOf: [{ type: 'number' }, { type: 'string' }],
         description: 'Number of CPUs to allocate',
@@ -89,6 +105,10 @@ export const appleContainerSandboxProvider: SandboxProvider<AppleContainerProvid
         type: 'string',
         description: 'Image architecture for multi-arch images',
       },
+      os: {
+        type: 'string',
+        description: 'Operating system for multi-platform images',
+      },
       rosetta: {
         type: 'boolean',
         description: 'Enable Rosetta in the container',
@@ -103,6 +123,51 @@ export const appleContainerSandboxProvider: SandboxProvider<AppleContainerProvid
         type: 'boolean',
         description: 'Forward the host SSH agent socket',
         default: false,
+      },
+      init: {
+        type: 'boolean',
+        description: "Enable Apple's init process in the container",
+        default: true,
+      },
+      virtualization: {
+        type: 'boolean',
+        description: 'Expose virtualization capabilities to the container',
+        default: false,
+      },
+      capAdd: {
+        type: 'array',
+        description: 'Linux capabilities to add',
+        items: { type: 'string' },
+      },
+      capDrop: {
+        type: 'array',
+        description: 'Linux capabilities to drop',
+        items: { type: 'string' },
+      },
+      tmpfs: {
+        type: 'array',
+        description: 'tmpfs mount specs',
+        items: { type: 'string' },
+      },
+      dns: {
+        type: 'array',
+        description: 'DNS nameserver IPs',
+        items: { type: 'string' },
+      },
+      dnsSearch: {
+        type: 'array',
+        description: 'DNS search domains',
+        items: { type: 'string' },
+      },
+      noDns: {
+        type: 'boolean',
+        description: 'Do not configure DNS in the container',
+        default: false,
+      },
+      labels: {
+        type: 'object',
+        description: 'Container labels',
+        additionalProperties: { type: 'string' },
       },
       workingDir: {
         type: 'string',
