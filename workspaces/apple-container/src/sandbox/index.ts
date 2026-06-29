@@ -281,7 +281,7 @@ export class AppleContainerSandbox extends MastraSandbox {
   ): Promise<CommandResult> {
     await this.ensureRunning();
 
-    const fullCommand = args.length > 0 ? `${command} ${args.map(shellQuote).join(' ')}` : command;
+    const fullCommand = [command, ...args].map(shellQuote).join(' ');
     const env = { ...this._env, ...options.env };
     const cliArgs = [
       'exec',

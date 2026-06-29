@@ -222,6 +222,29 @@ describe('AppleContainerSandbox', () => {
     );
   });
 
+  it('quotes the command before executing through the shell', async () => {
+    const runner = createRunner([{ success: false, exitCode: 1, stderr: 'container not found' }, {}, {}]);
+    const sandbox = new AppleContainerSandbox({ id: 'apple-test', runner });
+
+    await sandbox._start();
+    runner.run.mockClear();
+
+    await sandbox.executeCommand('node; touch /tmp/pwned', ['-v']);
+
+    expect(runner.run).toHaveBeenCalledWith(
+      [
+        'exec',
+        '--workdir',
+        '/workspace',
+        'apple-test',
+        'sh',
+        '-lc',
+        "'node; touch /tmp/pwned' -v",
+      ],
+      expect.any(Object),
+    );
+  });
+
   it('stops instead of deletes when deleteOnDestroy is disabled', async () => {
     const runner = createRunner([inspectResult('running'), {}]);
     const sandbox = new AppleContainerSandbox({ id: 'apple-test', deleteOnDestroy: false, runner });
