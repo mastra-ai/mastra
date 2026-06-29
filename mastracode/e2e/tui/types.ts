@@ -62,6 +62,7 @@ export type ScenarioName =
   | 'plugins-github-poll-update'
   | 'plugins-blocked-config'
   | 'plugins-scaffold-install-tool'
+  | 'plugins-assets-loading'
   | 'plugins-command-ui'
   | 'process-shortcuts'
   | 'provider-history-compat'

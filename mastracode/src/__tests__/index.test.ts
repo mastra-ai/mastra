@@ -497,6 +497,22 @@ describe('createMastraCode', () => {
     expect(agentControllerConfig?.workspace).not.toEqual({ id: 'custom-workspace' });
   });
 
+  it('adds active plugin tool names to mode availableTools allowlists', async () => {
+    const { createMastraCode } = await import('../index.js');
+    const pluginManager = {
+      reload: vi.fn(async () => [{ id: 'acme.plugin', status: 'active', toolNames: ['plugin_tool'] }]),
+      getPluginTools: vi.fn(() => ({ plugin_tool: { id: 'plugin_tool' } })),
+    };
+
+    await createMastraCode({ pluginManager: pluginManager as any });
+
+    const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
+      | { modes?: Array<{ id: string; availableTools?: string[] }> }
+      | undefined;
+    expect(agentControllerConfig?.modes?.find(mode => mode.id === 'plan')?.availableTools).toContain('plugin_tool');
+    expect(agentControllerConfig?.modes?.find(mode => mode.id === 'fast')?.availableTools).toContain('plugin_tool');
+  });
+
   it('registers the TaskSignalProvider on the code agent so task tools persist via state signals', async () => {
     const { TaskSignalProvider } = await import('@mastra/core/signals');
     const { createMastraCode } = await import('../index.js');

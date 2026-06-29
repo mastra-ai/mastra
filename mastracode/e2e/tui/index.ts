@@ -74,6 +74,7 @@ import { planApprovalGoalHandoffScenario } from './plan-approval-goal-handoff.js
 import { planApprovalHandoffScenario } from './plan-approval-handoff.js';
 import { planApprovalRequestChangesScenario } from './plan-approval-request-changes.js';
 import {
+  pluginsAssetsLoadingScenario,
   pluginsBlockedConfigScenario,
   pluginsCommandUiScenario,
   pluginsGithubPollUpdateScenario,
@@ -224,6 +225,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'plugins-blocked-config': pluginsBlockedConfigScenario,
   'plugins-scaffold-install-tool': pluginsScaffoldInstallToolScenario,
   'plugins-streaming-tool-output': pluginsStreamingToolOutputScenario,
+  'plugins-assets-loading': pluginsAssetsLoadingScenario,
   'plugins-command-ui': pluginsCommandUiScenario,
   'process-shortcuts': processShortcutsScenario,
   'provider-history-compat': providerHistoryCompatScenario,

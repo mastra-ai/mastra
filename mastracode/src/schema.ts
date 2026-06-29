@@ -52,6 +52,8 @@ export interface MastraCodeState {
     activeForm: string;
   }>;
   sandboxAllowedPaths: string[];
+  pluginSkillPaths: string[];
+  pluginCommandPaths: string[];
   activePlan: {
     title: string;
     plan: string;
@@ -137,6 +139,9 @@ export const stateSchema = z.object({
     .default([]),
   // Sandbox allowed paths (per-thread, absolute paths allowed in addition to project root)
   sandboxAllowedPaths: z.array(z.string()).default([]),
+  // Asset directories contributed by active plugins.
+  pluginSkillPaths: z.array(z.string()).default([]),
+  pluginCommandPaths: z.array(z.string()).default([]),
   // Active plan (set when a plan is approved in Plan mode)
   activePlan: z
     .object({

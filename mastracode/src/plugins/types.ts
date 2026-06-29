@@ -33,6 +33,8 @@ export type LoadedPlugin = ScopedInstalledPluginRecord & {
   error?: string;
   tools: MastraCodePluginTools;
   toolNames: string[];
+  skillPaths?: string[];
+  commandPaths?: string[];
   configSchema?: MastraCodePluginConfigSchema;
   configValues?: Record<string, MastraCodePluginConfigValue>;
   conflicts?: string[];

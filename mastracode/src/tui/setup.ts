@@ -444,10 +444,11 @@ export function setupAutocomplete(state: TUIState): void {
 
 export async function loadCustomSlashCommands(state: TUIState): Promise<void> {
   try {
-    const configDir = (state.session.state.get() as { configDir?: string } | undefined)?.configDir;
+    const sessionState = state.session.state.get() as { configDir?: string; pluginCommandPaths?: string[] } | undefined;
+    const configDir = sessionState?.configDir;
     // Load from all sources (global and local)
     const globalCommands = await loadCustomCommands(undefined, configDir);
-    const localCommands = await loadCustomCommands(process.cwd(), configDir);
+    const localCommands = await loadCustomCommands(process.cwd(), configDir, sessionState?.pluginCommandPaths ?? []);
 
     // Merge commands, with local taking precedence over global for same names
     const commandMap = new Map<string, (typeof globalCommands)[number]>();

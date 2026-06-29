@@ -24,7 +24,7 @@ function writePlugin(pluginDir: string, id: string, toolName: string, descriptio
   fs.mkdirSync(path.join(pluginDir, 'src'), { recursive: true });
   fs.writeFileSync(
     path.join(pluginDir, 'src/index.ts'),
-    `export default { id: '${id}', name: '${id}', tools: { ${toolName}: { id: '${toolName}', description: '${description}' } } };`,
+    `export default { id: '${id}', name: '${id}', tools: { ${toolName}: { tool: { id: '${toolName}', description: '${description}' } } } };`,
   );
 }
 
@@ -83,7 +83,7 @@ describe('PluginManager', () => {
       `export default {
         id: 'acme.config',
         config: { answerModel: { type: 'model', default: 'default-model' } },
-        tools: context => ({ config_tool: { id: 'config_tool', description: context.config.answerModel } })
+        tools: context => ({ config_tool: { tool: { id: 'config_tool', description: context.config.answerModel } } })
       };`,
     );
     const manager = new PluginManager({ projectRoot, homeDir });
