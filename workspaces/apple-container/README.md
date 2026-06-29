@@ -85,6 +85,7 @@ await workspace.destroy();
 Register the provider with `MastraEditor` to hydrate stored sandbox configs:
 
 ```typescript
+import { MastraEditor } from '@mastra/core/editor';
 import { appleContainerSandboxProvider } from '@mastra/apple-container';
 
 const editor = new MastraEditor({
