@@ -23,13 +23,20 @@ export class PluginManager {
   private loadedPlugins: LoadedPlugin[] = [];
   private readonly pluginTools: ReturnType<typeof collectActivePluginTools> = {};
   private readonly rawPluginTools: ReturnType<typeof collectActivePluginTools> = {};
+  private readonly toolRenderConfigs = new Map<string, NonNullable<LoadedPlugin['renderConfigs']>[string]>();
   private readonly watchedLocalEntries = new Set<string>();
   private readonly localEntryVersions = new Map<string, string>();
   private githubPollTimer: ReturnType<typeof setInterval> | undefined;
   private githubPollInFlight: Promise<boolean> | undefined;
   private reloadInFlight: Promise<LoadedPlugin[]> | undefined;
+  private readonly reloadListeners = new Set<(plugins: LoadedPlugin[]) => void | Promise<void>>();
 
   constructor(private readonly options: PluginPathOptions) {}
+
+  onReload(listener: (plugins: LoadedPlugin[]) => void | Promise<void>): () => void {
+    this.reloadListeners.add(listener);
+    return () => this.reloadListeners.delete(listener);
+  }
 
   async reload(): Promise<LoadedPlugin[]> {
     if (this.reloadInFlight) return this.reloadInFlight;
@@ -38,7 +45,9 @@ export class PluginManager {
       this.loadedPlugins = await loadPlugins(this.options);
       this.updateLocalEntryWatchers(this.loadedPlugins);
       this.updateGithubPoller(this.loadedPlugins);
+      this.updatePluginRenderConfigs(this.loadedPlugins);
       this.updatePluginTools(collectActivePluginTools(this.loadedPlugins));
+      await this.notifyReloadListeners(this.loadedPlugins);
       return this.loadedPlugins;
     })().finally(() => {
       this.reloadInFlight = undefined;
@@ -63,7 +72,7 @@ export class PluginManager {
   }
 
   getToolRenderConfig(toolName: string) {
-    return this.pluginTools[toolName]?.mastracode?.render;
+    return this.toolRenderConfigs.get(toolName);
   }
 
   getPluginSkillPaths(): string[] {
@@ -78,6 +87,22 @@ export class PluginManager {
     return this.loadedPlugins.flatMap(plugin =>
       plugin.status === 'active' && plugin.instructions ? [plugin.instructions] : [],
     );
+  }
+
+  private async notifyReloadListeners(plugins: LoadedPlugin[]): Promise<void> {
+    await Promise.all([...this.reloadListeners].map(listener => Promise.resolve(listener(plugins))));
+  }
+
+  private updatePluginRenderConfigs(plugins: LoadedPlugin[]): void {
+    this.toolRenderConfigs.clear();
+    for (const plugin of plugins) {
+      if (plugin.status !== 'active') continue;
+      for (const [toolName, renderConfig] of Object.entries(plugin.renderConfigs ?? {})) {
+        if (!this.toolRenderConfigs.has(toolName)) {
+          this.toolRenderConfigs.set(toolName, renderConfig);
+        }
+      }
+    }
   }
 
   private updatePluginTools(nextTools: ReturnType<typeof collectActivePluginTools>): void {
@@ -192,7 +217,7 @@ export class PluginManager {
       seen.add(checkoutPath);
 
       const before = await this.readGitHead(checkoutPath);
-      await this.refreshGithubCheckout(checkoutPath, before);
+      await this.refreshGithubCheckout(plugin, checkoutPath, before);
       const after = await this.readGitHead(checkoutPath);
       if (before !== after) changed = true;
     }
@@ -203,9 +228,10 @@ export class PluginManager {
     return changed;
   }
 
-  private async refreshGithubCheckout(checkoutPath: string, currentHead: string): Promise<void> {
+  private async refreshGithubCheckout(plugin: LoadedPlugin, checkoutPath: string, currentHead: string): Promise<void> {
     await execa('git', ['fetch', 'origin'], { cwd: checkoutPath });
-    const upstream = await this.resolveGitUpstream(checkoutPath);
+    const upstream = await this.resolveGitUpstream(checkoutPath, plugin.ref);
+    if (!upstream) return;
     const [localOnly, remoteOnly] = await this.readGitAheadBehind(checkoutPath, upstream);
     const hasLocalChanges = await this.hasGitWorkingTreeChanges(checkoutPath);
 
@@ -229,32 +255,35 @@ export class PluginManager {
       const currentBranch = await this.readGitCurrentBranch(checkoutPath);
       await execa('git', ['switch', '-c', backupBranch], { cwd: checkoutPath });
       await execa('git', ['add', '-A'], { cwd: checkoutPath });
-      await execa(
-        'git',
-        [
-          '-c',
-          'user.name=Mastra Code',
-          '-c',
-          'user.email=noreply@mastra.ai',
-          'commit',
-          '-m',
-          'chore: backup local plugin checkout changes',
-        ],
-        { cwd: checkoutPath },
-      );
-      await execa('git', ['switch', currentBranch], { cwd: checkoutPath });
+      const hasStagedChanges = await this.hasGitStagedChanges(checkoutPath);
+      if (hasStagedChanges) {
+        await execa(
+          'git',
+          [
+            '-c',
+            'user.name=Mastra Code',
+            '-c',
+            'user.email=noreply@mastra.ai',
+            'commit',
+            '-m',
+            'chore: backup local plugin checkout changes',
+          ],
+          { cwd: checkoutPath },
+        );
+      }
+      await this.restoreGitCheckout(checkoutPath, currentBranch, currentHead);
       return;
     }
 
     await execa('git', ['branch', backupBranch, 'HEAD'], { cwd: checkoutPath });
   }
 
-  private async resolveGitUpstream(cwd: string): Promise<string> {
+  private async resolveGitUpstream(cwd: string, installedRef?: string): Promise<string | undefined> {
     try {
       const { stdout } = await execa('git', ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], { cwd });
       return stdout.trim();
     } catch {
-      return 'origin/main';
+      return installedRef ? undefined : 'origin/main';
     }
   }
 
@@ -269,10 +298,27 @@ export class PluginManager {
     return stdout.trim().length > 0;
   }
 
-  private async readGitCurrentBranch(cwd: string): Promise<string> {
+  private async hasGitStagedChanges(cwd: string): Promise<boolean> {
+    try {
+      await execa('git', ['diff', '--cached', '--quiet'], { cwd });
+      return false;
+    } catch {
+      return true;
+    }
+  }
+
+  private async restoreGitCheckout(cwd: string, branch: string | undefined, fallbackHead: string): Promise<void> {
+    if (branch) {
+      await execa('git', ['switch', branch], { cwd });
+      return;
+    }
+    await execa('git', ['checkout', fallbackHead], { cwd });
+  }
+
+  private async readGitCurrentBranch(cwd: string): Promise<string | undefined> {
     const { stdout } = await execa('git', ['branch', '--show-current'], { cwd });
     const branch = stdout.trim();
-    return branch.length > 0 ? branch : 'main';
+    return branch.length > 0 ? branch : undefined;
   }
 
   private createGitBackupBranchName(currentHead: string): string {

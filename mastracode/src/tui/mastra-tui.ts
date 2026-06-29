@@ -23,6 +23,7 @@ import {
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
   MEMORY_GATEWAY_PROVIDER,
 } from '../onboarding/settings.js';
+import type { LoadedPlugin } from '../plugins/types.js';
 import {
   detectPackageManager,
   fetchChangelog,
@@ -156,6 +157,7 @@ export class MastraTUI {
   private hasShownUpdateBanner = false;
   private caffeinateProcess: ChildProcess | null = null;
   private cleanupKeyHandlers?: () => void;
+  private cleanupPluginReloadListener?: () => void;
   private lastStreamError: string | null = null;
 
   private static readonly DOUBLE_CTRL_C_MS = 500;
@@ -551,10 +553,26 @@ export class MastraTUI {
       this.cleanupKeyHandlers = undefined;
     }
 
+    if (this.cleanupPluginReloadListener) {
+      this.cleanupPluginReloadListener();
+      this.cleanupPluginReloadListener = undefined;
+    }
+
     if (this.state.unsubscribe) {
       this.state.unsubscribe();
     }
     this.state.ui.stop();
+  }
+
+  private async refreshPluginRuntimeState(plugins: LoadedPlugin[]): Promise<void> {
+    const activePlugins = plugins.filter(plugin => plugin.status === 'active');
+    this.state.session.state.set({
+      pluginSkillPaths: activePlugins.flatMap(plugin => plugin.skillPaths ?? []),
+      pluginCommandPaths: activePlugins.flatMap(plugin => plugin.commandPaths ?? []),
+      pluginInstructions: activePlugins.flatMap(plugin => (plugin.instructions ? [plugin.instructions] : [])),
+    });
+    await loadCustomSlashCommands(this.state);
+    await refreshSkillsAutocomplete(this.state);
   }
 
   // ===========================================================================
@@ -567,6 +585,15 @@ export class MastraTUI {
     // Initialize controller (but don't select thread yet)
     await this.state.controller.init();
     await this.state.controller.getMastra()?.startWorkers();
+
+    if (this.state.pluginManager && !this.cleanupPluginReloadListener) {
+      this.cleanupPluginReloadListener = this.state.pluginManager.onReload(plugins =>
+        this.refreshPluginRuntimeState(plugins).catch(err => {
+          const msg = err instanceof Error ? err.message : String(err);
+          process.stderr.write(`[plugin runtime refresh] ${msg}\n`);
+        }),
+      );
+    }
 
     // Load custom slash commands
     await loadCustomSlashCommands(this.state);
